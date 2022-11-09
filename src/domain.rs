@@ -2,7 +2,7 @@ use std::str::FromStr;
 use strum_macros::EnumString;
 
 #[derive(Debug, PartialEq, EnumString)]
-// The security's type:
+/// The security's type:
 enum SecurityType {
     STK,    /// stock (or ETF)
     OPT,    /// option
