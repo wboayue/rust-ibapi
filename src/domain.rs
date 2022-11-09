@@ -2,28 +2,43 @@ use std::str::FromStr;
 use strum_macros::EnumString;
 
 #[derive(Debug, PartialEq, EnumString)]
-/// The security's type:
-enum SecurityType {
-    STK,    /// stock (or ETF)
-    OPT,    /// option
-		// FUT - future
-		// IND - index
-		// FOP - futures option
-		// CASH - forex pair
-		// BAG - combo
-		// WAR - warrant
-		// BOND - bond
-		// CMDTY - commodity
-		// NEWS - news
-		// FUND - mutual fund.
+/// The security's type
+pub enum SecurityType {
+	/// Stock (or ETF)
+    STK,    
+	/// Option
+    OPT,
+	/// Future
+	FUT, 	
+	/// Index
+	IND,
+	/// Futures option
+	FOP, 	
+	/// Forex pair
+	CASH, 	
+	/// Combo
+	BAG, 	
+	///  Warrant
+	WAR, 	
+	/// Bond
+	BOND, 	
+	/// Commodity
+	CMDTY,	
+	/// News
+	NEWS,
+	/// Mutual fund	
+	FUND, 
 }
 
-	// // Describes an instrument's definition
-	// Contract struct {
-	// 	ContractId int    // The unique IB contract identifier.
-	// 	Symbol     string // The underlying's asset symbol.
-
-	// 	SecurityType string
+#[derive(Debug)]
+/// Describes an instrument's definition
+pub struct Contract {
+	/// The unique IB contract identifier.
+	pub contract_id: i32,	    
+	/// The underlying's asset symbol.
+	pub symbol: String, 			
+	pub security_type: SecurityType,
+}
 
 	// 	// The contract's last trading day or contract month (for Options and Futures).
 	// 	// Strings with format YYYYMM will be interpreted as the Contract Month whereas YYYYMMDD will be interpreted as Last Trading Day.

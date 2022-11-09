@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.66"
+strum = "0.24"
+strum_macros = "0.24"
