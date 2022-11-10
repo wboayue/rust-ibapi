@@ -3,7 +3,7 @@ use strum_macros::EnumString;
 use time::OffsetDateTime;
 
 #[derive(Debug, PartialEq, EnumString)]
-/// The security's type
+/// SecurityType enumerates available security types
 pub enum SecurityType {
     /// Stock (or ETF)
     STK,
@@ -32,7 +32,7 @@ pub enum SecurityType {
 }
 
 #[derive(Debug)]
-/// Describes an instrument's definition
+/// Contract describes an instrument's definition
 pub struct Contract {
     /// The unique IB contract identifier.
     pub contract_id: i32,
@@ -74,6 +74,7 @@ pub struct Contract {
 }
 
 #[derive(Debug)]
+// ComboLeg represents a leg within combo orders.
 pub struct ComboLeg {
     /// The Contract's IB's unique id.
     pub contract_id: i32,
@@ -95,6 +96,7 @@ pub struct ComboLeg {
 }
 
 #[derive(Debug)]
+/// OpenClose specifies whether an order is an open or closing order.
 pub enum OpenClose {
     /// 0 - Same as the parent security. This is the only option for retail customers.
     Same,
@@ -107,7 +109,8 @@ pub enum OpenClose {
 }
 
 #[derive(Debug)]
-/// Delta and underlying price for Delta-Neutral combo orders. Underlying (STK or FUT), delta and underlying price goes into this attribute.
+/// Delta and underlying price for Delta-Neutral combo orders.
+/// Underlying (STK or FUT), delta and underlying price goes into this attribute.
 pub struct DeltaNeutralContract {
     /// The unique contract identifier specifying the security. Used for Delta-Neutral Combo contracts.
     pub contract_id: String,
@@ -117,6 +120,7 @@ pub struct DeltaNeutralContract {
     pub price: f64,
 }
 
+/// ContractDetails provides extended contract details.
 pub struct ContractDetails {
     /// A fully-defined Contract object.
     pub contract: Contract,
@@ -207,11 +211,13 @@ pub struct ContractDetails {
     pub suggested_size_increment: f64,
 }
 
+/// TagValue is a convenience struct to define key-value pairs.
 pub struct TagValue {
     pub tag: String,
     pub value: String,
 }
 
+/// Bar describes the historical data bar.
 pub struct Bar {
     /// The bar's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     pub time: OffsetDateTime,
