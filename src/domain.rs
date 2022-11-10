@@ -278,3 +278,400 @@ pub struct BidAskAttribute {
     pub bid_past_low: bool,
     pub ask_past_high: bool,
 }
+
+pub struct HistogramData {
+    pub price: f64,
+    pub count: i32,
+}
+
+pub struct DepthMktDataDescription {
+    pub exchange: String,
+    pub sec_type: String,
+    pub listing_exch: String,
+    pub service_data_type: String,
+    pub agg_group: i32,
+}
+
+pub struct SmartComponent {
+    pub bit_number: i32,
+    pub exchange: String,
+    pub exchange_letter: String,
+}
+
+pub struct TickAttrib {
+    pub can_auto_execute: bool,
+    pub past_limit: bool,
+    pub pre_open: bool,
+}
+
+pub struct TickAttribBidAsk {
+    pub bid_past_low: bool,
+    pub ask_past_high: bool,
+}
+
+pub struct TickAttribLast {
+    pub past_limit: bool,
+    pub unreported: bool,
+}
+
+pub struct FamilyCode {
+    pub account_id: String,
+    pub family_code_str: String,
+}
+
+pub struct PriceIncrement {
+    pub low_edge: f64,
+    pub increment: f64,
+}
+
+pub struct HistoricalTick {
+    pub time: i32,
+    pub price: f64,
+    pub size: i32,
+}
+
+pub struct HistoricalTickBidAsk {
+    pub time: i32,
+    pub tick_attrib_bid_ask: TickAttribBidAsk,
+    pub price_bid: f64,
+    pub price_ask: f64,
+    pub size_bid: i32,
+    pub size_ask: i32,
+}
+
+pub struct NewsProvider {
+    pub code: String,
+    pub name: String,
+}
+
+pub enum ComboParam {
+    NonGuaranteed,
+    PriceCondConid,
+    CondPriceMax,
+    CondPriceMin,
+    ChangeToMktTime1,
+    ChangeToMktTime2,
+    DiscretionaryPct,
+    DontLeginNext,
+    LeginPrio,
+    MaxSegSize,
+}
+
+pub enum HedgeType {
+    None,
+    Delta,
+    Beta,
+    Fx,
+    Pair,
+}
+
+pub enum Right {
+    None,
+    Put,
+    Call,
+}
+
+pub enum VolatilityType {
+    None,
+    Daily,
+    Annual,
+}
+
+pub enum ReferencePriceType {
+    None,
+    Midpoint,
+    BidOrAsk,
+}
+
+pub enum Action {
+    BUY,
+    SELL,
+    SSHORT,
+}
+
+pub enum Rule80A {
+    None,
+    Individual,
+    Agency,
+    AgentOtherMember,
+    IndividualPTIA,
+    AgencyPTIA,
+    AgentOtherMemberPTIA,
+    IndividualPT,
+    AgencyPT,
+    AgentOtherMemberPT,
+}
+
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+/// Order describes the order.
+pub struct Order {
+    /// The API client's order id.
+    pub order_id: i32,
+    /// The Solicited field should be used for orders initiated or recommended by the broker or adviser that were approved by the client (by phone, email, chat, verbally, etc.) prior to entry. Please note that orders that the adviser or broker placed without specifically discussing with the client are discretionary orders, not solicited.
+    pub solicited: bool,
+    /// The API client id which placed the order.
+    pub client_id: i32,
+    /// The Host order identifier.
+    pub perm_id: i32,
+    /// Identifies the side.
+    /// Generally available values are BUY and SELL.
+    /// Additionally, SSHORT and SLONG are available in some institutional-accounts only.
+    /// For general account types, a SELL order will be able to enter a short position automatically if the order quantity is larger than your current long position.
+    /// SSHORT is only supported for institutional account configured with Long/Short account segments or clearing with a separate account.
+    /// SLONG is available in specially-configured institutional accounts to indicate that long position not yet delivered is being sold.
+    pub action: String,
+    /// The number of positions being bought/sold.
+    pub total_quantity: f64,
+    /// The order's type.
+    pub order_type: String,
+    /// The LIMIT price.
+    /// Used for limit, stop-limit and relative orders. In all other cases specify zero. For relative orders with no limit price, also specify zero.
+    pub lmt_price: f64,
+    /// Generic field to contain the stop price for STP LMT orders, trailing amount, etc.
+    pub aux_price: f64,
+    /// The time in force.
+    /// Valid values are:
+    /// DAY - Valid for the day only.
+    /// GTC - Good until canceled. The order will continue to work within the system and in the marketplace until it executes or is canceled. GTC orders will be automatically be cancelled under the following conditions:
+    /// If a corporate action on a security results in a stock split (forward or reverse), exchange for shares, or distribution of shares. If you do not log into your IB account for 90 days.
+    /// At the end of the calendar quarter following the current quarter. For example, an order placed during the third quarter of 2011 will be canceled at the end of the first quarter of 2012. If the last day is a non-trading day, the cancellation will occur at the close of the final trading day of that quarter. For example, if the last day of the quarter is Sunday, the orders will be cancelled on the preceding Friday.
+    /// Orders that are modified will be assigned a new “Auto Expire” date consistent with the end of the calendar quarter following the current quarter.
+    /// Orders submitted to IB that remain in force for more than one day will not be reduced for dividends. To allow adjustment to your order price on ex-dividend date, consider using a Good-Til-Date/Time (GTD) or Good-after-Time/Date (GAT) order type, or a combination of the two.
+    /// IOC - Immediate or Cancel. Any portion that is not filled as soon as it becomes available in the market is canceled.
+    /// GTD - Good until Date. It will remain working within the system and in the marketplace until it executes or until the close of the market on the date specified
+    /// OPG - Use OPG to send a market-on-open (MOO) or limit-on-open (LOO) order.
+    /// FOK - If the entire Fill-or-Kill order does not execute as soon as it becomes available, the entire order is canceled.
+    /// DTC - Day until Canceled.
+    pub tif: String,
+    /// One-Cancels-All group identifier.
+    pub oca_group: String,
+    /// Tells how to handle remaining orders in an OCA group when one order or part of an order executes.
+    /// Valid values are:
+    /// 1 - Cancel all remaining orders with block.
+    /// 2 - Remaining orders are proportionately reduced in size with block.
+    /// 3 - Remaining orders are proportionately reduced in size with no block.
+    /// If you use a value "with block" it gives the order overfill protection. This means that only one order in the group will be routed at a time to remove the possibility of an overfill.
+    pub oca_type: i32,
+    /// The order reference.
+    /// Intended for institutional customers only, although all customers may use it to identify the API client that sent the order when multiple API clients are running.
+    pub order_ref: String,
+    /// Specifies whether the order will be transmitted by TWS. If set to false, the order will be created at TWS but will not be sent.
+    pub transmit: bool,
+    /// The order ID of the parent order, used for bracket and auto trailing stop orders.
+    pub parent_id: i32,
+    /// If set to true, specifies that the order is an ISE Block order.
+    pub block_order: bool,
+    /// If set to true, specifies that the order is a Sweep-to-Fill order.
+    pub sweep_to_fill: bool,
+    /// The publicly disclosed order size, used when placing Iceberg orders.
+    pub display_size: i32,
+    /// Specifies how Simulated Stop, Stop-Limit and Trailing Stop orders are triggered.
+    /// Valid values are:
+    /// 0 - The default value. The "double bid/ask" function will be used for orders for OTC stocks and US options. All other orders will used the "last" function.
+    /// 1 - use "double bid/ask" function, where stop orders are triggered based on two consecutive bid or ask prices.
+    /// 2 - "last" function, where stop orders are triggered based on the last price.
+    /// 3 - double last function.
+    /// 4 - bid/ask function.
+    /// 7 - last or bid/ask function.
+    /// 8 - mid-point function.    
+    pub trigger_method: i32,
+    /// If set to true, allows orders to also trigger or fill outside of regular trading hours.
+    pub outside_rth: bool,
+    /// If set to true, the order will not be visible when viewing the market depth. This option only applies to orders routed to the NASDAQ exchange.
+    pub hidden: bool,
+    /// Specifies the date and time after which the order will be active.
+    /// Format: yyyymmdd hh:mm:ss {optional Timezone}.
+    pub good_after_time: String,
+    /// The date and time until the order will be active.
+    /// You must enter GTD as the time in force to use this string. The trade's "Good Till Date," format "yyyyMMdd HH:mm:ss (optional time zone)" or UTC "yyyyMMdd-HH:mm:ss".
+    pub good_till_date: String,
+
+
+    // Clearing info
+    pub account: String,
+    //used only when short_sale_slot=2
+    pub open_close: String,
+    // O=Open, C=Close
+    pub origin: Origin,
+
+
+    // "Time in Force" - DAY, GTC, etc.
+    pub active_start_time: String,
+    // for GTC orders
+    pub active_stop_time: String,
+    pub discretionary_amt: f64,
+    pub fa_group: String,
+    pub fa_method: String,
+    pub fa_percentage: String,
+    pub fa_profile: String,
+    // models
+    pub model_code: String,
+    // 0=Customer, 1=Firm
+    pub short_sale_slot: i32,
+    // institutional (ie non-cleared) only
+    pub designated_location: String,
+    // type: int; 1 if you hold the shares, 2 if they will be delivered from elsewhere.  Only for Action=SSHORT
+    pub exempt_code: i32,
+    // Format: 20060505 08:00:00 {time zone}
+    pub rule80a: String,
+    // Individual = 'I', Agency = 'A', AgentOtherMember = 'W', IndividualPTIA = 'J', AgencyPTIA = 'U', AgentOtherMemberPTIA = 'M', IndividualPT = 'K', AgencyPT = 'Y', AgentOtherMemberPT = 'N'
+    pub settling_firm: String,
+    pub all_or_none: bool,
+    pub min_qty: i32,
+    //type: int
+    pub percent_offset: f64,
+    // SMART routing only
+    pub e_trade_only: bool,
+    pub firm_quote_only: bool,
+    pub nbbo_price_cap: f64,
+    pub auction_strategy: AuctionStrategy,
+    // type: int; AuctionMatch, AuctionImprovement, AuctionTransparent
+    pub starting_price: f64,
+    // type: float
+    pub stock_ref_price: f64,
+    // type: float
+    pub delta: f64, // type: float
+    // pegged to stock and VOL orders only
+    pub stock_range_lower: f64,
+    // type: float
+    pub stock_range_upper: f64, // type: float
+    // type: float; REL orders only
+    pub override_percentage_constraints: bool,
+    // VOLATILITY ORDERS ONLY
+    pub volatility: f64,
+    // type: float
+    pub volatility_type: i32,
+    // type: int   // 1=daily, 2=annual
+    pub delta_neutral_order_type: String,
+    pub delta_neutral_aux_price: f64,
+    // type: float
+    pub delta_neutral_con_id: i32,
+    pub delta_neutral_settling_firm: String,
+    pub delta_neutral_clearing_account: String,
+    pub delta_neutral_clearing_intent: String,
+    pub delta_neutral_open_close: String,
+    pub delta_neutral_short_sale: bool,
+    pub delta_neutral_short_sale_slot: i32,
+    pub delta_neutral_designated_location: String,
+    pub continuous_update: bool,
+    pub reference_price_type: i32, // type: int; 1=Average, 2 = BidOrAsk
+    pub trail_stop_price: f64,
+    // type: float
+    pub trailing_percent: f64, // type: float; TRAILLIMIT orders only
+
+
+    // type: float
+    pub opt_out_smart_routing: bool,
+
+    // BOX exchange orders only
+
+
+    pub randomize_price: bool,
+    pub randomize_size: bool,
+
+
+    // COMBO ORDERS ONLY
+    pub basis_points: f64,
+    // type: float; EFP orders only
+    pub basis_points_type: i32, // type: int;  EFP orders only
+
+    // SCALE ORDERS ONLY
+    pub scale_init_level_size: i32,
+    // type: int
+    pub scale_subs_level_size: i32,
+    // type: int
+    pub scale_price_increment: f64,
+    // type: float
+    pub scale_price_adjust_value: f64,
+    // type: float
+    pub scale_price_adjust_interval: i32,
+    // type: int
+    pub scale_profit_offset: f64,
+    // type: float
+    pub scale_auto_reset: bool,
+    pub scale_init_position: i32,
+    // type: int
+    pub scale_init_fill_qty: i32,
+    // type: int
+    pub scale_random_percent: bool,
+    pub scale_table: String,
+
+    // HEDGE ORDERS
+    pub hedge_type: String,
+    // 'D' - delta, 'B' - beta, 'F' - FX, 'P' - pair
+    pub hedge_param: String, // 'beta=X' value for beta hedge, 'ratio=Y' for pair hedge
+
+    // IB account
+
+    pub clearing_account: String,
+    //True beneficiary of the order
+    pub clearing_intent: String, // "" (Default), "IB", "Away", "PTA" (PostTrade)
+
+    // ALGO ORDERS ONLY
+    pub algo_strategy: String,
+    pub algo_params: Vec<TagValue>,
+    //TagValueList
+    pub smart_combo_routing_params: Vec<TagValue>, //TagValueList
+    pub algo_id: String,
+
+    // What-if
+    pub what_if: bool,
+
+    // Not Held
+    pub not_held: bool,
+
+    // order combo legs
+    pub order_combo_legs: Vec<OrderComboLeg>, // OrderComboLegListSPtr
+
+    pub order_misc_options: Vec<TagValue>, // TagValueList
+
+    // VER PEG2BENCH fields:
+    pub reference_contract_id: i32,
+    pub pegged_change_amount: f64,
+    pub is_pegged_change_amount_decrease: bool,
+    pub reference_change_amount: f64,
+    pub reference_exchange_id: String,
+    pub adjusted_order_type: String,
+
+    pub trigger_price: f64,
+    pub adjusted_stop_price: f64,
+    pub adjusted_stop_limit_price: f64,
+    pub adjusted_trailing_amount: f64,
+    pub adjustable_trailing_unit: i32,
+    pub lmt_price_offset: f64,
+
+    pub conditions: Vec<OrderConditionEnum>,
+    // std::vector<std::shared_ptr<OrderCondition>>
+    pub conditions_cancel_order: bool,
+    pub conditions_ignore_rth: bool,
+
+    // ext operator
+    pub ext_operator: String,
+
+    pub soft_dollar_tier: SoftDollarTier,
+    // native cash quantity
+    pub cash_qty: f64,
+
+    pub mifid2decision_maker: String,
+    pub mifid2decision_algo: String,
+    pub mifid2execution_trader: String,
+    pub mifid2execution_algo: String,
+
+    pub dont_use_auto_price_for_hedge: bool,
+
+    pub is_oms_container: bool,
+
+    pub discretionary_up_to_limit_price: bool,
+
+    pub auto_cancel_date: String,
+    pub filled_quantity: f64,
+    pub ref_futures_con_id: i32,
+    pub auto_cancel_parent: bool,
+    pub shareholder: String,
+    pub imbalance_only: bool,
+    pub route_marketable_to_bbo: bool,
+    pub parent_perm_id: i32,
+
+    pub use_price_mgmt_algo: bool,
+}
