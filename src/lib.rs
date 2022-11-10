@@ -11,14 +11,17 @@
 //! [`proc_macro`]: https://doc.rust-lang.org/proc_macro/
 //! Fast and easy queue abstraction.
 //!```
-//!    use ibapi::client
+//!     use anyhow;
+//!     
+//!     fn main() -> anyhow::Result<()> {
+//!         let port = 4002;
+//!         let client_id = 100;
+//!         let host = "localhost";
 //!
-//!    let port = 4002;
-//!    let client_id = 100;
-//!    let host = "localhost";
-//!
-//!    let client = ibapi::client::connect(host, port, client_id)?;
-//!    println!("Client: {:?}", client);
+//!         let client = ibapi::client::connect(host, port, client_id)?;
+//!         println!("Client: {:?}", client);
+//!         Ok(())
+//!     }
 //!```
 /// TSW API Client.
 pub mod client;
