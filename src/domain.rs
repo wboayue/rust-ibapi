@@ -383,26 +383,6 @@ pub enum ReferencePriceType {
     BidOrAsk,
 }
 
-pub enum Action {
-    BUY,
-    SELL,
-    SSHORT,
-}
-
-pub enum Rule80A {
-    None,
-    Individual,
-    Agency,
-    AgentOtherMember,
-    IndividualPTIA,
-    AgencyPTIA,
-    AgentOtherMemberPTIA,
-    IndividualPT,
-    AgencyPT,
-    AgentOtherMemberPT,
-}
-
-
 #[derive(Serialize, Deserialize, Clone, Debug)]
 /// Order describes the order.
 pub struct Order {
@@ -420,7 +400,7 @@ pub struct Order {
     /// For general account types, a SELL order will be able to enter a short position automatically if the order quantity is larger than your current long position.
     /// SSHORT is only supported for institutional account configured with Long/Short account segments or clearing with a separate account.
     /// SLONG is available in specially-configured institutional accounts to indicate that long position not yet delivered is being sold.
-    pub action: String,
+    pub action: Action,
     /// The number of positions being bought/sold.
     pub total_quantity: f64,
     /// The order's type.
@@ -514,7 +494,7 @@ pub struct Order {
     // type: int; 1 if you hold the shares, 2 if they will be delivered from elsewhere.  Only for Action=SSHORT
     pub exempt_code: i32,
     // Format: 20060505 08:00:00 {time zone}
-    pub rule80a: String,
+    pub rule80a: Rule80A,
     // Individual = 'I', Agency = 'A', AgentOtherMember = 'W', IndividualPTIA = 'J', AgencyPTIA = 'U', AgentOtherMemberPTIA = 'M', IndividualPT = 'K', AgencyPT = 'Y', AgentOtherMemberPT = 'N'
     pub settling_firm: String,
     pub all_or_none: bool,
@@ -674,4 +654,23 @@ pub struct Order {
     pub parent_perm_id: i32,
 
     pub use_price_mgmt_algo: bool,
+}
+
+pub enum Action {
+    BUY,
+    SELL,
+    SSHORT,
+}
+
+pub enum Rule80A {
+    None,
+    Individual,
+    Agency,
+    AgentOtherMember,
+    IndividualPTIA,
+    AgencyPTIA,
+    AgentOtherMemberPTIA,
+    IndividualPT,
+    AgencyPT,
+    AgentOtherMemberPT,
 }
