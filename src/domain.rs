@@ -212,6 +212,7 @@ pub struct ContractDetails {
 }
 
 /// TagValue is a convenience struct to define key-value pairs.
+#[derive(Clone, Debug)]
 pub struct TagValue {
     pub tag: String,
     pub value: String,
@@ -383,7 +384,7 @@ pub enum ReferencePriceType {
     BidOrAsk,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Clone, Debug)]
 /// Order describes the order.
 pub struct Order {
     /// The API client's order id.
@@ -467,14 +468,12 @@ pub struct Order {
     /// You must enter GTD as the time in force to use this string. The trade's "Good Till Date," format "yyyyMMdd HH:mm:ss (optional time zone)" or UTC "yyyyMMdd-HH:mm:ss".
     pub good_till_date: String,
 
-
     // Clearing info
     pub account: String,
     //used only when short_sale_slot=2
     pub open_close: String,
     // O=Open, C=Close
-    pub origin: Origin,
-
+    // pub origin: Origin,
 
     // "Time in Force" - DAY, GTC, etc.
     pub active_start_time: String,
@@ -505,7 +504,7 @@ pub struct Order {
     pub e_trade_only: bool,
     pub firm_quote_only: bool,
     pub nbbo_price_cap: f64,
-    pub auction_strategy: AuctionStrategy,
+    // pub auction_strategy: AuctionStrategy,
     // type: int; AuctionMatch, AuctionImprovement, AuctionTransparent
     pub starting_price: f64,
     // type: float
@@ -540,16 +539,12 @@ pub struct Order {
     // type: float
     pub trailing_percent: f64, // type: float; TRAILLIMIT orders only
 
-
     // type: float
     pub opt_out_smart_routing: bool,
 
     // BOX exchange orders only
-
-
     pub randomize_price: bool,
     pub randomize_size: bool,
-
 
     // COMBO ORDERS ONLY
     pub basis_points: f64,
@@ -583,7 +578,6 @@ pub struct Order {
     pub hedge_param: String, // 'beta=X' value for beta hedge, 'ratio=Y' for pair hedge
 
     // IB account
-
     pub clearing_account: String,
     //True beneficiary of the order
     pub clearing_intent: String, // "" (Default), "IB", "Away", "PTA" (PostTrade)
@@ -602,7 +596,7 @@ pub struct Order {
     pub not_held: bool,
 
     // order combo legs
-    pub order_combo_legs: Vec<OrderComboLeg>, // OrderComboLegListSPtr
+    // pub order_combo_legs: Vec<OrderComboLeg>, // OrderComboLegListSPtr
 
     pub order_misc_options: Vec<TagValue>, // TagValueList
 
@@ -621,7 +615,7 @@ pub struct Order {
     pub adjustable_trailing_unit: i32,
     pub lmt_price_offset: f64,
 
-    pub conditions: Vec<OrderConditionEnum>,
+    // pub conditions: Vec<OrderConditionEnum>,
     // std::vector<std::shared_ptr<OrderCondition>>
     pub conditions_cancel_order: bool,
     pub conditions_ignore_rth: bool,
@@ -629,7 +623,7 @@ pub struct Order {
     // ext operator
     pub ext_operator: String,
 
-    pub soft_dollar_tier: SoftDollarTier,
+    // pub soft_dollar_tier: SoftDollarTier,
     // native cash quantity
     pub cash_qty: f64,
 
@@ -656,12 +650,23 @@ pub struct Order {
     pub use_price_mgmt_algo: bool,
 }
 
+/// Identifies the side.
+/// Generally available values are BUY and SELL.
+/// Additionally, SSHORT and SLONG are available in some institutional-accounts only.
+/// For general account types, a SELL order will be able to enter a short position automatically if the order quantity is larger than your current long position.
+/// SSHORT is only supported for institutional account configured with Long/Short account segments or clearing with a separate account.
+/// SLONG is available in specially-configured institutional accounts to indicate that long position not yet delivered is being sold.
+#[derive(Clone, Debug)]
 pub enum Action {
     BUY,
     SELL,
+    /// SSHORT is only supported for institutional account configured with Long/Short account segments or clearing with a separate account.
     SSHORT,
+    /// SLONG is available in specially-configured institutional accounts to indicate that long position not yet delivered is being sold.
+    SLONG,
 }
 
+#[derive(Clone, Debug)]
 pub enum Rule80A {
     None,
     Individual,
