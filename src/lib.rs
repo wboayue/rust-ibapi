@@ -28,3 +28,10 @@ pub mod client;
 
 /// Describes primary data structures used by the model.
 pub mod domain;
+
+pub mod contracts;
+
+/// News
+pub mod news;
+
+pub mod streaming_market_data;
