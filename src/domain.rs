@@ -483,7 +483,7 @@ pub struct Order {
     pub trail_stop_price: f64,
     /// Specifies the trailing amount of a trailing stop order as a percentage.
     /// Observe the following guidelines when using the trailingPercent field:
-    /// 
+    ///
     /// This field is mutually exclusive with the existing trailing amount. That is, the API client can send one or the other but not both.
     /// This field is read AFTER the stop price (barrier price) as follows: deltaNeutralAuxPrice stopPrice, trailingPercent, scale order attributes
     /// The field will also be sent to the API in the openOrder message if the API client version is >= 56. It is sent after the stopPrice field as follows: stopPrice, trailingPct, basisPoint.    
@@ -614,7 +614,7 @@ pub struct Order {
     pub hedge_param: String,
     /// The account the trade will be allocated to.    
     pub account: String,
-    /// Indicates the firm which will settle the trade. Institutions only. 
+    /// Indicates the firm which will settle the trade. Institutions only.
     pub settling_firm: String,
     /// Specifies the true beneficiary of the order.
     /// For IBExecution customers. This value is required for FUT/FOP orders for reporting to the exchange.
@@ -647,28 +647,28 @@ pub struct Order {
     /// These features are for both guaranteed and nonguaranteed combination orders routed to Smart, and are available based on combo type and order type. SmartComboRoutingParams is similar to AlgoParams in that it makes use of tag/value pairs to add parameters to combo orders.
     /// Make sure that you fully understand how Advanced Combo Routing works in TWS itself first: <https://guides.interactivebrokers.com/tws/twsguide.htm#usersguidebook/specializedorderentry/advanced_combo_routing.htm>
     /// The parameters cover the following capabilities:
-    /// 
+    ///
     /// * Non-Guaranteed - Determine if the combo order is Guaranteed or Non-Guaranteed.
     ///   <br/>Tag = NonGuaranteed
     ///   <br/>Value = 0: The order is guaranteed
     ///   <br/>Value = 1: The order is non-guaranteed
-    /// 
+    ///
     /// * Select Leg to Fill First - User can specify which leg to be executed first.
     ///   <br/>Tag = LeginPrio
     ///   <br/>Value = -1: No priority is assigned to either combo leg
     ///   <br/>Value = 0: Priority is assigned to the first leg being added to the comboLeg
     ///   <br/>Value = 1: Priority is assigned to the second leg being added to the comboLeg
     ///   <br/>Note: The LeginPrio parameter can only be applied to two-legged combo.
-    /// 
+    ///
     /// * Maximum Leg-In Combo Size - Specify the maximum allowed leg-in size per segment
     ///   <br/>Tag = MaxSegSize
     ///   <br/>Value = Unit of combo size
-    /// 
+    ///
     /// * Do Not Start Next Leg-In if Previous Leg-In Did Not Finish - Specify whether or not the system should attempt to fill the next segment before the current segment fills.
     ///   <br/>Tag = DontLeginNext
     ///   <br/>Value = 0: Start next leg-in even if previous leg-in did not finish
     ///   <br/>Value = 1: Do not start next leg-in if previous leg-in did not finish
-    /// 
+    ///
     /// * Price Condition - Combo order will be rejected or cancelled if the leg market price is outside of the specified price range [CondPriceMin, CondPriceMax]
     ///   <br/>Tag = PriceCondConid: The ContractID of the combo leg to specify price condition on
     ///   <br/>Value = The ContractID
@@ -699,11 +699,11 @@ pub struct Order {
     pub mifid2decision_algo: String,
     /// For MiFID 2 reporting; identifies a person as the responsible party for the execution of a transaction within the firm. Requires TWS 969+.
     pub mifid2execution_trader: String,
-    /// For MiFID 2 reporting; identifies the algorithm responsible for the execution of a transaction within the firm. Requires TWS 969+. 
+    /// For MiFID 2 reporting; identifies the algorithm responsible for the execution of a transaction within the firm. Requires TWS 969+.
     pub mifid2execution_algo: String,
     /// Don't use auto price for hedge.
     pub dont_use_auto_price_for_hedge: bool,
-    /// Specifies the date to auto cancel the order. 
+    /// Specifies the date to auto cancel the order.
     pub auto_cancel_date: String,
     /// Specifies the initial order quantity to be filled.
     pub filled_quantity: f64,
@@ -812,19 +812,13 @@ pub enum Rule80A {
 }
 
 #[derive(Clone, Debug)]
-pub struct OrderComboLeg {
-
-}
+pub struct OrderComboLeg {}
 
 #[derive(Clone, Debug)]
-pub struct OrderCondition {
-
-}
+pub struct OrderCondition {}
 
 #[derive(Clone, Debug)]
-pub struct SoftDollarTier {
-
-}
+pub struct SoftDollarTier {}
 
 #[derive(Clone, Debug)]
 pub struct RealTimeBar {

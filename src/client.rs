@@ -36,7 +36,7 @@ impl Client<'_> {
     /// Requests real time bars
     /// Currently, only 5 seconds bars are provided. This request is subject to the same pacing as any historical data request: no more than 60 API queries in more than 600 seconds.
     /// Real time bars subscriptions are also included in the calculation of the number of Level 1 market data subscriptions allowed in an account.
-    /// 
+    ///
     /// Parameters
     /// tickerId	the request's unique identifier.
     /// contract	the Contract for which the depth is being requested
@@ -47,7 +47,11 @@ impl Client<'_> {
     /// BID
     /// ASK
     /// useRTH	set to 0 to obtain the data which was also generated ourside of the Regular Trading Hours, set to 1 to obtain only the RTH data
-    fn real_time_bars(contract: &Contract, what_to_show: &WhatToShow, use_rth: bool) ->  Result<Vec<RealTimeBar>>  {
+    fn real_time_bars(
+        contract: &Contract,
+        what_to_show: &WhatToShow,
+        use_rth: bool,
+    ) -> Result<Vec<RealTimeBar>> {
         Err(anyhow!("not implemented!"))
     }
 
@@ -73,12 +77,17 @@ impl Client<'_> {
     ///     456 IBDividends
     /// snapshot	for users with corresponding real time market data subscriptions. A true value will return a one-time snapshot, while a false value will provide streaming data.
     /// regulatory	snapshot for US stocks requests NBBO snapshots for users which have "US Securities Snapshot Bundle" subscription but not corresponding Network A, B, or C subscription necessary for streaming * market data. One-time snapshot of current market price that will incur a fee of 1 cent to the account per snapshot.
-    fn market_data(contract: &Contract, generic_tick_list: &str, snapshot: bool, regulatory_snapshot: bool, market_data_options: &[TagValue]) {
-
+    fn market_data(
+        contract: &Contract,
+        generic_tick_list: &str,
+        snapshot: bool,
+        regulatory_snapshot: bool,
+        market_data_options: &[TagValue],
+    ) {
     }
 
     /// Requests news providers which the user has subscribed to.
-    fn news_providers(&self) -> Vec::<NewsProvider> {
+    fn news_providers(&self) -> Vec<NewsProvider> {
         Vec::<NewsProvider>::new()
     }
 }
