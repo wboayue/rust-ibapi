@@ -340,6 +340,7 @@ pub struct HistoricalTickBidAsk {
     pub size_ask: i32,
 }
 
+#[derive(Clone, Debug)]
 pub struct NewsProvider {
     pub code: String,
     pub name: String,
