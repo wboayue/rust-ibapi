@@ -36,10 +36,13 @@ pub trait Client {
     fn send_packet(&self, packet: &Packet) -> i32;
     fn receive_packet(&self, request_id: i32) -> Packet;
     fn receive_packets(&self, request_id: i32) -> PacketIterator;
+    fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
 
-// receive_packet
-// receive_packets
+
+// fn check_server_version(version: i32) -> Result<()> {
+
+// }
 
 pub fn connect(host: &str, port: i32, client_id: i32) -> anyhow::Result<BasicClient> {
     println!("Connect, world!");

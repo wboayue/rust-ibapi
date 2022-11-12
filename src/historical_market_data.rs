@@ -4,30 +4,7 @@ use time::OffsetDateTime;
 use crate::client::{Client, Packet};
 use crate::domain::Contract;
 use crate::domain::TickAttribBidAsk;
-
-struct RequestHeadTimestamp<'a> {
-    request_id: i32,
-    contract: &'a Contract,
-    what_to_show: &'a str,
-    use_rth: bool,
-}
-
-impl RequestHeadTimestamp<'_> {
-    const message_id: i32 = 32;
-
-    fn encode(&self) -> Result<Packet> {
-        let mut packet = Packet {};
-
-        packet.add_field(Self::message_id);
-        packet.add_field(self.request_id);
-        packet.add_field(self.contract);
-        packet.add_field(self.use_rth);
-        packet.add_field(self.what_to_show);
-        packet.add_field("format_date");
-
-        Ok(packet)
-    }
-}
+use crate::server_versions;
 
 // https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EClient.cs
 // https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EDecoder.cs#L733
@@ -39,23 +16,56 @@ pub fn head_timestamp<C: Client>(
     what_to_show: &str,
     use_rth: bool,
 ) -> Result<OffsetDateTime> {
-    // if (!CheckServerVersion(MinServerVer.REQ_HEAD_TIMESTAMP,
-    //     " It does not support head time stamp requests."))
-    //     return;
+    client.check_server_version(server_versions::REQ_HEAD_TIMESTAMP,  "It does not support head time stamp requests.")?;
+ 
+    let request_id = 12;
+    let request = encode_head_timestamp(client, request_id, contract, what_to_show, use_rth)?;
 
-    let request = RequestHeadTimestamp {
-        request_id: client.next_request_id(),
-        contract,
-        what_to_show,
-        use_rth,
-    };
+    client.send_packet(&request);
 
-    client.send_packet(&request.encode()?);
-
-    let packet = client.receive_packet(request.request_id);
-
-    decode_head_timestamp(&packet)
+    let response = client.receive_packet(request_id);
+    decode_head_timestamp(&response)
 }
+
+/// Encodes the head timestamp request
+pub fn encode_head_timestamp<C: Client>(
+    client: &C,
+    request_id: i32,
+    contract: &Contract,
+    what_to_show: &str,
+    use_rth: bool,
+) -> Result<Packet> {
+
+    let mut packet = Packet {};
+
+    packet.add_field(12);
+    packet.add_field(request_id);
+    packet.add_field(contract);
+    packet.add_field(use_rth);
+    packet.add_field(what_to_show);
+    packet.add_field("format_date");
+
+    Ok(packet)
+}
+
+// https://github.com/InteractiveBrokers/tws-api/blob/313c453bfc1a1f8928b0d2fba044947f4c37e380/source/csharpclient/client/IBParamsList.cs#L56
+
+// public static void AddParameter(this BinaryWriter source, Contract value)
+// {
+//     source.AddParameter(value.ConId);
+//     source.AddParameter(value.Symbol);
+//     source.AddParameter(value.SecType);
+//     source.AddParameter(value.LastTradeDateOrContractMonth);
+//     source.AddParameter(value.Strike);
+//     source.AddParameter(value.Right);
+//     source.AddParameter(value.Multiplier);
+//     source.AddParameter(value.Exchange);
+//     source.AddParameter(value.PrimaryExch);
+//     source.AddParameter(value.Currency);
+//     source.AddParameter(value.LocalSymbol);
+//     source.AddParameter(value.TradingClass);
+//     source.AddParameter(value.IncludeExpired);
+// }
 
 fn decode_head_timestamp(packet: &Packet) -> Result<OffsetDateTime> {
     let _request_id = packet.next_int()?;
