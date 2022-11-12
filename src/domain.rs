@@ -324,21 +324,6 @@ pub struct PriceIncrement {
     pub increment: f64,
 }
 
-pub struct HistoricalTick {
-    pub time: i32,
-    pub price: f64,
-    pub size: i32,
-}
-
-pub struct HistoricalTickBidAsk {
-    pub time: i32,
-    pub tick_attrib_bid_ask: TickAttribBidAsk,
-    pub price_bid: f64,
-    pub price_ask: f64,
-    pub size_bid: i32,
-    pub size_ask: i32,
-}
-
 #[derive(Clone, Debug)]
 pub struct NewsProvider {
     pub code: String,

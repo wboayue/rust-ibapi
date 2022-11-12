@@ -45,8 +45,8 @@ impl Iterator for BarIterator {
 /// BID
 /// ASK
 /// useRTH	set to 0 to obtain the data which was also generated ourside of the Regular Trading Hours, set to 1 to obtain only the RTH data
-pub fn real_time_bars(
-    client: &Client,
+pub fn real_time_bars<C: Client>(
+    client: &C,
     contract: &Contract,
     what_to_show: &WhatToShow,
     use_rth: bool,
@@ -54,11 +54,11 @@ pub fn real_time_bars(
     Err(anyhow!("not implemented!"))
 }
 
-pub fn tick_by_tick_trades(client: &Client, contract: &Contract) -> Result<BidAsk> {
+pub fn tick_by_tick_trades<C: Client>(client: &C, contract: &Contract) -> Result<BidAsk> {
     Err(anyhow!("not implemented!"))
 }
 
-pub fn tick_by_tick_bid_ask(client: &Client, contract: &Contract) -> Result<BidAsk> {
+pub fn tick_by_tick_bid_ask<C: Client>(client: &C, contract: &Contract) -> Result<BidAsk> {
     Err(anyhow!("not implemented!"))
 }
 
@@ -84,8 +84,8 @@ pub fn tick_by_tick_bid_ask(client: &Client, contract: &Contract) -> Result<BidA
 ///     456 IBDividends
 /// snapshot	for users with corresponding real time market data subscriptions. A true value will return a one-time snapshot, while a false value will provide streaming data.
 /// regulatory	snapshot for US stocks requests NBBO snapshots for users which have "US Securities Snapshot Bundle" subscription but not corresponding Network A, B, or C subscription necessary for streaming * market data. One-time snapshot of current market price that will incur a fee of 1 cent to the account per snapshot.
-pub fn market_data(
-    client: &Client,
+pub fn market_data<C: Client>(
+    client: &C,
     contract: &Contract,
     generic_tick_list: &str,
     snapshot: bool,
