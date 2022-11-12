@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
 
-use crate::client::{Client, Packet};
+use crate::client::{Client, RequestPacket, ResponsePacket};
 use crate::domain::Contract;
 use crate::domain::TickAttribBidAsk;
 use crate::server_versions;
@@ -37,8 +37,8 @@ pub fn encode_head_timestamp<C: Client>(
     contract: &Contract,
     what_to_show: &str,
     use_rth: bool,
-) -> Result<Packet> {
-    let mut packet = Packet {};
+) -> Result<RequestPacket> {
+    let mut packet = RequestPacket {};
 
     packet.add_field(12);
     packet.add_field(request_id);
@@ -69,7 +69,7 @@ pub fn encode_head_timestamp<C: Client>(
 //     source.AddParameter(value.IncludeExpired);
 // }
 
-fn decode_head_timestamp(packet: &Packet) -> Result<OffsetDateTime> {
+fn decode_head_timestamp(packet: &ResponsePacket) -> Result<OffsetDateTime> {
     let _request_id = packet.next_int()?;
     let head_timestamp = packet.next_date_time()?;
 
@@ -215,10 +215,4 @@ pub struct HistoricalSchedule {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
-    }
-}
+pub mod tests;

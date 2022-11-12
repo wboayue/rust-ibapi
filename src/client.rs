@@ -10,18 +10,21 @@ pub struct BasicClient<'a> {
     client_id: i32,
 }
 
-pub struct Packet {}
-pub struct PacketIterator {}
+pub struct RequestPacket {}
+pub struct ResponsePacket {}
+pub struct ResponsePacketIterator {}
 
 pub trait ToPacket {
     fn to_packet(&self) -> String;
 }
 
-impl Packet {
+impl RequestPacket {
     pub fn add_field<T: ToPacket>(&self, val: T) {
         val.to_packet();
     }
+}
 
+impl ResponsePacket {
     pub fn next_int(&self) -> Result<i32> {
         Err(anyhow!("not implemented!"))
     }
@@ -34,9 +37,9 @@ impl Packet {
 pub trait Client {
     fn next_request_id(&self) -> i32;
     fn server_version(&self) -> i32;
-    fn send_packet(&self, packet: &Packet) -> i32;
-    fn receive_packet(&self, request_id: i32) -> Packet;
-    fn receive_packets(&self, request_id: i32) -> PacketIterator;
+    fn send_packet(&self, packet: &RequestPacket) -> i32;
+    fn receive_packet(&self, request_id: i32) -> ResponsePacket;
+    fn receive_packets(&self, request_id: i32) -> ResponsePacketIterator;
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
 
@@ -82,3 +85,6 @@ impl ToPacket for &Contract {
         "contract".to_string()
     }
 }
+
+#[cfg(test)]
+pub mod tests;

@@ -1,4 +1,4 @@
-use ibapi::fixtures;
+use crate::client::tests::ClientStub;
 
 #[test]
 fn head_timestamp() {
