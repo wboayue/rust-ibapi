@@ -31,9 +31,9 @@ impl ReceiveHeadTimestamp {
 pub fn head_timestamp<C: Client>(client: &C, contract: &Contract, what_to_show: &str, use_rth: bool) -> Result<OffsetDateTime> {
     let request = RequestHeadTimestamp{
         request_id: client.next_request_id(),
-        contract: contract,
-        what_to_show: what_to_show,
-        use_rth: use_rth
+        contract,
+        what_to_show,
+        use_rth
     };
 
     client.send_packet(&request.encode()?);
