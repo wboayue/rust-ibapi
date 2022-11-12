@@ -31,6 +31,8 @@ pub mod domain;
 
 pub mod contracts;
 
+pub mod historical_market_data;
+
 /// News
 pub mod news;
 
