@@ -21,7 +21,7 @@ pub fn head_timestamp<C: Client>(
         "It does not support head time stamp requests.",
     )?;
 
-    let request_id = 12;
+    let request_id = client.next_request_id();
     let request = encode_head_timestamp(client, request_id, contract, what_to_show, use_rth)?;
 
     client.send_packet(&request);
