@@ -16,8 +16,11 @@ pub fn head_timestamp<C: Client>(
     what_to_show: &str,
     use_rth: bool,
 ) -> Result<OffsetDateTime> {
-    client.check_server_version(server_versions::REQ_HEAD_TIMESTAMP,  "It does not support head time stamp requests.")?;
- 
+    client.check_server_version(
+        server_versions::REQ_HEAD_TIMESTAMP,
+        "It does not support head time stamp requests.",
+    )?;
+
     let request_id = 12;
     let request = encode_head_timestamp(client, request_id, contract, what_to_show, use_rth)?;
 
@@ -35,7 +38,6 @@ pub fn encode_head_timestamp<C: Client>(
     what_to_show: &str,
     use_rth: bool,
 ) -> Result<Packet> {
-
     let mut packet = Packet {};
 
     packet.add_field(12);

@@ -39,7 +39,6 @@ pub trait Client {
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
 
-
 // fn check_server_version(version: i32) -> Result<()> {
 
 // }
