@@ -11,9 +11,9 @@ use crate::historical_market_data;
 fn test_head_timestamp() {
     let mut client = ClientStub::default();
     client.response_packets = VecDeque::from([ResponsePacket::from(vec![
-        "10".to_string(),
-        "0".to_string(),
-        "c".to_string(),
+        String::from("10"),
+        String::from("0"),
+        String::from("c"),
     ])]);
 
     let contract = contracts::stock("MSFT");
