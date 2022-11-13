@@ -1,12 +1,14 @@
-use anyhow::Result;
+use std::collections::VecDeque;
 
+use anyhow::{anyhow, Result};
+
+use super::*;
 use crate::client::Client;
-
-use super::{RequestPacket, ResponsePacket, ResponsePacketIterator};
 
 #[derive(Default, Debug, PartialEq)]
 pub struct ClientStub {
-    outbound_packets: Vec<RequestPacket>,
+    pub request_packets: Vec<RequestPacket>,
+    pub response_packets: VecDeque<ResponsePacket>,
 }
 
 impl Client for ClientStub {
@@ -19,12 +21,15 @@ impl Client for ClientStub {
     }
 
     fn send_packet(&mut self, packet: RequestPacket) -> Result<()> {
-        self.outbound_packets.push(packet);
+        self.request_packets.push(packet);
         Ok(())
     }
 
-    fn receive_packet(&self, request_id: i32) -> ResponsePacket {
-        ResponsePacket::default()
+    fn receive_packet(&mut self, _request_id: i32) -> Result<ResponsePacket> {
+        match self.response_packets.pop_front() {
+            Some(packet) => Ok(packet),
+            None => Err(anyhow!("ClientStub::receive_packet no packet")),
+        }
     }
 
     fn receive_packets(&self, request_id: i32) -> ResponsePacketIterator {

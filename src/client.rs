@@ -1,5 +1,8 @@
+use std::ops::Index;
+
 use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
+// use time::time_macros::{datetime, format_description};
 
 use crate::domain::Contract;
 
@@ -17,6 +20,7 @@ pub struct RequestPacket {
 
 #[derive(Default, Debug, PartialEq)]
 pub struct ResponsePacket {
+    i: usize,
     fields: Vec<String>,
 }
 
@@ -33,13 +37,44 @@ impl RequestPacket {
     }
 }
 
+impl Index<usize> for RequestPacket {
+    type Output = String;
+
+    fn index(&self, i: usize) -> &Self::Output {
+        &self.fields[i]
+    }
+}
+
 impl ResponsePacket {
-    pub fn next_int(&self) -> Result<i32> {
-        Err(anyhow!("ResponsePacket.next_int not implemented!"))
+    pub fn next_int(&mut self) -> Result<i32> {
+        let field = &self.fields[self.i];
+        match field.parse() {
+            Ok(val) => {
+                self.i += 1;
+                return Ok(val);
+            }
+            Err(err) => return Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+        };
     }
 
-    pub fn next_date_time(&self) -> Result<OffsetDateTime> {
-        Err(anyhow!("ResponsePacket.next_date_time not implemented!"))
+    pub fn next_date_time(&mut self) -> Result<OffsetDateTime> {
+        let field = &self.fields[self.i];
+        // from_unix_timestamp
+        let timestamp: i64 = field.parse()?;
+        match OffsetDateTime::from_unix_timestamp(timestamp) {
+            Ok(val) => {
+                self.i += 1;
+                return Ok(val);
+            }
+            Err(err) => return Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+        };
+    }
+
+    pub fn from(fields: Vec<String>) -> ResponsePacket {
+        ResponsePacket {
+            i: 0,
+            fields: fields,
+        }
     }
 }
 
@@ -47,7 +82,7 @@ pub trait Client {
     fn next_request_id(&self) -> i32;
     fn server_version(&self) -> i32;
     fn send_packet(&mut self, packet: RequestPacket) -> Result<()>;
-    fn receive_packet(&self, request_id: i32) -> ResponsePacket;
+    fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket>;
     fn receive_packets(&self, request_id: i32) -> ResponsePacketIterator;
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }

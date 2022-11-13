@@ -10,6 +10,23 @@ use crate::server_versions;
 // https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EDecoder.cs#L733
 
 /// Returns the timestamp of earliest available historical data for a contract and data type.
+/// ```no_run
+/// use ibapi
+///
+/// let port = 4002;
+/// let client_id = 100;
+/// let host = "localhost";
+///
+/// let client = ibapi::client::connect(host, port, client_id)?;
+///
+/// let contract = contracts::stock("MSFT");
+/// let what_to_show = "trades";
+/// let use_rth = true;
+/// let result =
+///    historical_market_data::head_timestamp(&mut client, &contract, what_to_show, use_rth);
+///
+/// print!("head_timestamp: {:?}", result);
+/// ```
 pub fn head_timestamp<C: Client>(
     client: &mut C,
     contract: &Contract,
@@ -26,8 +43,8 @@ pub fn head_timestamp<C: Client>(
 
     client.send_packet(request)?;
 
-    let response = client.receive_packet(request_id);
-    decode_head_timestamp(&response)
+    let mut response = client.receive_packet(request_id)?;
+    decode_head_timestamp(&mut response)
 }
 
 /// Encodes the head timestamp request
@@ -69,7 +86,7 @@ pub fn encode_head_timestamp<C: Client>(
 //     source.AddParameter(value.IncludeExpired);
 // }
 
-fn decode_head_timestamp(packet: &ResponsePacket) -> Result<OffsetDateTime> {
+fn decode_head_timestamp(packet: &mut ResponsePacket) -> Result<OffsetDateTime> {
     let _request_id = packet.next_int()?;
     let head_timestamp = packet.next_date_time()?;
 

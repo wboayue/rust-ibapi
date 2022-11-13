@@ -1,14 +1,21 @@
-use anyhow::anyhow;
+use std::collections::VecDeque;
+
 use time::OffsetDateTime;
 
 use crate::client::tests::ClientStub;
+use crate::client::ResponsePacket;
 use crate::contracts;
-use crate::domain::Contract;
 use crate::historical_market_data;
 
 #[test]
 fn test_head_timestamp() {
     let mut client = ClientStub::default();
+    client.response_packets = VecDeque::from([ResponsePacket::from(vec![
+        "10".to_string(),
+        "0".to_string(),
+        "c".to_string(),
+    ])]);
+
     let contract = contracts::stock("MSFT");
     let what_to_show = "trades";
     let use_rth = true;
@@ -20,6 +27,13 @@ fn test_head_timestamp() {
         Err(error) => assert_eq!(error.to_string(), ""),
         Ok(head_timestamp) => assert_eq!(head_timestamp, OffsetDateTime::now_utc()),
     };
+
+    assert_eq!(client.request_packets.len(), 1);
+
+    let packet = &client.request_packets[0];
+
+    assert_eq!(packet[0], "hh");
+    assert_eq!(packet[1], "hh");
 }
 
 #[test]
