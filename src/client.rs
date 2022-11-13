@@ -8,10 +8,29 @@ use crate::domain::Contract;
 
 #[derive(Debug)]
 pub struct BasicClient<'a> {
+    /// IB server version
+    pub server_version: i32,
+    /// IB Server time 
+    pub server_time: OffsetDateTime,
+    // Next valid order id
+    pub next_valid_order_id: i32,
+    // Ids of managed accounts
+    pub managed_accounts: String,
+
     host: &'a str,
     port: i32,
     client_id: i32,
 }
+
+// 	currentRequestId int                   // used to generate sequence of request Ids
+// 	channels         map[int]chan []string // message exchange
+// 	ready            chan struct{}
+
+// 	mu                   sync.Mutex
+// 	requestIdMutex       sync.Mutex
+// 	contractDetailsMutex sync.Mutex
+// 
+
 
 #[derive(Default, Debug, PartialEq)]
 pub struct RequestPacket {
