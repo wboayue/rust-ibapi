@@ -8,18 +8,18 @@ use crate::historical_market_data;
 
 #[test]
 fn test_head_timestamp() {
-    let client = ClientStub{};
+    let mut client = ClientStub::default();
     let contract = contracts::stock("MSFT");
     let what_to_show = "trades";
     let use_rth = true;
 
-    let result = historical_market_data::head_timestamp(&client, &contract, what_to_show, use_rth);
+    let result = historical_market_data::head_timestamp(&mut client, &contract, what_to_show, use_rth);
 
     match result {
-        Err(error) => !
-            assert_eq!(error, anyhow!(""))
+        Err(error) =>  
+            assert_eq!(error.to_string(), ""),
         Ok(head_timestamp) =>
-            assert_eq!(head_timestamp, OffsetDateTime::now_utc())
+            assert_eq!(head_timestamp, OffsetDateTime::now_utc()),
     };
 }
 

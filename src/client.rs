@@ -10,8 +10,16 @@ pub struct BasicClient<'a> {
     client_id: i32,
 }
 
-pub struct RequestPacket {}
-pub struct ResponsePacket {}
+#[derive(Default, Debug, PartialEq)]
+pub struct RequestPacket {
+    fields: Vec<String>
+}
+
+#[derive(Default, Debug, PartialEq)]
+pub struct ResponsePacket {
+    fields: Vec<String>
+}
+
 pub struct ResponsePacketIterator {}
 
 pub trait ToPacket {
@@ -19,25 +27,26 @@ pub trait ToPacket {
 }
 
 impl RequestPacket {
-    pub fn add_field<T: ToPacket>(&self, val: T) {
-        val.to_packet();
+    pub fn add_field<T: ToPacket>(& mut self, val: T) {
+        let field = val.to_packet();
+        self.fields.push(field);
     }
 }
 
 impl ResponsePacket {
     pub fn next_int(&self) -> Result<i32> {
-        Err(anyhow!("not implemented!"))
+        Err(anyhow!("ResponsePacket.next_int not implemented!"))
     }
 
     pub fn next_date_time(&self) -> Result<OffsetDateTime> {
-        Err(anyhow!("not implemented!"))
+        Err(anyhow!("ResponsePacket.next_date_time not implemented!"))
     }
 }
 
 pub trait Client {
     fn next_request_id(&self) -> i32;
     fn server_version(&self) -> i32;
-    fn send_packet(&self, packet: &RequestPacket) -> i32;
+    fn send_packet(& mut self, packet: RequestPacket) -> Result<()>;
     fn receive_packet(&self, request_id: i32) -> ResponsePacket;
     fn receive_packets(&self, request_id: i32) -> ResponsePacketIterator;
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;

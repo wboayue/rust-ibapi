@@ -11,7 +11,7 @@ use crate::server_versions;
 
 /// Returns the timestamp of earliest available historical data for a contract and data type.
 pub fn head_timestamp<C: Client>(
-    client: &C,
+    client: &mut C,
     contract: &Contract,
     what_to_show: &str,
     use_rth: bool,
@@ -24,7 +24,7 @@ pub fn head_timestamp<C: Client>(
     let request_id = client.next_request_id();
     let request = encode_head_timestamp(client, request_id, contract, what_to_show, use_rth)?;
 
-    client.send_packet(&request);
+    client.send_packet(request)?;
 
     let response = client.receive_packet(request_id);
     decode_head_timestamp(&response)
@@ -38,7 +38,7 @@ pub fn encode_head_timestamp<C: Client>(
     what_to_show: &str,
     use_rth: bool,
 ) -> Result<RequestPacket> {
-    let mut packet = RequestPacket {};
+    let mut packet = RequestPacket::default();
 
     packet.add_field(12);
     packet.add_field(request_id);
