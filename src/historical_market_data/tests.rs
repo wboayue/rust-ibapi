@@ -1,4 +1,4 @@
-use anyhow::{anyhow};
+use anyhow::anyhow;
 use time::OffsetDateTime;
 
 use crate::client::tests::ClientStub;
@@ -13,13 +13,12 @@ fn test_head_timestamp() {
     let what_to_show = "trades";
     let use_rth = true;
 
-    let result = historical_market_data::head_timestamp(&mut client, &contract, what_to_show, use_rth);
+    let result =
+        historical_market_data::head_timestamp(&mut client, &contract, what_to_show, use_rth);
 
     match result {
-        Err(error) =>  
-            assert_eq!(error.to_string(), ""),
-        Ok(head_timestamp) =>
-            assert_eq!(head_timestamp, OffsetDateTime::now_utc()),
+        Err(error) => assert_eq!(error.to_string(), ""),
+        Ok(head_timestamp) => assert_eq!(head_timestamp, OffsetDateTime::now_utc()),
     };
 }
 

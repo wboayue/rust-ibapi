@@ -90,6 +90,6 @@ pub fn market_data<C: Client>(
     generic_tick_list: &str,
     snapshot: bool,
     regulatory_snapshot: bool,
-    market_data_options: &[TagValue],
+    market_data_options: &Vec<TagValue>,
 ) {
 }

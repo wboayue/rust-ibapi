@@ -8,11 +8,14 @@ use crate::domain::DeltaNeutralContract;
 use crate::domain::SecurityType;
 
 pub fn stock(symbol: &str) -> Contract {
-    Contract{symbol: symbol.to_string(), ..default()}
+    Contract {
+        symbol: symbol.to_string(),
+        ..default()
+    }
 }
 
 pub fn default() -> Contract {
-    Contract{
+    Contract {
         contract_id: 1,
         symbol: "".to_string(),
         security_type: SecurityType::STK,
@@ -30,7 +33,11 @@ pub fn default() -> Contract {
         security_id: "".to_string(),
         combo_legs_description: "".to_string(),
         combo_legs: Vec::new(),
-        delta_neutral_contract: DeltaNeutralContract{ contract_id: "".to_string(), delta: 1.0, price: 12.0 },
+        delta_neutral_contract: DeltaNeutralContract {
+            contract_id: "".to_string(),
+            delta: 1.0,
+            price: 12.0,
+        },
     }
 }
 

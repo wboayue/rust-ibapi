@@ -2,10 +2,10 @@ use anyhow::Result;
 
 use crate::client::Client;
 
-use super::{ResponsePacket, RequestPacket, ResponsePacketIterator};
+use super::{RequestPacket, ResponsePacket, ResponsePacketIterator};
 
 #[derive(Default, Debug, PartialEq)]
-pub struct ClientStub{
+pub struct ClientStub {
     outbound_packets: Vec<RequestPacket>,
 }
 
@@ -18,7 +18,7 @@ impl Client for ClientStub {
         1
     }
 
-    fn send_packet(& mut self, packet: RequestPacket) -> Result<()> {
+    fn send_packet(&mut self, packet: RequestPacket) -> Result<()> {
         self.outbound_packets.push(packet);
         Ok(())
     }
@@ -28,7 +28,7 @@ impl Client for ClientStub {
     }
 
     fn receive_packets(&self, request_id: i32) -> ResponsePacketIterator {
-        ResponsePacketIterator{}
+        ResponsePacketIterator {}
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
@@ -41,4 +41,3 @@ fn it_works() {
     let result = 2 + 2;
     assert_eq!(result, 4);
 }
-
