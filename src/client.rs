@@ -6,12 +6,12 @@ use time::OffsetDateTime;
 
 use crate::domain::Contract;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct BasicClient<'a> {
     /// IB server version
     pub server_version: i32,
     /// IB Server time 
-    pub server_time: OffsetDateTime,
+//    pub server_time: OffsetDateTime,
     // Next valid order id
     pub next_valid_order_id: i32,
     // Ids of managed accounts
@@ -21,6 +21,7 @@ pub struct BasicClient<'a> {
     port: i32,
     client_id: i32,
 }
+
 
 // 	currentRequestId int                   // used to generate sequence of request Ids
 // 	channels         map[int]chan []string // message exchange
@@ -112,10 +113,11 @@ pub trait Client {
 
 pub fn connect(host: &str, port: i32, client_id: i32) -> anyhow::Result<BasicClient> {
     println!("Connect, world!");
-    Ok(BasicClient {
+    Ok(BasicClient{
         host,
         port,
         client_id,
+        ..BasicClient::default()
     })
 }
 
