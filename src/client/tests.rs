@@ -42,7 +42,16 @@ impl Client for ClientStub {
 }
 
 #[test]
-fn it_works() {
+fn request_packet_from_fields() {
+    // let mut packet = RequestPacket::default();
+    // packet.add_field(32);
+
+    let packet = || -> RequestPacket {
+        let mut packet = RequestPacket::default();
+        packet.add_field(32);
+        packet
+    }();
+
     let result = 2 + 2;
     assert_eq!(result, 4);
 }

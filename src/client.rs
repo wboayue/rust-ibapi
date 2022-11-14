@@ -2,12 +2,12 @@ use std::ops::Index;
 
 use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
-// use time::time_macros::{datetime, format_description};
 
 use crate::domain::Contract;
+use crate::client::transport::{MessageBus, TcpMessageBus};
 
 #[derive(Debug, Default)]
-pub struct BasicClient<'a> {
+pub struct BasicClient<'a, M: MessageBus + Default> {
     /// IB server version
     pub server_version: i32,
     /// IB Server time 
@@ -16,12 +16,25 @@ pub struct BasicClient<'a> {
     pub next_valid_order_id: i32,
     // Ids of managed accounts
     pub managed_accounts: String,
+    
+    message_bus: M,
 
     host: &'a str,
     port: i32,
     client_id: i32,
 }
 
+impl<M: MessageBus + Default> BasicClient<'_, M> {
+    pub fn connect() -> Result<BasicClient<'static, M>> {
+        Err(anyhow!("error parsing field"))
+    }
+}
+
+// impl<TcpMessageBus> BasicClient<'_, TcpMessageBus> {
+//     pub fn connect() -> Result<BasicClient<'static, TcpMessageBus>> {
+//         Err(anyhow!("error parsing field"))
+//     }
+// }
 
 // 	currentRequestId int                   // used to generate sequence of request Ids
 // 	channels         map[int]chan []string // message exchange
@@ -31,7 +44,6 @@ pub struct BasicClient<'a> {
 // 	requestIdMutex       sync.Mutex
 // 	contractDetailsMutex sync.Mutex
 // 
-
 
 #[derive(Default, Debug, PartialEq)]
 pub struct RequestPacket {
@@ -44,13 +56,12 @@ pub struct ResponsePacket {
     fields: Vec<String>,
 }
 
-pub struct ResponsePacketIterator {}
-
-pub trait ToPacket {
-    fn to_packet(&self) -> String;
-}
 
 impl RequestPacket {
+    pub fn from(fields: &[Box<dyn ToPacket>]) -> RequestPacket {
+        RequestPacket::default()
+    }
+
     pub fn add_field<T: ToPacket>(&mut self, val: T) {
         let field = val.to_packet();
         self.fields.push(field);
@@ -63,6 +74,12 @@ impl Index<usize> for RequestPacket {
     fn index(&self, i: usize) -> &Self::Output {
         &self.fields[i]
     }
+}
+
+pub struct ResponsePacketIterator {}
+
+pub trait ToPacket {
+    fn to_packet(&self) -> String;
 }
 
 impl ResponsePacket {
@@ -111,13 +128,13 @@ pub trait Client {
 
 // }
 
-pub fn connect(host: &str, port: i32, client_id: i32) -> anyhow::Result<BasicClient> {
+pub fn connect(host: &str, port: i32, client_id: i32) -> anyhow::Result<BasicClient<TcpMessageBus>> {
     println!("Connect, world!");
-    Ok(BasicClient{
+    Ok(BasicClient::<TcpMessageBus>{
         host,
         port,
         client_id,
-        ..BasicClient::default()
+        ..BasicClient::<TcpMessageBus>::default()
     })
 }
 
@@ -153,3 +170,4 @@ impl ToPacket for &Contract {
 
 #[cfg(test)]
 pub mod tests;
+pub mod transport;
