@@ -4,14 +4,15 @@ use std::ops::Index;
 use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
 
-use crate::domain::Contract;
 use crate::client::transport::{MessageBus, TcpMessageBus};
+use crate::domain::Contract;
 
 pub struct BasicClient<'a> {
     /// IB server version
     pub server_version: i32,
-    /// IB Server time 
-//    pub server_time: OffsetDateTime,
+    /// IB Server time
+    //    pub server_time: OffsetDateTime,
+    pub server_time: String,
     // Next valid order id
     pub next_valid_order_id: i32,
     // Ids of managed accounts
@@ -24,31 +25,50 @@ pub struct BasicClient<'a> {
     client_id: i32,
 }
 
-impl BasicClient<'static> {
-    pub fn connect() -> Result<BasicClient<'static>> {
-        Err(anyhow!("error parsing field"))
+const MIN_SERVER_VERSION: i32 = 12;
+const MAX_SERVER_VERSION: i32 = 13;
+
+impl BasicClient<'_> {
+    pub fn connect(&mut self, connection_string: &str) -> Result<&BasicClient> {
+        self.message_bus.connect(connection_string)?;
+        self.handshake()?;
+
+        Ok(self)
+    }
+
+    fn handshake(&mut self) -> Result<()> {
+        let mut prelude = RequestPacket::default();
+        prelude.add_field("API");
+        prelude.add_field(format!("v{}..{}", MIN_SERVER_VERSION, MAX_SERVER_VERSION));
+
+        self.message_bus.write_packet(&prelude);
+
+        let mut status = self.message_bus.read_packet()?;
+        // if status.len() != 2 {
+        //     return Err(!anyhow("hello"));
+        // }
+
+        self.server_version = status.next_int()?;
+        self.server_time = status.next_string()?;
+
+        Ok(())
     }
 }
 
 impl Default for BasicClient<'static> {
     fn default() -> BasicClient<'static> {
-        BasicClient { server_version: 0, next_valid_order_id: 0, managed_accounts: String::from(""), message_bus: &TcpMessageBus{}, host: "", port: 0, client_id: 0 }
+        BasicClient {
+            server_version: 0,
+            server_time: String::from("hello"),
+            next_valid_order_id: 0,
+            managed_accounts: String::from(""),
+            message_bus: &TcpMessageBus {},
+            host: "",
+            port: 0,
+            client_id: 0,
+        }
     }
 }
-// impl<TcpMessageBus> BasicClient<'_, TcpMessageBus> {
-//     pub fn connect() -> Result<BasicClient<'static, TcpMessageBus>> {
-//         Err(anyhow!("error parsing field"))
-//     }
-// }
-
-// 	currentRequestId int                   // used to generate sequence of request Ids
-// 	channels         map[int]chan []string // message exchange
-// 	ready            chan struct{}
-
-// 	mu                   sync.Mutex
-// 	requestIdMutex       sync.Mutex
-// 	contractDetailsMutex sync.Mutex
-// 
 
 #[derive(Default, Debug, PartialEq)]
 pub struct RequestPacket {
@@ -60,7 +80,6 @@ pub struct ResponsePacket {
     i: usize,
     fields: Vec<String>,
 }
-
 
 impl RequestPacket {
     pub fn from(fields: &[Box<dyn ToPacket>]) -> RequestPacket {
@@ -112,6 +131,11 @@ impl ResponsePacket {
         };
     }
 
+    pub fn next_string(&mut self) -> Result<String> {
+        let field = &self.fields[self.i];
+        Ok(String::from(field))
+    }
+
     pub fn from(fields: Vec<String>) -> ResponsePacket {
         ResponsePacket {
             i: 0,
@@ -135,7 +159,7 @@ pub trait Client {
 
 pub fn connect(host: &str, port: i32, client_id: i32) -> anyhow::Result<BasicClient> {
     println!("Connect, world!");
-    Ok(BasicClient{
+    Ok(BasicClient {
         host,
         port,
         client_id,

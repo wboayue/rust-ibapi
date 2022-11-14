@@ -3,21 +3,19 @@ use anyhow::{anyhow, Result};
 use super::{RequestPacket, ResponsePacket};
 
 pub trait MessageBus {
+    fn connect(&self, connection_string: &str) -> Result<()>;
     fn read_packet(&self) -> Result<ResponsePacket>;
     fn write_packet(&self, packet: &RequestPacket) -> Result<()>;
 }
 
 #[derive(Debug, Default)]
-pub struct TcpMessageBus {
-}
-
-impl TcpMessageBus {
-    pub fn connect(connection_string: &str) -> Result<TcpMessageBus> {
-        Err(anyhow!("TcpMessageBus::connect() not implemented"))
-    }
-}
+pub struct TcpMessageBus {}
 
 impl MessageBus for TcpMessageBus {
+    fn connect(&self, connection_string: &str) -> Result<()> {
+        Err(anyhow!("TcpMessageBus::connect() not implemented"))
+    }
+
     fn read_packet(&self) -> Result<ResponsePacket> {
         Err(anyhow!("TcpMessageBus::read_packet() not implemented"))
     }
