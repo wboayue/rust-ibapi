@@ -1,3 +1,4 @@
+use std::default;
 use std::ops::Index;
 
 use anyhow::{anyhow, Result};
@@ -6,8 +7,7 @@ use time::OffsetDateTime;
 use crate::domain::Contract;
 use crate::client::transport::{MessageBus, TcpMessageBus};
 
-#[derive(Debug, Default)]
-pub struct BasicClient<'a, M: MessageBus + Default> {
+pub struct BasicClient<'a> {
     /// IB server version
     pub server_version: i32,
     /// IB Server time 
@@ -16,20 +16,25 @@ pub struct BasicClient<'a, M: MessageBus + Default> {
     pub next_valid_order_id: i32,
     // Ids of managed accounts
     pub managed_accounts: String,
-    
-    message_bus: M,
+
+    message_bus: &'a dyn MessageBus,
 
     host: &'a str,
     port: i32,
     client_id: i32,
 }
 
-impl<M: MessageBus + Default> BasicClient<'_, M> {
-    pub fn connect() -> Result<BasicClient<'static, M>> {
+impl BasicClient<'static> {
+    pub fn connect() -> Result<BasicClient<'static>> {
         Err(anyhow!("error parsing field"))
     }
 }
 
+impl Default for BasicClient<'static> {
+    fn default() -> BasicClient<'static> {
+        BasicClient { server_version: 0, next_valid_order_id: 0, managed_accounts: String::from(""), message_bus: &TcpMessageBus{}, host: "", port: 0, client_id: 0 }
+    }
+}
 // impl<TcpMessageBus> BasicClient<'_, TcpMessageBus> {
 //     pub fn connect() -> Result<BasicClient<'static, TcpMessageBus>> {
 //         Err(anyhow!("error parsing field"))
@@ -128,13 +133,13 @@ pub trait Client {
 
 // }
 
-pub fn connect(host: &str, port: i32, client_id: i32) -> anyhow::Result<BasicClient<TcpMessageBus>> {
+pub fn connect(host: &str, port: i32, client_id: i32) -> anyhow::Result<BasicClient> {
     println!("Connect, world!");
-    Ok(BasicClient::<TcpMessageBus>{
+    Ok(BasicClient{
         host,
         port,
         client_id,
-        ..BasicClient::<TcpMessageBus>::default()
+        ..BasicClient::default()
     })
 }
 

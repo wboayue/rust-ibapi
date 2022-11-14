@@ -8,7 +8,8 @@ fn main() -> anyhow::Result<()> {
 
     let client = ibapi::client::connect(host, port, client_id)?;
 
-    println!("Client: {:?}", client);
+    // implement debug
+    // println!("Client: {:?}", client);
 
     Ok(())
 }
