@@ -12,7 +12,7 @@ use crate::domain::NewsProvider;
 /// Requesting News Articles
 
 /// Requests news providers which the user has subscribed to.
-pub fn news_providers<C: Client+Debug>(client: &C) -> Result<Vec<NewsProvider>> {
+pub fn news_providers<C: Client + Debug>(client: &C) -> Result<Vec<NewsProvider>> {
     // request = RequestNewsProvidersRequest::new()
     // packet = request.encode()
     // client.send_packet(packet)

@@ -32,7 +32,7 @@ use crate::server_versions;
 ///         Ok(())
 ///     }
 /// ```
-pub fn head_timestamp<C: Client+Debug>(
+pub fn head_timestamp<C: Client + Debug>(
     client: &mut C,
     contract: &Contract,
     what_to_show: &str,
@@ -98,7 +98,7 @@ fn decode_head_timestamp(packet: &mut ResponsePacket) -> Result<OffsetDateTime> 
 }
 
 /// Returns data histogram of specified contract
-pub fn histogram_data<C: Client+Debug>(
+pub fn histogram_data<C: Client + Debug>(
     client: &C,
     contract: &Contract,
     use_rth: bool,
@@ -111,7 +111,7 @@ pub fn histogram_data<C: Client+Debug>(
     Err(anyhow!("not implemented!"))
 }
 
-pub fn historical_data<C: Client+Debug>(
+pub fn historical_data<C: Client + Debug>(
     client: &C,
     contract: &Contract,
     end: &OffsetDateTime,
@@ -124,11 +124,14 @@ pub fn historical_data<C: Client+Debug>(
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_barsize
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_what_to_show
-    print!("{:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}", client, contract, end, duration, bar_size, what_to_show, use_rth, keep_up_to_date);
+    print!(
+        "{:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}",
+        client, contract, end, duration, bar_size, what_to_show, use_rth, keep_up_to_date
+    );
     Err(anyhow!("not implemented!"))
 }
 
-pub fn historical_schedule<C: Client+Debug>(
+pub fn historical_schedule<C: Client + Debug>(
     client: &C,
     contract: &Contract,
     use_rth: bool,
@@ -138,7 +141,7 @@ pub fn historical_schedule<C: Client+Debug>(
     Err(anyhow!("not implemented!"))
 }
 
-pub fn historical_ticks<C: Client+Debug>(
+pub fn historical_ticks<C: Client + Debug>(
     client: &C,
     contract: &Contract,
     start_date: Option<OffsetDateTime>,
@@ -147,11 +150,14 @@ pub fn historical_ticks<C: Client+Debug>(
     use_rth: i32,
     ignore_size: bool,
 ) -> Result<HistoricalTickIterator> {
-    print!("{:?} {:?} {:?} {:?} {:?} {:?} {:?}", client, contract, start_date, end_date, number_of_ticks, use_rth, ignore_size);
+    print!(
+        "{:?} {:?} {:?} {:?} {:?} {:?} {:?}",
+        client, contract, start_date, end_date, number_of_ticks, use_rth, ignore_size
+    );
     Err(anyhow!("not implemented!"))
 }
 
-pub fn historical_ticks_bid_ask<C: Client+Debug>(
+pub fn historical_ticks_bid_ask<C: Client + Debug>(
     client: &C,
     contract: &Contract,
     start_date: Option<OffsetDateTime>,
@@ -160,11 +166,14 @@ pub fn historical_ticks_bid_ask<C: Client+Debug>(
     use_rth: i32,
     ignore_size: bool,
 ) -> Result<HistoricalTickBidAskIterator> {
-    print!("{:?} {:?} {:?} {:?} {:?} {:?} {:?}", client, contract, start_date, end_date, number_of_ticks, use_rth, ignore_size);
+    print!(
+        "{:?} {:?} {:?} {:?} {:?} {:?} {:?}",
+        client, contract, start_date, end_date, number_of_ticks, use_rth, ignore_size
+    );
     Err(anyhow!("not implemented!"))
 }
 
-pub fn historical_ticks_last<C: Client+Debug>(
+pub fn historical_ticks_last<C: Client + Debug>(
     client: &C,
     contract: &Contract,
     start_date: Option<OffsetDateTime>,
@@ -173,7 +182,10 @@ pub fn historical_ticks_last<C: Client+Debug>(
     use_rth: i32,
     ignore_size: bool,
 ) -> Result<HistoricalTickLastIterator> {
-    print!("{:?} {:?} {:?} {:?} {:?} {:?} {:?}", client, contract, start_date, end_date, number_of_ticks, use_rth, ignore_size);
+    print!(
+        "{:?} {:?} {:?} {:?} {:?} {:?} {:?}",
+        client, contract, start_date, end_date, number_of_ticks, use_rth, ignore_size
+    );
     Err(anyhow!("not implemented!"))
 }
 
@@ -246,47 +258,45 @@ pub mod tests {
     use std::collections::VecDeque;
 
     use time::OffsetDateTime;
-    
+
+    use super::*;
     use crate::client::tests::ClientStub;
     use crate::client::ResponsePacket;
     use crate::contracts;
-    use super::*;
-    
+
     #[test]
     fn test_head_timestamp() {
         let mut client = ClientStub::default();
-        client.response_packets = VecDeque::from([
-            ResponsePacket::from("10\x0000\x00cc")
-        ]);
-    
+        client.response_packets = VecDeque::from([ResponsePacket::from("10\x0000\x00cc")]);
+
         let contract = contracts::stock("MSFT");
         let what_to_show = "trades";
         let use_rth = true;
-    
+
         let result = super::head_timestamp(&mut client, &contract, what_to_show, use_rth);
-    
+
         // match result {
         //     Err(error) => assert_eq!(error.to_string(), ""),
         //     Ok(head_timestamp) => assert_eq!(head_timestamp, OffsetDateTime::now_utc()),
         // };
-    
+
         assert_eq!(client.request_packets.len(), 1);
-    
+
         let packet = &client.request_packets[0];
-    
+
         // assert_eq!(packet[0], "hh");
         // assert_eq!(packet[1], "hh");
     }
-    
+
     #[test]
     fn histogram_data() {
         let result = 2 + 2;
         assert_eq!(result, 4);
     }
-    
+
     #[test]
     fn historical_data() {
         let result = 2 + 2;
         assert_eq!(result, 4);
-    }    
+    }
 }

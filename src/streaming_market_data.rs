@@ -48,22 +48,25 @@ impl Iterator for BarIterator {
 /// BID
 /// ASK
 /// useRTH	set to 0 to obtain the data which was also generated ourside of the Regular Trading Hours, set to 1 to obtain only the RTH data
-pub fn real_time_bars<C: Client+Debug>(
+pub fn real_time_bars<C: Client + Debug>(
     client: &C,
     contract: &Contract,
     what_to_show: &WhatToShow,
     use_rth: bool,
 ) -> Result<BarIterator> {
-    print!("{:?} {:?} {:?} {:?}", client, contract, what_to_show, use_rth);    
+    print!(
+        "{:?} {:?} {:?} {:?}",
+        client, contract, what_to_show, use_rth
+    );
     Err(anyhow!("not implemented!"))
 }
 
-pub fn tick_by_tick_trades<C: Client+Debug>(client: &C, contract: &Contract) -> Result<BidAsk> {
+pub fn tick_by_tick_trades<C: Client + Debug>(client: &C, contract: &Contract) -> Result<BidAsk> {
     print!("{:?} {:?}", client, contract);
     Err(anyhow!("not implemented!"))
 }
 
-pub fn tick_by_tick_bid_ask<C: Client+Debug>(client: &C, contract: &Contract) -> Result<BidAsk> {
+pub fn tick_by_tick_bid_ask<C: Client + Debug>(client: &C, contract: &Contract) -> Result<BidAsk> {
     print!("{:?} {:?}", client, contract);
     Err(anyhow!("not implemented!"))
 }
@@ -90,7 +93,7 @@ pub fn tick_by_tick_bid_ask<C: Client+Debug>(client: &C, contract: &Contract) ->
 ///     456 IBDividends
 /// snapshot	for users with corresponding real time market data subscriptions. A true value will return a one-time snapshot, while a false value will provide streaming data.
 /// regulatory	snapshot for US stocks requests NBBO snapshots for users which have "US Securities Snapshot Bundle" subscription but not corresponding Network A, B, or C subscription necessary for streaming * market data. One-time snapshot of current market price that will incur a fee of 1 cent to the account per snapshot.
-pub fn market_data<C: Client+Debug>(
+pub fn market_data<C: Client + Debug>(
     client: &C,
     contract: &Contract,
     generic_tick_list: &str,
@@ -98,5 +101,8 @@ pub fn market_data<C: Client+Debug>(
     regulatory_snapshot: bool,
     market_data_options: &Vec<TagValue>,
 ) {
-    print!("{:?} {:?} {:?} {:?} {:?} {:?}", client, contract, generic_tick_list, snapshot, regulatory_snapshot, market_data_options);
+    print!(
+        "{:?} {:?} {:?} {:?} {:?} {:?}",
+        client, contract, generic_tick_list, snapshot, regulatory_snapshot, market_data_options
+    );
 }

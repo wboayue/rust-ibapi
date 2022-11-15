@@ -2,7 +2,7 @@ use std::fmt;
 use std::ops::Index;
 
 use anyhow::{anyhow, Result};
-use log::{debug};
+use log::debug;
 use time::OffsetDateTime;
 
 use crate::client::transport::{MessageBus, TcpMessageBus};
@@ -47,7 +47,10 @@ impl BasicClient {
         BasicClient::do_connect(connection_string, message_bus)
     }
 
-    fn do_connect(connection_string: &str, message_bus: Box<dyn MessageBus>) -> Result<BasicClient> {
+    fn do_connect(
+        connection_string: &str,
+        message_bus: Box<dyn MessageBus>,
+    ) -> Result<BasicClient> {
         debug!("connecting to server with #{:?}", connection_string);
 
         let mut client = BasicClient {
@@ -81,7 +84,7 @@ impl BasicClient {
 
         Ok(())
     }
-    
+
     fn start_api(&mut self) -> Result<()> {
         let prelude = &mut RequestPacket::default();
         prelude.add_field(START_API);
@@ -127,10 +130,10 @@ impl Client for BasicClient {
 impl fmt::Debug for BasicClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("IbClient")
-         .field("server_version", &self.server_version)
-         .field("server_time", &self.server_time)
-         .field("client_id", &self.client_id)
-         .finish()
+            .field("server_version", &self.server_version)
+            .field("server_time", &self.server_time)
+            .field("client_id", &self.client_id)
+            .finish()
     }
 }
 
@@ -152,7 +155,7 @@ impl RequestPacket {
 
     pub fn encode(&self) -> String {
         self.fields.join("\x00")
-    } 
+    }
 }
 
 impl Index<usize> for RequestPacket {
@@ -249,58 +252,58 @@ pub mod tests {
     use std::collections::VecDeque;
 
     use anyhow::{anyhow, Result};
-    
+
     use super::*;
     use crate::client::Client;
-    
+
     #[derive(Default, Debug)]
     pub struct ClientStub {
         pub request_packets: Vec<RequestPacket>,
         pub response_packets: VecDeque<ResponsePacket>,
     }
-    
+
     impl Client for ClientStub {
         fn next_request_id(&self) -> i32 {
             1
         }
-    
+
         fn server_version(&self) -> i32 {
             1
         }
-    
+
         fn send_packet(&mut self, packet: RequestPacket) -> Result<()> {
             self.request_packets.push(packet);
             Ok(())
         }
-    
+
         fn receive_packet(&mut self, _request_id: i32) -> Result<ResponsePacket> {
             match self.response_packets.pop_front() {
                 Some(packet) => Ok(packet),
                 None => Err(anyhow!("ClientStub::receive_packet no packet")),
             }
         }
-    
+
         fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator> {
             Ok(ResponsePacketIterator {})
         }
-    
+
         fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
             Ok(())
         }
     }
-    
+
     #[test]
     fn request_packet_from_fields() {
         // let mut packet = RequestPacket::default();
         // packet.add_field(32);
-    
+
         let packet = || -> RequestPacket {
             let mut packet = RequestPacket::default();
             packet.add_field(32);
             packet
         }();
-    
+
         let result = 2 + 2;
         assert_eq!(result, 4);
-    }    
+    }
 }

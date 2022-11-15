@@ -1,9 +1,9 @@
-use std::io::Cursor;
 use std::io::prelude::*;
+use std::io::Cursor;
 use std::net::TcpStream;
 
-use anyhow::{Result};
-use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
+use anyhow::Result;
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use log::{debug, info};
 
 use super::{RequestPacket, ResponsePacket};
@@ -22,7 +22,9 @@ pub struct TcpMessageBus {
 
 impl TcpMessageBus {
     pub fn connect(connection_string: &str) -> Result<TcpMessageBus> {
-        Ok(TcpMessageBus{stream: Box::new(TcpStream::connect(connection_string)?)})
+        Ok(TcpMessageBus {
+            stream: Box::new(TcpStream::connect(connection_string)?),
+        })
     }
 }
 
@@ -64,5 +66,4 @@ impl MessageBus for TcpMessageBus {
         self.stream.write(&packet.as_bytes())?;
         Ok(())
     }
-
 }
