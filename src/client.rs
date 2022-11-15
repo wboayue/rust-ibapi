@@ -9,6 +9,8 @@ use crate::client::transport::{MessageBus, TcpMessageBus};
 use crate::domain::Contract;
 use crate::server_versions;
 
+pub mod transport;
+
 pub struct BasicClient {
     /// IB server version
     pub server_version: i32,
@@ -31,12 +33,13 @@ const START_API: i32 = 2;
 
 
 impl BasicClient {
+    /// Opens connection to TWS workstation or gateway.
     pub fn connect(connection_string: &str) -> Result<BasicClient> {
         let message_bus = Box::new(TcpMessageBus::connect(connection_string)?);
         BasicClient::do_connect(connection_string, message_bus)
     }
 
-    pub fn do_connect(connection_string: &str, message_bus: Box<dyn MessageBus>) -> Result<BasicClient> {
+    fn do_connect(connection_string: &str, message_bus: Box<dyn MessageBus>) -> Result<BasicClient> {
         debug!("connecting to server with #{:?}", connection_string);
 
         let mut client = BasicClient {
@@ -65,7 +68,6 @@ impl BasicClient {
         self.message_bus.write_packet(prelude)?;
 
         let mut status = self.message_bus.read_packet()?;
-
         self.server_version = status.next_int()?;
         self.server_time = status.next_string()?;
 
@@ -219,4 +221,3 @@ impl ToPacket for &Contract {
 
 #[cfg(test)]
 pub mod tests;
-pub mod transport;

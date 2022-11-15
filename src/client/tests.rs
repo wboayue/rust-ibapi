@@ -5,7 +5,7 @@ use anyhow::{anyhow, Result};
 use super::*;
 use crate::client::Client;
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug)]
 pub struct ClientStub {
     pub request_packets: Vec<RequestPacket>,
     pub response_packets: VecDeque<ResponsePacket>,
