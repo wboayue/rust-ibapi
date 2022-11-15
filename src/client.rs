@@ -1,17 +1,15 @@
-use std::default;
 use std::fmt;
 use std::ops::Index;
-use std::net::TcpStream;
 
 use anyhow::{anyhow, Result};
-use log::{debug, info};
+use log::{debug};
 use time::OffsetDateTime;
 
 use crate::client::transport::{MessageBus, TcpMessageBus};
 use crate::domain::Contract;
 use crate::server_versions;
 
-pub struct BasicClient<'a> {
+pub struct BasicClient {
     /// IB server version
     pub server_version: i32,
     /// IB Server time
@@ -23,9 +21,6 @@ pub struct BasicClient<'a> {
     pub managed_accounts: String,
 
     message_bus: Box<dyn MessageBus>,
-
-    host: &'a str,
-    port: i32,
     client_id: i32,
 }
 
@@ -35,21 +30,21 @@ const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
 const START_API: i32 = 2;
 
 
-impl BasicClient<'_> {
-    pub fn connect(connection_string: &str) -> Result<BasicClient<'_>> {
+impl BasicClient {
+    pub fn connect(connection_string: &str) -> Result<BasicClient> {
         let message_bus = Box::new(TcpMessageBus::connect(connection_string)?);
         BasicClient::do_connect(connection_string, message_bus)
     }
 
-    pub fn do_connect(connection_string: &str, message_bus: Box<dyn MessageBus>) -> Result<BasicClient<'_>> {
+    pub fn do_connect(connection_string: &str, message_bus: Box<dyn MessageBus>) -> Result<BasicClient> {
+        debug!("connecting to server with #{:?}", connection_string);
+
         let mut client = BasicClient {
             server_version: 0,
             server_time: String::from("hello"),
             next_valid_order_id: 0,
             managed_accounts: String::from(""),
             message_bus: message_bus,
-            host: "",
-            port: 0,
             client_id: 0,
         };
 
@@ -57,7 +52,7 @@ impl BasicClient<'_> {
         client.start_api()?;
 
         // start processing thread
-        
+
         Ok(client)
     }
 
@@ -78,7 +73,7 @@ impl BasicClient<'_> {
     }
     
     fn start_api(&mut self) -> Result<()> {
-        let mut prelude = &mut RequestPacket::default();
+        let prelude = &mut RequestPacket::default();
         prelude.add_field(START_API);
         prelude.add_field(CLIENT_VERSION);
         prelude.add_field(self.client_id);
@@ -87,13 +82,13 @@ impl BasicClient<'_> {
             prelude.add_field("");
         }
 
-        self.message_bus.write_packet(prelude);
+        self.message_bus.write_packet(prelude)?;
 
         Ok(())
     }
 }
 
-impl fmt::Debug for BasicClient<'_> {
+impl fmt::Debug for BasicClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("IbClient")
          .field("server_version", &self.server_version)
@@ -109,7 +104,7 @@ pub struct RequestPacket {
 }
 
 impl RequestPacket {
-    pub fn from(fields: &[Box<dyn ToPacket>]) -> RequestPacket {
+    pub fn from(_fields: &[Box<dyn ToPacket>]) -> RequestPacket {
         RequestPacket::default()
     }
 

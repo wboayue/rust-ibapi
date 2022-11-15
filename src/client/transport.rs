@@ -2,7 +2,7 @@ use std::io::Cursor;
 use std::io::prelude::*;
 use std::net::TcpStream;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result};
 use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
 use log::{debug, info};
 
@@ -29,7 +29,7 @@ impl TcpMessageBus {
 impl MessageBus for TcpMessageBus {
     // set read timeout
     fn read_packet(&mut self) -> Result<ResponsePacket> {
-        let mut buf = &mut [0 as u8; 4];
+        let buf = &mut [0 as u8; 4];
 
         self.stream.read(buf)?;
 

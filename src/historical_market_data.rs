@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
 
@@ -27,7 +29,7 @@ use crate::server_versions;
 ///
 /// print!("head_timestamp: {:?}", result);
 /// ```
-pub fn head_timestamp<C: Client>(
+pub fn head_timestamp<C: Client+Debug>(
     client: &mut C,
     contract: &Contract,
     what_to_show: &str,
@@ -39,7 +41,7 @@ pub fn head_timestamp<C: Client>(
     )?;
 
     let request_id = client.next_request_id();
-    let request = encode_head_timestamp(client, request_id, contract, what_to_show, use_rth)?;
+    let request = encode_head_timestamp(request_id, contract, what_to_show, use_rth)?;
 
     client.send_packet(request)?;
 
@@ -48,8 +50,7 @@ pub fn head_timestamp<C: Client>(
 }
 
 /// Encodes the head timestamp request
-pub fn encode_head_timestamp<C: Client>(
-    client: &C,
+pub fn encode_head_timestamp(
     request_id: i32,
     contract: &Contract,
     what_to_show: &str,
@@ -94,7 +95,7 @@ fn decode_head_timestamp(packet: &mut ResponsePacket) -> Result<OffsetDateTime> 
 }
 
 /// Returns data histogram of specified contract
-pub fn histogram_data<C: Client>(
+pub fn histogram_data<C: Client+Debug>(
     client: &C,
     contract: &Contract,
     use_rth: bool,
@@ -103,10 +104,11 @@ pub fn histogram_data<C: Client>(
     // " S (seconds) - " D (days)
     // " W (weeks) - " M (months)
     // " Y (years)
+    print!("{:?} {:?} {:?} {:?}", client, contract, use_rth, period);
     Err(anyhow!("not implemented!"))
 }
 
-pub fn historical_data<C: Client>(
+pub fn historical_data<C: Client+Debug>(
     client: &C,
     contract: &Contract,
     end: &OffsetDateTime,
@@ -119,19 +121,21 @@ pub fn historical_data<C: Client>(
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_barsize
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_what_to_show
+    print!("{:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}", client, contract, end, duration, bar_size, what_to_show, use_rth, keep_up_to_date);
     Err(anyhow!("not implemented!"))
 }
 
-pub fn historical_schedule<C: Client>(
+pub fn historical_schedule<C: Client+Debug>(
     client: &C,
     contract: &Contract,
     use_rth: bool,
     period: &str,
 ) -> Result<HistogramDataIterator> {
+    print!("{:?} {:?} {:?} {:?}", client, contract, use_rth, period);
     Err(anyhow!("not implemented!"))
 }
 
-pub fn historical_ticks<C: Client>(
+pub fn historical_ticks<C: Client+Debug>(
     client: &C,
     contract: &Contract,
     start_date: Option<OffsetDateTime>,
@@ -140,10 +144,11 @@ pub fn historical_ticks<C: Client>(
     use_rth: i32,
     ignore_size: bool,
 ) -> Result<HistoricalTickIterator> {
+    print!("{:?} {:?} {:?} {:?} {:?} {:?} {:?}", client, contract, start_date, end_date, number_of_ticks, use_rth, ignore_size);
     Err(anyhow!("not implemented!"))
 }
 
-pub fn historical_ticks_bid_ask<C: Client>(
+pub fn historical_ticks_bid_ask<C: Client+Debug>(
     client: &C,
     contract: &Contract,
     start_date: Option<OffsetDateTime>,
@@ -152,10 +157,11 @@ pub fn historical_ticks_bid_ask<C: Client>(
     use_rth: i32,
     ignore_size: bool,
 ) -> Result<HistoricalTickBidAskIterator> {
+    print!("{:?} {:?} {:?} {:?} {:?} {:?} {:?}", client, contract, start_date, end_date, number_of_ticks, use_rth, ignore_size);
     Err(anyhow!("not implemented!"))
 }
 
-pub fn historical_ticks_last<C: Client>(
+pub fn historical_ticks_last<C: Client+Debug>(
     client: &C,
     contract: &Contract,
     start_date: Option<OffsetDateTime>,
@@ -164,6 +170,7 @@ pub fn historical_ticks_last<C: Client>(
     use_rth: i32,
     ignore_size: bool,
 ) -> Result<HistoricalTickLastIterator> {
+    print!("{:?} {:?} {:?} {:?} {:?} {:?} {:?}", client, contract, start_date, end_date, number_of_ticks, use_rth, ignore_size);
     Err(anyhow!("not implemented!"))
 }
 
@@ -214,14 +221,14 @@ pub struct HistogramData {}
 pub struct HistogramDataIterator {}
 
 pub struct Bar {
-    time: OffsetDateTime,
-    open: f64,
-    high: f64,
-    low: f64,
-    close: f64,
-    volume: f64,
-    wap: f64,
-    count: i32,
+    pub time: OffsetDateTime,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: f64,
+    pub wap: f64,
+    pub count: i32,
 }
 
 pub struct BarIterator {}
