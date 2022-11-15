@@ -29,7 +29,7 @@ impl MessageBus for TcpMessageBus {
     fn read_packet(&mut self) -> Result<ResponsePacket> {
         info!("reading packet");
 
-        let mut buf = &mut [0 as u8; 128];
+        let mut buf = &mut [0 as u8; 4];
         self.stream.read(buf)?;
         info!("read {:?}", buf);
         Err(anyhow!("TcpMessageBus::read_packet() not implemented"))
