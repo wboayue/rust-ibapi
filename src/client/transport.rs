@@ -11,7 +11,7 @@ use super::{RequestPacket, ResponsePacket};
 pub trait MessageBus {
     // fn connect(connection_string: &str) -> Result<Self>;
     fn read_packet(&mut self) -> Result<ResponsePacket>;
-    fn write_packet(&mut self, packet: &mut RequestPacket) -> Result<()>;
+    fn write_packet(&mut self, packet: &RequestPacket) -> Result<()>;
     fn write(&mut self, packet: &str) -> Result<()>;
 }
 
@@ -45,7 +45,7 @@ impl MessageBus for TcpMessageBus {
         Ok(packet)
     }
 
-    fn write_packet(&mut self, packet: &mut RequestPacket) -> Result<()> {
+    fn write_packet(&mut self, packet: &RequestPacket) -> Result<()> {
         let encoded = packet.encode();
 
         let mut wtr = vec![];

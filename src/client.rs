@@ -11,6 +11,15 @@ use crate::server_versions;
 
 pub mod transport;
 
+pub trait Client {
+    fn next_request_id(&self) -> i32;
+    fn server_version(&self) -> i32;
+    fn send_packet(&mut self, packet: RequestPacket) -> Result<()>;
+    fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket>;
+    fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator>;
+    fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
+}
+
 pub struct BasicClient {
     /// IB server version
     pub server_version: i32,
@@ -30,7 +39,6 @@ const CLIENT_VERSION: i32 = 2;
 const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
 const START_API: i32 = 2;
-
 
 impl BasicClient {
     /// Opens connection to TWS workstation or gateway.
@@ -90,6 +98,32 @@ impl BasicClient {
     }
 }
 
+impl Client for BasicClient {
+    fn next_request_id(&self) -> i32 {
+        10
+    }
+
+    fn server_version(&self) -> i32 {
+        self.server_version
+    }
+
+    fn send_packet(&mut self, packet: RequestPacket) -> Result<()> {
+        self.message_bus.write_packet(&packet)
+    }
+
+    fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket> {
+        Err(anyhow!("not implemented"))
+    }
+
+    fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator> {
+        Err(anyhow!("not implemented"))
+    }
+
+    fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
+        Err(anyhow!("not implemented"))
+    }
+}
+
 impl fmt::Debug for BasicClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("IbClient")
@@ -116,7 +150,7 @@ impl RequestPacket {
         self
     }
 
-    pub fn encode(&mut self, ) -> String {
+    pub fn encode(&self) -> String {
         self.fields.join("\x00")
     } 
 }
@@ -178,15 +212,6 @@ impl ResponsePacket {
             fields: fields.split("\x00").map(|x| x.to_string()).collect(),
         }
     }
-}
-
-pub trait Client {
-    fn next_request_id(&self) -> i32;
-    fn server_version(&self) -> i32;
-    fn send_packet(&mut self, packet: RequestPacket) -> Result<()>;
-    fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket>;
-    fn receive_packets(&self, request_id: i32) -> ResponsePacketIterator;
-    fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
 
 impl ToPacket for bool {

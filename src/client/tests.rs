@@ -32,8 +32,8 @@ impl Client for ClientStub {
         }
     }
 
-    fn receive_packets(&self, request_id: i32) -> ResponsePacketIterator {
-        ResponsePacketIterator {}
+    fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator> {
+        Ok(ResponsePacketIterator {})
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {

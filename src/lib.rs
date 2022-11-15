@@ -10,15 +10,12 @@
 //!
 //! [`proc_macro`]: https://doc.rust-lang.org/proc_macro/
 //! Fast and easy queue abstraction.
-//!```
+//!```no_run
 //!     use anyhow;
+//!     use ibapi::client::BasicClient;     
 //!     
 //!     fn main() -> anyhow::Result<()> {
-//!         let port = 4002;
-//!         let client_id = 100;
-//!         let host = "localhost";
-//!
-//!         let client = ibapi::client::connect(host, port, client_id)?;
+//!         let client = BasicClient::connect("localhost:4002:100")?;
 //!         println!("Client: {:?}", client);
 //!         Ok(())
 //!     }
