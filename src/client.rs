@@ -4,6 +4,7 @@ use std::ops::Index;
 use std::net::TcpStream;
 
 use anyhow::{anyhow, Result};
+use log::{debug, info};
 use time::OffsetDateTime;
 
 use crate::client::transport::{MessageBus, TcpMessageBus};
@@ -55,20 +56,20 @@ impl BasicClient<'_> {
         client.handshake()?;
         client.start_api()?;
 
+        // start processing thread
+        
         Ok(client)
     }
 
     fn handshake(&mut self) -> Result<()> {
+        self.message_bus.write("API\x00")?;
+
         let prelude = &mut RequestPacket::default();
-        prelude.add_field("API");
         prelude.add_field(format!("v{}..{}", MIN_SERVER_VERSION, MAX_SERVER_VERSION));
 
-        self.message_bus.write_packet(prelude);
+        self.message_bus.write_packet(prelude)?;
 
         let mut status = self.message_bus.read_packet()?;
-        // if status.len() != 2 {
-        //     return Err(!anyhow("hello"));
-        // }
 
         self.server_version = status.next_int()?;
         self.server_time = status.next_string()?;
@@ -105,13 +106,6 @@ impl fmt::Debug for BasicClient<'_> {
 #[derive(Default, Debug, PartialEq)]
 pub struct RequestPacket {
     fields: Vec<String>,
-    encoded: String,
-}
-
-#[derive(Default, Debug, PartialEq)]
-pub struct ResponsePacket {
-    i: usize,
-    fields: Vec<String>,
 }
 
 impl RequestPacket {
@@ -125,9 +119,8 @@ impl RequestPacket {
         self
     }
 
-    pub fn encode(&mut self, ) -> &[u8] {
-        self.encoded = self.fields.join("\x00");
-        self.encoded.as_bytes()
+    pub fn encode(&mut self, ) -> String {
+        self.fields.join("\x00")
     } 
 }
 
@@ -143,6 +136,12 @@ pub struct ResponsePacketIterator {}
 
 pub trait ToPacket {
     fn to_packet(&self) -> String;
+}
+
+#[derive(Default, Debug)]
+pub struct ResponsePacket {
+    i: usize,
+    fields: Vec<String>,
 }
 
 impl ResponsePacket {
@@ -176,10 +175,10 @@ impl ResponsePacket {
         Ok(String::from(field))
     }
 
-    pub fn from(fields: Vec<String>) -> ResponsePacket {
+    pub fn from(fields: &str) -> ResponsePacket {
         ResponsePacket {
             i: 0,
-            fields: fields,
+            fields: fields.split("\x00").map(|x| x.to_string()).collect(),
         }
     }
 }
@@ -195,7 +194,7 @@ pub trait Client {
 
 impl ToPacket for bool {
     fn to_packet(&self) -> String {
-        "bool".to_string()
+        self.to_string()
     }
 }
 
@@ -207,7 +206,7 @@ impl ToPacket for String {
 
 impl ToPacket for i32 {
     fn to_packet(&self) -> String {
-        "i32".to_string()
+        self.to_string()
     }
 }
 
@@ -219,7 +218,7 @@ impl ToPacket for &str {
 
 impl ToPacket for &Contract {
     fn to_packet(&self) -> String {
-        "contract".to_string()
+        format!("{:?}", self)
     }
 }
 

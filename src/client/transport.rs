@@ -1,9 +1,10 @@
+use std::io::Cursor;
 use std::io::prelude::*;
 use std::net::TcpStream;
 
 use anyhow::{anyhow, Result};
-use byteorder::{BigEndian, WriteBytesExt};
-use log::{info};
+use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
+use log::{debug, info};
 
 use super::{RequestPacket, ResponsePacket};
 
@@ -11,6 +12,7 @@ pub trait MessageBus {
     // fn connect(connection_string: &str) -> Result<Self>;
     fn read_packet(&mut self) -> Result<ResponsePacket>;
     fn write_packet(&mut self, packet: &mut RequestPacket) -> Result<()>;
+    fn write(&mut self, packet: &str) -> Result<()>;
 }
 
 #[derive(Debug)]
@@ -27,12 +29,20 @@ impl TcpMessageBus {
 impl MessageBus for TcpMessageBus {
     // set read timeout
     fn read_packet(&mut self) -> Result<ResponsePacket> {
-        info!("reading packet");
-
         let mut buf = &mut [0 as u8; 4];
+
         self.stream.read(buf)?;
-        info!("read {:?}", buf);
-        Err(anyhow!("TcpMessageBus::read_packet() not implemented"))
+
+        let mut rdr = Cursor::new(buf);
+        let count = rdr.read_u32::<BigEndian>()?;
+
+        let mut data = vec![0 as u8; count as usize];
+        self.stream.read(&mut data)?;
+
+        let packet = ResponsePacket::from(&String::from_utf8(data)?);
+        debug!("read packet {:?}", packet);
+
+        Ok(packet)
     }
 
     fn write_packet(&mut self, packet: &mut RequestPacket) -> Result<()> {
@@ -41,11 +51,18 @@ impl MessageBus for TcpMessageBus {
         let mut wtr = vec![];
         wtr.write_u32::<BigEndian>(encoded.len().try_into().unwrap())?;
 
-        info!("write packet {:?}", encoded);
+        info!("outbound request {:?}", encoded);
 
         self.stream.write(&wtr)?;
-        self.stream.write(&encoded)?;
+        self.stream.write(&encoded.as_bytes())?;
 
         Ok(())
     }
+
+    fn write(&mut self, packet: &str) -> Result<()> {
+        info!("write_packet: {:?}", packet);
+        self.stream.write(&packet.as_bytes())?;
+        Ok(())
+    }
+
 }
