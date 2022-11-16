@@ -12,6 +12,7 @@ pub trait MessageBus {
     fn read_packet(&mut self) -> Result<ResponsePacket>;
     fn write_packet(&mut self, packet: &RequestPacket) -> Result<()>;
     fn write(&mut self, packet: &str) -> Result<()>;
+    fn process_messages(&mut self) -> Result<()>;
 }
 
 #[derive(Debug)]
@@ -63,6 +64,10 @@ impl MessageBus for TcpMessageBus {
     fn write(&mut self, packet: &str) -> Result<()> {
         info!("write_packet: {:?}", packet);
         self.stream.write(&packet.as_bytes())?;
+        Ok(())
+    }
+
+    fn process_messages(&mut self) -> Result<()> {
         Ok(())
     }
 }

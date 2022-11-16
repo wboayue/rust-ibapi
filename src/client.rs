@@ -63,7 +63,7 @@ impl BasicClient {
         client.handshake()?;
         client.start_api()?;
 
-        // start processing thread
+        client.message_bus.process_messages()?;
 
         Ok(client)
     }
