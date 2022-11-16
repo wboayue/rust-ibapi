@@ -6,10 +6,9 @@ use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use log::{debug, info};
 
-use super::{RequestPacket, ResponsePacket};
+use crate::client::{RequestPacket, ResponsePacket};
 
 pub trait MessageBus {
-    // fn connect(connection_string: &str) -> Result<Self>;
     fn read_packet(&mut self) -> Result<ResponsePacket>;
     fn write_packet(&mut self, packet: &RequestPacket) -> Result<()>;
     fn write(&mut self, packet: &str) -> Result<()>;

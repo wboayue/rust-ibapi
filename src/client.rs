@@ -5,11 +5,9 @@ use anyhow::{anyhow, Result};
 use log::debug;
 use time::OffsetDateTime;
 
-use crate::client::transport::{MessageBus, TcpMessageBus};
+use crate::transport::{MessageBus, TcpMessageBus};
 use crate::domain::Contract;
 use crate::server_versions;
-
-pub mod transport;
 
 pub trait Client {
     fn next_request_id(&self) -> i32;
@@ -307,3 +305,4 @@ pub mod tests {
         assert_eq!(result, 4);
     }
 }
+ 
