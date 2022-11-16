@@ -252,7 +252,6 @@ pub mod tests {
     use anyhow::{anyhow, Result};
 
     use super::*;
-    use crate::client::Client;
 
     #[derive(Default, Debug)]
     pub struct ClientStub {
