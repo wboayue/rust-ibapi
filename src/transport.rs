@@ -26,23 +26,21 @@ impl TcpMessageBus {
 //        stream.set_nonblocking(true)
         let stream = Box::new(TcpStream::connect(connection_string)?);
         // stream.set_nonblocking(true);
-        Ok(TcpMessageBus {
-            stream: stream,
-        })
+        Ok(TcpMessageBus {stream})
     }
 }
 
 impl MessageBus for TcpMessageBus {
     // set read timeout
     fn read_packet(&mut self) -> Result<ResponsePacket> {
-        let buf = &mut [0 as u8; 4];
+        let buf = &mut [0_u8; 4];
 
         self.stream.read(buf)?;
 
         let mut rdr = Cursor::new(buf);
         let count = rdr.read_u32::<BigEndian>()?;
 
-        let mut data = vec![0 as u8; count as usize];
+        let mut data = vec![0_u8; count as usize];
         self.stream.read(&mut data)?;
 
         let packet = ResponsePacket::from(&String::from_utf8(data)?);
@@ -59,15 +57,15 @@ impl MessageBus for TcpMessageBus {
 
         info!("outbound request {:?}", encoded);
 
-        self.stream.write(&wtr)?;
-        self.stream.write(&encoded.as_bytes())?;
+        self.stream.write_all(&wtr)?;
+        self.stream.write_all(encoded.as_bytes())?;
 
         Ok(())
     }
 
     fn write(&mut self, packet: &str) -> Result<()> {
         info!("write_packet: {:?}", packet);
-        self.stream.write(&packet.as_bytes())?;
+        self.stream.write_all(packet.as_bytes())?;
         Ok(())
     }
 

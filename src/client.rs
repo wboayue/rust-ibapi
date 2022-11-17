@@ -1,7 +1,5 @@
 use std::ops::Index;
-use std::sync::{Arc, Mutex};
-use std::thread::JoinHandle;
-use std::{fmt, thread, time as std_time};
+use std::{fmt};
 
 use anyhow::{anyhow, Result};
 use log::{debug, info};
@@ -58,7 +56,7 @@ impl BasicClient {
             server_time: String::from("hello"),
             next_valid_order_id: 0,
             managed_accounts: String::from(""),
-            message_bus: message_bus,
+            message_bus,
             client_id: 100,
         };
 
@@ -125,11 +123,11 @@ impl Client for BasicClient {
     }
 
     fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket> {
-        Err(anyhow!("not implemented"))
+        Err(anyhow!("received_packet not implemented: {:?}", request_id))
     }
 
     fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator> {
-        Err(anyhow!("not implemented"))
+        Err(anyhow!("received_packets not implemented: {:?}", request_id))
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
@@ -203,10 +201,10 @@ impl ResponsePacket {
         match field.parse() {
             Ok(val) => {
                 self.i += 1;
-                return Ok(val);
+                Ok(val)
             }
-            Err(err) => return Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
-        };
+            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+        }
     }
 
     pub fn next_date_time(&mut self) -> Result<OffsetDateTime> {
@@ -216,10 +214,10 @@ impl ResponsePacket {
         match OffsetDateTime::from_unix_timestamp(timestamp) {
             Ok(val) => {
                 self.i += 1;
-                return Ok(val);
+                Ok(val)
             }
-            Err(err) => return Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
-        };
+            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+        }
     }
 
     pub fn next_string(&mut self) -> Result<String> {
@@ -231,7 +229,7 @@ impl ResponsePacket {
     pub fn from(fields: &str) -> ResponsePacket {
         ResponsePacket {
             i: 0,
-            fields: fields.split("\x00").map(|x| x.to_string()).collect(),
+            fields: fields.split('\x00').map(|x| x.to_string()).collect(),
         }
     }
 }

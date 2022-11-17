@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result};
 use log::info;
 
 use crate::client::Client;
@@ -82,8 +82,8 @@ pub fn contract_details<C: Client + Debug>(
     }
 
     const VERSION: i32 = 8;
-    const request_id: i32 = 100;
 
+    let request_id = client.next_request_id();
     let mut packet = RequestPacket::default();
 
     packet.add_field(&(OutgoingMessages::RequestContractData as i32));
