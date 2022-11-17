@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use anyhow::{Result};
+use anyhow::Result;
 use log::info;
 
 use crate::client::Client;

@@ -1,5 +1,5 @@
+use std::fmt;
 use std::ops::Index;
-use std::{fmt};
 
 use anyhow::{anyhow, Result};
 use log::{debug, info};
@@ -127,7 +127,10 @@ impl Client for BasicClient {
     }
 
     fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator> {
-        Err(anyhow!("received_packets not implemented: {:?}", request_id))
+        Err(anyhow!(
+            "received_packets not implemented: {:?}",
+            request_id
+        ))
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {

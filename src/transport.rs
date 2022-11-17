@@ -33,14 +33,17 @@ impl TcpMessageBus {
         let reader = Arc::new(stream.try_clone()?);
         let writer = Box::new(stream);
 
-        Ok(TcpMessageBus {reader, writer, handles: Vec::default()})
+        Ok(TcpMessageBus {
+            reader,
+            writer,
+            handles: Vec::default(),
+        })
     }
 }
 
 // impl read/write?
 
 impl MessageBus for TcpMessageBus {
-
     fn read_packet(&mut self) -> Result<ResponsePacket> {
         read_packet(&self.reader)
     }
@@ -73,7 +76,7 @@ impl MessageBus for TcpMessageBus {
                 info!("tick");
                 // let packet = read_packet(&_reader);
                 // info!("read packet: {:?}", packet);
-                thread::sleep(Duration::from_secs(1));    
+                thread::sleep(Duration::from_secs(1));
             }
         });
 
