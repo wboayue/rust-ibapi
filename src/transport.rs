@@ -69,13 +69,13 @@ impl MessageBus for TcpMessageBus {
     }
 
     fn process_messages(&mut self) -> Result<()> {
+        let reader = Arc::clone(&self.reader);
         let handle = thread::spawn(move || {
-            // let _reader = &self.reader;
 
             loop {
                 info!("tick");
-                // let packet = read_packet(&_reader);
-                // info!("read packet: {:?}", packet);
+                let packet = read_packet(&reader);
+                info!("read packet: {:?}", packet);
                 thread::sleep(Duration::from_secs(1));
             }
         });
@@ -91,7 +91,6 @@ fn read_packet(mut reader: &TcpStream) -> Result<ResponsePacket> {
     let mut data = vec![0_u8; message_size];
 
     reader.read(&mut data)?;
-    debug!("raw packet {:?}", data);
 
     let packet = ResponsePacket::from(&String::from_utf8(data)?);
     debug!("read packet {:?}", packet);
