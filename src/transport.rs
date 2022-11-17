@@ -1,6 +1,10 @@
 use std::io::prelude::*;
 use std::io::Cursor;
 use std::net::TcpStream;
+use std::sync::Arc;
+use std::thread;
+use std::thread::JoinHandle;
+use std::time::Duration;
 
 use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -12,74 +16,92 @@ pub trait MessageBus {
     fn read_packet(&mut self) -> Result<ResponsePacket>;
     fn write_packet(&mut self, packet: &RequestPacket) -> Result<()>;
     fn write(&mut self, packet: &str) -> Result<()>;
-    fn process_messages(&self) -> Result<()>;
+    fn process_messages(&mut self) -> Result<()>;
 }
 
 #[derive(Debug)]
 pub struct TcpMessageBus {
-    stream: Box<TcpStream>,
+    reader: Arc<TcpStream>,
+    writer: Box<TcpStream>,
+    handles: Vec<JoinHandle<i32>>,
 }
 
 impl TcpMessageBus {
     pub fn connect(connection_string: &str) -> Result<TcpMessageBus> {
-        // .set_read_timeout(Some(Duration::new(0, 0)));
-//        stream.set_nonblocking(true)
-        let stream = Box::new(TcpStream::connect(connection_string)?);
-        // stream.set_nonblocking(true);
-        Ok(TcpMessageBus {stream})
+        let stream = TcpStream::connect(connection_string)?;
+
+        let reader = Arc::new(stream.try_clone()?);
+        let writer = Box::new(stream);
+
+        Ok(TcpMessageBus {reader, writer, handles: Vec::default()})
     }
 }
 
+// impl read/write?
+
 impl MessageBus for TcpMessageBus {
-    // set read timeout
+
     fn read_packet(&mut self) -> Result<ResponsePacket> {
-        let buf = &mut [0_u8; 4];
-
-        self.stream.read(buf)?;
-
-        let mut rdr = Cursor::new(buf);
-        let count = rdr.read_u32::<BigEndian>()?;
-
-        let mut data = vec![0_u8; count as usize];
-        self.stream.read(&mut data)?;
-
-        let packet = ResponsePacket::from(&String::from_utf8(data)?);
-        debug!("read packet {:?}", packet);
-
-        Ok(packet)
+        read_packet(&self.reader)
     }
 
     fn write_packet(&mut self, packet: &RequestPacket) -> Result<()> {
         let encoded = packet.encode();
+        debug!("{:?} ->", encoded);
 
-        let mut wtr = vec![];
-        wtr.write_u32::<BigEndian>(encoded.len().try_into().unwrap())?;
+        let data = encoded.as_bytes();
+        let mut header = vec![];
+        header.write_u32::<BigEndian>(data.len() as u32)?;
 
-        info!("outbound request {:?}", encoded);
-
-        self.stream.write_all(&wtr)?;
-        self.stream.write_all(encoded.as_bytes())?;
+        self.writer.write_all(&header)?;
+        self.writer.write_all(&data)?;
 
         Ok(())
     }
 
-    fn write(&mut self, packet: &str) -> Result<()> {
-        info!("write_packet: {:?}", packet);
-        self.stream.write_all(packet.as_bytes())?;
+    fn write(&mut self, data: &str) -> Result<()> {
+        debug!("{:?} ->", data);
+        self.writer.write_all(data.as_bytes())?;
         Ok(())
     }
 
-    fn process_messages(&self) -> Result<()> {
-        // let message_bus = Arc::clone(&self.message_bus);
+    fn process_messages(&mut self) -> Result<()> {
+        let handle = thread::spawn(move || {
+            // let _reader = &self.reader;
 
-        // let handle = thread::spawn(move || loop {
-        //     || -> () {
-        //         debug!("read next packet");
-        //         let packet = message_bus.lock().unwrap().read_packet();
-        //         info!("next packet: {:?}", packet);
-        //         thread::sleep(std_time::Duration::from_secs(1));    
-        //     }();
-        // });
+            loop {
+                info!("tick");
+                // let packet = read_packet(&_reader);
+                // info!("read packet: {:?}", packet);
+                thread::sleep(Duration::from_secs(1));    
+            }
+        });
+
+        self.handles.push(handle);
+
         Ok(())
     }
+}
+
+fn read_packet(mut reader: &TcpStream) -> Result<ResponsePacket> {
+    let message_size = read_header(reader)?;
+    let mut data = vec![0_u8; message_size];
+
+    reader.read(&mut data)?;
+    debug!("raw packet {:?}", data);
+
+    let packet = ResponsePacket::from(&String::from_utf8(data)?);
+    debug!("read packet {:?}", packet);
+
+    Ok(packet)
+}
+
+fn read_header(mut reader: &TcpStream) -> Result<usize> {
+    let buffer = &mut [0_u8; 4];
+    reader.read(buffer)?;
+
+    let mut reader = Cursor::new(buffer);
+    let count = reader.read_u32::<BigEndian>()?;
+
+    Ok(count as usize)
 }

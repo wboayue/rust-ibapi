@@ -39,15 +39,15 @@ impl Iterator for BarIterator {
 /// Real time bars subscriptions are also included in the calculation of the number of Level 1 market data subscriptions allowed in an account.
 ///
 /// Parameters
-/// tickerId	the request's unique identifier.
-/// contract	the Contract for which the depth is being requested
-/// barSize	currently being ignored
-/// whatToShow	the nature of the data being retrieved:
+/// tickerId    the request's unique identifier.
+/// contract    the Contract for which the depth is being requested
+/// barSize currently being ignored
+/// whatToShow  the nature of the data being retrieved:
 /// TRADES
 /// MIDPOINT
 /// BID
 /// ASK
-/// useRTH	set to 0 to obtain the data which was also generated ourside of the Regular Trading Hours, set to 1 to obtain only the RTH data
+/// useRTH  set to 0 to obtain the data which was also generated ourside of the Regular Trading Hours, set to 1 to obtain only the RTH data
 pub fn real_time_bars<C: Client + Debug>(
     client: &C,
     contract: &Contract,
@@ -73,9 +73,9 @@ pub fn tick_by_tick_bid_ask<C: Client + Debug>(client: &C, contract: &Contract) 
 
 /// Requests real time market data. Returns market data for an instrument either in real time or 10-15 minutes delayed (depending on the market data type specified)
 /// Parameters
-/// tickerId	the request's identifier
-/// contract	the Contract for which the data is being requested
-/// genericTickList	comma separated ids of the available generic ticks:
+///     tickerId    the request's identifier
+///     contract    the Contract for which the data is being requested
+///     genericTickList comma separated ids of the available generic ticks:
 ///     100 Option Volume (currently for stocks)
 ///     101 Option Open Interest (currently for stocks)
 ///     104 Historical Volatility (currently for stocks)
@@ -91,8 +91,8 @@ pub fn tick_by_tick_bid_ask<C: Client + Debug>(client: &C, contract: &Contract) 
 ///     258 Fundamental Ratios
 ///     411 Realtime Historical Volatility
 ///     456 IBDividends
-/// snapshot	for users with corresponding real time market data subscriptions. A true value will return a one-time snapshot, while a false value will provide streaming data.
-/// regulatory	snapshot for US stocks requests NBBO snapshots for users which have "US Securities Snapshot Bundle" subscription but not corresponding Network A, B, or C subscription necessary for streaming * market data. One-time snapshot of current market price that will incur a fee of 1 cent to the account per snapshot.
+/// snapshot    for users with corresponding real time market data subscriptions. A true value will return a one-time snapshot, while a false value will provide streaming data.
+/// regulatory  snapshot for US stocks requests NBBO snapshots for users which have "US Securities Snapshot Bundle" subscription but not corresponding Network A, B, or C subscription necessary for streaming * market data. One-time snapshot of current market price that will incur a fee of 1 cent to the account per snapshot.
 pub fn market_data<C: Client + Debug>(
     client: &C,
     contract: &Contract,
