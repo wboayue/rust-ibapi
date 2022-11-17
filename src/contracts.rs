@@ -142,7 +142,7 @@ pub fn contract_details<C: Client + Debug>(
 
     info!("packet: {:?}", packet);
 
-    client.send_packet(&packet)?;
+    client.send_packet(packet)?;
 
     info!("packet sent");
 

@@ -17,7 +17,7 @@ const START_API: i32 = 71;
 pub trait Client {
     fn next_request_id(&self) -> i32;
     fn server_version(&self) -> i32;
-    fn send_packet(&mut self, packet: &RequestPacket) -> Result<()>;
+    fn send_packet(&mut self, packet: RequestPacket) -> Result<()>;
     fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket>;
     fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator>;
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
@@ -117,9 +117,9 @@ impl Client for BasicClient {
         self.server_version
     }
 
-    fn send_packet(&mut self, packet: &RequestPacket) -> Result<()> {
+    fn send_packet(&mut self, packet: RequestPacket) -> Result<()> {
         debug!("send_packet({:?})", packet);
-        self.message_bus.write_packet(packet)
+        self.message_bus.write_packet(&packet)
     }
 
     fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket> {
@@ -321,10 +321,6 @@ pub mod tests {
         fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
             Ok(())
         }
-
-        fn process_messages(&self) -> Result<()> {
-            Ok(())
-        }
     }
 
     #[test]
@@ -334,7 +330,7 @@ pub mod tests {
 
         let packet = || -> RequestPacket {
             let mut packet = RequestPacket::default();
-            packet.add_field(32);
+            packet.add_field(&32);
             packet
         }();
 
