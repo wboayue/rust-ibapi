@@ -11,7 +11,6 @@ use crate::domain::Contract;
 use crate::server_versions;
 use crate::transport::{MessageBus, TcpMessageBus};
 
-const CLIENT_VERSION: i32 = 2;
 const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
 const START_API: i32 = 71;
@@ -19,7 +18,7 @@ const START_API: i32 = 71;
 pub trait Client {
     fn next_request_id(&self) -> i32;
     fn server_version(&self) -> i32;
-    fn send_packet(&mut self, packet: RequestPacket) -> Result<()>;
+    fn send_packet(&mut self, packet: &RequestPacket) -> Result<()>;
     fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket>;
     fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator>;
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
@@ -90,9 +89,12 @@ impl BasicClient {
     }
 
     fn start_api(&mut self) -> Result<()> {
+        const VERSION: i32 = 2;
+
         let prelude = &mut RequestPacket::default();
+
         prelude.add_field(START_API);
-        prelude.add_field(CLIENT_VERSION);
+        prelude.add_field(VERSION);
         prelude.add_field(self.client_id);
 
         if self.server_version > server_versions::OPTIONAL_CAPABILITIES {
@@ -131,8 +133,8 @@ impl Client for BasicClient {
         self.server_version
     }
 
-    fn send_packet(&mut self, packet: RequestPacket) -> Result<()> {
-        self.message_bus.lock().unwrap().write_packet(&packet)
+    fn send_packet(&mut self, packet: &RequestPacket) -> Result<()> {
+        self.message_bus.lock().unwrap().write_packet(packet)
     }
 
     fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket> {
@@ -144,7 +146,11 @@ impl Client for BasicClient {
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
-        Err(anyhow!("not implemented"))
+        if version <= self.server_version {
+            Ok(())
+        } else {
+            Err(anyhow!("server version {} required, got {}: {}", version, self.server_version, message))
+        }
     }
 }
 

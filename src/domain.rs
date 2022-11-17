@@ -1,10 +1,11 @@
 use strum_macros::EnumString;
 use time::OffsetDateTime;
 
-#[derive(Debug, PartialEq, EnumString)]
+#[derive(Debug, PartialEq, EnumString, Default)]
 /// SecurityType enumerates available security types
 pub enum SecurityType {
     /// Stock (or ETF)
+    #[default]
     STK,
     /// Option
     OPT,
@@ -30,7 +31,7 @@ pub enum SecurityType {
     FUND,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 /// Contract describes an instrument's definition
 pub struct Contract {
     /// The unique IB contract identifier.
@@ -70,9 +71,11 @@ pub struct Contract {
     pub combo_legs: Vec<ComboLeg>,
     /// Delta and underlying price for Delta-Neutral combo orders. Underlying (STK or FUT), delta and underlying price goes into this attribute.
     pub delta_neutral_contract: DeltaNeutralContract,
+
+    pub issuer_id: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 // ComboLeg represents a leg within combo orders.
 pub struct ComboLeg {
     /// The Contract's IB's unique id.
@@ -94,7 +97,7 @@ pub struct ComboLeg {
     pub exempt_code: i32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 /// OpenClose specifies whether an order is an open or closing order.
 pub enum OpenClose {
     /// 0 - Same as the parent security. This is the only option for retail customers.
@@ -104,10 +107,11 @@ pub enum OpenClose {
     /// 2 - Close. This value is only valid for institutional customers.
     Close,
     /// 3 - Unknown.
+    #[default]
     Unknown,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 /// Delta and underlying price for Delta-Neutral combo orders.
 /// Underlying (STK or FUT), delta and underlying price goes into this attribute.
 pub struct DeltaNeutralContract {
@@ -120,6 +124,7 @@ pub struct DeltaNeutralContract {
 }
 
 /// ContractDetails provides extended contract details.
+#[derive(Debug, Default)]
 pub struct ContractDetails {
     /// A fully-defined Contract object.
     pub contract: Contract,
