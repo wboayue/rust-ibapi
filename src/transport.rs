@@ -70,14 +70,11 @@ impl MessageBus for TcpMessageBus {
 
     fn process_messages(&mut self) -> Result<()> {
         let reader = Arc::clone(&self.reader);
-        let handle = thread::spawn(move || {
-
-            loop {
-                info!("tick");
-                let packet = read_packet(&reader);
-                info!("read packet: {:?}", packet);
-                thread::sleep(Duration::from_secs(1));
-            }
+        let handle = thread::spawn(move || loop {
+            info!("tick");
+            let packet = read_packet(&reader);
+            info!("read packet: {:?}", packet);
+            thread::sleep(Duration::from_secs(1));
         });
 
         self.handles.push(handle);
