@@ -61,12 +61,12 @@ pub fn encode_head_timestamp(
 ) -> Result<RequestPacket> {
     let mut packet = RequestPacket::default();
 
-    packet.add_field(12);
-    packet.add_field(request_id);
-    packet.add_field(contract);
-    packet.add_field(use_rth);
-    packet.add_field(what_to_show);
-    packet.add_field("format_date");
+    packet.add_field(&12);
+    packet.add_field(&request_id);
+    packet.add_field(&contract);
+    packet.add_field(&use_rth);
+    packet.add_field(&what_to_show);
+    packet.add_field(&"format_date");
 
     Ok(packet)
 }

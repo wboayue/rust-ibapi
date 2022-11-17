@@ -8,6 +8,7 @@ use log::{debug, info};
 use time::OffsetDateTime;
 
 use crate::domain::Contract;
+use crate::domain::SecurityType;
 use crate::server_versions;
 use crate::transport::{MessageBus, TcpMessageBus};
 
@@ -77,7 +78,7 @@ impl BasicClient {
         message_bus.write("API\x00")?;
 
         let prelude = &mut RequestPacket::default();
-        prelude.add_field(format!("v{}..{}", MIN_SERVER_VERSION, MAX_SERVER_VERSION));
+        prelude.add_field(&format!("v{}..{}", MIN_SERVER_VERSION, MAX_SERVER_VERSION));
 
         message_bus.write_packet(prelude)?;
 
@@ -93,12 +94,12 @@ impl BasicClient {
 
         let prelude = &mut RequestPacket::default();
 
-        prelude.add_field(START_API);
-        prelude.add_field(VERSION);
-        prelude.add_field(self.client_id);
+        prelude.add_field(&START_API);
+        prelude.add_field(&VERSION);
+        prelude.add_field(&self.client_id);
 
         if self.server_version > server_versions::OPTIONAL_CAPABILITIES {
-            prelude.add_field("");
+            prelude.add_field(&"");
         }
 
         self.message_bus.lock().unwrap().write_packet(prelude)?;
@@ -174,7 +175,7 @@ impl RequestPacket {
         RequestPacket::default()
     }
 
-    pub fn add_field<T: ToPacket>(&mut self, val: T) -> &RequestPacket {
+    pub fn add_field<T: ToPacket>(&mut self, val: &T) -> &RequestPacket {
         let field = val.to_packet();
         self.fields.push(field);
         self
@@ -259,6 +260,18 @@ impl ToPacket for String {
 impl ToPacket for i32 {
     fn to_packet(&self) -> String {
         self.to_string()
+    }
+}
+
+impl ToPacket for f64 {
+    fn to_packet(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToPacket for SecurityType {
+    fn to_packet(&self) -> String {
+        "securi".to_string()
     }
 }
 

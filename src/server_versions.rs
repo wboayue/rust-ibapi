@@ -1,5 +1,15 @@
 //! The known server versions.
 
+ //shouldn't these all be deprecated?
+//  public const int HISTORICAL_DATA = 24;
+//  public const int CURRENT_TIME = 33;
+//  public const int REAL_TIME_BARS = 34;
+//  public const int SCALE_ORDERS = 35;
+//  public const int SNAPSHOT_MKT_DATA = 35;
+//  public const int SSHORT_COMBO_LEGS = 35;
+//  public const int WHAT_IF_ORDERS = 36;
+pub const CONTRACT_CONID: i32 = 37;
+
 pub const PTA_ORDERS: i32 = 39;
 pub const FUNDAMENTAL_DATA: i32 = 40;
 pub const DELTA_NEUTRAL: i32 = 40;
