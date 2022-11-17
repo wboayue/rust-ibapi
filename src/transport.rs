@@ -12,6 +12,7 @@ pub trait MessageBus {
     fn read_packet(&mut self) -> Result<ResponsePacket>;
     fn write_packet(&mut self, packet: &RequestPacket) -> Result<()>;
     fn write(&mut self, packet: &str) -> Result<()>;
+    fn process_messages(&self) -> Result<()>;
 }
 
 #[derive(Debug)]
@@ -67,6 +68,20 @@ impl MessageBus for TcpMessageBus {
     fn write(&mut self, packet: &str) -> Result<()> {
         info!("write_packet: {:?}", packet);
         self.stream.write(&packet.as_bytes())?;
+        Ok(())
+    }
+
+    fn process_messages(&self) -> Result<()> {
+        // let message_bus = Arc::clone(&self.message_bus);
+
+        // let handle = thread::spawn(move || loop {
+        //     || -> () {
+        //         debug!("read next packet");
+        //         let packet = message_bus.lock().unwrap().read_packet();
+        //         info!("next packet: {:?}", packet);
+        //         thread::sleep(std_time::Duration::from_secs(1));    
+        //     }();
+        // });
         Ok(())
     }
 }

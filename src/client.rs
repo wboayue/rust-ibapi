@@ -37,20 +37,19 @@ pub struct BasicClient {
     pub managed_accounts: String,
 
     client_id: i32,
-    handles: Vec<JoinHandle<i32>>,
-    message_bus: Arc<Mutex<dyn MessageBus + Sync + Send>>,
+    message_bus: Box<dyn MessageBus>,
 }
 
 impl BasicClient {
     /// Opens connection to TWS workstation or gateway.
     pub fn connect(connection_string: &str) -> Result<BasicClient> {
-        let message_bus = Arc::new(Mutex::new(TcpMessageBus::connect(connection_string)?));
+        let message_bus = Box::new(TcpMessageBus::connect(connection_string)?);
         BasicClient::do_connect(connection_string, message_bus)
     }
 
     fn do_connect(
         connection_string: &str,
-        message_bus: Arc<Mutex<dyn MessageBus + Send + Sync>>,
+        message_bus: Box<dyn MessageBus>,
     ) -> Result<BasicClient> {
         debug!("connecting to server with #{:?}", connection_string);
 
@@ -61,28 +60,25 @@ impl BasicClient {
             managed_accounts: String::from(""),
             message_bus: message_bus,
             client_id: 100,
-            handles: Vec::<JoinHandle<i32>>::default(),
         };
 
         client.handshake()?;
         client.start_api()?;
 
-        client.process_messages()?;
+        client.message_bus.process_messages()?;
 
         Ok(client)
     }
 
     fn handshake(&mut self) -> Result<()> {
-        let mut message_bus = self.message_bus.lock().unwrap();
-
-        message_bus.write("API\x00")?;
+        self.message_bus.write("API\x00")?;
 
         let prelude = &mut RequestPacket::default();
         prelude.add_field(&format!("v{}..{}", MIN_SERVER_VERSION, MAX_SERVER_VERSION));
 
-        message_bus.write_packet(prelude)?;
+        self.message_bus.write_packet(prelude)?;
 
-        let mut status = message_bus.read_packet()?;
+        let mut status = self.message_bus.read_packet()?;
         self.server_version = status.next_int()?;
         self.server_time = status.next_string()?;
 
@@ -102,22 +98,8 @@ impl BasicClient {
             prelude.add_field(&"");
         }
 
-        self.message_bus.lock().unwrap().write_packet(prelude)?;
+        self.message_bus.write_packet(prelude)?;
 
-        Ok(())
-    }
-
-    fn process_messages(&self) -> Result<()> {
-        let message_bus = Arc::clone(&self.message_bus);
-
-        let handle = thread::spawn(move || loop {
-            || -> () {
-                debug!("read next packet");
-                let packet = message_bus.lock().unwrap().read_packet();
-                info!("next packet: {:?}", packet);
-                thread::sleep(std_time::Duration::from_secs(1));    
-            }();
-        });
         Ok(())
     }
 }
@@ -139,7 +121,7 @@ impl Client for BasicClient {
 
     fn send_packet(&mut self, packet: &RequestPacket) -> Result<()> {
         debug!("send_packet({:?})", packet);
-        self.message_bus.lock().unwrap().write_packet(packet)
+        self.message_bus.write_packet(packet)
     }
 
     fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket> {
