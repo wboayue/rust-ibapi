@@ -157,7 +157,7 @@ impl fmt::Debug for BasicClient {
     }
 }
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug)]
 pub struct RequestPacket {
     fields: Vec<String>,
 }
@@ -269,7 +269,7 @@ impl ToPacket for SecurityType {
 
 impl ToPacket for &str {
     fn to_packet(&self) -> String {
-        self.clone().to_string()
+        <&str>::clone(self).to_string()
     }
 }
 

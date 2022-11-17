@@ -1,7 +1,5 @@
 use std::{thread, time};
 
-use anyhow;
-use env_logger;
 use log::info;
 
 use ibapi::client::BasicClient;

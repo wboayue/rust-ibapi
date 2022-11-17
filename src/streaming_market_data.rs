@@ -16,6 +16,7 @@ pub enum WhatToShow {
     Ask,
 }
 
+#[derive(Default)]
 pub struct BarIterator {}
 
 impl BarIterator {

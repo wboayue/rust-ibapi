@@ -57,7 +57,7 @@ impl MessageBus for TcpMessageBus {
         header.write_u32::<BigEndian>(data.len() as u32)?;
 
         self.writer.write_all(&header)?;
-        self.writer.write_all(&data)?;
+        self.writer.write_all(data)?;
 
         Ok(())
     }
@@ -87,7 +87,7 @@ fn read_packet(mut reader: &TcpStream) -> Result<ResponsePacket> {
     let message_size = read_header(reader)?;
     let mut data = vec![0_u8; message_size];
 
-    reader.read(&mut data)?;
+    reader.read_exact(&mut data)?;
 
     let packet = ResponsePacket::from(&String::from_utf8(data)?);
     debug!("read packet {:?}", packet);
@@ -97,7 +97,7 @@ fn read_packet(mut reader: &TcpStream) -> Result<ResponsePacket> {
 
 fn read_header(mut reader: &TcpStream) -> Result<usize> {
     let buffer = &mut [0_u8; 4];
-    reader.read(buffer)?;
+    reader.read_exact(buffer)?;
 
     let mut reader = Cursor::new(buffer);
     let count = reader.read_u32::<BigEndian>()?;

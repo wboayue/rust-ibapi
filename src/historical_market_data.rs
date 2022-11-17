@@ -210,6 +210,7 @@ pub struct HistoricalTickLast {
     pub size: i32,
 }
 
+#[derive(Default)]
 pub struct HistoricalTickIterator {}
 
 impl HistoricalTickIterator {

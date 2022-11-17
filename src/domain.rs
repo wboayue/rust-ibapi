@@ -1,7 +1,7 @@
 use strum_macros::EnumString;
 use time::OffsetDateTime;
 
-#[derive(Debug, PartialEq, EnumString, Default)]
+#[derive(Debug, PartialEq, Eq, EnumString, Default)]
 /// SecurityType enumerates available security types
 pub enum SecurityType {
     /// Stock (or ETF)
