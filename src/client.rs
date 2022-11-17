@@ -150,7 +150,12 @@ impl Client for BasicClient {
         if version <= self.server_version {
             Ok(())
         } else {
-            Err(anyhow!("server version {} required, got {}: {}", version, self.server_version, message))
+            Err(anyhow!(
+                "server version {} required, got {}: {}",
+                version,
+                self.server_version,
+                message
+            ))
         }
     }
 }

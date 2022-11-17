@@ -37,5 +37,5 @@ pub mod server_versions;
 
 pub mod streaming_market_data;
 
-pub mod transport;
 pub mod outgoing_messages;
+pub mod transport;

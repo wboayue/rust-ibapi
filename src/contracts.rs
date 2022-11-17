@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use anyhow::{anyhow, Result};
-use log::{info};
+use log::info;
 
 use crate::client::Client;
 use crate::client::RequestPacket;
@@ -9,8 +9,8 @@ use crate::domain::Contract;
 use crate::domain::ContractDetails;
 use crate::domain::DeltaNeutralContract;
 use crate::domain::SecurityType;
+use crate::outgoing_messages::OutgoingMessages;
 use crate::server_versions;
-use crate::outgoing_messages::{OutgoingMessages};
 
 pub fn stock(symbol: &str) -> Contract {
     Contract {
@@ -54,19 +54,31 @@ pub fn contract_details<C: Client + Debug>(
     contract: &Contract,
 ) -> Result<ContractDetails> {
     if !contract.security_id_type.is_empty() || !contract.security_id.is_empty() {
-        client.check_server_version(server_versions::SEC_ID_TYPE, "It does not support secIdType not secId attributes")?
+        client.check_server_version(
+            server_versions::SEC_ID_TYPE,
+            "It does not support secIdType not secId attributes",
+        )?
     }
 
     if !contract.trading_class.is_empty() {
-        client.check_server_version(server_versions::TRADING_CLASS, "It does not support the TradingClass parameter when requesting contract details.")?
+        client.check_server_version(
+            server_versions::TRADING_CLASS,
+            "It does not support the TradingClass parameter when requesting contract details.",
+        )?
     }
 
     if !contract.primary_exchange.is_empty() {
-        client.check_server_version(server_versions::LINKING, "It does not support PrimaryExch parameter when requesting contract details.")?
+        client.check_server_version(
+            server_versions::LINKING,
+            "It does not support PrimaryExch parameter when requesting contract details.",
+        )?
     }
 
     if !contract.issuer_id.is_empty() {
-        client.check_server_version(server_versions::BOND_ISSUERID, "It does not support IssuerId parameter when requesting contract details.")?
+        client.check_server_version(
+            server_versions::BOND_ISSUERID,
+            "It does not support IssuerId parameter when requesting contract details.",
+        )?
     }
 
     const VERSION: i32 = 8;
@@ -99,8 +111,13 @@ pub fn contract_details<C: Client + Debug>(
         packet.add_field(&contract.exchange);
         packet.add_field(&contract.primary_exchange);
     } else if client.server_version() >= server_versions::LINKING {
-        if !contract.primary_exchange.is_empty() && (contract.exchange == "BEST" || contract.exchange == "SMART") {
-            packet.add_field(&format!("{}:{}", contract.exchange, contract.primary_exchange));
+        if !contract.primary_exchange.is_empty()
+            && (contract.exchange == "BEST" || contract.exchange == "SMART")
+        {
+            packet.add_field(&format!(
+                "{}:{}",
+                contract.exchange, contract.primary_exchange
+            ));
         } else {
             packet.add_field(&contract.exchange);
         }
@@ -129,6 +146,5 @@ pub fn contract_details<C: Client + Debug>(
 
     info!("packet sent");
 
-    
     Ok(ContractDetails::default())
 }

@@ -1,6 +1,6 @@
 //! The known server versions.
 
- //shouldn't these all be deprecated?
+//shouldn't these all be deprecated?
 //  public const int HISTORICAL_DATA = 24;
 //  public const int CURRENT_TIME = 33;
 //  public const int REAL_TIME_BARS = 34;

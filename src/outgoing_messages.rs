@@ -1,5 +1,3 @@
-
-
 pub enum OutgoingMessages {
     RequestMarketData = 1,
     CancelMarketData = 2,
@@ -80,5 +78,5 @@ pub enum OutgoingMessages {
     CancelWshMetaData = 101,
     ReqWshEventData = 102,
     CancelWshEventData = 103,
-    ReqUserInfo = 104
+    ReqUserInfo = 104,
 }
