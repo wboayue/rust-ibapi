@@ -111,9 +111,12 @@ impl BasicClient {
         let message_bus = Arc::clone(&self.message_bus);
 
         let handle = thread::spawn(move || loop {
-            let packet = message_bus.lock().unwrap().read_packet();
-            info!("next packet: {:?}", packet);
-            thread::sleep(std_time::Duration::from_secs(1));
+            || -> () {
+                debug!("read next packet");
+                let packet = message_bus.lock().unwrap().read_packet();
+                info!("next packet: {:?}", packet);
+                thread::sleep(std_time::Duration::from_secs(1));    
+            }();
         });
         Ok(())
     }
@@ -135,6 +138,7 @@ impl Client for BasicClient {
     }
 
     fn send_packet(&mut self, packet: &RequestPacket) -> Result<()> {
+        debug!("send_packet({:?})", packet);
         self.message_bus.lock().unwrap().write_packet(packet)
     }
 

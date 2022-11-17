@@ -21,8 +21,12 @@ pub struct TcpMessageBus {
 
 impl TcpMessageBus {
     pub fn connect(connection_string: &str) -> Result<TcpMessageBus> {
+        // .set_read_timeout(Some(Duration::new(0, 0)));
+//        stream.set_nonblocking(true)
+        let stream = Box::new(TcpStream::connect(connection_string)?);
+        // stream.set_nonblocking(true);
         Ok(TcpMessageBus {
-            stream: Box::new(TcpStream::connect(connection_string)?),
+            stream: stream,
         })
     }
 }
