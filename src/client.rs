@@ -1,13 +1,20 @@
-use std::fmt;
 use std::ops::Index;
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
+use std::{fmt, thread, time as std_time};
 
 use anyhow::{anyhow, Result};
-use log::debug;
+use log::{debug, info};
 use time::OffsetDateTime;
 
-use crate::transport::{MessageBus, TcpMessageBus};
 use crate::domain::Contract;
 use crate::server_versions;
+use crate::transport::{MessageBus, TcpMessageBus};
+
+const CLIENT_VERSION: i32 = 2;
+const MIN_SERVER_VERSION: i32 = 100;
+const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
+const START_API: i32 = 71;
 
 pub trait Client {
     fn next_request_id(&self) -> i32;
@@ -29,25 +36,21 @@ pub struct BasicClient {
     // Ids of managed accounts
     pub managed_accounts: String,
 
-    message_bus: Box<dyn MessageBus>,
     client_id: i32,
+    handles: Vec<JoinHandle<i32>>,
+    message_bus: Arc<Mutex<dyn MessageBus + Sync + Send>>,
 }
-
-const CLIENT_VERSION: i32 = 2;
-const MIN_SERVER_VERSION: i32 = 100;
-const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
-const START_API: i32 = 2;
 
 impl BasicClient {
     /// Opens connection to TWS workstation or gateway.
     pub fn connect(connection_string: &str) -> Result<BasicClient> {
-        let message_bus = Box::new(TcpMessageBus::connect(connection_string)?);
+        let message_bus = Arc::new(Mutex::new(TcpMessageBus::connect(connection_string)?));
         BasicClient::do_connect(connection_string, message_bus)
     }
 
     fn do_connect(
         connection_string: &str,
-        message_bus: Box<dyn MessageBus>,
+        message_bus: Arc<Mutex<dyn MessageBus + Send + Sync>>,
     ) -> Result<BasicClient> {
         debug!("connecting to server with #{:?}", connection_string);
 
@@ -57,26 +60,29 @@ impl BasicClient {
             next_valid_order_id: 0,
             managed_accounts: String::from(""),
             message_bus: message_bus,
-            client_id: 0,
+            client_id: 100,
+            handles: Vec::<JoinHandle<i32>>::default(),
         };
 
         client.handshake()?;
         client.start_api()?;
 
-        client.message_bus.process_messages()?;
+        client.process_messages()?;
 
         Ok(client)
     }
 
     fn handshake(&mut self) -> Result<()> {
-        self.message_bus.write("API\x00")?;
+        let mut message_bus = self.message_bus.lock().unwrap();
+
+        message_bus.write("API\x00")?;
 
         let prelude = &mut RequestPacket::default();
         prelude.add_field(format!("v{}..{}", MIN_SERVER_VERSION, MAX_SERVER_VERSION));
 
-        self.message_bus.write_packet(prelude)?;
+        message_bus.write_packet(prelude)?;
 
-        let mut status = self.message_bus.read_packet()?;
+        let mut status = message_bus.read_packet()?;
         self.server_version = status.next_int()?;
         self.server_time = status.next_string()?;
 
@@ -93,9 +99,26 @@ impl BasicClient {
             prelude.add_field("");
         }
 
-        self.message_bus.write_packet(prelude)?;
+        self.message_bus.lock().unwrap().write_packet(prelude)?;
 
         Ok(())
+    }
+
+    fn process_messages(&self) -> Result<()> {
+        let message_bus = Arc::clone(&self.message_bus);
+
+        let handle = thread::spawn(move || loop {
+            let packet = message_bus.lock().unwrap().read_packet();
+            info!("next packet: {:?}", packet);
+            thread::sleep(std_time::Duration::from_secs(1));
+        });
+        Ok(())
+    }
+}
+
+impl Drop for BasicClient {
+    fn drop(&mut self) {
+        info!("dropping basic client")
     }
 }
 
@@ -109,7 +132,7 @@ impl Client for BasicClient {
     }
 
     fn send_packet(&mut self, packet: RequestPacket) -> Result<()> {
-        self.message_bus.write_packet(&packet)
+        self.message_bus.lock().unwrap().write_packet(&packet)
     }
 
     fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket> {
@@ -287,6 +310,10 @@ pub mod tests {
         fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
             Ok(())
         }
+
+        fn process_messages(&self) -> Result<()> {
+            Ok(())
+        }
     }
 
     #[test]
@@ -304,4 +331,3 @@ pub mod tests {
         assert_eq!(result, 4);
     }
 }
- 
