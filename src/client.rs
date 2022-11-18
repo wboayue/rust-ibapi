@@ -322,7 +322,7 @@ pub mod tests {
     }
 
     impl Client for ClientStub {
-        fn next_request_id(&self) -> i32 {
+        fn next_request_id(&mut self) -> i32 {
             1
         }
 
