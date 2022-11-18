@@ -25,15 +25,13 @@ pub trait MessageBus {
 }
 
 #[derive(Debug)]
-struct Request {
-    
-}
+struct Request {}
 
 unsafe impl Send for Request {}
 
 impl Request {
     fn new(request_id: i32) -> Request {
-        Request{}
+        Request {}
     }
 }
 
@@ -42,7 +40,7 @@ pub struct TcpMessageBus {
     reader: Arc<TcpStream>,
     writer: Box<TcpStream>,
     handles: Vec<JoinHandle<i32>>,
-    requests: Arc<RwLock<HashMap<i32, Request>>>, 
+    requests: Arc<RwLock<HashMap<i32, Request>>>,
 }
 
 impl TcpMessageBus {
@@ -90,7 +88,7 @@ impl MessageBus for TcpMessageBus {
         match requests.write() {
             Ok(mut hash) => {
                 hash.insert(request_id, Request::new(request_id));
-            },
+            }
             Err(e) => {
                 return Err(anyhow!("{}", e));
             }

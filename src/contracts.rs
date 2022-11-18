@@ -56,28 +56,28 @@ pub fn contract_details<C: Client + Debug>(
     if !contract.security_id_type.is_empty() || !contract.security_id.is_empty() {
         client.check_server_version(
             server_versions::SEC_ID_TYPE,
-            "It does not support secIdType not secId attributes",
+            "It does not support security_id_type or security_id attributes",
         )?
     }
 
     if !contract.trading_class.is_empty() {
         client.check_server_version(
             server_versions::TRADING_CLASS,
-            "It does not support the TradingClass parameter when requesting contract details.",
+            "It does not support the trading_class parameter when requesting contract details.",
         )?
     }
 
     if !contract.primary_exchange.is_empty() {
         client.check_server_version(
             server_versions::LINKING,
-            "It does not support PrimaryExch parameter when requesting contract details.",
+            "It does not support primary_exchange parameter when requesting contract details.",
         )?
     }
 
     if !contract.issuer_id.is_empty() {
         client.check_server_version(
             server_versions::BOND_ISSUERID,
-            "It does not support IssuerId parameter when requesting contract details.",
+            "It does not support issuer_id parameter when requesting contract details.",
         )?
     }
 
@@ -86,7 +86,7 @@ pub fn contract_details<C: Client + Debug>(
     let request_id = client.next_request_id();
     let mut packet = RequestPacket::default();
 
-    packet.add_field(&(OutgoingMessage::RequestContractData as i32));
+    packet.add_field(&OutgoingMessage::RequestContractData);
     packet.add_field(&VERSION);
 
     if client.server_version() >= server_versions::CONTRACT_DATA_CHAIN {
@@ -144,7 +144,7 @@ pub fn contract_details<C: Client + Debug>(
 
     client.send_packet(packet)?;
 
-    info!("packet sent");
-
     Ok(ContractDetails::default())
 }
+
+// client.reqMatchingSymbols(211, "IBM");

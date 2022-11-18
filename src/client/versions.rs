@@ -3,7 +3,7 @@ use crate::server_versions;
 // 100+ messaging */
 // 100 = enhanced handshake, msg length prefixes
 
-pub const CLIENT_VERSION: i32 = 66;  //API v. 9.71
+pub const CLIENT_VERSION: i32 = 66; //API v. 9.71
 
 pub const MIN_CLIENT_VER: i32 = 100;
 pub const MAX_CLIENT_VER: i32 = server_versions::PRICE_MGMT_ALGO;

@@ -175,6 +175,7 @@ impl From<i32> for IncomingMessage {
     }
 }
 
+#[derive(Debug)]
 pub enum OutgoingMessage {
     RequestMarketData = 1,
     CancelMarketData = 2,

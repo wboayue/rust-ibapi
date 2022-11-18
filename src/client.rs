@@ -9,6 +9,7 @@ use time::OffsetDateTime;
 use crate::domain::Contract;
 use crate::domain::SecurityType;
 use crate::messages::IncomingMessage;
+use crate::messages::OutgoingMessage;
 use crate::server_versions;
 use crate::transport::{MessageBus, TcpMessageBus};
 
@@ -304,6 +305,12 @@ impl ToPacket for &str {
 }
 
 impl ToPacket for &Contract {
+    fn to_packet(&self) -> String {
+        format!("{:?}", self)
+    }
+}
+
+impl ToPacket for OutgoingMessage {
     fn to_packet(&self) -> String {
         format!("{:?}", self)
     }
