@@ -7,7 +7,7 @@ use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use log::{debug, error, info};
 
@@ -17,6 +17,7 @@ use crate::server_versions;
 
 pub trait MessageBus {
     fn read_packet(&mut self) -> Result<ResponsePacket>;
+    fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponsePacket>;
     fn write_packet(&mut self, packet: &RequestPacket) -> Result<()>;
     fn write_packet_for_request(&mut self, request_id: i32, packet: &RequestPacket) -> Result<()>;
     fn write(&mut self, packet: &str) -> Result<()>;
@@ -29,7 +30,6 @@ struct Request {
 }
 
 unsafe impl Send for Request {}
-unsafe impl Sync for Request {}
 
 impl Request {
     fn new(request_id: i32) -> Request {
@@ -69,10 +69,32 @@ impl MessageBus for TcpMessageBus {
         read_packet(&self.reader)
     }
 
+    fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponsePacket> {
+        let requests = Arc::clone(&self.requests);
+        // match requests.write() {
+        //     Ok(mut hash) => {
+        //         let Some(a) = hash.remove(&request_id);
+        //         hash.insert(request_id, Request::new(request_id));
+        //     },
+        //     Err(e) => {
+        //         return Err(anyhow!("{}", e));
+        //     }
+        // }
+
+        // self.read_packet()
+        Err(anyhow!("not implemented"))
+    }
+
     fn write_packet_for_request(&mut self, request_id: i32, packet: &RequestPacket) -> Result<()> {
-        // let requests = Arc::clone(&self.requests);
-        // requests.write()?.insert(request_id, Request::new(request_id));
-        // drop(requests);
+        let requests = Arc::clone(&self.requests);
+        match requests.write() {
+            Ok(mut hash) => {
+                hash.insert(request_id, Request::new(request_id));
+            },
+            Err(e) => {
+                return Err(anyhow!("{}", e));
+            }
+        }
 
         self.write_packet(packet)
     }
