@@ -1,5 +1,6 @@
 use std::fmt;
 use std::ops::Index;
+use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
 use log::{debug, info};
@@ -7,6 +8,7 @@ use time::OffsetDateTime;
 
 use crate::domain::Contract;
 use crate::domain::SecurityType;
+use crate::messages::IncomingMessage;
 use crate::server_versions;
 use crate::transport::{MessageBus, TcpMessageBus};
 
@@ -15,7 +17,7 @@ const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
 const START_API: i32 = 71;
 
 pub trait Client {
-    fn next_request_id(&self) -> i32;
+    fn next_request_id(&mut self) -> i32;
     fn server_version(&self) -> i32;
     fn send_packet(&mut self, packet: RequestPacket) -> Result<()>;
     fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket>;
@@ -36,6 +38,7 @@ pub struct BasicClient {
 
     client_id: i32,
     message_bus: Box<dyn MessageBus>,
+    next_request_id: i32,
 }
 
 impl BasicClient {
@@ -58,12 +61,13 @@ impl BasicClient {
             managed_accounts: String::from(""),
             message_bus,
             client_id: 100,
+            next_request_id: 9000,
         };
 
         client.handshake()?;
         client.start_api()?;
 
-        client.message_bus.process_messages()?;
+        client.message_bus.process_messages(client.server_version)?;
 
         Ok(client)
     }
@@ -109,8 +113,9 @@ impl Drop for BasicClient {
 }
 
 impl Client for BasicClient {
-    fn next_request_id(&self) -> i32 {
-        10
+    fn next_request_id(&mut self) -> i32 {
+        self.next_request_id += 1;
+        self.next_request_id
     }
 
     fn server_version(&self) -> i32 {
@@ -174,7 +179,9 @@ impl RequestPacket {
     }
 
     pub fn encode(&self) -> String {
-        self.fields.join("\x00")
+        let mut data = self.fields.join("\x00");
+        data.push_str("\0");
+        data
     }
 }
 
@@ -199,6 +206,15 @@ pub struct ResponsePacket {
 }
 
 impl ResponsePacket {
+    pub fn message_type(&self) -> IncomingMessage {
+        if self.fields.is_empty() {
+            IncomingMessage::NotValid
+        } else {
+            let message_id = i32::from_str(&self.fields[0]).unwrap_or(-1);
+            IncomingMessage::from(message_id)
+        }
+    }
+
     pub fn next_int(&mut self) -> Result<i32> {
         let field = &self.fields[self.i];
         match field.parse() {
@@ -235,11 +251,23 @@ impl ResponsePacket {
             fields: fields.split('\x00').map(|x| x.to_string()).collect(),
         }
     }
+
+    pub fn skip(&mut self) {
+        self.i += 1;
+    }
+
+    pub fn reset(&mut self) {
+        self.i = 0;
+    }
 }
 
 impl ToPacket for bool {
     fn to_packet(&self) -> String {
-        self.to_string()
+        if *self {
+            String::from("1")
+        } else {
+            String::from("0")
+        }
     }
 }
 
@@ -263,7 +291,7 @@ impl ToPacket for f64 {
 
 impl ToPacket for SecurityType {
     fn to_packet(&self) -> String {
-        "securi".to_string()
+        self.to_string()
     }
 }
 

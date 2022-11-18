@@ -1,6 +1,7 @@
 use std::{thread, time};
+use std::time::Duration;
 
-use log::info;
+use log::{info, debug};
 
 use ibapi::client::BasicClient;
 use ibapi::contracts;
@@ -13,7 +14,9 @@ fn main() -> anyhow::Result<()> {
     info!("Connected {:?}", client);
 
     let contract = contracts::stock("MSFT");
-    info!("Contract {:?}", contract);
+    debug!("Contract {:?}", contract);
+
+    thread::sleep(Duration::from_secs(2));
 
     let result = contracts::contract_details(&mut client, &contract)?;
     info!("details {:?}", result);

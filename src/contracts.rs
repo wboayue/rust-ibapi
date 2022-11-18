@@ -9,7 +9,7 @@ use crate::domain::Contract;
 use crate::domain::ContractDetails;
 use crate::domain::DeltaNeutralContract;
 use crate::domain::SecurityType;
-use crate::outgoing_messages::OutgoingMessages;
+use crate::messages::OutgoingMessage;
 use crate::server_versions;
 
 pub fn stock(symbol: &str) -> Contract {
@@ -86,7 +86,7 @@ pub fn contract_details<C: Client + Debug>(
     let request_id = client.next_request_id();
     let mut packet = RequestPacket::default();
 
-    packet.add_field(&(OutgoingMessages::RequestContractData as i32));
+    packet.add_field(&(OutgoingMessage::RequestContractData as i32));
     packet.add_field(&VERSION);
 
     if client.server_version() >= server_versions::CONTRACT_DATA_CHAIN {

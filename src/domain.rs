@@ -1,3 +1,5 @@
+use std::string::ToString;
+
 use strum_macros::EnumString;
 use time::OffsetDateTime;
 
@@ -29,6 +31,25 @@ pub enum SecurityType {
     NEWS,
     /// Mutual fund
     FUND,
+}
+
+impl ToString for SecurityType {
+    fn to_string(&self) -> String {
+        match self {
+            SecurityType::STK => "STK".to_string(),
+            SecurityType::OPT => "OPT".to_string(),
+            SecurityType::FUT => "FUT".to_string(),
+            SecurityType::IND => "IND".to_string(),
+            SecurityType::FOP => "FOP".to_string(),
+            SecurityType::CASH => "CASH".to_string(),
+            SecurityType::BAG => "BAG".to_string(),
+            SecurityType::WAR => "WAR".to_string(),
+            SecurityType::BOND => "BOND".to_string(),
+            SecurityType::CMDTY => "CMDTY".to_string(),
+            SecurityType::NEWS => "NEWS".to_string(),
+            SecurityType::FUND => "FUND".to_string(),        
+        }
+    }
 }
 
 #[derive(Debug, Default)]
