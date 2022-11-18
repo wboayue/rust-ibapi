@@ -88,7 +88,9 @@ impl MessageBus for TcpMessageBus {
             match packet.message_type() {
                 IncomingMessage::Error => error_event(server_version, &mut packet).unwrap(),
                 IncomingMessage::NextValidId => process_next_valid_id(server_version, &mut packet),
-                IncomingMessage::ManagedAccounts => process_managed_accounts(server_version, &mut packet),
+                IncomingMessage::ManagedAccounts => {
+                    process_managed_accounts(server_version, &mut packet)
+                }
                 _ => info!(
                     "application message: {:?} {:?}",
                     packet.message_type(),
@@ -136,7 +138,7 @@ fn error_event(server_version: i32, packet: &mut ResponsePacket) -> Result<()> {
         error!("version 2 erorr: {}", message);
         Ok(())
     } else {
-        let id = packet.next_int()?;
+        let request_id = packet.next_int()?;
         let error_code = packet.next_int()?;
         let error_message = if server_version >= server_versions::ENCODE_MSG_ASCII7 {
             // Regex.Unescape(ReadString()) : ReadString();
@@ -154,8 +156,8 @@ fn error_event(server_version: i32, packet: &mut ResponsePacket) -> Result<()> {
             // }
         }
         error!(
-            "id: {}, error_code: {}, error_message: {}, advanced_order_reject_json: {}",
-            id, error_code, error_message, advanced_order_reject_json
+            "request_id: {}, error_code: {}, error_message: {}, advanced_order_reject_json: {}",
+            request_id, error_code, error_message, advanced_order_reject_json
         );
         Ok(())
     }

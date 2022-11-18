@@ -47,7 +47,7 @@ impl ToString for SecurityType {
             SecurityType::BOND => "BOND".to_string(),
             SecurityType::CMDTY => "CMDTY".to_string(),
             SecurityType::NEWS => "NEWS".to_string(),
-            SecurityType::FUND => "FUND".to_string(),        
+            SecurityType::FUND => "FUND".to_string(),
         }
     }
 }
