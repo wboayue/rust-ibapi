@@ -1,7 +1,8 @@
+use std::collections::HashMap;
 use std::io::prelude::*;
 use std::io::Cursor;
 use std::net::TcpStream;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -17,8 +18,23 @@ use crate::server_versions;
 pub trait MessageBus {
     fn read_packet(&mut self) -> Result<ResponsePacket>;
     fn write_packet(&mut self, packet: &RequestPacket) -> Result<()>;
+    fn write_packet_for_request(&mut self, request_id: i32, packet: &RequestPacket) -> Result<()>;
     fn write(&mut self, packet: &str) -> Result<()>;
     fn process_messages(&mut self, server_version: i32) -> Result<()>;
+}
+
+#[derive(Debug)]
+struct Request {
+    
+}
+
+unsafe impl Send for Request {}
+unsafe impl Sync for Request {}
+
+impl Request {
+    fn new(request_id: i32) -> Request {
+        Request{}
+    }
 }
 
 #[derive(Debug)]
@@ -26,6 +42,7 @@ pub struct TcpMessageBus {
     reader: Arc<TcpStream>,
     writer: Box<TcpStream>,
     handles: Vec<JoinHandle<i32>>,
+    requests: Arc<RwLock<HashMap<i32, Request>>>, 
 }
 
 impl TcpMessageBus {
@@ -34,11 +51,13 @@ impl TcpMessageBus {
 
         let reader = Arc::new(stream.try_clone()?);
         let writer = Box::new(stream);
+        let requests = Arc::new(RwLock::new(HashMap::default()));
 
         Ok(TcpMessageBus {
             reader,
             writer,
             handles: Vec::default(),
+            requests,
         })
     }
 }
@@ -48,6 +67,14 @@ impl TcpMessageBus {
 impl MessageBus for TcpMessageBus {
     fn read_packet(&mut self) -> Result<ResponsePacket> {
         read_packet(&self.reader)
+    }
+
+    fn write_packet_for_request(&mut self, request_id: i32, packet: &RequestPacket) -> Result<()> {
+        // let requests = Arc::clone(&self.requests);
+        // requests.write()?.insert(request_id, Request::new(request_id));
+        // drop(requests);
+
+        self.write_packet(packet)
     }
 
     fn write_packet(&mut self, packet: &RequestPacket) -> Result<()> {
