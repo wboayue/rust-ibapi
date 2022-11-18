@@ -12,6 +12,8 @@ use crate::messages::IncomingMessage;
 use crate::server_versions;
 use crate::transport::{MessageBus, TcpMessageBus};
 
+mod versions;
+
 const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
 const START_API: i32 = 71;
