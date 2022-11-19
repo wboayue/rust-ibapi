@@ -93,7 +93,12 @@ impl MessageBus for TcpMessageBus {
             }
         };
 
-        debug!("found request {:?}", request);
+        // debug!("found request {:?}", request);
+        // // FIXME still conviluted
+        // let data = request.rx.recv()?;
+
+        // let mut mut_collection = requests.write().unwrap();
+        // mut_collection.remove(&request_id);
 
         Ok(request.rx.recv()?)
     }
