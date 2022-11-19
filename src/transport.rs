@@ -3,9 +3,12 @@ use std::io::prelude::*;
 use std::io::Cursor;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex, RwLock};
+use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc;
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
+use std::ops::Deref;
 
 use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -25,13 +28,21 @@ pub trait MessageBus {
 }
 
 #[derive(Debug)]
-struct Request {}
+struct Request {
+    tx: Sender<ResponsePacket>,
+    rx: Receiver<ResponsePacket>,
+}
 
 unsafe impl Send for Request {}
+unsafe impl Sync for Request {}
 
 impl Request {
     fn new(request_id: i32) -> Request {
-        Request {}
+        let (tx, rx) = mpsc::channel();
+        Request {
+            tx,
+            rx,
+        }
     }
 }
 
@@ -62,25 +73,29 @@ impl TcpMessageBus {
 
 // impl read/write?
 
+const UNSPECIFIED_REQUEST_ID: i32 =  -1;
+
 impl MessageBus for TcpMessageBus {
     fn read_packet(&mut self) -> Result<ResponsePacket> {
         read_packet(&self.reader)
     }
 
     fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponsePacket> {
-        let requests = Arc::clone(&self.requests);
-        // match requests.write() {
-        //     Ok(mut hash) => {
-        //         let Some(a) = hash.remove(&request_id);
-        //         hash.insert(request_id, Request::new(request_id));
-        //     },
-        //     Err(e) => {
-        //         return Err(anyhow!("{}", e));
-        //     }
-        // }
+        debug!("read message for request_id {:?}", request_id);
 
-        // self.read_packet()
-        Err(anyhow!("not implemented"))
+        let requests = Arc::clone(&self.requests);
+
+        let mut collection = requests.read().unwrap();
+        let request = match collection.get(&request_id) {
+            Some(request) => request,
+            _ => {
+                return Err(anyhow!("no request found for request_id {:?}", request_id));
+            }
+        };
+
+        debug!("found request {:?}", request);
+
+        Ok(request.rx.recv()?)
     }
 
     fn write_packet_for_request(&mut self, request_id: i32, packet: &RequestPacket) -> Result<()> {
@@ -119,6 +134,7 @@ impl MessageBus for TcpMessageBus {
 
     fn process_messages(&mut self, server_version: i32) -> Result<()> {
         let reader = Arc::clone(&self.reader);
+        let requests = Arc::clone(&self.requests);
 
         let handle = thread::spawn(move || loop {
             info!("tick");
@@ -133,16 +149,20 @@ impl MessageBus for TcpMessageBus {
             };
 
             match packet.message_type() {
-                IncomingMessage::Error => error_event(server_version, &mut packet).unwrap(),
+                IncomingMessage::Error => {
+                    let request_id = packet.peek_int(2).unwrap_or(-1);
+
+                    if request_id == UNSPECIFIED_REQUEST_ID {
+                        error_event(server_version, &mut packet).unwrap();
+                    } else {
+                        process_response(&requests, packet);
+                    }
+                },
                 IncomingMessage::NextValidId => process_next_valid_id(server_version, &mut packet),
                 IncomingMessage::ManagedAccounts => {
                     process_managed_accounts(server_version, &mut packet)
                 }
-                _ => info!(
-                    "application message: {:?} {:?}",
-                    packet.message_type(),
-                    packet
-                ),
+                _ => process_response(&requests, packet),
             };
 
             thread::sleep(Duration::from_secs(1));
@@ -224,4 +244,19 @@ fn process_managed_accounts(server_version: i32, packet: &mut ResponsePacket) {
 
     let managed_accounts = packet.next_string().unwrap_or(String::from(""));
     info!("managed accounts: {}", managed_accounts)
+}
+
+fn process_response(requests: &Arc<RwLock<HashMap<i32, Request>>>, mut packet: ResponsePacket) {
+    let collection = requests.read().unwrap();
+
+    let request_id = packet.peek_int(2).unwrap_or(-1);
+    let request = match collection.get(&request_id) {
+        Some(request) => request,
+        _ => {
+            debug!("no request found for request_id {:?} - {:?}", request_id, packet);
+            return
+        }
+    };
+
+    request.tx.send(packet).unwrap();
 }

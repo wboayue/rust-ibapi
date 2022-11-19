@@ -23,6 +23,7 @@ pub trait Client {
     fn next_request_id(&mut self) -> i32;
     fn server_version(&self) -> i32;
     fn send_packet(&mut self, packet: RequestPacket) -> Result<()>;
+    fn send_packet_for_request(&mut self, request_id: i32, packet: RequestPacket) -> Result<()>;
     fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket>;
     fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator>;
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
@@ -130,8 +131,13 @@ impl Client for BasicClient {
         self.message_bus.write_packet(&packet)
     }
 
+    fn send_packet_for_request(&mut self, request_id: i32, packet: RequestPacket) -> Result<()> {
+        debug!("send_packet({:?})", packet);
+        self.message_bus.write_packet_for_request(request_id, &packet)
+    }
+
     fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket> {
-        Err(anyhow!("received_packet not implemented: {:?}", request_id))
+        self.message_bus.read_packet_for_request(request_id)
     }
 
     fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator> {
@@ -215,6 +221,16 @@ impl ResponsePacket {
         } else {
             let message_id = i32::from_str(&self.fields[0]).unwrap_or(-1);
             IncomingMessage::from(message_id)
+        }
+    }
+
+    pub fn peek_int(&mut self, i: usize) -> Result<i32> {
+        let field = &self.fields[i];
+        match field.parse() {
+            Ok(val) => {
+                Ok(val)
+            }
+            Err(err) => Err(anyhow!("error parsing field {} {}: {}", i, field, err)),
         }
     }
 
@@ -312,7 +328,7 @@ impl ToPacket for &Contract {
 
 impl ToPacket for OutgoingMessage {
     fn to_packet(&self) -> String {
-        format!("{:?}", self)
+        (*self as i32).to_string()
     }
 }
 

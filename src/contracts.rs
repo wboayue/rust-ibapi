@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use log::info;
 
 use crate::client::Client;
@@ -9,7 +9,7 @@ use crate::domain::Contract;
 use crate::domain::ContractDetails;
 use crate::domain::DeltaNeutralContract;
 use crate::domain::SecurityType;
-use crate::messages::OutgoingMessage;
+use crate::messages::{IncomingMessage, OutgoingMessage};
 use crate::server_versions;
 
 pub fn stock(symbol: &str) -> Contract {
@@ -24,7 +24,7 @@ pub fn default() -> Contract {
         contract_id: 1,
         symbol: "".to_string(),
         security_type: SecurityType::STK,
-        last_trade_date_or_contract_month: "123".to_string(),
+        last_trade_date_or_contract_month: "".to_string(),
         strike: 0.0,
         right: "".to_string(),
         multiplier: "".to_string(),
@@ -140,11 +140,19 @@ pub fn contract_details<C: Client + Debug>(
         packet.add_field(&contract.issuer_id);
     }
 
-    info!("packet: {:?}", packet);
+    info!("outbound message: {:?}", packet);
 
-    client.send_packet(packet)?;
+    client.send_packet_for_request(request_id, packet)?;
 
-    Ok(ContractDetails::default())
+    let message = client.receive_packet(request_id)?;
+
+    match message.message_type() {
+        IncomingMessage::Error => Err(anyhow!("{:?}", message)),
+        _ => { 
+            info!("inbound message: {:?}", message);
+            Ok(ContractDetails::default())
+        }
+    }
 }
 
 // client.reqMatchingSymbols(211, "IBM");
