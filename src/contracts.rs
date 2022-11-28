@@ -21,7 +21,7 @@ pub fn stock(symbol: &str) -> Contract {
 
 pub fn default() -> Contract {
     Contract {
-        contract_id: 1,
+        contract_id: 0,
         symbol: "".to_string(),
         security_type: SecurityType::STK,
         last_trade_date_or_contract_month: "".to_string(),
@@ -33,7 +33,7 @@ pub fn default() -> Contract {
         local_symbol: "".to_string(),
         primary_exchange: "".to_string(),
         trading_class: "".to_string(),
-        include_expired: true,
+        include_expired: false,
         security_id_type: "".to_string(),
         security_id: "".to_string(),
         combo_legs_description: "".to_string(),
@@ -146,7 +146,7 @@ pub fn contract_details<C: Client + Debug>(
     let message = promise.message()?;
 
     match message.message_type() {
-        IncomingMessage::Error => Err(anyhow!("{:?}", message)),
+        IncomingMessage::Error => Err(anyhow!("contract_details {:?}", message)),
         _ => { 
             info!("inbound message: {:?}", message);
             Ok(ContractDetails::default())

@@ -13,7 +13,7 @@ fn main() -> anyhow::Result<()> {
 
     info!("Connected {:?}", client);
 
-    let contract = contracts::stock("MSFT");
+    let contract = contracts::stock("TSLA");
     debug!("Contract {:?}", contract);
 
     thread::sleep(Duration::from_secs(2));
@@ -21,7 +21,7 @@ fn main() -> anyhow::Result<()> {
     let result = contracts::contract_details(&mut client, &contract)?;
     info!("details {:?}", result);
 
-    thread::sleep(time::Duration::from_secs(15));
+    thread::sleep(time::Duration::from_secs(5));
 
     Ok(())
 }

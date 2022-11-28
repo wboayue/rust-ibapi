@@ -11,7 +11,7 @@ use crate::domain::SecurityType;
 use crate::messages::IncomingMessage;
 use crate::messages::OutgoingMessage;
 use crate::server_versions;
-use crate::transport::{MessageBus, TcpMessageBus};
+use crate::transport::{MessageBus, TcpMessageBus, ResponsePacketPromise};
 
 mod versions;
 
@@ -23,20 +23,10 @@ pub trait Client {
     fn next_request_id(&mut self) -> i32;
     fn server_version(&self) -> i32;
     fn send_packet(&mut self, packet: RequestPacket) -> Result<()>;
-    fn send_message(&mut self, request_id: i32, packet: RequestPacket) -> Result<ResponsePacketPromise>;
+    fn send_message(&mut self, request_id: i32, message: RequestPacket) -> Result<ResponsePacketPromise>;
     // fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket>;
     fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator>;
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
-}
-
-pub struct ResponsePacketPromise {
-
-}
-
-impl ResponsePacketPromise {
-    pub fn message(&self) -> Result<ResponsePacket> {
-        return Err(anyhow!("no message"));
-    }
 }
 
 pub struct BasicClient {
@@ -141,10 +131,9 @@ impl Client for BasicClient {
         self.message_bus.write_packet(&packet)
     }
 
-    fn send_message(&mut self, request_id: i32, packet: RequestPacket) -> Result<(ResponsePacketPromise)> {
-        debug!("send_packet({:?})", packet);
-        self.message_bus.write_packet_for_request(request_id, &packet);
-        Ok(ResponsePacketPromise{})
+    fn send_message(&mut self, request_id: i32, message: RequestPacket) -> Result<ResponsePacketPromise> {
+        debug!("send_message({:?}, {:?})", request_id, message);
+        self.message_bus.write_packet_for_request(request_id, &message)
     }
 
     // fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket> {

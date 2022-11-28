@@ -3,8 +3,7 @@ use std::io::prelude::*;
 use std::io::Cursor;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex, RwLock};
-use std::sync::mpsc::{Sender, Receiver};
-use std::sync::mpsc;
+use std::sync::mpsc::{self, Sender, Receiver};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -22,37 +21,25 @@ pub trait MessageBus {
     fn read_packet(&mut self) -> Result<ResponsePacket>;
     fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponsePacket>;
     fn write_packet(&mut self, packet: &RequestPacket) -> Result<()>;
-    fn write_packet_for_request(&mut self, request_id: i32, packet: &RequestPacket) -> Result<()>;
+    fn write_packet_for_request(&mut self, request_id: i32, packet: &RequestPacket) -> Result<ResponsePacketPromise>;
     fn write(&mut self, packet: &str) -> Result<()>;
     fn process_messages(&mut self, server_version: i32) -> Result<()>;
 }
 
 #[derive(Debug)]
-struct Request {
-    tx: Sender<ResponsePacket>,
-    rx: Receiver<ResponsePacket>,
-}
-
-unsafe impl Send for Request {}
-unsafe impl Sync for Request {}
-
-impl Request {
-    fn new(request_id: i32) -> Request {
-        let (tx, rx) = mpsc::channel();
-        Request {
-            tx,
-            rx,
-        }
-    }
-}
+struct Outbox(Sender<ResponsePacket>);
 
 #[derive(Debug)]
 pub struct TcpMessageBus {
     reader: Arc<TcpStream>,
     writer: Box<TcpStream>,
     handles: Vec<JoinHandle<i32>>,
-    requests: Arc<RwLock<HashMap<i32, Request>>>,
+    requests: Arc<RwLock<HashMap<i32, Outbox>>>,
 }
+
+unsafe impl Send for Outbox {}
+unsafe impl Sync for Outbox {}
+
 
 impl TcpMessageBus {
     pub fn connect(connection_string: &str) -> Result<TcpMessageBus> {
@@ -68,6 +55,21 @@ impl TcpMessageBus {
             handles: Vec::default(),
             requests,
         })
+    }
+
+    fn add_sender(&mut self, request_id: i32, sender: Sender<ResponsePacket>) -> Result<()> {
+        let requests = Arc::clone(&self.requests);
+
+        match requests.write() {
+            Ok(mut hash) => {
+                hash.insert(request_id, Outbox(sender));
+            }
+            Err(e) => {
+                return Err(anyhow!("{}", e));
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -100,21 +102,17 @@ impl MessageBus for TcpMessageBus {
         // let mut mut_collection = requests.write().unwrap();
         // mut_collection.remove(&request_id);
 
-        Ok(request.rx.recv()?)
+        // Ok(request.rx.recv()?)
+        Err(anyhow!("no way"))
     }
 
-    fn write_packet_for_request(&mut self, request_id: i32, packet: &RequestPacket) -> Result<()> {
-        let requests = Arc::clone(&self.requests);
-        match requests.write() {
-            Ok(mut hash) => {
-                hash.insert(request_id, Request::new(request_id));
-            }
-            Err(e) => {
-                return Err(anyhow!("{}", e));
-            }
-        }
+    fn write_packet_for_request(&mut self, request_id: i32, packet: &RequestPacket) -> Result<ResponsePacketPromise> {
+        let (sender, receiver) = mpsc::channel();
 
-        self.write_packet(packet)
+        self.add_sender(request_id, sender);
+        self.write_packet(packet);
+
+        Ok(ResponsePacketPromise::new(receiver))
     }
 
     fn write_packet(&mut self, packet: &RequestPacket) -> Result<()> {
@@ -251,17 +249,36 @@ fn process_managed_accounts(server_version: i32, packet: &mut ResponsePacket) {
     info!("managed accounts: {}", managed_accounts)
 }
 
-fn process_response(requests: &Arc<RwLock<HashMap<i32, Request>>>, mut packet: ResponsePacket) {
+fn process_response(requests: &Arc<RwLock<HashMap<i32, Outbox>>>, mut packet: ResponsePacket) {
     let collection = requests.read().unwrap();
 
     let request_id = packet.peek_int(2).unwrap_or(-1);
-    let request = match collection.get(&request_id) {
-        Some(request) => request,
+    let outbox = match collection.get(&request_id) {
+        Some(outbox) => outbox,
         _ => {
             debug!("no request found for request_id {:?} - {:?}", request_id, packet);
             return
         }
     };
 
-    request.tx.send(packet).unwrap();
+    outbox.0.send(packet).unwrap();
+}
+
+
+#[derive(Debug)]
+pub struct ResponsePacketPromise {
+    receiver: Receiver<ResponsePacket>
+}
+
+impl ResponsePacketPromise {
+    fn new(receiver: Receiver<ResponsePacket>) -> ResponsePacketPromise {
+        ResponsePacketPromise{receiver: receiver}
+    }
+
+    pub fn message(&self) -> Result<ResponsePacket> {
+        // Duration::from_millis(100)
+
+        Ok(self.receiver.recv_timeout(Duration::from_millis(5000))?)
+        // return Err(anyhow!("no message"));
+    }
 }
