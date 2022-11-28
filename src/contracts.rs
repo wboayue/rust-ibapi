@@ -142,9 +142,8 @@ pub fn contract_details<C: Client + Debug>(
 
     info!("outbound message: {:?}", packet);
 
-    client.send_packet_for_request(request_id, packet)?;
-
-    let message = client.receive_packet(request_id)?;
+    let promise = client.send_message(request_id, packet)?;
+    let message = promise.message()?;
 
     match message.message_type() {
         IncomingMessage::Error => Err(anyhow!("{:?}", message)),

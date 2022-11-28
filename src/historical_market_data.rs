@@ -46,9 +46,9 @@ pub fn head_timestamp<C: Client + Debug>(
     let request_id = client.next_request_id();
     let request = encode_head_timestamp(request_id, contract, what_to_show, use_rth)?;
 
-    client.send_packet(request)?;
+    let promise = client.send_message(request_id, request)?;
+    let mut response = promise.message()?;
 
-    let mut response = client.receive_packet(request_id)?;
     decode_head_timestamp(&mut response)
 }
 
