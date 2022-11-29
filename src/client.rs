@@ -11,7 +11,7 @@ use crate::domain::SecurityType;
 use crate::messages::IncomingMessage;
 use crate::messages::OutgoingMessage;
 use crate::server_versions;
-use crate::transport::{MessageBus, TcpMessageBus, ResponsePacketPromise};
+use crate::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
 
 mod versions;
 
@@ -23,7 +23,11 @@ pub trait Client {
     fn next_request_id(&mut self) -> i32;
     fn server_version(&self) -> i32;
     fn send_packet(&mut self, packet: RequestPacket) -> Result<()>;
-    fn send_message(&mut self, request_id: i32, message: RequestPacket) -> Result<ResponsePacketPromise>;
+    fn send_message(
+        &mut self,
+        request_id: i32,
+        message: RequestPacket,
+    ) -> Result<ResponsePacketPromise>;
     // fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket>;
     fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator>;
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
@@ -131,9 +135,14 @@ impl Client for BasicClient {
         self.message_bus.write_packet(&packet)
     }
 
-    fn send_message(&mut self, request_id: i32, message: RequestPacket) -> Result<ResponsePacketPromise> {
+    fn send_message(
+        &mut self,
+        request_id: i32,
+        message: RequestPacket,
+    ) -> Result<ResponsePacketPromise> {
         debug!("send_message({:?}, {:?})", request_id, message);
-        self.message_bus.write_packet_for_request(request_id, &message)
+        self.message_bus
+            .write_packet_for_request(request_id, &message)
     }
 
     // fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket> {
@@ -224,12 +233,20 @@ impl ResponsePacket {
         }
     }
 
-    pub fn peek_int(&mut self, i: usize) -> Result<i32> {
+    pub fn request_id(&self) -> Result<i32> {
+        match self.message_type() {
+            IncomingMessage::ContractData | IncomingMessage::TickByTick => return self.peek_int(1),
+            IncomingMessage::ContractDataEnd | IncomingMessage::RealTimeBars => {
+                return self.peek_int(2)
+            }
+            _ => Err(anyhow!("error parsing field request id {:?}", self)),
+        }
+    }
+
+    pub fn peek_int(&self, i: usize) -> Result<i32> {
         let field = &self.fields[i];
         match field.parse() {
-            Ok(val) => {
-                Ok(val)
-            }
+            Ok(val) => Ok(val),
             Err(err) => Err(anyhow!("error parsing field {} {}: {}", i, field, err)),
         }
     }
@@ -262,6 +279,17 @@ impl ResponsePacket {
         let field = &self.fields[self.i];
         self.i += 1;
         Ok(String::from(field))
+    }
+
+    pub fn next_double(&mut self) -> Result<f64> {
+        let field = &self.fields[self.i];
+        match field.parse() {
+            Ok(val) => {
+                self.i += 1;
+                Ok(val)
+            }
+            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+        }
     }
 
     pub fn from(fields: &str) -> ResponsePacket {

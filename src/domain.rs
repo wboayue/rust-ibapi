@@ -52,6 +52,26 @@ impl ToString for SecurityType {
     }
 }
 
+impl SecurityType {
+    pub fn from(name: &str) -> SecurityType {
+        match name {
+            "STK" => SecurityType::STK,
+            "OPT" => SecurityType::OPT,
+            "FUT" => SecurityType::FUT,
+            "IND" => SecurityType::IND,
+            "FOP" => SecurityType::FOP,
+            "CASH" => SecurityType::CASH,
+            "BAG" => SecurityType::BAG,
+            "WAR" => SecurityType::WAR,
+            "BOND" => SecurityType::BOND,
+            "CMDTY" => SecurityType::CMDTY,
+            "NEWS" => SecurityType::NEWS,
+            "FUND" => SecurityType::FUND,
+            &_ => todo!(),
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 /// Contract describes an instrument's definition
 pub struct Contract {

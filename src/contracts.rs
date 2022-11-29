@@ -2,9 +2,10 @@ use std::fmt::Debug;
 
 use anyhow::{anyhow, Result};
 use log::info;
+use regex::Regex;
 
 use crate::client::Client;
-use crate::client::RequestPacket;
+use crate::client::{RequestPacket, ResponsePacket};
 use crate::domain::Contract;
 use crate::domain::ContractDetails;
 use crate::domain::DeltaNeutralContract;
@@ -143,15 +144,113 @@ pub fn contract_details<C: Client + Debug>(
     info!("outbound message: {:?}", packet);
 
     let promise = client.send_message(request_id, packet)?;
-    let message = promise.message()?;
+    let mut message = promise.message()?;
 
     match message.message_type() {
         IncomingMessage::Error => Err(anyhow!("contract_details {:?}", message)),
-        _ => { 
+        _ => {
             info!("inbound message: {:?}", message);
-            Ok(ContractDetails::default())
+            decode_contract_details(client.server_version(), &mut message)
         }
     }
 }
 
-// client.reqMatchingSymbols(211, "IBM");
+fn decode_contract_details(
+    server_version: i32,
+    message: &mut ResponsePacket,
+) -> Result<ContractDetails> {
+    message.skip(); // message type
+
+    let mut message_version = 8;
+    if server_version < server_versions::SIZE_RULES {
+        message_version = message.next_int()?;
+    }
+
+    info!("server version: {} {}", server_version, message_version);
+
+    let mut request_id = -1;
+    if message_version >= 3 {
+        request_id = message.next_int()?;
+    }
+
+    let mut contract = ContractDetails::default();
+
+    contract.contract.symbol = message.next_string()?;
+    contract.contract.security_type = SecurityType::from(&message.next_string()?);
+    read_last_trade_date(&mut contract, message, false);
+    contract.contract.strike = message.next_double()?;
+    contract.contract.right = message.next_string()?;
+    contract.contract.exchange = message.next_string()?;
+    contract.contract.currency = message.next_string()?;
+    contract.contract.local_symbol = message.next_string()?;
+    contract.market_name = message.next_string()?;
+    contract.contract.trading_class = message.next_string()?;
+    contract.contract.contract_id = message.next_int()?;
+    contract.min_tick = message.next_double()?;
+    if server_version >= server_versions::MD_SIZE_MULTIPLIER && server_version < server_versions::SIZE_RULES {
+        message.next_int();     // mdSizeMultiplier no longer used 
+    }
+    contract.contract.multiplier = message.next_string()?;
+    contract.order_types = message.next_string()?;
+    contract.valid_exchanges = message.next_string()?;
+    if message_version >= 2 {
+        contract.price_magnifier = message.next_int()?;
+    }
+    if message_version >= 4 {
+        contract.under_contract_id = message.next_int()?;
+    }
+    if message_version >= 5 {
+        //        https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EDecoder.cs#L1626
+        contract.long_name = message.next_string()?;
+        contract.contract.primary_exchange = message.next_string()?;
+    }
+    if message_version >= 6 {
+        contract.contract_month = message.next_string()?;
+        contract.industry = message.next_string()?;
+        contract.category = message.next_string()?;
+        contract.subcategory = message.next_string()?;
+        contract.time_zone_id = message.next_string()?;
+        contract.trading_hours = message.next_string()?;
+        contract.liquid_hours = message.next_string()?;
+    }
+    if message_version >= 8 {
+        contract.ev_rule = message.next_string()?;
+        // contract.ev_multiplier = message.next_int()?; // FIXME int or double
+    }
+
+    Ok(contract)
+}
+
+fn read_last_trade_date(
+    contract: &mut ContractDetails,
+    message: &mut ResponsePacket,
+    is_bond: bool,
+) -> Result<()> {
+    let mut last_trade_date_or_contract_month = message.next_string()?;
+    if last_trade_date_or_contract_month.is_empty() {
+        return Ok(());
+    }
+
+    let splitted: Vec<&str> = if last_trade_date_or_contract_month.contains("-") {
+        last_trade_date_or_contract_month.split("-").collect()
+    } else {
+        // let re = Regex::new(r"\s+").unwrap();
+        last_trade_date_or_contract_month.split(" ").collect()
+    };
+
+    if splitted.len() > 0 {
+        if is_bond {
+            contract.maturity = splitted[0].to_string();
+        } else {
+            contract.contract.last_trade_date_or_contract_month = splitted[0].to_string();
+        }
+    }
+    if splitted.len() > 1 {
+        contract.last_trade_time = splitted[1].to_string();
+    }
+    if is_bond && splitted.len() > 2 {
+        contract.time_zone_id = splitted[2].to_string();
+    }
+
+    Ok(())
+}

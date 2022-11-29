@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::io::prelude::*;
 use std::io::Cursor;
 use std::net::TcpStream;
+use std::ops::Deref;
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, RwLock};
-use std::sync::mpsc::{self, Sender, Receiver};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
-use std::ops::Deref;
 
 use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -21,7 +21,11 @@ pub trait MessageBus {
     fn read_packet(&mut self) -> Result<ResponsePacket>;
     fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponsePacket>;
     fn write_packet(&mut self, packet: &RequestPacket) -> Result<()>;
-    fn write_packet_for_request(&mut self, request_id: i32, packet: &RequestPacket) -> Result<ResponsePacketPromise>;
+    fn write_packet_for_request(
+        &mut self,
+        request_id: i32,
+        packet: &RequestPacket,
+    ) -> Result<ResponsePacketPromise>;
     fn write(&mut self, packet: &str) -> Result<()>;
     fn process_messages(&mut self, server_version: i32) -> Result<()>;
 }
@@ -39,7 +43,6 @@ pub struct TcpMessageBus {
 
 unsafe impl Send for Outbox {}
 unsafe impl Sync for Outbox {}
-
 
 impl TcpMessageBus {
     pub fn connect(connection_string: &str) -> Result<TcpMessageBus> {
@@ -75,7 +78,7 @@ impl TcpMessageBus {
 
 // impl read/write?
 
-const UNSPECIFIED_REQUEST_ID: i32 =  -1;
+const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 impl MessageBus for TcpMessageBus {
     fn read_packet(&mut self) -> Result<ResponsePacket> {
@@ -106,7 +109,11 @@ impl MessageBus for TcpMessageBus {
         Err(anyhow!("no way"))
     }
 
-    fn write_packet_for_request(&mut self, request_id: i32, packet: &RequestPacket) -> Result<ResponsePacketPromise> {
+    fn write_packet_for_request(
+        &mut self,
+        request_id: i32,
+        packet: &RequestPacket,
+    ) -> Result<ResponsePacketPromise> {
         let (sender, receiver) = mpsc::channel();
 
         self.add_sender(request_id, sender);
@@ -160,7 +167,7 @@ impl MessageBus for TcpMessageBus {
                     } else {
                         process_response(&requests, packet);
                     }
-                },
+                }
                 IncomingMessage::NextValidId => process_next_valid_id(server_version, &mut packet),
                 IncomingMessage::ManagedAccounts => {
                     process_managed_accounts(server_version, &mut packet)
@@ -252,27 +259,29 @@ fn process_managed_accounts(server_version: i32, packet: &mut ResponsePacket) {
 fn process_response(requests: &Arc<RwLock<HashMap<i32, Outbox>>>, mut packet: ResponsePacket) {
     let collection = requests.read().unwrap();
 
-    let request_id = packet.peek_int(2).unwrap_or(-1);
+    let request_id = packet.request_id().unwrap_or(-1);
     let outbox = match collection.get(&request_id) {
         Some(outbox) => outbox,
         _ => {
-            debug!("no request found for request_id {:?} - {:?}", request_id, packet);
-            return
+            debug!(
+                "no request found for request_id {:?} - {:?}",
+                request_id, packet
+            );
+            return;
         }
     };
 
     outbox.0.send(packet).unwrap();
 }
 
-
 #[derive(Debug)]
 pub struct ResponsePacketPromise {
-    receiver: Receiver<ResponsePacket>
+    receiver: Receiver<ResponsePacket>,
 }
 
 impl ResponsePacketPromise {
     fn new(receiver: Receiver<ResponsePacket>) -> ResponsePacketPromise {
-        ResponsePacketPromise{receiver: receiver}
+        ResponsePacketPromise { receiver: receiver }
     }
 
     pub fn message(&self) -> Result<ResponsePacket> {
