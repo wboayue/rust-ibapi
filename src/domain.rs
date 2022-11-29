@@ -205,7 +205,7 @@ pub struct ContractDetails {
     /// Aggregated group Indicates the smart-routing group to which a contract belongs. contracts which cannot be smart-routed have aggGroup = -1.
     pub agg_group: i32,
     /// A list of contract identifiers that the customer is allowed to view. CUSIP/ISIN/etc. For US stocks, receiving the ISIN requires the CUSIP market data subscription. For Bonds, the CUSIP or ISIN is input directly into the symbol field of the Contract class.
-    pub sec_id_list: Box<[TagValue]>,
+    pub sec_id_list: Vec<TagValue>,
     /// For derivatives, the symbol of the underlying contract.
     pub under_symbol: String,
     /// For derivatives, returns the underlying security type.

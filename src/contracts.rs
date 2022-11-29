@@ -2,7 +2,6 @@ use std::fmt::Debug;
 
 use anyhow::{anyhow, Result};
 use log::info;
-use regex::Regex;
 
 use crate::client::Client;
 use crate::client::{RequestPacket, ResponsePacket};
@@ -10,6 +9,7 @@ use crate::domain::Contract;
 use crate::domain::ContractDetails;
 use crate::domain::DeltaNeutralContract;
 use crate::domain::SecurityType;
+use crate::domain::TagValue;
 use crate::messages::{IncomingMessage, OutgoingMessage};
 use crate::server_versions;
 
@@ -42,8 +42,8 @@ pub fn default() -> Contract {
         issuer_id: "".to_string(),
         delta_neutral_contract: DeltaNeutralContract {
             contract_id: "".to_string(),
-            delta: 1.0,
-            price: 12.0,
+            delta: 0.0,
+            price: 0.0,
         },
     }
 }
@@ -171,13 +171,13 @@ fn decode_contract_details(
         request_id = message.next_int()?;
     }
 
-    info!("server version: {} {} {}", request_id, server_version, message_version);
+    info!("request_id: {}, server_version: {}, message_version: {}", request_id, server_version, message_version);
 
     let mut contract = ContractDetails::default();
 
     contract.contract.symbol = message.next_string()?;
     contract.contract.security_type = SecurityType::from(&message.next_string()?);
-    read_last_trade_date(&mut contract, message, false);
+    read_last_trade_date(&mut contract, message, false)?;
     contract.contract.strike = message.next_double()?;
     contract.contract.right = message.next_string()?;
     contract.contract.exchange = message.next_string()?;
@@ -188,7 +188,7 @@ fn decode_contract_details(
     contract.contract.contract_id = message.next_int()?;
     contract.min_tick = message.next_double()?;
     if server_version >= server_versions::MD_SIZE_MULTIPLIER && server_version < server_versions::SIZE_RULES {
-        message.next_int();     // mdSizeMultiplier no longer used 
+        message.next_int()?;     // mdSizeMultiplier no longer used 
     }
     contract.contract.multiplier = message.next_string()?;
     contract.order_types = message.next_string()?;
@@ -217,6 +217,14 @@ fn decode_contract_details(
         contract.ev_rule = message.next_string()?;
         contract.ev_multiplier = message.next_double()?;
     }
+    if message_version >= 7 {
+        let sec_id_list_count = message.next_int()?;
+        for i in 0..sec_id_list_count {
+            let tag = message.next_string()?;
+            let value = message.next_string()?;
+            contract.sec_id_list.push(TagValue{tag, value});
+        }
+    }
 
     Ok(contract)
 }
@@ -226,7 +234,7 @@ fn read_last_trade_date(
     message: &mut ResponsePacket,
     is_bond: bool,
 ) -> Result<()> {
-    let mut last_trade_date_or_contract_month = message.next_string()?;
+    let last_trade_date_or_contract_month = message.next_string()?;
     if last_trade_date_or_contract_month.is_empty() {
         return Ok(());
     }

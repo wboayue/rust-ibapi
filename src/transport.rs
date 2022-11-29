@@ -116,8 +116,8 @@ impl MessageBus for TcpMessageBus {
     ) -> Result<ResponsePacketPromise> {
         let (sender, receiver) = mpsc::channel();
 
-        self.add_sender(request_id, sender);
-        self.write_packet(packet);
+        self.add_sender(request_id, sender)?;
+        self.write_packet(packet)?;
 
         Ok(ResponsePacketPromise::new(receiver))
     }
@@ -256,7 +256,7 @@ fn process_managed_accounts(server_version: i32, packet: &mut ResponsePacket) {
     info!("managed accounts: {}", managed_accounts)
 }
 
-fn process_response(requests: &Arc<RwLock<HashMap<i32, Outbox>>>, mut packet: ResponsePacket) {
+fn process_response(requests: &Arc<RwLock<HashMap<i32, Outbox>>>, packet: ResponsePacket) {
     let collection = requests.read().unwrap();
 
     let request_id = packet.request_id().unwrap_or(-1);
