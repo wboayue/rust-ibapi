@@ -18,6 +18,8 @@ mod versions;
 const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
 const START_API: i32 = 71;
+const INFINITY_STR: &str = "Infinity";
+
 
 pub trait Client {
     fn next_request_id(&mut self) -> i32;
@@ -283,6 +285,28 @@ impl ResponsePacket {
 
     pub fn next_double(&mut self) -> Result<f64> {
         let field = &self.fields[self.i];
+        if field.is_empty() || field == "0" {
+            return Ok(0.0)   
+        }
+
+        match field.parse() {
+            Ok(val) => {
+                self.i += 1;
+                Ok(val)
+            }
+            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+        }
+    }
+
+    pub fn next_double_max(&mut self) -> Result<f64> {
+        let field = &self.fields[self.i];
+        if field.is_empty() || field == "0" {
+            return Ok(f64::MAX)   
+        }
+        if field == INFINITY_STR {
+            return Ok(f64::INFINITY)
+        }
+
         match field.parse() {
             Ok(val) => {
                 self.i += 1;

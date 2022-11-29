@@ -287,7 +287,7 @@ impl ResponsePacketPromise {
     pub fn message(&self) -> Result<ResponsePacket> {
         // Duration::from_millis(100)
 
-        Ok(self.receiver.recv_timeout(Duration::from_millis(5000))?)
+        Ok(self.receiver.recv_timeout(Duration::from_millis(20000))?)
         // return Err(anyhow!("no message"));
     }
 }

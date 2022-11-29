@@ -201,7 +201,7 @@ pub struct ContractDetails {
     /// Contains the Economic Value Rule name and the respective optional argument. The two values should be separated by a colon. For example, aussieBond:YearsToExpiration=3. When the optional argument is not present, the first value will be followed by a colon.
     pub ev_rule: String,
     /// Tells you approximately how much the market value of a contract would change if the price were to change by 1. It cannot be used to get market value by multiplying the price by the approximate multiplier.
-    pub ev_multiplier: i32,
+    pub ev_multiplier: f64,
     /// Aggregated group Indicates the smart-routing group to which a contract belongs. contracts which cannot be smart-routed have aggGroup = -1.
     pub agg_group: i32,
     /// A list of contract identifiers that the customer is allowed to view. CUSIP/ISIN/etc. For US stocks, receiving the ISIN requires the CUSIP market data subscription. For Bonds, the CUSIP or ISIN is input directly into the symbol field of the Contract class.
@@ -861,3 +861,24 @@ pub struct RealTimeBar {
     pub wap: f64,
     pub count: i32,
 }
+
+
+
+// namespace IBApi
+// {
+//     public static class Constants
+//     {
+//         public const int ClientVersion = 66;//API v. 9.71
+//         public const byte EOL = 0;
+//         public const string BagSecType = "BAG";
+//         public const int REDIRECT_COUNT_MAX = 2;
+//         public const string INFINITY_STR = "Infinity";
+
+//         public const int FaGroups = 1;
+//         public const int FaProfiles = 2;
+//         public const int FaAliases = 3;
+//         public const int MinVersion = 100;
+//         public const int MaxVersion = MinServerVer.MIN_SERVER_VER_BOND_ISSUERID;
+//         public const int MaxMsgSize = 0x00FFFFFF;
+//     }
+// }

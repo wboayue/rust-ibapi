@@ -166,12 +166,12 @@ fn decode_contract_details(
         message_version = message.next_int()?;
     }
 
-    info!("server version: {} {}", server_version, message_version);
-
     let mut request_id = -1;
     if message_version >= 3 {
         request_id = message.next_int()?;
     }
+
+    info!("server version: {} {} {}", request_id, server_version, message_version);
 
     let mut contract = ContractDetails::default();
 
@@ -215,7 +215,7 @@ fn decode_contract_details(
     }
     if message_version >= 8 {
         contract.ev_rule = message.next_string()?;
-        // contract.ev_multiplier = message.next_int()?; // FIXME int or double
+        contract.ev_multiplier = message.next_double()?;
     }
 
     Ok(contract)
