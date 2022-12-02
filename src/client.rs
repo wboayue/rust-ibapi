@@ -20,7 +20,6 @@ const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
 const START_API: i32 = 71;
 const INFINITY_STR: &str = "Infinity";
 
-
 pub trait Client {
     fn next_request_id(&mut self) -> i32;
     fn server_version(&self) -> i32;
@@ -238,9 +237,7 @@ impl ResponsePacket {
     pub fn request_id(&self) -> Result<i32> {
         match self.message_type() {
             IncomingMessage::ContractData | IncomingMessage::TickByTick => self.peek_int(1),
-            IncomingMessage::ContractDataEnd | IncomingMessage::RealTimeBars => {
-                self.peek_int(2)
-            }
+            IncomingMessage::ContractDataEnd | IncomingMessage::RealTimeBars => self.peek_int(2),
             _ => Err(anyhow!("error parsing field request id {:?}", self)),
         }
     }
@@ -258,9 +255,7 @@ impl ResponsePacket {
         self.i += 1;
 
         match field.parse() {
-            Ok(val) => {
-                Ok(val)
-            }
+            Ok(val) => Ok(val),
             Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
         }
     }
@@ -272,9 +267,7 @@ impl ResponsePacket {
         // from_unix_timestamp
         let timestamp: i64 = field.parse()?;
         match OffsetDateTime::from_unix_timestamp(timestamp) {
-            Ok(val) => {
-                Ok(val)
-            }
+            Ok(val) => Ok(val),
             Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
         }
     }
@@ -290,13 +283,11 @@ impl ResponsePacket {
         self.i += 1;
 
         if field.is_empty() || field == "0" {
-            return Ok(0.0)   
+            return Ok(0.0);
         }
 
         match field.parse() {
-            Ok(val) => {
-                Ok(val)
-            }
+            Ok(val) => Ok(val),
             Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
         }
     }
@@ -306,16 +297,14 @@ impl ResponsePacket {
         self.i += 1;
 
         if field.is_empty() || field == "0" {
-            return Ok(f64::MAX)   
+            return Ok(f64::MAX);
         }
         if field == INFINITY_STR {
-            return Ok(f64::INFINITY)
+            return Ok(f64::INFINITY);
         }
 
         match field.parse() {
-            Ok(val) => {
-                Ok(val)
-            }
+            Ok(val) => Ok(val),
             Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
         }
     }

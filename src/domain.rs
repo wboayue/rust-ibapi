@@ -862,8 +862,6 @@ pub struct RealTimeBar {
     pub count: i32,
 }
 
-
-
 // namespace IBApi
 // {
 //     public static class Constants

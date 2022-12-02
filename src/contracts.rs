@@ -171,7 +171,10 @@ fn decode_contract_details(
         request_id = message.next_int()?;
     }
 
-    info!("request_id: {}, server_version: {}, message_version: {}", request_id, server_version, message_version);
+    info!(
+        "request_id: {}, server_version: {}, message_version: {}",
+        request_id, server_version, message_version
+    );
 
     let mut contract = ContractDetails::default();
 
@@ -187,8 +190,9 @@ fn decode_contract_details(
     contract.contract.trading_class = message.next_string()?;
     contract.contract.contract_id = message.next_int()?;
     contract.min_tick = message.next_double()?;
-    if (server_versions::MD_SIZE_MULTIPLIER..server_versions::SIZE_RULES).contains(&server_version) {
-        message.next_int()?;     // mdSizeMultiplier no longer used 
+    if (server_versions::MD_SIZE_MULTIPLIER..server_versions::SIZE_RULES).contains(&server_version)
+    {
+        message.next_int()?; // mdSizeMultiplier no longer used
     }
     contract.contract.multiplier = message.next_string()?;
     contract.order_types = message.next_string()?;
@@ -222,7 +226,7 @@ fn decode_contract_details(
         for i in 0..sec_id_list_count {
             let tag = message.next_string()?;
             let value = message.next_string()?;
-            contract.sec_id_list.push(TagValue{tag, value});
+            contract.sec_id_list.push(TagValue { tag, value });
         }
     }
     if server_version > server_versions::AGG_GROUP {
@@ -241,8 +245,10 @@ fn decode_contract_details(
     if server_version > server_versions::STOCK_TYPE {
         contract.stock_type = message.next_string()?;
     }
-    if (server_versions::FRACTIONAL_SIZE_SUPPORT..server_versions::SIZE_RULES).contains(&server_version) {
-        message.next_double()?;  // size min tick -- no longer used
+    if (server_versions::FRACTIONAL_SIZE_SUPPORT..server_versions::SIZE_RULES)
+        .contains(&server_version)
+    {
+        message.next_double()?; // size min tick -- no longer used
     }
     if server_version >= server_versions::SIZE_RULES {
         contract.min_size = message.next_double()?;
