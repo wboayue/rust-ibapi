@@ -199,8 +199,8 @@ impl RequestPacket {
     }
 
     pub fn encode(&self) -> String {
-        let mut data = self.fields.join("\x00");
-        data.push_str("\0");
+        let mut data = self.fields.join("\0");
+        data.push('\0');
         data
     }
 }
@@ -237,9 +237,9 @@ impl ResponsePacket {
 
     pub fn request_id(&self) -> Result<i32> {
         match self.message_type() {
-            IncomingMessage::ContractData | IncomingMessage::TickByTick => return self.peek_int(1),
+            IncomingMessage::ContractData | IncomingMessage::TickByTick => self.peek_int(1),
             IncomingMessage::ContractDataEnd | IncomingMessage::RealTimeBars => {
-                return self.peek_int(2)
+                self.peek_int(2)
             }
             _ => Err(anyhow!("error parsing field request id {:?}", self)),
         }

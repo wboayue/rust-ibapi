@@ -187,7 +187,7 @@ fn decode_contract_details(
     contract.contract.trading_class = message.next_string()?;
     contract.contract.contract_id = message.next_int()?;
     contract.min_tick = message.next_double()?;
-    if server_version >= server_versions::MD_SIZE_MULTIPLIER && server_version < server_versions::SIZE_RULES {
+    if (server_versions::MD_SIZE_MULTIPLIER..server_versions::SIZE_RULES).contains(&server_version) {
         message.next_int()?;     // mdSizeMultiplier no longer used 
     }
     contract.contract.multiplier = message.next_string()?;
@@ -239,14 +239,14 @@ fn read_last_trade_date(
         return Ok(());
     }
 
-    let splitted: Vec<&str> = if last_trade_date_or_contract_month.contains("-") {
-        last_trade_date_or_contract_month.split("-").collect()
+    let splitted: Vec<&str> = if last_trade_date_or_contract_month.contains('-') {
+        last_trade_date_or_contract_month.split('-').collect()
     } else {
         // let re = Regex::new(r"\s+").unwrap();
-        last_trade_date_or_contract_month.split(" ").collect()
+        last_trade_date_or_contract_month.split(' ').collect()
     };
 
-    if splitted.len() > 0 {
+    if !splitted.is_empty() {
         if is_bond {
             contract.maturity = splitted[0].to_string();
         } else {

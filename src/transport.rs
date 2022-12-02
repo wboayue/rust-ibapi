@@ -2,9 +2,8 @@ use std::collections::HashMap;
 use std::io::prelude::*;
 use std::io::Cursor;
 use std::net::TcpStream;
-use std::ops::Deref;
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -90,7 +89,7 @@ impl MessageBus for TcpMessageBus {
 
         let requests = Arc::clone(&self.requests);
 
-        let mut collection = requests.read().unwrap();
+        let collection = requests.read().unwrap();
         let request = match collection.get(&request_id) {
             Some(request) => request,
             _ => {
@@ -217,12 +216,13 @@ fn error_event(server_version: i32, packet: &mut ResponsePacket) -> Result<()> {
     } else {
         let request_id = packet.next_int()?;
         let error_code = packet.next_int()?;
-        let error_message = if server_version >= server_versions::ENCODE_MSG_ASCII7 {
-            // Regex.Unescape(ReadString()) : ReadString();
-            packet.next_string()?
-        } else {
-            packet.next_string()?
-        };
+        let error_message = packet.next_string()?;
+        // let error_message = if server_version >= server_versions::ENCODE_MSG_ASCII7 {
+        //     // Regex.Unescape(ReadString()) : ReadString();
+        //     packet.next_string()?
+        // } else {
+        //     packet.next_string()?
+        // };
 
         let mut advanced_order_reject_json: String = "".to_string();
         if server_version >= server_versions::ADVANCED_ORDER_REJECT {
@@ -244,7 +244,7 @@ fn process_next_valid_id(server_version: i32, packet: &mut ResponsePacket) {
     packet.skip(); // message_id
     packet.skip(); // version
 
-    let order_id = packet.next_string().unwrap_or(String::from(""));
+    let order_id = packet.next_string().unwrap_or_else(|_| String::default());
     info!("next_valid_order_id: {}", order_id)
 }
 
@@ -252,7 +252,7 @@ fn process_managed_accounts(server_version: i32, packet: &mut ResponsePacket) {
     packet.skip(); // message_id
     packet.skip(); // version
 
-    let managed_accounts = packet.next_string().unwrap_or(String::from(""));
+    let managed_accounts = packet.next_string().unwrap_or_else(|_| String::default());
     info!("managed accounts: {}", managed_accounts)
 }
 
@@ -281,7 +281,7 @@ pub struct ResponsePacketPromise {
 
 impl ResponsePacketPromise {
     fn new(receiver: Receiver<ResponsePacket>) -> ResponsePacketPromise {
-        ResponsePacketPromise { receiver: receiver }
+        ResponsePacketPromise { receiver }
     }
 
     pub fn message(&self) -> Result<ResponsePacket> {
