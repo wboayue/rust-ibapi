@@ -209,7 +209,7 @@ pub struct ContractDetails {
     /// For derivatives, the symbol of the underlying contract.
     pub under_symbol: String,
     /// For derivatives, returns the underlying security type.
-    pub under_sec_type: String,
+    pub under_security_type: String,
     /// The list of market rule IDs separated by comma Market rule IDs can be used to determine the minimum price increment at a given price.
     pub market_rule_ids: String,
     /// Real expiration date. Requires TWS 968+ and API v973.04+. Python API specifically requires API v973.06+.

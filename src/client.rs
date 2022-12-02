@@ -255,9 +255,10 @@ impl ResponsePacket {
 
     pub fn next_int(&mut self) -> Result<i32> {
         let field = &self.fields[self.i];
+        self.i += 1;
+
         match field.parse() {
             Ok(val) => {
-                self.i += 1;
                 Ok(val)
             }
             Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
@@ -266,11 +267,12 @@ impl ResponsePacket {
 
     pub fn next_date_time(&mut self) -> Result<OffsetDateTime> {
         let field = &self.fields[self.i];
+        self.i += 1;
+
         // from_unix_timestamp
         let timestamp: i64 = field.parse()?;
         match OffsetDateTime::from_unix_timestamp(timestamp) {
             Ok(val) => {
-                self.i += 1;
                 Ok(val)
             }
             Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
@@ -285,13 +287,14 @@ impl ResponsePacket {
 
     pub fn next_double(&mut self) -> Result<f64> {
         let field = &self.fields[self.i];
+        self.i += 1;
+
         if field.is_empty() || field == "0" {
             return Ok(0.0)   
         }
 
         match field.parse() {
             Ok(val) => {
-                self.i += 1;
                 Ok(val)
             }
             Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
@@ -300,6 +303,8 @@ impl ResponsePacket {
 
     pub fn next_double_max(&mut self) -> Result<f64> {
         let field = &self.fields[self.i];
+        self.i += 1;
+
         if field.is_empty() || field == "0" {
             return Ok(f64::MAX)   
         }
@@ -309,7 +314,6 @@ impl ResponsePacket {
 
         match field.parse() {
             Ok(val) => {
-                self.i += 1;
                 Ok(val)
             }
             Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),

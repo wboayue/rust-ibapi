@@ -190,6 +190,7 @@ fn read_packet(mut reader: &TcpStream) -> Result<ResponsePacket> {
     reader.read_exact(&mut data)?;
 
     let packet = ResponsePacket::from(&String::from_utf8(data)?);
+    debug!("raw string: {:?}", packet);
 
     Ok(packet)
 }

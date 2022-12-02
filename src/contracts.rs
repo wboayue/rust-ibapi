@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use anyhow::{anyhow, Result};
-use log::info;
+use log::{debug, info};
 
 use crate::client::Client;
 use crate::client::{RequestPacket, ResponsePacket};
@@ -177,7 +177,7 @@ fn decode_contract_details(
 
     contract.contract.symbol = message.next_string()?;
     contract.contract.security_type = SecurityType::from(&message.next_string()?);
-    read_last_trade_date(&mut contract, message, false)?;
+    read_last_trade_date(&mut contract, &message.next_string()?, false)?;
     contract.contract.strike = message.next_double()?;
     contract.contract.right = message.next_string()?;
     contract.contract.exchange = message.next_string()?;
@@ -225,16 +225,39 @@ fn decode_contract_details(
             contract.sec_id_list.push(TagValue{tag, value});
         }
     }
+    if server_version > server_versions::AGG_GROUP {
+        contract.agg_group = message.next_int()?;
+    }
+    if server_version > server_versions::UNDERLYING_INFO {
+        contract.under_symbol = message.next_string()?;
+        contract.under_security_type = message.next_string()?;
+    }
+    if server_version > server_versions::MARKET_RULES {
+        contract.market_rule_ids = message.next_string()?;
+    }
+    if server_version > server_versions::REAL_EXPIRATION_DATE {
+        contract.real_expiration_date = message.next_string()?;
+    }
+    if server_version > server_versions::STOCK_TYPE {
+        contract.stock_type = message.next_string()?;
+    }
+    if (server_versions::FRACTIONAL_SIZE_SUPPORT..server_versions::SIZE_RULES).contains(&server_version) {
+        message.next_double()?;  // size min tick -- no longer used
+    }
+    if server_version >= server_versions::SIZE_RULES {
+        contract.min_size = message.next_double()?;
+        contract.size_increment = message.next_double()?;
+        contract.suggested_size_increment = message.next_double()?;
+    }
 
     Ok(contract)
 }
 
 fn read_last_trade_date(
     contract: &mut ContractDetails,
-    message: &mut ResponsePacket,
+    last_trade_date_or_contract_month: &str,
     is_bond: bool,
 ) -> Result<()> {
-    let last_trade_date_or_contract_month = message.next_string()?;
     if last_trade_date_or_contract_month.is_empty() {
         return Ok(());
     }

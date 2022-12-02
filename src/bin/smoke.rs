@@ -19,7 +19,7 @@ fn main() -> anyhow::Result<()> {
     thread::sleep(Duration::from_secs(2));
 
     let result = contracts::contract_details(&mut client, &contract)?;
-    info!("details {:?}", result);
+    info!("details ----> {:?}", result);
 
     thread::sleep(time::Duration::from_secs(5));
 
