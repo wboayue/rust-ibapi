@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::io::prelude::*;
 use std::io::Cursor;
+use std::iter::IntoIterator;
+use std::iter::Iterator;
 use std::net::TcpStream;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, RwLock};
@@ -290,5 +292,31 @@ impl ResponsePacketPromise {
 
         Ok(self.receiver.recv_timeout(Duration::from_millis(20000))?)
         // return Err(anyhow!("no message"));
+    }
+}
+
+// impl IntoIterator for ResponsePacketPromise {
+//     type Item = ResponsePacket;
+//     type IntoIter = ResponsePacketIterator;
+//     fn into_iter(self) -> Self::IntoIter {
+//         todo!()
+//     }
+// }
+
+pub struct ResponsePacketIterator {}
+
+impl Iterator for ResponsePacketPromise {
+    type Item = ResponsePacket;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.receiver.recv_timeout(Duration::from_millis(10000)) {
+            Err(e) => {
+                error!("error receiving packet: {:?}", e);
+                None
+            }
+            Ok(message) => {
+                info!("go message: {:?}", message);
+                Some(message)
+            }
+        }
     }
 }

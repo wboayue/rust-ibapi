@@ -11,6 +11,7 @@ use crate::domain::SecurityType;
 use crate::messages::IncomingMessage;
 use crate::messages::OutgoingMessage;
 use crate::server_versions;
+use crate::transport::ResponsePacketIterator;
 use crate::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
 
 mod versions;
@@ -211,8 +212,6 @@ impl Index<usize> for RequestPacket {
         &self.fields[i]
     }
 }
-
-pub struct ResponsePacketIterator {}
 
 pub trait ToPacket {
     fn to_packet(&self) -> String;

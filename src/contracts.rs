@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use anyhow::{anyhow, Result};
-use log::{debug, info};
+use log::{debug, error, info};
 
 use crate::client::Client;
 use crate::client::{RequestPacket, ResponsePacket};
@@ -53,7 +53,7 @@ pub fn default() -> Contract {
 pub fn contract_details<C: Client + Debug>(
     client: &mut C,
     contract: &Contract,
-) -> Result<ContractDetails> {
+) -> Result<Vec<ContractDetails>> {
     if !contract.security_id_type.is_empty() || !contract.security_id.is_empty() {
         client.check_server_version(
             server_versions::SEC_ID_TYPE,
@@ -144,15 +144,30 @@ pub fn contract_details<C: Client + Debug>(
     info!("outbound message: {:?}", packet);
 
     let promise = client.send_message(request_id, packet)?;
-    let mut message = promise.message()?;
 
-    match message.message_type() {
-        IncomingMessage::Error => Err(anyhow!("contract_details {:?}", message)),
-        _ => {
-            info!("inbound message: {:?}", message);
-            decode_contract_details(client.server_version(), &mut message)
+    let mut contract_details: Vec<ContractDetails> = Vec::default();
+
+    for mut message in promise {
+        match message.message_type() {
+            IncomingMessage::ContractData => {
+                info!("inbound message: {:?}", message);
+                let decoded = decode_contract_details(client.server_version(), &mut message)?;
+                contract_details.push(decoded);
+            }
+            IncomingMessage::ContractDataEnd => {
+                info!("contract data end: {:?}", message);
+            }
+            IncomingMessage::Error => {
+                error!("error: {:?}", message);
+                return Err(anyhow!("contract_details {:?}", message));
+            }
+            _ => {
+                error!("unexpected message: {:?}", message);
+            }
         }
     }
+
+    return Ok(contract_details);
 }
 
 fn decode_contract_details(
