@@ -168,7 +168,7 @@ pub fn contract_details<C: Client + Debug>(
         }
     }
 
-    return Ok(contract_details);
+    Ok(contract_details)
 }
 
 fn decode_contract_details(
