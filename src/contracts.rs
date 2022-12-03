@@ -156,6 +156,7 @@ pub fn contract_details<C: Client + Debug>(
             }
             IncomingMessage::ContractDataEnd => {
                 info!("contract data end: {:?}", message);
+                break
             }
             IncomingMessage::Error => {
                 error!("error: {:?}", message);

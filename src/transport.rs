@@ -314,7 +314,6 @@ impl Iterator for ResponsePacketPromise {
                 None
             }
             Ok(message) => {
-                info!("go message: {:?}", message);
                 Some(message)
             }
         }

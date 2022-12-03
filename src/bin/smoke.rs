@@ -18,8 +18,10 @@ fn main() -> anyhow::Result<()> {
 
     thread::sleep(Duration::from_secs(2));
 
-    let result = contracts::contract_details(&mut client, &contract)?;
-    info!("details ----> {:?}", result);
+    let results = contracts::contract_details(&mut client, &contract)?;
+    for result in &results {
+        println!("symbol: {:?}, exchange: {:?}, currency: {:?}", result.contract.symbol, result.contract.exchange, result.contract.currency);
+    }
 
     thread::sleep(time::Duration::from_secs(5));
 
