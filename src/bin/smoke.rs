@@ -20,7 +20,10 @@ fn main() -> anyhow::Result<()> {
 
     let results = contracts::contract_details(&mut client, &contract)?;
     for result in &results {
-        println!("symbol: {:?}, exchange: {:?}, currency: {:?}", result.contract.symbol, result.contract.exchange, result.contract.currency);
+        println!(
+            "symbol: {:?}, exchange: {:?}, currency: {:?}",
+            result.contract.symbol, result.contract.exchange, result.contract.currency
+        );
     }
 
     thread::sleep(time::Duration::from_secs(5));

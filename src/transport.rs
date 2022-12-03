@@ -313,9 +313,7 @@ impl Iterator for ResponsePacketPromise {
                 error!("error receiving packet: {:?}", e);
                 None
             }
-            Ok(message) => {
-                Some(message)
-            }
+            Ok(message) => Some(message),
         }
     }
 }
