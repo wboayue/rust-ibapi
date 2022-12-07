@@ -404,12 +404,12 @@ pub mod tests {
             Ok(())
         }
 
-        fn receive_packet(&mut self, _request_id: i32) -> Result<ResponsePacket> {
-            match self.response_packets.pop_front() {
-                Some(packet) => Ok(packet),
-                None => Err(anyhow!("ClientStub::receive_packet no packet")),
-            }
-        }
+        // fn receive_packet(&mut self, _request_id: i32) -> Result<ResponsePacket> {
+        //     match self.response_packets.pop_front() {
+        //         Some(packet) => Ok(packet),
+        //         None => Err(anyhow!("ClientStub::receive_packet no packet")),
+        //     }
+        // }
 
         fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator> {
             Ok(ResponsePacketIterator {})

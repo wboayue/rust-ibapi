@@ -1,10 +1,9 @@
 use std::fmt::Debug;
 
 use anyhow::{anyhow, Result};
-use log::{debug, error, info};
+use log::{error, info};
 
-use crate::client::Client;
-use crate::client::{RequestPacket, ResponsePacket};
+use crate::client::{Client, RequestPacket, ResponsePacket};
 use crate::domain::Contract;
 use crate::domain::ContractDetails;
 use crate::domain::DeltaNeutralContract;
@@ -13,13 +12,16 @@ use crate::domain::TagValue;
 use crate::messages::{IncomingMessage, OutgoingMessage};
 use crate::server_versions;
 
+/// Creates stock contract from specified symbol
 pub fn stock(symbol: &str) -> Contract {
     Contract {
         symbol: symbol.to_string(),
+        security_type: SecurityType::STK,
         ..default()
     }
 }
 
+/// Creates a default contract
 pub fn default() -> Contract {
     Contract {
         contract_id: 0,
@@ -49,7 +51,35 @@ pub fn default() -> Contract {
 }
 
 /// Requests contract information.
-/// This method will provide all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. This information will be returned at EWrapper:contractDetails. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
+/// 
+/// This method will provide all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
+///
+/// # Arguments
+/// * `client` - [Client] with an active connection to gateway.
+/// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::client::BasicClient;
+/// use ibapi::contracts;
+///
+/// fn main() -> anyhow::Result<()> {
+///     let mut client = BasicClient::connect("localhost:4002")?;
+/// 
+///     let contract = contracts::stock("TSLA");
+///     let results = contracts::contract_details(&mut client, &contract)?;
+/// 
+///     for result in &results {
+///         println!(
+///             "symbol: {:?}, exchange: {:?}, currency: {:?}",
+///              result.contract.symbol, result.contract.exchange, result.contract.currency
+///         );
+///     }
+///
+///     Ok(())
+/// }
+/// ```
 pub fn contract_details<C: Client + Debug>(
     client: &mut C,
     contract: &Contract,
@@ -306,4 +336,44 @@ fn read_last_trade_date(
     }
 
     Ok(())
+}
+
+/// Contract data and list of derivative security types
+pub struct ContractDescription {
+    contract: Contract,
+    derivative_secuity_types: Vec<String>
+}
+
+/// Requests matching stock symbols.
+/// 
+/// # Arguments
+/// * `client` - [Client] with an active connection to gateway.
+/// * `pattern` - Either start of ticker symbol or (for larger strings) company name.
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::client::BasicClient;
+/// use ibapi::contracts;
+///
+/// fn main() -> anyhow::Result<()> {
+///     let mut client = BasicClient::connect("localhost:4002")?;
+/// 
+///     let results = contracts::matching_symbols(&mut client, "IB")?;
+/// 
+///     for result in &results {
+///         println!(
+///             "symbol: {:?}, exchange: {:?}, currency: {:?}",
+///              result.contract.symbol, result.contract.exchange, result.contract.currency
+///         );
+///     }
+///
+///     Ok(())
+/// }
+/// ```
+pub fn matching_symbols<C: Client + Debug>(
+    client: &mut C,
+    contract: &Contract,
+) -> Result<Vec<ContractDescription>> {
+    Err(anyhow!("not implemented"))
 }
