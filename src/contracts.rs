@@ -340,8 +340,8 @@ fn read_last_trade_date(
 
 /// Contract data and list of derivative security types
 pub struct ContractDescription {
-    contract: Contract,
-    derivative_secuity_types: Vec<String>
+    pub contract: Contract,
+    pub derivative_secuity_types: Vec<String>
 }
 
 /// Requests matching stock symbols.
