@@ -33,8 +33,8 @@ jobs:
       - name: Test Reporter
         uses: dorny/test-reporter@v1.6.0
         with:
-          artifact: test-results            # artifact name
+          # artifact: test-results            # artifact name
           name: JUNIT Tests                 # Name of the check run which will be created
-          path: '*.xml'                     # Path to test results (inside artifact .zip)
+          path: test-results/*.xml                     # Path to test results (inside artifact .zip)
           reporter: java-junit              # Format of test results        
         if: always()
