@@ -22,12 +22,19 @@ jobs:
 
       - name: Generate test result and coverage report
         run: |
-          mkdir results;
+          mkdir test-results;
           cargo install cargo2junit;
-          cargo test -- -Z unstable-options --format json | cargo2junit > results/tests.xml;
-
-      - name: Create test summary
-        uses: test-summary/action@dist
+          cargo test -- -Z unstable-options --format json | cargo2junit > test-results/tests.xml;
+      # - name: Create test summary
+      #   uses: test-summary/action@dist
+      #   with:
+      #     paths: test-results/**/*.xml
+      #   if: always()
+      - name: Test Reporter
+        uses: dorny/test-reporter@v1.6.0
         with:
-          paths: results/**/*.xml
+          artifact: test-results            # artifact name
+          name: JUNIT Tests                 # Name of the check run which will be created
+          path: '*.xml'                     # Path to test results (inside artifact .zip)
+          reporter: java-junit              # Format of test results        
         if: always()
