@@ -60,7 +60,7 @@ pub fn default() -> Contract {
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use ibapi::client::BasicClient;
 /// use ibapi::contracts;
 ///
@@ -68,19 +68,16 @@ pub fn default() -> Contract {
 ///     let mut client = BasicClient::connect("localhost:4002")?;
 /// 
 ///     let contract = contracts::stock("TSLA");
-///     let results = contracts::contract_details(&mut client, &contract)?;
+///     let results = contracts::find_contract_details(&mut client, &contract)?;
 /// 
-///     for result in &results {
-///         println!(
-///             "symbol: {:?}, exchange: {:?}, currency: {:?}",
-///              result.contract.symbol, result.contract.exchange, result.contract.currency
-///         );
+///     for contract_detail in &results {
+///         println!("contract: {:?}", contract_detail);
 ///     }
 ///
 ///     Ok(())
 /// }
 /// ```
-pub fn contract_details<C: Client + Debug>(
+pub fn find_contract_details<C: Client + Debug>(
     client: &mut C,
     contract: &Contract,
 ) -> Result<Vec<ContractDetails>> {
@@ -339,6 +336,7 @@ fn read_last_trade_date(
 }
 
 /// Contract data and list of derivative security types
+#[derive(Debug)]
 pub struct ContractDescription {
     pub contract: Contract,
     pub derivative_secuity_types: Vec<String>
@@ -352,28 +350,25 @@ pub struct ContractDescription {
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use ibapi::client::BasicClient;
 /// use ibapi::contracts;
 ///
 /// fn main() -> anyhow::Result<()> {
 ///     let mut client = BasicClient::connect("localhost:4002")?;
 /// 
-///     let results = contracts::matching_symbols(&mut client, "IB")?;
+///     let contracts = contracts::find_contracts_matching(&mut client, "IB")?;
 /// 
-///     for result in &results {
-///         println!(
-///             "symbol: {:?}, exchange: {:?}, currency: {:?}",
-///              result.contract.symbol, result.contract.exchange, result.contract.currency
-///         );
+///     for contract in &contracts {
+///         println!("contract: {:?}", contract);
 ///     }
 ///
 ///     Ok(())
 /// }
 /// ```
-pub fn matching_symbols<C: Client + Debug>(
+pub fn find_contracts_matching<C: Client + Debug>(
     client: &mut C,
-    contract: &Contract,
+    pattern: &str,
 ) -> Result<Vec<ContractDescription>> {
     Err(anyhow!("not implemented"))
 }

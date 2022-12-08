@@ -18,7 +18,7 @@ fn main() -> anyhow::Result<()> {
 
     thread::sleep(Duration::from_secs(2));
 
-    let results = contracts::contract_details(&mut client, &contract)?;
+    let results = contracts::find_contract_details(&mut client, &contract)?;
     for result in &results {
         println!(
             "symbol: {:?}, exchange: {:?}, currency: {:?}",
