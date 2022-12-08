@@ -357,7 +357,7 @@ pub struct ContractDescription {
 /// fn main() -> anyhow::Result<()> {
 ///     let mut client = BasicClient::connect("localhost:4002")?;
 /// 
-///     let contracts = contracts::find_contracts_matching(&mut client, "IB")?;
+///     let contracts = contracts::find_contract_descriptions_matching(&mut client, "IB")?;
 /// 
 ///     for contract in &contracts {
 ///         println!("contract: {:?}", contract);
@@ -366,7 +366,7 @@ pub struct ContractDescription {
 ///     Ok(())
 /// }
 /// ```
-pub fn find_contracts_matching<C: Client + Debug>(
+pub fn find_contract_descriptions_matching<C: Client + Debug>(
     client: &mut C,
     pattern: &str,
 ) -> Result<Vec<ContractDescription>> {
