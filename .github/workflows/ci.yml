@@ -17,5 +17,17 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
+
       - run: cargo test
-      # - run: cargo build --release --all-features
+
+      - name: Generate test result and coverage report
+        run: |
+          mkdir results;
+          cargo install cargo2junit;
+          cargo test -- -Z unstable-options --format json | cargo2junit > results/tests.xml;
+
+      - name: Create test summary
+        uses: test-summary/action@dist
+        with:
+          paths: results/**/*.xml
+        if: always()
