@@ -114,6 +114,7 @@ pub struct Contract {
     pub delta_neutral_contract: DeltaNeutralContract,
 
     pub issuer_id: String,
+    pub description: String,
 }
 
 #[derive(Debug, Default)]

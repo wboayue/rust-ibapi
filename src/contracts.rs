@@ -42,6 +42,7 @@ pub fn default() -> Contract {
         combo_legs_description: "".to_string(),
         combo_legs: Vec::new(),
         issuer_id: "".to_string(),
+        description: "".to_string(),
         delta_neutral_contract: DeltaNeutralContract {
             contract_id: "".to_string(),
             delta: 0.0,
@@ -346,7 +347,7 @@ fn read_last_trade_date(
 #[derive(Debug)]
 pub struct ContractDescription {
     pub contract: Contract,
-    pub derivative_secuity_types: Vec<String>
+    pub derivative_security_types: Vec<String>
 }
 
 /// Requests matching stock symbols.
@@ -377,5 +378,79 @@ pub fn find_contract_descriptions_matching<C: Client + Debug>(
     client: &mut C,
     pattern: &str,
 ) -> Result<Vec<ContractDescription>> {
-    Err(anyhow!("not implemented"))
+    client.check_server_version(
+        server_versions::REQ_MATCHING_SYMBOLS,
+        "It does not support mathing symbols requests.",
+    )?;
+
+    let request_id = client.next_request_id();
+    let request = encode_request_matching_symbols(request_id, pattern)?;
+
+    let promise = client.send_message(request_id, request)?;
+
+    for mut message in promise {
+        match message.message_type() {
+            IncomingMessage::SymbolSamples => {
+                return decode_contract_descriptions(client.server_version(), &mut message);
+            }
+            IncomingMessage::Error => {
+                error!("unexpected error: {:?}", message);
+                return Err(anyhow!("unexpected error: {:?}", message));
+            }
+            _ => {
+                info!("unexpected message: {:?}", message);
+                return Err(anyhow!("unexpected message: {:?}", message));
+            }
+        }
+    }
+
+    Ok(Vec::default())
+}
+
+fn encode_request_matching_symbols(request_id: i32, pattern: &str) -> Result<RequestPacket> {
+    let mut message = RequestPacket::default();
+
+    message.add_field(&OutgoingMessage::RequestMatchingSymbols);
+    message.add_field(&request_id);
+    message.add_field(&pattern);
+
+    Ok(message)
+}
+
+fn decode_contract_descriptions(server_version: i32, message: &mut ResponsePacket) -> Result<Vec<ContractDescription>> {
+    message.skip(); // message type
+
+    let mut contract_descriptions: Vec<ContractDescription> = Vec::default();
+
+    let request_id = message.next_int()?;
+    let contract_descriptions_count = message.next_int()?;
+
+    if contract_descriptions_count < 1 {
+        return Ok(contract_descriptions)
+    }
+
+    for i in 0..contract_descriptions_count {
+        let mut contract = Contract::default();
+
+        contract.contract_id = message.next_int()?;
+        contract.symbol = message.next_string()?;
+        contract.security_type =  SecurityType::from(&message.next_string()?);
+        contract.primary_exchange = message.next_string()?;
+        contract.currency = message.next_string()?;
+
+        let mut derivative_security_types: Vec<String> = Vec::default();
+        let derivative_security_types_count = message.next_int()?;
+        for i in 0..derivative_security_types_count {
+            derivative_security_types.push(message.next_string()?);
+        }
+
+        if server_version >= server_versions::BOND_ISSUERID {
+            contract.description = message.next_string()?;
+            contract.issuer_id = message.next_string()?;
+        }
+
+        contract_descriptions.push(ContractDescription{contract, derivative_security_types});
+    }
+
+    Ok(contract_descriptions)
 }

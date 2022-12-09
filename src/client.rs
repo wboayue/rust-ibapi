@@ -235,9 +235,9 @@ impl ResponsePacket {
 
     pub fn request_id(&self) -> Result<i32> {
         match self.message_type() {
-            IncomingMessage::ContractData | IncomingMessage::TickByTick => self.peek_int(1),
+            IncomingMessage::ContractData | IncomingMessage::TickByTick | IncomingMessage::SymbolSamples => self.peek_int(1),
             IncomingMessage::ContractDataEnd | IncomingMessage::RealTimeBars => self.peek_int(2),
-            _ => Err(anyhow!("error parsing field request id {:?}", self)),
+            _ => Err(anyhow!("error parsing field request id {:?}: {:?}", self.message_type(), self)),
         }
     }
 
