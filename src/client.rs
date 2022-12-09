@@ -235,9 +235,15 @@ impl ResponsePacket {
 
     pub fn request_id(&self) -> Result<i32> {
         match self.message_type() {
-            IncomingMessage::ContractData | IncomingMessage::TickByTick | IncomingMessage::SymbolSamples => self.peek_int(1),
+            IncomingMessage::ContractData
+            | IncomingMessage::TickByTick
+            | IncomingMessage::SymbolSamples => self.peek_int(1),
             IncomingMessage::ContractDataEnd | IncomingMessage::RealTimeBars => self.peek_int(2),
-            _ => Err(anyhow!("error parsing field request id {:?}: {:?}", self.message_type(), self)),
+            _ => Err(anyhow!(
+                "error parsing field request id {:?}: {:?}",
+                self.message_type(),
+                self
+            )),
         }
     }
 
@@ -411,7 +417,7 @@ pub mod tests {
         ) -> Result<ResponsePacketPromise> {
             Err(anyhow!("not implemented"))
         }
-    
+
         // fn receive_packet(&mut self, _request_id: i32) -> Result<ResponsePacket> {
         //     match self.response_packets.pop_front() {
         //         Some(packet) => Ok(packet),

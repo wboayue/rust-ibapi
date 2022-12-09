@@ -52,7 +52,7 @@ pub fn default() -> Contract {
 }
 
 /// Requests contract information.
-/// 
+///
 /// This method will provide all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
 ///
 /// # Arguments
@@ -67,10 +67,10 @@ pub fn default() -> Contract {
 ///
 /// fn main() -> anyhow::Result<()> {
 ///     let mut client = BasicClient::connect("localhost:4002")?;
-/// 
+///
 ///     let contract = contracts::stock("TSLA");
 ///     let results = contracts::find_contract_details(&mut client, &contract)?;
-/// 
+///
 ///     for contract_detail in &results {
 ///         println!("contract: {:?}", contract_detail);
 ///     }
@@ -144,7 +144,11 @@ pub fn find_contract_details<C: Client + Debug>(
     Ok(contract_details)
 }
 
-fn encode_request_contract_data(server_version: i32, request_id: i32, contract: &Contract) -> Result<RequestPacket> {
+fn encode_request_contract_data(
+    server_version: i32,
+    request_id: i32,
+    contract: &Contract,
+) -> Result<RequestPacket> {
     const VERSION: i32 = 8;
 
     let mut packet = RequestPacket::default();
@@ -347,11 +351,11 @@ fn read_last_trade_date(
 #[derive(Debug)]
 pub struct ContractDescription {
     pub contract: Contract,
-    pub derivative_security_types: Vec<String>
+    pub derivative_security_types: Vec<String>,
 }
 
 /// Requests matching stock symbols.
-/// 
+///
 /// # Arguments
 /// * `client` - [Client] with an active connection to gateway.
 /// * `pattern` - Either start of ticker symbol or (for larger strings) company name.
@@ -364,9 +368,9 @@ pub struct ContractDescription {
 ///
 /// fn main() -> anyhow::Result<()> {
 ///     let mut client = BasicClient::connect("localhost:4002")?;
-/// 
+///
 ///     let contracts = contracts::find_contract_descriptions_matching(&mut client, "IB")?;
-/// 
+///
 ///     for contract in &contracts {
 ///         println!("contract: {:?}", contract);
 ///     }
@@ -417,7 +421,10 @@ fn encode_request_matching_symbols(request_id: i32, pattern: &str) -> Result<Req
     Ok(message)
 }
 
-fn decode_contract_descriptions(server_version: i32, message: &mut ResponsePacket) -> Result<Vec<ContractDescription>> {
+fn decode_contract_descriptions(
+    server_version: i32,
+    message: &mut ResponsePacket,
+) -> Result<Vec<ContractDescription>> {
     message.skip(); // message type
 
     let mut contract_descriptions: Vec<ContractDescription> = Vec::default();
@@ -426,11 +433,11 @@ fn decode_contract_descriptions(server_version: i32, message: &mut ResponsePacke
     let contract_descriptions_count = message.next_int()?;
 
     if contract_descriptions_count < 1 {
-        return Ok(contract_descriptions)
+        return Ok(contract_descriptions);
     }
 
     for i in 0..contract_descriptions_count {
-        let mut contract = Contract{
+        let mut contract = Contract {
             contract_id: message.next_int()?,
             symbol: message.next_string()?,
             security_type: SecurityType::from(&message.next_string()?),
@@ -450,7 +457,10 @@ fn decode_contract_descriptions(server_version: i32, message: &mut ResponsePacke
             contract.issuer_id = message.next_string()?;
         }
 
-        contract_descriptions.push(ContractDescription{contract, derivative_security_types});
+        contract_descriptions.push(ContractDescription {
+            contract,
+            derivative_security_types,
+        });
     }
 
     Ok(contract_descriptions)
