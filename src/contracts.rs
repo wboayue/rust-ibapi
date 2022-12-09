@@ -109,64 +109,9 @@ pub fn find_contract_details<C: Client + Debug>(
         )?
     }
 
-    const VERSION: i32 = 8;
-
     let request_id = client.next_request_id();
-    let mut packet = RequestPacket::default();
 
-    packet.add_field(&OutgoingMessage::RequestContractData);
-    packet.add_field(&VERSION);
-
-    if client.server_version() >= server_versions::CONTRACT_DATA_CHAIN {
-        packet.add_field(&request_id);
-    }
-
-    if client.server_version() >= server_versions::CONTRACT_CONID {
-        packet.add_field(&contract.contract_id);
-    }
-
-    packet.add_field(&contract.symbol);
-    packet.add_field(&contract.security_type);
-    packet.add_field(&contract.last_trade_date_or_contract_month);
-    packet.add_field(&contract.strike);
-    packet.add_field(&contract.right);
-
-    if client.server_version() >= 15 {
-        packet.add_field(&contract.multiplier);
-    }
-
-    if client.server_version() >= server_versions::PRIMARYEXCH {
-        packet.add_field(&contract.exchange);
-        packet.add_field(&contract.primary_exchange);
-    } else if client.server_version() >= server_versions::LINKING {
-        if !contract.primary_exchange.is_empty()
-            && (contract.exchange == "BEST" || contract.exchange == "SMART")
-        {
-            packet.add_field(&format!(
-                "{}:{}",
-                contract.exchange, contract.primary_exchange
-            ));
-        } else {
-            packet.add_field(&contract.exchange);
-        }
-    }
-
-    packet.add_field(&contract.currency);
-    packet.add_field(&contract.local_symbol);
-
-    if client.server_version() >= server_versions::TRADING_CLASS {
-        packet.add_field(&contract.trading_class);
-    }
-    if client.server_version() >= 31 {
-        packet.add_field(&contract.include_expired);
-    }
-    if client.server_version() >= server_versions::SEC_ID_TYPE {
-        packet.add_field(&contract.security_id_type);
-        packet.add_field(&contract.security_id);
-    }
-    if client.server_version() >= server_versions::BOND_ISSUERID {
-        packet.add_field(&contract.issuer_id);
-    }
+    let packet = encode_request_contract_data(client.server_version(), request_id, contract)?;
 
     info!("outbound message: {:?}", packet);
 
@@ -196,6 +141,68 @@ pub fn find_contract_details<C: Client + Debug>(
     }
 
     Ok(contract_details)
+}
+
+fn encode_request_contract_data(server_version: i32, request_id: i32, contract: &Contract) -> Result<RequestPacket> {
+    const VERSION: i32 = 8;
+
+    let mut packet = RequestPacket::default();
+
+    packet.add_field(&OutgoingMessage::RequestContractData);
+    packet.add_field(&VERSION);
+
+    if server_version >= server_versions::CONTRACT_DATA_CHAIN {
+        packet.add_field(&request_id);
+    }
+
+    if server_version >= server_versions::CONTRACT_CONID {
+        packet.add_field(&contract.contract_id);
+    }
+
+    packet.add_field(&contract.symbol);
+    packet.add_field(&contract.security_type);
+    packet.add_field(&contract.last_trade_date_or_contract_month);
+    packet.add_field(&contract.strike);
+    packet.add_field(&contract.right);
+
+    if server_version >= 15 {
+        packet.add_field(&contract.multiplier);
+    }
+
+    if server_version >= server_versions::PRIMARYEXCH {
+        packet.add_field(&contract.exchange);
+        packet.add_field(&contract.primary_exchange);
+    } else if server_version >= server_versions::LINKING {
+        if !contract.primary_exchange.is_empty()
+            && (contract.exchange == "BEST" || contract.exchange == "SMART")
+        {
+            packet.add_field(&format!(
+                "{}:{}",
+                contract.exchange, contract.primary_exchange
+            ));
+        } else {
+            packet.add_field(&contract.exchange);
+        }
+    }
+
+    packet.add_field(&contract.currency);
+    packet.add_field(&contract.local_symbol);
+
+    if server_version >= server_versions::TRADING_CLASS {
+        packet.add_field(&contract.trading_class);
+    }
+    if server_version >= 31 {
+        packet.add_field(&contract.include_expired);
+    }
+    if server_version >= server_versions::SEC_ID_TYPE {
+        packet.add_field(&contract.security_id_type);
+        packet.add_field(&contract.security_id);
+    }
+    if server_version >= server_versions::BOND_ISSUERID {
+        packet.add_field(&contract.issuer_id);
+    }
+
+    Ok(packet)
 }
 
 fn decode_contract_details(

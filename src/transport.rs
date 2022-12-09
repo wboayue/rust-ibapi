@@ -154,7 +154,7 @@ impl MessageBus for TcpMessageBus {
                 Ok(packet) => packet,
                 Err(err) => {
                     error!("error reading packet: {:?}", err);
-                    thread::sleep(Duration::from_secs(1));
+                    // thread::sleep(Duration::from_secs(1));
                     continue;
                 }
             };
@@ -176,7 +176,8 @@ impl MessageBus for TcpMessageBus {
                 _ => process_response(&requests, packet),
             };
 
-            thread::sleep(Duration::from_secs(1));
+            // FIXME - does read block?
+            // thread::sleep(Duration::from_secs(1));
         });
 
         self.handles.push(handle);

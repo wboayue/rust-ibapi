@@ -13,17 +13,15 @@ fn main() -> anyhow::Result<()> {
 
     info!("Connected {:?}", client);
 
-    let contract = contracts::stock("TSLA");
+    let mut contract = contracts::stock("TSLA");
+    contract.currency = "USD".to_string();
     debug!("Contract {:?}", contract);
 
     thread::sleep(Duration::from_secs(2));
 
     let results = contracts::find_contract_details(&mut client, &contract)?;
     for result in &results {
-        println!(
-            "symbol: {:?}, exchange: {:?}, currency: {:?}",
-            result.contract.symbol, result.contract.exchange, result.contract.currency
-        );
+        println!("contract: {:?}", result);
     }
 
     thread::sleep(time::Duration::from_secs(5));
