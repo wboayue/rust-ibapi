@@ -1,7 +1,7 @@
 use std::time::Duration;
-use std::{thread, time};
+use std::{thread};
 
-use log::{debug, info};
+use log::{info};
 
 use ibapi::client::BasicClient;
 use ibapi::contracts;

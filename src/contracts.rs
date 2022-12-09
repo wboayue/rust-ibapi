@@ -386,9 +386,9 @@ pub fn find_contract_descriptions_matching<C: Client + Debug>(
     let request_id = client.next_request_id();
     let request = encode_request_matching_symbols(request_id, pattern)?;
 
-    let promise = client.send_message(request_id, request)?;
+    let mut promise = client.send_message(request_id, request)?;
 
-    for mut message in promise {
+    if let Some(mut message) = promise.next() {
         match message.message_type() {
             IncomingMessage::SymbolSamples => {
                 return decode_contract_descriptions(client.server_version(), &mut message);
@@ -430,13 +430,14 @@ fn decode_contract_descriptions(server_version: i32, message: &mut ResponsePacke
     }
 
     for i in 0..contract_descriptions_count {
-        let mut contract = Contract::default();
-
-        contract.contract_id = message.next_int()?;
-        contract.symbol = message.next_string()?;
-        contract.security_type =  SecurityType::from(&message.next_string()?);
-        contract.primary_exchange = message.next_string()?;
-        contract.currency = message.next_string()?;
+        let mut contract = Contract{
+            contract_id: message.next_int()?,
+            symbol: message.next_string()?,
+            security_type: SecurityType::from(&message.next_string()?),
+            primary_exchange: message.next_string()?,
+            currency: message.next_string()?,
+            ..Default::default()
+        };
 
         let mut derivative_security_types: Vec<String> = Vec::default();
         let derivative_security_types_count = message.next_int()?;
