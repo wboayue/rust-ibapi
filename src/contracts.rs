@@ -116,11 +116,11 @@ pub fn find_contract_details<C: Client + Debug>(
 
     info!("outbound message: {:?}", packet);
 
-    let promise = client.send_message(request_id, packet)?;
+    let responses = client.send_message(request_id, packet)?;
 
     let mut contract_details: Vec<ContractDetails> = Vec::default();
 
-    for mut message in promise {
+    for mut message in responses {
         match message.message_type() {
             IncomingMessage::ContractData => {
                 info!("inbound message: {:?}", message);
@@ -390,9 +390,9 @@ pub fn find_contract_descriptions_matching<C: Client + Debug>(
     let request_id = client.next_request_id();
     let request = encode_request_matching_symbols(request_id, pattern)?;
 
-    let mut promise = client.send_message(request_id, request)?;
+    let mut responses = client.send_message(request_id, request)?;
 
-    if let Some(mut message) = promise.next() {
+    if let Some(mut message) = responses.next() {
         match message.message_type() {
             IncomingMessage::SymbolSamples => {
                 return decode_contract_descriptions(client.server_version(), &mut message);
