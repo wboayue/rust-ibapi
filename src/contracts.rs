@@ -465,3 +465,6 @@ fn decode_contract_descriptions(
 
     Ok(contract_descriptions)
 }
+
+#[cfg(test)]
+mod tests;
