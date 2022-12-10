@@ -8,10 +8,8 @@ use time::OffsetDateTime;
 
 use self::transport::ResponsePacketIterator;
 use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
-use crate::domain::Contract;
-use crate::domain::SecurityType;
-use crate::messages::IncomingMessage;
-use crate::messages::OutgoingMessage;
+use crate::contracts::{Contract, SecurityType};
+use crate::messages::{IncomingMessage, OutgoingMessage};
 use crate::server_versions;
 
 mod transport;

@@ -4,8 +4,7 @@ use std::{thread, time};
 use log::{debug, info};
 
 use ibapi::client::BasicClient;
-use ibapi::contracts;
-use ibapi::domain::Contract;
+use ibapi::contracts::{self, Contract};
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();

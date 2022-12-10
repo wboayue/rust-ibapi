@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
 
 use crate::client::{Client, RequestPacket, ResponsePacket};
-use crate::domain::Contract;
+use crate::contracts::{Contract};
 use crate::domain::TickAttribBidAsk;
 use crate::server_versions;
 
@@ -15,8 +15,7 @@ use crate::server_versions;
 /// ```no_run
 ///     use anyhow::Result;
 ///     use ibapi::client::BasicClient;
-///     use ibapi::contracts;
-///     use ibapi::domain::{Contract};
+///     use ibapi::contracts::{self, Contract};
 ///     use ibapi::historical_market_data;
 ///
 ///     fn main() -> Result<()> {
