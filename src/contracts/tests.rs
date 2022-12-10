@@ -16,10 +16,9 @@ fn test_read_last_trade_date() {
     let result = read_last_trade_date(&mut contract, "", false);
     assert!(!result.is_err(), "unexpected error {:?}", result);
 
+    // handles non bond contracts
 
-    // contract: &mut ContractDetails,
-    // last_trade_date_or_contract_month: &str,
-    // is_bond: bool,
+    // handles bond contracts
 
 }
 
