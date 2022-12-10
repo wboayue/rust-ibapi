@@ -6,13 +6,13 @@ use anyhow::{anyhow, Result};
 use log::{debug, info};
 use time::OffsetDateTime;
 
+use self::transport::ResponsePacketIterator;
+use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
 use crate::domain::Contract;
 use crate::domain::SecurityType;
 use crate::messages::IncomingMessage;
 use crate::messages::OutgoingMessage;
 use crate::server_versions;
-use self::transport::ResponsePacketIterator;
-use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
 
 mod transport;
 mod versions;

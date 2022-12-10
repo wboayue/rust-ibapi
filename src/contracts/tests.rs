@@ -1,12 +1,10 @@
 use super::*;
 
 #[test]
-fn test_encode_request_contract_data() {
-}
+fn test_encode_request_contract_data() {}
 
 #[test]
-fn test_decode_contract_details() {
-}
+fn test_decode_contract_details() {}
 
 #[test]
 fn test_read_last_trade_date() {
@@ -19,13 +17,10 @@ fn test_read_last_trade_date() {
     // handles non bond contracts
 
     // handles bond contracts
-
 }
 
 #[test]
-fn test_encode_request_matching_symbols() {
-}
+fn test_encode_request_matching_symbols() {}
 
 #[test]
-fn test_decode_contract_descriptions() {
-}
+fn test_decode_contract_descriptions() {}
