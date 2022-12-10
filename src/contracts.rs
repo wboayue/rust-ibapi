@@ -6,7 +6,6 @@ use log::{error, info};
 use crate::client::{Client, RequestPacket, ResponsePacket};
 use crate::domain::Contract;
 use crate::domain::ContractDetails;
-use crate::domain::DeltaNeutralContract;
 use crate::domain::SecurityType;
 use crate::domain::TagValue;
 use crate::messages::{IncomingMessage, OutgoingMessage};
@@ -388,14 +387,15 @@ fn decode_contract_descriptions(
 ) -> Result<Vec<ContractDescription>> {
     message.skip(); // message type
 
-    let mut contract_descriptions: Vec<ContractDescription> = Vec::default();
-
     let _request_id = message.next_int()?;
     let contract_descriptions_count = message.next_int()?;
 
     if contract_descriptions_count < 1 {
-        return Ok(contract_descriptions);
+        return Ok(Vec::default());
     }
+
+    let mut contract_descriptions: Vec<ContractDescription> =
+        Vec::with_capacity(contract_descriptions_count as usize);
 
     for _ in 0..contract_descriptions_count {
         let mut contract = Contract {
@@ -407,8 +407,8 @@ fn decode_contract_descriptions(
             ..Default::default()
         };
 
-        let mut derivative_security_types: Vec<String> = Vec::default();
         let derivative_security_types_count = message.next_int()?;
+        let mut derivative_security_types: Vec<String> = Vec::with_capacity(derivative_security_types_count as usize);
         for _ in 0..derivative_security_types_count {
             derivative_security_types.push(message.next_string()?);
         }

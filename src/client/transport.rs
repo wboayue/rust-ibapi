@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::io::prelude::*;
 use std::io::Cursor;
-use std::iter::IntoIterator;
 use std::iter::Iterator;
 use std::net::TcpStream;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -92,7 +91,7 @@ impl MessageBus for TcpMessageBus {
         let requests = Arc::clone(&self.requests);
 
         let collection = requests.read().unwrap();
-        let request = match collection.get(&request_id) {
+        let _request = match collection.get(&request_id) {
             Some(request) => request,
             _ => {
                 return Err(anyhow!("no request found for request_id {:?}", request_id));
@@ -244,7 +243,7 @@ fn error_event(server_version: i32, packet: &mut ResponsePacket) -> Result<()> {
     }
 }
 
-fn process_next_valid_id(server_version: i32, packet: &mut ResponsePacket) {
+fn process_next_valid_id(_server_version: i32, packet: &mut ResponsePacket) {
     packet.skip(); // message_id
     packet.skip(); // version
 
@@ -252,7 +251,7 @@ fn process_next_valid_id(server_version: i32, packet: &mut ResponsePacket) {
     info!("next_valid_order_id: {}", order_id)
 }
 
-fn process_managed_accounts(server_version: i32, packet: &mut ResponsePacket) {
+fn process_managed_accounts(_server_version: i32, packet: &mut ResponsePacket) {
     packet.skip(); // message_id
     packet.skip(); // version
 
