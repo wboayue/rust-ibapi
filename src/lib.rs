@@ -40,4 +40,3 @@ pub mod news;
 pub mod server_versions;
 
 mod messages;
-pub mod transport;

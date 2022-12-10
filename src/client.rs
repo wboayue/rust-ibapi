@@ -11,9 +11,10 @@ use crate::domain::SecurityType;
 use crate::messages::IncomingMessage;
 use crate::messages::OutgoingMessage;
 use crate::server_versions;
-use crate::transport::ResponsePacketIterator;
-use crate::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
+use self::transport::ResponsePacketIterator;
+use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
 
+mod transport;
 mod versions;
 
 const MIN_SERVER_VERSION: i32 = 100;
