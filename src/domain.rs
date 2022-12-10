@@ -117,6 +117,17 @@ pub struct Contract {
     pub description: String,
 }
 
+impl Contract {
+    /// Creates stock contract from specified symbol
+    pub fn stock(symbol: &str) -> Contract {
+        Contract {
+            symbol: symbol.to_string(),
+            security_type: SecurityType::STK,
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 // ComboLeg represents a leg within combo orders.
 pub struct ComboLeg {

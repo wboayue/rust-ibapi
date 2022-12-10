@@ -5,6 +5,7 @@ use log::{debug, info};
 
 use ibapi::client::BasicClient;
 use ibapi::contracts;
+use ibapi::domain::Contract;
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
@@ -13,7 +14,7 @@ fn main() -> anyhow::Result<()> {
 
     info!("Connected {:?}", client);
 
-    let mut contract = contracts::stock("TSLA");
+    let mut contract = Contract::stock("TSLA");
     contract.currency = "USD".to_string();
     debug!("Contract {:?}", contract);
 

@@ -12,45 +12,6 @@ use crate::domain::TagValue;
 use crate::messages::{IncomingMessage, OutgoingMessage};
 use crate::server_versions;
 
-/// Creates stock contract from specified symbol
-pub fn stock(symbol: &str) -> Contract {
-    Contract {
-        symbol: symbol.to_string(),
-        security_type: SecurityType::STK,
-        ..default()
-    }
-}
-
-/// Creates a default contract
-pub fn default() -> Contract {
-    Contract {
-        contract_id: 0,
-        symbol: "".to_string(),
-        security_type: SecurityType::STK,
-        last_trade_date_or_contract_month: "".to_string(),
-        strike: 0.0,
-        right: "".to_string(),
-        multiplier: "".to_string(),
-        exchange: "".to_string(),
-        currency: "".to_string(),
-        local_symbol: "".to_string(),
-        primary_exchange: "".to_string(),
-        trading_class: "".to_string(),
-        include_expired: false,
-        security_id_type: "".to_string(),
-        security_id: "".to_string(),
-        combo_legs_description: "".to_string(),
-        combo_legs: Vec::new(),
-        issuer_id: "".to_string(),
-        description: "".to_string(),
-        delta_neutral_contract: DeltaNeutralContract {
-            contract_id: "".to_string(),
-            delta: 0.0,
-            price: 0.0,
-        },
-    }
-}
-
 /// Requests contract information.
 ///
 /// This method will provide all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
@@ -278,7 +239,7 @@ fn decode_contract_details(
     }
     if message_version >= 7 {
         let sec_id_list_count = message.next_int()?;
-        for i in 0..sec_id_list_count {
+        for _ in 0..sec_id_list_count {
             let tag = message.next_string()?;
             let value = message.next_string()?;
             contract.sec_id_list.push(TagValue { tag, value });
@@ -429,14 +390,14 @@ fn decode_contract_descriptions(
 
     let mut contract_descriptions: Vec<ContractDescription> = Vec::default();
 
-    let request_id = message.next_int()?;
+    let _request_id = message.next_int()?;
     let contract_descriptions_count = message.next_int()?;
 
     if contract_descriptions_count < 1 {
         return Ok(contract_descriptions);
     }
 
-    for i in 0..contract_descriptions_count {
+    for _ in 0..contract_descriptions_count {
         let mut contract = Contract {
             contract_id: message.next_int()?,
             symbol: message.next_string()?,
@@ -448,7 +409,7 @@ fn decode_contract_descriptions(
 
         let mut derivative_security_types: Vec<String> = Vec::default();
         let derivative_security_types_count = message.next_int()?;
-        for i in 0..derivative_security_types_count {
+        for _ in 0..derivative_security_types_count {
             derivative_security_types.push(message.next_string()?);
         }
 
