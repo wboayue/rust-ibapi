@@ -71,10 +71,7 @@ pub fn find_contract_details<C: Client + Debug>(
     }
 
     let request_id = client.next_request_id();
-
     let packet = encode_request_contract_data(client.server_version(), request_id, contract)?;
-
-    info!("outbound message: {:?}", packet);
 
     let responses = client.send_message(request_id, packet)?;
 
@@ -83,12 +80,10 @@ pub fn find_contract_details<C: Client + Debug>(
     for mut message in responses {
         match message.message_type() {
             IncomingMessage::ContractData => {
-                info!("inbound message: {:?}", message);
                 let decoded = decode_contract_details(client.server_version(), &mut message)?;
                 contract_details.push(decoded);
             }
             IncomingMessage::ContractDataEnd => {
-                info!("contract data end: {:?}", message);
                 break;
             }
             IncomingMessage::Error => {
@@ -408,7 +403,8 @@ fn decode_contract_descriptions(
         };
 
         let derivative_security_types_count = message.next_int()?;
-        let mut derivative_security_types: Vec<String> = Vec::with_capacity(derivative_security_types_count as usize);
+        let mut derivative_security_types: Vec<String> =
+            Vec::with_capacity(derivative_security_types_count as usize);
         for _ in 0..derivative_security_types_count {
             derivative_security_types.push(message.next_string()?);
         }

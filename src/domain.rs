@@ -1,9 +1,8 @@
 use std::string::ToString;
 
-use strum_macros::EnumString;
 use time::OffsetDateTime;
 
-#[derive(Debug, PartialEq, Eq, EnumString, Default)]
+#[derive(Debug, PartialEq, Eq, Default)]
 /// SecurityType enumerates available security types
 pub enum SecurityType {
     /// Stock (or ETF)
