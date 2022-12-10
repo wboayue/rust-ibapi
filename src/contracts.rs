@@ -282,6 +282,8 @@ pub struct TagValue {
     pub value: String,
 }
 
+// API
+
 /// Requests contract information.
 ///
 /// This method will provide all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
