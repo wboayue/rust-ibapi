@@ -24,11 +24,12 @@ use crate::server_versions;
 /// ```no_run
 /// use ibapi::client::BasicClient;
 /// use ibapi::contracts;
+/// use ibapi::domain::{Contract};
 ///
 /// fn main() -> anyhow::Result<()> {
 ///     let mut client = BasicClient::connect("localhost:4002")?;
 ///
-///     let contract = contracts::stock("TSLA");
+///     let contract = Contract::stock("TSLA");
 ///     let results = contracts::find_contract_details(&mut client, &contract)?;
 ///
 ///     for contract_detail in &results {

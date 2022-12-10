@@ -16,12 +16,13 @@ use crate::server_versions;
 ///     use anyhow::Result;
 ///     use ibapi::client::BasicClient;
 ///     use ibapi::contracts;
+///     use ibapi::domain::{Contract};
 ///     use ibapi::historical_market_data;
 ///
 ///     fn main() -> Result<()> {
 ///         let mut client = BasicClient::connect("localhost:4002")?;
 ///
-///         let contract = contracts::stock("MSFT");
+///         let contract = Contract::stock("MSFT");
 ///         let what_to_show = "trades";
 ///         let use_rth = true;
 ///
@@ -270,7 +271,7 @@ pub mod tests {
         let mut client = ClientStub::default();
         client.response_packets = VecDeque::from([ResponsePacket::from("10\x0000\x00cc")]);
 
-        let contract = contracts::stock("MSFT");
+        let contract = Contract::stock("MSFT");
         let what_to_show = "trades";
         let use_rth = true;
 
