@@ -14,7 +14,7 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use log::{debug, error, info};
 
 use crate::client::{RequestPacket, ResponsePacket};
-use crate::messages::IncomingMessage;
+use crate::messages::IncomingMessages;
 use crate::server_versions;
 
 pub trait MessageBus {
@@ -159,7 +159,7 @@ impl MessageBus for TcpMessageBus {
             };
 
             match packet.message_type() {
-                IncomingMessage::Error => {
+                IncomingMessages::Error => {
                     let request_id = packet.peek_int(2).unwrap_or(-1);
 
                     if request_id == UNSPECIFIED_REQUEST_ID {
@@ -168,8 +168,8 @@ impl MessageBus for TcpMessageBus {
                         process_response(&requests, packet);
                     }
                 }
-                IncomingMessage::NextValidId => process_next_valid_id(server_version, &mut packet),
-                IncomingMessage::ManagedAccounts => {
+                IncomingMessages::NextValidId => process_next_valid_id(server_version, &mut packet),
+                IncomingMessages::ManagedAccounts => {
                     process_managed_accounts(server_version, &mut packet)
                 }
                 _ => process_response(&requests, packet),

@@ -5,7 +5,7 @@ use anyhow::{anyhow, Result};
 use log::{error, info};
 
 use crate::client::{Client, RequestPacket, ResponsePacket};
-use crate::messages::{IncomingMessage, OutgoingMessage};
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
 
 // Models
@@ -15,46 +15,46 @@ use crate::server_versions;
 pub enum SecurityType {
     /// Stock (or ETF)
     #[default]
-    STK,
+    Stock,
     /// Option
-    OPT,
+    Option,
     /// Future
-    FUT,
+    Future,
     /// Index
-    IND,
+    Index,
     /// Futures option
-    FOP,
+    FuturesOption,
     /// Forex pair
-    CASH,
+    ForexPair,
     /// Combo
-    BAG,
+    Spread,
     ///  Warrant
-    WAR,
+    Warrant,
     /// Bond
-    BOND,
+    Bond,
     /// Commodity
-    CMDTY,
+    Commodity,
     /// News
-    NEWS,
+    News,
     /// Mutual fund
-    FUND,
+    MutualFund,
 }
 
 impl ToString for SecurityType {
     fn to_string(&self) -> String {
         match self {
-            SecurityType::STK => "STK".to_string(),
-            SecurityType::OPT => "OPT".to_string(),
-            SecurityType::FUT => "FUT".to_string(),
-            SecurityType::IND => "IND".to_string(),
-            SecurityType::FOP => "FOP".to_string(),
-            SecurityType::CASH => "CASH".to_string(),
-            SecurityType::BAG => "BAG".to_string(),
-            SecurityType::WAR => "WAR".to_string(),
-            SecurityType::BOND => "BOND".to_string(),
-            SecurityType::CMDTY => "CMDTY".to_string(),
-            SecurityType::NEWS => "NEWS".to_string(),
-            SecurityType::FUND => "FUND".to_string(),
+            SecurityType::Stock => "STK".to_string(),
+            SecurityType::Option => "OPT".to_string(),
+            SecurityType::Future => "FUT".to_string(),
+            SecurityType::Index => "IND".to_string(),
+            SecurityType::FuturesOption => "FOP".to_string(),
+            SecurityType::ForexPair => "CASH".to_string(),
+            SecurityType::Spread => "BAG".to_string(),
+            SecurityType::Warrant => "WAR".to_string(),
+            SecurityType::Bond => "BOND".to_string(),
+            SecurityType::Commodity => "CMDTY".to_string(),
+            SecurityType::News => "NEWS".to_string(),
+            SecurityType::MutualFund => "FUND".to_string(),
         }
     }
 }
@@ -62,18 +62,18 @@ impl ToString for SecurityType {
 impl SecurityType {
     pub fn from(name: &str) -> SecurityType {
         match name {
-            "STK" => SecurityType::STK,
-            "OPT" => SecurityType::OPT,
-            "FUT" => SecurityType::FUT,
-            "IND" => SecurityType::IND,
-            "FOP" => SecurityType::FOP,
-            "CASH" => SecurityType::CASH,
-            "BAG" => SecurityType::BAG,
-            "WAR" => SecurityType::WAR,
-            "BOND" => SecurityType::BOND,
-            "CMDTY" => SecurityType::CMDTY,
-            "NEWS" => SecurityType::NEWS,
-            "FUND" => SecurityType::FUND,
+            "STK" => SecurityType::Stock,
+            "OPT" => SecurityType::Option,
+            "FUT" => SecurityType::Future,
+            "IND" => SecurityType::Index,
+            "FOP" => SecurityType::FuturesOption,
+            "CASH" => SecurityType::ForexPair,
+            "BAG" => SecurityType::Spread,
+            "WAR" => SecurityType::Warrant,
+            "BOND" => SecurityType::Bond,
+            "CMDTY" => SecurityType::Commodity,
+            "NEWS" => SecurityType::News,
+            "FUND" => SecurityType::MutualFund,
             &_ => todo!(),
         }
     }
@@ -129,7 +129,7 @@ impl Contract {
     pub fn stock(symbol: &str) -> Contract {
         Contract {
             symbol: symbol.to_string(),
-            security_type: SecurityType::STK,
+            security_type: SecurityType::Stock,
             ..Default::default()
         }
     }
@@ -352,14 +352,14 @@ pub fn find_contract_details<C: Client + Debug>(
 
     for mut message in responses {
         match message.message_type() {
-            IncomingMessage::ContractData => {
+            IncomingMessages::ContractData => {
                 let decoded = decode_contract_details(client.server_version(), &mut message)?;
                 contract_details.push(decoded);
             }
-            IncomingMessage::ContractDataEnd => {
+            IncomingMessages::ContractDataEnd => {
                 break;
             }
-            IncomingMessage::Error => {
+            IncomingMessages::Error => {
                 error!("error: {:?}", message);
                 return Err(anyhow!("contract_details {:?}", message));
             }
@@ -381,7 +381,7 @@ fn encode_request_contract_data(
 
     let mut packet = RequestPacket::default();
 
-    packet.add_field(&OutgoingMessage::RequestContractData);
+    packet.add_field(&OutgoingMessages::RequestContractData);
     packet.add_field(&VERSION);
 
     if server_version >= server_versions::CONTRACT_DATA_CHAIN {
@@ -622,10 +622,10 @@ pub fn find_contract_descriptions_matching<C: Client + Debug>(
 
     if let Some(mut message) = responses.next() {
         match message.message_type() {
-            IncomingMessage::SymbolSamples => {
+            IncomingMessages::SymbolSamples => {
                 return decode_contract_descriptions(client.server_version(), &mut message);
             }
-            IncomingMessage::Error => {
+            IncomingMessages::Error => {
                 error!("unexpected error: {:?}", message);
                 return Err(anyhow!("unexpected error: {:?}", message));
             }
@@ -642,7 +642,7 @@ pub fn find_contract_descriptions_matching<C: Client + Debug>(
 fn encode_request_matching_symbols(request_id: i32, pattern: &str) -> Result<RequestPacket> {
     let mut message = RequestPacket::default();
 
-    message.add_field(&OutgoingMessage::RequestMatchingSymbols);
+    message.add_field(&OutgoingMessages::RequestMatchingSymbols);
     message.add_field(&request_id);
     message.add_field(&pattern);
 
