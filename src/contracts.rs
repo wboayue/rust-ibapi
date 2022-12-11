@@ -5,7 +5,7 @@ use anyhow::{anyhow, Result};
 use log::{error, info};
 
 use crate::client::{Client, RequestPacket, ResponsePacket};
-use crate::messages::{IncomingMessage, OutgoingMessage};
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
 
 // Models
@@ -352,14 +352,14 @@ pub fn find_contract_details<C: Client + Debug>(
 
     for mut message in responses {
         match message.message_type() {
-            IncomingMessage::ContractData => {
+            IncomingMessages::ContractData => {
                 let decoded = decode_contract_details(client.server_version(), &mut message)?;
                 contract_details.push(decoded);
             }
-            IncomingMessage::ContractDataEnd => {
+            IncomingMessages::ContractDataEnd => {
                 break;
             }
-            IncomingMessage::Error => {
+            IncomingMessages::Error => {
                 error!("error: {:?}", message);
                 return Err(anyhow!("contract_details {:?}", message));
             }
@@ -381,7 +381,7 @@ fn encode_request_contract_data(
 
     let mut packet = RequestPacket::default();
 
-    packet.add_field(&OutgoingMessage::RequestContractData);
+    packet.add_field(&OutgoingMessages::RequestContractData);
     packet.add_field(&VERSION);
 
     if server_version >= server_versions::CONTRACT_DATA_CHAIN {
@@ -622,10 +622,10 @@ pub fn find_contract_descriptions_matching<C: Client + Debug>(
 
     if let Some(mut message) = responses.next() {
         match message.message_type() {
-            IncomingMessage::SymbolSamples => {
+            IncomingMessages::SymbolSamples => {
                 return decode_contract_descriptions(client.server_version(), &mut message);
             }
-            IncomingMessage::Error => {
+            IncomingMessages::Error => {
                 error!("unexpected error: {:?}", message);
                 return Err(anyhow!("unexpected error: {:?}", message));
             }
@@ -642,7 +642,7 @@ pub fn find_contract_descriptions_matching<C: Client + Debug>(
 fn encode_request_matching_symbols(request_id: i32, pattern: &str) -> Result<RequestPacket> {
     let mut message = RequestPacket::default();
 
-    message.add_field(&OutgoingMessage::RequestMatchingSymbols);
+    message.add_field(&OutgoingMessages::RequestMatchingSymbols);
     message.add_field(&request_id);
     message.add_field(&pattern);
 

@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use self::transport::ResponsePacketIterator;
 use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
 use crate::contracts::{Contract, SecurityType};
-use crate::messages::{IncomingMessage, OutgoingMessage};
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
 
 mod transport;
@@ -223,21 +223,21 @@ pub struct ResponsePacket {
 }
 
 impl ResponsePacket {
-    pub fn message_type(&self) -> IncomingMessage {
+    pub fn message_type(&self) -> IncomingMessages {
         if self.fields.is_empty() {
-            IncomingMessage::NotValid
+            IncomingMessages::NotValid
         } else {
             let message_id = i32::from_str(&self.fields[0]).unwrap_or(-1);
-            IncomingMessage::from(message_id)
+            IncomingMessages::from(message_id)
         }
     }
 
     pub fn request_id(&self) -> Result<i32> {
         match self.message_type() {
-            IncomingMessage::ContractData
-            | IncomingMessage::TickByTick
-            | IncomingMessage::SymbolSamples => self.peek_int(1),
-            IncomingMessage::ContractDataEnd | IncomingMessage::RealTimeBars => self.peek_int(2),
+            IncomingMessages::ContractData
+            | IncomingMessages::TickByTick
+            | IncomingMessages::SymbolSamples => self.peek_int(1),
+            IncomingMessages::ContractDataEnd | IncomingMessages::RealTimeBars => self.peek_int(2),
             _ => Err(anyhow!(
                 "error parsing field request id {:?}: {:?}",
                 self.message_type(),
@@ -375,7 +375,7 @@ impl ToPacket for &Contract {
     }
 }
 
-impl ToPacket for OutgoingMessage {
+impl ToPacket for OutgoingMessages {
     fn to_packet(&self) -> String {
         (*self as i32).to_string()
     }
