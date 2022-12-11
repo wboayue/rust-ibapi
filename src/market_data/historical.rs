@@ -111,6 +111,7 @@ pub fn histogram_data<C: Client + Debug>(
     Err(anyhow!("not implemented!"))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn historical_data<C: Client + Debug>(
     client: &C,
     contract: &Contract,
