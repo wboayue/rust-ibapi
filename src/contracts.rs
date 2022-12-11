@@ -15,46 +15,46 @@ use crate::server_versions;
 pub enum SecurityType {
     /// Stock (or ETF)
     #[default]
-    STK,
+    Stock,
     /// Option
-    OPT,
+    Option,
     /// Future
-    FUT,
+    Future,
     /// Index
-    IND,
+    Index,
     /// Futures option
-    FOP,
+    FuturesOption,
     /// Forex pair
-    CASH,
+    ForexPair,
     /// Combo
-    BAG,
+    Spread,
     ///  Warrant
-    WAR,
+    Warrant,
     /// Bond
-    BOND,
+    Bond,
     /// Commodity
-    CMDTY,
+    Commodity,
     /// News
-    NEWS,
+    News,
     /// Mutual fund
-    FUND,
+    MutualFund,
 }
 
 impl ToString for SecurityType {
     fn to_string(&self) -> String {
         match self {
-            SecurityType::STK => "STK".to_string(),
-            SecurityType::OPT => "OPT".to_string(),
-            SecurityType::FUT => "FUT".to_string(),
-            SecurityType::IND => "IND".to_string(),
-            SecurityType::FOP => "FOP".to_string(),
-            SecurityType::CASH => "CASH".to_string(),
-            SecurityType::BAG => "BAG".to_string(),
-            SecurityType::WAR => "WAR".to_string(),
-            SecurityType::BOND => "BOND".to_string(),
-            SecurityType::CMDTY => "CMDTY".to_string(),
-            SecurityType::NEWS => "NEWS".to_string(),
-            SecurityType::FUND => "FUND".to_string(),
+            SecurityType::Stock => "STK".to_string(),
+            SecurityType::Option => "OPT".to_string(),
+            SecurityType::Future => "FUT".to_string(),
+            SecurityType::Index => "IND".to_string(),
+            SecurityType::FuturesOption => "FOP".to_string(),
+            SecurityType::ForexPair => "CASH".to_string(),
+            SecurityType::Spread => "BAG".to_string(),
+            SecurityType::Warrant => "WAR".to_string(),
+            SecurityType::Bond => "BOND".to_string(),
+            SecurityType::Commodity => "CMDTY".to_string(),
+            SecurityType::News => "NEWS".to_string(),
+            SecurityType::MutualFund => "FUND".to_string(),
         }
     }
 }
@@ -62,18 +62,18 @@ impl ToString for SecurityType {
 impl SecurityType {
     pub fn from(name: &str) -> SecurityType {
         match name {
-            "STK" => SecurityType::STK,
-            "OPT" => SecurityType::OPT,
-            "FUT" => SecurityType::FUT,
-            "IND" => SecurityType::IND,
-            "FOP" => SecurityType::FOP,
-            "CASH" => SecurityType::CASH,
-            "BAG" => SecurityType::BAG,
-            "WAR" => SecurityType::WAR,
-            "BOND" => SecurityType::BOND,
-            "CMDTY" => SecurityType::CMDTY,
-            "NEWS" => SecurityType::NEWS,
-            "FUND" => SecurityType::FUND,
+            "STK" => SecurityType::Stock,
+            "OPT" => SecurityType::Option,
+            "FUT" => SecurityType::Future,
+            "IND" => SecurityType::Index,
+            "FOP" => SecurityType::FuturesOption,
+            "CASH" => SecurityType::ForexPair,
+            "BAG" => SecurityType::Spread,
+            "WAR" => SecurityType::Warrant,
+            "BOND" => SecurityType::Bond,
+            "CMDTY" => SecurityType::Commodity,
+            "NEWS" => SecurityType::News,
+            "FUND" => SecurityType::MutualFund,
             &_ => todo!(),
         }
     }
@@ -129,7 +129,7 @@ impl Contract {
     pub fn stock(symbol: &str) -> Contract {
         Contract {
             symbol: symbol.to_string(),
-            security_type: SecurityType::STK,
+            security_type: SecurityType::Stock,
             ..Default::default()
         }
     }
