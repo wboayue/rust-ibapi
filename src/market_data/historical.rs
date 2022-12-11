@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
 
 use crate::client::{Client, RequestPacket, ResponsePacket};
-use crate::contracts::{Contract};
+use crate::contracts::Contract;
 use crate::domain::TickAttribBidAsk;
 use crate::server_versions;
 
