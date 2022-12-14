@@ -36,6 +36,12 @@ pub mod market_data;
 /// News
 pub mod news;
 
+/// APIs for placing orders
+pub mod orders;
+
 pub mod server_versions;
 
 mod messages;
+
+/// APIs for requesting account information
+pub mod accounts;
