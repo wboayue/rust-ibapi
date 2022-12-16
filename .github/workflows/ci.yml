@@ -16,5 +16,25 @@ jobs:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
-      - run: cargo build --release --all-features
+          toolchain: nightly
+
+      - run: cargo test
+
+      - name: Generate test result and coverage report
+        run: |
+          mkdir test-results;
+          cargo install cargo2junit;
+          cargo test -- -Z unstable-options --format json | cargo2junit > test-results/tests.xml;
+      - name: Create test summary
+        uses: test-summary/action@dist
+        with:
+          paths: test-results/**/*.xml
+        if: always()
+      # - name: Test Reporter
+      #   uses: dorny/test-reporter@v1.6.0
+      #   with:
+      #     # artifact: test-results            # artifact name
+      #     name: JUNIT Tests                 # Name of the check run which will be created
+      #     path: test-results/*.xml                     # Path to test results (inside artifact .zip)
+      #     reporter: java-junit              # Format of test results        
+      #   if: always()
