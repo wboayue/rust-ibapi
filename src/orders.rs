@@ -5,13 +5,16 @@ use anyhow::{anyhow, Result};
 use crate::client::{Client, RequestPacket, ResponsePacket};
 use crate::contracts::{Contract};
 
+pub struct Order {
+
+}
 
 // place_order
 pub fn place_order<C: Client + Debug>(
     client: &mut C,
     order_id: i32,
     contract: &Contract,
-    order: i32,
+    order: &Order,
 ) -> Result<()> {
     Ok(())
 }
