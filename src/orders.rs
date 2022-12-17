@@ -470,6 +470,41 @@ pub struct SoftDollarTier {
     display_name: String,
 }
 
+pub struct OrderState {
+    /// The order's current status
+    status: String,
+    /// The account's current initial margin.
+    initial_margin_before: String,
+    /// The account's current maintenance margin
+    maintenance_margin_before: String,
+    /// The account's current equity with loan
+    equity_with_loan_before: String,
+    /// The change of the account's initial margin.
+    initial_margin_change: String,
+    /// The change of the account's maintenance margin
+    maintenance_margin_change: String,
+    /// The change of the account's equity with loan
+    equity_with_loan_change: String,
+    /// The order's impact on the account's initial margin.
+    initial_margin_after: String,
+    /// The order's impact on the account's maintenance margin
+    maintenance_margin_after: String,
+    /// Shows the impact the order would have on the account's equity with loan
+    equity_with_loan_after: String,
+    /// The order's generated commission.
+    commission: f64,
+    // The execution's minimum commission.
+    minimum_commission: f64,
+    /// The executions maximum commission.
+    maximum_commission: f64,
+    /// The generated commission currency
+    commission_currency: String,
+    /// If the order is warranted, a descriptive message will be provided.
+    warning_text: String,
+    completed_time: String,
+    completed_status: String,
+}
+
 // place_order
 pub fn place_order<C: Client + Debug>(
     client: &mut C,
