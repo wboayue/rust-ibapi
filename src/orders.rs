@@ -4,6 +4,8 @@ use anyhow::{anyhow, Result};
 
 use crate::client::{Client, RequestPacket, ResponsePacket};
 use crate::contracts::Contract;
+use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::server_versions;
 
 /// New description
 pub use crate::contracts::TagValue;
@@ -512,7 +514,137 @@ pub fn place_order<C: Client + Debug>(
     contract: &Contract,
     order: &Order,
 ) -> Result<()> {
+    verify_order(client, order, order_id)?;
+    verify_order_contract(contract, order_id)?;
+
+    let request_id = client.next_request_id();
+    let message = encode_place_order(
+        client.server_version(),
+        request_id,
+        order_id,
+        contract,
+        order,
+    )?;
+
+    // let responses = client.send_message(request_id, packet)?;
+
+    // let mut contract_details: Vec<ContractDetails> = Vec::default();
+
+    // for mut message in responses {
+    //     match message.message_type() {
+    //         IncomingMessages::ContractData => {
+    //             let decoded = decode_contract_details(client.server_version(), &mut message)?;
+    //             contract_details.push(decoded);
+    //         }
+    //         IncomingMessages::ContractDataEnd => {
+    //             break;
+    //         }
+    //         IncomingMessages::Error => {
+    //             error!("error: {:?}", message);
+    //             return Err(anyhow!("contract_details {:?}", message));
+    //         }
+    //         _ => {
+    //             error!("unexpected message: {:?}", message);
+    //         }
+    //     }
+    // }
+
     Ok(())
+}
+
+fn verify_order<C: Client + Debug>(client: &mut C, order: &Order, order_id: i32) -> Result<()> {
+    let is_bag_order: bool = true; // StringsAreEqual(Constants.BagSecType, contract.SecType)
+
+    if order.scale_init_level_size != i32::MAX || order.scale_price_increment != f64::MAX {
+        client.check_server_version(
+            server_versions::SCALE_ORDERS,
+            "It does not support Scale orders.",
+        )?
+    }
+
+    if order.what_if {
+        client.check_server_version(
+            server_versions::WHAT_IF_ORDERS,
+            "It does not support what-if orders.",
+        )?
+    }
+
+    if order.scale_subs_level_size != i32::MAX {
+        client.check_server_version(
+            server_versions::SCALE_ORDERS2,
+            "It does not support Subsequent Level Size for Scale orders.",
+        )?
+    }
+
+    if !order.algo_strategy.is_empty() {
+        client.check_server_version(
+            server_versions::ALGO_ORDERS,
+            "It does not support algo orders.",
+        )?
+    }
+
+    if order.not_held {
+        client.check_server_version(
+            server_versions::NOT_HELD,
+            "It does not support notHeld parameter.",
+        )?
+    }
+
+    if order.exempt_code != -1 {
+        client.check_server_version(
+            server_versions::SSHORTX,
+            "It does not support exemptCode parameter.",
+        )?
+    }
+
+    if !order.hedge_type.is_empty() {
+        client.check_server_version(
+            server_versions::HEDGE_ORDERS,
+            "It does not support hedge orders.",
+        )?
+    }
+
+    if order.opt_out_smart_routing {
+        client.check_server_version(
+            server_versions::OPT_OUT_SMART_ROUTING,
+            "It does not support optOutSmartRouting parameter.",
+        )?
+    }
+
+    // https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EClient.cs#L3914
+
+    Ok(())
+}
+
+fn verify_order_contract(contract: &Contract, order_id: i32) -> Result<()> {
+    Ok(())
+}
+
+fn encode_place_order(
+    server_version: i32,
+    request_id: i32,
+    order_id: i32,
+    contract: &Contract,
+    order: &Order,
+) -> Result<RequestPacket> {
+    let mut message = RequestPacket::default();
+    let message_version = if server_version < server_versions::NOT_HELD {
+        27
+    } else {
+        45
+    };
+
+    message.add_field(&OutgoingMessages::PlaceOrder);
+
+    if server_version >= server_versions::ORDER_CONTAINER {
+        message.add_field(&message_version);
+    }
+
+    message.add_field(&order_id);
+
+    // https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EClient.cs#L783
+
+    Ok(message)
 }
 
 // cancel_order
