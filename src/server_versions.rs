@@ -6,7 +6,7 @@
 //  public const int REAL_TIME_BARS = 34;
 pub const SCALE_ORDERS: i32 = 35;
 //  public const int SNAPSHOT_MKT_DATA = 35;
-//  public const int SSHORT_COMBO_LEGS = 35;
+pub const SSHORT_COMBO_LEGS: i32 = 35;
 pub const WHAT_IF_ORDERS: i32 = 36;
 pub const CONTRACT_CONID: i32 = 37;
 

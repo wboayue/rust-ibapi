@@ -509,7 +509,7 @@ pub fn place_order<C: Client + Debug>(
     order: &Order,
 ) -> Result<()> {
     verify_order(client, order, order_id)?;
-    verify_order_contract(contract, order_id)?;
+    verify_order_contract(client, contract, order_id)?;
 
     let request_id = client.next_request_id();
     let message = encode_place_order(
@@ -546,8 +546,8 @@ pub fn place_order<C: Client + Debug>(
     Ok(())
 }
 
-fn verify_order<C: Client + Debug>(client: &mut C, order: &Order, order_id: i32) -> Result<()> {
-    let is_bag_order: bool = true; // StringsAreEqual(Constants.BagSecType, contract.SecType)
+fn verify_order<C: Client>(client: &mut C, order: &Order, order_id: i32) -> Result<()> {
+    let is_bag_order: bool = false; // StringsAreEqual(Constants.BagSecType, contract.SecType)
 
     if order.scale_init_level_size.is_some() || order.scale_price_increment.is_some() {
         client.check_server_version(
@@ -777,7 +777,59 @@ fn verify_order<C: Client + Debug>(client: &mut C, order: &Order, order_id: i32)
     Ok(())
 }
 
-fn verify_order_contract(contract: &Contract, order_id: i32) -> Result<()> {
+fn verify_order_contract<C: Client>(
+    client: &mut C,
+    contract: &Contract,
+    order_id: i32,
+) -> Result<()> {
+    if contract.combo_legs.iter().any(|combo_leg| {
+        combo_leg.short_sale_slot != 0 || !combo_leg.designated_location.is_empty()
+    }) {
+        client.check_server_version(
+            server_versions::SSHORT_COMBO_LEGS,
+            "It does not support SSHORT flag for combo legs",
+        )?
+    }
+
+    if contract.delta_neutral_contract.is_some() {
+        client.check_server_version(
+            server_versions::DELTA_NEUTRAL,
+            "It does not support delta-neutral orders",
+        )?
+    }
+
+    if contract.contract_id > 0 {
+        client.check_server_version(
+            server_versions::PLACE_ORDER_CONID,
+            "It does not support contract_id parameter",
+        )?
+    }
+
+    if !contract.security_id_type.is_empty() || !contract.security_id.is_empty() {
+        client.check_server_version(
+            server_versions::SEC_ID_TYPE,
+            "It does not support sec_id_type and sec_id parameters",
+        )?
+    }
+
+    if contract
+        .combo_legs
+        .iter()
+        .any(|combo_leg| combo_leg.exempt_code != -1)
+    {
+        client.check_server_version(
+            server_versions::SSHORTX,
+            "It does not support exempt_code parameter",
+        )?
+    }
+
+    if !contract.trading_class.is_empty() {
+        client.check_server_version(
+            server_versions::TRADING_CLASS,
+            "It does not support trading_class parameters in place_order",
+        )?
+    }
+
     Ok(())
 }
 

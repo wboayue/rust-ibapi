@@ -118,7 +118,7 @@ pub struct Contract {
     pub combo_legs_description: String,
     pub combo_legs: Vec<ComboLeg>,
     /// Delta and underlying price for Delta-Neutral combo orders. Underlying (STK or FUT), delta and underlying price goes into this attribute.
-    pub delta_neutral_contract: DeltaNeutralContract,
+    pub delta_neutral_contract: Option<DeltaNeutralContract>,
 
     pub issuer_id: String,
     pub description: String,
