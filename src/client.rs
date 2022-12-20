@@ -9,6 +9,7 @@ use time::OffsetDateTime;
 use self::transport::ResponsePacketIterator;
 use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
 use crate::contracts::{Contract, SecurityType};
+use crate::orders::{Action};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
 
@@ -378,6 +379,12 @@ impl ToPacket for &Contract {
 impl ToPacket for OutgoingMessages {
     fn to_packet(&self) -> String {
         (*self as i32).to_string()
+    }
+}
+
+impl ToPacket for Action {
+    fn to_packet(&self) -> String {
+        format!("{:?}", self)
     }
 }
 
