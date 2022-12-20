@@ -444,20 +444,13 @@ pub struct OrderComboLeg {
 
 #[derive(Clone, Debug)]
 pub enum OrderCondition {
-    Price,
-    Time,
-    Margin,
-    Execution,
-    Volume,
-    PercentChange,
+    Price = 1,
+    Time = 3,
+    Margin = 4,
+    Execution = 5,
+    Volume = 6,
+    PercentChange = 7,
 }
-
-// Price = 1,
-// Time = 3,
-// Margin = 4,
-// Execution = 5,
-// Volume = 6,
-// PercentCange = 7
 
 #[derive(Clone, Debug, Default)]
 pub struct SoftDollarTier {
@@ -841,11 +834,7 @@ fn encode_place_order(
     order: &Order,
 ) -> Result<RequestPacket> {
     let mut message = RequestPacket::default();
-    let message_version = if server_version < server_versions::NOT_HELD {
-        27
-    } else {
-        45
-    };
+    let message_version = message_version_for(server_version);
 
     message.add_field(&OutgoingMessages::PlaceOrder);
 
@@ -858,6 +847,14 @@ fn encode_place_order(
     // https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EClient.cs#L783
 
     Ok(message)
+}
+
+fn message_version_for(server_version: i32) -> i32 {
+    if server_version < server_versions::NOT_HELD {
+        27
+    } else {
+        45
+    }
 }
 
 // cancel_order
