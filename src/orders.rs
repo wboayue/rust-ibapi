@@ -838,13 +838,50 @@ fn encode_place_order(
 
     message.add_field(&OutgoingMessages::PlaceOrder);
 
-    if server_version >= server_versions::ORDER_CONTAINER {
+    if server_version < server_versions::ORDER_CONTAINER {
         message.add_field(&message_version);
     }
 
     message.add_field(&order_id);
 
-    // https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EClient.cs#L783
+    if server_version >= server_versions::PLACE_ORDER_CONID {
+        message.add_field(&contract.contract_id);
+    }
+    message.add_field(&contract.symbol);
+    message.add_field(&contract.security_type);
+    message.add_field(&contract.last_trade_date_or_contract_month);
+    message.add_field(&contract.strike);
+    message.add_field(&contract.right);
+    if server_version >= 15 {
+        message.add_field(&contract.multiplier);
+    }
+    message.add_field(&contract.exchange);
+    if server_version >= 14 {
+        message.add_field(&contract.primary_exchange);
+    }
+    message.add_field(&contract.currency);
+    if server_version >= 2 {
+        message.add_field(&contract.local_symbol);
+    }
+    if server_version >= server_versions::TRADING_CLASS {
+        message.add_field(&contract.trading_class);
+    }
+    if server_version >= server_versions::SEC_ID_TYPE {
+        message.add_field(&contract.security_id_type);
+        message.add_field(&contract.security_id);
+    }
+
+    message.add_field(&order.action);
+
+    if server_version >= server_versions::FRACTIONAL_POSITIONS {
+        message.add_field(&order.total_quantity);
+    } else {
+        message.add_field(&(order.total_quantity as i32));
+    }
+
+    message.add_field(&order.order_type);
+
+    // https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EClient.cs#L794
 
     Ok(message)
 }
