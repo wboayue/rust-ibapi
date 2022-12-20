@@ -611,7 +611,169 @@ fn verify_order<C: Client + Debug>(client: &mut C, order: &Order, order_id: i32)
         )?
     }
 
-    // https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EClient.cs#L3914
+    if order.delta_neutral_con_id > 0
+        || !order.delta_neutral_settling_firm.is_empty()
+        || !order.delta_neutral_clearing_account.is_empty()
+        || !order.delta_neutral_clearing_intent.is_empty()
+    {
+        client.check_server_version(
+                server_versions::DELTA_NEUTRAL_CONID,
+                "It does not support deltaNeutral parameters: ConId, SettlingFirm, ClearingAccount, ClearingIntentIt does not support deltaNeutral parameters: ConId, SettlingFirm, ClearingAccount, ClearingIntentIt does not support deltaNeutral parameters: ConId, SettlingFirm, ClearingAccount, ClearingIntent",
+            )?
+    }
+
+    if !order.delta_neutral_open_close.is_empty()
+        || order.delta_neutral_short_sale
+        || order.delta_neutral_short_sale_slot > 0
+        || !order.delta_neutral_designated_location.is_empty()
+    {
+        client.check_server_version(
+                server_versions::DELTA_NEUTRAL_OPEN_CLOSE,
+                "It does not support deltaNeutral parameters: OpenClose, ShortSale, ShortSaleSlot, DesignatedLocation",
+            )?
+    }
+
+    if (order.scale_price_increment > 0.0 && order.scale_price_increment != f64::MAX)
+        && (order.scale_price_adjust_value != f64::MAX
+            || order.scale_price_adjust_interval != i32::MAX
+            || order.scale_profit_offset != f64::MAX
+            || order.scale_auto_reset
+            || order.scale_init_position != i32::MAX
+            || order.scale_init_fill_qty != i32::MAX
+            || order.scale_random_percent)
+    {
+        client.check_server_version(
+                server_versions::SCALE_ORDERS3,
+                "It does not support Scale order parameters: PriceAdjustValue, PriceAdjustInterval, ProfitOffset, AutoReset, InitPosition, InitFillQty and RandomPercent",
+            )?
+    }
+
+    if is_bag_order && order.order_combo_legs.iter().any(|l| l.price != f64::MAX) {
+        client.check_server_version(
+            server_versions::ORDER_COMBO_LEGS_PRICE,
+            "It does not support per-leg prices for order combo legs.",
+        )?
+    }
+
+    if order.trailing_percent != f64::MAX {
+        client.check_server_version(
+            server_versions::TRAILING_PERCENT,
+            "It does not support trailing percent parameter.",
+        )?
+    }
+
+    if !order.algo_id.is_empty() {
+        client.check_server_version(
+            server_versions::ALGO_ID,
+            "It does not support algo_id parameter",
+        )?
+    }
+
+    if !order.scale_table.is_empty()
+        || !order.active_start_time.is_empty()
+        || !order.active_stop_time.is_empty()
+    {
+        client.check_server_version(
+            server_versions::SCALE_TABLE,
+            "It does not support scale_table, active_start_time nor active_stop_time parameters.",
+        )?
+    }
+
+    if !order.ext_operator.is_empty() {
+        client.check_server_version(
+            server_versions::EXT_OPERATOR,
+            "It does not support ext_operator parameter",
+        )?
+    }
+
+    if order.cash_qty != f64::MAX {
+        client.check_server_version(
+            server_versions::CASH_QTY,
+            "It does not support cash_qty parameter",
+        )?
+    }
+
+    if !order.mifid2_execution_trader.is_empty() || !order.mifid2_execution_algo.is_empty() {
+        client.check_server_version(
+            server_versions::DECISION_MAKER,
+            "It does not support MIFID II execution parameters",
+        )?
+    }
+
+    if order.dont_use_auto_price_for_hedge {
+        client.check_server_version(
+            server_versions::AUTO_PRICE_FOR_HEDGE,
+            "It does not support don't use auto price for hedge parameter",
+        )?
+    }
+
+    if order.is_oms_container {
+        client.check_server_version(
+            server_versions::ORDER_CONTAINER,
+            "It does not support oms container parameter",
+        )?
+    }
+
+    if order.discretionary_up_to_limit_price {
+        client.check_server_version(
+            server_versions::D_PEG_ORDERS,
+            "It does not support D-Peg orders",
+        )?
+    }
+
+    if order.use_price_mgmt_algo {
+        client.check_server_version(
+            server_versions::PRICE_MGMT_ALGO,
+            "It does not support Use Price Management Algo requests",
+        )?
+    }
+
+    if order.duration != i32::MAX {
+        client.check_server_version(
+            server_versions::DURATION,
+            "It does not support duration attribute",
+        )?
+    }
+
+    if order.post_to_ats != i32::MAX {
+        client.check_server_version(
+            server_versions::POST_TO_ATS,
+            "It does not support post_to_ats attribute",
+        )?
+    }
+
+    if order.auto_cancel_parent {
+        client.check_server_version(
+            server_versions::AUTO_CANCEL_PARENT,
+            "It does not support auto_cancel_parent attribute",
+        )?
+    }
+
+    if !order.advanced_error_override.is_empty() {
+        client.check_server_version(
+            server_versions::ADVANCED_ORDER_REJECT,
+            "It does not support advanced error override attribute",
+        )?
+    }
+
+    if !order.manual_order_time.is_empty() {
+        client.check_server_version(
+            server_versions::MANUAL_ORDER_TIME,
+            "It does not support manual order time attribute",
+        )?
+    }
+
+    if order.min_trade_qty != i32::MAX
+        || order.min_complete_size != i32::MAX
+        || order.compete_against_best_offet != f64::MAX
+        || order.mid_offset_at_whole != f64::MAX
+        || order.mid_offset_at_half != f64::MAX
+    {
+        client.check_server_version(
+            server_versions::PEGBEST_PEGMID_OFFSETS,
+            "It does not support PEG BEST / PEG MID order parameters: minTradeQty, minCompeteSize, competeAgainstBestOffset, midOffsetAtWhole and midOffsetAtHalf",
+        )?
+    }
 
     Ok(())
 }
