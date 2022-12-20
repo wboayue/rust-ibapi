@@ -112,7 +112,7 @@ pub struct Order {
     /// This field is mutually exclusive with the existing trailing amount. That is, the API client can send one or the other but not both.
     /// This field is read AFTER the stop price (barrier price) as follows: deltaNeutralAuxPrice stopPrice, trailingPercent, scale order attributes
     /// The field will also be sent to the API in the openOrder message if the API client version is >= 56. It is sent after the stopPrice field as follows: stopPrice, trailingPct, basisPoint.    
-    pub trailing_percent: f64,
+    pub trailing_percent: Option<f64>,
     /// The Financial Advisor group the trade will be allocated to. Use an empty string if not applicable.
     pub fa_group: String,
     /// The Financial Advisor allocation profile the trade will be allocated to. Use an empty string if not applicable.
@@ -209,23 +209,23 @@ pub struct Order {
     /// Specifies the increment of the Basis Points. For EFP orders only.
     pub basis_points_type: i32,
     /// Defines the size of the first, or initial, order component. For Scale orders only.
-    pub scale_init_level_size: i32,
+    pub scale_init_level_size: Option<i32>,
     /// Defines the order size of the subsequent scale order components. For Scale orders only. Used in conjunction with scaleInitLevelSize().
-    pub scale_subs_level_size: i32,
+    pub scale_subs_level_size: Option<i32>,
     /// Defines the price increment between scale components. For Scale orders only. This value is compulsory.
-    pub scale_price_increment: f64,
+    pub scale_price_increment: Option<f64>,
     /// Modifies the value of the Scale order. For extended Scale orders.
-    pub scale_price_adjust_value: f64,
+    pub scale_price_adjust_value: Option<f64>,
     /// Specifies the interval when the price is adjusted. For extended Scale orders.
-    pub scale_price_adjust_interval: i32,
+    pub scale_price_adjust_interval: Option<i32>,
     /// Specifies the offset when to adjust profit. For extended scale orders.
-    pub scale_profit_offset: f64,
+    pub scale_profit_offset: Option<f64>,
     /// Restarts the Scale series if the order is cancelled. For extended scale orders.
     pub scale_auto_reset: bool,
     /// The initial position of the Scale order. For extended scale orders.
-    pub scale_init_position: i32,
+    pub scale_init_position: Option<i32>,
     /// Specifies the initial quantity to be filled. For extended scale orders.
-    pub scale_init_fill_qty: i32,
+    pub scale_init_fill_qty: Option<i32>,
     /// Defines the random percent by which to adjust the position. For extended scale orders.
     pub scale_random_percent: bool,
     /// For hedge orders.
@@ -318,7 +318,7 @@ pub struct Order {
     /// This is a regulartory attribute that applies to all US Commodity (Futures) Exchanges, provided to allow client to comply with CFTC Tag 50 Rules.
     pub ext_operator: String,
     /// The native cash quantity.
-    pub cash_qty: f64,
+    pub cash_qty: Option<f64>,
     /// Identifies a person as the responsible party for investment decisions within the firm. Orders covered by MiFID 2 (Markets in Financial Instruments Directive 2) must include either Mifid2DecisionMaker or Mifid2DecisionAlgo field (but not both). Requires TWS 969+.
     pub mifid2_decision_maker: String,
     /// Identifies the algorithm responsible for investment decisions within the firm. Orders covered under MiFID 2 must include either Mifid2DecisionMaker or Mifid2DecisionAlgo, but cannot have both. Requires TWS 969+.
@@ -402,9 +402,9 @@ pub struct Order {
     /// Specifies wether to use Price Management Algo. CTCI users only.
     pub use_price_mgmt_algo: bool,
     /// Specifies the duration of the order. Format: yyyymmdd hh:mm:ss TZ. For GTD orders.
-    pub duration: i32, // TODO date object?
+    pub duration: Option<i32>, // TODO date object?
     /// Value must be positive, and it is number of seconds that SMART order would be parked for at IBKRATS before being routed to exchange.
-    pub post_to_ats: i32,
+    pub post_to_ats: Option<i32>,
 }
 
 /// Identifies the side.
@@ -437,15 +437,9 @@ pub enum Rule80A {
     AgentOtherMemberPT,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct OrderComboLeg {
-    price: f64,
-}
-
-impl Default for OrderComboLeg {
-    fn default() -> Self {
-        Self { price: f64::MAX }
-    }
+    price: Option<f64>,
 }
 
 #[derive(Clone, Debug)]
@@ -555,7 +549,7 @@ pub fn place_order<C: Client + Debug>(
 fn verify_order<C: Client + Debug>(client: &mut C, order: &Order, order_id: i32) -> Result<()> {
     let is_bag_order: bool = true; // StringsAreEqual(Constants.BagSecType, contract.SecType)
 
-    if order.scale_init_level_size != i32::MAX || order.scale_price_increment != f64::MAX {
+    if order.scale_init_level_size.is_some() || order.scale_price_increment.is_some() {
         client.check_server_version(
             server_versions::SCALE_ORDERS,
             "It does not support Scale orders.",
@@ -569,7 +563,7 @@ fn verify_order<C: Client + Debug>(client: &mut C, order: &Order, order_id: i32)
         )?
     }
 
-    if order.scale_subs_level_size != i32::MAX {
+    if order.scale_subs_level_size.is_some() {
         client.check_server_version(
             server_versions::SCALE_ORDERS2,
             "It does not support Subsequent Level Size for Scale orders.",
@@ -586,14 +580,14 @@ fn verify_order<C: Client + Debug>(client: &mut C, order: &Order, order_id: i32)
     if order.not_held {
         client.check_server_version(
             server_versions::NOT_HELD,
-            "It does not support notHeld parameter.",
+            "It does not support not_held parameter.",
         )?
     }
 
     if order.exempt_code != -1 {
         client.check_server_version(
             server_versions::SSHORTX,
-            "It does not support exemptCode parameter.",
+            "It does not support exempt_code parameter.",
         )?
     }
 
@@ -607,7 +601,7 @@ fn verify_order<C: Client + Debug>(client: &mut C, order: &Order, order_id: i32)
     if order.opt_out_smart_routing {
         client.check_server_version(
             server_versions::OPT_OUT_SMART_ROUTING,
-            "It does not support optOutSmartRouting parameter.",
+            "It does not support opt_out_smart_routing parameter.",
         )?
     }
 
@@ -618,7 +612,7 @@ fn verify_order<C: Client + Debug>(client: &mut C, order: &Order, order_id: i32)
     {
         client.check_server_version(
                 server_versions::DELTA_NEUTRAL_CONID,
-                "It does not support deltaNeutral parameters: ConId, SettlingFirm, ClearingAccount, ClearingIntentIt does not support deltaNeutral parameters: ConId, SettlingFirm, ClearingAccount, ClearingIntentIt does not support deltaNeutral parameters: ConId, SettlingFirm, ClearingAccount, ClearingIntent",
+                "It does not support delta_neutral parameters: con_id, settling_firm, clearing_account, clearing_intent.",
             )?
     }
 
@@ -629,17 +623,17 @@ fn verify_order<C: Client + Debug>(client: &mut C, order: &Order, order_id: i32)
     {
         client.check_server_version(
                 server_versions::DELTA_NEUTRAL_OPEN_CLOSE,
-                "It does not support deltaNeutral parameters: OpenClose, ShortSale, ShortSaleSlot, DesignatedLocation",
+                "It does not support delta_neutral parameters: open_close, short_sale, short_saleSlot, designated_location",
             )?
     }
 
-    if (order.scale_price_increment > 0.0 && order.scale_price_increment != f64::MAX)
-        && (order.scale_price_adjust_value != f64::MAX
-            || order.scale_price_adjust_interval != i32::MAX
-            || order.scale_profit_offset != f64::MAX
+    if (order.scale_price_increment > Some(0.0))
+        && (order.scale_price_adjust_value.is_some()
+            || order.scale_price_adjust_interval.is_some()
+            || order.scale_profit_offset.is_some()
             || order.scale_auto_reset
-            || order.scale_init_position != i32::MAX
-            || order.scale_init_fill_qty != i32::MAX
+            || order.scale_init_position.is_some()
+            || order.scale_init_fill_qty.is_some()
             || order.scale_random_percent)
     {
         client.check_server_version(
@@ -648,14 +642,19 @@ fn verify_order<C: Client + Debug>(client: &mut C, order: &Order, order_id: i32)
             )?
     }
 
-    if is_bag_order && order.order_combo_legs.iter().any(|l| l.price != f64::MAX) {
+    if is_bag_order
+        && order
+            .order_combo_legs
+            .iter()
+            .any(|combo_leg| combo_leg.price.is_some())
+    {
         client.check_server_version(
             server_versions::ORDER_COMBO_LEGS_PRICE,
             "It does not support per-leg prices for order combo legs.",
         )?
     }
 
-    if order.trailing_percent != f64::MAX {
+    if order.trailing_percent.is_some() {
         client.check_server_version(
             server_versions::TRAILING_PERCENT,
             "It does not support trailing percent parameter.",
@@ -686,7 +685,7 @@ fn verify_order<C: Client + Debug>(client: &mut C, order: &Order, order_id: i32)
         )?
     }
 
-    if order.cash_qty != f64::MAX {
+    if order.cash_qty.is_some() {
         client.check_server_version(
             server_versions::CASH_QTY,
             "It does not support cash_qty parameter",
@@ -728,14 +727,14 @@ fn verify_order<C: Client + Debug>(client: &mut C, order: &Order, order_id: i32)
         )?
     }
 
-    if order.duration != i32::MAX {
+    if order.duration.is_some() {
         client.check_server_version(
             server_versions::DURATION,
             "It does not support duration attribute",
         )?
     }
 
-    if order.post_to_ats != i32::MAX {
+    if order.post_to_ats.is_some() {
         client.check_server_version(
             server_versions::POST_TO_ATS,
             "It does not support post_to_ats attribute",
