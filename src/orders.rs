@@ -350,15 +350,15 @@ pub struct Order {
     /// Used by brokers and advisors when manually entering, modifying or cancelling orders at the direction of a client. Only used when allocating orders to specific groups or accounts. Excluding "All" group.
     pub manual_order_time: String,
     /// Defines the minimum trade quantity to fill. For IBKRATS orders.
-    pub min_trade_qty: i32,
+    pub min_trade_qty: Option<i32>,
     /// Defines the minimum size to compete. For IBKRATS orders.
-    pub min_complete_size: i32,
+    pub min_complete_size: Option<i32>,
     /// Specifies the offset off the midpoint that will be applied to the order. For IBKRATS orders.
-    pub compete_against_best_offet: f64,
+    pub compete_against_best_offet: Option<f64>,
     /// his offset is applied when the spread is an even number of cents wide. This offset must be in whole-penny increments or zero. For IBKRATS orders.
-    pub mid_offset_at_whole: f64,
+    pub mid_offset_at_whole: Option<f64>,
     /// This offset is applied when the spread is an odd number of cents wide. This offset must be in half-penny increments. For IBKRATS orders.
-    pub mid_offset_at_half: f64,
+    pub mid_offset_at_half: Option<f64>,
     /// Randomizes the order's size. Only for Volatility and Pegged to Volatility orders.
     pub randomize_size: bool,
     /// Randomizes the order's price. Only for Volatility and Pegged to Volatility orders.
@@ -763,11 +763,11 @@ fn verify_order<C: Client + Debug>(client: &mut C, order: &Order, order_id: i32)
         )?
     }
 
-    if order.min_trade_qty != i32::MAX
-        || order.min_complete_size != i32::MAX
-        || order.compete_against_best_offet != f64::MAX
-        || order.mid_offset_at_whole != f64::MAX
-        || order.mid_offset_at_half != f64::MAX
+    if order.min_trade_qty.is_some()
+        || order.min_complete_size.is_some()
+        || order.compete_against_best_offet.is_some()
+        || order.mid_offset_at_whole.is_some()
+        || order.mid_offset_at_half.is_some()
     {
         client.check_server_version(
             server_versions::PEGBEST_PEGMID_OFFSETS,
