@@ -8,9 +8,9 @@ use time::OffsetDateTime;
 
 use self::transport::ResponsePacketIterator;
 use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
-use crate::contracts::{Contract, SecurityType};
-use crate::orders::{Action};
+use crate::contracts::{Contract, SecurityType, OpenClose};
 use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::orders::{Action};
 use crate::server_versions;
 
 mod transport;
@@ -346,6 +346,12 @@ impl ToPacket for String {
     }
 }
 
+impl ToPacket for usize {
+    fn to_packet(&self) -> String {
+        self.to_string()
+    }
+}
+
 impl ToPacket for i32 {
     fn to_packet(&self) -> String {
         self.to_string()
@@ -355,6 +361,15 @@ impl ToPacket for i32 {
 impl ToPacket for f64 {
     fn to_packet(&self) -> String {
         self.to_string()
+    }
+}
+
+impl ToPacket for Option<f64> {
+    fn to_packet(&self) -> String {
+        match self {
+            Some(f) => f.to_string(),
+            None => f64::MAX.to_string(),
+        }
     }
 }
 
@@ -374,6 +389,20 @@ impl ToPacket for &Contract {
     fn to_packet(&self) -> String {
         format!("{:?}", self)
     }
+
+    // source.AddParameter(value.ConId);
+    // source.AddParameter(value.Symbol);
+    // source.AddParameter(value.SecType);
+    // source.AddParameter(value.LastTradeDateOrContractMonth);
+    // source.AddParameter(value.Strike);
+    // source.AddParameter(value.Right);
+    // source.AddParameter(value.Multiplier);
+    // source.AddParameter(value.Exchange);
+    // source.AddParameter(value.PrimaryExch);
+    // source.AddParameter(value.Currency);
+    // source.AddParameter(value.LocalSymbol);
+    // source.AddParameter(value.TradingClass);
+    // source.AddParameter(value.IncludeExpired);
 }
 
 impl ToPacket for OutgoingMessages {
@@ -383,6 +412,12 @@ impl ToPacket for OutgoingMessages {
 }
 
 impl ToPacket for Action {
+    fn to_packet(&self) -> String {
+        format!("{:?}", self)
+    }
+}
+
+impl ToPacket for OpenClose {
     fn to_packet(&self) -> String {
         format!("{:?}", self)
     }

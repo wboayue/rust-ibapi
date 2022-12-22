@@ -133,6 +133,11 @@ impl Contract {
             ..Default::default()
         }
     }
+
+    /// Is Spread request
+    pub fn is_spread(&self) -> bool {
+        self.security_type == SecurityType::Spread
+    }
 }
 
 #[derive(Debug, Default)]

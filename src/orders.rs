@@ -34,9 +34,9 @@ pub struct Order {
     pub order_type: String,
     /// The LIMIT price.
     /// Used for limit, stop-limit and relative orders. In all other cases specify zero. For relative orders with no limit price, also specify zero.
-    pub lmt_price: f64,
+    pub limit_price: Option<f64>,
     /// Generic field to contain the stop price for STP LMT orders, trailing amount, etc.
-    pub aux_price: f64,
+    pub aux_price: Option<f64>,
     /// The time in force.
     /// Valid values are:
     /// DAY - Valid for the day only.
@@ -880,17 +880,91 @@ fn encode_place_order(
     }
 
     message.add_field(&order.order_type);
+    if server_version < server_versions::ORDER_COMBO_LEGS_PRICE {
+        message.add_field(&f64_max_to_zero(order.limit_price));
+    } else {
+        message.add_field(&order.limit_price);
+    }
+    if server_version < server_versions::TRAILING_PERCENT {
+        message.add_field(&f64_max_to_zero(order.aux_price));
+    } else {
+        message.add_field(&order.aux_price);
+    }
+
+    // extended order fields
+    message.add_field(&order.tif);
+    message.add_field(&order.oca_group);
+    message.add_field(&order.account);
+    message.add_field(&order.open_close);
+    message.add_field(&order.origin);
+    message.add_field(&order.order_ref);
+    message.add_field(&order.transmit);
+    if server_version >= 4 {
+        message.add_field(&order.order_id);
+    }
+
+    if server_version >= 5 {
+        message.add_field(&order.block_order);
+        message.add_field(&order.sweep_to_fill);
+        message.add_field(&order.display_size);
+        message.add_field(&order.trigger_method);
+        message.add_field(&order.outside_rth);
+    }
+
+    if server_version >= 7 {
+        message.add_field(&order.hidden);
+    }
+
+    // Contract combo legs for BAG requests
+    if server_version >= 8 && contract.is_spread() {
+        message.add_field(&contract.combo_legs.len());
+
+        for combo_leg in &contract.combo_legs {
+            message.add_field(&combo_leg.contract_id);
+            message.add_field(&combo_leg.ratio);
+            message.add_field(&combo_leg.action);
+            message.add_field(&combo_leg.exchange);
+            message.add_field(&combo_leg.open_close);
+
+            if server_version >= server_versions::SSHORT_COMBO_LEGS {
+                message.add_field(&combo_leg.short_sale_slot);
+                message.add_field(&combo_leg.designated_location);
+            }
+            if server_version >= server_versions::SSHORTX_OLD {
+                message.add_field(&combo_leg.exempt_code);
+            }            
+        }
+    }
+
+    // Order combo legs for BAG requests
+    if server_version >= server_versions::ORDER_COMBO_LEGS_PRICE && contract.is_spread() {
+        message.add_field(&order.order_combo_legs.len());
+
+        for combo_leg in &order.order_combo_legs {
+            message.add_field(&combo_leg.price);
+        }
+    }
 
     // https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EClient.cs#L794
 
     Ok(message)
 }
 
+//https://github.com/InteractiveBrokers/tws-api/blob/b3f6c3de83cff4e636776cea38ece09e2c1b81d1/source/csharpclient/client/IBParamsList.cs
+
 fn message_version_for(server_version: i32) -> i32 {
     if server_version < server_versions::NOT_HELD {
         27
     } else {
         45
+    }
+}
+
+fn f64_max_to_zero(num: Option<f64>) -> Option<f64> {
+    if num == Some(f64::MAX) {
+        Some(0.0)
+    } else {
+        num
     }
 }
 

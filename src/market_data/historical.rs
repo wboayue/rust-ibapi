@@ -68,6 +68,20 @@ pub fn encode_head_timestamp(
     packet.add_field(&what_to_show);
     packet.add_field(&"format_date");
 
+    // source.AddParameter(value.ConId);
+    // source.AddParameter(value.Symbol);
+    // source.AddParameter(value.SecType);
+    // source.AddParameter(value.LastTradeDateOrContractMonth);
+    // source.AddParameter(value.Strike);
+    // source.AddParameter(value.Right);
+    // source.AddParameter(value.Multiplier);
+    // source.AddParameter(value.Exchange);
+    // source.AddParameter(value.PrimaryExch);
+    // source.AddParameter(value.Currency);
+    // source.AddParameter(value.LocalSymbol);
+    // source.AddParameter(value.TradingClass);
+    // source.AddParameter(value.IncludeExpired);
+
     Ok(packet)
 }
 
