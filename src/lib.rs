@@ -39,7 +39,7 @@ pub mod news;
 /// APIs for placing orders
 pub mod orders;
 
-pub mod server_versions;
+mod server_versions;
 
 mod messages;
 
