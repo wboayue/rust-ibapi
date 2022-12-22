@@ -836,116 +836,116 @@ fn encode_place_order(
     let mut message = RequestPacket::default();
     let message_version = message_version_for(server_version);
 
-    message.add_field(&OutgoingMessages::PlaceOrder);
+    message.push_field(&OutgoingMessages::PlaceOrder);
 
     if server_version < server_versions::ORDER_CONTAINER {
-        message.add_field(&message_version);
+        message.push_field(&message_version);
     }
 
-    message.add_field(&order_id);
+    message.push_field(&order_id);
 
     if server_version >= server_versions::PLACE_ORDER_CONID {
-        message.add_field(&contract.contract_id);
+        message.push_field(&contract.contract_id);
     }
-    message.add_field(&contract.symbol);
-    message.add_field(&contract.security_type);
-    message.add_field(&contract.last_trade_date_or_contract_month);
-    message.add_field(&contract.strike);
-    message.add_field(&contract.right);
+    message.push_field(&contract.symbol);
+    message.push_field(&contract.security_type);
+    message.push_field(&contract.last_trade_date_or_contract_month);
+    message.push_field(&contract.strike);
+    message.push_field(&contract.right);
     if server_version >= 15 {
-        message.add_field(&contract.multiplier);
+        message.push_field(&contract.multiplier);
     }
-    message.add_field(&contract.exchange);
+    message.push_field(&contract.exchange);
     if server_version >= 14 {
-        message.add_field(&contract.primary_exchange);
+        message.push_field(&contract.primary_exchange);
     }
-    message.add_field(&contract.currency);
+    message.push_field(&contract.currency);
     if server_version >= 2 {
-        message.add_field(&contract.local_symbol);
+        message.push_field(&contract.local_symbol);
     }
     if server_version >= server_versions::TRADING_CLASS {
-        message.add_field(&contract.trading_class);
+        message.push_field(&contract.trading_class);
     }
     if server_version >= server_versions::SEC_ID_TYPE {
-        message.add_field(&contract.security_id_type);
-        message.add_field(&contract.security_id);
+        message.push_field(&contract.security_id_type);
+        message.push_field(&contract.security_id);
     }
 
-    message.add_field(&order.action);
+    message.push_field(&order.action);
 
     if server_version >= server_versions::FRACTIONAL_POSITIONS {
-        message.add_field(&order.total_quantity);
+        message.push_field(&order.total_quantity);
     } else {
-        message.add_field(&(order.total_quantity as i32));
+        message.push_field(&(order.total_quantity as i32));
     }
 
-    message.add_field(&order.order_type);
+    message.push_field(&order.order_type);
     if server_version < server_versions::ORDER_COMBO_LEGS_PRICE {
-        message.add_field(&f64_max_to_zero(order.limit_price));
+        message.push_field(&f64_max_to_zero(order.limit_price));
     } else {
-        message.add_field(&order.limit_price);
+        message.push_field(&order.limit_price);
     }
     if server_version < server_versions::TRAILING_PERCENT {
-        message.add_field(&f64_max_to_zero(order.aux_price));
+        message.push_field(&f64_max_to_zero(order.aux_price));
     } else {
-        message.add_field(&order.aux_price);
+        message.push_field(&order.aux_price);
     }
 
     // extended order fields
-    message.add_field(&order.tif);
-    message.add_field(&order.oca_group);
-    message.add_field(&order.account);
-    message.add_field(&order.open_close);
-    message.add_field(&order.origin);
-    message.add_field(&order.order_ref);
-    message.add_field(&order.transmit);
+    message.push_field(&order.tif);
+    message.push_field(&order.oca_group);
+    message.push_field(&order.account);
+    message.push_field(&order.open_close);
+    message.push_field(&order.origin);
+    message.push_field(&order.order_ref);
+    message.push_field(&order.transmit);
     if server_version >= 4 {
-        message.add_field(&order.order_id);
+        message.push_field(&order.order_id);
     }
 
     if server_version >= 5 {
-        message.add_field(&order.block_order);
-        message.add_field(&order.sweep_to_fill);
-        message.add_field(&order.display_size);
-        message.add_field(&order.trigger_method);
-        message.add_field(&order.outside_rth);
+        message.push_field(&order.block_order);
+        message.push_field(&order.sweep_to_fill);
+        message.push_field(&order.display_size);
+        message.push_field(&order.trigger_method);
+        message.push_field(&order.outside_rth);
     }
 
     if server_version >= 7 {
-        message.add_field(&order.hidden);
+        message.push_field(&order.hidden);
     }
 
     // Contract combo legs for BAG requests
     if server_version >= 8 && contract.is_spread() {
-        message.add_field(&contract.combo_legs.len());
+        message.push_field(&contract.combo_legs.len());
 
         for combo_leg in &contract.combo_legs {
-            message.add_field(&combo_leg.contract_id);
-            message.add_field(&combo_leg.ratio);
-            message.add_field(&combo_leg.action);
-            message.add_field(&combo_leg.exchange);
-            message.add_field(&combo_leg.open_close);
+            message.push_field(&combo_leg.contract_id);
+            message.push_field(&combo_leg.ratio);
+            message.push_field(&combo_leg.action);
+            message.push_field(&combo_leg.exchange);
+            message.push_field(&combo_leg.open_close);
 
             if server_version >= server_versions::SSHORT_COMBO_LEGS {
-                message.add_field(&combo_leg.short_sale_slot);
-                message.add_field(&combo_leg.designated_location);
+                message.push_field(&combo_leg.short_sale_slot);
+                message.push_field(&combo_leg.designated_location);
             }
             if server_version >= server_versions::SSHORTX_OLD {
-                message.add_field(&combo_leg.exempt_code);
-            }            
+                message.push_field(&combo_leg.exempt_code);
+            }
         }
     }
 
     // Order combo legs for BAG requests
     if server_version >= server_versions::ORDER_COMBO_LEGS_PRICE && contract.is_spread() {
-        message.add_field(&order.order_combo_legs.len());
+        message.push_field(&order.order_combo_legs.len());
 
         for combo_leg in &order.order_combo_legs {
-            message.add_field(&combo_leg.price);
+            message.push_field(&combo_leg.price);
         }
     }
 
-    // https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EClient.cs#L794
+    // https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EClient.cs#L901
 
     Ok(message)
 }

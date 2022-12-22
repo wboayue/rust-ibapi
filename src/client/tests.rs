@@ -55,7 +55,7 @@ fn request_packet_from_fields() {
 
     let packet = || -> RequestPacket {
         let mut packet = RequestPacket::default();
-        packet.add_field(&32);
+        packet.push_field(&32);
         packet
     }();
 

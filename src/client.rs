@@ -8,9 +8,9 @@ use time::OffsetDateTime;
 
 use self::transport::ResponsePacketIterator;
 use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
-use crate::contracts::{Contract, SecurityType, OpenClose};
+use crate::contracts::{Contract, OpenClose, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
-use crate::orders::{Action};
+use crate::orders::Action;
 use crate::server_versions;
 
 mod transport;
@@ -86,7 +86,7 @@ impl BasicClient {
         self.message_bus.write("API\x00")?;
 
         let prelude = &mut RequestPacket::default();
-        prelude.add_field(&format!("v{}..{}", MIN_SERVER_VERSION, MAX_SERVER_VERSION));
+        prelude.push_field(&format!("v{}..{}", MIN_SERVER_VERSION, MAX_SERVER_VERSION));
 
         self.message_bus.write_packet(prelude)?;
 
@@ -102,12 +102,12 @@ impl BasicClient {
 
         let prelude = &mut RequestPacket::default();
 
-        prelude.add_field(&START_API);
-        prelude.add_field(&VERSION);
-        prelude.add_field(&self.client_id);
+        prelude.push_field(&START_API);
+        prelude.push_field(&VERSION);
+        prelude.push_field(&self.client_id);
 
         if self.server_version > server_versions::OPTIONAL_CAPABILITIES {
-            prelude.add_field(&"");
+            prelude.push_field(&"");
         }
 
         self.message_bus.write_packet(prelude)?;
@@ -192,7 +192,7 @@ impl RequestPacket {
         RequestPacket::default()
     }
 
-    pub fn add_field<T: ToPacket>(&mut self, val: &T) -> &RequestPacket {
+    pub fn push_field<T: ToPacket>(&mut self, val: &T) -> &RequestPacket {
         let field = val.to_packet();
         self.fields.push(field);
         self

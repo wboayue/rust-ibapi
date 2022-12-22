@@ -386,58 +386,58 @@ fn encode_request_contract_data(
 
     let mut packet = RequestPacket::default();
 
-    packet.add_field(&OutgoingMessages::RequestContractData);
-    packet.add_field(&VERSION);
+    packet.push_field(&OutgoingMessages::RequestContractData);
+    packet.push_field(&VERSION);
 
     if server_version >= server_versions::CONTRACT_DATA_CHAIN {
-        packet.add_field(&request_id);
+        packet.push_field(&request_id);
     }
 
     if server_version >= server_versions::CONTRACT_CONID {
-        packet.add_field(&contract.contract_id);
+        packet.push_field(&contract.contract_id);
     }
 
-    packet.add_field(&contract.symbol);
-    packet.add_field(&contract.security_type);
-    packet.add_field(&contract.last_trade_date_or_contract_month);
-    packet.add_field(&contract.strike);
-    packet.add_field(&contract.right);
+    packet.push_field(&contract.symbol);
+    packet.push_field(&contract.security_type);
+    packet.push_field(&contract.last_trade_date_or_contract_month);
+    packet.push_field(&contract.strike);
+    packet.push_field(&contract.right);
 
     if server_version >= 15 {
-        packet.add_field(&contract.multiplier);
+        packet.push_field(&contract.multiplier);
     }
 
     if server_version >= server_versions::PRIMARYEXCH {
-        packet.add_field(&contract.exchange);
-        packet.add_field(&contract.primary_exchange);
+        packet.push_field(&contract.exchange);
+        packet.push_field(&contract.primary_exchange);
     } else if server_version >= server_versions::LINKING {
         if !contract.primary_exchange.is_empty()
             && (contract.exchange == "BEST" || contract.exchange == "SMART")
         {
-            packet.add_field(&format!(
+            packet.push_field(&format!(
                 "{}:{}",
                 contract.exchange, contract.primary_exchange
             ));
         } else {
-            packet.add_field(&contract.exchange);
+            packet.push_field(&contract.exchange);
         }
     }
 
-    packet.add_field(&contract.currency);
-    packet.add_field(&contract.local_symbol);
+    packet.push_field(&contract.currency);
+    packet.push_field(&contract.local_symbol);
 
     if server_version >= server_versions::TRADING_CLASS {
-        packet.add_field(&contract.trading_class);
+        packet.push_field(&contract.trading_class);
     }
     if server_version >= 31 {
-        packet.add_field(&contract.include_expired);
+        packet.push_field(&contract.include_expired);
     }
     if server_version >= server_versions::SEC_ID_TYPE {
-        packet.add_field(&contract.security_id_type);
-        packet.add_field(&contract.security_id);
+        packet.push_field(&contract.security_id_type);
+        packet.push_field(&contract.security_id);
     }
     if server_version >= server_versions::BOND_ISSUERID {
-        packet.add_field(&contract.issuer_id);
+        packet.push_field(&contract.issuer_id);
     }
 
     Ok(packet)
@@ -647,9 +647,9 @@ pub fn find_contract_descriptions_matching<C: Client + Debug>(
 fn encode_request_matching_symbols(request_id: i32, pattern: &str) -> Result<RequestPacket> {
     let mut message = RequestPacket::default();
 
-    message.add_field(&OutgoingMessages::RequestMatchingSymbols);
-    message.add_field(&request_id);
-    message.add_field(&pattern);
+    message.push_field(&OutgoingMessages::RequestMatchingSymbols);
+    message.push_field(&request_id);
+    message.push_field(&pattern);
 
     Ok(message)
 }
