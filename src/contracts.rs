@@ -4,7 +4,7 @@ use std::string::ToString;
 use anyhow::{anyhow, Result};
 use log::{error, info};
 
-use crate::client::{Client, RequestPacket, ResponsePacket};
+use crate::client::{Client, RequestMessage, ResponseMessage};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
 
@@ -381,10 +381,10 @@ fn encode_request_contract_data(
     server_version: i32,
     request_id: i32,
     contract: &Contract,
-) -> Result<RequestPacket> {
+) -> Result<RequestMessage> {
     const VERSION: i32 = 8;
 
-    let mut packet = RequestPacket::default();
+    let mut packet = RequestMessage::default();
 
     packet.push_field(&OutgoingMessages::RequestContractData);
     packet.push_field(&VERSION);
@@ -445,7 +445,7 @@ fn encode_request_contract_data(
 
 fn decode_contract_details(
     server_version: i32,
-    message: &mut ResponsePacket,
+    message: &mut ResponseMessage,
 ) -> Result<ContractDetails> {
     message.skip(); // message type
 
@@ -644,8 +644,8 @@ pub fn find_contract_descriptions_matching<C: Client + Debug>(
     Ok(Vec::default())
 }
 
-fn encode_request_matching_symbols(request_id: i32, pattern: &str) -> Result<RequestPacket> {
-    let mut message = RequestPacket::default();
+fn encode_request_matching_symbols(request_id: i32, pattern: &str) -> Result<RequestMessage> {
+    let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::RequestMatchingSymbols);
     message.push_field(&request_id);
@@ -656,7 +656,7 @@ fn encode_request_matching_symbols(request_id: i32, pattern: &str) -> Result<Req
 
 fn decode_contract_descriptions(
     server_version: i32,
-    message: &mut ResponsePacket,
+    message: &mut ResponseMessage,
 ) -> Result<Vec<ContractDescription>> {
     message.skip(); // message type
 

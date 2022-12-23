@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use anyhow::{anyhow, Result};
 
-use crate::client::{Client, RequestPacket, ResponsePacket};
+use crate::client::{Client, RequestMessage, ResponseMessage};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
@@ -847,8 +847,8 @@ fn encode_place_order(
     order_id: i32,
     contract: &Contract,
     order: &Order,
-) -> Result<RequestPacket> {
-    let mut message = RequestPacket::default();
+) -> Result<RequestMessage> {
+    let mut message = RequestMessage::default();
     let message_version = message_version_for(server_version);
 
     message.push_field(&OutgoingMessages::PlaceOrder);

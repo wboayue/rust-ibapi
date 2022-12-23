@@ -13,25 +13,25 @@ use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use log::{debug, error, info};
 
-use crate::client::{RequestPacket, ResponsePacket};
+use crate::client::{RequestMessage, ResponseMessage};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 
 pub trait MessageBus {
-    fn read_packet(&mut self) -> Result<ResponsePacket>;
-    fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponsePacket>;
-    fn write_packet(&mut self, packet: &RequestPacket) -> Result<()>;
+    fn read_packet(&mut self) -> Result<ResponseMessage>;
+    fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponseMessage>;
+    fn write_packet(&mut self, packet: &RequestMessage) -> Result<()>;
     fn write_packet_for_request(
         &mut self,
         request_id: i32,
-        packet: &RequestPacket,
+        packet: &RequestMessage,
     ) -> Result<ResponsePacketPromise>;
     fn write(&mut self, packet: &str) -> Result<()>;
     fn process_messages(&mut self, server_version: i32) -> Result<()>;
 }
 
 #[derive(Debug)]
-struct Outbox(Sender<ResponsePacket>);
+struct Outbox(Sender<ResponseMessage>);
 
 #[derive(Debug)]
 pub struct TcpMessageBus {
@@ -60,7 +60,7 @@ impl TcpMessageBus {
         })
     }
 
-    fn add_sender(&mut self, request_id: i32, sender: Sender<ResponsePacket>) -> Result<()> {
+    fn add_sender(&mut self, request_id: i32, sender: Sender<ResponseMessage>) -> Result<()> {
         let requests = Arc::clone(&self.requests);
 
         match requests.write() {
@@ -81,11 +81,11 @@ impl TcpMessageBus {
 const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 impl MessageBus for TcpMessageBus {
-    fn read_packet(&mut self) -> Result<ResponsePacket> {
+    fn read_packet(&mut self) -> Result<ResponseMessage> {
         read_packet(&self.reader)
     }
 
-    fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponsePacket> {
+    fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponseMessage> {
         debug!("read message for request_id {:?}", request_id);
 
         let requests = Arc::clone(&self.requests);
@@ -112,7 +112,7 @@ impl MessageBus for TcpMessageBus {
     fn write_packet_for_request(
         &mut self,
         request_id: i32,
-        packet: &RequestPacket,
+        packet: &RequestMessage,
     ) -> Result<ResponsePacketPromise> {
         let (sender, receiver) = mpsc::channel();
 
@@ -122,7 +122,7 @@ impl MessageBus for TcpMessageBus {
         Ok(ResponsePacketPromise::new(receiver))
     }
 
-    fn write_packet(&mut self, packet: &RequestPacket) -> Result<()> {
+    fn write_packet(&mut self, packet: &RequestMessage) -> Result<()> {
         let encoded = packet.encode();
         debug!("{:?} ->", encoded);
 
@@ -185,13 +185,13 @@ impl MessageBus for TcpMessageBus {
     }
 }
 
-fn read_packet(mut reader: &TcpStream) -> Result<ResponsePacket> {
+fn read_packet(mut reader: &TcpStream) -> Result<ResponseMessage> {
     let message_size = read_header(reader)?;
     let mut data = vec![0_u8; message_size];
 
     reader.read_exact(&mut data)?;
 
-    let packet = ResponsePacket::from(&String::from_utf8(data)?);
+    let packet = ResponseMessage::from(&String::from_utf8(data)?);
     debug!("raw string: {:?}", packet);
 
     Ok(packet)
@@ -207,7 +207,7 @@ fn read_header(mut reader: &TcpStream) -> Result<usize> {
     Ok(count as usize)
 }
 
-fn error_event(server_version: i32, packet: &mut ResponsePacket) -> Result<()> {
+fn error_event(server_version: i32, packet: &mut ResponseMessage) -> Result<()> {
     packet.skip(); // message_id
 
     let version = packet.next_int()?;
@@ -243,7 +243,7 @@ fn error_event(server_version: i32, packet: &mut ResponsePacket) -> Result<()> {
     }
 }
 
-fn process_next_valid_id(_server_version: i32, packet: &mut ResponsePacket) {
+fn process_next_valid_id(_server_version: i32, packet: &mut ResponseMessage) {
     packet.skip(); // message_id
     packet.skip(); // version
 
@@ -251,7 +251,7 @@ fn process_next_valid_id(_server_version: i32, packet: &mut ResponsePacket) {
     info!("next_valid_order_id: {}", order_id)
 }
 
-fn process_managed_accounts(_server_version: i32, packet: &mut ResponsePacket) {
+fn process_managed_accounts(_server_version: i32, packet: &mut ResponseMessage) {
     packet.skip(); // message_id
     packet.skip(); // version
 
@@ -259,7 +259,7 @@ fn process_managed_accounts(_server_version: i32, packet: &mut ResponsePacket) {
     info!("managed accounts: {}", managed_accounts)
 }
 
-fn process_response(requests: &Arc<RwLock<HashMap<i32, Outbox>>>, packet: ResponsePacket) {
+fn process_response(requests: &Arc<RwLock<HashMap<i32, Outbox>>>, packet: ResponseMessage) {
     let collection = requests.read().unwrap();
 
     let request_id = packet.request_id().unwrap_or(-1);
@@ -279,15 +279,15 @@ fn process_response(requests: &Arc<RwLock<HashMap<i32, Outbox>>>, packet: Respon
 
 #[derive(Debug)]
 pub struct ResponsePacketPromise {
-    receiver: Receiver<ResponsePacket>,
+    receiver: Receiver<ResponseMessage>,
 }
 
 impl ResponsePacketPromise {
-    fn new(receiver: Receiver<ResponsePacket>) -> ResponsePacketPromise {
+    fn new(receiver: Receiver<ResponseMessage>) -> ResponsePacketPromise {
         ResponsePacketPromise { receiver }
     }
 
-    pub fn message(&self) -> Result<ResponsePacket> {
+    pub fn message(&self) -> Result<ResponseMessage> {
         // Duration::from_millis(100)
 
         Ok(self.receiver.recv_timeout(Duration::from_millis(20000))?)
@@ -306,7 +306,7 @@ impl ResponsePacketPromise {
 pub struct ResponsePacketIterator {}
 
 impl Iterator for ResponsePacketPromise {
-    type Item = ResponsePacket;
+    type Item = ResponseMessage;
     fn next(&mut self) -> Option<Self::Item> {
         match self.receiver.recv_timeout(Duration::from_millis(10000)) {
             Err(e) => {

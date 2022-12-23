@@ -6,8 +6,8 @@ use super::*;
 
 #[derive(Default, Debug)]
 pub struct ClientStub {
-    pub request_packets: Vec<RequestPacket>,
-    pub response_packets: VecDeque<ResponsePacket>,
+    pub request_packets: Vec<RequestMessage>,
+    pub response_packets: VecDeque<ResponseMessage>,
 }
 
 impl Client for ClientStub {
@@ -19,7 +19,7 @@ impl Client for ClientStub {
         1
     }
 
-    fn send_packet(&mut self, packet: RequestPacket) -> Result<()> {
+    fn send_packet(&mut self, packet: RequestMessage) -> Result<()> {
         self.request_packets.push(packet);
         Ok(())
     }
@@ -27,7 +27,7 @@ impl Client for ClientStub {
     fn send_message(
         &mut self,
         request_id: i32,
-        message: RequestPacket,
+        message: RequestMessage,
     ) -> Result<ResponsePacketPromise> {
         Err(anyhow!("not implemented"))
     }
@@ -53,8 +53,8 @@ fn request_packet_from_fields() {
     // let mut packet = RequestPacket::default();
     // packet.add_field(32);
 
-    let packet = || -> RequestPacket {
-        let mut packet = RequestPacket::default();
+    let packet = || -> RequestMessage {
+        let mut packet = RequestMessage::default();
         packet.push_field(&32);
         packet
     }();

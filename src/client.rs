@@ -24,11 +24,11 @@ const INFINITY_STR: &str = "Infinity";
 pub trait Client {
     fn next_request_id(&mut self) -> i32;
     fn server_version(&self) -> i32;
-    fn send_packet(&mut self, packet: RequestPacket) -> Result<()>;
+    fn send_packet(&mut self, packet: RequestMessage) -> Result<()>;
     fn send_message(
         &mut self,
         request_id: i32,
-        message: RequestPacket,
+        message: RequestMessage,
     ) -> Result<ResponsePacketPromise>;
     // fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket>;
     fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator>;
@@ -85,7 +85,7 @@ impl BasicClient {
     fn handshake(&mut self) -> Result<()> {
         self.message_bus.write("API\x00")?;
 
-        let prelude = &mut RequestPacket::default();
+        let prelude = &mut RequestMessage::default();
         prelude.push_field(&format!("v{}..{}", MIN_SERVER_VERSION, MAX_SERVER_VERSION));
 
         self.message_bus.write_packet(prelude)?;
@@ -100,7 +100,7 @@ impl BasicClient {
     fn start_api(&mut self) -> Result<()> {
         const VERSION: i32 = 2;
 
-        let prelude = &mut RequestPacket::default();
+        let prelude = &mut RequestMessage::default();
 
         prelude.push_field(&START_API);
         prelude.push_field(&VERSION);
@@ -132,7 +132,7 @@ impl Client for BasicClient {
         self.server_version
     }
 
-    fn send_packet(&mut self, packet: RequestPacket) -> Result<()> {
+    fn send_packet(&mut self, packet: RequestMessage) -> Result<()> {
         debug!("send_packet({:?})", packet);
         self.message_bus.write_packet(&packet)
     }
@@ -140,7 +140,7 @@ impl Client for BasicClient {
     fn send_message(
         &mut self,
         request_id: i32,
-        message: RequestPacket,
+        message: RequestMessage,
     ) -> Result<ResponsePacketPromise> {
         debug!("send_message({:?}, {:?})", request_id, message);
         self.message_bus
@@ -183,16 +183,16 @@ impl fmt::Debug for BasicClient {
 }
 
 #[derive(Default, Debug)]
-pub struct RequestPacket {
+pub struct RequestMessage {
     fields: Vec<String>,
 }
 
-impl RequestPacket {
-    pub fn from(_fields: &[Box<dyn ToPacket>]) -> RequestPacket {
-        RequestPacket::default()
+impl RequestMessage {
+    pub fn from(_fields: &[Box<dyn ToField>]) -> RequestMessage {
+        RequestMessage::default()
     }
 
-    pub fn push_field<T: ToPacket>(&mut self, val: &T) -> &RequestPacket {
+    pub fn push_field<T: ToField>(&mut self, val: &T) -> &RequestMessage {
         let field = val.to_packet();
         self.fields.push(field);
         self
@@ -205,7 +205,7 @@ impl RequestPacket {
     }
 }
 
-impl Index<usize> for RequestPacket {
+impl Index<usize> for RequestMessage {
     type Output = String;
 
     fn index(&self, i: usize) -> &Self::Output {
@@ -213,17 +213,17 @@ impl Index<usize> for RequestPacket {
     }
 }
 
-pub trait ToPacket {
+pub trait ToField {
     fn to_packet(&self) -> String;
 }
 
 #[derive(Default, Debug)]
-pub struct ResponsePacket {
+pub struct ResponseMessage {
     i: usize,
     fields: Vec<String>,
 }
 
-impl ResponsePacket {
+impl ResponseMessage {
     pub fn message_type(&self) -> IncomingMessages {
         if self.fields.is_empty() {
             IncomingMessages::NotValid
@@ -314,8 +314,8 @@ impl ResponsePacket {
         }
     }
 
-    pub fn from(fields: &str) -> ResponsePacket {
-        ResponsePacket {
+    pub fn from(fields: &str) -> ResponseMessage {
+        ResponseMessage {
             i: 0,
             fields: fields.split('\x00').map(|x| x.to_string()).collect(),
         }
@@ -330,7 +330,7 @@ impl ResponsePacket {
     }
 }
 
-impl ToPacket for bool {
+impl ToField for bool {
     fn to_packet(&self) -> String {
         if *self {
             String::from("1")
@@ -340,31 +340,31 @@ impl ToPacket for bool {
     }
 }
 
-impl ToPacket for String {
+impl ToField for String {
     fn to_packet(&self) -> String {
         self.clone()
     }
 }
 
-impl ToPacket for usize {
+impl ToField for usize {
     fn to_packet(&self) -> String {
         self.to_string()
     }
 }
 
-impl ToPacket for i32 {
+impl ToField for i32 {
     fn to_packet(&self) -> String {
         self.to_string()
     }
 }
 
-impl ToPacket for f64 {
+impl ToField for f64 {
     fn to_packet(&self) -> String {
         self.to_string()
     }
 }
 
-impl ToPacket for Option<f64> {
+impl ToField for Option<f64> {
     fn to_packet(&self) -> String {
         match self {
             Some(f) => f.to_string(),
@@ -373,7 +373,7 @@ impl ToPacket for Option<f64> {
     }
 }
 
-impl ToPacket for Option<i32> {
+impl ToField for Option<i32> {
     fn to_packet(&self) -> String {
         match self {
             Some(f) => f.to_string(),
@@ -382,19 +382,19 @@ impl ToPacket for Option<i32> {
     }
 }
 
-impl ToPacket for SecurityType {
+impl ToField for SecurityType {
     fn to_packet(&self) -> String {
         self.to_string()
     }
 }
 
-impl ToPacket for &str {
+impl ToField for &str {
     fn to_packet(&self) -> String {
         <&str>::clone(self).to_string()
     }
 }
 
-impl ToPacket for &Contract {
+impl ToField for &Contract {
     fn to_packet(&self) -> String {
         format!("{:?}", self)
     }
@@ -414,31 +414,31 @@ impl ToPacket for &Contract {
     // source.AddParameter(value.IncludeExpired);
 }
 
-impl ToPacket for OutgoingMessages {
+impl ToField for OutgoingMessages {
     fn to_packet(&self) -> String {
         (*self as i32).to_string()
     }
 }
 
-impl ToPacket for Action {
+impl ToField for Action {
     fn to_packet(&self) -> String {
         format!("{:?}", self)
     }
 }
 
-impl ToPacket for OpenClose {
+impl ToField for OpenClose {
     fn to_packet(&self) -> String {
         format!("{:?}", self)
     }
 }
 
-impl ToPacket for Rule80A {
+impl ToField for Rule80A {
     fn to_packet(&self) -> String {
         format!("{:?}", self)
     }
 }
 
-impl ToPacket for OrderCondition {
+impl ToField for OrderCondition {
     fn to_packet(&self) -> String {
         format!("{:?}", self)
     }

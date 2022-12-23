@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
 
-use crate::client::{Client, RequestPacket, ResponsePacket};
+use crate::client::{Client, RequestMessage, ResponseMessage};
 use crate::contracts::Contract;
 use crate::domain::TickAttribBidAsk;
 use crate::server_versions;
@@ -58,8 +58,8 @@ pub fn encode_head_timestamp(
     contract: &Contract,
     what_to_show: &str,
     use_rth: bool,
-) -> Result<RequestPacket> {
-    let mut packet = RequestPacket::default();
+) -> Result<RequestMessage> {
+    let mut packet = RequestMessage::default();
 
     packet.push_field(&12);
     packet.push_field(&request_id);
@@ -104,7 +104,7 @@ pub fn encode_head_timestamp(
 //     source.AddParameter(value.IncludeExpired);
 // }
 
-fn decode_head_timestamp(packet: &mut ResponsePacket) -> Result<OffsetDateTime> {
+fn decode_head_timestamp(packet: &mut ResponseMessage) -> Result<OffsetDateTime> {
     let _request_id = packet.next_int()?;
     let head_timestamp = packet.next_date_time()?;
 
