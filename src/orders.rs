@@ -414,8 +414,8 @@ impl Order {
 
     pub fn is_scale_order(&self) -> bool {
         match self.scale_price_increment {
-           Some(price_increment) => price_increment > 0.0,
-           _ => false 
+            Some(price_increment) => price_increment > 0.0,
+            _ => false,
         }
     }
 }
@@ -955,7 +955,7 @@ fn encode_place_order(
         }
     }
 
-    message.push_field(&"");    // deprecated sharesAllocation field
+    message.push_field(&""); // deprecated sharesAllocation field
     message.push_field(&order.discretionary_amt);
     message.push_field(&order.good_after_time);
     message.push_field(&order.good_till_date);
@@ -1074,7 +1074,7 @@ fn encode_place_order(
             message.push_field(&delta_neutral_contract.delta);
             message.push_field(&delta_neutral_contract.price);
         } else {
-            message.push_field(&false);            
+            message.push_field(&false);
         }
     }
 
@@ -1099,7 +1099,7 @@ fn encode_place_order(
 
     if server_version >= server_versions::LINKING {
         // TODO default of XYZ
-//        message.push_field(&order.order_misc_options);
+        //        message.push_field(&order.order_misc_options);
         message.push_field(&"XYZ");
     }
 
@@ -1124,20 +1124,20 @@ fn encode_place_order(
                 // https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EClient.cs#L1187
                 message.push_field(condition);
             }
-    
+
             message.push_field(&order.conditions_ignore_rth);
-            message.push_field(&order.conditions_cancel_order);    
+            message.push_field(&order.conditions_cancel_order);
         }
 
-        message.push_field(&order.adjusted_order_type);    
-        message.push_field(&order.trigger_price);    
-        message.push_field(&order.lmt_price_offset);    
-        message.push_field(&order.adjusted_stop_price);    
-        message.push_field(&order.adjusted_stop_limit_price);    
-        message.push_field(&order.adjusted_trailing_amount);    
-        message.push_field(&order.adjustable_trailing_unit);    
+        message.push_field(&order.adjusted_order_type);
+        message.push_field(&order.trigger_price);
+        message.push_field(&order.lmt_price_offset);
+        message.push_field(&order.adjusted_stop_price);
+        message.push_field(&order.adjusted_stop_limit_price);
+        message.push_field(&order.adjusted_trailing_amount);
+        message.push_field(&order.adjustable_trailing_unit);
     }
-    
+
     // https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EClient.cs#L1203
 
     Ok(message)

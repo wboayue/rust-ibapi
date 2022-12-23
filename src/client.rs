@@ -10,7 +10,7 @@ use self::transport::ResponsePacketIterator;
 use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
 use crate::contracts::{Contract, OpenClose, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
-use crate::orders::{Action, Rule80A, OrderCondition};
+use crate::orders::{Action, OrderCondition, Rule80A};
 use crate::server_versions;
 
 mod transport;
