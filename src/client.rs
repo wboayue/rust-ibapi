@@ -370,10 +370,7 @@ impl ToField for i32 {
 
 impl ToField for Option<i32> {
     fn to_field(&self) -> String {
-        match self {
-            Some(val) => val.to_field(),
-            None => String::from(""),
-        }
+        encode_option_field(self)
     }
 }
 
@@ -385,10 +382,7 @@ impl ToField for f64 {
 
 impl ToField for Option<f64> {
     fn to_field(&self) -> String {
-        match self {
-            Some(val) => val.to_field(),
-            None => String::from(""),
-        }
+        encode_option_field(self)
     }
 }
 
@@ -412,7 +406,13 @@ impl ToField for OutgoingMessages {
 
 impl ToField for Action {
     fn to_field(&self) -> String {
-        format!("{:?}", self)
+        self.to_string()
+    }
+}
+
+impl ToField for Option<Action> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
     }
 }
 
@@ -422,18 +422,40 @@ impl ToField for OpenClose {
     }
 }
 
+impl ToField for Option<OpenClose> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
+impl ToField for Rule80A {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
 impl ToField for Option<Rule80A> {
     fn to_field(&self) -> String {
-        match self {
-            Some(val) => val.to_string(),
-            None => String::from(""),
-        }
+        encode_option_field(self)
     }
 }
 
 impl ToField for OrderCondition {
     fn to_field(&self) -> String {
         (*self as u8).to_string()
+    }
+}
+
+impl ToField for Option<OrderCondition> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
+fn encode_option_field<T: ToField>(val: &Option<T>) -> String {
+    match val {
+        Some(val) => val.to_field(),
+        None => String::from(""),
     }
 }
 

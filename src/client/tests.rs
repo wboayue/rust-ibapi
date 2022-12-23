@@ -142,3 +142,16 @@ fn message_encodes_order_condition() {
     assert_eq!(6, message.fields.len());
     assert_eq!("1\03\04\05\06\07\0", message.encode());
 }
+
+#[test]
+fn message_encodes_action() {
+    let mut message = RequestMessage::new();
+
+    message.push_field(&Action::Buy);
+    message.push_field(&Action::Sell);
+    message.push_field(&Action::SellShort);
+    message.push_field(&Action::SellLong);
+
+    assert_eq!(4, message.fields.len());
+    assert_eq!("BUY\0SELL\0SSHORT\0SLONG\0", message.encode());
+}

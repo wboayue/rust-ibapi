@@ -430,12 +430,23 @@ impl Order {
 /// SLONG is available in specially-configured institutional accounts to indicate that long position not yet delivered is being sold.
 #[derive(Clone, Debug)]
 pub enum Action {
-    BUY,
-    SELL,
+    Buy,
+    Sell,
     /// SSHORT is only supported for institutional account configured with Long/Short account segments or clearing with a separate account.
-    SSHORT,
+    SellShort,
     /// SLONG is available in specially-configured institutional accounts to indicate that long position not yet delivered is being sold.
-    SLONG,
+    SellLong,
+}
+
+impl ToString for Action {
+    fn to_string(&self) -> String {
+        match self {
+            Action::Buy => String::from("BUY"),
+            Action::Sell => String::from("SELL"),
+            Action::SellShort => String::from("SSHORT"),
+            Action::SellLong => String::from("SLONG"),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
