@@ -174,5 +174,21 @@ fn message_encodes_security_type() {
     message.push_field(&SecurityType::MutualFund);
 
     assert_eq!(12, message.fields.len());
-    assert_eq!("STK\0OPT\0FUT\0IND\0FOP\0CASH\0BAG\0WAR\0BOND\0CMDTY\0NEWS\0FUND\0", message.encode());
+    assert_eq!(
+        "STK\0OPT\0FUT\0IND\0FOP\0CASH\0BAG\0WAR\0BOND\0CMDTY\0NEWS\0FUND\0",
+        message.encode()
+    );
+}
+
+#[test]
+fn message_encodes_outgoing_message() {
+    let mut message = RequestMessage::new();
+
+    message.push_field(&OutgoingMessages::RequestMarketData);
+    message.push_field(&OutgoingMessages::CancelMarketData);
+    message.push_field(&OutgoingMessages::PlaceOrder);
+    message.push_field(&OutgoingMessages::ReqUserInfo);
+
+    assert_eq!(4, message.fields.len());
+    assert_eq!("1\02\03\0104\0", message.encode());
 }

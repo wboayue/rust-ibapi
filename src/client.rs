@@ -410,12 +410,6 @@ impl ToField for Action {
     }
 }
 
-impl ToField for Option<Action> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
-}
-
 impl ToField for OpenClose {
     fn to_field(&self) -> String {
         format!("{:?}", self)
