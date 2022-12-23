@@ -1245,4 +1245,35 @@ pub fn cancel_order<C: Client + Debug>(client: &mut C, order_id: i32) -> Result<
     Ok(())
 }
 
-pub fn check_order_status<C: Client + Debug>() {}
+pub fn request_global_cancel<C: Client + Debug>() {
+    
+}
+
+pub fn check_order_status<C: Client + Debug>() {
+//    Immediately after the order was submitted correctly, the TWS will start sending events concerning the order's activity via IBApi.EWrapper.openOrder and IBApi.EWrapper.orderStatus    
+}
+
+pub fn request_open_orders<C: Client + Debug>() {
+    // Active orders will be delivered via The openOrder callback and The orderStatus callback callbacks. When all orders have been sent to the client application you will receive a IBApi.EWrapper.openOrderEnd event:
+
+    
+}
+
+pub fn request_all_open_orders<C: Client + Debug>() {
+    
+}
+
+//https://interactivebrokers.github.io/tws-api/classIBApi_1_1ExecutionFilter.html
+
+pub struct ExecutionFilter {
+
+}
+
+pub fn request_executions<C: Client + Debug>() {
+//    IBApi.Execution and IBApi.CommissionReport can be requested on demand via the IBApi.EClient.reqExecutions method which receives a IBApi.ExecutionFilter object as parameter to obtain only those executions matching the given criteria. An empty IBApi.ExecutionFilter object can be passed to obtain all previous executions.    
+}
+
+pub fn request_market_rule<C: Client + Debug>(market_rule_id: i32) {
+    
+}
+
