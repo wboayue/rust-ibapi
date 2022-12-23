@@ -350,6 +350,12 @@ impl ToField for String {
     }
 }
 
+impl ToField for &str {
+    fn to_field(&self) -> String {
+        <&str>::clone(self).to_string()
+    }
+}
+
 impl ToField for usize {
     fn to_field(&self) -> String {
         self.to_string()
@@ -362,6 +368,15 @@ impl ToField for i32 {
     }
 }
 
+impl ToField for Option<i32> {
+    fn to_field(&self) -> String {
+        match self {
+            Some(val) => val.to_field(),
+            None => String::from(""),
+        }
+    }
+}
+
 impl ToField for f64 {
     fn to_field(&self) -> String {
         self.to_string()
@@ -371,16 +386,7 @@ impl ToField for f64 {
 impl ToField for Option<f64> {
     fn to_field(&self) -> String {
         match self {
-            Some(f) => f.to_string(),
-            None => String::from(""),
-        }
-    }
-}
-
-impl ToField for Option<i32> {
-    fn to_field(&self) -> String {
-        match self {
-            Some(f) => f.to_string(),
+            Some(val) => val.to_field(),
             None => String::from(""),
         }
     }
@@ -389,12 +395,6 @@ impl ToField for Option<i32> {
 impl ToField for SecurityType {
     fn to_field(&self) -> String {
         self.to_string()
-    }
-}
-
-impl ToField for &str {
-    fn to_field(&self) -> String {
-        <&str>::clone(self).to_string()
     }
 }
 

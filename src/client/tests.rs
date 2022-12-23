@@ -75,6 +75,30 @@ fn message_encodes_bool() {
 }
 
 #[test]
+fn message_encodes_i32() {
+    let mut message = RequestMessage::new();
+
+    message.push_field(&1);
+    message.push_field(&Some(2));
+    message.push_field(&Option::<i32>::None);
+
+    assert_eq!(3, message.fields.len());
+    assert_eq!("1\02\0\0", message.encode());
+}
+
+#[test]
+fn message_encodes_f64() {
+    let mut message = RequestMessage::new();
+
+    message.push_field(&2.0);
+    message.push_field(&Some(3.0));
+    message.push_field(&Option::<f64>::None);
+
+    assert_eq!(3, message.fields.len());
+    // assert_eq!("2.0\03.0\0\0", message.encode());
+}
+
+#[test]
 fn message_encodes_string() {
     let mut message = RequestMessage::new();
 
