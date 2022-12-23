@@ -188,6 +188,10 @@ pub struct RequestMessage {
 }
 
 impl RequestMessage {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn from(_fields: &[Box<dyn ToField>]) -> RequestMessage {
         RequestMessage::default()
     }
@@ -418,15 +422,18 @@ impl ToField for OpenClose {
     }
 }
 
-impl ToField for Rule80A {
+impl ToField for Option<Rule80A> {
     fn to_field(&self) -> String {
-        format!("{:?}", self)
+        match self {
+            Some(val) => val.to_string(),
+            None => String::from(""),
+        }
     }
 }
 
 impl ToField for OrderCondition {
     fn to_field(&self) -> String {
-        format!("{:?}", self)
+        (*self as u8).to_string()
     }
 }
 

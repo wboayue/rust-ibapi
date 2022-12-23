@@ -99,7 +99,7 @@ pub struct Order {
     /// Precautionary constraints are defined on the TWS Presets page, and help ensure tha tyour price and size order values are reasonable. Orders sent from the API are also validated against these safety constraints, and may be rejected if any constraint is violated. To override validation, set this parameter’s value to True.
     pub override_percentage_constraints: bool,
     /// Individual = 'I', Agency = 'A', AgentOtherMember = 'W', IndividualPTIA = 'J', AgencyPTIA = 'U', AgentOtherMemberPTIA = 'M', IndividualPT = 'K', AgencyPT = 'Y', AgentOtherMemberPT = 'N'
-    pub rule_80_a: Rule80A,
+    pub rule_80_a: Option<Rule80A>,
     /// Indicates whether or not all the order has to be filled on a single execution.
     pub all_or_none: bool,
     /// Identifies a minimum quantity order type.
@@ -440,7 +440,6 @@ pub enum Action {
 
 #[derive(Clone, Debug)]
 pub enum Rule80A {
-    None,
     Individual,
     Agency,
     AgentOtherMember,
@@ -452,12 +451,28 @@ pub enum Rule80A {
     AgentOtherMemberPT,
 }
 
+impl ToString for Rule80A {
+    fn to_string(&self) -> String {
+        match self {
+            Rule80A::Individual => String::from('I'),
+            Rule80A::Agency => String::from('A'),
+            Rule80A::AgentOtherMember => String::from('W'),
+            Rule80A::IndividualPTIA => String::from('J'),
+            Rule80A::AgencyPTIA => String::from('U'),
+            Rule80A::AgentOtherMemberPTIA => String::from('M'),
+            Rule80A::IndividualPT => String::from('K'),
+            Rule80A::AgencyPT => String::from('Y'),
+            Rule80A::AgentOtherMemberPT => String::from('N'),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct OrderComboLeg {
     price: Option<f64>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum OrderCondition {
     Price = 1,
     Time = 3,
@@ -1245,35 +1260,24 @@ pub fn cancel_order<C: Client + Debug>(client: &mut C, order_id: i32) -> Result<
     Ok(())
 }
 
-pub fn request_global_cancel<C: Client + Debug>() {
-    
-}
+pub fn request_global_cancel<C: Client + Debug>() {}
 
 pub fn check_order_status<C: Client + Debug>() {
-//    Immediately after the order was submitted correctly, the TWS will start sending events concerning the order's activity via IBApi.EWrapper.openOrder and IBApi.EWrapper.orderStatus    
+    //    Immediately after the order was submitted correctly, the TWS will start sending events concerning the order's activity via IBApi.EWrapper.openOrder and IBApi.EWrapper.orderStatus
 }
 
 pub fn request_open_orders<C: Client + Debug>() {
     // Active orders will be delivered via The openOrder callback and The orderStatus callback callbacks. When all orders have been sent to the client application you will receive a IBApi.EWrapper.openOrderEnd event:
-
-    
 }
 
-pub fn request_all_open_orders<C: Client + Debug>() {
-    
-}
+pub fn request_all_open_orders<C: Client + Debug>() {}
 
 //https://interactivebrokers.github.io/tws-api/classIBApi_1_1ExecutionFilter.html
 
-pub struct ExecutionFilter {
-
-}
+pub struct ExecutionFilter {}
 
 pub fn request_executions<C: Client + Debug>() {
-//    IBApi.Execution and IBApi.CommissionReport can be requested on demand via the IBApi.EClient.reqExecutions method which receives a IBApi.ExecutionFilter object as parameter to obtain only those executions matching the given criteria. An empty IBApi.ExecutionFilter object can be passed to obtain all previous executions.    
+    //    IBApi.Execution and IBApi.CommissionReport can be requested on demand via the IBApi.EClient.reqExecutions method which receives a IBApi.ExecutionFilter object as parameter to obtain only those executions matching the given criteria. An empty IBApi.ExecutionFilter object can be passed to obtain all previous executions.
 }
 
-pub fn request_market_rule<C: Client + Debug>(market_rule_id: i32) {
-    
-}
-
+pub fn request_market_rule<C: Client + Debug>(market_rule_id: i32) {}

@@ -62,3 +62,59 @@ fn request_packet_from_fields() {
     let result = 2 + 2;
     assert_eq!(result, 4);
 }
+
+#[test]
+fn message_encodes_bool() {
+    let mut message = RequestMessage::new();
+
+    message.push_field(&false);
+    message.push_field(&true);
+
+    assert_eq!(2, message.fields.len());
+    assert_eq!("0\01\0", message.encode());
+}
+
+#[test]
+fn message_encodes_string() {
+    let mut message = RequestMessage::new();
+
+    message.push_field(&"interactive");
+    message.push_field(&"brokers");
+
+    assert_eq!(2, message.fields.len());
+    assert_eq!("interactive\0brokers\0", message.encode());
+}
+
+#[test]
+fn message_encodes_rule_80_a() {
+    let mut message = RequestMessage::new();
+
+    message.push_field(&Some(Rule80A::Individual));
+    message.push_field(&Some(Rule80A::Agency));
+    message.push_field(&Some(Rule80A::AgentOtherMember));
+    message.push_field(&Some(Rule80A::IndividualPTIA));
+    message.push_field(&Some(Rule80A::AgencyPTIA));
+    message.push_field(&Some(Rule80A::AgentOtherMemberPTIA));
+    message.push_field(&Some(Rule80A::IndividualPT));
+    message.push_field(&Some(Rule80A::AgencyPT));
+    message.push_field(&Some(Rule80A::AgentOtherMemberPT));
+    message.push_field(&Option::<Rule80A>::None);
+
+    assert_eq!(10, message.fields.len());
+    assert_eq!("I\0A\0W\0J\0U\0M\0K\0Y\0N\0\0", message.encode());
+}
+
+#[test]
+fn message_encodes_order_condition() {
+    let mut message = RequestMessage::new();
+
+    message.push_field(&OrderCondition::Price);
+    message.push_field(&OrderCondition::Time);
+    message.push_field(&OrderCondition::Margin);
+    message.push_field(&OrderCondition::Execution);
+    message.push_field(&OrderCondition::Volume);
+    message.push_field(&OrderCondition::PercentChange);
+
+    assert_eq!(6, message.fields.len());
+    assert_eq!("1\03\04\05\06\07\0", message.encode());
+}
