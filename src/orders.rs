@@ -10,6 +10,8 @@ use crate::server_versions;
 /// New description
 pub use crate::contracts::TagValue;
 
+const COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID: Option<f64> = Some(f64::INFINITY);
+
 #[derive(Clone, Debug)]
 /// Order describes the order.
 pub struct Order {
@@ -354,7 +356,7 @@ pub struct Order {
     /// Defines the minimum size to compete. For IBKRATS orders.
     pub min_complete_size: Option<i32>,
     /// Specifies the offset off the midpoint that will be applied to the order. For IBKRATS orders.
-    pub compete_against_best_offet: Option<f64>,
+    pub compete_against_best_offset: Option<f64>,
     /// his offset is applied when the spread is an even number of cents wide. This offset must be in whole-penny increments or zero. For IBKRATS orders.
     pub mid_offset_at_whole: Option<f64>,
     /// This offset is applied when the spread is an odd number of cents wide. This offset must be in half-penny increments. For IBKRATS orders.
@@ -770,7 +772,7 @@ fn verify_order<C: Client>(client: &mut C, order: &Order, order_id: i32) -> Resu
 
     if order.min_trade_qty.is_some()
         || order.min_complete_size.is_some()
-        || order.compete_against_best_offet.is_some()
+        || order.compete_against_best_offset.is_some()
         || order.mid_offset_at_whole.is_some()
         || order.mid_offset_at_half.is_some()
     {
@@ -1138,7 +1140,84 @@ fn encode_place_order(
         message.push_field(&order.adjustable_trailing_unit);
     }
 
-    // https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EClient.cs#L1203
+    if server_version >= server_versions::EXT_OPERATOR {
+        message.push_field(&order.ext_operator);
+    }
+
+    if server_version >= server_versions::SOFT_DOLLAR_TIER {
+        message.push_field(&order.soft_dollar_tier.name);
+        message.push_field(&order.soft_dollar_tier.value);
+    }
+
+    if server_version >= server_versions::CASH_QTY {
+        message.push_field(&order.cash_qty);
+    }
+
+    if server_version >= server_versions::DECISION_MAKER {
+        message.push_field(&order.mifid2_decision_maker);
+        message.push_field(&order.mifid2_decision_algo);
+    }
+
+    if server_version >= server_versions::MIFID_EXECUTION {
+        message.push_field(&order.mifid2_execution_trader);
+        message.push_field(&order.mifid2_execution_algo);
+    }
+
+    if server_version >= server_versions::AUTO_PRICE_FOR_HEDGE {
+        message.push_field(&order.dont_use_auto_price_for_hedge);
+    }
+
+    if server_version >= server_versions::ORDER_CONTAINER {
+        message.push_field(&order.is_oms_container);
+    }
+
+    if server_version >= server_versions::D_PEG_ORDERS {
+        message.push_field(&order.discretionary_up_to_limit_price);
+    }
+
+    if server_version >= server_versions::PRICE_MGMT_ALGO {
+        message.push_field(&order.use_price_mgmt_algo);
+    }
+
+    if server_version >= server_versions::DURATION {
+        message.push_field(&order.duration);
+    }
+
+    if server_version >= server_versions::POST_TO_ATS {
+        message.push_field(&order.post_to_ats);
+    }
+
+    if server_version >= server_versions::AUTO_CANCEL_PARENT {
+        message.push_field(&order.auto_cancel_parent);
+    }
+
+    if server_version >= server_versions::ADVANCED_ORDER_REJECT {
+        message.push_field(&order.advanced_error_override);
+    }
+
+    if server_version >= server_versions::MANUAL_ORDER_TIME {
+        message.push_field(&order.manual_order_time);
+    }
+
+    if server_version >= server_versions::PEGBEST_PEGMID_OFFSETS {
+        if contract.exchange == "IBKRATS" {
+            message.push_field(&order.min_trade_qty);
+        }
+        let mut send_mid_offsets = false;
+        if order.order_type == "PEG BEST" {
+            message.push_field(&order.min_complete_size);
+            message.push_field(&order.compete_against_best_offset);
+            if order.compete_against_best_offset == COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID {
+                send_mid_offsets = true;
+            }
+        } else if order.order_type == "PEG MID" {
+            send_mid_offsets = true;
+        }
+        if send_mid_offsets {
+            message.push_field(&order.mid_offset_at_whole);
+            message.push_field(&order.mid_offset_at_half);
+        }
+    }
 
     Ok(message)
 }
