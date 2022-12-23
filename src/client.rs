@@ -392,9 +392,9 @@ impl ToField for SecurityType {
     }
 }
 
-impl ToField for &Contract {
+impl ToField for Option<SecurityType> {
     fn to_field(&self) -> String {
-        format!("{:?}", self)
+        encode_option_field(self)
     }
 }
 

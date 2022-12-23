@@ -63,7 +63,7 @@ pub fn encode_head_timestamp(
 
     packet.push_field(&12);
     packet.push_field(&request_id);
-    packet.push_field(&contract);
+    contract.push_fields(&mut packet);
     packet.push_field(&use_rth);
     packet.push_field(&what_to_show);
     packet.push_field(&"format_date");

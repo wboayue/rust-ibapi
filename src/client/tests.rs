@@ -155,3 +155,24 @@ fn message_encodes_action() {
     assert_eq!(4, message.fields.len());
     assert_eq!("BUY\0SELL\0SSHORT\0SLONG\0", message.encode());
 }
+
+#[test]
+fn message_encodes_security_type() {
+    let mut message = RequestMessage::new();
+
+    message.push_field(&SecurityType::Stock);
+    message.push_field(&SecurityType::Option);
+    message.push_field(&SecurityType::Future);
+    message.push_field(&SecurityType::Index);
+    message.push_field(&SecurityType::FuturesOption);
+    message.push_field(&SecurityType::ForexPair);
+    message.push_field(&SecurityType::Spread);
+    message.push_field(&SecurityType::Warrant);
+    message.push_field(&SecurityType::Bond);
+    message.push_field(&SecurityType::Commodity);
+    message.push_field(&SecurityType::News);
+    message.push_field(&SecurityType::MutualFund);
+
+    assert_eq!(12, message.fields.len());
+    assert_eq!("STK\0OPT\0FUT\0IND\0FOP\0CASH\0BAG\0WAR\0BOND\0CMDTY\0NEWS\0FUND\0", message.encode());
+}
