@@ -10,7 +10,7 @@ use self::transport::ResponsePacketIterator;
 use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
 use crate::contracts::{Contract, OpenClose, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
-use crate::orders::Action;
+use crate::orders::{Action, Rule80A, OrderCondition};
 use crate::server_versions;
 
 mod transport;
@@ -368,7 +368,16 @@ impl ToPacket for Option<f64> {
     fn to_packet(&self) -> String {
         match self {
             Some(f) => f.to_string(),
-            None => f64::MAX.to_string(),
+            None => String::from(""),
+        }
+    }
+}
+
+impl ToPacket for Option<i32> {
+    fn to_packet(&self) -> String {
+        match self {
+            Some(f) => f.to_string(),
+            None => String::from(""),
         }
     }
 }
@@ -418,6 +427,18 @@ impl ToPacket for Action {
 }
 
 impl ToPacket for OpenClose {
+    fn to_packet(&self) -> String {
+        format!("{:?}", self)
+    }
+}
+
+impl ToPacket for Rule80A {
+    fn to_packet(&self) -> String {
+        format!("{:?}", self)
+    }
+}
+
+impl ToPacket for OrderCondition {
     fn to_packet(&self) -> String {
         format!("{:?}", self)
     }

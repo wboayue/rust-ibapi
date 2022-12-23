@@ -134,8 +134,8 @@ impl Contract {
         }
     }
 
-    /// Is Spread request
-    pub fn is_spread(&self) -> bool {
+    /// Is Bag request
+    pub fn is_bag(&self) -> bool {
         self.security_type == SecurityType::Spread
     }
 }
