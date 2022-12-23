@@ -193,7 +193,7 @@ impl RequestMessage {
     }
 
     pub fn push_field<T: ToField>(&mut self, val: &T) -> &RequestMessage {
-        let field = val.to_packet();
+        let field = val.to_field();
         self.fields.push(field);
         self
     }
@@ -214,7 +214,7 @@ impl Index<usize> for RequestMessage {
 }
 
 pub trait ToField {
-    fn to_packet(&self) -> String;
+    fn to_field(&self) -> String;
 }
 
 #[derive(Default, Debug)]
@@ -331,7 +331,7 @@ impl ResponseMessage {
 }
 
 impl ToField for bool {
-    fn to_packet(&self) -> String {
+    fn to_field(&self) -> String {
         if *self {
             String::from("1")
         } else {
@@ -341,31 +341,31 @@ impl ToField for bool {
 }
 
 impl ToField for String {
-    fn to_packet(&self) -> String {
+    fn to_field(&self) -> String {
         self.clone()
     }
 }
 
 impl ToField for usize {
-    fn to_packet(&self) -> String {
+    fn to_field(&self) -> String {
         self.to_string()
     }
 }
 
 impl ToField for i32 {
-    fn to_packet(&self) -> String {
+    fn to_field(&self) -> String {
         self.to_string()
     }
 }
 
 impl ToField for f64 {
-    fn to_packet(&self) -> String {
+    fn to_field(&self) -> String {
         self.to_string()
     }
 }
 
 impl ToField for Option<f64> {
-    fn to_packet(&self) -> String {
+    fn to_field(&self) -> String {
         match self {
             Some(f) => f.to_string(),
             None => String::from(""),
@@ -374,7 +374,7 @@ impl ToField for Option<f64> {
 }
 
 impl ToField for Option<i32> {
-    fn to_packet(&self) -> String {
+    fn to_field(&self) -> String {
         match self {
             Some(f) => f.to_string(),
             None => String::from(""),
@@ -383,63 +383,49 @@ impl ToField for Option<i32> {
 }
 
 impl ToField for SecurityType {
-    fn to_packet(&self) -> String {
+    fn to_field(&self) -> String {
         self.to_string()
     }
 }
 
 impl ToField for &str {
-    fn to_packet(&self) -> String {
+    fn to_field(&self) -> String {
         <&str>::clone(self).to_string()
     }
 }
 
 impl ToField for &Contract {
-    fn to_packet(&self) -> String {
+    fn to_field(&self) -> String {
         format!("{:?}", self)
     }
-
-    // source.AddParameter(value.ConId);
-    // source.AddParameter(value.Symbol);
-    // source.AddParameter(value.SecType);
-    // source.AddParameter(value.LastTradeDateOrContractMonth);
-    // source.AddParameter(value.Strike);
-    // source.AddParameter(value.Right);
-    // source.AddParameter(value.Multiplier);
-    // source.AddParameter(value.Exchange);
-    // source.AddParameter(value.PrimaryExch);
-    // source.AddParameter(value.Currency);
-    // source.AddParameter(value.LocalSymbol);
-    // source.AddParameter(value.TradingClass);
-    // source.AddParameter(value.IncludeExpired);
 }
 
 impl ToField for OutgoingMessages {
-    fn to_packet(&self) -> String {
+    fn to_field(&self) -> String {
         (*self as i32).to_string()
     }
 }
 
 impl ToField for Action {
-    fn to_packet(&self) -> String {
+    fn to_field(&self) -> String {
         format!("{:?}", self)
     }
 }
 
 impl ToField for OpenClose {
-    fn to_packet(&self) -> String {
+    fn to_field(&self) -> String {
         format!("{:?}", self)
     }
 }
 
 impl ToField for Rule80A {
-    fn to_packet(&self) -> String {
+    fn to_field(&self) -> String {
         format!("{:?}", self)
     }
 }
 
 impl ToField for OrderCondition {
-    fn to_packet(&self) -> String {
+    fn to_field(&self) -> String {
         format!("{:?}", self)
     }
 }

@@ -138,6 +138,22 @@ impl Contract {
     pub fn is_bag(&self) -> bool {
         self.security_type == SecurityType::Spread
     }
+
+    pub fn push_fields(&self, message: &mut RequestMessage) {
+        message.push_field(&self.contract_id);
+        message.push_field(&self.symbol);
+        message.push_field(&self.security_type);
+        message.push_field(&self.last_trade_date_or_contract_month);
+        message.push_field(&self.strike);
+        message.push_field(&self.right);
+        message.push_field(&self.multiplier);
+        message.push_field(&self.exchange);
+        message.push_field(&self.primary_exchange);
+        message.push_field(&self.currency);
+        message.push_field(&self.local_symbol);
+        message.push_field(&self.trading_class);
+        message.push_field(&self.include_expired);
+    }
 }
 
 #[derive(Debug, Default)]
