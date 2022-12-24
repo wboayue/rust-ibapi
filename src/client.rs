@@ -8,7 +8,7 @@ use time::OffsetDateTime;
 
 use self::transport::ResponsePacketIterator;
 use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
-use crate::contracts::{Contract, OpenClose, SecurityType};
+use crate::contracts::{ComboLegOpenClose, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::orders::{Action, OrderCondition, Rule80A};
 use crate::server_versions;
@@ -407,13 +407,13 @@ impl ToField for Action {
     }
 }
 
-impl ToField for OpenClose {
+impl ToField for ComboLegOpenClose {
     fn to_field(&self) -> String {
         format!("{:?}", self)
     }
 }
 
-impl ToField for Option<OpenClose> {
+impl ToField for Option<ComboLegOpenClose> {
     fn to_field(&self) -> String {
         encode_option_field(self)
     }

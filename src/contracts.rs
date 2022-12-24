@@ -169,7 +169,7 @@ pub struct ComboLeg {
     pub exchange: String,
     /// Specifies whether an order is an open or closing order.
     /// For instituational customers to determine if this order is to open or close a position.
-    pub open_close: OpenClose,
+    pub open_close: ComboLegOpenClose,
     /// For stock legs when doing short selling. Set to 1 = clearing broker, 2 = third party.
     pub short_sale_slot: i32,
     /// When ShortSaleSlot is 2, this field shall contain the designated location.
@@ -180,7 +180,7 @@ pub struct ComboLeg {
 
 #[derive(Debug, Default)]
 /// OpenClose specifies whether an order is an open or closing order.
-pub enum OpenClose {
+pub enum ComboLegOpenClose {
     /// 0 - Same as the parent security. This is the only option for retail customers.
     Same,
     /// 1 - Open. This value is only valid for institutional customers.
