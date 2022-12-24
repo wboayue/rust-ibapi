@@ -35,7 +35,7 @@ pub trait Client {
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
 
-pub struct BasicClient {
+pub struct IBClient {
     /// IB server version
     pub server_version: i32,
     /// IB Server time
@@ -51,20 +51,17 @@ pub struct BasicClient {
     next_request_id: i32,
 }
 
-impl BasicClient {
+impl IBClient {
     /// Opens connection to TWS workstation or gateway.
-    pub fn connect(connection_string: &str) -> Result<BasicClient> {
+    pub fn connect(connection_string: &str) -> Result<IBClient> {
         let message_bus = Box::new(TcpMessageBus::connect(connection_string)?);
-        BasicClient::do_connect(connection_string, message_bus)
+        IBClient::do_connect(connection_string, message_bus)
     }
 
-    fn do_connect(
-        connection_string: &str,
-        message_bus: Box<dyn MessageBus>,
-    ) -> Result<BasicClient> {
+    fn do_connect(connection_string: &str, message_bus: Box<dyn MessageBus>) -> Result<IBClient> {
         debug!("connecting to server with #{:?}", connection_string);
 
-        let mut client = BasicClient {
+        let mut client = IBClient {
             server_version: 0,
             server_time: String::from("hello"),
             next_valid_order_id: 0,
@@ -116,13 +113,13 @@ impl BasicClient {
     }
 }
 
-impl Drop for BasicClient {
+impl Drop for IBClient {
     fn drop(&mut self) {
         info!("dropping basic client")
     }
 }
 
-impl Client for BasicClient {
+impl Client for IBClient {
     fn next_request_id(&mut self) -> i32 {
         self.next_request_id += 1;
         self.next_request_id
@@ -172,7 +169,7 @@ impl Client for BasicClient {
     }
 }
 
-impl fmt::Debug for BasicClient {
+impl fmt::Debug for IBClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("IbClient")
             .field("server_version", &self.server_version)

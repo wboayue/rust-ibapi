@@ -14,12 +14,12 @@ use crate::server_versions;
 /// Returns the timestamp of earliest available historical data for a contract and data type.
 /// ```no_run
 ///     use anyhow::Result;
-///     use ibapi::client::BasicClient;
+///     use ibapi::client::IBClient;
 ///     use ibapi::contracts::{self, Contract};
 ///     use ibapi::market_data::historical;
 ///
 ///     fn main() -> Result<()> {
-///         let mut client = BasicClient::connect("localhost:4002")?;
+///         let mut client = IBClient::connect("localhost:4002")?;
 ///
 ///         let contract = Contract::stock("MSFT");
 ///         let what_to_show = "trades";

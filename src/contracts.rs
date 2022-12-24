@@ -316,11 +316,11 @@ pub struct TagValue {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::BasicClient;
+/// use ibapi::client::IBClient;
 /// use ibapi::contracts::{self, Contract};
 ///
 /// fn main() -> anyhow::Result<()> {
-///     let mut client = BasicClient::connect("localhost:4002")?;
+///     let mut client = IBClient::connect("localhost:4002")?;
 ///
 ///     let contract = Contract::stock("TSLA");
 ///     let results = contracts::find_contract_details(&mut client, &contract)?;
@@ -612,11 +612,11 @@ pub struct ContractDescription {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::BasicClient;
+/// use ibapi::client::IBClient;
 /// use ibapi::contracts;
 ///
 /// fn main() -> anyhow::Result<()> {
-///     let mut client = BasicClient::connect("localhost:4002")?;
+///     let mut client = IBClient::connect("localhost:4002")?;
 ///
 ///     let contracts = contracts::find_contract_descriptions_matching(&mut client, "IB")?;
 ///

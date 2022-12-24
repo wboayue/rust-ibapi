@@ -3,13 +3,13 @@ use std::{thread, time};
 
 use log::{debug, info};
 
-use ibapi::client::BasicClient;
+use ibapi::client::IBClient;
 use ibapi::contracts::{self, Contract};
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    let mut client = BasicClient::connect("odin:4002")?;
+    let mut client = IBClient::connect("odin:4002")?;
 
     info!("Connected {:?}", client);
 
