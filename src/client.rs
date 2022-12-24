@@ -10,7 +10,7 @@ use self::transport::ResponsePacketIterator;
 use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
 use crate::contracts::{ComboLegOpenClose, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
-use crate::orders::{Action, OrderCondition, Rule80A};
+use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A};
 use crate::server_versions;
 
 mod transport;
@@ -414,6 +414,18 @@ impl ToField for ComboLegOpenClose {
 }
 
 impl ToField for Option<ComboLegOpenClose> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
+impl ToField for OrderOpenClose {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToField for Option<OrderOpenClose> {
     fn to_field(&self) -> String {
         encode_option_field(self)
     }

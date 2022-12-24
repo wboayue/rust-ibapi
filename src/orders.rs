@@ -1,10 +1,10 @@
 use std::fmt::Debug;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 
-use crate::client::{Client, RequestMessage, ResponseMessage};
+use crate::client::{Client, RequestMessage};
 use crate::contracts::Contract;
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::OutgoingMessages;
 use crate::server_versions;
 
 /// New description
@@ -127,7 +127,7 @@ pub struct Order {
     /// Available for institutional clients to determine if this order is to open or close a position.
     /// When Action = "BUY" and OpenClose = "O" this will open a new position.
     /// When Action = "BUY" and OpenClose = "C" this will close and existing short position.    
-    pub open_close: String,
+    pub open_close: Option<OrderOpenClose>,
     /// The order's origin. Same as TWS "Origin" column. Identifies the type of customer from which the order originated.
     /// Valid values are:
     /// 0 - Customer
@@ -533,6 +533,25 @@ pub struct OrderState {
     warning_text: String,
     completed_time: String,
     completed_status: String,
+}
+
+/// For institutional customers only. Valid values are O (open) and C (close).
+/// Available for institutional clients to determine if this order is to open or close a position.
+/// When Action = "BUY" and OpenClose = "O" this will open a new position.
+/// When Action = "BUY" and OpenClose = "C" this will close and existing short position.
+#[derive(Clone, Debug)]
+pub enum OrderOpenClose {
+    Open,
+    Close,
+}
+
+impl ToString for OrderOpenClose {
+    fn to_string(&self) -> String {
+        match self {
+            OrderOpenClose::Open => String::from("O"),
+            OrderOpenClose::Close => String::from("C"),
+        }
+    }
 }
 
 // place_order
