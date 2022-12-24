@@ -204,3 +204,16 @@ fn message_encodes_order_open_close() {
     assert_eq!(3, message.fields.len());
     assert_eq!("\0O\0C\0", message.encode());
 }
+
+#[test]
+fn message_encodes_combo_leg_open_close() {
+    let mut message = RequestMessage::new();
+
+    message.push_field(&ComboLegOpenClose::Same);
+    message.push_field(&ComboLegOpenClose::Open);
+    message.push_field(&ComboLegOpenClose::Close);
+    message.push_field(&ComboLegOpenClose::Unknown);
+
+    assert_eq!(4, message.fields.len());
+    assert_eq!("0\01\02\03\0", message.encode());
+}

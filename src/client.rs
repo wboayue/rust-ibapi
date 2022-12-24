@@ -409,13 +409,7 @@ impl ToField for Action {
 
 impl ToField for ComboLegOpenClose {
     fn to_field(&self) -> String {
-        format!("{:?}", self)
-    }
-}
-
-impl ToField for Option<ComboLegOpenClose> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
+        (*self as u8).to_string()
     }
 }
 

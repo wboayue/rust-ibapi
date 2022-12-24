@@ -178,18 +178,18 @@ pub struct ComboLeg {
     pub exempt_code: i32,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 /// OpenClose specifies whether an order is an open or closing order.
 pub enum ComboLegOpenClose {
     /// 0 - Same as the parent security. This is the only option for retail customers.
-    Same,
-    /// 1 - Open. This value is only valid for institutional customers.
-    Open,
-    /// 2 - Close. This value is only valid for institutional customers.
-    Close,
-    /// 3 - Unknown.
     #[default]
-    Unknown,
+    Same = 0,
+    /// 1 - Open. This value is only valid for institutional customers.
+    Open = 1,
+    /// 2 - Close. This value is only valid for institutional customers.
+    Close = 2,
+    /// 3 - Unknown.
+    Unknown = 3,
 }
 
 #[derive(Debug, Default)]
