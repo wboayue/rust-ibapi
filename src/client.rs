@@ -14,7 +14,7 @@ use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A};
 use crate::server_versions;
 
 mod transport;
-mod versions;
+mod constants;
 
 const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;

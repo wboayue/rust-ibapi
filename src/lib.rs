@@ -39,9 +39,10 @@ pub mod news;
 /// APIs for placing orders
 pub mod orders;
 
-mod server_versions;
-
-mod messages;
-
 /// APIs for requesting account information
 pub mod accounts;
+
+
+mod constants;
+mod messages;
+mod server_versions;
