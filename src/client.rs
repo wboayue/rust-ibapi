@@ -328,6 +328,12 @@ impl ResponseMessage {
     pub fn reset(&mut self) {
         self.i = 0;
     }
+
+    pub fn encode(&self) -> String {
+        let mut data = self.fields.join("\0");
+        data.push('\0');
+        data
+    }
 }
 
 impl ToField for bool {
