@@ -42,7 +42,6 @@ pub mod orders;
 /// APIs for requesting account information
 pub mod accounts;
 
-
 mod constants;
 mod messages;
 mod server_versions;

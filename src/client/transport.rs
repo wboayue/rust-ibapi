@@ -1,8 +1,11 @@
 use std::collections::HashMap;
+use std::env;
+use std::fs;
 use std::io::prelude::*;
 use std::io::Cursor;
 use std::iter::Iterator;
 use std::net::TcpStream;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -39,6 +42,7 @@ pub struct TcpMessageBus {
     writer: Box<TcpStream>,
     handles: Vec<JoinHandle<i32>>,
     requests: Arc<RwLock<HashMap<i32, Outbox>>>,
+    recorder: MessageRecorder,
 }
 
 unsafe impl Send for Outbox {}
@@ -57,6 +61,7 @@ impl TcpMessageBus {
             writer,
             handles: Vec::default(),
             requests,
+            recorder: MessageRecorder::new(),
         })
     }
 
@@ -122,8 +127,8 @@ impl MessageBus for TcpMessageBus {
         Ok(ResponsePacketPromise::new(receiver))
     }
 
-    fn write_packet(&mut self, packet: &RequestMessage) -> Result<()> {
-        let encoded = packet.encode();
+    fn write_packet(&mut self, message: &RequestMessage) -> Result<()> {
+        let encoded = message.encode();
         debug!("{:?} ->", encoded);
 
         let data = encoded.as_bytes();
@@ -132,6 +137,8 @@ impl MessageBus for TcpMessageBus {
 
         self.writer.write_all(&header)?;
         self.writer.write_all(data)?;
+
+        self.recorder.record_request(message);
 
         Ok(())
     }
@@ -145,12 +152,11 @@ impl MessageBus for TcpMessageBus {
     fn process_messages(&mut self, server_version: i32) -> Result<()> {
         let reader = Arc::clone(&self.reader);
         let requests = Arc::clone(&self.requests);
+        let recorder = self.recorder.clone();
 
         let handle = thread::spawn(move || loop {
-            info!("tick");
-
-            let mut packet = match read_packet(&reader) {
-                Ok(packet) => packet,
+            let mut message = match read_packet(&reader) {
+                Ok(message) => message,
                 Err(err) => {
                     error!("error reading packet: {:?}", err);
                     // thread::sleep(Duration::from_secs(1));
@@ -158,21 +164,25 @@ impl MessageBus for TcpMessageBus {
                 }
             };
 
-            match packet.message_type() {
+            recorder.record_response(&message);
+
+            match message.message_type() {
                 IncomingMessages::Error => {
-                    let request_id = packet.peek_int(2).unwrap_or(-1);
+                    let request_id = message.peek_int(2).unwrap_or(-1);
 
                     if request_id == UNSPECIFIED_REQUEST_ID {
-                        error_event(server_version, &mut packet).unwrap();
+                        error_event(server_version, &mut message).unwrap();
                     } else {
-                        process_response(&requests, packet);
+                        process_response(&requests, message);
                     }
                 }
-                IncomingMessages::NextValidId => process_next_valid_id(server_version, &mut packet),
-                IncomingMessages::ManagedAccounts => {
-                    process_managed_accounts(server_version, &mut packet)
+                IncomingMessages::NextValidId => {
+                    process_next_valid_id(server_version, &mut message)
                 }
-                _ => process_response(&requests, packet),
+                IncomingMessages::ManagedAccounts => {
+                    process_managed_accounts(server_version, &mut message)
+                }
+                _ => process_response(&requests, message),
             };
 
             // FIXME - does read block?
@@ -315,5 +325,111 @@ impl Iterator for ResponsePacketPromise {
             }
             Ok(message) => Some(message),
         }
+    }
+}
+
+static RECORDING_SEQ: AtomicUsize = AtomicUsize::new(0);
+
+#[derive(Clone, Debug)]
+struct MessageRecorder {
+    enabled: bool,
+    recording_dir: String,
+}
+
+// let old_thread_count = GLOBAL_THREAD_COUNT.fetch_add(1, Ordering::SeqCst);
+// println!("live threads: {}", old_thread_count + 1);
+
+impl MessageRecorder {
+    fn new() -> Self {
+        match env::var("IBAPI_RECORDING_DIR") {
+            Ok(dir) => {
+                if !dir.is_empty() {
+                    fs::create_dir_all(&dir).unwrap();
+                }
+
+                MessageRecorder {
+                    enabled: !dir.is_empty(),
+                    recording_dir: dir,
+                }
+            }
+            _ => MessageRecorder {
+                enabled: false,
+                recording_dir: String::from(""),
+            },
+        }
+    }
+
+    fn request_file(&self, record_id: usize) -> String {
+        format!("{}/{:04}-request.msg", self.recording_dir, record_id)
+    }
+
+    fn response_file(&self, record_id: usize) -> String {
+        format!("{}/{:04}-response.msg", self.recording_dir, record_id)
+    }
+
+    fn record_request(&self, message: &RequestMessage) {
+        if !self.enabled {
+            return;
+        }
+
+        let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn record_response(&self, message: &ResponseMessage) {
+        if !self.enabled {
+            return;
+        }
+
+        let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::env;
+
+    #[test]
+    fn env_var_enables_recorder() {
+        let key = String::from("IBAPI_RECORDING_DIR");
+        let dir = String::from("/tmp/records");
+
+        env::set_var(&key, &dir);
+
+        let recorder = MessageRecorder::new();
+
+        assert_eq!(true, recorder.enabled);
+        assert_eq!(&dir, &recorder.recording_dir);
+    }
+
+    #[test]
+    fn recorder_is_disabled() {
+        let key = String::from("IBAPI_RECORDING_DIR");
+
+        env::set_var(&key, &"");
+
+        let recorder = MessageRecorder::new();
+
+        assert_eq!(false, recorder.enabled);
+        assert_eq!("", &recorder.recording_dir);
+    }
+
+    #[test]
+    fn recorder_generates_output_file() {
+        let recording_dir = String::from("/tmp/records");
+
+        let recorder = MessageRecorder {
+            enabled: true,
+            recording_dir: recording_dir,
+        };
+
+        assert_eq!(
+            format!("{}/0001-request.msg", recorder.recording_dir),
+            recorder.request_file(1)
+        );
+        assert_eq!(
+            format!("{}/0002-response.msg", recorder.recording_dir),
+            recorder.response_file(2)
+        );
     }
 }
