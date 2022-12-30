@@ -15,6 +15,8 @@ use std::time::Duration;
 use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use log::{debug, error, info};
+use time::macros::{datetime, format_description};
+use time::OffsetDateTime;
 
 use crate::client::{RequestMessage, ResponseMessage};
 use crate::messages::IncomingMessages;
@@ -343,13 +345,22 @@ impl MessageRecorder {
     fn new() -> Self {
         match env::var("IBAPI_RECORDING_DIR") {
             Ok(dir) => {
-                if !dir.is_empty() {
-                    fs::create_dir_all(&dir).unwrap();
-                }
+                if dir.is_empty() {
+                    MessageRecorder {
+                        enabled: false,
+                        recording_dir: String::from(""),
+                    }
+                } else {
+                    let format = format_description!("[year]-[month]-[day]-[hour]-[minute]");
+                    let now = OffsetDateTime::now_utc();
+                    let recording_dir = format!("{}/{}", dir, now.format(&format).unwrap());
 
-                MessageRecorder {
-                    enabled: !dir.is_empty(),
-                    recording_dir: dir,
+                    fs::create_dir_all(&recording_dir).unwrap();
+
+                    MessageRecorder {
+                        enabled: true,
+                        recording_dir: recording_dir,
+                    }
                 }
             }
             _ => MessageRecorder {
@@ -381,6 +392,8 @@ impl MessageRecorder {
             return;
         }
 
+        // assert_eq!(dt.format("%Y-%m-%d %H:%M:%S").to_string(), "2014-11-28 12:00:09")
+
         let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
         fs::write(self.response_file(record_id), message.encode()).unwrap();
     }
@@ -401,7 +414,12 @@ mod test {
         let recorder = MessageRecorder::new();
 
         assert_eq!(true, recorder.enabled);
-        assert_eq!(&dir, &recorder.recording_dir);
+        assert!(
+            &recorder.recording_dir.starts_with(&dir),
+            "{} != {}",
+            &recorder.recording_dir,
+            &dir
+        )
     }
 
     #[test]

@@ -10,4 +10,4 @@ anyhow = "1.0.66"
 byteorder = "1.4.3"
 env_logger = "0.9.3"
 log = "0.4.17"
-time = "0.3.17"
+time = {version = "0.3.17", features = ["formatting", "macros", "local-offset"]}
