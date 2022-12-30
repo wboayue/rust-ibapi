@@ -384,7 +384,7 @@ impl MessageRecorder {
         }
 
         let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
-        fs::write(self.request_file(record_id), message.encode()).unwrap();
+        fs::write(self.request_file(record_id), message.encode().replace("\0", "|")).unwrap();
     }
 
     fn record_response(&self, message: &ResponseMessage) {
@@ -392,10 +392,8 @@ impl MessageRecorder {
             return;
         }
 
-        // assert_eq!(dt.format("%Y-%m-%d %H:%M:%S").to_string(), "2014-11-28 12:00:09")
-
         let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
-        fs::write(self.response_file(record_id), message.encode()).unwrap();
+        fs::write(self.response_file(record_id), message.encode().replace("\0", "|")).unwrap();
     }
 }
 
