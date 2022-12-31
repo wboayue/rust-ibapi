@@ -19,12 +19,12 @@ impl Client for ClientStub {
         1
     }
 
-    fn send_packet(&mut self, packet: RequestMessage) -> Result<()> {
+    fn send_message(&mut self, packet: RequestMessage) -> Result<()> {
         self.request_packets.push(packet);
         Ok(())
     }
 
-    fn send_message(
+    fn send_message_for_request(
         &mut self,
         request_id: i32,
         message: RequestMessage,
@@ -39,7 +39,7 @@ impl Client for ClientStub {
     //     }
     // }
 
-    fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator> {
+    fn receive_messages(&self, request_id: i32) -> Result<ResponsePacketIterator> {
         Ok(ResponsePacketIterator {})
     }
 

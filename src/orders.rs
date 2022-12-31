@@ -573,7 +573,7 @@ pub fn place_order<C: Client + Debug>(
         order,
     )?;
 
-    let responses = client.send_message(request_id, message)?;
+    let responses = client.send_message_for_request(request_id, message)?;
     // return order status
 
     // let mut contract_details: Vec<ContractDetails> = Vec::default();

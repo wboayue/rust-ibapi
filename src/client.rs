@@ -23,14 +23,13 @@ const INFINITY_STR: &str = "Infinity";
 pub trait Client {
     fn next_request_id(&mut self) -> i32;
     fn server_version(&self) -> i32;
-    fn send_packet(&mut self, packet: RequestMessage) -> Result<()>;
-    fn send_message(
+    fn send_message(&mut self, packet: RequestMessage) -> Result<()>;
+    fn send_message_for_request(
         &mut self,
         request_id: i32,
         message: RequestMessage,
     ) -> Result<ResponsePacketPromise>;
-    // fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket>;
-    fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator>;
+    fn receive_messages(&self, request_id: i32) -> Result<ResponsePacketIterator>;
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
 
@@ -128,12 +127,12 @@ impl Client for IBClient {
         self.server_version
     }
 
-    fn send_packet(&mut self, packet: RequestMessage) -> Result<()> {
+    fn send_message(&mut self, packet: RequestMessage) -> Result<()> {
         debug!("send_packet({:?})", packet);
         self.message_bus.write_packet(&packet)
     }
 
-    fn send_message(
+    fn send_message_for_request(
         &mut self,
         request_id: i32,
         message: RequestMessage,
@@ -147,7 +146,7 @@ impl Client for IBClient {
     //     self.message_bus.read_packet_for_request(request_id)
     // }
 
-    fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator> {
+    fn receive_messages(&self, request_id: i32) -> Result<ResponsePacketIterator> {
         Err(anyhow!(
             "received_packets not implemented: {:?}",
             request_id
