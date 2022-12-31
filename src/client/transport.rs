@@ -157,34 +157,16 @@ impl MessageBus for TcpMessageBus {
         let recorder = self.recorder.clone();
 
         let handle = thread::spawn(move || loop {
-            let mut message = match read_packet(&reader) {
-                Ok(message) => message,
+            match read_packet(&reader) {
+                Ok(message) => {
+                    recorder.record_response(&message);
+                    dispatch_message(message, server_version, &requests);
+                },
                 Err(err) => {
                     error!("error reading packet: {:?}", err);
                     // thread::sleep(Duration::from_secs(1));
                     continue;
                 }
-            };
-
-            recorder.record_response(&message);
-
-            match message.message_type() {
-                IncomingMessages::Error => {
-                    let request_id = message.peek_int(2).unwrap_or(-1);
-
-                    if request_id == UNSPECIFIED_REQUEST_ID {
-                        error_event(server_version, &mut message).unwrap();
-                    } else {
-                        process_response(&requests, message);
-                    }
-                }
-                IncomingMessages::NextValidId => {
-                    process_next_valid_id(server_version, &mut message)
-                }
-                IncomingMessages::ManagedAccounts => {
-                    process_managed_accounts(server_version, &mut message)
-                }
-                _ => process_response(&requests, message),
             };
 
             // FIXME - does read block?
@@ -195,6 +177,27 @@ impl MessageBus for TcpMessageBus {
 
         Ok(())
     }
+}
+
+fn dispatch_message(mut message: ResponseMessage, server_version: i32, requests: &Arc<RwLock<HashMap<i32, Outbox>>>) {
+    match message.message_type() {
+        IncomingMessages::Error => {
+            let request_id = message.peek_int(2).unwrap_or(-1);
+
+            if request_id == UNSPECIFIED_REQUEST_ID {
+                error_event(server_version, message).unwrap();
+            } else {
+                process_response(&requests, message);
+            }
+        }
+        IncomingMessages::NextValidId => {
+            process_next_valid_id(server_version, message)
+        }
+        IncomingMessages::ManagedAccounts => {
+            process_managed_accounts(server_version, message)
+        }
+        _ => process_response(&requests, message),
+    };
 }
 
 fn read_packet(mut reader: &TcpStream) -> Result<ResponseMessage> {
@@ -219,7 +222,7 @@ fn read_header(mut reader: &TcpStream) -> Result<usize> {
     Ok(count as usize)
 }
 
-fn error_event(server_version: i32, packet: &mut ResponseMessage) -> Result<()> {
+fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<()> {
     packet.skip(); // message_id
 
     let version = packet.next_int()?;
@@ -255,7 +258,7 @@ fn error_event(server_version: i32, packet: &mut ResponseMessage) -> Result<()> 
     }
 }
 
-fn process_next_valid_id(_server_version: i32, packet: &mut ResponseMessage) {
+fn process_next_valid_id(_server_version: i32, mut packet: ResponseMessage) {
     packet.skip(); // message_id
     packet.skip(); // version
 
@@ -263,7 +266,7 @@ fn process_next_valid_id(_server_version: i32, packet: &mut ResponseMessage) {
     info!("next_valid_order_id: {}", order_id)
 }
 
-fn process_managed_accounts(_server_version: i32, packet: &mut ResponseMessage) {
+fn process_managed_accounts(_server_version: i32, mut packet: ResponseMessage) {
     packet.skip(); // message_id
     packet.skip(); // version
 
@@ -337,9 +340,6 @@ struct MessageRecorder {
     enabled: bool,
     recording_dir: String,
 }
-
-// let old_thread_count = GLOBAL_THREAD_COUNT.fetch_add(1, Ordering::SeqCst);
-// println!("live threads: {}", old_thread_count + 1);
 
 impl MessageRecorder {
     fn new() -> Self {
