@@ -384,7 +384,11 @@ impl MessageRecorder {
         }
 
         let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
-        fs::write(self.request_file(record_id), message.encode().replace("\0", "|")).unwrap();
+        fs::write(
+            self.request_file(record_id),
+            message.encode().replace("\0", "|"),
+        )
+        .unwrap();
     }
 
     fn record_response(&self, message: &ResponseMessage) {
@@ -393,7 +397,11 @@ impl MessageRecorder {
         }
 
         let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
-        fs::write(self.response_file(record_id), message.encode().replace("\0", "|")).unwrap();
+        fs::write(
+            self.response_file(record_id),
+            message.encode().replace("\0", "|"),
+        )
+        .unwrap();
     }
 }
 
