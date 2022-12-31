@@ -6,7 +6,6 @@ use anyhow::{anyhow, Result};
 use log::{debug, info};
 use time::OffsetDateTime;
 
-use self::transport::ResponsePacketIterator;
 use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
 use crate::contracts::{ComboLegOpenClose, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
@@ -29,7 +28,6 @@ pub trait Client {
         request_id: i32,
         message: RequestMessage,
     ) -> Result<ResponsePacketPromise>;
-    fn receive_messages(&self, request_id: i32) -> Result<ResponsePacketIterator>;
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
 
@@ -83,7 +81,7 @@ impl IBClient {
         let prelude = &mut RequestMessage::default();
         prelude.push_field(&format!("v{}..{}", MIN_SERVER_VERSION, MAX_SERVER_VERSION));
 
-        self.message_bus.write_packet(prelude)?;
+        self.message_bus.write_message(prelude)?;
 
         let mut status = self.message_bus.read_packet()?;
         self.server_version = status.next_int()?;
@@ -105,7 +103,7 @@ impl IBClient {
             prelude.push_field(&"");
         }
 
-        self.message_bus.write_packet(prelude)?;
+        self.message_bus.write_message(prelude)?;
 
         Ok(())
     }
@@ -128,8 +126,7 @@ impl Client for IBClient {
     }
 
     fn send_message(&mut self, packet: RequestMessage) -> Result<()> {
-        debug!("send_packet({:?})", packet);
-        self.message_bus.write_packet(&packet)
+        self.message_bus.write_message(&packet)
     }
 
     fn send_message_for_request(
@@ -139,18 +136,7 @@ impl Client for IBClient {
     ) -> Result<ResponsePacketPromise> {
         debug!("send_message({:?}, {:?})", request_id, message);
         self.message_bus
-            .write_packet_for_request(request_id, &message)
-    }
-
-    // fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket> {
-    //     self.message_bus.read_packet_for_request(request_id)
-    // }
-
-    fn receive_messages(&self, request_id: i32) -> Result<ResponsePacketIterator> {
-        Err(anyhow!(
-            "received_packets not implemented: {:?}",
-            request_id
-        ))
+            .write_message_for_request(request_id, &message)
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {

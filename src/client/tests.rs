@@ -32,17 +32,6 @@ impl Client for ClientStub {
         Err(anyhow!("not implemented"))
     }
 
-    // fn receive_packet(&mut self, _request_id: i32) -> Result<ResponsePacket> {
-    //     match self.response_packets.pop_front() {
-    //         Some(packet) => Ok(packet),
-    //         None => Err(anyhow!("ClientStub::receive_packet no packet")),
-    //     }
-    // }
-
-    fn receive_messages(&self, request_id: i32) -> Result<ResponsePacketIterator> {
-        Ok(ResponsePacketIterator {})
-    }
-
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
         Ok(())
     }

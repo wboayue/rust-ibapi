@@ -25,8 +25,8 @@ use crate::server_versions;
 pub trait MessageBus {
     fn read_packet(&mut self) -> Result<ResponseMessage>;
     fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponseMessage>;
-    fn write_packet(&mut self, packet: &RequestMessage) -> Result<()>;
-    fn write_packet_for_request(
+    fn write_message(&mut self, packet: &RequestMessage) -> Result<()>;
+    fn write_message_for_request(
         &mut self,
         request_id: i32,
         packet: &RequestMessage,
@@ -116,7 +116,7 @@ impl MessageBus for TcpMessageBus {
         Err(anyhow!("no way"))
     }
 
-    fn write_packet_for_request(
+    fn write_message_for_request(
         &mut self,
         request_id: i32,
         packet: &RequestMessage,
@@ -124,12 +124,12 @@ impl MessageBus for TcpMessageBus {
         let (sender, receiver) = mpsc::channel();
 
         self.add_sender(request_id, sender)?;
-        self.write_packet(packet)?;
+        self.write_message(packet)?;
 
         Ok(ResponsePacketPromise::new(receiver))
     }
 
-    fn write_packet(&mut self, message: &RequestMessage) -> Result<()> {
+    fn write_message(&mut self, message: &RequestMessage) -> Result<()> {
         let encoded = message.encode();
         debug!("{:?} ->", encoded);
 
