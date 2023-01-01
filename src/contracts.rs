@@ -324,7 +324,7 @@ pub struct TagValue {
 ///     let mut client = IBClient::connect("localhost:4002")?;
 ///
 ///     let contract = Contract::stock("TSLA");
-///     let results = contracts::find_contract_details(&mut client, &contract)?;
+///     let results = contracts::request_contract_details(&mut client, &contract)?;
 ///
 ///     for contract_detail in &results {
 ///         println!("contract: {:?}", contract_detail);
