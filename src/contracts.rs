@@ -130,6 +130,7 @@ impl Contract {
         Contract {
             symbol: symbol.to_string(),
             security_type: SecurityType::Stock,
+            currency: "USD".to_string(),
             ..Default::default()
         }
     }
@@ -332,7 +333,7 @@ pub struct TagValue {
 ///     Ok(())
 /// }
 /// ```
-pub fn find_contract_details<C: Client + Debug>(
+pub fn request_contract_details<C: Client + Debug>(
     client: &mut C,
     contract: &Contract,
 ) -> Result<Vec<ContractDetails>> {

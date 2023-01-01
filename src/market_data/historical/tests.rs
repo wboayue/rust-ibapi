@@ -3,14 +3,14 @@ use std::collections::VecDeque;
 use time::OffsetDateTime;
 
 use super::*;
-use crate::client::tests::ClientStub;
+use crate::client::stub::ClientStub;
 use crate::client::ResponseMessage;
 use crate::contracts;
 
 #[test]
 fn test_head_timestamp() {
     let mut client = ClientStub::default();
-    client.response_packets = VecDeque::from([ResponseMessage::from("10\x0000\x00cc")]);
+    // client.response_packets = VecDeque::from([ResponseMessage::from("10\x0000\x00cc")]);
 
     let contract = Contract::stock("MSFT");
     let what_to_show = "trades";

@@ -298,7 +298,7 @@ pub struct ResponsePacketPromise {
 }
 
 impl ResponsePacketPromise {
-    fn new(receiver: Receiver<ResponseMessage>) -> ResponsePacketPromise {
+    pub fn new(receiver: Receiver<ResponseMessage>) -> ResponsePacketPromise {
         ResponsePacketPromise { receiver }
     }
 

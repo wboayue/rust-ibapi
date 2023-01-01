@@ -204,8 +204,8 @@ pub trait ToField {
 
 #[derive(Default, Debug)]
 pub struct ResponseMessage {
-    i: usize,
-    fields: Vec<String>,
+    pub i: usize,
+    pub fields: Vec<String>,
 }
 
 impl ResponseMessage {
@@ -447,4 +447,7 @@ fn encode_option_field<T: ToField>(val: &Option<T>) -> String {
 }
 
 #[cfg(test)]
-pub mod tests;
+pub(crate) mod tests;
+
+#[cfg(test)]
+pub(crate) mod stub;

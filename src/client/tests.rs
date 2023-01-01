@@ -4,38 +4,6 @@ use anyhow::{anyhow, Result};
 
 use super::*;
 
-#[derive(Default, Debug)]
-pub struct ClientStub {
-    pub request_packets: Vec<RequestMessage>,
-    pub response_packets: VecDeque<ResponseMessage>,
-}
-
-impl Client for ClientStub {
-    fn next_request_id(&mut self) -> i32 {
-        1
-    }
-
-    fn server_version(&self) -> i32 {
-        1
-    }
-
-    fn send_message(&mut self, packet: RequestMessage) -> Result<()> {
-        self.request_packets.push(packet);
-        Ok(())
-    }
-
-    fn send_message_for_request(
-        &mut self,
-        request_id: i32,
-        message: RequestMessage,
-    ) -> Result<ResponsePacketPromise> {
-        Err(anyhow!("not implemented"))
-    }
-
-    fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
-        Ok(())
-    }
-}
 
 #[test]
 fn request_packet_from_fields() {
