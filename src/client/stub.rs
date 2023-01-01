@@ -1,5 +1,4 @@
-use std::collections::VecDeque;
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc;
 
 use anyhow::{anyhow, Result};
 
@@ -41,7 +40,7 @@ impl Client for ClientStub {
 
     fn send_message_for_request(
         &mut self,
-        request_id: i32,
+        _request_id: i32,
         message: RequestMessage,
     ) -> Result<ResponsePacketPromise> {
         self.request_messages.push(encode_message(&message));
@@ -49,14 +48,23 @@ impl Client for ClientStub {
         let (sender, receiver) = mpsc::channel();
 
         for message in &self.response_messages {
-            sender.send(ResponseMessage::from(message));
+            sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
         Ok(ResponsePacketPromise::new(receiver))
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
-        Ok(())
+        if version <= self.server_version {
+            Ok(())
+        } else {
+            Err(anyhow!(
+                "server version {} required, got {}: {}",
+                version,
+                self.server_version,
+                message
+            ))
+        }
     }
 }
 

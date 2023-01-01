@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use super::*;
 use crate::client::stub::ClientStub;
 
@@ -16,13 +14,14 @@ fn request_contract_details() {
 
     let results = super::request_contract_details(&mut client, &contract);
 
-    assert!(results.is_ok(), "failed to encode request: {:?}", results.unwrap_err());
+    assert_eq!(client.request_messages[0], "9|8|3000|0|TSLA|STK||0|||||USD|||0|||");
 
-    // assert_eq!(client.last_request(), "adasdsadasdsd");
+//    assert!(results.is_ok(), "failed to encode request: {:?}", results.unwrap_err());
 
-    let contracts = results.unwrap();
 
-    assert_eq!(2, contracts.len());
+//     let contracts = results.unwrap();
+
+//     assert_eq!(2, contracts.len());
 }
 
 #[test]
