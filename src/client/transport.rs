@@ -161,7 +161,7 @@ impl MessageBus for TcpMessageBus {
                 Ok(message) => {
                     recorder.record_response(&message);
                     dispatch_message(message, server_version, &requests);
-                },
+                }
                 Err(err) => {
                     error!("error reading packet: {:?}", err);
                     // thread::sleep(Duration::from_secs(1));
@@ -179,7 +179,11 @@ impl MessageBus for TcpMessageBus {
     }
 }
 
-fn dispatch_message(mut message: ResponseMessage, server_version: i32, requests: &Arc<RwLock<HashMap<i32, Outbox>>>) {
+fn dispatch_message(
+    mut message: ResponseMessage,
+    server_version: i32,
+    requests: &Arc<RwLock<HashMap<i32, Outbox>>>,
+) {
     match message.message_type() {
         IncomingMessages::Error => {
             let request_id = message.peek_int(2).unwrap_or(-1);
@@ -190,12 +194,8 @@ fn dispatch_message(mut message: ResponseMessage, server_version: i32, requests:
                 process_response(&requests, message);
             }
         }
-        IncomingMessages::NextValidId => {
-            process_next_valid_id(server_version, message)
-        }
-        IncomingMessages::ManagedAccounts => {
-            process_managed_accounts(server_version, message)
-        }
+        IncomingMessages::NextValidId => process_next_valid_id(server_version, message),
+        IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
         _ => process_response(&requests, message),
     };
 }

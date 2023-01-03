@@ -2,7 +2,6 @@ use anyhow::{anyhow, Result};
 
 use super::*;
 
-
 #[test]
 fn request_packet_from_fields() {
     // let mut packet = RequestPacket::default();

@@ -17,7 +17,7 @@ impl ClientStub {
         Self {
             server_version: server_version,
             next_request_id: 3000,
-            .. Default::default()
+            ..Default::default()
         }
     }
 }
@@ -48,7 +48,9 @@ impl Client for ClientStub {
         let (sender, receiver) = mpsc::channel();
 
         for message in &self.response_messages {
-            sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
+            sender
+                .send(ResponseMessage::from(&message.replace("|", "\0")))
+                .unwrap();
         }
 
         Ok(ResponsePacketPromise::new(receiver))

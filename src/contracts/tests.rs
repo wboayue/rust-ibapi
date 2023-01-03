@@ -2,7 +2,7 @@ use super::*;
 use crate::client::stub::ClientStub;
 
 #[test]
-fn request_contract_details() {
+fn request_stock_contract_details() {
     let mut client = ClientStub::new(server_versions::SIZE_RULES);
     client.response_messages = vec![
         "10|9001|TSLA|STK||0||SMART|USD|TSLA|NMS|NMS|76792991|0.01||ACTIVETIM,AD,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DARKONLY,DARKPOLL,DAY,DEACT,DEACTDIS,DEACTEOD,DIS,DUR,GAT,GTC,GTD,GTT,HID,IBKRATS,ICE,IMB,IOC,LIT,LMT,LOC,MIDPX,MIT,MKT,MOC,MTL,NGCOMB,NODARK,NONALGO,OCA,OPG,OPGREROUT,PEGBENCH,PEGMID,POSTATS,POSTONLY,PREOPGRTH,PRICECHK,REL,REL2MID,RELPCTOFS,RPI,RTH,SCALE,SCALEODD,SCALERST,SIZECHK,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,SWEEP,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF|SMART,AMEX,NYSE,CBOE,PHLX,ISE,CHX,ARCA,ISLAND,DRCTEDGE,BEX,BATS,EDGEA,CSFBALGO,JEFFALGO,BYX,IEX,EDGX,FOXRIVER,PEARL,NYSENAT,LTSE,MEMX,PSX|1|0|TESLA INC|NASDAQ||Consumer, Cyclical|Auto Manufacturers|Auto-Cars/Light Trucks|US/Eastern|20221229:0400-20221229:2000;20221230:0400-20221230:2000;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0400-20230103:2000|20221229:0930-20221229:1600;20221230:0930-20221230:1600;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0930-20230103:1600|||1|ISIN|US88160R1014|1|||26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26||COMMON|1|1|100||".to_string(),
@@ -14,8 +14,15 @@ fn request_contract_details() {
 
     let results = super::request_contract_details(&mut client, &contract);
 
-    assert_eq!(client.request_messages[0], "9|8|3000|0|TSLA|STK||0|||||USD|||0|||");
-    assert!(results.is_ok(), "failed to encode request: {:?}", results.unwrap_err());
+    assert_eq!(
+        client.request_messages[0],
+        "9|8|3000|0|TSLA|STK||0|||||USD|||0|||"
+    );
+    assert!(
+        results.is_ok(),
+        "failed to encode request: {:?}",
+        results.unwrap_err()
+    );
 
     let contracts = results.unwrap();
     assert_eq!(2, contracts.len());
@@ -46,7 +53,10 @@ fn request_contract_details() {
     assert_eq!(contracts[0].sec_id_list[0].tag, "ISIN");
     assert_eq!(contracts[0].sec_id_list[0].value, "US88160R1014");
     assert_eq!(contracts[0].agg_group, 1);
-    assert_eq!(contracts[0].market_rule_ids, "26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26");
+    assert_eq!(
+        contracts[0].market_rule_ids,
+        "26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26"
+    );
     assert_eq!(contracts[0].stock_type, "COMMON");
     assert_eq!(contracts[0].min_size, 1.0);
     assert_eq!(contracts[0].size_increment, 1.0);
