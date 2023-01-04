@@ -15,7 +15,7 @@ fn main() -> anyhow::Result<()> {
 
     thread::sleep(Duration::from_secs(2));
 
-    let results = contracts::find_contract_descriptions_matching(&mut client, "microsoft")?;
+    let results = contracts::request_matching_symbols(&mut client, "microsoft")?;
     for result in &results {
         println!("contract: {:?}", result);
     }

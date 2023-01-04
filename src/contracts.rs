@@ -619,7 +619,7 @@ pub struct ContractDescription {
 /// fn main() -> anyhow::Result<()> {
 ///     let mut client = IBClient::connect("localhost:4002")?;
 ///
-///     let contracts = contracts::find_contract_descriptions_matching(&mut client, "IB")?;
+///     let contracts = contracts::request_matching_symbols(&mut client, "IB")?;
 ///
 ///     for contract in &contracts {
 ///         println!("contract: {:?}", contract);
@@ -628,7 +628,7 @@ pub struct ContractDescription {
 ///     Ok(())
 /// }
 /// ```
-pub fn find_contract_descriptions_matching<C: Client + Debug>(
+pub fn request_matching_symbols<C: Client + Debug>(
     client: &mut C,
     pattern: &str,
 ) -> Result<Vec<ContractDescription>> {
