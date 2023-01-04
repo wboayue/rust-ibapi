@@ -65,6 +65,12 @@ fn request_stock_contract_details() {
 }
 
 #[test]
+fn request_bond_contract_details() {}
+
+#[test]
+fn request_future_contract_details() {}
+
+#[test]
 fn test_read_last_trade_date() {
     let mut contract = ContractDetails::default();
 
@@ -76,3 +82,6 @@ fn test_read_last_trade_date() {
 
     // handles bond contracts
 }
+
+#[test]
+fn request_matching_symbols() {}
