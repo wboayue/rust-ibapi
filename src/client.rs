@@ -6,14 +6,13 @@ use anyhow::{anyhow, Result};
 use log::{debug, info};
 use time::OffsetDateTime;
 
-use self::transport::ResponsePacketIterator;
 use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
-use crate::contracts::{Contract, SecurityType};
+use crate::contracts::{ComboLegOpenClose, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A};
 use crate::server_versions;
 
 mod transport;
-mod versions;
 
 const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
@@ -23,18 +22,16 @@ const INFINITY_STR: &str = "Infinity";
 pub trait Client {
     fn next_request_id(&mut self) -> i32;
     fn server_version(&self) -> i32;
-    fn send_packet(&mut self, packet: RequestPacket) -> Result<()>;
-    fn send_message(
+    fn send_message(&mut self, packet: RequestMessage) -> Result<()>;
+    fn send_message_for_request(
         &mut self,
         request_id: i32,
-        message: RequestPacket,
+        message: RequestMessage,
     ) -> Result<ResponsePacketPromise>;
-    // fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket>;
-    fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator>;
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
 
-pub struct BasicClient {
+pub struct IBClient {
     /// IB server version
     pub server_version: i32,
     /// IB Server time
@@ -50,20 +47,17 @@ pub struct BasicClient {
     next_request_id: i32,
 }
 
-impl BasicClient {
+impl IBClient {
     /// Opens connection to TWS workstation or gateway.
-    pub fn connect(connection_string: &str) -> Result<BasicClient> {
+    pub fn connect(connection_string: &str) -> Result<IBClient> {
         let message_bus = Box::new(TcpMessageBus::connect(connection_string)?);
-        BasicClient::do_connect(connection_string, message_bus)
+        IBClient::do_connect(connection_string, message_bus)
     }
 
-    fn do_connect(
-        connection_string: &str,
-        message_bus: Box<dyn MessageBus>,
-    ) -> Result<BasicClient> {
+    fn do_connect(connection_string: &str, message_bus: Box<dyn MessageBus>) -> Result<IBClient> {
         debug!("connecting to server with #{:?}", connection_string);
 
-        let mut client = BasicClient {
+        let mut client = IBClient {
             server_version: 0,
             server_time: String::from("hello"),
             next_valid_order_id: 0,
@@ -84,10 +78,10 @@ impl BasicClient {
     fn handshake(&mut self) -> Result<()> {
         self.message_bus.write("API\x00")?;
 
-        let prelude = &mut RequestPacket::default();
-        prelude.add_field(&format!("v{}..{}", MIN_SERVER_VERSION, MAX_SERVER_VERSION));
+        let prelude = &mut RequestMessage::default();
+        prelude.push_field(&format!("v{}..{}", MIN_SERVER_VERSION, MAX_SERVER_VERSION));
 
-        self.message_bus.write_packet(prelude)?;
+        self.message_bus.write_message(prelude)?;
 
         let mut status = self.message_bus.read_packet()?;
         self.server_version = status.next_int()?;
@@ -99,29 +93,29 @@ impl BasicClient {
     fn start_api(&mut self) -> Result<()> {
         const VERSION: i32 = 2;
 
-        let prelude = &mut RequestPacket::default();
+        let prelude = &mut RequestMessage::default();
 
-        prelude.add_field(&START_API);
-        prelude.add_field(&VERSION);
-        prelude.add_field(&self.client_id);
+        prelude.push_field(&START_API);
+        prelude.push_field(&VERSION);
+        prelude.push_field(&self.client_id);
 
         if self.server_version > server_versions::OPTIONAL_CAPABILITIES {
-            prelude.add_field(&"");
+            prelude.push_field(&"");
         }
 
-        self.message_bus.write_packet(prelude)?;
+        self.message_bus.write_message(prelude)?;
 
         Ok(())
     }
 }
 
-impl Drop for BasicClient {
+impl Drop for IBClient {
     fn drop(&mut self) {
         info!("dropping basic client")
     }
 }
 
-impl Client for BasicClient {
+impl Client for IBClient {
     fn next_request_id(&mut self) -> i32 {
         self.next_request_id += 1;
         self.next_request_id
@@ -131,30 +125,18 @@ impl Client for BasicClient {
         self.server_version
     }
 
-    fn send_packet(&mut self, packet: RequestPacket) -> Result<()> {
-        debug!("send_packet({:?})", packet);
-        self.message_bus.write_packet(&packet)
+    fn send_message(&mut self, packet: RequestMessage) -> Result<()> {
+        self.message_bus.write_message(&packet)
     }
 
-    fn send_message(
+    fn send_message_for_request(
         &mut self,
         request_id: i32,
-        message: RequestPacket,
+        message: RequestMessage,
     ) -> Result<ResponsePacketPromise> {
         debug!("send_message({:?}, {:?})", request_id, message);
         self.message_bus
-            .write_packet_for_request(request_id, &message)
-    }
-
-    // fn receive_packet(&mut self, request_id: i32) -> Result<ResponsePacket> {
-    //     self.message_bus.read_packet_for_request(request_id)
-    // }
-
-    fn receive_packets(&self, request_id: i32) -> Result<ResponsePacketIterator> {
-        Err(anyhow!(
-            "received_packets not implemented: {:?}",
-            request_id
-        ))
+            .write_message_for_request(request_id, &message)
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
@@ -171,7 +153,7 @@ impl Client for BasicClient {
     }
 }
 
-impl fmt::Debug for BasicClient {
+impl fmt::Debug for IBClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("IbClient")
             .field("server_version", &self.server_version)
@@ -182,17 +164,21 @@ impl fmt::Debug for BasicClient {
 }
 
 #[derive(Default, Debug)]
-pub struct RequestPacket {
+pub struct RequestMessage {
     fields: Vec<String>,
 }
 
-impl RequestPacket {
-    pub fn from(_fields: &[Box<dyn ToPacket>]) -> RequestPacket {
-        RequestPacket::default()
+impl RequestMessage {
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    pub fn add_field<T: ToPacket>(&mut self, val: &T) -> &RequestPacket {
-        let field = val.to_packet();
+    pub fn from(_fields: &[Box<dyn ToField>]) -> RequestMessage {
+        RequestMessage::default()
+    }
+
+    pub fn push_field<T: ToField>(&mut self, val: &T) -> &RequestMessage {
+        let field = val.to_field();
         self.fields.push(field);
         self
     }
@@ -204,7 +190,7 @@ impl RequestPacket {
     }
 }
 
-impl Index<usize> for RequestPacket {
+impl Index<usize> for RequestMessage {
     type Output = String;
 
     fn index(&self, i: usize) -> &Self::Output {
@@ -212,17 +198,17 @@ impl Index<usize> for RequestPacket {
     }
 }
 
-pub trait ToPacket {
-    fn to_packet(&self) -> String;
+pub trait ToField {
+    fn to_field(&self) -> String;
 }
 
 #[derive(Default, Debug)]
-pub struct ResponsePacket {
-    i: usize,
-    fields: Vec<String>,
+pub struct ResponseMessage {
+    pub i: usize,
+    pub fields: Vec<String>,
 }
 
-impl ResponsePacket {
+impl ResponseMessage {
     pub fn message_type(&self) -> IncomingMessages {
         if self.fields.is_empty() {
             IncomingMessages::NotValid
@@ -313,8 +299,8 @@ impl ResponsePacket {
         }
     }
 
-    pub fn from(fields: &str) -> ResponsePacket {
-        ResponsePacket {
+    pub fn from(fields: &str) -> ResponseMessage {
+        ResponseMessage {
             i: 0,
             fields: fields.split('\x00').map(|x| x.to_string()).collect(),
         }
@@ -327,10 +313,16 @@ impl ResponsePacket {
     pub fn reset(&mut self) {
         self.i = 0;
     }
+
+    pub fn encode(&self) -> String {
+        let mut data = self.fields.join("\0");
+        data.push('\0');
+        data
+    }
 }
 
-impl ToPacket for bool {
-    fn to_packet(&self) -> String {
+impl ToField for bool {
+    fn to_field(&self) -> String {
         if *self {
             String::from("1")
         } else {
@@ -339,47 +331,123 @@ impl ToPacket for bool {
     }
 }
 
-impl ToPacket for String {
-    fn to_packet(&self) -> String {
+impl ToField for String {
+    fn to_field(&self) -> String {
         self.clone()
     }
 }
 
-impl ToPacket for i32 {
-    fn to_packet(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToPacket for f64 {
-    fn to_packet(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToPacket for SecurityType {
-    fn to_packet(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToPacket for &str {
-    fn to_packet(&self) -> String {
+impl ToField for &str {
+    fn to_field(&self) -> String {
         <&str>::clone(self).to_string()
     }
 }
 
-impl ToPacket for &Contract {
-    fn to_packet(&self) -> String {
-        format!("{:?}", self)
+impl ToField for usize {
+    fn to_field(&self) -> String {
+        self.to_string()
     }
 }
 
-impl ToPacket for OutgoingMessages {
-    fn to_packet(&self) -> String {
+impl ToField for i32 {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToField for Option<i32> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
+impl ToField for f64 {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToField for Option<f64> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
+impl ToField for SecurityType {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToField for Option<SecurityType> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
+impl ToField for OutgoingMessages {
+    fn to_field(&self) -> String {
         (*self as i32).to_string()
     }
 }
 
+impl ToField for Action {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToField for ComboLegOpenClose {
+    fn to_field(&self) -> String {
+        (*self as u8).to_string()
+    }
+}
+
+impl ToField for OrderOpenClose {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToField for Option<OrderOpenClose> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
+impl ToField for Rule80A {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToField for Option<Rule80A> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
+impl ToField for OrderCondition {
+    fn to_field(&self) -> String {
+        (*self as u8).to_string()
+    }
+}
+
+impl ToField for Option<OrderCondition> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
+fn encode_option_field<T: ToField>(val: &Option<T>) -> String {
+    match val {
+        Some(val) => val.to_field(),
+        None => String::from(""),
+    }
+}
+
 #[cfg(test)]
-pub mod tests;
+pub(crate) mod tests;
+
+#[cfg(test)]
+pub(crate) mod stub;

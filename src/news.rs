@@ -21,3 +21,9 @@ pub fn news_providers<C: Client + Debug>(client: &C) -> Result<Vec<NewsProvider>
     print!("{:?}", client);
     Err(anyhow!("not implemented!"))
 }
+
+// :reqNewsArticle below.
+
+// reqHistoricalNews
+
+//reqNewsArticle s

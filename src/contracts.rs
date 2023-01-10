@@ -4,7 +4,7 @@ use std::string::ToString;
 use anyhow::{anyhow, Result};
 use log::{error, info};
 
-use crate::client::{Client, RequestPacket, ResponsePacket};
+use crate::client::{Client, RequestMessage, ResponseMessage};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
 
@@ -118,7 +118,7 @@ pub struct Contract {
     pub combo_legs_description: String,
     pub combo_legs: Vec<ComboLeg>,
     /// Delta and underlying price for Delta-Neutral combo orders. Underlying (STK or FUT), delta and underlying price goes into this attribute.
-    pub delta_neutral_contract: DeltaNeutralContract,
+    pub delta_neutral_contract: Option<DeltaNeutralContract>,
 
     pub issuer_id: String,
     pub description: String,
@@ -130,8 +130,30 @@ impl Contract {
         Contract {
             symbol: symbol.to_string(),
             security_type: SecurityType::Stock,
+            currency: "USD".to_string(),
             ..Default::default()
         }
+    }
+
+    /// Is Bag request
+    pub fn is_bag(&self) -> bool {
+        self.security_type == SecurityType::Spread
+    }
+
+    pub fn push_fields(&self, message: &mut RequestMessage) {
+        message.push_field(&self.contract_id);
+        message.push_field(&self.symbol);
+        message.push_field(&self.security_type);
+        message.push_field(&self.last_trade_date_or_contract_month);
+        message.push_field(&self.strike);
+        message.push_field(&self.right);
+        message.push_field(&self.multiplier);
+        message.push_field(&self.exchange);
+        message.push_field(&self.primary_exchange);
+        message.push_field(&self.currency);
+        message.push_field(&self.local_symbol);
+        message.push_field(&self.trading_class);
+        message.push_field(&self.include_expired);
     }
 }
 
@@ -148,7 +170,7 @@ pub struct ComboLeg {
     pub exchange: String,
     /// Specifies whether an order is an open or closing order.
     /// For instituational customers to determine if this order is to open or close a position.
-    pub open_close: OpenClose,
+    pub open_close: ComboLegOpenClose,
     /// For stock legs when doing short selling. Set to 1 = clearing broker, 2 = third party.
     pub short_sale_slot: i32,
     /// When ShortSaleSlot is 2, this field shall contain the designated location.
@@ -157,18 +179,18 @@ pub struct ComboLeg {
     pub exempt_code: i32,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 /// OpenClose specifies whether an order is an open or closing order.
-pub enum OpenClose {
+pub enum ComboLegOpenClose {
     /// 0 - Same as the parent security. This is the only option for retail customers.
-    Same,
-    /// 1 - Open. This value is only valid for institutional customers.
-    Open,
-    /// 2 - Close. This value is only valid for institutional customers.
-    Close,
-    /// 3 - Unknown.
     #[default]
-    Unknown,
+    Same = 0,
+    /// 1 - Open. This value is only valid for institutional customers.
+    Open = 1,
+    /// 2 - Close. This value is only valid for institutional customers.
+    Close = 2,
+    /// 3 - Unknown.
+    Unknown = 3,
 }
 
 #[derive(Debug, Default)]
@@ -295,14 +317,14 @@ pub struct TagValue {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::BasicClient;
+/// use ibapi::client::IBClient;
 /// use ibapi::contracts::{self, Contract};
 ///
 /// fn main() -> anyhow::Result<()> {
-///     let mut client = BasicClient::connect("localhost:4002")?;
+///     let mut client = IBClient::connect("localhost:4002")?;
 ///
 ///     let contract = Contract::stock("TSLA");
-///     let results = contracts::find_contract_details(&mut client, &contract)?;
+///     let results = contracts::request_contract_details(&mut client, &contract)?;
 ///
 ///     for contract_detail in &results {
 ///         println!("contract: {:?}", contract_detail);
@@ -311,7 +333,7 @@ pub struct TagValue {
 ///     Ok(())
 /// }
 /// ```
-pub fn find_contract_details<C: Client + Debug>(
+pub fn request_contract_details<C: Client + Debug>(
     client: &mut C,
     contract: &Contract,
 ) -> Result<Vec<ContractDetails>> {
@@ -346,7 +368,7 @@ pub fn find_contract_details<C: Client + Debug>(
     let request_id = client.next_request_id();
     let packet = encode_request_contract_data(client.server_version(), request_id, contract)?;
 
-    let responses = client.send_message(request_id, packet)?;
+    let responses = client.send_message_for_request(request_id, packet)?;
 
     let mut contract_details: Vec<ContractDetails> = Vec::default();
 
@@ -376,63 +398,63 @@ fn encode_request_contract_data(
     server_version: i32,
     request_id: i32,
     contract: &Contract,
-) -> Result<RequestPacket> {
+) -> Result<RequestMessage> {
     const VERSION: i32 = 8;
 
-    let mut packet = RequestPacket::default();
+    let mut packet = RequestMessage::default();
 
-    packet.add_field(&OutgoingMessages::RequestContractData);
-    packet.add_field(&VERSION);
+    packet.push_field(&OutgoingMessages::RequestContractData);
+    packet.push_field(&VERSION);
 
     if server_version >= server_versions::CONTRACT_DATA_CHAIN {
-        packet.add_field(&request_id);
+        packet.push_field(&request_id);
     }
 
     if server_version >= server_versions::CONTRACT_CONID {
-        packet.add_field(&contract.contract_id);
+        packet.push_field(&contract.contract_id);
     }
 
-    packet.add_field(&contract.symbol);
-    packet.add_field(&contract.security_type);
-    packet.add_field(&contract.last_trade_date_or_contract_month);
-    packet.add_field(&contract.strike);
-    packet.add_field(&contract.right);
+    packet.push_field(&contract.symbol);
+    packet.push_field(&contract.security_type);
+    packet.push_field(&contract.last_trade_date_or_contract_month);
+    packet.push_field(&contract.strike);
+    packet.push_field(&contract.right);
 
     if server_version >= 15 {
-        packet.add_field(&contract.multiplier);
+        packet.push_field(&contract.multiplier);
     }
 
     if server_version >= server_versions::PRIMARYEXCH {
-        packet.add_field(&contract.exchange);
-        packet.add_field(&contract.primary_exchange);
+        packet.push_field(&contract.exchange);
+        packet.push_field(&contract.primary_exchange);
     } else if server_version >= server_versions::LINKING {
         if !contract.primary_exchange.is_empty()
             && (contract.exchange == "BEST" || contract.exchange == "SMART")
         {
-            packet.add_field(&format!(
+            packet.push_field(&format!(
                 "{}:{}",
                 contract.exchange, contract.primary_exchange
             ));
         } else {
-            packet.add_field(&contract.exchange);
+            packet.push_field(&contract.exchange);
         }
     }
 
-    packet.add_field(&contract.currency);
-    packet.add_field(&contract.local_symbol);
+    packet.push_field(&contract.currency);
+    packet.push_field(&contract.local_symbol);
 
     if server_version >= server_versions::TRADING_CLASS {
-        packet.add_field(&contract.trading_class);
+        packet.push_field(&contract.trading_class);
     }
     if server_version >= 31 {
-        packet.add_field(&contract.include_expired);
+        packet.push_field(&contract.include_expired);
     }
     if server_version >= server_versions::SEC_ID_TYPE {
-        packet.add_field(&contract.security_id_type);
-        packet.add_field(&contract.security_id);
+        packet.push_field(&contract.security_id_type);
+        packet.push_field(&contract.security_id);
     }
     if server_version >= server_versions::BOND_ISSUERID {
-        packet.add_field(&contract.issuer_id);
+        packet.push_field(&contract.issuer_id);
     }
 
     Ok(packet)
@@ -440,7 +462,7 @@ fn encode_request_contract_data(
 
 fn decode_contract_details(
     server_version: i32,
-    message: &mut ResponsePacket,
+    message: &mut ResponseMessage,
 ) -> Result<ContractDetails> {
     message.skip(); // message type
 
@@ -591,13 +613,13 @@ pub struct ContractDescription {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::BasicClient;
+/// use ibapi::client::IBClient;
 /// use ibapi::contracts;
 ///
 /// fn main() -> anyhow::Result<()> {
-///     let mut client = BasicClient::connect("localhost:4002")?;
+///     let mut client = IBClient::connect("localhost:4002")?;
 ///
-///     let contracts = contracts::find_contract_descriptions_matching(&mut client, "IB")?;
+///     let contracts = contracts::request_matching_symbols(&mut client, "IB")?;
 ///
 ///     for contract in &contracts {
 ///         println!("contract: {:?}", contract);
@@ -606,7 +628,7 @@ pub struct ContractDescription {
 ///     Ok(())
 /// }
 /// ```
-pub fn find_contract_descriptions_matching<C: Client + Debug>(
+pub fn request_matching_symbols<C: Client + Debug>(
     client: &mut C,
     pattern: &str,
 ) -> Result<Vec<ContractDescription>> {
@@ -618,7 +640,7 @@ pub fn find_contract_descriptions_matching<C: Client + Debug>(
     let request_id = client.next_request_id();
     let request = encode_request_matching_symbols(request_id, pattern)?;
 
-    let mut responses = client.send_message(request_id, request)?;
+    let mut responses = client.send_message_for_request(request_id, request)?;
 
     if let Some(mut message) = responses.next() {
         match message.message_type() {
@@ -639,19 +661,19 @@ pub fn find_contract_descriptions_matching<C: Client + Debug>(
     Ok(Vec::default())
 }
 
-fn encode_request_matching_symbols(request_id: i32, pattern: &str) -> Result<RequestPacket> {
-    let mut message = RequestPacket::default();
+fn encode_request_matching_symbols(request_id: i32, pattern: &str) -> Result<RequestMessage> {
+    let mut message = RequestMessage::default();
 
-    message.add_field(&OutgoingMessages::RequestMatchingSymbols);
-    message.add_field(&request_id);
-    message.add_field(&pattern);
+    message.push_field(&OutgoingMessages::RequestMatchingSymbols);
+    message.push_field(&request_id);
+    message.push_field(&pattern);
 
     Ok(message)
 }
 
 fn decode_contract_descriptions(
     server_version: i32,
-    message: &mut ResponsePacket,
+    message: &mut ResponseMessage,
 ) -> Result<Vec<ContractDescription>> {
     message.skip(); // message type
 

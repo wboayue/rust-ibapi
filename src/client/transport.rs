@@ -1,8 +1,11 @@
 use std::collections::HashMap;
+use std::env;
+use std::fs;
 use std::io::prelude::*;
 use std::io::Cursor;
 use std::iter::Iterator;
 use std::net::TcpStream;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -12,26 +15,28 @@ use std::time::Duration;
 use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use log::{debug, error, info};
+use time::macros::{datetime, format_description};
+use time::OffsetDateTime;
 
-use crate::client::{RequestPacket, ResponsePacket};
+use crate::client::{RequestMessage, ResponseMessage};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
 
 pub trait MessageBus {
-    fn read_packet(&mut self) -> Result<ResponsePacket>;
-    fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponsePacket>;
-    fn write_packet(&mut self, packet: &RequestPacket) -> Result<()>;
-    fn write_packet_for_request(
+    fn read_packet(&mut self) -> Result<ResponseMessage>;
+    fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponseMessage>;
+    fn write_message(&mut self, packet: &RequestMessage) -> Result<()>;
+    fn write_message_for_request(
         &mut self,
         request_id: i32,
-        packet: &RequestPacket,
+        packet: &RequestMessage,
     ) -> Result<ResponsePacketPromise>;
     fn write(&mut self, packet: &str) -> Result<()>;
     fn process_messages(&mut self, server_version: i32) -> Result<()>;
 }
 
 #[derive(Debug)]
-struct Outbox(Sender<ResponsePacket>);
+struct Outbox(Sender<ResponseMessage>);
 
 #[derive(Debug)]
 pub struct TcpMessageBus {
@@ -39,6 +44,7 @@ pub struct TcpMessageBus {
     writer: Box<TcpStream>,
     handles: Vec<JoinHandle<i32>>,
     requests: Arc<RwLock<HashMap<i32, Outbox>>>,
+    recorder: MessageRecorder,
 }
 
 unsafe impl Send for Outbox {}
@@ -57,10 +63,11 @@ impl TcpMessageBus {
             writer,
             handles: Vec::default(),
             requests,
+            recorder: MessageRecorder::new(),
         })
     }
 
-    fn add_sender(&mut self, request_id: i32, sender: Sender<ResponsePacket>) -> Result<()> {
+    fn add_sender(&mut self, request_id: i32, sender: Sender<ResponseMessage>) -> Result<()> {
         let requests = Arc::clone(&self.requests);
 
         match requests.write() {
@@ -81,11 +88,11 @@ impl TcpMessageBus {
 const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 impl MessageBus for TcpMessageBus {
-    fn read_packet(&mut self) -> Result<ResponsePacket> {
+    fn read_packet(&mut self) -> Result<ResponseMessage> {
         read_packet(&self.reader)
     }
 
-    fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponsePacket> {
+    fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponseMessage> {
         debug!("read message for request_id {:?}", request_id);
 
         let requests = Arc::clone(&self.requests);
@@ -109,21 +116,21 @@ impl MessageBus for TcpMessageBus {
         Err(anyhow!("no way"))
     }
 
-    fn write_packet_for_request(
+    fn write_message_for_request(
         &mut self,
         request_id: i32,
-        packet: &RequestPacket,
+        packet: &RequestMessage,
     ) -> Result<ResponsePacketPromise> {
         let (sender, receiver) = mpsc::channel();
 
         self.add_sender(request_id, sender)?;
-        self.write_packet(packet)?;
+        self.write_message(packet)?;
 
         Ok(ResponsePacketPromise::new(receiver))
     }
 
-    fn write_packet(&mut self, packet: &RequestPacket) -> Result<()> {
-        let encoded = packet.encode();
+    fn write_message(&mut self, message: &RequestMessage) -> Result<()> {
+        let encoded = message.encode();
         debug!("{:?} ->", encoded);
 
         let data = encoded.as_bytes();
@@ -132,6 +139,8 @@ impl MessageBus for TcpMessageBus {
 
         self.writer.write_all(&header)?;
         self.writer.write_all(data)?;
+
+        self.recorder.record_request(message);
 
         Ok(())
     }
@@ -145,34 +154,19 @@ impl MessageBus for TcpMessageBus {
     fn process_messages(&mut self, server_version: i32) -> Result<()> {
         let reader = Arc::clone(&self.reader);
         let requests = Arc::clone(&self.requests);
+        let recorder = self.recorder.clone();
 
         let handle = thread::spawn(move || loop {
-            info!("tick");
-
-            let mut packet = match read_packet(&reader) {
-                Ok(packet) => packet,
+            match read_packet(&reader) {
+                Ok(message) => {
+                    recorder.record_response(&message);
+                    dispatch_message(message, server_version, &requests);
+                }
                 Err(err) => {
                     error!("error reading packet: {:?}", err);
                     // thread::sleep(Duration::from_secs(1));
                     continue;
                 }
-            };
-
-            match packet.message_type() {
-                IncomingMessages::Error => {
-                    let request_id = packet.peek_int(2).unwrap_or(-1);
-
-                    if request_id == UNSPECIFIED_REQUEST_ID {
-                        error_event(server_version, &mut packet).unwrap();
-                    } else {
-                        process_response(&requests, packet);
-                    }
-                }
-                IncomingMessages::NextValidId => process_next_valid_id(server_version, &mut packet),
-                IncomingMessages::ManagedAccounts => {
-                    process_managed_accounts(server_version, &mut packet)
-                }
-                _ => process_response(&requests, packet),
             };
 
             // FIXME - does read block?
@@ -185,13 +179,34 @@ impl MessageBus for TcpMessageBus {
     }
 }
 
-fn read_packet(mut reader: &TcpStream) -> Result<ResponsePacket> {
+fn dispatch_message(
+    mut message: ResponseMessage,
+    server_version: i32,
+    requests: &Arc<RwLock<HashMap<i32, Outbox>>>,
+) {
+    match message.message_type() {
+        IncomingMessages::Error => {
+            let request_id = message.peek_int(2).unwrap_or(-1);
+
+            if request_id == UNSPECIFIED_REQUEST_ID {
+                error_event(server_version, message).unwrap();
+            } else {
+                process_response(&requests, message);
+            }
+        }
+        IncomingMessages::NextValidId => process_next_valid_id(server_version, message),
+        IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
+        _ => process_response(&requests, message),
+    };
+}
+
+fn read_packet(mut reader: &TcpStream) -> Result<ResponseMessage> {
     let message_size = read_header(reader)?;
     let mut data = vec![0_u8; message_size];
 
     reader.read_exact(&mut data)?;
 
-    let packet = ResponsePacket::from(&String::from_utf8(data)?);
+    let packet = ResponseMessage::from(&String::from_utf8(data)?);
     debug!("raw string: {:?}", packet);
 
     Ok(packet)
@@ -207,7 +222,7 @@ fn read_header(mut reader: &TcpStream) -> Result<usize> {
     Ok(count as usize)
 }
 
-fn error_event(server_version: i32, packet: &mut ResponsePacket) -> Result<()> {
+fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<()> {
     packet.skip(); // message_id
 
     let version = packet.next_int()?;
@@ -243,7 +258,7 @@ fn error_event(server_version: i32, packet: &mut ResponsePacket) -> Result<()> {
     }
 }
 
-fn process_next_valid_id(_server_version: i32, packet: &mut ResponsePacket) {
+fn process_next_valid_id(_server_version: i32, mut packet: ResponseMessage) {
     packet.skip(); // message_id
     packet.skip(); // version
 
@@ -251,7 +266,7 @@ fn process_next_valid_id(_server_version: i32, packet: &mut ResponsePacket) {
     info!("next_valid_order_id: {}", order_id)
 }
 
-fn process_managed_accounts(_server_version: i32, packet: &mut ResponsePacket) {
+fn process_managed_accounts(_server_version: i32, mut packet: ResponseMessage) {
     packet.skip(); // message_id
     packet.skip(); // version
 
@@ -259,7 +274,7 @@ fn process_managed_accounts(_server_version: i32, packet: &mut ResponsePacket) {
     info!("managed accounts: {}", managed_accounts)
 }
 
-fn process_response(requests: &Arc<RwLock<HashMap<i32, Outbox>>>, packet: ResponsePacket) {
+fn process_response(requests: &Arc<RwLock<HashMap<i32, Outbox>>>, packet: ResponseMessage) {
     let collection = requests.read().unwrap();
 
     let request_id = packet.request_id().unwrap_or(-1);
@@ -279,15 +294,15 @@ fn process_response(requests: &Arc<RwLock<HashMap<i32, Outbox>>>, packet: Respon
 
 #[derive(Debug)]
 pub struct ResponsePacketPromise {
-    receiver: Receiver<ResponsePacket>,
+    receiver: Receiver<ResponseMessage>,
 }
 
 impl ResponsePacketPromise {
-    fn new(receiver: Receiver<ResponsePacket>) -> ResponsePacketPromise {
+    pub fn new(receiver: Receiver<ResponseMessage>) -> ResponsePacketPromise {
         ResponsePacketPromise { receiver }
     }
 
-    pub fn message(&self) -> Result<ResponsePacket> {
+    pub fn message(&self) -> Result<ResponseMessage> {
         // Duration::from_millis(100)
 
         Ok(self.receiver.recv_timeout(Duration::from_millis(20000))?)
@@ -306,7 +321,7 @@ impl ResponsePacketPromise {
 pub struct ResponsePacketIterator {}
 
 impl Iterator for ResponsePacketPromise {
-    type Item = ResponsePacket;
+    type Item = ResponseMessage;
     fn next(&mut self) -> Option<Self::Item> {
         match self.receiver.recv_timeout(Duration::from_millis(10000)) {
             Err(e) => {
@@ -315,5 +330,132 @@ impl Iterator for ResponsePacketPromise {
             }
             Ok(message) => Some(message),
         }
+    }
+}
+
+static RECORDING_SEQ: AtomicUsize = AtomicUsize::new(0);
+
+#[derive(Clone, Debug)]
+struct MessageRecorder {
+    enabled: bool,
+    recording_dir: String,
+}
+
+impl MessageRecorder {
+    fn new() -> Self {
+        match env::var("IBAPI_RECORDING_DIR") {
+            Ok(dir) => {
+                if dir.is_empty() {
+                    MessageRecorder {
+                        enabled: false,
+                        recording_dir: String::from(""),
+                    }
+                } else {
+                    let format = format_description!("[year]-[month]-[day]-[hour]-[minute]");
+                    let now = OffsetDateTime::now_utc();
+                    let recording_dir = format!("{}/{}", dir, now.format(&format).unwrap());
+
+                    fs::create_dir_all(&recording_dir).unwrap();
+
+                    MessageRecorder {
+                        enabled: true,
+                        recording_dir: recording_dir,
+                    }
+                }
+            }
+            _ => MessageRecorder {
+                enabled: false,
+                recording_dir: String::from(""),
+            },
+        }
+    }
+
+    fn request_file(&self, record_id: usize) -> String {
+        format!("{}/{:04}-request.msg", self.recording_dir, record_id)
+    }
+
+    fn response_file(&self, record_id: usize) -> String {
+        format!("{}/{:04}-response.msg", self.recording_dir, record_id)
+    }
+
+    fn record_request(&self, message: &RequestMessage) {
+        if !self.enabled {
+            return;
+        }
+
+        let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
+        fs::write(
+            self.request_file(record_id),
+            message.encode().replace("\0", "|"),
+        )
+        .unwrap();
+    }
+
+    fn record_response(&self, message: &ResponseMessage) {
+        if !self.enabled {
+            return;
+        }
+
+        let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
+        fs::write(
+            self.response_file(record_id),
+            message.encode().replace("\0", "|"),
+        )
+        .unwrap();
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::env;
+
+    #[test]
+    fn env_var_enables_recorder() {
+        let key = String::from("IBAPI_RECORDING_DIR");
+        let dir = String::from("/tmp/records");
+
+        env::set_var(&key, &dir);
+
+        let recorder = MessageRecorder::new();
+
+        assert_eq!(true, recorder.enabled);
+        assert!(
+            &recorder.recording_dir.starts_with(&dir),
+            "{} != {}",
+            &recorder.recording_dir,
+            &dir
+        )
+    }
+
+    #[test]
+    fn recorder_is_disabled() {
+        let key = String::from("IBAPI_RECORDING_DIR");
+
+        env::set_var(&key, &"");
+
+        let recorder = MessageRecorder::new();
+
+        assert_eq!(false, recorder.enabled);
+        assert_eq!("", &recorder.recording_dir);
+    }
+
+    #[test]
+    fn recorder_generates_output_file() {
+        let recording_dir = String::from("/tmp/records");
+
+        let recorder = MessageRecorder {
+            enabled: true,
+            recording_dir: recording_dir,
+        };
+
+        assert_eq!(
+            format!("{}/0001-request.msg", recorder.recording_dir),
+            recorder.request_file(1)
+        );
+        assert_eq!(
+            format!("{}/0002-response.msg", recorder.recording_dir),
+            recorder.response_file(2)
+        );
     }
 }

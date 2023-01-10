@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
 
-use crate::client::{Client, RequestPacket, ResponsePacket};
+use crate::client::{Client, RequestMessage, ResponseMessage};
 use crate::contracts::Contract;
 use crate::domain::TickAttribBidAsk;
 use crate::server_versions;
@@ -14,12 +14,12 @@ use crate::server_versions;
 /// Returns the timestamp of earliest available historical data for a contract and data type.
 /// ```no_run
 ///     use anyhow::Result;
-///     use ibapi::client::BasicClient;
+///     use ibapi::client::IBClient;
 ///     use ibapi::contracts::{self, Contract};
 ///     use ibapi::market_data::historical;
 ///
 ///     fn main() -> Result<()> {
-///         let mut client = BasicClient::connect("localhost:4002")?;
+///         let mut client = IBClient::connect("localhost:4002")?;
 ///
 ///         let contract = Contract::stock("MSFT");
 ///         let what_to_show = "trades";
@@ -46,7 +46,7 @@ pub fn head_timestamp<C: Client + Debug>(
     let request_id = client.next_request_id();
     let request = encode_head_timestamp(request_id, contract, what_to_show, use_rth)?;
 
-    let promise = client.send_message(request_id, request)?;
+    let promise = client.send_message_for_request(request_id, request)?;
     let mut response = promise.message()?;
 
     decode_head_timestamp(&mut response)
@@ -58,15 +58,29 @@ pub fn encode_head_timestamp(
     contract: &Contract,
     what_to_show: &str,
     use_rth: bool,
-) -> Result<RequestPacket> {
-    let mut packet = RequestPacket::default();
+) -> Result<RequestMessage> {
+    let mut packet = RequestMessage::default();
 
-    packet.add_field(&12);
-    packet.add_field(&request_id);
-    packet.add_field(&contract);
-    packet.add_field(&use_rth);
-    packet.add_field(&what_to_show);
-    packet.add_field(&"format_date");
+    packet.push_field(&12);
+    packet.push_field(&request_id);
+    contract.push_fields(&mut packet);
+    packet.push_field(&use_rth);
+    packet.push_field(&what_to_show);
+    packet.push_field(&"format_date");
+
+    // source.AddParameter(value.ConId);
+    // source.AddParameter(value.Symbol);
+    // source.AddParameter(value.SecType);
+    // source.AddParameter(value.LastTradeDateOrContractMonth);
+    // source.AddParameter(value.Strike);
+    // source.AddParameter(value.Right);
+    // source.AddParameter(value.Multiplier);
+    // source.AddParameter(value.Exchange);
+    // source.AddParameter(value.PrimaryExch);
+    // source.AddParameter(value.Currency);
+    // source.AddParameter(value.LocalSymbol);
+    // source.AddParameter(value.TradingClass);
+    // source.AddParameter(value.IncludeExpired);
 
     Ok(packet)
 }
@@ -90,7 +104,7 @@ pub fn encode_head_timestamp(
 //     source.AddParameter(value.IncludeExpired);
 // }
 
-fn decode_head_timestamp(packet: &mut ResponsePacket) -> Result<OffsetDateTime> {
+fn decode_head_timestamp(packet: &mut ResponseMessage) -> Result<OffsetDateTime> {
     let _request_id = packet.next_int()?;
     let head_timestamp = packet.next_date_time()?;
 

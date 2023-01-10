@@ -12,10 +12,10 @@
 //! Fast and easy queue abstraction.
 //!```no_run
 //!     use anyhow;
-//!     use ibapi::client::BasicClient;     
+//!     use ibapi::client::IBClient;     
 //!     
 //!     fn main() -> anyhow::Result<()> {
-//!         let client = BasicClient::connect("localhost:4002:100")?;
+//!         let client = IBClient::connect("localhost:4002:100")?;
 //!         println!("Client: {:?}", client);
 //!         Ok(())
 //!     }
@@ -39,9 +39,9 @@ pub mod news;
 /// APIs for placing orders
 pub mod orders;
 
-pub mod server_versions;
-
-mod messages;
-
 /// APIs for requesting account information
 pub mod accounts;
+
+mod constants;
+mod messages;
+mod server_versions;
