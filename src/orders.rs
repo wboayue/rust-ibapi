@@ -1312,3 +1312,6 @@ pub fn request_executions<C: Client + Debug>() {
 }
 
 pub fn request_market_rule<C: Client + Debug>(market_rule_id: i32) {}
+
+#[cfg(test)]
+mod tests;
