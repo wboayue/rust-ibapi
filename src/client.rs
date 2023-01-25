@@ -67,11 +67,13 @@ impl IBClient {
             next_request_id: 9000,
         };
 
-        let promise = client.message_bus.negotiate_connection(client.client_id)?;
-        let server_status = promise.server_status()?;
+        let status_promise = client.message_bus.negotiate_connection(client.client_id)?;
+        let server_status = status_promise.server_status()?;
 
         client.server_version = server_status.server_version;
         client.server_time = server_status.server_time;
+
+        client.message_bus.process_messages(server_status.server_version)?;
 
         Ok(client)
     }

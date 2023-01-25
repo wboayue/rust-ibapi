@@ -150,8 +150,6 @@ impl MessageBus for TcpMessageBus {
         let server_status = self.handshake()?;
         self.start_api(client_id, server_status.server_version)?;
 
-        self.process_messages(server_status.server_version)?;
-
         Ok(ServerStatusPromise { server_status })
     }
 
