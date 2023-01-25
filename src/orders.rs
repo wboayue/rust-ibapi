@@ -600,7 +600,7 @@ pub fn place_order<C: Client + Debug>(
     Ok(())
 }
 
-fn verify_order<C: Client>(client: &mut C, order: &Order, order_id: i32) -> Result<()> {
+fn verify_order<C: Client>(client: &mut C, order: &Order, _order_id: i32) -> Result<()> {
     let is_bag_order: bool = false; // StringsAreEqual(Constants.BagSecType, contract.SecType)
 
     if order.scale_init_level_size.is_some() || order.scale_price_increment.is_some() {
@@ -834,7 +834,7 @@ fn verify_order<C: Client>(client: &mut C, order: &Order, order_id: i32) -> Resu
 fn verify_order_contract<C: Client>(
     client: &mut C,
     contract: &Contract,
-    order_id: i32,
+    _order_id: i32,
 ) -> Result<()> {
     if contract.combo_legs.iter().any(|combo_leg| {
         combo_leg.short_sale_slot != 0 || !combo_leg.designated_location.is_empty()

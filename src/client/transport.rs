@@ -23,8 +23,11 @@ use crate::messages::IncomingMessages;
 use crate::server_versions;
 
 pub trait MessageBus {
+    fn negotiate_connection(&mut self, client_id: i32) -> Result<ServerStatusPromise>;
+
     fn read_packet(&mut self) -> Result<ResponseMessage>;
     fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponseMessage>;
+
     fn write_message(&mut self, packet: &RequestMessage) -> Result<()>;
     fn write_message_for_request(
         &mut self,
@@ -32,6 +35,7 @@ pub trait MessageBus {
         packet: &RequestMessage,
     ) -> Result<ResponsePacketPromise>;
     fn write(&mut self, packet: &str) -> Result<()>;
+
     fn process_messages(&mut self, server_version: i32) -> Result<()>;
 }
 
@@ -49,6 +53,21 @@ pub struct TcpMessageBus {
 
 unsafe impl Send for Outbox {}
 unsafe impl Sync for Outbox {}
+
+pub struct ServerStatus {
+    pub server_version: i32,
+    pub server_time: String,
+}
+
+pub struct ServerStatusPromise {
+    server_status: ServerStatus,
+}
+
+impl ServerStatusPromise {
+    pub fn server_status(self) -> Result<ServerStatus> {
+        Ok(self.server_status)
+    }
+}
 
 impl TcpMessageBus {
     pub fn connect(connection_string: &str) -> Result<TcpMessageBus> {
@@ -81,6 +100,44 @@ impl TcpMessageBus {
 
         Ok(())
     }
+
+    fn handshake(&mut self) -> Result<ServerStatus> {
+        self.write("API\x00")?;
+
+        let prelude = &mut RequestMessage::default();
+        prelude.push_field(&format!(
+            "v{}..{}",
+            super::MIN_SERVER_VERSION,
+            super::MAX_SERVER_VERSION
+        ));
+
+        self.write_message(prelude)?;
+
+        let mut status = self.read_packet()?;
+
+        Ok(ServerStatus {
+            server_version: status.next_int()?,
+            server_time: status.next_string()?,
+        })
+    }
+
+    fn start_api(&mut self, client_id: i32, server_version: i32) -> Result<()> {
+        const VERSION: i32 = 2;
+
+        let prelude = &mut RequestMessage::default();
+
+        prelude.push_field(&super::START_API);
+        prelude.push_field(&VERSION);
+        prelude.push_field(&client_id);
+
+        if server_version > server_versions::OPTIONAL_CAPABILITIES {
+            prelude.push_field(&"");
+        }
+
+        self.write_message(prelude)?;
+
+        Ok(())
+    }
 }
 
 // impl read/write?
@@ -88,6 +145,16 @@ impl TcpMessageBus {
 const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 impl MessageBus for TcpMessageBus {
+    // connect and handshake with client
+    fn negotiate_connection(&mut self, client_id: i32) -> Result<ServerStatusPromise> {
+        let server_status = self.handshake()?;
+        self.start_api(client_id, server_status.server_version)?;
+
+        self.process_messages(server_status.server_version)?;
+
+        Ok(ServerStatusPromise { server_status })
+    }
+
     fn read_packet(&mut self) -> Result<ResponseMessage> {
         read_packet(&self.reader)
     }
@@ -191,12 +258,12 @@ fn dispatch_message(
             if request_id == UNSPECIFIED_REQUEST_ID {
                 error_event(server_version, message).unwrap();
             } else {
-                process_response(&requests, message);
+                process_response(requests, message);
             }
         }
         IncomingMessages::NextValidId => process_next_valid_id(server_version, message),
         IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
-        _ => process_response(&requests, message),
+        _ => process_response(requests, message),
     };
 }
 
@@ -359,7 +426,7 @@ impl MessageRecorder {
 
                     MessageRecorder {
                         enabled: true,
-                        recording_dir: recording_dir,
+                        recording_dir,
                     }
                 }
             }
@@ -386,7 +453,7 @@ impl MessageRecorder {
         let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
         fs::write(
             self.request_file(record_id),
-            message.encode().replace("\0", "|"),
+            message.encode().replace('\0', "|"),
         )
         .unwrap();
     }
@@ -399,7 +466,7 @@ impl MessageRecorder {
         let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
         fs::write(
             self.response_file(record_id),
-            message.encode().replace("\0", "|"),
+            message.encode().replace('\0', "|"),
         )
         .unwrap();
     }

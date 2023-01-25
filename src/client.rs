@@ -59,7 +59,7 @@ impl IBClient {
 
         let mut client = IBClient {
             server_version: 0,
-            server_time: String::from("hello"),
+            server_time: String::from(""),
             next_valid_order_id: 0,
             managed_accounts: String::from(""),
             message_bus,
@@ -67,45 +67,13 @@ impl IBClient {
             next_request_id: 9000,
         };
 
-        client.handshake()?;
-        client.start_api()?;
+        let promise = client.message_bus.negotiate_connection(client.client_id)?;
+        let server_status = promise.server_status()?;
 
-        client.message_bus.process_messages(client.server_version)?;
+        client.server_version = server_status.server_version;
+        client.server_time = server_status.server_time;
 
         Ok(client)
-    }
-
-    fn handshake(&mut self) -> Result<()> {
-        self.message_bus.write("API\x00")?;
-
-        let prelude = &mut RequestMessage::default();
-        prelude.push_field(&format!("v{}..{}", MIN_SERVER_VERSION, MAX_SERVER_VERSION));
-
-        self.message_bus.write_message(prelude)?;
-
-        let mut status = self.message_bus.read_packet()?;
-        self.server_version = status.next_int()?;
-        self.server_time = status.next_string()?;
-
-        Ok(())
-    }
-
-    fn start_api(&mut self) -> Result<()> {
-        const VERSION: i32 = 2;
-
-        let prelude = &mut RequestMessage::default();
-
-        prelude.push_field(&START_API);
-        prelude.push_field(&VERSION);
-        prelude.push_field(&self.client_id);
-
-        if self.server_version > server_versions::OPTIONAL_CAPABILITIES {
-            prelude.push_field(&"");
-        }
-
-        self.message_bus.write_message(prelude)?;
-
-        Ok(())
     }
 }
 
