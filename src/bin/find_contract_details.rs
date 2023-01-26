@@ -1,6 +1,7 @@
 use std::time::Duration;
 use std::{thread, time};
 
+use clap::{arg, Command};
 use log::{debug, info};
 
 use ibapi::client::IBClient;

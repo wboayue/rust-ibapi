@@ -73,7 +73,9 @@ impl IBClient {
         client.server_version = server_status.server_version;
         client.server_time = server_status.server_time;
 
-        client.message_bus.process_messages(server_status.server_version)?;
+        client
+            .message_bus
+            .process_messages(server_status.server_version)?;
 
         Ok(client)
     }
