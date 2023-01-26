@@ -1,6 +1,3 @@
-use std::thread;
-use std::time::Duration;
-
 use clap::{arg, Command};
 use log::info;
 
@@ -28,8 +25,6 @@ fn main() -> anyhow::Result<()> {
     let mut client = IBClient::connect(connection_string)?;
 
     info!("connected {:?}, using: {:?}", client, connection_string);
-
-    thread::sleep(Duration::from_secs(2));
 
     let results = contracts::request_matching_symbols(&mut client, pattern)?;
     for result in &results {

@@ -1,6 +1,8 @@
 use std::fmt;
 use std::ops::Index;
 use std::str::FromStr;
+use std::thread;
+use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use log::{debug, info};
@@ -76,6 +78,8 @@ impl IBClient {
         client
             .message_bus
             .process_messages(server_status.server_version)?;
+
+        thread::sleep(Duration::from_secs(2));
 
         Ok(client)
     }
