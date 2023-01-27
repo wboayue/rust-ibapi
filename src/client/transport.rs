@@ -70,6 +70,8 @@ impl ServerStatusPromise {
 }
 
 impl TcpMessageBus {
+
+    // establishes TCP connection to server
     pub fn connect(connection_string: &str) -> Result<TcpMessageBus> {
         let stream = TcpStream::connect(connection_string)?;
 
@@ -101,6 +103,7 @@ impl TcpMessageBus {
         Ok(())
     }
 
+    // sends server handshake
     fn handshake(&mut self) -> Result<ServerStatus> {
         self.write("API\x00")?;
 
@@ -121,6 +124,7 @@ impl TcpMessageBus {
         })
     }
 
+    // asks server to start processing messages
     fn start_api(&mut self, client_id: i32, server_version: i32) -> Result<()> {
         const VERSION: i32 = 2;
 
