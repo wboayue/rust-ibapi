@@ -18,7 +18,7 @@ pub fn news_providers<C: Client + Debug>(client: &C) -> Result<Vec<NewsProvider>
     // client.send_packet(packet)
     // packet = client.receive_packet(request_id)
     // ReceiveNewsProvidersResponse::decode(packet)
-    print!("{:?}", client);
+    print!("client: {client:?}");
     Err(anyhow!("not implemented!"))
 }
 

@@ -11,17 +11,17 @@ fn main() -> anyhow::Result<()> {
 
     let mut client = IBClient::connect("odin:4002")?;
 
-    info!("Connected {:?}", client);
+    info!("Connected {client:?}");
 
     let mut contract = Contract::stock("TSLA");
     contract.currency = "USD".to_string();
-    debug!("Contract {:?}", contract);
+    debug!("contract template {contract:?}");
 
     thread::sleep(Duration::from_secs(2));
 
     let results = contracts::request_contract_details(&mut client, &contract)?;
     for result in &results {
-        println!("contract: {:?}", result);
+        println!("contract: {result:?}");
     }
 
     thread::sleep(time::Duration::from_secs(5));

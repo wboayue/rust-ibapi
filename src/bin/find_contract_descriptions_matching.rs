@@ -24,11 +24,11 @@ fn main() -> anyhow::Result<()> {
 
     let mut client = IBClient::connect(connection_string)?;
 
-    info!("connected {:?}, using: {:?}", client, connection_string);
+    info!("connected {client:?}, using: {connection_string}");
 
     let results = contracts::request_matching_symbols(&mut client, pattern)?;
     for result in &results {
-        println!("contract: {:?}", result);
+        println!("contract: {result:?}");
     }
 
     Ok(())

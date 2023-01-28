@@ -28,7 +28,7 @@ use crate::server_versions;
 ///         let result =
 ///             historical::head_timestamp(&mut client, &contract, what_to_show, use_rth);
 ///
-///         print!("head_timestamp: {:?}", result);
+///         print!("head_timestamp: {result:?}");
 ///         Ok(())
 ///     }
 /// ```

@@ -26,15 +26,15 @@ fn main() -> anyhow::Result<()> {
 
     let mut client = IBClient::connect(connection_string)?;
 
-    info!("connected {:?}", client);
+    info!("connected {client:?}");
 
     let mut contract = Contract::stock(stock_symbol);
     contract.currency = "USD".to_string();
-    debug!("Contract {:?}", contract);
+    debug!("contract template: {contract:?}");
 
     let results = contracts::request_contract_details(&mut client, &contract)?;
     for result in &results {
-        println!("contract: {:?}", result);
+        println!("contract: {result:?}");
     }
 
     thread::sleep(time::Duration::from_secs(5));
