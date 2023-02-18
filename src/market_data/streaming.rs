@@ -10,7 +10,7 @@ use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::orders::TagValue;
 use crate::server_versions;
 
-use super::{BarSize, WhatToShow};
+use super::{BarSize, WhatToShow, RealTimeBar};
 
 pub fn realtime_bars<C: Client + Debug>(
     client: &mut C,
@@ -18,7 +18,7 @@ pub fn realtime_bars<C: Client + Debug>(
     bar_size: &BarSize,
     what_to_show: &WhatToShow,
     use_RTH: bool
-) -> Result<Vec<ContractDetails>> {
+) -> Result<Vec<RealTimeBar>> {
     realtime_bars_with_options(client, contract, bar_size, what_to_show, use_RTH, Vec::default())
 }
 
@@ -55,9 +55,9 @@ pub fn realtime_bars_with_options<C: Client + Debug>(
     contract: &Contract,
     bar_size: &BarSize,
     what_to_show: &WhatToShow,
-    use_RTH: bool,
+    use_rth: bool,
     options: Vec<TagValue>
-) -> Result<Vec<ContractDetails>> {
+) -> Result<Vec<RealTimeBar>> {
     client.check_server_version(
         server_versions::REAL_TIME_BARS,
         "It does not support real time bars.",
@@ -70,17 +70,30 @@ pub fn realtime_bars_with_options<C: Client + Debug>(
         )?;
     }
 
-    const VERSION: i32 = 3;
-
     let request_id = client.next_request_id();
-    let packet = encode_request_realtime_bars(client.server_version(), request_id, contract, bar_size, what_to_show, use_RTH, options)?;
+    let packet = encode_request_realtime_bars(client.server_version(), request_id, contract, bar_size, what_to_show, use_rth, options)?;
 
     let responses = client.send_message_for_request(request_id, packet)?;
 
-    let mut contract_details: Vec<ContractDetails> = Vec::default();
+    let mut contract_details: Vec<RealTimeBar> = Vec::default();
 
+    for mut message in responses {
+        match message.message_type() {
+            IncomingMessages::RealTimeBars => {
+                let decoded = decode_realtime_bar(client.server_version(), &mut message)?;
+                contract_details.push(decoded);
+            }
+            IncomingMessages::Error => {
+                error!("error: {:?}", message);
+                return Err(anyhow!("contract_details {:?}", message));
+            }
+            _ => {
+                error!("unexpected message: {:?}", message);
+            }
+        }
+    }
 
-    Ok(Vec::default())
+    Ok(contract_details)
 }
 
 fn encode_request_realtime_bars(
@@ -89,7 +102,7 @@ fn encode_request_realtime_bars(
     contract: &Contract,
     bar_size: &BarSize,
     what_to_show: &WhatToShow,
-    use_RTH: bool,
+    use_rth: bool,
     options: Vec<TagValue>
 ) -> Result<RequestMessage> {
     const VERSION: i32 = 8;
@@ -121,11 +134,31 @@ fn encode_request_realtime_bars(
 
     packet.push_field(&0);      // bar size -- not used
     packet.push_field(&what_to_show.to_string());
-    packet.push_field(&use_RTH);
+    packet.push_field(&use_rth);
 
     if server_version >= server_versions::LINKING {
         packet.push_field(&options);
     }
 
     Ok(packet)
+}
+
+fn decode_realtime_bar(
+    _server_version: i32,
+    message: &mut ResponseMessage,
+) -> Result<RealTimeBar> {
+    message.skip(); // message type
+
+    let _message_version = message.next_int()?;
+    let _request_id = message.next_int()?;
+    let date = message.next_long()?; // long, convert to date
+    let open = message.next_double()?;
+    let high = message.next_double()?;
+    let low = message.next_double()?;
+    let close = message.next_double()?;
+    let volume = message.next_double()?;
+    let wap = message.next_double()?;
+    let count = message.next_int()?;
+
+    Ok(RealTimeBar { date: date.to_string(), open, high, low, close, volume, wap, count})
 }

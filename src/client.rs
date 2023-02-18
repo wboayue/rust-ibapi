@@ -250,6 +250,16 @@ impl ResponseMessage {
         }
     }
 
+    pub fn next_long(&mut self) -> Result<i64> {
+        let field = &self.fields[self.i];
+        self.i += 1;
+
+        match field.parse() {
+            Ok(val) => Ok(val),
+            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+        }
+    }
+
     pub fn next_date_time(&mut self) -> Result<OffsetDateTime> {
         let field = &self.fields[self.i];
         self.i += 1;
