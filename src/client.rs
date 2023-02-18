@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
 use crate::contracts::{ComboLegOpenClose, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
-use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A};
+use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A, TagValue};
 use crate::server_versions;
 
 mod transport;
@@ -443,6 +443,16 @@ fn encode_option_field<T: ToField>(val: &Option<T>) -> String {
     match val {
         Some(val) => val.to_field(),
         None => String::from(""),
+    }
+}
+
+impl ToField for Vec<TagValue> {
+    fn to_field(&self) -> String {
+        let mut values = Vec::new();
+        for tag_value in self {
+            values.push(format!("{}={};", tag_value.tag, tag_value.value))
+        }
+        values.concat()
     }
 }
 

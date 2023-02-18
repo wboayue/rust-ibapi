@@ -1,8 +1,11 @@
+use std::thread;
+use std::time::Duration;
+
 use clap::{arg, ArgMatches, Command};
 
 use ibapi::client::IBClient;
 use ibapi::contracts::Contract;
-use ibapi::market_data::streaming;
+use ibapi::market_data::{streaming, WhatToShow, BarSize};
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
@@ -26,7 +29,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut client = IBClient::connect("odin:4002")?;
 
-    let bars = streaming::realtime_bars(&mut client, &contract)?;
+    let bars = streaming::realtime_bars(&mut client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
     for (i, bar) in bars.iter().enumerate() {
         println!("bar: {i:?} {bar:?}");
 
@@ -38,6 +41,8 @@ fn main() -> anyhow::Result<()> {
     // let mut contract = Contract::stock(stock_symbol);
     // contract.currency = "USD".to_string();
     // debug!("contract template: {contract:?}");
+    
+    thread::sleep(Duration::from_secs(5));
 
     Ok(())
 }
