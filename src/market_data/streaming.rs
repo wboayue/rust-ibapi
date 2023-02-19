@@ -116,6 +116,9 @@ impl RealTimeBarIterator {
             responses,
         }
     }
+
+    /// Cancels request to stream realtime bars
+    fn cancel_realtime_bars(&mut self) {}
 }
 
 impl Iterator for RealTimeBarIterator {
@@ -128,11 +131,11 @@ impl Iterator for RealTimeBarIterator {
                     let decoded = decode_realtime_bar(self.server_version, &mut message);
 
                     if let Ok(bar) = decoded {
-                        Some(bar)
-                    } else {
-                        error!("unexpected message: {:?}", decoded.err());
-                        None
+                        return Some(bar);
                     }
+
+                    error!("unexpected message: {:?}", decoded.err());
+                    None
                 }
                 _ => {
                     error!("unexpected message: {message:?}");
@@ -142,6 +145,12 @@ impl Iterator for RealTimeBarIterator {
         } else {
             None
         }
+    }
+}
+
+impl Drop for RealTimeBarIterator {
+    fn drop(&mut self) {
+        self.cancel_realtime_bars()
     }
 }
 
