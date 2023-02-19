@@ -15,14 +15,14 @@ pub struct RealTimeBar {
 }
 
 pub enum BarSize {
-    Secs5
+    Secs5,
 }
 
 pub enum WhatToShow {
     Trades,
     MidPoint,
     Bid,
-    Ask
+    Ask,
 }
 
 impl ToString for WhatToShow {

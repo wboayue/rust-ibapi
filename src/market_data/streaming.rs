@@ -4,22 +4,30 @@ use std::string::ToString;
 use anyhow::{anyhow, Result};
 use log::{error, info};
 
+use crate::client::transport::ResponsePacketPromise;
 use crate::client::{Client, RequestMessage, ResponseMessage};
 use crate::contracts::{Contract, ContractDetails};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::orders::TagValue;
 use crate::server_versions;
 
-use super::{BarSize, WhatToShow, RealTimeBar};
+use super::{BarSize, RealTimeBar, WhatToShow};
 
 pub fn realtime_bars<C: Client + Debug>(
     client: &mut C,
     contract: &Contract,
     bar_size: &BarSize,
     what_to_show: &WhatToShow,
-    use_RTH: bool
-) -> Result<Vec<RealTimeBar>> {
-    realtime_bars_with_options(client, contract, bar_size, what_to_show, use_RTH, Vec::default())
+    use_rth: bool,
+) -> Result<RealTimeBarIterator> {
+    realtime_bars_with_options(
+        client,
+        contract,
+        bar_size,
+        what_to_show,
+        use_rth,
+        Vec::default(),
+    )
 }
 
 /// Requests contract information.
@@ -56,8 +64,8 @@ pub fn realtime_bars_with_options<C: Client + Debug>(
     bar_size: &BarSize,
     what_to_show: &WhatToShow,
     use_rth: bool,
-    options: Vec<TagValue>
-) -> Result<Vec<RealTimeBar>> {
+    options: Vec<TagValue>,
+) -> Result<RealTimeBarIterator> {
     client.check_server_version(
         server_versions::REAL_TIME_BARS,
         "It does not support real time bars.",
@@ -71,29 +79,70 @@ pub fn realtime_bars_with_options<C: Client + Debug>(
     }
 
     let request_id = client.next_request_id();
-    let packet = encode_request_realtime_bars(client.server_version(), request_id, contract, bar_size, what_to_show, use_rth, options)?;
+    let packet = encode_request_realtime_bars(
+        client.server_version(),
+        request_id,
+        contract,
+        bar_size,
+        what_to_show,
+        use_rth,
+        options,
+    )?;
 
     let responses = client.send_message_for_request(request_id, packet)?;
 
-    let mut contract_details: Vec<RealTimeBar> = Vec::default();
+    Ok(RealTimeBarIterator::new(
+        client.server_version(),
+        request_id,
+        responses,
+    ))
+}
 
-    for mut message in responses {
-        match message.message_type() {
-            IncomingMessages::RealTimeBars => {
-                let decoded = decode_realtime_bar(client.server_version(), &mut message)?;
-                contract_details.push(decoded);
-            }
-            IncomingMessages::Error => {
-                error!("error: {:?}", message);
-                return Err(anyhow!("contract_details {:?}", message));
-            }
-            _ => {
-                error!("unexpected message: {:?}", message);
-            }
+pub struct RealTimeBarIterator {
+    server_version: i32,
+    request_id: i32,
+    responses: ResponsePacketPromise,
+}
+
+impl RealTimeBarIterator {
+    fn new(
+        server_version: i32,
+        request_id: i32,
+        responses: ResponsePacketPromise,
+    ) -> RealTimeBarIterator {
+        RealTimeBarIterator {
+            server_version,
+            request_id,
+            responses,
         }
     }
+}
 
-    Ok(contract_details)
+impl Iterator for RealTimeBarIterator {
+    type Item = RealTimeBar;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(mut message) = self.responses.next() {
+            match message.message_type() {
+                IncomingMessages::RealTimeBars => {
+                    let decoded = decode_realtime_bar(self.server_version, &mut message);
+
+                    if let Ok(bar) = decoded {
+                        Some(bar)
+                    } else {
+                        error!("unexpected message: {:?}", decoded.err());
+                        None
+                    }
+                }
+                _ => {
+                    error!("unexpected message: {message:?}");
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    }
 }
 
 fn encode_request_realtime_bars(
@@ -103,7 +152,7 @@ fn encode_request_realtime_bars(
     bar_size: &BarSize,
     what_to_show: &WhatToShow,
     use_rth: bool,
-    options: Vec<TagValue>
+    options: Vec<TagValue>,
 ) -> Result<RequestMessage> {
     const VERSION: i32 = 8;
 
@@ -132,7 +181,7 @@ fn encode_request_realtime_bars(
         packet.push_field(&contract.trading_class);
     }
 
-    packet.push_field(&0);      // bar size -- not used
+    packet.push_field(&0); // bar size -- not used
     packet.push_field(&what_to_show.to_string());
     packet.push_field(&use_rth);
 
@@ -143,10 +192,7 @@ fn encode_request_realtime_bars(
     Ok(packet)
 }
 
-fn decode_realtime_bar(
-    _server_version: i32,
-    message: &mut ResponseMessage,
-) -> Result<RealTimeBar> {
+fn decode_realtime_bar(_server_version: i32, message: &mut ResponseMessage) -> Result<RealTimeBar> {
     message.skip(); // message type
 
     let _message_version = message.next_int()?;
@@ -160,5 +206,14 @@ fn decode_realtime_bar(
     let wap = message.next_double()?;
     let count = message.next_int()?;
 
-    Ok(RealTimeBar { date: date.to_string(), open, high, low, close, volume, wap, count})
+    Ok(RealTimeBar {
+        date: date.to_string(),
+        open,
+        high,
+        low,
+        close,
+        volume,
+        wap,
+        count,
+    })
 }

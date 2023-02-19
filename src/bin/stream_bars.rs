@@ -5,7 +5,7 @@ use clap::{arg, ArgMatches, Command};
 
 use ibapi::client::IBClient;
 use ibapi::contracts::Contract;
-use ibapi::market_data::{streaming, WhatToShow, BarSize};
+use ibapi::market_data::{streaming, BarSize, WhatToShow};
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
@@ -29,8 +29,14 @@ fn main() -> anyhow::Result<()> {
 
     let mut client = IBClient::connect("odin:4002")?;
 
-    let bars = streaming::realtime_bars(&mut client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
-    for (i, bar) in bars.iter().enumerate() {
+    let bars = streaming::realtime_bars(
+        &mut client,
+        &contract,
+        &BarSize::Secs5,
+        &WhatToShow::Trades,
+        false,
+    )?;
+    for (i, bar) in bars.enumerate() {
         println!("bar: {i:?} {bar:?}");
 
         if i > 60 {
@@ -41,7 +47,7 @@ fn main() -> anyhow::Result<()> {
     // let mut contract = Contract::stock(stock_symbol);
     // contract.currency = "USD".to_string();
     // debug!("contract template: {contract:?}");
-    
+
     thread::sleep(Duration::from_secs(5));
 
     Ok(())
@@ -53,12 +59,12 @@ fn extract_contract(matches: &ArgMatches) -> Option<Contract> {
             .get_one::<String>("stock")
             .expect("error parsing stock symbol");
 
-        return Some(Contract::stock(&symbol.to_uppercase()));
+        Some(Contract::stock(&symbol.to_uppercase()))
     } else {
         let symbol = matches
             .get_one::<String>("futures")
             .expect("error parsing futures symbol");
 
-        return Some(Contract::futures(&symbol.to_uppercase()));
+        Some(Contract::futures(&symbol.to_uppercase()))
     }
 }
