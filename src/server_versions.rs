@@ -3,7 +3,7 @@
 //shouldn't these all be deprecated?
 //  public const int HISTORICAL_DATA = 24;
 //  public const int CURRENT_TIME = 33;
-//  public const int REAL_TIME_BARS = 34;
+pub const REAL_TIME_BARS: i32 = 34;
 pub const SCALE_ORDERS: i32 = 35;
 //  public const int SNAPSHOT_MKT_DATA = 35;
 pub const SSHORT_COMBO_LEGS: i32 = 35;

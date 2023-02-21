@@ -9,10 +9,10 @@ use time::OffsetDateTime;
 use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
 use crate::contracts::{ComboLegOpenClose, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
-use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A};
+use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A, TagValue};
 use crate::server_versions;
 
-mod transport;
+pub(crate) mod transport;
 
 const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
@@ -250,6 +250,16 @@ impl ResponseMessage {
         }
     }
 
+    pub fn next_long(&mut self) -> Result<i64> {
+        let field = &self.fields[self.i];
+        self.i += 1;
+
+        match field.parse() {
+            Ok(val) => Ok(val),
+            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+        }
+    }
+
     pub fn next_date_time(&mut self) -> Result<OffsetDateTime> {
         let field = &self.fields[self.i];
         self.i += 1;
@@ -443,6 +453,16 @@ fn encode_option_field<T: ToField>(val: &Option<T>) -> String {
     match val {
         Some(val) => val.to_field(),
         None => String::from(""),
+    }
+}
+
+impl ToField for Vec<TagValue> {
+    fn to_field(&self) -> String {
+        let mut values = Vec::new();
+        for tag_value in self {
+            values.push(format!("{}={};", tag_value.tag, tag_value.value))
+        }
+        values.concat()
     }
 }
 

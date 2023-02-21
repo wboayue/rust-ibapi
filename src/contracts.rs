@@ -135,6 +135,16 @@ impl Contract {
         }
     }
 
+    /// Creates futures contract from specified symbol
+    pub fn futures(symbol: &str) -> Contract {
+        Contract {
+            symbol: symbol.to_string(),
+            security_type: SecurityType::Future,
+            currency: "USD".to_string(),
+            ..Default::default()
+        }
+    }
+
     /// Is Bag request
     pub fn is_bag(&self) -> bool {
         self.security_type == SecurityType::Spread

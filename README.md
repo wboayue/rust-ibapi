@@ -8,6 +8,8 @@ RUST_LOG=debug
 // https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EClient.cs
 // https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EDecoder.cs#L733
 
+https://github.com/InteractiveBrokers/tws-api/blob/5cb24aea5cef9d315985a7b13dea7efbcfe2b16a/source/csharpclient/client/IBParamsList.cs
+
 RUST_LOG=debug cargo run --bin find_contract_details
 
 
