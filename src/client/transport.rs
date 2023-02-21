@@ -23,8 +23,6 @@ use crate::messages::IncomingMessages;
 use crate::server_versions;
 
 pub trait MessageBus {
-    fn negotiate_connection(&mut self, client_id: i32) -> Result<ServerStatusPromise>;
-
     fn read_packet(&mut self) -> Result<ResponseMessage>;
     fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponseMessage>;
 
@@ -102,46 +100,6 @@ impl TcpMessageBus {
 
         Ok(())
     }
-
-    // sends server handshake
-    fn handshake(&mut self) -> Result<ServerStatus> {
-        self.write("API\x00")?;
-
-        let prelude = &mut RequestMessage::default();
-        prelude.push_field(&format!(
-            "v{}..{}",
-            super::MIN_SERVER_VERSION,
-            super::MAX_SERVER_VERSION
-        ));
-
-        self.write_message(prelude)?;
-
-        let mut status = self.read_packet()?;
-
-        Ok(ServerStatus {
-            server_version: status.next_int()?,
-            server_time: status.next_string()?,
-        })
-    }
-
-    // asks server to start processing messages
-    fn start_api(&mut self, client_id: i32, server_version: i32) -> Result<()> {
-        const VERSION: i32 = 2;
-
-        let prelude = &mut RequestMessage::default();
-
-        prelude.push_field(&super::START_API);
-        prelude.push_field(&VERSION);
-        prelude.push_field(&client_id);
-
-        if server_version > server_versions::OPTIONAL_CAPABILITIES {
-            prelude.push_field(&"");
-        }
-
-        self.write_message(prelude)?;
-
-        Ok(())
-    }
 }
 
 // impl read/write?
@@ -149,14 +107,6 @@ impl TcpMessageBus {
 const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 impl MessageBus for TcpMessageBus {
-    // connect and handshake with client
-    fn negotiate_connection(&mut self, client_id: i32) -> Result<ServerStatusPromise> {
-        let server_status = self.handshake()?;
-        self.start_api(client_id, server_status.server_version)?;
-
-        Ok(ServerStatusPromise { server_status })
-    }
-
     fn read_packet(&mut self) -> Result<ResponseMessage> {
         read_packet(&self.reader)
     }

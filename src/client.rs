@@ -69,19 +69,52 @@ impl IBClient {
             next_request_id: 9000,
         };
 
-        let status_promise = client.message_bus.negotiate_connection(client.client_id)?;
-        let server_status = status_promise.server_status()?;
+        client.handshake()?;
+        client.start_api()?;
 
-        client.server_version = server_status.server_version;
-        client.server_time = server_status.server_time;
+        // will return receiver to next order id
+        client.message_bus.process_messages(client.server_version)?;
 
-        client
-            .message_bus
-            .process_messages(server_status.server_version)?;
-
+        // wait for next order id
         thread::sleep(Duration::from_secs(2));
 
         Ok(client)
+    }
+
+    // sends server handshake
+    fn handshake(&mut self) -> Result<()> {
+        self.message_bus.write("API\x00")?;
+
+        let prelude = &mut RequestMessage::new();
+        prelude.push_field(&format!("v{MIN_SERVER_VERSION}..{MAX_SERVER_VERSION}"));
+
+        self.message_bus.write_message(prelude)?;
+
+        let mut status = self.message_bus.read_packet()?;
+
+        self.server_version = status.next_int()?;
+        self.server_time = status.next_string()?;
+
+        Ok(())
+    }
+
+    // asks server to start processing messages
+    fn start_api(&mut self) -> Result<()> {
+        const VERSION: i32 = 2;
+
+        let prelude = &mut RequestMessage::default();
+
+        prelude.push_field(&START_API);
+        prelude.push_field(&VERSION);
+        prelude.push_field(&self.client_id);
+
+        if self.server_version > server_versions::OPTIONAL_CAPABILITIES {
+            prelude.push_field(&"");
+        }
+
+        self.message_bus.write_message(prelude)?;
+
+        Ok(())
     }
 }
 
