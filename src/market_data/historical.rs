@@ -152,7 +152,7 @@ pub fn historical_schedule<C: Client + Debug>(
     use_rth: bool,
     period: &str,
 ) -> Result<HistogramDataIterator> {
-    print!("{:?} {:?} {:?} {:?}", client, contract, use_rth, period);
+    print!("{client:?} {contract:?} {use_rth:?} {period:?}");
     Err(anyhow!("not implemented!"))
 }
 

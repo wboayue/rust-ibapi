@@ -36,6 +36,7 @@ fn main() -> anyhow::Result<()> {
         &WhatToShow::Trades,
         false,
     )?;
+
     for (i, bar) in bars.enumerate() {
         println!("bar: {i:?} {bar:?}");
 
@@ -44,27 +45,17 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    // let mut contract = Contract::stock(stock_symbol);
-    // contract.currency = "USD".to_string();
-    // debug!("contract template: {contract:?}");
-
     thread::sleep(Duration::from_secs(5));
 
     Ok(())
 }
 
 fn extract_contract(matches: &ArgMatches) -> Option<Contract> {
-    if matches.contains_id("stock") {
-        let symbol = matches
-            .get_one::<String>("stock")
-            .expect("error parsing stock symbol");
-
+    if let Some(symbol) = matches.get_one::<String>("stock") {
         Some(Contract::stock(&symbol.to_uppercase()))
-    } else {
-        let symbol = matches
-            .get_one::<String>("futures")
-            .expect("error parsing futures symbol");
-
+    } else if let Some(symbol) = matches.get_one::<String>("futures") {
         Some(Contract::futures(&symbol.to_uppercase()))
+    } else {
+        None
     }
 }

@@ -54,17 +54,11 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn get_order(matches: &ArgMatches) -> Option<(String, f64)> {
-    if matches.contains_id("buy") {
-        let quantity = matches
-            .get_one::<f64>("buy")
-            .expect("action buy/sell is required");
-       
-        return Some(("BUY".to_string(), *quantity))
+    if let Some(quantity) = matches.get_one::<f64>("buy") {
+        Some(("BUY".to_string(), *quantity))
+    } else if let Some(quantity) = matches.get_one::<f64>("sell") {
+        Some(("SELL".to_string(), *quantity))   
     } else {
-        let quantity = matches
-            .get_one::<f64>("buy")
-            .expect("action buy/sell is required");
-       
-            return Some(("SELL".to_string(), *quantity))
+        None
     }
 }
