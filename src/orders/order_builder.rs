@@ -664,227 +664,237 @@ pub fn limit_order_for_combo_with_leg_prices(
     order
 }
 
-//     /// <summary>
-//     /// Create combination orders that include options, stock and futures legs (stock legs can be included if the order is routed
-//     /// through SmartRouting). Although a combination/spread order is constructed of separate legs, it is executed as a single transaction
-//     /// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
-//     /// best execution.
-//     /// Products: OPT, STK, FUT
-//     /// </summary>
-//     public static Order RelativeLimitCombo(string action, decimal quantity, double limitPrice, bool nonGuaranteed)
-//     {
-//         // ! [relativelimitcombo]
-//         Order order = new Order();
-//         order.Action = action;
-//         order.TotalQuantity = quantity;
-//         order.OrderType = "REL + LMT";
-//         order.LmtPrice = limitPrice;
-//         if (nonGuaranteed)
-//         {
-//             order.SmartComboRoutingParams = new List<TagValue>();
-//             order.SmartComboRoutingParams.Add(new TagValue("NonGuaranteed", "1"));
-//         }
-//         // ! [relativelimitcombo]
-//         return order;
-//     }
+/// Create combination orders that include options, stock and futures legs (stock legs can be included if the order is routed
+/// through SmartRouting). Although a combination/spread order is constructed of separate legs, it is executed as a single transaction
+/// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
+/// best execution.
+/// Products: OPT, STK, FUT
+pub fn relative_limit_combo(
+    action: Action,
+    quantity: f64,
+    limit_price: f64,
+    non_guaranteed: bool,
+) -> Order {
+    let mut order = Order {
+        action,
+        order_type: "REL + LMT".to_owned(),
+        total_quantity: quantity,
+        limit_price: Some(limit_price),
+        ..Order::default()
+    };
 
-//     /// <summary>
-//     /// Create combination orders that include options, stock and futures legs (stock legs can be included if the order is routed
-//     /// through SmartRouting). Although a combination/spread order is constructed of separate legs, it is executed as a single transaction
-//     /// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
-//     /// best execution.
-//     /// Products: OPT, STK, FUT
-//     /// </summary>
-//     public static Order RelativeMarketCombo(string action, decimal quantity, bool nonGuaranteed)
-//     {
-//         // ! [relativemarketcombo]
-//         Order order = new Order();
-//         order.Action = action;
-//         order.TotalQuantity = quantity;
-//         order.OrderType = "REL + MKT";
-//         if (nonGuaranteed)
-//         {
-//             order.SmartComboRoutingParams = new List<TagValue>();
-//             order.SmartComboRoutingParams.Add(new TagValue("NonGuaranteed", "1"));
-//         }
-//         // ! [relativemarketcombo]
-//         return order;
-//     }
+    if non_guaranteed {
+        order = tag_order_non_guaranteed(order)
+    }
 
-//     /// <summary>
-//     /// One-Cancels All (OCA) order type allows an investor to place multiple and possibly unrelated orders assigned to a group. The aim is
-//     /// to complete just one of the orders, which in turn will cause TWS to cancel the remaining orders. The investor may submit several
-//     /// orders aimed at taking advantage of the most desirable price within the group. Completion of one piece of the group order causes
-//     /// cancellation of the remaining group orders while partial completion causes the group to rebalance. An investor might desire to sell
-//     /// 1000 shares of only ONE of three positions held above prevailing market prices. The OCA order group allows the investor to enter prices
-//     /// at specified target levels and if one is completed, the other two will automatically cancel. Alternatively, an investor may wish to take
-//     /// a LONG position in eMini S&P stock index futures in a falling market or else SELL US treasury futures at a more favorable price.
-//     /// Grouping the two orders using an OCA order type offers the investor two chance to enter a similar position, while only running the risk
-//     /// of taking on a single position.
-//     /// Products: BOND, CASH, FUT, FOP, STK, OPT, WAR
-//     /// </summary>
-//    // ! [oca]
-//     public static List<Order> OneCancelsAll(string ocaGroup, List<Order> ocaOrders, int ocaType)
-//     {
-//         foreach (Order o in ocaOrders)
-//         {
-//             o.OcaGroup = ocaGroup;
-//             o.OcaType = ocaType;
-//         }
-//         return ocaOrders;
-//     }
-//     // ! [oca]
+    order
+}
 
-//     /// <summary>
-//     /// Specific to US options, investors are able to create and enter Volatility-type orders for options and combinations rather than price orders.
-//     /// Option traders may wish to trade and position for movements in the price of the option determined by its implied volatility. Because
-//     /// implied volatility is a key determinant of the premium on an option, traders position in specific contract months in an effort to take
-//     /// advantage of perceived changes in implied volatility arising before, during or after earnings or when company specific or broad market
-//     /// volatility is predicted to change. In order to create a Volatility order, clients must first create a Volatility Trader page from the
-//     /// Trading Tools menu and as they enter option contracts, premiums will display in percentage terms rather than premium. The buy/sell process
-//     /// is the same as for regular orders priced in premium terms except that the client can limit the volatility level they are willing to pay or
-//     /// receive.
-//     /// Products: FOP, OPT
-//     /// </summary>
-//     public static Order Volatility(string action, decimal quantity, double volatilityPercent, int volatilityType)
-//     {
-//         // ! [volatility]
-//         Order order = new Order();
-//         order.Action = action;
-//         order.OrderType = "VOL";
-//         order.TotalQuantity = quantity;
-//         order.Volatility = volatilityPercent;//Expressed in percentage (40%)
-//         order.VolatilityType = volatilityType;// 1=daily, 2=annual
-//         // ! [volatility]
-//         return order;
-//     }
+/// Create combination orders that include options, stock and futures legs (stock legs can be included if the order is routed
+/// through SmartRouting). Although a combination/spread order is constructed of separate legs, it is executed as a single transaction
+/// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
+/// best execution.
+/// Products: OPT, STK, FUT
+pub fn relative_market_combo(action: Action, quantity: f64, non_guaranteed: bool) -> Order {
+    let mut order = Order {
+        action,
+        order_type: "REL + MKT".to_owned(),
+        total_quantity: quantity,
+        ..Order::default()
+    };
 
-//     //! [fhedge]
-//     public static Order MarketFHedge(int parentOrderId, string action)
-//     {
-//         //FX Hedge orders can only have a quantity of 0
-//         Order order = MarketOrder(action, 0);
-//         order.ParentId = parentOrderId;
-//         order.HedgeType = "F";
-//         return order;
-//     }
-//     //! [fhedge]
+    if non_guaranteed {
+        order = tag_order_non_guaranteed(order)
+    }
 
-//     public static Order PeggedToBenchmark(string action, decimal quantity, double startingPrice, bool peggedChangeAmountDecrease, double peggedChangeAmount,
-//          double referenceChangeAmount, int referenceConId, string referenceExchange, double stockReferencePrice,
-//         double referenceContractLowerRange, double referenceContractUpperRange)
-//     {
-//         //! [pegged_benchmark]
-//         Order order = new Order();
-//         order.OrderType = "PEG BENCH";
-//         //BUY or SELL
-//         order.Action = action;
-//         order.TotalQuantity = quantity;
-//         //Beginning with price...
-//         order.StartingPrice = startingPrice;
-//         //increase/decrease price..
-//         order.IsPeggedChangeAmountDecrease = peggedChangeAmountDecrease;
-//         //by... (and likewise for price moving in opposite direction)
-//         order.PeggedChangeAmount = peggedChangeAmount;
-//         //whenever there is a price change of...
-//         order.ReferenceChangeAmount = referenceChangeAmount;
-//         //in the reference contract...
-//         order.ReferenceContractId = referenceConId;
-//         //being traded at...
-//         order.ReferenceExchange = referenceExchange;
-//         //starting reference price is...
-//         order.StockRefPrice = stockReferencePrice;
-//         //Keep order active as long as reference contract trades between...
-//         order.StockRangeLower = referenceContractLowerRange;
-//         //and...
-//         order.StockRangeUpper = referenceContractUpperRange;
-//         //! [pegged_benchmark]
-//         return order;
-//     }
+    order
+}
 
-//     public static Order AttachAdjustableToStop(Order parent, double attachedOrderStopPrice, double triggerPrice, double adjustStopPrice)
-//     {
-//         //! [adjustable_stop]
-//         //Attached order is a conventional STP order in opposite direction
-//         Order order = Stop(parent.Action.Equals("BUY") ? "SELL" : "BUY", parent.TotalQuantity, attachedOrderStopPrice);
-//         order.ParentId = parent.OrderId;
-//         //When trigger price is penetrated
-//         order.TriggerPrice = triggerPrice;
-//         //The parent order will be turned into a STP order
-//         order.AdjustedOrderType = "STP";
-//         //With the given STP price
-//         order.AdjustedStopPrice = adjustStopPrice;
-//         //! [adjustable_stop]
-//         return order;
-//     }
+/// One-Cancels All (OCA) order type allows an investor to place multiple and possibly unrelated orders assigned to a group. The aim is
+/// to complete just one of the orders, which in turn will cause TWS to cancel the remaining orders. The investor may submit several
+/// orders aimed at taking advantage of the most desirable price within the group. Completion of one piece of the group order causes
+/// cancellation of the remaining group orders while partial completion causes the group to rebalance. An investor might desire to sell
+/// 1000 shares of only ONE of three positions held above prevailing market prices. The OCA order group allows the investor to enter prices
+/// at specified target levels and if one is completed, the other two will automatically cancel. Alternatively, an investor may wish to take
+/// a LONG position in eMini S&P stock index futures in a falling market or else SELL US treasury futures at a more favorable price.
+/// Grouping the two orders using an OCA order type offers the investor two chance to enter a similar position, while only running the risk
+/// of taking on a single position.
+/// Products: BOND, CASH, FUT, FOP, STK, OPT, WAR
+pub fn one_cancels_all(oca_group: &str, mut oca_orders: Vec<Order>, oca_type: i32) -> Vec<Order> {
+    for order in &mut oca_orders {
+        order.oca_group = oca_group.to_owned();
+        order.oca_type = oca_type;
+    }
 
-//     public static Order AttachAdjustableToStopLimit(Order parent, double attachedOrderStopPrice, double triggerPrice,
-//         double adjustedStopPrice, double adjustedStopLimitPrice)
-//     {
-//         //! [adjustable_stop_limit]
-//         //Attached order is a conventional STP order
-//         Order order = Stop(parent.Action.Equals("BUY") ? "SELL" : "BUY", parent.TotalQuantity, attachedOrderStopPrice);
-//         order.ParentId = parent.OrderId;
-//         //When trigger price is penetrated
-//         order.TriggerPrice = triggerPrice;
-//         //The parent order will be turned into a STP LMT order
-//         order.AdjustedOrderType = "STP LMT";
-//         //With the given stop price
-//         order.AdjustedStopPrice = adjustedStopPrice;
-//         //And the given limit price
-//         order.AdjustedStopLimitPrice = adjustedStopLimitPrice;
-//         //! [adjustable_stop_limit]
-//         return order;
-//     }
+    oca_orders
+}
 
-// 	public static Order AttachAdjustableToTrail(Order parent, double attachedOrderStopPrice, double triggerPrice, double adjustedStopPrice,
-//         double adjustedTrailAmount, int trailUnit)
-//     {
-//         //! [adjustable_trail]
-//         //Attached order is a conventional STP order
-//         Order order = Stop(parent.Action.Equals("BUY") ? "SELL" : "BUY", parent.TotalQuantity, attachedOrderStopPrice);
-//         order.ParentId = parent.OrderId;
-//         //When trigger price is penetrated
-//         order.TriggerPrice = triggerPrice;
-//         //The parent order will be turned into a TRAIL order
-//         order.AdjustedOrderType = "TRAIL";
-//         //With a stop price of...
-//         order.AdjustedStopPrice = adjustedStopPrice;
-//         //traling by and amount (0) or a percent (100)...
-//         order.AdjustableTrailingUnit = trailUnit;
-//         //of...
-//         order.AdjustedTrailingAmount = adjustedTrailAmount;
-//         //! [adjustable_trail]
-//         return order;
-//     }
+/// Specific to US options, investors are able to create and enter Volatility-type orders for options and combinations rather than price orders.
+/// Option traders may wish to trade and position for movements in the price of the option determined by its implied volatility. Because
+/// implied volatility is a key determinant of the premium on an option, traders position in specific contract months in an effort to take
+/// advantage of perceived changes in implied volatility arising before, during or after earnings or when company specific or broad market
+/// volatility is predicted to change. In order to create a Volatility order, clients must first create a Volatility Trader page from the
+/// Trading Tools menu and as they enter option contracts, premiums will display in percentage terms rather than premium. The buy/sell process
+/// is the same as for regular orders priced in premium terms except that the client can limit the volatility level they are willing to pay or
+/// receive.
+/// Products: FOP, OPT
+pub fn volatility(
+    action: Action,
+    quantity: f64,
+    volatility_percent: f64,
+    volatility_type: i32,
+) -> Order {
+    Order {
+        action,
+        order_type: "VOL".to_owned(),
+        total_quantity: quantity,
+        volatility: Some(volatility_percent), //Expressed in percentage (40%)
+        volatility_type: Some(volatility_type), // 1=daily, 2=annual
+        ..Order::default()
+    }
+}
 
-//     public static Order WhatIfLimitOrder(string action, decimal quantity, double limitPrice)
-//     {
-//         // ! [whatiflimitorder]
-//         Order order = LimitOrder(action, quantity, limitPrice);
-//         order.WhatIf = true;
-//         // ! [whatiflimitorder]
-//         return order;
-//     }
+pub fn market_f_hedge(parent_order_id: i32, action: Action) -> Order {
+    //FX Hedge orders can only have a quantity of 0
+    let mut order = market_order(action, 0.0);
+    order.parent_id = parent_order_id;
+    order.hedge_type = "F".to_owned();
 
-//     public static PriceCondition PriceCondition(int conId, string exchange, double price, bool isMore, bool isConjunction)
-//     {
-//         //! [price_condition]
-//         //Conditions have to be created via the OrderCondition.Create
-//         PriceCondition priceCondition = (PriceCondition)OrderCondition.Create(OrderConditionType.Price);
-//         //When this contract...
-//         priceCondition.ConId = conId;
-//         //traded on this exchange
-//         priceCondition.Exchange = exchange;
-//         //has a price above/below
-//         priceCondition.IsMore = isMore;
-//         //this quantity
-//         priceCondition.Price = price;
-//         //AND | OR next condition (will be ignored if no more conditions are added)
-//         priceCondition.IsConjunctionConnection = isConjunction;
-//         //! [price_condition]
-//         return priceCondition;
-//     }
+    order
+}
+
+pub fn pegged_to_benchmark(
+    action: Action,
+    quantity: f64,
+    starting_price: f64,
+    pegged_change_amount_decrease: bool,
+    pegged_change_amount: f64,
+    reference_change_amount: f64,
+    reference_contract_id: i32,
+    reference_exchange: &str,
+    stock_reference_price: f64,
+    reference_contract_lower_range: f64,
+    reference_contract_upper_range: f64,
+) -> Order {
+    Order {
+        action,
+        order_type: "PEG BENCH".to_owned(),
+        total_quantity: quantity,
+        starting_price: Some(starting_price),
+        is_pegged_change_amount_decrease: pegged_change_amount_decrease,
+        pegged_change_amount, // by ... (and likewise for price moving in opposite direction)
+        reference_change_amount, // whenever there is a price change of ...
+        reference_contract_id, // in the reference contract ...
+        reference_exchange: reference_exchange.to_owned(), // being traded at ...
+        stock_ref_price: Some(stock_reference_price), // starting reference price is ...
+        //Keep order active as long as reference contract trades between ...
+        stock_range_lower: Some(reference_contract_lower_range),
+        stock_range_upper: Some(reference_contract_upper_range),
+        ..Order::default()
+    }
+}
+
+/// An attached order that turns the parent order (a conventional STP order) into a STP order
+/// in the opposite direction when the trigger is hit.
+pub fn attach_adjustable_to_stop(
+    parent: &Order,
+    attached_order_stop_price: f64,
+    trigger_price: f64,
+    adjusted_stop_price: f64,
+) -> Order {
+    // Attached order is a conventional STP order
+    let mut order = stop(
+        parent.action.reverse(),
+        parent.total_quantity,
+        attached_order_stop_price,
+    );
+
+    order.parent_id = parent.order_id;
+    order.trigger_price = trigger_price; // When trigger price is penetrated
+    order.adjusted_order_type = "STP".to_owned(); // The parent order will be turned into a STP order
+    order.adjusted_stop_price = adjusted_stop_price; // With the given STP price
+
+    order
+}
+
+/// An attached order that turns the parent order (a conventional STP order) into a STP LMT order
+/// in the opposite direction when the trigger is hit.
+pub fn attach_adjustable_to_stop_limit(
+    parent: &Order,
+    attached_order_stop_price: f64,
+    trigger_price: f64,
+    adjusted_stop_price: f64,
+    adjusted_stop_limit_price: f64,
+) -> Order {
+    // Attached order is a conventional STP order
+    let mut order = stop(
+        parent.action.reverse(),
+        parent.total_quantity,
+        attached_order_stop_price,
+    );
+
+    order.parent_id = parent.order_id;
+    order.trigger_price = trigger_price; // When trigger price is penetrated
+    order.adjusted_order_type = "STP LMT".to_owned(); // The parent order will be turned into a STP LMT order
+    order.adjusted_stop_price = adjusted_stop_price; // With the given STP price
+    order.adjusted_stop_limit_price = adjusted_stop_limit_price; // And the given limit price
+
+    order
+}
+
+/// An attached order that turns the parent order (a conventional STP order) into a
+/// TRAIL order in the opposite direction when the trigger is hit.
+pub fn attach_adjustable_to_trail(
+    parent: &Order,
+    attached_order_stop_price: f64,
+    trigger_price: f64,
+    adjusted_stop_price: f64,
+    adjusted_trail_amount: f64,
+    trail_unit: i32,
+) -> Order {
+    // Attached order is a conventional STP order
+    let mut order = stop(
+        parent.action.reverse(),
+        parent.total_quantity,
+        attached_order_stop_price,
+    );
+
+    order.parent_id = parent.order_id;
+    order.trigger_price = trigger_price; // When trigger price is penetrated
+    order.adjusted_order_type = "TRAIL".to_owned(); // The parent order will be turned into a TRAIL order
+    order.adjusted_stop_price = adjusted_stop_price; // With a stop price of ...
+    order.adjustable_trailing_unit = trail_unit; // trailing by and amount (0) or a percent (100) ...
+    order.adjusted_trailing_amount = adjusted_trail_amount; // of ...
+
+    order
+}
+
+pub fn what_if_limit_order(action: Action, quantity: f64, limit_price: f64) -> Order {
+    let mut order = limit_order(action, quantity, limit_price);
+    order.what_if = true;
+
+    order
+}
+
+// https://github.com/InteractiveBrokers/tws-api/blob/07e54ceecda2c9cbd6ffb5f524894f0c837a9ecb/source/csharpclient/client/ContractCondition.cs
+// pub fn price_condition(contract_id: i32, exchange: &str, price: f64, is_more: bool, is_conjunction: bool) -> PriceCondition
+// {
+//     //! [price_condition]
+//     //Conditions have to be created via the OrderCondition.Create
+//     PriceCondition priceCondition = (PriceCondition)OrderCondition.Create(OrderConditionType.Price);
+//     //When this contract...
+//     priceCondition.ConId = conId;
+//     //traded on this exchange
+//     priceCondition.Exchange = exchange;
+//     //has a price above/below
+//     priceCondition.IsMore = isMore;
+//     //this quantity
+//     priceCondition.Price = price;
+//     //AND | OR next condition (will be ignored if no more conditions are added)
+//     priceCondition.IsConjunctionConnection = isConjunction;
+//     //! [price_condition]
+//     return priceCondition;
+// }
 
 //     public static ExecutionCondition ExecutionCondition(string symbol, string secType, string exchange, bool isConjunction)
 //     {
@@ -967,74 +977,91 @@ pub fn limit_order_for_combo_with_leg_prices(
 
 //     }
 
-// 	public static Order LimitIBKRATS(string action, decimal quantity, double limitPrice)
-//     {
-//         // ! [limit_ibkrats]
-//         Order order = new Order();
-//         order.Action = action;
-//         order.OrderType = "LMT";
-// 		order.LmtPrice = limitPrice;
-//         order.TotalQuantity = quantity;
-// 		order.NotHeld = true;
-//         // ! [limit_ibkrats]
-//         return order;
-//     }
+pub fn limit_ibkrats(action: Action, quantity: f64, limit_price: f64) -> Order {
+    Order {
+        action,
+        order_type: "LMT".to_owned(),
+        total_quantity: quantity,
+        limit_price: Some(limit_price),
+        not_held: true,
+        ..Order::default()
+    }
+}
 
-//     public static Order LimitOrderWithManualOrderTime(string action, decimal quantity, double limitPrice, string manualOrderTime)
-//     {
-//         // ! [limit_order_with_manual_order_time]
-//         Order order = OrderSamples.LimitOrder(action, quantity, limitPrice);
-//         order.ManualOrderTime = manualOrderTime;
-//         // ! [limit_order_with_manual_order_time]
-//         return order;
-//     }
+pub fn limit_order_with_manual_order_time(
+    action: Action,
+    quantity: f64,
+    limit_price: f64,
+    manual_order_time: &str,
+) -> Order {
+    let mut order = limit_order(action, quantity, limit_price);
+    order.manual_order_time = manual_order_time.to_owned();
 
-//     public static Order PegBestUpToMidOrder(string action, decimal quantity, double limitPrice, int minTradeQty, int minCompeteSize, double midOffsetAtWhole, double midOffsetAtHalf)
-//     {
-//         // ! [peg_best_up_to_mid_order]
-//         Order order = new Order();
-//         order.Action = action;
-//         order.OrderType = "PEG BEST";
-//         order.LmtPrice = limitPrice;
-//         order.TotalQuantity = quantity;
-//         order.NotHeld = true;
-//         order.MinTradeQty = minTradeQty;
-//         order.MinCompeteSize = minCompeteSize;
-//         order.CompeteAgainstBestOffset = Order.COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID;
-//         order.MidOffsetAtWhole = midOffsetAtWhole;
-//         order.MidOffsetAtHalf = midOffsetAtHalf;
-//         // ! [peg_best_up_to_mid_order]
-//         return order;
-//     }
+    order
+}
 
-//     public static Order PegBestOrder(string action, decimal quantity, double limitPrice, int minTradeQty, int minCompeteSize, double competeAgainstBestOffset)
-//     {
-//         // ! [peg_best_order]
-//         Order order = new Order();
-//         order.Action = action;
-//         order.OrderType = "PEG BEST";
-//         order.LmtPrice = limitPrice;
-//         order.TotalQuantity = quantity;
-//         order.NotHeld = true;
-//         order.MinTradeQty = minTradeQty;
-//         order.MinCompeteSize = minCompeteSize;
-//         order.CompeteAgainstBestOffset = competeAgainstBestOffset;
-//         // ! [peg_best_order]
-//         return order;
-//     }
+pub fn peg_best_up_to_mid_order(
+    action: Action,
+    quantity: f64,
+    limit_price: f64,
+    min_trade_qty: i32,
+    min_compete_size: i32,
+    mid_offset_at_whole: f64,
+    mid_offset_at_half: f64,
+) -> Order {
+    Order {
+        action,
+        order_type: "PEG BEST".to_owned(),
+        total_quantity: quantity,
+        limit_price: Some(limit_price),
+        not_held: true,
+        min_trade_qty: Some(min_trade_qty),
+        min_complete_size: Some(min_compete_size),
+        compete_against_best_offset: super::COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID,
+        mid_offset_at_whole: Some(mid_offset_at_whole),
+        mid_offset_at_half: Some(mid_offset_at_half),
+        ..Order::default()
+    }
+}
 
-//     public static Order PegMidOrder(string action, decimal quantity, double limitPrice, int minTradeQty, double midOffsetAtWhole, double midOffsetAtHalf)
-//     {
-//         // ! [peg_mid_order]
-//         Order order = new Order();
-//         order.Action = action;
-//         order.OrderType = "PEG MID";
-//         order.LmtPrice = limitPrice;
-//         order.TotalQuantity = quantity;
-//         order.NotHeld = true;
-//         order.MinTradeQty = minTradeQty;
-//         order.MidOffsetAtWhole = midOffsetAtWhole;
-//         order.MidOffsetAtHalf = midOffsetAtHalf;
-//         // ! [peg_mid_order]
-//         return order;
-//     }
+pub fn peg_best_order(
+    action: Action,
+    quantity: f64,
+    limit_price: f64,
+    min_trade_qty: i32,
+    min_compete_size: i32,
+    compete_against_best_offset: f64,
+) -> Order {
+    Order {
+        action,
+        order_type: "PEG BEST".to_owned(),
+        total_quantity: quantity,
+        limit_price: Some(limit_price),
+        not_held: true,
+        min_trade_qty: Some(min_trade_qty),
+        min_complete_size: Some(min_compete_size),
+        compete_against_best_offset: Some(compete_against_best_offset),
+        ..Order::default()
+    }
+}
+
+pub fn peg_mid_order(
+    action: Action,
+    quantity: f64,
+    limit_price: f64,
+    min_trade_qty: i32,
+    mid_offset_at_whole: f64,
+    mid_offset_at_half: f64,
+) -> Order {
+    Order {
+        action,
+        order_type: "PEG MID".to_owned(),
+        total_quantity: quantity,
+        limit_price: Some(limit_price),
+        not_held: true,
+        min_trade_qty: Some(min_trade_qty),
+        mid_offset_at_whole: Some(mid_offset_at_whole),
+        mid_offset_at_half: Some(mid_offset_at_half),
+        ..Order::default()
+    }
+}
