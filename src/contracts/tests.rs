@@ -17,7 +17,7 @@ fn request_stock_contract_details() {
 
     assert_eq!(
         client.request_messages[0],
-        "9|8|3000|0|TSLA|STK||0|||||USD|||0|||"
+        "9|8|3000|0|TSLA|STK||0|||SMART||USD|||0|||"
     );
     assert!(
         results.is_ok(),
