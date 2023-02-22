@@ -597,13 +597,18 @@ pub fn combo_limit_order(
     };
 
     if non_guaranteed {
-        order.smart_combo_routing_params = vec![];
-        order.smart_combo_routing_params.push(TagValue {
-            tag: "NonGuaranteed".to_owned(),
-            value: "1".to_owned(),
-        });
+        order = tag_order_non_guaranteed(order)
     }
 
+    order
+}
+
+fn tag_order_non_guaranteed(mut order: Order) -> Order {
+    order.smart_combo_routing_params = vec![];
+    order.smart_combo_routing_params.push(TagValue {
+        tag: "NonGuaranteed".to_owned(),
+        value: "1".to_owned(),
+    });
     order
 }
 
@@ -621,11 +626,7 @@ pub fn combo_market_order(action: Action, quantity: f64, non_guaranteed: bool) -
     };
 
     if non_guaranteed {
-        order.smart_combo_routing_params = vec![];
-        order.smart_combo_routing_params.push(TagValue {
-            tag: "NonGuaranteed".to_owned(),
-            value: "1".to_owned(),
-        });
+        order = tag_order_non_guaranteed(order)
     }
 
     order
@@ -657,11 +658,7 @@ pub fn limit_order_for_combo_with_leg_prices(
     }
 
     if non_guaranteed {
-        order.smart_combo_routing_params = vec![];
-        order.smart_combo_routing_params.push(TagValue {
-            tag: "NonGuaranteed".to_owned(),
-            value: "1".to_owned(),
-        });
+        order = tag_order_non_guaranteed(order)
     }
 
     order
