@@ -131,6 +131,7 @@ impl Contract {
             symbol: symbol.to_string(),
             security_type: SecurityType::Stock,
             currency: "USD".to_string(),
+            exchange: "SMART".to_string(),
             ..Default::default()
         }
     }

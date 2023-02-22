@@ -7,12 +7,14 @@ use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::server_versions;
 
+pub mod order_builder;
+
 /// New description
 pub use crate::contracts::TagValue;
 
 const COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID: Option<f64> = Some(f64::INFINITY);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 /// Order describes the order.
 pub struct Order {
     /// The API client's order id.
@@ -428,8 +430,9 @@ impl Order {
 /// For general account types, a SELL order will be able to enter a short position automatically if the order quantity is larger than your current long position.
 /// SSHORT is only supported for institutional account configured with Long/Short account segments or clearing with a separate account.
 /// SLONG is available in specially-configured institutional accounts to indicate that long position not yet delivered is being sold.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum Action {
+    #[default]
     Buy,
     Sell,
     /// SSHORT is only supported for institutional account configured with Long/Short account segments or clearing with a separate account.
