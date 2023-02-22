@@ -15,7 +15,7 @@ use std::time::Duration;
 use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use log::{debug, error, info};
-use time::macros::{datetime, format_description};
+use time::macros::{format_description};
 use time::OffsetDateTime;
 
 use crate::client::{RequestMessage, ResponseMessage};
@@ -51,21 +51,6 @@ pub struct TcpMessageBus {
 
 unsafe impl Send for Outbox {}
 unsafe impl Sync for Outbox {}
-
-pub struct ServerStatus {
-    pub server_version: i32,
-    pub server_time: String,
-}
-
-pub struct ServerStatusPromise {
-    server_status: ServerStatus,
-}
-
-impl ServerStatusPromise {
-    pub fn server_status(self) -> Result<ServerStatus> {
-        Ok(self.server_status)
-    }
-}
 
 impl TcpMessageBus {
 
@@ -150,10 +135,10 @@ impl MessageBus for TcpMessageBus {
 
     fn write_message(&mut self, message: &RequestMessage) -> Result<()> {
         let encoded = message.encode();
-        debug!("{:?} ->", encoded);
+        debug!("{encoded:?} ->");
 
         let data = encoded.as_bytes();
-        let mut header = vec![];
+        let mut header = Vec::with_capacity(data.len());
         header.write_u32::<BigEndian>(data.len() as u32)?;
 
         self.writer.write_all(&header)?;
@@ -165,7 +150,7 @@ impl MessageBus for TcpMessageBus {
     }
 
     fn write(&mut self, data: &str) -> Result<()> {
-        debug!("{:?} ->", data);
+        debug!("{data:?} ->");
         self.writer.write_all(data.as_bytes())?;
         Ok(())
     }
@@ -199,7 +184,7 @@ impl MessageBus for TcpMessageBus {
 }
 
 fn dispatch_message(
-    mut message: ResponseMessage,
+    message: ResponseMessage,
     server_version: i32,
     requests: &Arc<RwLock<HashMap<i32, Outbox>>>,
 ) {
@@ -221,6 +206,7 @@ fn dispatch_message(
 
 fn read_packet(mut reader: &TcpStream) -> Result<ResponseMessage> {
     let message_size = read_header(reader)?;
+    debug!("message size: {message_size:?}");
     let mut data = vec![0_u8; message_size];
 
     reader.read_exact(&mut data)?;
