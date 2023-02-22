@@ -1,4 +1,4 @@
-use super::{Action, Order};
+use super::{Action, Order, OrderComboLeg, TagValue};
 
 /// An auction order is entered into the electronic trading system during the pre-market opening period for execution at the
 /// Calculated Opening Price (COP). If your order is not filled on the open, the order is re-submitted as a limit order with
@@ -456,220 +456,216 @@ pub fn bracket_order(
     vec![parent, take_profit, stop_loss]
 }
 
-//     /// <summary>
-//     /// Products:CFD, FUT, FOP, OPT, STK, WAR
-//     /// A Market-to-Limit (MTL) order is submitted as a market order to execute at the current best market price. If the order is only
-//     /// partially filled, the remainder of the order is canceled and re-submitted as a limit order with the limit price equal to the price
-//     /// at which the filled portion of the order executed.
-//     /// </summary>
-//     public static Order MarketToLimit(string action, decimal quantity)
-//     {
-//         // ! [markettolimit]
-//         Order order = new Order();
-//         order.Action = action;
-//         order.OrderType = "MTL";
-//         order.TotalQuantity = quantity;
-//         // ! [markettolimit]
-//         return order;
-//     }
+/// Products:CFD, FUT, FOP, OPT, STK, WAR
+/// A Market-to-Limit (MTL) order is submitted as a market order to execute at the current best market price. If the order is only
+/// partially filled, the remainder of the order is canceled and re-submitted as a limit order with the limit price equal to the price
+/// at which the filled portion of the order executed.
+pub fn market_to_limit(action: Action, quantity: f64) -> Order {
+    Order {
+        action,
+        order_type: "MTL".to_owned(),
+        total_quantity: quantity,
+        ..Order::default()
+    }
+}
 
-//     /// <summary>
-//     /// This order type is useful for futures traders using Globex. A Market with Protection order is a market order that will be cancelled and
-//     /// resubmitted as a limit order if the entire order does not immediately execute at the market price. The limit price is set by Globex to be
-//     /// close to the current market price, slightly higher for a sell order and lower for a buy order.
-//     /// Products: FUT, FOP
-//     /// </summary>
-//     public static Order MarketWithProtection(string action, decimal quantity)
-//     {
-//         // ! [marketwithprotection]
-//         Order order = new Order();
-//         order.Action = action;
-//         order.OrderType = "MKT PRT";
-//         order.TotalQuantity = quantity;
-//         // ! [marketwithprotection]
-//         return order;
-//     }
+/// This order type is useful for futures traders using Globex. A Market with Protection order is a market order that will be cancelled and
+/// resubmitted as a limit order if the entire order does not immediately execute at the market price. The limit price is set by Globex to be
+/// close to the current market price, slightly higher for a sell order and lower for a buy order.
+/// Products: FUT, FOP
+pub fn market_with_protection(action: Action, quantity: f64) -> Order {
+    Order {
+        action,
+        order_type: "MKT PRT".to_owned(),
+        total_quantity: quantity,
+        ..Order::default()
+    }
+}
 
-//     /// <summary>
-//     /// A Stop order is an instruction to submit a buy or sell market order if and when the user-specified stop trigger price is attained or
-//     /// penetrated. A Stop order is not guaranteed a specific execution price and may execute significantly away from its stop price. A Sell
-//     /// Stop order is always placed below the current market price and is typically used to limit a loss or protect a profit on a long stock
-//     /// position. A Buy Stop order is always placed above the current market price. It is typically used to limit a loss or help protect a
-//     /// profit on a short sale.
-//     /// Products: CFD, BAG, CASH, FUT, FOP, OPT, STK, WAR
-//     /// </summary>
-//     public static Order Stop(string action, decimal quantity, double stopPrice)
-//     {
-//         // ! [stop]
-//         Order order = new Order();
-//         order.Action = action;
-//         order.OrderType = "STP";
-//         order.AuxPrice = stopPrice;
-//         order.TotalQuantity = quantity;
-//         // ! [stop]
-//         return order;
-//     }
+/// A Stop order is an instruction to submit a buy or sell market order if and when the user-specified stop trigger price is attained or
+/// penetrated. A Stop order is not guaranteed a specific execution price and may execute significantly away from its stop price. A Sell
+/// Stop order is always placed below the current market price and is typically used to limit a loss or protect a profit on a long stock
+/// position. A Buy Stop order is always placed above the current market price. It is typically used to limit a loss or help protect a
+/// profit on a short sale.
+/// Products: CFD, BAG, CASH, FUT, FOP, OPT, STK, WAR
+pub fn stop(action: Action, quantity: f64, stop_price: f64) -> Order {
+    Order {
+        action,
+        order_type: "STP".to_owned(),
+        total_quantity: quantity,
+        aux_price: Some(stop_price),
+        ..Order::default()
+    }
+}
 
-//     /// <summary>
-//     /// A Stop-Limit order is an instruction to submit a buy or sell limit order when the user-specified stop trigger price is attained or
-//     /// penetrated. The order has two basic components: the stop price and the limit price. When a trade has occurred at or through the stop
-//     /// price, the order becomes executable and enters the market as a limit order, which is an order to buy or sell at a specified price or better.
-//     /// Products: CFD, CASH, FUT, FOP, OPT, STK, WAR
-//     /// </summary>
-//     public static Order StopLimit(string action, decimal quantity, double limitPrice, double stopPrice)
-//     {
-//         // ! [stoplimit]
-//         Order order = new Order();
-//         order.Action = action;
-//         order.OrderType = "STP LMT";
-//         order.TotalQuantity = quantity;
-//         order.LmtPrice = limitPrice;
-//         order.AuxPrice = stopPrice;
-//         // ! [stoplimit]
-//         return order;
-//     }
+/// A Stop-Limit order is an instruction to submit a buy or sell limit order when the user-specified stop trigger price is attained or
+/// penetrated. The order has two basic components: the stop price and the limit price. When a trade has occurred at or through the stop
+/// price, the order becomes executable and enters the market as a limit order, which is an order to buy or sell at a specified price or better.
+/// Products: CFD, CASH, FUT, FOP, OPT, STK, WAR
+pub fn stop_limit(action: Action, quantity: f64, limit_price: f64, stop_price: f64) -> Order {
+    Order {
+        action,
+        order_type: "STP LMT".to_owned(),
+        total_quantity: quantity,
+        limit_price: Some(limit_price),
+        aux_price: Some(stop_price),
+        ..Order::default()
+    }
+}
 
-//     /// <summary>
-//     /// A Stop with Protection order combines the functionality of a stop limit order with a market with protection order. The order is set
-//     /// to trigger at a specified stop price. When the stop price is penetrated, the order is triggered as a market with protection order,
-//     /// which means that it will fill within a specified protected price range equal to the trigger price +/- the exchange-defined protection
-//     /// point range. Any portion of the order that does not fill within this protected range is submitted as a limit order at the exchange-defined
-//     /// trigger price +/- the protection points.
-//     /// Products: FUT
-//     /// </summary>
-//     public static Order StopWithProtection(string action, decimal quantity, double stopPrice)
-//     {
-//         // ! [stopwithprotection]
-//         Order order = new Order();
-//         order.TotalQuantity = quantity;
-//         order.Action = action;
-//         order.OrderType = "STP PRT";
-//         order.AuxPrice = stopPrice;
-//         // ! [stopwithprotection]
-//         return order;
-//     }
+/// A Stop with Protection order combines the functionality of a stop limit order with a market with protection order. The order is set
+/// to trigger at a specified stop price. When the stop price is penetrated, the order is triggered as a market with protection order,
+/// which means that it will fill within a specified protected price range equal to the trigger price +/- the exchange-defined protection
+/// point range. Any portion of the order that does not fill within this protected range is submitted as a limit order at the exchange-defined
+/// trigger price +/- the protection points.
+/// Products: FUT
+pub fn stop_with_protection(action: Action, quantity: f64, stop_price: f64) -> Order {
+    Order {
+        action,
+        order_type: "STP PRT".to_owned(),
+        total_quantity: quantity,
+        aux_price: Some(stop_price),
+        ..Order::default()
+    }
+}
 
-//     /// <summary>
-//     /// A sell trailing stop order sets the stop price at a fixed amount below the market price with an attached "trailing" amount. As the
-//     /// market price rises, the stop price rises by the trail amount, but if the stock price falls, the stop loss price doesn't change,
-//     /// and a market order is submitted when the stop price is hit. This technique is designed to allow an investor to specify a limit on the
-//     /// maximum possible loss, without setting a limit on the maximum possible gain. "Buy" trailing stop orders are the mirror image of sell
-//     /// trailing stop orders, and are most appropriate for use in falling markets.
-//     /// Products: CFD, CASH, FOP, FUT, OPT, STK, WAR
-//     /// </summary>
-//     public static Order TrailingStop(string action, decimal quantity, double trailingPercent, double trailStopPrice)
-//     {
-//         // ! [trailingstop]
-//         Order order = new Order();
-//         order.Action = action;
-//         order.OrderType = "TRAIL";
-//         order.TotalQuantity = quantity;
-//         order.TrailingPercent = trailingPercent;
-//         order.TrailStopPrice = trailStopPrice;
-//         // ! [trailingstop]
-//         return order;
-//     }
+/// A sell trailing stop order sets the stop price at a fixed amount below the market price with an attached "trailing" amount. As the
+/// market price rises, the stop price rises by the trail amount, but if the stock price falls, the stop loss price doesn't change,
+/// and a market order is submitted when the stop price is hit. This technique is designed to allow an investor to specify a limit on the
+/// maximum possible loss, without setting a limit on the maximum possible gain. "Buy" trailing stop orders are the mirror image of sell
+/// trailing stop orders, and are most appropriate for use in falling markets.
+/// Products: CFD, CASH, FOP, FUT, OPT, STK, WAR
+pub fn trailing_stop(
+    action: Action,
+    quantity: f64,
+    trailing_percent: f64,
+    trail_stop_price: f64,
+) -> Order {
+    Order {
+        action,
+        order_type: "TRAIL".to_owned(),
+        total_quantity: quantity,
+        trailing_percent: Some(trailing_percent),
+        trail_stop_price: Some(trail_stop_price),
+        ..Order::default()
+    }
+}
 
-//     /// <summary>
-//     /// A trailing stop limit order is designed to allow an investor to specify a limit on the maximum possible loss, without setting a limit
-//     /// on the maximum possible gain. A SELL trailing stop limit moves with the market price, and continually recalculates the stop trigger
-//     /// price at a fixed amount below the market price, based on the user-defined "trailing" amount. The limit order price is also continually
-//     /// recalculated based on the limit offset. As the market price rises, both the stop price and the limit price rise by the trail amount and
-//     /// limit offset respectively, but if the stock price falls, the stop price remains unchanged, and when the stop price is hit a limit order
-//     /// is submitted at the last calculated limit price. A "Buy" trailing stop limit order is the mirror image of a sell trailing stop limit,
-//     /// and is generally used in falling markets.
-//     /// Products: BOND, CFD, CASH, FUT, FOP, OPT, STK, WAR
-//     /// </summary>
-//     public static Order TrailingStopLimit(string action, decimal quantity, double lmtPriceOffset, double trailingAmount, double trailStopPrice)
-//     {
-//         // ! [trailingstoplimit]
-//         Order order = new Order();
-//         order.Action = action;
-//         order.OrderType = "TRAIL LIMIT";
-//         order.TotalQuantity = quantity;
-//         order.TrailStopPrice = trailStopPrice;
-//         order.LmtPriceOffset = lmtPriceOffset;
-//         order.AuxPrice = trailingAmount;
-//         // ! [trailingstoplimit]
-//         return order;
-//     }
+/// A trailing stop limit order is designed to allow an investor to specify a limit on the maximum possible loss, without setting a limit
+/// on the maximum possible gain. A SELL trailing stop limit moves with the market price, and continually recalculates the stop trigger
+/// price at a fixed amount below the market price, based on the user-defined "trailing" amount. The limit order price is also continually
+/// recalculated based on the limit offset. As the market price rises, both the stop price and the limit price rise by the trail amount and
+/// limit offset respectively, but if the stock price falls, the stop price remains unchanged, and when the stop price is hit a limit order
+/// is submitted at the last calculated limit price. A "Buy" trailing stop limit order is the mirror image of a sell trailing stop limit,
+/// and is generally used in falling markets.
+/// Products: BOND, CFD, CASH, FUT, FOP, OPT, STK, WAR
+pub fn trailing_stop_limit(
+    action: Action,
+    quantity: f64,
+    lmt_price_offset: f64,
+    trailing_amount: f64,
+    trail_stop_price: f64,
+) -> Order {
+    Order {
+        action,
+        order_type: "TRAIL LIMIT".to_owned(),
+        total_quantity: quantity,
+        trail_stop_price: Some(trail_stop_price),
+        lmt_price_offset: lmt_price_offset,
+        aux_price: Some(trailing_amount),
+        ..Order::default()
+    }
+}
 
-//     /// <summary>
-//     /// Create combination orders that include options, stock and futures legs (stock legs can be included if the order is routed
-//     /// through SmartRouting). Although a combination/spread order is constructed of separate legs, it is executed as a single transaction
-//     /// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
-//     /// best execution.
-//     /// Products: OPT, STK, FUT
-//     /// </summary>
-//     public static Order ComboLimitOrder(string action, decimal quantity, double limitPrice, bool nonGuaranteed)
-//     {
-//         // ! [combolimit]
-//         Order order = new Order();
-//         order.Action = action;
-//         order.OrderType = "LMT";
-//         order.TotalQuantity = quantity;
-//         order.LmtPrice = limitPrice;
-//         if (nonGuaranteed)
-//         {
-//             order.SmartComboRoutingParams = new List<TagValue>();
-//             order.SmartComboRoutingParams.Add(new TagValue("NonGuaranteed", "1"));
-//         }
-//         // ! [combolimit]
-//         return order;
-//     }
+/// Create combination orders that include options, stock and futures legs (stock legs can be included if the order is routed
+/// through SmartRouting). Although a combination/spread order is constructed of separate legs, it is executed as a single transaction
+/// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
+/// best execution.
+/// Products: OPT, STK, FUT
+pub fn combo_limit_order(
+    action: Action,
+    quantity: f64,
+    limit_price: f64,
+    non_guaranteed: bool,
+) -> Order {
+    let mut order = Order {
+        action,
+        order_type: "LMT".to_owned(),
+        total_quantity: quantity,
+        limit_price: Some(limit_price),
+        ..Order::default()
+    };
 
-//     /// <summary>
-//     /// Create combination orders that include options, stock and futures legs (stock legs can be included if the order is routed
-//     /// through SmartRouting). Although a combination/spread order is constructed of separate legs, it is executed as a single transaction
-//     /// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
-//     /// best execution.
-//     /// Products: OPT, STK, FUT
-//     /// </summary>
-//     public static Order ComboMarketOrder(string action, decimal quantity, bool nonGuaranteed)
-//     {
-//         // ! [combomarket]
-//         Order order = new Order();
-//         order.Action = action;
-//         order.OrderType = "MKT";
-//         order.TotalQuantity = quantity;
-//         if (nonGuaranteed)
-//         {
-//             order.SmartComboRoutingParams = new List<TagValue>();
-//             order.SmartComboRoutingParams.Add(new TagValue("NonGuaranteed", "1"));
-//         }
-//         // ! [combomarket]
-//         return order;
-//     }
+    if non_guaranteed {
+        order.smart_combo_routing_params = vec![];
+        order.smart_combo_routing_params.push(TagValue {
+            tag: "NonGuaranteed".to_owned(),
+            value: "1".to_owned(),
+        });
+    }
 
-//     /// <summary>
-//     /// Create combination orders that include options, stock and futures legs (stock legs can be included if the order is routed
-//     /// through SmartRouting). Although a combination/spread order is constructed of separate legs, it is executed as a single transaction
-//     /// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
-//     /// best execution.
-//     /// Products: OPT, STK, FUT
-//     /// </summary>
-//     public static Order LimitOrderForComboWithLegPrices(string action, decimal quantity, double[] legPrices, bool nonGuaranteed)
-//     {
-//         // ! [limitordercombolegprices]
-//         Order order = new Order();
-//         order.Action = action;
-//         order.OrderType = "LMT";
-//         order.TotalQuantity = quantity;
-//         order.OrderComboLegs = new List<OrderComboLeg>();
-//         foreach(double price in legPrices)
-//         {
-//             OrderComboLeg comboLeg = new OrderComboLeg();
-//             comboLeg.Price = 5.0;
-//             order.OrderComboLegs.Add(comboLeg);
-//         }
-//         if (nonGuaranteed)
-//         {
-//             order.SmartComboRoutingParams = new List<TagValue>();
-//             order.SmartComboRoutingParams.Add(new TagValue("NonGuaranteed", "1"));
-//         }
-//         // ! [limitordercombolegprices]
-//         return order;
-//     }
+    order
+}
+
+/// Create combination orders that include options, stock and futures legs (stock legs can be included if the order is routed
+/// through SmartRouting). Although a combination/spread order is constructed of separate legs, it is executed as a single transaction
+/// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
+/// best execution.
+/// Products: OPT, STK, FUT
+pub fn combo_market_order(action: Action, quantity: f64, non_guaranteed: bool) -> Order {
+    let mut order = Order {
+        action,
+        order_type: "MKT".to_owned(),
+        total_quantity: quantity,
+        ..Order::default()
+    };
+
+    if non_guaranteed {
+        order.smart_combo_routing_params = vec![];
+        order.smart_combo_routing_params.push(TagValue {
+            tag: "NonGuaranteed".to_owned(),
+            value: "1".to_owned(),
+        });
+    }
+
+    order
+}
+
+/// Create combination orders that include options, stock and futures legs (stock legs can be included if the order is routed
+/// through SmartRouting). Although a combination/spread order is constructed of separate legs, it is executed as a single transaction
+/// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
+/// best execution.
+/// Products: OPT, STK, FUT
+pub fn limit_order_for_combo_with_leg_prices(
+    action: Action,
+    quantity: f64,
+    leg_prices: Vec<f64>,
+    non_guaranteed: bool,
+) -> Order {
+    let mut order = Order {
+        action,
+        order_type: "LMT".to_owned(),
+        total_quantity: quantity,
+        order_combo_legs: vec![],
+        ..Order::default()
+    };
+
+    for price in leg_prices {
+        order
+            .order_combo_legs
+            .push(OrderComboLeg { price: Some(price) });
+    }
+
+    if non_guaranteed {
+        order.smart_combo_routing_params = vec![];
+        order.smart_combo_routing_params.push(TagValue {
+            tag: "NonGuaranteed".to_owned(),
+            value: "1".to_owned(),
+        });
+    }
+
+    order
+}
 
 //     /// <summary>
 //     /// Create combination orders that include options, stock and futures legs (stock legs can be included if the order is routed
