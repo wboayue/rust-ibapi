@@ -7,6 +7,9 @@ use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::server_versions;
 
+/// Make sure to test using only your paper trading account when applicable. A good way of finding out if an order type/exchange combination
+/// is possible is by trying to place such order manually using the TWS.
+/// Before contacting our API support team please refer to the available documentation.
 pub mod order_builder;
 
 /// New description
@@ -448,6 +451,17 @@ impl ToString for Action {
             Action::Sell => String::from("SELL"),
             Action::SellShort => String::from("SSHORT"),
             Action::SellLong => String::from("SLONG"),
+        }
+    }
+}
+
+impl Action {
+    fn reverse(&self) -> Action {
+        match self {
+            Action::Buy => Action::Sell,
+            Action::Sell => Action::Buy,
+            Action::SellShort => Action::SellLong,
+            Action::SellLong => Action::SellShort,
         }
     }
 }
