@@ -15,7 +15,7 @@ use std::time::Duration;
 use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use log::{debug, error, info};
-use time::macros::{format_description};
+use time::macros::format_description;
 use time::OffsetDateTime;
 
 use crate::client::{RequestMessage, ResponseMessage};
@@ -53,7 +53,6 @@ unsafe impl Send for Outbox {}
 unsafe impl Sync for Outbox {}
 
 impl TcpMessageBus {
-
     // establishes TCP connection to server
     pub fn connect(connection_string: &str) -> Result<TcpMessageBus> {
         let stream = TcpStream::connect(connection_string)?;
