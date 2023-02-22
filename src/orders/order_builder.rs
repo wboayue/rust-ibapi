@@ -6,7 +6,7 @@ use super::{Action, Order};
 pub struct OrderBuilder {   
 }
 
-impl OrderBuilder {
+impl super::Order {
 
     /// An auction order is entered into the electronic trading system during the pre-market opening period for execution at the 
     /// Calculated Opening Price (COP). If your order is not filled on the open, the order is re-submitted as a limit order with 
