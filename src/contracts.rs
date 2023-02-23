@@ -8,6 +8,12 @@ use crate::client::{Client, RequestMessage, ResponseMessage};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
 
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+pub(crate) mod contract_samples;
+
 // Models
 
 #[derive(Debug, PartialEq, Eq, Default)]
@@ -728,6 +734,3 @@ fn decode_contract_descriptions(
 
     Ok(contract_descriptions)
 }
-
-#[cfg(test)]
-mod tests;
