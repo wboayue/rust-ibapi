@@ -1,5 +1,7 @@
 use super::*;
 
+// https://github.com/InteractiveBrokers/tws-api/blob/5cb24aea5cef9d315985a7b13dea7efbcfe2b16a/samples/CSharp/Testbed/ContractSamples.cs
+
 // Future contracts also require an expiration date but are less complicated than options.
 pub fn simple_future() -> Contract {
     Contract{
