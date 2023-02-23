@@ -1163,9 +1163,7 @@ fn encode_place_order(
     }
 
     if server_version >= server_versions::LINKING {
-        // TODO default of XYZ
-        //        message.push_field(&order.order_misc_options);
-        message.push_field(&"XYZ");
+        message.push_field(&order.order_misc_options);
     }
 
     if server_version >= server_versions::RANDOMIZE_SIZE_AND_PRICE {
