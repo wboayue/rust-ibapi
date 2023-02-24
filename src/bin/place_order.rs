@@ -6,7 +6,7 @@ use log::{debug, info};
 
 use ibapi::client::IBClient;
 use ibapi::contracts::{self, Contract};
-use ibapi::orders::{self, order_builder, Order, OrderStatus};
+use ibapi::orders::{self, order_builder, Order, OrderState};
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
@@ -38,13 +38,14 @@ fn main() -> anyhow::Result<()> {
 
     info!("Connected {client:?}");
 
-    let mut contract = Contract::stock("TSLA");
+    let mut contract = Contract::stock(stock_symbol);
     contract.currency = "USD".to_string();
     debug!("contract template {contract:?}");
 
     thread::sleep(Duration::from_secs(2));
 
-    let order_id = 12;
+    // TODO - set next valid order_id
+    let order_id = 14;
     let order = order_builder::market_order(orders::Action::Buy, 100.0);
 
     println!("contract: {contract:?}, order: {order:?}");
@@ -53,9 +54,10 @@ fn main() -> anyhow::Result<()> {
 
     for status in results {
         match status {
-            OrderStatus::OpenOrder(order_state) => println!("state: {order_state:?}"),
-            OrderStatus::ExecutionData(execution) => println!("execution: {execution:?}"),
-            OrderStatus::CommissionReport(report) => println!("commision report: {report:?}"),
+            OrderState::OrderStatus(order_status) => println!("order status: {order_status:?}"),
+            OrderState::OpenOrder(open_order) => println!("open order: {open_order:?}"),
+            OrderState::ExecutionData(execution) => println!("execution: {execution:?}"),
+            OrderState::CommissionReport(report) => println!("commision report: {report:?}"),
         }
     }
 
