@@ -17,9 +17,6 @@ pub mod order_builder;
 pub use crate::contracts::TagValue;
 
 const COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID: Option<f64> = Some(f64::INFINITY);
-// TODO: use when processing responses
-// const UNSET_DOUBLE: String = String::from("1.7976931348623157E308");
-// const UNSET_INTEGER: String = String::from("2147483647");
 
 #[derive(Clone, Debug)]
 /// Order describes the order.

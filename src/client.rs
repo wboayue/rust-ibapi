@@ -20,6 +20,8 @@ const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
 const START_API: i32 = 71;
 const INFINITY_STR: &str = "Infinity";
+const UNSET_DOUBLE: &str = "1.7976931348623157E308";
+const UNSET_INTEGER: &str = "2147483647";
 
 pub trait Client {
     fn next_request_id(&mut self) -> i32;
@@ -249,6 +251,7 @@ impl ResponseMessage {
         }
     }
 
+    // TODO: maybe return Option<i32>
     pub fn next_int(&mut self) -> Result<i32> {
         let field = &self.fields[self.i];
         self.i += 1;
