@@ -6,7 +6,7 @@ use log::{debug, info};
 
 use ibapi::client::IBClient;
 use ibapi::contracts::{self, Contract};
-use ibapi::orders::{self, order_builder, Order};
+use ibapi::orders::{self, order_builder, Order, OrderStatus};
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
@@ -51,7 +51,13 @@ fn main() -> anyhow::Result<()> {
 
     let results = orders::place_order(&mut client, order_id, &contract, &order)?;
 
-    println!("order: {results:?}");
+    for status in results {
+        match status {
+            OrderStatus::OpenOrder(order_state) => println!("state: {order_state:?}"),
+            OrderStatus::ExecutionData(execution) => println!("execution: {execution:?}"),
+            OrderStatus::CommissionReport(report) => println!("commision report: {report:?}"),
+        }
+    }
 
     thread::sleep(time::Duration::from_secs(5));
 
