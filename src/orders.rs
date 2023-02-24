@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use anyhow::Result;
+use log::{debug, info};
 
 use crate::client::{Client, RequestMessage};
 use crate::contracts::Contract;
@@ -16,8 +17,11 @@ pub mod order_builder;
 pub use crate::contracts::TagValue;
 
 const COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID: Option<f64> = Some(f64::INFINITY);
+// TODO: use when processing responses
+// const UNSET_DOUBLE: String = String::from("1.7976931348623157E308");
+// const UNSET_INTEGER: String = String::from("2147483647");
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 /// Order describes the order.
 pub struct Order {
     /// The API client's order id.
@@ -383,15 +387,15 @@ pub struct Order {
     /// Adjusted Stop orders: the parent order will be adjusted to the given type when the adjusted trigger price is penetrated.
     pub adjusted_order_type: String,
     /// Adjusted Stop orders: specifies the trigger price to execute.
-    pub trigger_price: f64,
+    pub trigger_price: Option<f64>,
     /// Adjusted Stop orders: specifies the price offset for the stop to move in increments.
-    pub lmt_price_offset: f64,
+    pub lmt_price_offset: Option<f64>,
     /// Adjusted Stop orders: specifies the stop price of the adjusted (STP) parent.
-    pub adjusted_stop_price: f64,
+    pub adjusted_stop_price: Option<f64>,
     /// Adjusted Stop orders: specifies the stop limit price of the adjusted (STPL LMT) parent.
-    pub adjusted_stop_limit_price: f64,
+    pub adjusted_stop_limit_price: Option<f64>,
     /// Adjusted Stop orders: specifies the trailing amount of the adjusted (TRAIL) parent.
-    pub adjusted_trailing_amount: f64,
+    pub adjusted_trailing_amount: Option<f64>,
     /// Adjusted Stop orders: specifies where the trailing unit is an amount (set to 0) or a percentage (set to 1)
     pub adjustable_trailing_unit: i32,
     /// Conditions determining when the order will be activated or canceled.
@@ -412,6 +416,149 @@ pub struct Order {
     pub duration: Option<i32>, // TODO date object?
     /// Value must be positive, and it is number of seconds that SMART order would be parked for at IBKRATS before being routed to exchange.
     pub post_to_ats: Option<i32>,
+}
+
+impl Default for Order {
+    fn default() -> Self {
+        Self {
+            order_id: 0,
+            solicited: false,
+            client_id: 0,
+            perm_id: 0,
+            action: Action::Buy,
+            total_quantity: 0.0,
+            order_type: "".to_owned(),
+            limit_price: None,
+            aux_price: None,
+            tif: "".to_owned(),
+            oca_group: "".to_owned(),
+            oca_type: 0,
+            order_ref: "".to_owned(),
+            transmit: true,
+            parent_id: 0,
+            block_order: false,
+            sweep_to_fill: false,
+            display_size: 0,
+            trigger_method: 0,
+            outside_rth: false,
+            hidden: false,
+            good_after_time: "".to_owned(),
+            good_till_date: "".to_owned(),
+            override_percentage_constraints: false,
+            rule_80_a: None,
+            all_or_none: false,
+            min_qty: None,
+            percent_offset: None,
+            trail_stop_price: None,
+            trailing_percent: None,
+            fa_group: "".to_owned(),
+            fa_profile: "".to_owned(),
+            fa_method: "".to_owned(),
+            fa_percentage:"".to_owned(),
+            open_close: None,
+            origin: 0,
+            short_sale_slot: 0,
+            designated_location: "".to_owned(),
+            exempt_code: -1,
+            discretionary_amt: 0.0,
+            opt_out_smart_routing: false,
+            auction_strategy: Some(0),  // TODO - use enum
+            starting_price: None,
+            stock_ref_price: None,
+            delta: None,
+            stock_range_lower: None,
+            stock_range_upper: None,
+            volatility: None,
+            volatility_type: None,
+            continuous_update: false,
+            reference_price_type: None,
+            delta_neutral_order_type: "".to_owned(),
+            delta_neutral_aux_price: None,
+            delta_neutral_con_id: 0,
+            delta_neutral_settling_firm: "".to_owned(),
+            delta_neutral_clearing_account: "".to_owned(),
+            delta_neutral_clearing_intent: "".to_owned(),
+            delta_neutral_open_close: "".to_owned(),
+            delta_neutral_short_sale: false,
+            delta_neutral_short_sale_slot: 0,
+            delta_neutral_designated_location: "".to_owned(),
+            basis_points: 0.0,
+            basis_points_type: 0,
+            scale_init_level_size: None,
+            scale_subs_level_size: None,
+            scale_price_increment: None,
+            scale_price_adjust_value: None,
+            scale_price_adjust_interval: None,
+            scale_profit_offset: None,
+            scale_auto_reset: false,
+            scale_init_position: None,
+            scale_init_fill_qty: None,
+            scale_random_percent: false,
+            hedge_type: "".to_owned(),
+            hedge_param: "".to_owned(),
+            account: "".to_owned(),
+            settling_firm: "".to_owned(),
+            clearing_account: "".to_owned(),
+            clearing_intent: "".to_owned(),
+            algo_strategy: "".to_owned(),
+            algo_params: vec![],
+            what_if: false,
+            algo_id: "".to_owned(),
+            not_held: false,
+            smart_combo_routing_params: vec![],
+            order_combo_legs: vec![],
+            order_misc_options: vec![],
+            active_start_time: "".to_owned(),
+            active_stop_time: "".to_owned(),
+            scale_table: "".to_owned(),
+            model_code: "".to_owned(),
+            ext_operator: "".to_owned(),
+            cash_qty: None,
+            mifid2_decision_maker: "".to_owned(),
+            mifid2_decision_algo: "".to_owned(),
+            mifid2_execution_trader: "".to_owned(),
+            mifid2_execution_algo: "".to_owned(),
+            dont_use_auto_price_for_hedge: false,
+            auto_cancel_date: "".to_owned(),
+            filled_quantity: 0.0,
+            ref_futures_con_id: 0,
+            auto_cancel_parent: false,
+            shareholder: "".to_owned(),
+            imbalance_only: false,
+            route_marketable_to_bbo: false,
+            parent_perm_id: 0,
+            advanced_error_override: "".to_owned(),
+            manual_order_time: "".to_owned(),
+            min_trade_qty: None,
+            min_complete_size: None,
+            compete_against_best_offset: None,
+            mid_offset_at_whole: None,
+            mid_offset_at_half: None,
+            randomize_size: false,
+            randomize_price: false,
+            reference_contract_id: 0,
+            is_pegged_change_amount_decrease: false,
+            pegged_change_amount: 0.0,
+            reference_change_amount: 0.0,
+            reference_exchange: "".to_owned(),
+            adjusted_order_type: "".to_owned(),
+            trigger_price: None,
+            lmt_price_offset: None,
+            adjusted_stop_price: None,
+            adjusted_stop_limit_price: None,
+            adjusted_trailing_amount: None,
+            adjustable_trailing_unit: 0,
+            conditions: vec![],
+            conditions_ignore_rth: false,
+            conditions_cancel_order: false,
+            soft_dollar_tier: SoftDollarTier::default(),
+            is_oms_container: false,
+            discretionary_up_to_limit_price: false,
+            use_price_mgmt_algo: false,
+            duration: None,
+            post_to_ats: None,
+        }
+    }
 }
 
 impl Order {
@@ -493,6 +640,12 @@ impl ToString for Rule80A {
             Rule80A::AgentOtherMemberPT => String::from('N'),
         }
     }
+}
+
+enum AuctionStrategy {
+    Match,
+    Improvement,
+    Transparent
 }
 
 #[derive(Clone, Debug, Default)]
@@ -580,6 +733,8 @@ pub fn place_order<C: Client + Debug>(
 ) -> Result<()> {
     verify_order(client, order, order_id)?;
     verify_order_contract(client, contract, order_id)?;
+
+    info!("using server version {}", client.server_version());
 
     let request_id = client.next_request_id();
     let message = encode_place_order(
@@ -971,7 +1126,7 @@ fn encode_place_order(
     message.push_field(&order.origin);
     message.push_field(&order.order_ref);
     message.push_field(&order.transmit);
-    message.push_field(&order.order_id);
+    message.push_field(&order.parent_id);
 
     message.push_field(&order.block_order);
     message.push_field(&order.sweep_to_fill);
@@ -1021,13 +1176,17 @@ fn encode_place_order(
     }
 
     message.push_field(&""); // deprecated sharesAllocation field
+
     message.push_field(&order.discretionary_amt);
     message.push_field(&order.good_after_time);
     message.push_field(&order.good_till_date);
+
     message.push_field(&order.fa_group);
     message.push_field(&order.fa_method);
     message.push_field(&order.fa_percentage);
-    message.push_field(&order.fa_profile);
+    if server_version < server_versions::FA_PROFILE_DESUPPORT {
+        message.push_field(&order.fa_profile);
+    }
 
     if server_version >= server_versions::MODELS_SUPPORT {
         message.push_field(&order.model_code);
@@ -1055,6 +1214,7 @@ fn encode_place_order(
     message.push_field(&order.delta);
     message.push_field(&order.stock_range_lower);
     message.push_field(&order.stock_range_upper);
+
     message.push_field(&order.override_percentage_constraints);
 
     // Volitility orders
@@ -1166,6 +1326,10 @@ fn encode_place_order(
         message.push_field(&order.order_misc_options);
     }
 
+    if server_version >= server_versions::ORDER_SOLICITED {
+        message.push_field(&order.solicited);
+    }
+
     if server_version >= server_versions::RANDOMIZE_SIZE_AND_PRICE {
         message.push_field(&order.randomize_size);
         message.push_field(&order.randomize_price);
@@ -1180,8 +1344,9 @@ fn encode_place_order(
             message.push_field(&order.reference_exchange);
         }
 
+        message.push_field(&order.conditions.len());
+
         if !order.conditions.is_empty() {
-            message.push_field(&order.conditions.len());
             for condition in &order.conditions {
                 // verify
                 // https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EClient.cs#L1187

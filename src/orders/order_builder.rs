@@ -571,7 +571,7 @@ pub fn trailing_stop_limit(
         order_type: "TRAIL LIMIT".to_owned(),
         total_quantity: quantity,
         trail_stop_price: Some(trail_stop_price),
-        lmt_price_offset: lmt_price_offset,
+        lmt_price_offset: Some(lmt_price_offset),
         aux_price: Some(trailing_amount),
         ..Order::default()
     }
@@ -810,9 +810,9 @@ pub fn attach_adjustable_to_stop(
     );
 
     order.parent_id = parent.order_id;
-    order.trigger_price = trigger_price; // When trigger price is penetrated
+    order.trigger_price = Some(trigger_price); // When trigger price is penetrated
     order.adjusted_order_type = "STP".to_owned(); // The parent order will be turned into a STP order
-    order.adjusted_stop_price = adjusted_stop_price; // With the given STP price
+    order.adjusted_stop_price = Some(adjusted_stop_price); // With the given STP price
 
     order
 }
@@ -834,10 +834,10 @@ pub fn attach_adjustable_to_stop_limit(
     );
 
     order.parent_id = parent.order_id;
-    order.trigger_price = trigger_price; // When trigger price is penetrated
+    order.trigger_price = Some(trigger_price); // When trigger price is penetrated
     order.adjusted_order_type = "STP LMT".to_owned(); // The parent order will be turned into a STP LMT order
-    order.adjusted_stop_price = adjusted_stop_price; // With the given STP price
-    order.adjusted_stop_limit_price = adjusted_stop_limit_price; // And the given limit price
+    order.adjusted_stop_price = Some(adjusted_stop_price); // With the given STP price
+    order.adjusted_stop_limit_price = Some(adjusted_stop_limit_price); // And the given limit price
 
     order
 }
@@ -860,11 +860,11 @@ pub fn attach_adjustable_to_trail(
     );
 
     order.parent_id = parent.order_id;
-    order.trigger_price = trigger_price; // When trigger price is penetrated
+    order.trigger_price = Some(trigger_price); // When trigger price is penetrated
     order.adjusted_order_type = "TRAIL".to_owned(); // The parent order will be turned into a TRAIL order
-    order.adjusted_stop_price = adjusted_stop_price; // With a stop price of ...
+    order.adjusted_stop_price = Some(adjusted_stop_price); // With a stop price of ...
     order.adjustable_trailing_unit = trail_unit; // trailing by and amount (0) or a percent (100) ...
-    order.adjusted_trailing_amount = adjusted_trail_amount; // of ...
+    order.adjusted_trailing_amount = Some(adjusted_trail_amount); // of ...
 
     order
 }

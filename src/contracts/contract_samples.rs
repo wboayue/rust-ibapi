@@ -4,40 +4,38 @@ use super::*;
 
 // Future contracts also require an expiration date but are less complicated than options.
 pub fn simple_future() -> Contract {
-    Contract{
+    Contract {
         symbol: "GBL".to_owned(),
         security_type: SecurityType::Future,
         exchange: "EUREX".to_owned(),
         currency: "EUR".to_owned(),
         last_trade_date_or_contract_month: "202303".to_owned(),
-        ..Contract::default()    
+        ..Contract::default()
     }
 }
 
 // Rather than giving expiration dates we can also provide the local symbol
-// attributes such as symbol, currency, strike, etc. 
-pub fn future_with_local_symbol() -> Contract
-{
-    Contract{
+// attributes such as symbol, currency, strike, etc.
+pub fn future_with_local_symbol() -> Contract {
+    Contract {
         security_type: SecurityType::Future,
         exchange: "EUREX".to_owned(),
         currency: "EUR".to_owned(),
         local_symbol: "FGBL MAR 23".to_owned(),
         last_trade_date_or_contract_month: "202303".to_owned(),
-        ..Contract::default()    
+        ..Contract::default()
     }
 }
 
-pub fn future_with_multiplier() -> Contract
-{
-    Contract{
+pub fn future_with_multiplier() -> Contract {
+    Contract {
         symbol: "DAX".to_owned(),
         security_type: SecurityType::Future,
         exchange: "EUREX".to_owned(),
         currency: "EUR".to_owned(),
         last_trade_date_or_contract_month: "202303".to_owned(),
         multiplier: "1".to_owned(),
-        ..Contract::default()    
+        ..Contract::default()
     }
 }
 
