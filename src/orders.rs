@@ -454,7 +454,7 @@ impl Default for Order {
             fa_group: "".to_owned(),
             fa_profile: "".to_owned(),
             fa_method: "".to_owned(),
-            fa_percentage:"".to_owned(),
+            fa_percentage: "".to_owned(),
             open_close: None,
             origin: 0,
             short_sale_slot: 0,
@@ -462,7 +462,7 @@ impl Default for Order {
             exempt_code: -1,
             discretionary_amt: 0.0,
             opt_out_smart_routing: false,
-            auction_strategy: Some(0),  // TODO - use enum
+            auction_strategy: Some(0), // TODO - use enum
             starting_price: None,
             stock_ref_price: None,
             delta: None,
@@ -645,7 +645,7 @@ impl ToString for Rule80A {
 enum AuctionStrategy {
     Match,
     Improvement,
-    Transparent
+    Transparent,
 }
 
 #[derive(Clone, Debug, Default)]
