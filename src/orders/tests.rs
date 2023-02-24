@@ -13,6 +13,7 @@ fn place_market_order() {
         "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1236109||0||100|1376327563|0|0|0||1376327563.0/DU1236109/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Filled|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
         "3|13|Filled|100|0|196.52|1376327563|0|196.52|100||0||".to_owned(),
         "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1236109||0||100|1376327563|0|0|0||1376327563.0/DU1236109/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Filled|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.0|||USD||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
+        "59|1|00025b46.63f8f39c.01.01|1.0|USD|1.7976931348623157E308|1.7976931348623157E308|||".to_owned(),
     ];
 
     let contract = Contract {
@@ -26,20 +27,45 @@ fn place_market_order() {
     let order_id = 13;
     let order = order_builder::market_order(super::Action::Buy, 100.0);
 
-    let results = super::place_order(&mut client, order_id, &contract, &order);
+    let result = super::place_order(&mut client, order_id, &contract, &order);
 
     assert_eq!(
         client.request_messages[0],
         "3|13|0|TSLA|STK||0|||SMART||USD|||||BUY|100|MKT|||||||0||1|0|0|0|0|0|0|0||0||||||||0||-1|0|||0|||0|0||0||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
     );
 
-    assert!(
-        results.is_ok(),
-        "failed to place order: {:?}",
-        results.unwrap_err()
-    );
+    assert!(result.is_ok(), "failed to place order: {:?}", result.err());
 
-    // 5 open order
+    let mut notifications = result.unwrap();
+
+    if let Some(OrderNotification::OpenOrder(notification)) = notifications.next() {
+        assert_eq!(notification.order_id, 13, "notification.order_id");
+
+        let contract = &notification.contract;
+
+        assert_eq!(contract.contract_id, 76792991, "contract.contract_id");
+        assert_eq!(contract.symbol, "TSLA", "contract.symbol");
+        assert_eq!(contract.security_type, SecurityType::Stock, "contract.security_type");
+        assert_eq!(contract.last_trade_date_or_contract_month, "", "contract.last_trade_date_or_contract_month");
+        assert_eq!(contract.strike, 0.0, "contract.strike");
+        assert_eq!(contract.right, "?", "contract.right");
+        assert_eq!(contract.multiplier, "", "contract.multiplier");
+        assert_eq!(contract.exchange, "SMART", "contract.exchange");
+        assert_eq!(contract.currency, "USD", "contract.currency");
+        assert_eq!(contract.local_symbol, "TSLA", "contract.local_symbol");
+        assert_eq!(contract.trading_class, "NMS", "contract.trading_class");
+ 
+        let order = &notification.order;
+
+        assert_eq!(order.order_id, 13, "order.order_id");
+
+        let order_state = &notification.order_state;
+        //            *
+        //         "|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1236109||0||100|1376327563|0|0|0||1376327563.0/DU1236109/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
+    } else {
+        assert!(false, "expected an open order notification");
+    }
+
     // 3 order status
     // 11 execution data
 }
@@ -64,7 +90,7 @@ fn place_limit_order() {
     assert!(
         results.is_ok(),
         "failed to place order: {:?}",
-        results.unwrap_err()
+        results.err()
     );
 }
 
@@ -88,7 +114,7 @@ fn place_combo_market_order() {
     assert!(
         results.is_ok(),
         "failed to place order: {:?}",
-        results.unwrap_err()
+        results.err()
     );
 }
 

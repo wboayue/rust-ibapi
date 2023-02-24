@@ -16,7 +16,7 @@ pub(crate) mod contract_samples;
 
 // Models
 
-#[derive(Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 /// SecurityType enumerates available security types
 pub enum SecurityType {
     /// Stock (or ETF)
@@ -85,7 +85,7 @@ impl SecurityType {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 /// Contract describes an instrument's definition
 pub struct Contract {
     /// The unique IB contract identifier.
@@ -174,7 +174,7 @@ impl Contract {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 // ComboLeg represents a leg within combo orders.
 pub struct ComboLeg {
     /// The Contract's IB's unique id.
@@ -210,7 +210,7 @@ pub enum ComboLegOpenClose {
     Unknown = 3,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 /// Delta and underlying price for Delta-Neutral combo orders.
 /// Underlying (STK or FUT), delta and underlying price goes into this attribute.
 pub struct DeltaNeutralContract {

@@ -3,9 +3,10 @@ use std::fmt::Debug;
 use anyhow::Result;
 use log::{debug, info};
 
-use crate::client::{Client, RequestMessage};
-use crate::contracts::Contract;
-use crate::messages::OutgoingMessages;
+use crate::client::transport::ResponsePacketPromise;
+use crate::client::{Client, RequestMessage, ResponseMessage};
+use crate::contracts::{Contract, SecurityType};
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
 
 /// Make sure to test using only your paper trading account when applicable. A good way of finding out if an order type/exchange combination
@@ -667,9 +668,21 @@ pub struct SoftDollarTier {
     display_name: String,
 }
 
-/// Provides an active order's current state.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct OpenOrder {
+    /// The order's unique id
+    order_id: i32,
+    /// The order's Contract.
+    contract: Contract,
+    /// The currently active order
+    order: Order,
+    /// The order's OrderState
+    order_state: OrderState,
+}
+
+/// Provides an active order's current state.
+#[derive(Clone, Debug, Default)]
+pub struct OrderState {
     /// The order's current status
     status: String,
     /// The account's current initial margin.
@@ -797,7 +810,7 @@ pub struct Execution {
 }
 
 #[derive(Clone, Debug)]
-pub enum OrderState {
+pub enum OrderNotification {
     OrderStatus(OrderStatus),
     OpenOrder(OpenOrder),
     ExecutionData(Execution),
@@ -845,7 +858,7 @@ pub fn place_order<C: Client + Debug>(
     order_id: i32,
     contract: &Contract,
     order: &Order,
-) -> Result<Vec<OrderState>> {
+) -> Result<OrderNotificationIterator> {
     verify_order(client, order, order_id)?;
     verify_order_contract(client, contract, order_id)?;
 
@@ -860,31 +873,44 @@ pub fn place_order<C: Client + Debug>(
         order,
     )?;
 
-    let responses = client.send_message_for_request(request_id, message)?;
-    // return order status
+    let messages = client.send_message_for_request(request_id, message)?;
 
-    // let mut contract_details: Vec<ContractDetails> = Vec::default();
+    Ok(OrderNotificationIterator { messages, server_version: client.server_version() })
+}
 
-    // for mut message in responses {
-    //     match message.message_type() {
-    //         IncomingMessages::ContractData => {
-    //             let decoded = decode_contract_details(client.server_version(), &mut message)?;
-    //             contract_details.push(decoded);
-    //         }
-    //         IncomingMessages::ContractDataEnd => {
-    //             break;
-    //         }
-    //         IncomingMessages::Error => {
-    //             error!("error: {:?}", message);
-    //             return Err(anyhow!("contract_details {:?}", message));
-    //         }
-    //         _ => {
-    //             error!("unexpected message: {:?}", message);
-    //         }
-    //     }
-    // }
+pub struct OrderNotificationIterator {
+    server_version: i32,
+    messages: ResponsePacketPromise,
+}
 
-    Ok(Vec::new())
+impl Iterator for OrderNotificationIterator {
+    type Item = OrderNotification;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(mut message) = self.messages.next() {
+            match message.message_type() {
+                IncomingMessages::OpenOrder => {
+                    let result = decode_open_order(self.server_version, &mut message);
+                    match result {
+                        Ok(open_order) => Some(OrderNotification::OpenOrder(open_order)),
+                        Err(err) => {
+                            info!("error: {err:?}");
+                            None
+                        }
+                    }
+                },
+                IncomingMessages::OrderStatus => None,
+                IncomingMessages::ExecutionData => None,
+                IncomingMessages::CommissionsReport => None,
+                _ => {
+                    info!("unexpected message: {:?}", message);
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    }
 }
 
 fn verify_order<C: Client>(client: &mut C, order: &Order, _order_id: i32) -> Result<()> {
@@ -1579,6 +1605,120 @@ fn f64_max_to_zero(num: Option<f64>) -> Option<f64> {
     } else {
         num
     }
+}
+
+fn decode_open_order(
+    server_version: i32,
+    message: &mut ResponseMessage,
+) -> Result<OpenOrder> {
+    message.skip(); // message type
+
+    let message_version = if server_version < server_versions::ORDER_CONTAINER {
+        message.next_int()?
+    } else {
+        server_version
+    };
+
+    let mut open_order = OpenOrder::default();
+
+    let contract = &mut open_order.contract;
+    let order = &mut open_order.order;
+    let order_state = &mut open_order.order_state;
+
+    // Order Id
+
+    open_order.order_id = message.next_int()?;
+    order.order_id = open_order.order_id;
+
+    // Contract fields
+    
+    contract.contract_id = message.next_int()?;
+    contract.symbol = message.next_string()?;
+
+    let security_type = message.next_string()?;
+    contract.security_type = SecurityType::from(&security_type);
+
+    contract.last_trade_date_or_contract_month = message.next_string()?;
+    contract.strike = message.next_double()?;
+    contract.right = message.next_string()?;
+    contract.multiplier = message.next_string()?;
+    contract.exchange = message.next_string()?;
+    contract.currency = message.next_string()?;
+    contract.local_symbol = message.next_string()?;
+    contract.trading_class = message.next_string()?;
+
+    // Order fields
+            // // read order fields
+            // eOrderDecoder.readAction();
+            // eOrderDecoder.readTotalQuantity();
+            // eOrderDecoder.readOrderType();
+            // eOrderDecoder.readLmtPrice();
+            // eOrderDecoder.readAuxPrice();
+            // eOrderDecoder.readTIF();
+            // eOrderDecoder.readOcaGroup();
+            // eOrderDecoder.readAccount();
+            // eOrderDecoder.readOpenClose();
+            // eOrderDecoder.readOrigin();
+            // eOrderDecoder.readOrderRef();
+            // eOrderDecoder.readClientId();
+            // eOrderDecoder.readPermId();
+            // eOrderDecoder.readOutsideRth();
+            // eOrderDecoder.readHidden();
+            // eOrderDecoder.readDiscretionaryAmount();
+            // eOrderDecoder.readGoodAfterTime();
+            // eOrderDecoder.skipSharesAllocation();
+            // eOrderDecoder.readFAParams();
+            // eOrderDecoder.readModelCode();
+            // eOrderDecoder.readGoodTillDate();
+            // eOrderDecoder.readRule80A();
+            // eOrderDecoder.readPercentOffset();
+            // eOrderDecoder.readSettlingFirm();
+            // eOrderDecoder.readShortSaleParams();
+            // eOrderDecoder.readAuctionStrategy();
+            // eOrderDecoder.readBoxOrderParams();
+            // eOrderDecoder.readPegToStkOrVolOrderParams();
+            // eOrderDecoder.readDisplaySize();
+            // eOrderDecoder.readOldStyleOutsideRth();
+            // eOrderDecoder.readBlockOrder();
+            // eOrderDecoder.readSweepToFill();
+            // eOrderDecoder.readAllOrNone();
+            // eOrderDecoder.readMinQty();
+            // eOrderDecoder.readOcaType();
+            // eOrderDecoder.skipETradeOnly();
+            // eOrderDecoder.skipFirmQuoteOnly();
+            // eOrderDecoder.skipNbboPriceCap();
+            // eOrderDecoder.readParentId();
+            // eOrderDecoder.readTriggerMethod();
+            // eOrderDecoder.readVolOrderParams(true);
+            // eOrderDecoder.readTrailParams();
+            // eOrderDecoder.readBasisPoints();
+            // eOrderDecoder.readComboLegs();
+            // eOrderDecoder.readSmartComboRoutingParams();
+            // eOrderDecoder.readScaleOrderParams();
+            // eOrderDecoder.readHedgeParams();
+            // eOrderDecoder.readOptOutSmartRouting();
+            // eOrderDecoder.readClearingParams();
+            // eOrderDecoder.readNotHeld();
+            // eOrderDecoder.readDeltaNeutral();
+            // eOrderDecoder.readAlgoParams();
+            // eOrderDecoder.readSolicited();
+            // eOrderDecoder.readWhatIfInfoAndCommission();
+            // eOrderDecoder.readVolRandomizeFlags();
+            // eOrderDecoder.readPegToBenchParams();
+            // eOrderDecoder.readConditions();
+            // eOrderDecoder.readAdjustedOrderParams();
+            // eOrderDecoder.readSoftDollarTier();
+            // eOrderDecoder.readCashQty();
+            // eOrderDecoder.readDontUseAutoPriceForHedge();
+            // eOrderDecoder.readIsOmsContainer();
+            // eOrderDecoder.readDiscretionaryUpToLimitPrice();
+            // eOrderDecoder.readUsePriceMgmtAlgo();
+            // eOrderDecoder.readDuration();
+            // eOrderDecoder.readPostToAts();
+            // eOrderDecoder.readAutoCancelParent(MinServerVer.AUTO_CANCEL_PARENT);
+            // eOrderDecoder.readPegBestPegMidOrderAttributes();
+
+    Ok(open_order)
 }
 
 // cancel_order
