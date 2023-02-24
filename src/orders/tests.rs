@@ -64,7 +64,7 @@ fn place_combo_market_order() {
 
     client.response_messages = vec![];
 
-    let order_id = 12;
+    let order_id = 12;  // get next order id
     let contract = contract_samples::smart_future_combo_contract();
     let order = order_builder::combo_market_order(Action::Sell, 150.0, true);
 
