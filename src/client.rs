@@ -348,6 +348,9 @@ impl ResponseMessage {
         if field.is_empty() || field == "0" || field == "0.0" || field == UNSET_DOUBLE {
             return Ok(None);
         }
+        // if field.is_empty() || field == UNSET_DOUBLE {
+        //     return Ok(None);
+        // }
         if field == INFINITY_STR {
             return Ok(Some(f64::INFINITY));
         }
