@@ -361,7 +361,7 @@ pub struct Order {
     /// Defines the minimum trade quantity to fill. For IBKRATS orders.
     pub min_trade_qty: Option<i32>,
     /// Defines the minimum size to compete. For IBKRATS orders.
-    pub min_complete_size: Option<i32>,
+    pub min_compete_size: Option<i32>,
     /// Specifies the offset off the midpoint that will be applied to the order. For IBKRATS orders.
     pub compete_against_best_offset: Option<f64>,
     /// his offset is applied when the spread is an even number of cents wide. This offset must be in whole-penny increments or zero. For IBKRATS orders.
@@ -377,9 +377,9 @@ pub struct Order {
     /// Pegged-to-benchmark orders: indicates whether the order's pegged price should increase or decreases.
     pub is_pegged_change_amount_decrease: bool,
     /// Pegged-to-benchmark orders: amount by which the order's pegged price should move.
-    pub pegged_change_amount: f64,
+    pub pegged_change_amount: Option<f64>,
     /// Pegged-to-benchmark orders: the amount the reference contract needs to move to adjust the pegged order.
-    pub reference_change_amount: f64,
+    pub reference_change_amount: Option<f64>,
     /// Pegged-to-benchmark orders: the exchange against which we want to observe the reference contract.
     pub reference_exchange: String,
     /// Adjusted Stop orders: the parent order will be adjusted to the given type when the adjusted trigger price is penetrated.
@@ -528,7 +528,7 @@ impl Default for Order {
             advanced_error_override: "".to_owned(),
             manual_order_time: "".to_owned(),
             min_trade_qty: None,
-            min_complete_size: None,
+            min_compete_size: None,
             compete_against_best_offset: None,
             mid_offset_at_whole: None,
             mid_offset_at_half: None,
@@ -536,8 +536,8 @@ impl Default for Order {
             randomize_price: false,
             reference_contract_id: 0,
             is_pegged_change_amount_decrease: false,
-            pegged_change_amount: 0.0,
-            reference_change_amount: 0.0,
+            pegged_change_amount: Some(0.0),
+            reference_change_amount: Some(0.0),
             reference_exchange: "".to_owned(),
             adjusted_order_type: "".to_owned(),
             trigger_price: None,
@@ -686,6 +686,20 @@ pub enum OrderCondition {
     Execution = 5,
     Volume = 6,
     PercentChange = 7,
+}
+
+impl OrderCondition {
+    pub fn from_i32(val: i32) -> Self {
+        match val {
+            1 => OrderCondition::Price,
+            3 => OrderCondition::Time,
+            4 => OrderCondition::Volume,
+            5 => OrderCondition::Execution,
+            6 => OrderCondition::Volume,
+            7 => OrderCondition::PercentChange,
+            _ => panic!("unsupport order condition: {val}"),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -1097,7 +1111,7 @@ fn verify_order<C: Client>(client: &mut C, order: &Order, _order_id: i32) -> Res
     }
 
     if order.min_trade_qty.is_some()
-        || order.min_complete_size.is_some()
+        || order.min_compete_size.is_some()
         || order.compete_against_best_offset.is_some()
         || order.mid_offset_at_whole.is_some()
         || order.mid_offset_at_half.is_some()
@@ -1512,7 +1526,7 @@ fn encode_place_order(server_version: i32, request_id: i32, order_id: i32, contr
         }
         let mut send_mid_offsets = false;
         if order.order_type == "PEG BEST" {
-            message.push_field(&order.min_complete_size);
+            message.push_field(&order.min_compete_size);
             message.push_field(&order.compete_against_best_offset);
             if order.compete_against_best_offset == COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID {
                 send_mid_offsets = true;
@@ -1803,20 +1817,92 @@ fn decode_open_order(server_version: i32, message: &mut ResponseMessage) -> Resu
     order_state.commission_currency = message.next_string()?;
     order_state.warning_text = message.next_string()?;
 
-    // eOrderDecoder.readVolRandomizeFlags();
-    // eOrderDecoder.readPegToBenchParams();
-    // eOrderDecoder.readConditions();
-    // eOrderDecoder.readAdjustedOrderParams();
-    // eOrderDecoder.readSoftDollarTier();
-    // eOrderDecoder.readCashQty();
-    // eOrderDecoder.readDontUseAutoPriceForHedge();
-    // eOrderDecoder.readIsOmsContainer();
-    // eOrderDecoder.readDiscretionaryUpToLimitPrice();
-    // eOrderDecoder.readUsePriceMgmtAlgo();
-    // eOrderDecoder.readDuration();
-    // eOrderDecoder.readPostToAts();
-    // eOrderDecoder.readAutoCancelParent(MinServerVer.AUTO_CANCEL_PARENT);
-    // eOrderDecoder.readPegBestPegMidOrderAttributes();
+    // vol randomize flags
+    order.randomize_size = message.next_bool()?;
+    order.randomize_price = message.next_bool()?;
+
+    if server_version >= server_versions::PEGGED_TO_BENCHMARK {
+        if order.order_type == "PEG BENCH" {
+            order.reference_contract_id = message.next_int()?;
+            order.is_pegged_change_amount_decrease = message.next_bool()?;
+            order.pegged_change_amount = message.next_optional_double()?;
+            order.reference_change_amount = message.next_optional_double()?;
+            order.reference_exchange = message.next_string()?;
+        }
+    }
+    
+    // Conditions
+    if server_version >= server_versions::PEGGED_TO_BENCHMARK {
+        let conditions_count = message.next_int()?;
+        for _ in 0..conditions_count {
+            let order_condition = message.next_int()?;
+            order.conditions.push(OrderCondition::from_i32(order_condition));
+        }
+        if conditions_count > 0 {
+            order.conditions_ignore_rth = message.next_bool()?;
+            order.conditions_cancel_order = message.next_bool()?;
+        }
+    }
+
+    // Adjusted order params
+    if server_version >= server_versions::PEGGED_TO_BENCHMARK {
+        order.adjusted_order_type = message.next_string()?;
+        order.trigger_price = message.next_optional_double()?;
+        order.trail_stop_price = message.next_optional_double()?;
+        order.lmt_price_offset = message.next_optional_double()?;
+        order.adjusted_stop_price = message.next_optional_double()?;
+        order.adjusted_stop_limit_price = message.next_optional_double()?;
+        order.adjusted_trailing_amount = message.next_optional_double()?;
+        order.adjustable_trailing_unit =message.next_int()?;
+    }
+
+    if server_version >= server_versions::SOFT_DOLLAR_TIER {
+        order.soft_dollar_tier = SoftDollarTier{
+            name: message.next_string()?,
+            value: message.next_string()?,
+            display_name: message.next_string()?,
+        };
+    }
+
+    if server_version >= server_versions::CASH_QTY {
+        order.cash_qty = message.next_optional_double()?;
+    }
+
+    if server_version >= server_versions::AUTO_PRICE_FOR_HEDGE {
+        order.dont_use_auto_price_for_hedge = message.next_bool()?;
+    }
+
+    if server_version >= server_versions::ORDER_CONTAINER {
+        order.is_oms_container = message.next_bool()?;
+    }
+
+    if server_version >= server_versions::D_PEG_ORDERS {
+        order.discretionary_up_to_limit_price = message.next_bool()?;
+    }
+
+    if server_version >= server_versions::PRICE_MGMT_ALGO {
+        order.use_price_mgmt_algo = message.next_bool()?;
+    }
+
+    if server_version >= server_versions::DURATION {
+        order.duration = message.next_optional_int()?;
+    }
+
+    if server_version >= server_versions::POST_TO_ATS {
+        order.post_to_ats = message.next_optional_int()?;
+    }
+
+    if server_version >= server_versions::AUTO_CANCEL_PARENT {
+        order.auto_cancel_parent = message.next_bool()?;
+    }
+
+    if server_version >= server_versions::PEGBEST_PEGMID_OFFSETS {
+        order.min_trade_qty = message.next_optional_int()?;
+        order.min_compete_size = message.next_optional_int()?;
+        order.compete_against_best_offset = message.next_optional_double()?;
+        order.mid_offset_at_whole = message.next_optional_double()?;
+        order.mid_offset_at_half = message.next_optional_double()?;
+    }
 
     Ok(open_order)
 }

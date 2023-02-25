@@ -139,9 +139,47 @@ fn place_market_order() {
         assert_eq!(order.solicited, false, "order.solicited");
         assert_eq!(order.what_if, false, "order.what_if");
         assert_eq!(order_state.status, "PreSubmitted", "order_state.status");
-
-    //        *
-    // |PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
+        assert_eq!(order_state.initial_margin_before, "1.7976931348623157E308", "order_state.initial_margin_before");
+        assert_eq!(order_state.maintenance_margin_before, "1.7976931348623157E308", "order_state.maintenance_margin_before");
+        assert_eq!(order_state.equity_with_loan_before, "1.7976931348623157E308", "order_state.equity_with_loan_before");
+        assert_eq!(order_state.initial_margin_change, "1.7976931348623157E308", "order_state.initial_margin_change");
+        assert_eq!(order_state.maintenance_margin_change, "1.7976931348623157E308", "order_state.maintenance_margin_change");
+        assert_eq!(order_state.equity_with_loan_change, "1.7976931348623157E308", "order_state.equity_with_loan_change");
+        assert_eq!(order_state.initial_margin_after, "1.7976931348623157E308", "order_state.initial_margin_after");
+        assert_eq!(order_state.maintenance_margin_after, "1.7976931348623157E308", "order_state.maintenance_margin_after");
+        assert_eq!(order_state.equity_with_loan_after, "1.7976931348623157E308", "order_state.equity_with_loan_after");
+        assert_eq!(order_state.commission, None, "order_state.commission");
+        assert_eq!(order_state.minimum_commission, None, "order_state.minimum_commission");
+        assert_eq!(order_state.maximum_commission, None, "order_state.maximum_commission");
+        assert_eq!(order_state.commission_currency, "", "order_state.commission_currency");
+        assert_eq!(order_state.warning_text, "", "order_state.warning_text");
+        assert_eq!(order.randomize_size , false, "order.randomize_size ");
+        assert_eq!(order.randomize_price, false, "order.randomize_price");
+        assert_eq!(order.conditions.len(), 0, "order.conditions.len()");
+        assert_eq!(order.adjusted_order_type, "None", "order.adjusted_order_type");
+        assert_eq!(order.trigger_price, None, "order.trigger_price");
+        assert_eq!(order.trail_stop_price, None, "order.trail_stop_price");
+        assert_eq!(order.lmt_price_offset, None, "order.lmt_price_offset");
+        assert_eq!(order.adjusted_stop_price, None, "order.adjusted_stop_price");
+        assert_eq!(order.adjusted_stop_limit_price, None, "order.adjusted_stop_limit_price");
+        assert_eq!(order.adjusted_trailing_amount, None, "order.adjusted_trailing_amount");
+        assert_eq!(order.adjustable_trailing_unit, 0, "order.adjustable_trailing_unit");
+        assert_eq!(order.soft_dollar_tier.name, "", "order.soft_dollar_tier.name");
+        assert_eq!(order.soft_dollar_tier.value, "", "order.soft_dollar_tier.value");
+        assert_eq!(order.soft_dollar_tier.display_name, "", "order.soft_dollar_tier.display_name");
+        assert_eq!(order.cash_qty, Some(0.0), "order.cash_qty");
+        assert_eq!(order.dont_use_auto_price_for_hedge, true, "order.dont_use_auto_price_for_hedge");
+        assert_eq!(order.is_oms_container, false, "order.is_oms_container");
+        assert_eq!(order.discretionary_up_to_limit_price, false, "order.discretionary_up_to_limit_price");
+        assert_eq!(order.use_price_mgmt_algo, false, "order.use_price_mgmt_algo");
+        assert_eq!(order.duration, None, "order.duration");
+        assert_eq!(order.post_to_ats, None, "order.post_to_ats");
+        assert_eq!(order.auto_cancel_parent, false, "order.auto_cancel_parent");
+        assert_eq!(order.min_trade_qty, None, "order.min_trade_qty");
+        assert_eq!(order.min_compete_size, None, "order.min_compete_size");
+        assert_eq!(order.compete_against_best_offset, None, "order.compete_against_best_offset");
+        assert_eq!(order.mid_offset_at_whole, None, "order.mid_offset_at_whole");
+        assert_eq!(order.mid_offset_at_half, None, "order.mid_offset_at_half");
     } else {
         assert!(false, "expected an open order notification");
     }

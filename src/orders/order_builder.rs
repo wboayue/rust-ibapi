@@ -723,8 +723,8 @@ pub fn pegged_to_benchmark(
         total_quantity: quantity,
         starting_price: Some(starting_price),
         is_pegged_change_amount_decrease: pegged_change_amount_decrease,
-        pegged_change_amount,                              // by ... (and likewise for price moving in opposite direction)
-        reference_change_amount,                           // whenever there is a price change of ...
+        pegged_change_amount: Some(pegged_change_amount),                              // by ... (and likewise for price moving in opposite direction)
+        reference_change_amount: Some(reference_change_amount),                        // whenever there is a price change of ...
         reference_contract_id,                             // in the reference contract ...
         reference_exchange: reference_exchange.to_owned(), // being traded at ...
         stock_ref_price: Some(stock_reference_price),      // starting reference price is ...
@@ -935,7 +935,7 @@ pub fn peg_best_up_to_mid_order(
         limit_price: Some(limit_price),
         not_held: true,
         min_trade_qty: Some(min_trade_qty),
-        min_complete_size: Some(min_compete_size),
+        min_compete_size: Some(min_compete_size),
         compete_against_best_offset: super::COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID,
         mid_offset_at_whole: Some(mid_offset_at_whole),
         mid_offset_at_half: Some(mid_offset_at_half),
@@ -958,7 +958,7 @@ pub fn peg_best_order(
         limit_price: Some(limit_price),
         not_held: true,
         min_trade_qty: Some(min_trade_qty),
-        min_complete_size: Some(min_compete_size),
+        min_compete_size: Some(min_compete_size),
         compete_against_best_offset: Some(compete_against_best_offset),
         ..Order::default()
     }
