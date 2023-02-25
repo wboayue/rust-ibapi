@@ -181,7 +181,23 @@ fn place_market_order() {
         assert_eq!(order.mid_offset_at_whole, None, "order.mid_offset_at_whole");
         assert_eq!(order.mid_offset_at_half, None, "order.mid_offset_at_half");
     } else {
-        assert!(false, "expected an open order notification");
+        assert!(false, "message[0] expected an open order notification");
+    }
+
+    if let Some(OrderNotification::OrderStatus(order_status)) = notifications.next() {
+        assert_eq!(order_status.order_id, 13, "order_status.order_id");
+        assert_eq!(order_status.status, "PreSubmitted", "order_status.status");
+        assert_eq!(order_status.filled, 0.0, "order_status.filled");
+        assert_eq!(order_status.remaining, 100.0, "order_status.remaining");
+        assert_eq!(order_status.average_fill_price, 0.0, "order_status.average_fill_price");
+        assert_eq!(order_status.perm_id, 1376327563, "order_status.perm_id");
+        assert_eq!(order_status.parent_id, 0, "order_status.parent_id");
+        assert_eq!(order_status.last_fill_price, 0.0, "order_status.last_fill_price");
+        assert_eq!(order_status.client_id, 100, "order_status.client_id");
+        assert_eq!(order_status.why_held, "", "order_status.why_held");
+        assert_eq!(order_status.market_cap_price, 0.0, "order_status.market_cap_price");
+    } else {
+        assert!(false, "message[1] expected order status notification");
     }
 
     // 3 order status
