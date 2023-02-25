@@ -314,7 +314,7 @@ impl ResponseMessage {
         let field = &self.fields[self.i];
         self.i += 1;
 
-        if field.is_empty() || field == "0" || field == "0.0"{
+        if field.is_empty() || field == "0" || field == "0.0" {
             return Ok(0.0);
         }
 

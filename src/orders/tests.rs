@@ -98,7 +98,11 @@ fn place_market_order() {
         assert_eq!(order.starting_price, None, "order.starting_price");
         assert_eq!(order.stock_ref_price, None, "order.stock_ref_price");
         assert_eq!(order.delta, None, "order.delta");
-        assert_eq!(order.stock_range_lower, Some(0.0), "order.stock_range_lower");
+        assert_eq!(
+            order.stock_range_lower,
+            Some(0.0),
+            "order.stock_range_lower"
+        );
         assert_eq!(order.stock_range_upper, None, "order.stock_range_upper");
         assert_eq!(order.display_size, None, "order.display_size");
         assert_eq!(order.block_order, false, "order.block_order");
@@ -119,23 +123,51 @@ fn place_market_order() {
             "order.delta_neutral_aux_price"
         );
         assert_eq!(order.delta_neutral_con_id, 0, "order.delta_neutral_con_id");
-        assert_eq!(order.delta_neutral_settling_firm, "", "order.delta_neutral_settling_firm");
-        assert_eq!(order.delta_neutral_clearing_account, "", "order.delta_neutral_clearing_account");
-        assert_eq!(order.delta_neutral_clearing_intent, "", "order.delta_neutral_clearing_intent");
-        assert_eq!(order.delta_neutral_open_close, "?", "order.delta_neutral_open_close");
-        assert_eq!(order.delta_neutral_short_sale, false, "order.delta_neutral_short_sale");
-        assert_eq!(order.delta_neutral_short_sale_slot, 0, "order.delta_neutral_short_sale_slot");
-        assert_eq!(order.delta_neutral_designated_location, "", "order.delta_neutral_designated_location");
+        assert_eq!(
+            order.delta_neutral_settling_firm, "",
+            "order.delta_neutral_settling_firm"
+        );
+        assert_eq!(
+            order.delta_neutral_clearing_account, "",
+            "order.delta_neutral_clearing_account"
+        );
+        assert_eq!(
+            order.delta_neutral_clearing_intent, "",
+            "order.delta_neutral_clearing_intent"
+        );
+        assert_eq!(
+            order.delta_neutral_open_close, "?",
+            "order.delta_neutral_open_close"
+        );
+        assert_eq!(
+            order.delta_neutral_short_sale, false,
+            "order.delta_neutral_short_sale"
+        );
+        assert_eq!(
+            order.delta_neutral_short_sale_slot, 0,
+            "order.delta_neutral_short_sale_slot"
+        );
+        assert_eq!(
+            order.delta_neutral_designated_location, "",
+            "order.delta_neutral_designated_location"
+        );
         assert_eq!(order.continuous_update, false, "order.continuous_update");
-        assert_eq!(order.stock_range_lower, Some(0.0), "order.stock_range_lower");
+        assert_eq!(
+            order.stock_range_lower,
+            Some(0.0),
+            "order.stock_range_lower"
+        );
         assert_eq!(order.stock_range_upper, None, "order.stock_range_upper");
-        assert_eq!(order.reference_price_type, None, "order.reference_price_type");
-            
+        assert_eq!(
+            order.reference_price_type, None,
+            "order.reference_price_type"
+        );
+
         // order.continuous_update = message.next_bool()?;
         // order.stock_range_lower = message.next_optional_double()?;
         // order.stock_range_upper = message.next_optional_double()?;
         // order.reference_price_type = message.next_optional_int()?;
-    
+
         let order_state = &notification.order_state;
         //   *
         //  |0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),

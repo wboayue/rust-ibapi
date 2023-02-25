@@ -1763,7 +1763,7 @@ fn decode_open_order(server_version: i32, message: &mut ResponseMessage) -> Resu
     order.volatility_type = message.next_optional_int()?;
     order.delta_neutral_order_type = message.next_string()?;
     order.delta_neutral_aux_price = message.next_optional_double()?;
-    
+
     if order.is_delta_neutral() {
         order.delta_neutral_con_id = message.next_int()?;
         order.delta_neutral_settling_firm = message.next_string()?;
@@ -1772,7 +1772,7 @@ fn decode_open_order(server_version: i32, message: &mut ResponseMessage) -> Resu
         order.delta_neutral_open_close = message.next_string()?;
         order.delta_neutral_short_sale = message.next_bool()?;
         order.delta_neutral_short_sale_slot = message.next_int()?;
-        order.delta_neutral_designated_location= message.next_string()?;
+        order.delta_neutral_designated_location = message.next_string()?;
     }
 
     order.continuous_update = message.next_bool()?;
