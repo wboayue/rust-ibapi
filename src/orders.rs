@@ -727,23 +727,23 @@ pub struct OrderState {
     /// The order's current status
     status: String,
     /// The account's current initial margin.
-    initial_margin_before: String,
+    initial_margin_before: Option<f64>,
     /// The account's current maintenance margin
-    maintenance_margin_before: String,
+    maintenance_margin_before: Option<f64>,
     /// The account's current equity with loan
-    equity_with_loan_before: String,
+    equity_with_loan_before: Option<f64>,
     /// The change of the account's initial margin.
-    initial_margin_change: String,
+    initial_margin_change: Option<f64>,
     /// The change of the account's maintenance margin
-    maintenance_margin_change: String,
+    maintenance_margin_change: Option<f64>,
     /// The change of the account's equity with loan
-    equity_with_loan_change: String,
+    equity_with_loan_change: Option<f64>,
     /// The order's impact on the account's initial margin.
-    initial_margin_after: String,
+    initial_margin_after: Option<f64>,
     /// The order's impact on the account's maintenance margin
-    maintenance_margin_after: String,
+    maintenance_margin_after: Option<f64>,
     /// Shows the impact the order would have on the account's equity with loan
-    equity_with_loan_after: String,
+    equity_with_loan_after: Option<f64>,
     /// The order's generated commission.
     commission: Option<f64>,
     // The execution's minimum commission.
@@ -1801,16 +1801,16 @@ fn decode_open_order(server_version: i32, message: &mut ResponseMessage) -> Resu
     order.what_if = message.next_bool()?;
     order_state.status = message.next_string()?;
     if server_version >= server_versions::WHAT_IF_EXT_FIELDS {
-        order_state.initial_margin_before = message.next_string()?;
-        order_state.maintenance_margin_before = message.next_string()?;
-        order_state.equity_with_loan_before = message.next_string()?;
-        order_state.initial_margin_change = message.next_string()?;
-        order_state.maintenance_margin_change = message.next_string()?;
-        order_state.equity_with_loan_change = message.next_string()?;
+        order_state.initial_margin_before = message.next_optional_double()?;
+        order_state.maintenance_margin_before = message.next_optional_double()?;
+        order_state.equity_with_loan_before = message.next_optional_double()?;
+        order_state.initial_margin_change = message.next_optional_double()?;
+        order_state.maintenance_margin_change = message.next_optional_double()?;
+        order_state.equity_with_loan_change = message.next_optional_double()?;
     }
-    order_state.initial_margin_after = message.next_string()?;
-    order_state.maintenance_margin_after = message.next_string()?;
-    order_state.equity_with_loan_after = message.next_string()?;
+    order_state.initial_margin_after = message.next_optional_double()?;
+    order_state.maintenance_margin_after = message.next_optional_double()?;
+    order_state.equity_with_loan_after = message.next_optional_double()?;
     order_state.commission = message.next_optional_double()?;
     order_state.minimum_commission = message.next_optional_double()?;
     order_state.maximum_commission = message.next_optional_double()?;
@@ -1830,7 +1830,7 @@ fn decode_open_order(server_version: i32, message: &mut ResponseMessage) -> Resu
             order.reference_exchange = message.next_string()?;
         }
     }
-    
+
     // Conditions
     if server_version >= server_versions::PEGGED_TO_BENCHMARK {
         let conditions_count = message.next_int()?;
@@ -1853,11 +1853,11 @@ fn decode_open_order(server_version: i32, message: &mut ResponseMessage) -> Resu
         order.adjusted_stop_price = message.next_optional_double()?;
         order.adjusted_stop_limit_price = message.next_optional_double()?;
         order.adjusted_trailing_amount = message.next_optional_double()?;
-        order.adjustable_trailing_unit =message.next_int()?;
+        order.adjustable_trailing_unit = message.next_int()?;
     }
 
     if server_version >= server_versions::SOFT_DOLLAR_TIER {
-        order.soft_dollar_tier = SoftDollarTier{
+        order.soft_dollar_tier = SoftDollarTier {
             name: message.next_string()?,
             value: message.next_string()?,
             display_name: message.next_string()?,
