@@ -68,8 +68,8 @@ fn place_market_order() {
         assert_eq!(order.action, Action::Buy, "order.action");
         assert_eq!(order.total_quantity, 100.0, "order.total_quantity");
         assert_eq!(order.order_type, "MKT", "order.order_type");
-        assert_eq!(order.limit_price, None, "order.limit_price");
-        assert_eq!(order.aux_price, None, "order.aux_price");
+        assert_eq!(order.limit_price, Some(0.0), "order.limit_price");
+        assert_eq!(order.aux_price, Some(0.0), "order.aux_price");
         assert_eq!(order.tif, "DAY", "order.tif");
         assert_eq!(order.oca_group, "", "order.oca_group");
         assert_eq!(order.account, "DU1236109", "order.account");
@@ -98,7 +98,7 @@ fn place_market_order() {
         assert_eq!(order.starting_price, None, "order.starting_price");
         assert_eq!(order.stock_ref_price, None, "order.stock_ref_price");
         assert_eq!(order.delta, None, "order.delta");
-        assert_eq!(order.stock_range_lower, None, "order.stock_range_lower");
+        assert_eq!(order.stock_range_lower, Some(0.0), "order.stock_range_lower");
         assert_eq!(order.stock_range_upper, None, "order.stock_range_upper");
         assert_eq!(order.display_size, None, "order.display_size");
         assert_eq!(order.block_order, false, "order.block_order");

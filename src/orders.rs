@@ -1781,7 +1781,7 @@ fn decode_open_order(server_version: i32, message: &mut ResponseMessage) -> Resu
     order.reference_price_type = message.next_optional_int()?;
 
     // https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EOrderDecoder.cs#L442
-    
+
     // eOrderDecoder.readTrailParams();
     // eOrderDecoder.readBasisPoints();
 
