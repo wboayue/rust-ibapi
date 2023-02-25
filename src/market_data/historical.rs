@@ -32,16 +32,8 @@ use crate::server_versions;
 ///         Ok(())
 ///     }
 /// ```
-pub fn head_timestamp<C: Client + Debug>(
-    client: &mut C,
-    contract: &Contract,
-    what_to_show: &str,
-    use_rth: bool,
-) -> Result<OffsetDateTime> {
-    client.check_server_version(
-        server_versions::REQ_HEAD_TIMESTAMP,
-        "It does not support head time stamp requests.",
-    )?;
+pub fn head_timestamp<C: Client + Debug>(client: &mut C, contract: &Contract, what_to_show: &str, use_rth: bool) -> Result<OffsetDateTime> {
+    client.check_server_version(server_versions::REQ_HEAD_TIMESTAMP, "It does not support head time stamp requests.")?;
 
     let request_id = client.next_request_id();
     let request = encode_head_timestamp(request_id, contract, what_to_show, use_rth)?;
@@ -53,12 +45,7 @@ pub fn head_timestamp<C: Client + Debug>(
 }
 
 /// Encodes the head timestamp request
-pub fn encode_head_timestamp(
-    request_id: i32,
-    contract: &Contract,
-    what_to_show: &str,
-    use_rth: bool,
-) -> Result<RequestMessage> {
+pub fn encode_head_timestamp(request_id: i32, contract: &Contract, what_to_show: &str, use_rth: bool) -> Result<RequestMessage> {
     let mut packet = RequestMessage::default();
 
     packet.push_field(&12);
@@ -112,12 +99,7 @@ fn decode_head_timestamp(packet: &mut ResponseMessage) -> Result<OffsetDateTime>
 }
 
 /// Returns data histogram of specified contract
-pub fn histogram_data<C: Client + Debug>(
-    client: &C,
-    contract: &Contract,
-    use_rth: bool,
-    period: &str,
-) -> Result<HistogramDataIterator> {
+pub fn histogram_data<C: Client + Debug>(client: &C, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator> {
     // " S (seconds) - " D (days)
     // " W (weeks) - " M (months)
     // " Y (years)
@@ -146,12 +128,7 @@ pub fn historical_data<C: Client + Debug>(
     Err(anyhow!("not implemented!"))
 }
 
-pub fn historical_schedule<C: Client + Debug>(
-    client: &C,
-    contract: &Contract,
-    use_rth: bool,
-    period: &str,
-) -> Result<HistogramDataIterator> {
+pub fn historical_schedule<C: Client + Debug>(client: &C, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator> {
     print!("{client:?} {contract:?} {use_rth:?} {period:?}");
     Err(anyhow!("not implemented!"))
 }

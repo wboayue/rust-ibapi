@@ -45,11 +45,7 @@ fn place_market_order() {
 
         assert_eq!(contract.contract_id, 76792991, "contract.contract_id");
         assert_eq!(contract.symbol, "TSLA", "contract.symbol");
-        assert_eq!(
-            contract.security_type,
-            SecurityType::Stock,
-            "contract.security_type"
-        );
+        assert_eq!(contract.security_type, SecurityType::Stock, "contract.security_type");
         assert_eq!(
             contract.last_trade_date_or_contract_month, "",
             "contract.last_trade_date_or_contract_month"
@@ -98,11 +94,7 @@ fn place_market_order() {
         assert_eq!(order.starting_price, None, "order.starting_price");
         assert_eq!(order.stock_ref_price, None, "order.stock_ref_price");
         assert_eq!(order.delta, None, "order.delta");
-        assert_eq!(
-            order.stock_range_lower,
-            Some(0.0),
-            "order.stock_range_lower"
-        );
+        assert_eq!(order.stock_range_lower, Some(0.0), "order.stock_range_lower");
         assert_eq!(order.stock_range_upper, None, "order.stock_range_upper");
         assert_eq!(order.display_size, None, "order.display_size");
         assert_eq!(order.block_order, false, "order.block_order");
@@ -114,54 +106,20 @@ fn place_market_order() {
         assert_eq!(order.trigger_method, 0, "order.trigger_method");
         assert_eq!(order.volatility, None, "order.volatility");
         assert_eq!(order.volatility_type, Some(0), "order.volatility_type");
-        assert_eq!(
-            order.delta_neutral_order_type, "None",
-            "order.delta_neutral_order_type"
-        );
-        assert_eq!(
-            order.delta_neutral_aux_price, None,
-            "order.delta_neutral_aux_price"
-        );
+        assert_eq!(order.delta_neutral_order_type, "None", "order.delta_neutral_order_type");
+        assert_eq!(order.delta_neutral_aux_price, None, "order.delta_neutral_aux_price");
         assert_eq!(order.delta_neutral_con_id, 0, "order.delta_neutral_con_id");
-        assert_eq!(
-            order.delta_neutral_settling_firm, "",
-            "order.delta_neutral_settling_firm"
-        );
-        assert_eq!(
-            order.delta_neutral_clearing_account, "",
-            "order.delta_neutral_clearing_account"
-        );
-        assert_eq!(
-            order.delta_neutral_clearing_intent, "",
-            "order.delta_neutral_clearing_intent"
-        );
-        assert_eq!(
-            order.delta_neutral_open_close, "?",
-            "order.delta_neutral_open_close"
-        );
-        assert_eq!(
-            order.delta_neutral_short_sale, false,
-            "order.delta_neutral_short_sale"
-        );
-        assert_eq!(
-            order.delta_neutral_short_sale_slot, 0,
-            "order.delta_neutral_short_sale_slot"
-        );
-        assert_eq!(
-            order.delta_neutral_designated_location, "",
-            "order.delta_neutral_designated_location"
-        );
+        assert_eq!(order.delta_neutral_settling_firm, "", "order.delta_neutral_settling_firm");
+        assert_eq!(order.delta_neutral_clearing_account, "", "order.delta_neutral_clearing_account");
+        assert_eq!(order.delta_neutral_clearing_intent, "", "order.delta_neutral_clearing_intent");
+        assert_eq!(order.delta_neutral_open_close, "?", "order.delta_neutral_open_close");
+        assert_eq!(order.delta_neutral_short_sale, false, "order.delta_neutral_short_sale");
+        assert_eq!(order.delta_neutral_short_sale_slot, 0, "order.delta_neutral_short_sale_slot");
+        assert_eq!(order.delta_neutral_designated_location, "", "order.delta_neutral_designated_location");
         assert_eq!(order.continuous_update, false, "order.continuous_update");
-        assert_eq!(
-            order.stock_range_lower,
-            Some(0.0),
-            "order.stock_range_lower"
-        );
+        assert_eq!(order.stock_range_lower, Some(0.0), "order.stock_range_lower");
         assert_eq!(order.stock_range_upper, None, "order.stock_range_upper");
-        assert_eq!(
-            order.reference_price_type, None,
-            "order.reference_price_type"
-        );
+        assert_eq!(order.reference_price_type, None, "order.reference_price_type");
 
         // order.continuous_update = message.next_bool()?;
         // order.stock_range_lower = message.next_optional_double()?;
@@ -197,11 +155,7 @@ fn place_limit_order() {
         "3|12|0||FUT|202303|0|||EUREX||EUR|FGBL MAR 23||||BUY|10|LMT|500||||||0||1|0|0|0|0|0|0|0||0||||||||0||-1|0|||0|||0|0||0||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
     );
 
-    assert!(
-        results.is_ok(),
-        "failed to place order: {:?}",
-        results.err()
-    );
+    assert!(results.is_ok(), "failed to place order: {:?}", results.err());
 }
 
 #[test]
@@ -221,11 +175,7 @@ fn place_combo_market_order() {
         "3|12|0|WTI|BAG||0|||SMART||USD|||||SELL|150|MKT|||||||0||1|0|0|0|0|0|0|0|2|55928698|1|BUY|IPE|0|0||0|55850663|1|SELL|IPE|0|0||0|0|1|NonGuaranteed|1||0||||||||0||-1|0|||0|||0|0||0||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
     );
 
-    assert!(
-        results.is_ok(),
-        "failed to place order: {:?}",
-        results.err()
-    );
+    assert!(results.is_ok(), "failed to place order: {:?}", results.err());
 }
 
 // 11:49:32:189 <- 3-12-0-AAPL-STK--0.0---SMART--USD-----BUY-100-MKT-------0--1-0-0-0-0-0-0-0--0--------0---1-0---0---0-0--0------0-----0-----------0---0-0---0--0-0-0-0--1.7976931348623157e+308-1.7976931348623157e+308-1.7976931348623157e+308-1.7976931348623157e+308-1.7976931348623157e+308-0----1.7976931348623157e+308-----0-0-0--2147483647-2147483647-0-

@@ -21,12 +21,8 @@ fn main() -> anyhow::Result<()> {
         .arg(arg!(--sell <QUANTITY>).value_parser(clap::value_parser!(i32)))
         .get_matches();
 
-    let connection_string = matches
-        .get_one::<String>("connection_string")
-        .expect("connection_string is required");
-    let stock_symbol = matches
-        .get_one::<String>("stock")
-        .expect("stock symbol is required");
+    let connection_string = matches.get_one::<String>("connection_string").expect("connection_string is required");
+    let stock_symbol = matches.get_one::<String>("stock").expect("stock symbol is required");
 
     if let Some((action, quantity)) = get_order(&matches) {
         println!("action: {action}, quantity: {quantity}");

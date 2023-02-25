@@ -27,11 +27,7 @@ pub trait Client {
     fn next_request_id(&mut self) -> i32;
     fn server_version(&self) -> i32;
     fn send_message(&mut self, packet: RequestMessage) -> Result<()>;
-    fn send_message_for_request(
-        &mut self,
-        request_id: i32,
-        message: RequestMessage,
-    ) -> Result<ResponsePacketPromise>;
+    fn send_message_for_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
 
@@ -140,26 +136,16 @@ impl Client for IBClient {
         self.message_bus.write_message(&packet)
     }
 
-    fn send_message_for_request(
-        &mut self,
-        request_id: i32,
-        message: RequestMessage,
-    ) -> Result<ResponsePacketPromise> {
+    fn send_message_for_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
         debug!("send_message({:?}, {:?})", request_id, message);
-        self.message_bus
-            .write_message_for_request(request_id, &message)
+        self.message_bus.write_message_for_request(request_id, &message)
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
         if version <= self.server_version {
             Ok(())
         } else {
-            Err(anyhow!(
-                "server version {} required, got {}: {}",
-                version,
-                self.server_version,
-                message
-            ))
+            Err(anyhow!("server version {} required, got {}: {}", version, self.server_version, message))
         }
     }
 }
@@ -231,15 +217,9 @@ impl ResponseMessage {
 
     pub fn request_id(&self) -> Result<i32> {
         match self.message_type() {
-            IncomingMessages::ContractData
-            | IncomingMessages::TickByTick
-            | IncomingMessages::SymbolSamples => self.peek_int(1),
+            IncomingMessages::ContractData | IncomingMessages::TickByTick | IncomingMessages::SymbolSamples => self.peek_int(1),
             IncomingMessages::ContractDataEnd | IncomingMessages::RealTimeBars => self.peek_int(2),
-            _ => Err(anyhow!(
-                "error parsing field request id {:?}: {:?}",
-                self.message_type(),
-                self
-            )),
+            _ => Err(anyhow!("error parsing field request id {:?}: {:?}", self.message_type(), self)),
         }
     }
 

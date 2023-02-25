@@ -18,12 +18,7 @@ pub fn at_auction(action: Action, quantity: f64, price: f64) -> Order {
 /// A Discretionary order is a limit order submitted with a hidden, specified 'discretionary' amount off the limit price which
 /// may be used to increase the price range over which the limit order is eligible to execute. The market sees only the limit price.
 /// Products: STK
-pub fn discretionary(
-    action: Action,
-    quantity: f64,
-    price: f64,
-    discretionary_amount: f64,
-) -> Order {
+pub fn discretionary(action: Action, quantity: f64, price: f64, discretionary_amount: f64) -> Order {
     Order {
         action,
         order_type: "LMT".to_owned(),
@@ -139,13 +134,7 @@ pub fn pegged_to_market(action: Action, quantity: f64, market_offset: f64) -> Or
 /// is entered. You may also enter a high/low stock price range which cancels the order when reached. The delta times the change in stock
 /// price will be rounded to the nearest penny in favor of the order.
 /// Products: OPT
-pub fn pegged_to_stock(
-    action: Action,
-    quantity: f64,
-    delta: f64,
-    stock_reference_price: f64,
-    starting_price: f64,
-) -> Order {
+pub fn pegged_to_stock(action: Action, quantity: f64, delta: f64, stock_reference_price: f64, starting_price: f64) -> Order {
     Order {
         action,
         order_type: "PEG STK".to_owned(),
@@ -167,12 +156,7 @@ pub fn pegged_to_stock(
 /// absolute cap, which works like a limit price, and will prevent your order from being executed above or below a specified level.
 /// Stocks, Options and Futures - not available on paper trading
 /// Products: CFD, STK, OPT, FUT
-pub fn relative_pegged_to_primary(
-    action: Action,
-    quantity: f64,
-    price_cap: f64,
-    offset_amount: f64,
-) -> Order {
+pub fn relative_pegged_to_primary(action: Action, quantity: f64, price_cap: f64, offset_amount: f64) -> Order {
     Order {
         action,
         order_type: "REL".to_owned(),
@@ -231,12 +215,7 @@ pub fn auction_limit(action: Action, quantity: f64, price: f64, auction_strategy
 /// will be rounded to the nearest penny in favor of the order and will be used as your auction improvement amount.
 /// Products: OPT
 /// Supported Exchanges: BOX
-pub fn auction_pegged_to_stock(
-    action: Action,
-    quantity: f64,
-    starting_price: f64,
-    delta: f64,
-) -> Order {
+pub fn auction_pegged_to_stock(action: Action, quantity: f64, starting_price: f64, delta: f64) -> Order {
     Order {
         action,
         order_type: "PEG STK".to_owned(),
@@ -326,12 +305,7 @@ pub fn limit_order_with_cash_qty(action: Action, limit_price: f64, cash_qty: f64
 /// held in the system until the trigger price is touched. An LIT order is similar to a stop limit order, except that an LIT sell order is
 /// placed above the current market price, and a stop limit sell order is placed below.
 /// Products: BOND, CFD, CASH, FUT, FOP, OPT, STK, WAR
-pub fn limit_if_touched(
-    action: Action,
-    quantity: f64,
-    limit_price: f64,
-    trigger_price: f64,
-) -> Order {
+pub fn limit_if_touched(action: Action, quantity: f64, limit_price: f64, trigger_price: f64) -> Order {
     Order {
         action,
         order_type: "LIT".to_owned(),
@@ -535,12 +509,7 @@ pub fn stop_with_protection(action: Action, quantity: f64, stop_price: f64) -> O
 /// maximum possible loss, without setting a limit on the maximum possible gain. "Buy" trailing stop orders are the mirror image of sell
 /// trailing stop orders, and are most appropriate for use in falling markets.
 /// Products: CFD, CASH, FOP, FUT, OPT, STK, WAR
-pub fn trailing_stop(
-    action: Action,
-    quantity: f64,
-    trailing_percent: f64,
-    trail_stop_price: f64,
-) -> Order {
+pub fn trailing_stop(action: Action, quantity: f64, trailing_percent: f64, trail_stop_price: f64) -> Order {
     Order {
         action,
         order_type: "TRAIL".to_owned(),
@@ -559,13 +528,7 @@ pub fn trailing_stop(
 /// is submitted at the last calculated limit price. A "Buy" trailing stop limit order is the mirror image of a sell trailing stop limit,
 /// and is generally used in falling markets.
 /// Products: BOND, CFD, CASH, FUT, FOP, OPT, STK, WAR
-pub fn trailing_stop_limit(
-    action: Action,
-    quantity: f64,
-    lmt_price_offset: f64,
-    trailing_amount: f64,
-    trail_stop_price: f64,
-) -> Order {
+pub fn trailing_stop_limit(action: Action, quantity: f64, lmt_price_offset: f64, trailing_amount: f64, trail_stop_price: f64) -> Order {
     Order {
         action,
         order_type: "TRAIL LIMIT".to_owned(),
@@ -582,12 +545,7 @@ pub fn trailing_stop_limit(
 /// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
 /// best execution.
 /// Products: OPT, STK, FUT
-pub fn combo_limit_order(
-    action: Action,
-    quantity: f64,
-    limit_price: f64,
-    non_guaranteed: bool,
-) -> Order {
+pub fn combo_limit_order(action: Action, quantity: f64, limit_price: f64, non_guaranteed: bool) -> Order {
     let mut order = Order {
         action,
         order_type: "LMT".to_owned(),
@@ -637,12 +595,7 @@ pub fn combo_market_order(action: Action, quantity: f64, non_guaranteed: bool) -
 /// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
 /// best execution.
 /// Products: OPT, STK, FUT
-pub fn limit_order_for_combo_with_leg_prices(
-    action: Action,
-    quantity: f64,
-    leg_prices: Vec<f64>,
-    non_guaranteed: bool,
-) -> Order {
+pub fn limit_order_for_combo_with_leg_prices(action: Action, quantity: f64, leg_prices: Vec<f64>, non_guaranteed: bool) -> Order {
     let mut order = Order {
         action,
         order_type: "LMT".to_owned(),
@@ -652,9 +605,7 @@ pub fn limit_order_for_combo_with_leg_prices(
     };
 
     for price in leg_prices {
-        order
-            .order_combo_legs
-            .push(OrderComboLeg { price: Some(price) });
+        order.order_combo_legs.push(OrderComboLeg { price: Some(price) });
     }
 
     if non_guaranteed {
@@ -669,12 +620,7 @@ pub fn limit_order_for_combo_with_leg_prices(
 /// if it is routed directly to an exchange. For combination orders that are SmartRouted, each leg may be executed separately to ensure
 /// best execution.
 /// Products: OPT, STK, FUT
-pub fn relative_limit_combo(
-    action: Action,
-    quantity: f64,
-    limit_price: f64,
-    non_guaranteed: bool,
-) -> Order {
+pub fn relative_limit_combo(action: Action, quantity: f64, limit_price: f64, non_guaranteed: bool) -> Order {
     let mut order = Order {
         action,
         order_type: "REL + LMT".to_owned(),
@@ -738,17 +684,12 @@ pub fn one_cancels_all(oca_group: &str, mut oca_orders: Vec<Order>, oca_type: i3
 /// is the same as for regular orders priced in premium terms except that the client can limit the volatility level they are willing to pay or
 /// receive.
 /// Products: FOP, OPT
-pub fn volatility(
-    action: Action,
-    quantity: f64,
-    volatility_percent: f64,
-    volatility_type: i32,
-) -> Order {
+pub fn volatility(action: Action, quantity: f64, volatility_percent: f64, volatility_type: i32) -> Order {
     Order {
         action,
         order_type: "VOL".to_owned(),
         total_quantity: quantity,
-        volatility: Some(volatility_percent), //Expressed in percentage (40%)
+        volatility: Some(volatility_percent),   //Expressed in percentage (40%)
         volatility_type: Some(volatility_type), // 1=daily, 2=annual
         ..Order::default()
     }
@@ -782,11 +723,11 @@ pub fn pegged_to_benchmark(
         total_quantity: quantity,
         starting_price: Some(starting_price),
         is_pegged_change_amount_decrease: pegged_change_amount_decrease,
-        pegged_change_amount, // by ... (and likewise for price moving in opposite direction)
-        reference_change_amount, // whenever there is a price change of ...
-        reference_contract_id, // in the reference contract ...
+        pegged_change_amount,                              // by ... (and likewise for price moving in opposite direction)
+        reference_change_amount,                           // whenever there is a price change of ...
+        reference_contract_id,                             // in the reference contract ...
         reference_exchange: reference_exchange.to_owned(), // being traded at ...
-        stock_ref_price: Some(stock_reference_price), // starting reference price is ...
+        stock_ref_price: Some(stock_reference_price),      // starting reference price is ...
         //Keep order active as long as reference contract trades between ...
         stock_range_lower: Some(reference_contract_lower_range),
         stock_range_upper: Some(reference_contract_upper_range),
@@ -796,18 +737,9 @@ pub fn pegged_to_benchmark(
 
 /// An attached order that turns the parent order (a conventional STP order) into a STP order
 /// in the opposite direction when the trigger is hit.
-pub fn attach_adjustable_to_stop(
-    parent: &Order,
-    attached_order_stop_price: f64,
-    trigger_price: f64,
-    adjusted_stop_price: f64,
-) -> Order {
+pub fn attach_adjustable_to_stop(parent: &Order, attached_order_stop_price: f64, trigger_price: f64, adjusted_stop_price: f64) -> Order {
     // Attached order is a conventional STP order
-    let mut order = stop(
-        parent.action.reverse(),
-        parent.total_quantity,
-        attached_order_stop_price,
-    );
+    let mut order = stop(parent.action.reverse(), parent.total_quantity, attached_order_stop_price);
 
     order.parent_id = parent.order_id;
     order.trigger_price = Some(trigger_price); // When trigger price is penetrated
@@ -827,11 +759,7 @@ pub fn attach_adjustable_to_stop_limit(
     adjusted_stop_limit_price: f64,
 ) -> Order {
     // Attached order is a conventional STP order
-    let mut order = stop(
-        parent.action.reverse(),
-        parent.total_quantity,
-        attached_order_stop_price,
-    );
+    let mut order = stop(parent.action.reverse(), parent.total_quantity, attached_order_stop_price);
 
     order.parent_id = parent.order_id;
     order.trigger_price = Some(trigger_price); // When trigger price is penetrated
@@ -853,11 +781,7 @@ pub fn attach_adjustable_to_trail(
     trail_unit: i32,
 ) -> Order {
     // Attached order is a conventional STP order
-    let mut order = stop(
-        parent.action.reverse(),
-        parent.total_quantity,
-        attached_order_stop_price,
-    );
+    let mut order = stop(parent.action.reverse(), parent.total_quantity, attached_order_stop_price);
 
     order.parent_id = parent.order_id;
     order.trigger_price = Some(trigger_price); // When trigger price is penetrated
@@ -988,12 +912,7 @@ pub fn limit_ibkrats(action: Action, quantity: f64, limit_price: f64) -> Order {
     }
 }
 
-pub fn limit_order_with_manual_order_time(
-    action: Action,
-    quantity: f64,
-    limit_price: f64,
-    manual_order_time: &str,
-) -> Order {
+pub fn limit_order_with_manual_order_time(action: Action, quantity: f64, limit_price: f64, manual_order_time: &str) -> Order {
     let mut order = limit_order(action, quantity, limit_price);
     order.manual_order_time = manual_order_time.to_owned();
 

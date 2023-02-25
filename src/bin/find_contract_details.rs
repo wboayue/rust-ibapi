@@ -17,12 +17,8 @@ fn main() -> anyhow::Result<()> {
         .arg(arg!(--stock <VALUE>).required(true))
         .get_matches();
 
-    let connection_string = matches
-        .get_one::<String>("connection_string")
-        .expect("connection_string is required");
-    let stock_symbol = matches
-        .get_one::<String>("stock")
-        .expect("stock symbol is required");
+    let connection_string = matches.get_one::<String>("connection_string").expect("connection_string is required");
+    let stock_symbol = matches.get_one::<String>("stock").expect("stock symbol is required");
 
     let mut client = IBClient::connect(connection_string)?;
 

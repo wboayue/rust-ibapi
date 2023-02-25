@@ -27,11 +27,7 @@ pub trait MessageBus {
     fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponseMessage>;
 
     fn write_message(&mut self, packet: &RequestMessage) -> Result<()>;
-    fn write_message_for_request(
-        &mut self,
-        request_id: i32,
-        packet: &RequestMessage,
-    ) -> Result<ResponsePacketPromise>;
+    fn write_message_for_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
     fn write(&mut self, packet: &str) -> Result<()>;
 
     fn process_messages(&mut self, server_version: i32) -> Result<()>;
@@ -119,11 +115,7 @@ impl MessageBus for TcpMessageBus {
         Err(anyhow!("no way"))
     }
 
-    fn write_message_for_request(
-        &mut self,
-        request_id: i32,
-        packet: &RequestMessage,
-    ) -> Result<ResponsePacketPromise> {
+    fn write_message_for_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise> {
         let (sender, receiver) = mpsc::channel();
 
         self.add_sender(request_id, sender)?;
@@ -182,11 +174,7 @@ impl MessageBus for TcpMessageBus {
     }
 }
 
-fn dispatch_message(
-    message: ResponseMessage,
-    server_version: i32,
-    requests: &Arc<RwLock<HashMap<i32, Outbox>>>,
-) {
+fn dispatch_message(message: ResponseMessage, server_version: i32, requests: &Arc<RwLock<HashMap<i32, Outbox>>>) {
     match message.message_type() {
         IncomingMessages::Error => {
             let request_id = message.peek_int(2).unwrap_or(-1);
@@ -285,10 +273,7 @@ fn process_response(requests: &Arc<RwLock<HashMap<i32, Outbox>>>, packet: Respon
     let outbox = match collection.get(&request_id) {
         Some(outbox) => outbox,
         _ => {
-            debug!(
-                "no request found for request_id {:?} - {:?}",
-                request_id, packet
-            );
+            debug!("no request found for request_id {:?} - {:?}", request_id, packet);
             return;
         }
     };
@@ -388,11 +373,7 @@ impl MessageRecorder {
         }
 
         let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
-        fs::write(
-            self.request_file(record_id),
-            message.encode().replace('\0', "|"),
-        )
-        .unwrap();
+        fs::write(self.request_file(record_id), message.encode().replace('\0', "|")).unwrap();
     }
 
     fn record_response(&self, message: &ResponseMessage) {
@@ -401,11 +382,7 @@ impl MessageRecorder {
         }
 
         let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
-        fs::write(
-            self.response_file(record_id),
-            message.encode().replace('\0', "|"),
-        )
-        .unwrap();
+        fs::write(self.response_file(record_id), message.encode().replace('\0', "|")).unwrap();
     }
 }
 
@@ -424,12 +401,7 @@ mod test {
         let recorder = MessageRecorder::new();
 
         assert_eq!(true, recorder.enabled);
-        assert!(
-            &recorder.recording_dir.starts_with(&dir),
-            "{} != {}",
-            &recorder.recording_dir,
-            &dir
-        )
+        assert!(&recorder.recording_dir.starts_with(&dir), "{} != {}", &recorder.recording_dir, &dir)
     }
 
     #[test]
@@ -453,13 +425,7 @@ mod test {
             recording_dir: recording_dir,
         };
 
-        assert_eq!(
-            format!("{}/0001-request.msg", recorder.recording_dir),
-            recorder.request_file(1)
-        );
-        assert_eq!(
-            format!("{}/0002-response.msg", recorder.recording_dir),
-            recorder.response_file(2)
-        );
+        assert_eq!(format!("{}/0001-request.msg", recorder.recording_dir), recorder.request_file(1));
+        assert_eq!(format!("{}/0002-response.msg", recorder.recording_dir), recorder.response_file(2));
     }
 }

@@ -19,9 +19,7 @@ fn main() -> anyhow::Result<()> {
         .arg(arg!(--futures <SYMBOL>))
         .get_matches();
 
-    let connection_string = matches
-        .get_one::<String>("connection_string")
-        .expect("connection_string is required");
+    let connection_string = matches.get_one::<String>("connection_string").expect("connection_string is required");
     let contract = extract_contract(&matches).expect("error parsing --stock or --future");
 
     println!("connection_string: {connection_string:?}");
@@ -29,13 +27,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut client = IBClient::connect("odin:4002")?;
 
-    let bars = streaming::realtime_bars(
-        &mut client,
-        &contract,
-        &BarSize::Secs5,
-        &WhatToShow::Trades,
-        false,
-    )?;
+    let bars = streaming::realtime_bars(&mut client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
 
     for (i, bar) in bars.enumerate() {
         println!("bar: {i:?} {bar:?}");
