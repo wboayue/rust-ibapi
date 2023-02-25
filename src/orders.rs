@@ -81,7 +81,7 @@ pub struct Order {
     /// If set to true, specifies that the order is a Sweep-to-Fill order.
     pub sweep_to_fill: bool,
     /// The publicly disclosed order size, used when placing Iceberg orders.
-    pub display_size: i32,
+    pub display_size: Option<i32>,
     /// Specifies how Simulated Stop, Stop-Limit and Trailing Stop orders are triggered.
     /// Valid values are:
     /// 0 - The default value. The "double bid/ask" function will be used for orders for OTC stocks and US options. All other orders will used the "last" function.
@@ -436,7 +436,7 @@ impl Default for Order {
             parent_id: 0,
             block_order: false,
             sweep_to_fill: false,
-            display_size: 0,
+            display_size: Some(0), // TODO - default to None?
             trigger_method: 0,
             outside_rth: false,
             hidden: false,
@@ -578,7 +578,7 @@ impl Order {
 /// For general account types, a SELL order will be able to enter a short position automatically if the order quantity is larger than your current long position.
 /// SSHORT is only supported for institutional account configured with Long/Short account segments or clearing with a separate account.
 /// SLONG is available in specially-configured institutional accounts to indicate that long position not yet delivered is being sold.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum Action {
     #[default]
     Buy,
@@ -609,9 +609,19 @@ impl Action {
             Action::SellLong => Action::SellShort,
         }
     }
+
+    pub fn from(name: &str) -> Self {
+        match name {
+            "BUY" => Self::Buy,
+            "SELL" => Self::Sell,
+            "SSHORT" => Self::SellShort,
+            "SLONG" => Self::SellLong,
+            &_ => todo!(),
+        }
+    }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Rule80A {
     Individual,
     Agency,
@@ -636,6 +646,23 @@ impl ToString for Rule80A {
             Rule80A::IndividualPT => String::from('K'),
             Rule80A::AgencyPT => String::from('Y'),
             Rule80A::AgentOtherMemberPT => String::from('N'),
+        }
+    }
+}
+
+impl Rule80A {
+    pub fn from(source: &str) -> Option<Self> {
+        match source {
+            "I" => Some(Rule80A::Individual),
+            "A" => Some(Rule80A::Agency),
+            "W" => Some(Rule80A::AgentOtherMember),
+            "J" => Some(Rule80A::IndividualPTIA),
+            "U" => Some(Rule80A::AgencyPTIA),
+            "M" => Some(Rule80A::AgentOtherMemberPTIA),
+            "K" => Some(Rule80A::IndividualPT),
+            "Y" => Some(Rule80A::AgencyPT),
+            "N" => Some(Rule80A::AgentOtherMemberPT),
+            _ => None,
         }
     }
 }
@@ -721,7 +748,7 @@ pub struct OrderState {
 /// Available for institutional clients to determine if this order is to open or close a position.
 /// When Action = "BUY" and OpenClose = "O" this will open a new position.
 /// When Action = "BUY" and OpenClose = "C" this will close and existing short position.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum OrderOpenClose {
     Open,
     Close,
@@ -732,6 +759,16 @@ impl ToString for OrderOpenClose {
         match self {
             OrderOpenClose::Open => String::from("O"),
             OrderOpenClose::Close => String::from("C"),
+        }
+    }
+}
+
+impl OrderOpenClose {
+    pub fn from(source: &str) -> Option<Self> {
+        match source {
+            "O" => Some(OrderOpenClose::Open),
+            "C" => Some(OrderOpenClose::Close),
+            _ => None,
         }
     }
 }
@@ -875,7 +912,10 @@ pub fn place_order<C: Client + Debug>(
 
     let messages = client.send_message_for_request(request_id, message)?;
 
-    Ok(OrderNotificationIterator { messages, server_version: client.server_version() })
+    Ok(OrderNotificationIterator {
+        messages,
+        server_version: client.server_version(),
+    })
 }
 
 pub struct OrderNotificationIterator {
@@ -898,7 +938,7 @@ impl Iterator for OrderNotificationIterator {
                             None
                         }
                     }
-                },
+                }
                 IncomingMessages::OrderStatus => None,
                 IncomingMessages::ExecutionData => None,
                 IncomingMessages::CommissionsReport => None,
@@ -1607,10 +1647,7 @@ fn f64_max_to_zero(num: Option<f64>) -> Option<f64> {
     }
 }
 
-fn decode_open_order(
-    server_version: i32,
-    message: &mut ResponseMessage,
-) -> Result<OpenOrder> {
+fn decode_open_order(server_version: i32, message: &mut ResponseMessage) -> Result<OpenOrder> {
     message.skip(); // message type
 
     let message_version = if server_version < server_versions::ORDER_CONTAINER {
@@ -1631,7 +1668,7 @@ fn decode_open_order(
     order.order_id = open_order.order_id;
 
     // Contract fields
-    
+
     contract.contract_id = message.next_int()?;
     contract.symbol = message.next_string()?;
 
@@ -1648,75 +1685,113 @@ fn decode_open_order(
     contract.trading_class = message.next_string()?;
 
     // Order fields
-            // // read order fields
-            // eOrderDecoder.readAction();
-            // eOrderDecoder.readTotalQuantity();
-            // eOrderDecoder.readOrderType();
-            // eOrderDecoder.readLmtPrice();
-            // eOrderDecoder.readAuxPrice();
-            // eOrderDecoder.readTIF();
-            // eOrderDecoder.readOcaGroup();
-            // eOrderDecoder.readAccount();
-            // eOrderDecoder.readOpenClose();
-            // eOrderDecoder.readOrigin();
-            // eOrderDecoder.readOrderRef();
-            // eOrderDecoder.readClientId();
-            // eOrderDecoder.readPermId();
-            // eOrderDecoder.readOutsideRth();
-            // eOrderDecoder.readHidden();
-            // eOrderDecoder.readDiscretionaryAmount();
-            // eOrderDecoder.readGoodAfterTime();
-            // eOrderDecoder.skipSharesAllocation();
-            // eOrderDecoder.readFAParams();
-            // eOrderDecoder.readModelCode();
-            // eOrderDecoder.readGoodTillDate();
-            // eOrderDecoder.readRule80A();
-            // eOrderDecoder.readPercentOffset();
-            // eOrderDecoder.readSettlingFirm();
-            // eOrderDecoder.readShortSaleParams();
-            // eOrderDecoder.readAuctionStrategy();
-            // eOrderDecoder.readBoxOrderParams();
-            // eOrderDecoder.readPegToStkOrVolOrderParams();
-            // eOrderDecoder.readDisplaySize();
-            // eOrderDecoder.readOldStyleOutsideRth();
-            // eOrderDecoder.readBlockOrder();
-            // eOrderDecoder.readSweepToFill();
-            // eOrderDecoder.readAllOrNone();
-            // eOrderDecoder.readMinQty();
-            // eOrderDecoder.readOcaType();
-            // eOrderDecoder.skipETradeOnly();
-            // eOrderDecoder.skipFirmQuoteOnly();
-            // eOrderDecoder.skipNbboPriceCap();
-            // eOrderDecoder.readParentId();
-            // eOrderDecoder.readTriggerMethod();
-            // eOrderDecoder.readVolOrderParams(true);
-            // eOrderDecoder.readTrailParams();
-            // eOrderDecoder.readBasisPoints();
-            // eOrderDecoder.readComboLegs();
-            // eOrderDecoder.readSmartComboRoutingParams();
-            // eOrderDecoder.readScaleOrderParams();
-            // eOrderDecoder.readHedgeParams();
-            // eOrderDecoder.readOptOutSmartRouting();
-            // eOrderDecoder.readClearingParams();
-            // eOrderDecoder.readNotHeld();
-            // eOrderDecoder.readDeltaNeutral();
-            // eOrderDecoder.readAlgoParams();
-            // eOrderDecoder.readSolicited();
-            // eOrderDecoder.readWhatIfInfoAndCommission();
-            // eOrderDecoder.readVolRandomizeFlags();
-            // eOrderDecoder.readPegToBenchParams();
-            // eOrderDecoder.readConditions();
-            // eOrderDecoder.readAdjustedOrderParams();
-            // eOrderDecoder.readSoftDollarTier();
-            // eOrderDecoder.readCashQty();
-            // eOrderDecoder.readDontUseAutoPriceForHedge();
-            // eOrderDecoder.readIsOmsContainer();
-            // eOrderDecoder.readDiscretionaryUpToLimitPrice();
-            // eOrderDecoder.readUsePriceMgmtAlgo();
-            // eOrderDecoder.readDuration();
-            // eOrderDecoder.readPostToAts();
-            // eOrderDecoder.readAutoCancelParent(MinServerVer.AUTO_CANCEL_PARENT);
-            // eOrderDecoder.readPegBestPegMidOrderAttributes();
+
+    let action = message.next_string()?;
+    order.action = Action::from(&action);
+
+    order.total_quantity = message.next_double()?;
+    order.order_type = message.next_string()?;
+    order.limit_price = message.next_optional_double()?;
+    order.aux_price = message.next_optional_double()?;
+    order.tif = message.next_string()?;
+    order.oca_group = message.next_string()?;
+    order.account = message.next_string()?;
+
+    let open_close = message.next_string()?;
+    order.open_close = OrderOpenClose::from(&open_close);
+
+    order.origin = message.next_int()?;
+    order.order_ref = message.next_string()?;
+    order.client_id = message.next_int()?;
+    order.perm_id = message.next_int()?;
+    order.outside_rth = message.next_bool()?;
+    order.hidden = message.next_bool()?;
+    order.discretionary_amt = message.next_double()?;
+    order.good_after_time = message.next_string()?;
+
+    message.skip(); // skip deprecated shares_allocation field
+
+    order.fa_group = message.next_string()?;
+    order.fa_method = message.next_string()?;
+    order.fa_percentage = message.next_string()?;
+    if server_version < server_versions::FA_PROFILE_DESUPPORT {
+        order.fa_percentage = message.next_string()?;
+    }
+
+    if server_version > server_versions::MODELS_SUPPORT {
+        order.model_code = message.next_string()?;
+    }
+
+    order.good_till_date = message.next_string()?;
+    let rule_80_a = message.next_string()?;
+    order.rule_80_a = Rule80A::from(&rule_80_a);
+    order.percent_offset = message.next_optional_double()?;
+    order.settling_firm = message.next_string()?;
+
+    // Short sale params
+    order.short_sale_slot = message.next_int()?;
+    order.designated_location = message.next_string()?;
+    order.exempt_code = message.next_int()?;
+
+    order.auction_strategy = message.next_optional_int()?;
+
+    // Box order paramas
+    order.starting_price = message.next_optional_double()?;
+    order.stock_ref_price = message.next_optional_double()?;
+    order.delta = message.next_optional_double()?;
+
+    // Peg to STK or volume order params
+    order.stock_range_lower = message.next_optional_double()?;
+    order.stock_range_upper = message.next_optional_double()?;
+
+    order.display_size = message.next_optional_int()?;
+    order.block_order = message.next_bool()?;
+    order.sweep_to_fill = message.next_bool()?;
+    order.all_or_none = message.next_bool()?;
+    order.min_qty = message.next_optional_int()?;
+    order.oca_type = message.next_int()?;
+
+    message.skip(); // ETradeOnly
+    message.skip(); // FirmQuoteOnly
+    message.skip(); // NbboPriceCap
+
+    order.parent_id = message.next_int()?;
+    order.trigger_method = message.next_int()?;
+
+    // Volatility order params
+    order.volatility = message.next_optional_double()?;
+    order.volatility_type = message.next_optional_int()?;
+    order.delta_neutral_order_type = message.next_string()?;
+    order.delta_neutral_aux_price = message.next_optional_double()?;
+
+    // eOrderDecoder.readTrailParams();
+    // eOrderDecoder.readBasisPoints();
+
+    // eOrderDecoder.readComboLegs();
+    // eOrderDecoder.readSmartComboRoutingParams();
+    // eOrderDecoder.readScaleOrderParams();
+    // eOrderDecoder.readHedgeParams();
+    // eOrderDecoder.readOptOutSmartRouting();
+    // eOrderDecoder.readClearingParams();
+    // eOrderDecoder.readNotHeld();
+    // eOrderDecoder.readDeltaNeutral();
+    // eOrderDecoder.readAlgoParams();
+    // eOrderDecoder.readSolicited();
+    // eOrderDecoder.readWhatIfInfoAndCommission();
+    // eOrderDecoder.readVolRandomizeFlags();
+    // eOrderDecoder.readPegToBenchParams();
+    // eOrderDecoder.readConditions();
+    // eOrderDecoder.readAdjustedOrderParams();
+    // eOrderDecoder.readSoftDollarTier();
+    // eOrderDecoder.readCashQty();
+    // eOrderDecoder.readDontUseAutoPriceForHedge();
+    // eOrderDecoder.readIsOmsContainer();
+    // eOrderDecoder.readDiscretionaryUpToLimitPrice();
+    // eOrderDecoder.readUsePriceMgmtAlgo();
+    // eOrderDecoder.readDuration();
+    // eOrderDecoder.readPostToAts();
+    // eOrderDecoder.readAutoCancelParent(MinServerVer.AUTO_CANCEL_PARENT);
+    // eOrderDecoder.readPegBestPegMidOrderAttributes();
 
     Ok(open_order)
 }

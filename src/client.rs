@@ -251,7 +251,6 @@ impl ResponseMessage {
         }
     }
 
-    // TODO: maybe return Option<i32>
     pub fn next_int(&mut self) -> Result<i32> {
         let field = &self.fields[self.i];
         self.i += 1;
@@ -260,6 +259,27 @@ impl ResponseMessage {
             Ok(val) => Ok(val),
             Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
         }
+    }
+
+    pub fn next_optional_int(&mut self) -> Result<Option<i32>> {
+        let field = &self.fields[self.i];
+        self.i += 1;
+
+        if field.is_empty() || field == UNSET_INTEGER {
+            return Ok(None);
+        }
+
+        match field.parse::<i32>() {
+            Ok(val) => Ok(Some(val)),
+            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+        }
+    }
+
+    pub fn next_bool(&mut self) -> Result<bool> {
+        let field = &self.fields[self.i];
+        self.i += 1;
+
+        Ok(field == "1")
     }
 
     pub fn next_long(&mut self) -> Result<i64> {
@@ -317,6 +337,23 @@ impl ResponseMessage {
 
         match field.parse() {
             Ok(val) => Ok(val),
+            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+        }
+    }
+
+    pub fn next_optional_double(&mut self) -> Result<Option<f64>> {
+        let field = &self.fields[self.i];
+        self.i += 1;
+
+        if field.is_empty() || field == "0" || field == "0.0" || field == UNSET_DOUBLE {
+            return Ok(None);
+        }
+        if field == INFINITY_STR {
+            return Ok(Some(f64::INFINITY));
+        }
+
+        match field.parse() {
+            Ok(val) => Ok(Some(val)),
             Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
         }
     }
