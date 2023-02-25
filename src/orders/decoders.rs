@@ -369,3 +369,22 @@ pub fn decode_order_status(server_version: i32, message: &mut ResponseMessage) -
 
     Ok(order_status)
 }
+
+pub fn decode_execution_data(server_version: i32, message: &mut ResponseMessage) -> Result<ExecutionData> {
+    message.skip(); // message type
+
+    if server_version < server_versions::LAST_LIQUIDITY {
+        message.skip(); // message version
+    };
+
+    let mut execution_data = ExecutionData::default();
+
+    execution_data.request_id = message.next_int()?;
+    execution_data.execution.order_id = message.next_int()?;
+    execution_data.contract.contract_id = message.next_int()?;
+    execution_data.contract.symbol = message.next_string()?;
+    let secutity_type = message.next_string()?;
+    execution_data.contract.security_type = SecurityType::from(&secutity_type);
+ 
+    Ok(execution_data)
+}

@@ -200,7 +200,21 @@ fn place_market_order() {
         assert!(false, "message[1] expected order status notification");
     }
 
-    // 3 order status
+    if let Some(OrderNotification::ExecutionData(execution_data)) = notifications.next() {
+        assert_eq!(execution_data.request_id, -1, "execution_data.request_id");
+        assert_eq!(execution_data.execution.order_id, 13, "execution_data.execution.order_id");
+        assert_eq!(execution_data.contract.contract_id, 76792991, "execution_data.contract.contract_id");
+        assert_eq!(execution_data.contract.symbol, "TSLA", "execution_data.contract.symbol");
+        assert_eq!(execution_data.contract.security_type, SecurityType::Stock, "execution_data.contract.security_type");
+    
+        // requestId, contract, exec
+        //                         *
+//        "11|-1|13|76792991|TSLA|STK||0.0|||ISLAND|USD|TSLA|NMS|00025b46.63f8f39c.01.01|20230224  12:04:56|DU1236109|ISLAND|BOT|100|196.52|1376327563|100|0|100|196.52|||||2||".to_owned(),
+
+    } else {
+        assert!(false, "message[2] expected execution notification");
+    }
+
     // 11 execution data
 }
 
