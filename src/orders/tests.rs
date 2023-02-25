@@ -42,6 +42,8 @@ fn place_market_order() {
         assert_eq!(notification.order_id, 13, "notification.order_id");
 
         let contract = &notification.contract;
+        let order = &notification.order;
+        let order_state = &notification.order_state;
 
         assert_eq!(contract.contract_id, 76792991, "contract.contract_id");
         assert_eq!(contract.symbol, "TSLA", "contract.symbol");
@@ -57,8 +59,6 @@ fn place_market_order() {
         assert_eq!(contract.currency, "USD", "contract.currency");
         assert_eq!(contract.local_symbol, "TSLA", "contract.local_symbol");
         assert_eq!(contract.trading_class, "NMS", "contract.trading_class");
-
-        let order = &notification.order;
 
         assert_eq!(order.order_id, 13, "order.order_id");
         assert_eq!(order.action, Action::Buy, "order.action");
@@ -94,7 +94,7 @@ fn place_market_order() {
         assert_eq!(order.starting_price, None, "order.starting_price");
         assert_eq!(order.stock_ref_price, None, "order.stock_ref_price");
         assert_eq!(order.delta, None, "order.delta");
-        assert_eq!(order.stock_range_lower, Some(0.0), "order.stock_range_lower");
+        assert_eq!(order.stock_range_lower, None, "order.stock_range_lower");
         assert_eq!(order.stock_range_upper, None, "order.stock_range_upper");
         assert_eq!(order.display_size, None, "order.display_size");
         assert_eq!(order.block_order, false, "order.block_order");
@@ -117,19 +117,31 @@ fn place_market_order() {
         assert_eq!(order.delta_neutral_short_sale_slot, 0, "order.delta_neutral_short_sale_slot");
         assert_eq!(order.delta_neutral_designated_location, "", "order.delta_neutral_designated_location");
         assert_eq!(order.continuous_update, false, "order.continuous_update");
-        assert_eq!(order.stock_range_lower, Some(0.0), "order.stock_range_lower");
-        assert_eq!(order.stock_range_upper, None, "order.stock_range_upper");
-        assert_eq!(order.reference_price_type, None, "order.reference_price_type");
+        assert_eq!(order.reference_price_type, Some(0), "order.reference_price_type");
+        assert_eq!(order.trail_stop_price, None, "order.trail_stop_price");
+        assert_eq!(order.trailing_percent, None, "order.trailing_percent");
+        assert_eq!(order.basis_points, None, "order.basis_points");
+        assert_eq!(order.basis_points_type, None, "order.basis_points_type");
+        assert_eq!(contract.combo_legs_description, "", "contract.combo_legs_description");
+        assert_eq!(contract.combo_legs.len(), 0, "contract.combo_legs.len()");
+        assert_eq!(order.order_combo_legs.len(), 0, "order.order_combo_legs.len()");
+        assert_eq!(order.smart_combo_routing_params.len(), 0, "order.smart_combo_routing_params.len()");
+        assert_eq!(order.scale_init_level_size, None, "order.scale_init_level_size");
+        assert_eq!(order.scale_subs_level_size, None, "order.scale_subs_level_size");
+        assert_eq!(order.scale_price_increment, None, "order.scale_price_increment");
+        assert_eq!(order.hedge_type, "", "order.hedge_type");
+        assert_eq!(order.opt_out_smart_routing, false, "order.opt_out_smart_routing");
+        assert_eq!(order.clearing_account, "", "order.clearing_account");
+        assert_eq!(order.clearing_intent, "IB", "order.clearing_intent");
+        assert_eq!(order.not_held, false, "order.not_held");
+        assert_eq!(order.algo_strategy, "", "order.algo_strategy");
+        assert_eq!(order.algo_params.len(), 0, "order.algo_params.len()");
+        assert_eq!(order.solicited, false, "order.solicited");
+        assert_eq!(order.what_if, false, "order.what_if");
+        assert_eq!(order_state.status, "PreSubmitted", "order_state.status");
 
-        // order.continuous_update = message.next_bool()?;
-        // order.stock_range_lower = message.next_optional_double()?;
-        // order.stock_range_upper = message.next_optional_double()?;
-        // order.reference_price_type = message.next_optional_int()?;
-
-        let order_state = &notification.order_state;
-        //   *
-        //  |0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
-        //   ^ continuous update
+    //        *
+    // |PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
     } else {
         assert!(false, "expected an open order notification");
     }

@@ -5,7 +5,7 @@ use log::{debug, info};
 
 use crate::client::transport::ResponsePacketPromise;
 use crate::client::{Client, RequestMessage, ResponseMessage};
-use crate::contracts::{Contract, SecurityType};
+use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
 
@@ -214,9 +214,9 @@ pub struct Order {
     /// Identifies third party order origin. Used only when deltaNeutralShortSaleSlot = 2.
     pub delta_neutral_designated_location: String,
     /// Specifies Basis Points for EFP order. The values increment in 0.01% = 1 basis point. For EFP orders only.
-    pub basis_points: f64,
+    pub basis_points: Option<f64>,
     /// Specifies the increment of the Basis Points. For EFP orders only.
-    pub basis_points_type: i32,
+    pub basis_points_type: Option<i32>,
     /// Defines the size of the first, or initial, order component. For Scale orders only.
     pub scale_init_level_size: Option<i32>,
     /// Defines the order size of the subsequent scale order components. For Scale orders only. Used in conjunction with scaleInitLevelSize().
@@ -480,8 +480,8 @@ impl Default for Order {
             delta_neutral_short_sale: false,
             delta_neutral_short_sale_slot: 0,
             delta_neutral_designated_location: "".to_owned(),
-            basis_points: 0.0,
-            basis_points_type: 0,
+            basis_points: Some(0.0),
+            basis_points_type: Some(0),
             scale_init_level_size: None,
             scale_subs_level_size: None,
             scale_price_increment: None,
@@ -731,11 +731,11 @@ pub struct OrderState {
     /// Shows the impact the order would have on the account's equity with loan
     equity_with_loan_after: String,
     /// The order's generated commission.
-    commission: f64,
+    commission: Option<f64>,
     // The execution's minimum commission.
-    minimum_commission: f64,
+    minimum_commission: Option<f64>,
     /// The executions maximum commission.
-    maximum_commission: f64,
+    maximum_commission: Option<f64>,
     /// The generated commission currency
     commission_currency: String,
     /// If the order is warranted, a descriptive message will be provided.
@@ -1676,26 +1676,133 @@ fn decode_open_order(server_version: i32, message: &mut ResponseMessage) -> Resu
     }
 
     order.continuous_update = message.next_bool()?;
-    order.stock_range_lower = message.next_optional_double()?;
-    order.stock_range_upper = message.next_optional_double()?;
     order.reference_price_type = message.next_optional_int()?;
 
-    // https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EOrderDecoder.cs#L442
+    // Trail parameters
+    order.trail_stop_price = message.next_optional_double()?;
+    order.trailing_percent = message.next_optional_double()?;
 
-    // eOrderDecoder.readTrailParams();
-    // eOrderDecoder.readBasisPoints();
+    // Basic points
+    order.basis_points = message.next_optional_double()?;
+    order.basis_points_type = message.next_optional_int()?;
 
-    // eOrderDecoder.readComboLegs();
-    // eOrderDecoder.readSmartComboRoutingParams();
-    // eOrderDecoder.readScaleOrderParams();
-    // eOrderDecoder.readHedgeParams();
-    // eOrderDecoder.readOptOutSmartRouting();
-    // eOrderDecoder.readClearingParams();
-    // eOrderDecoder.readNotHeld();
-    // eOrderDecoder.readDeltaNeutral();
-    // eOrderDecoder.readAlgoParams();
-    // eOrderDecoder.readSolicited();
-    // eOrderDecoder.readWhatIfInfoAndCommission();
+    // Combo Legs
+    contract.combo_legs_description = message.next_string()?;
+
+    let combo_legs_count = message.next_int()?;
+    for _ in 0..combo_legs_count {
+        let contract_id = message.next_int()?;
+        let ratio = message.next_int()?;
+        let action = message.next_string()?;
+        let exchange = message.next_string()?;
+        let open_close = message.next_int()?;
+        let short_sale_slot = message.next_int()?;
+        let designated_location = message.next_string()?;
+        let exempt_code = message.next_int()?;
+
+        contract.combo_legs.push(ComboLeg {
+            contract_id,
+            ratio,
+            action,
+            exchange,
+            open_close: ComboLegOpenClose::from_i32(open_close),
+            short_sale_slot,
+            designated_location,
+            exempt_code,
+        });
+    }
+
+    // smart combo routing params
+    let order_combo_legs_count = message.next_int()?;
+    for _ in 0..order_combo_legs_count {
+        let price = message.next_optional_double()?;
+
+        order.order_combo_legs.push(OrderComboLeg { price });
+    }
+
+    let smart_combo_routing_params_count = message.next_int()?;
+    for _ in 0..smart_combo_routing_params_count {
+        order.smart_combo_routing_params.push(TagValue {
+            tag: message.next_string()?,
+            value: message.next_string()?,
+        });
+    }
+
+    // scale order params
+    order.scale_init_level_size = message.next_optional_int()?;
+    order.scale_subs_level_size = message.next_optional_int()?;
+    order.scale_price_increment = message.next_optional_double()?;
+
+    if let Some(scale_price_increment) = order.scale_price_increment {
+        if scale_price_increment > 0.0 {
+            order.scale_price_adjust_value = message.next_optional_double()?;
+            order.scale_price_adjust_interval = message.next_optional_int()?;
+            order.scale_profit_offset = message.next_optional_double()?;
+            order.scale_auto_reset = message.next_bool()?;
+            order.scale_init_position = message.next_optional_int()?;
+            order.scale_init_fill_qty = message.next_optional_int()?;
+            order.scale_random_percent = message.next_bool()?;
+        }
+    }
+
+    // hedge params
+    order.hedge_type = message.next_string()?;
+    if !order.hedge_type.is_empty() {
+        order.hedge_param = message.next_string()?;
+    }
+
+    order.opt_out_smart_routing = message.next_bool()?;
+
+    order.clearing_account = message.next_string()?;
+    order.clearing_intent = message.next_string()?;
+
+    order.not_held = message.next_bool()?;
+
+    //https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EOrderDecoder.cs#L594
+    // delta neutral
+    let has_delta_neutral_contract = message.next_bool()?;
+    if has_delta_neutral_contract {
+        contract.delta_neutral_contract = Some(DeltaNeutralContract {
+            contract_id: message.next_int()?,
+            delta: message.next_double()?,
+            price: message.next_double()?,
+        });
+    }
+
+    // algo params
+    order.algo_strategy = message.next_string()?;
+    if !order.algo_strategy.is_empty() {
+        let algo_params_count = message.next_int()?;
+        for _ in 0..algo_params_count {
+            order.algo_params.push(TagValue {
+                tag: message.next_string()?,
+                value: message.next_string()?,
+            });
+        }
+    }
+
+    order.solicited = message.next_bool()?;
+
+    // what_if and comission
+    order.what_if = message.next_bool()?;
+    order_state.status = message.next_string()?;
+    if server_version >= server_versions::WHAT_IF_EXT_FIELDS {
+        order_state.initial_margin_before = message.next_string()?;
+        order_state.maintenance_margin_before = message.next_string()?;
+        order_state.equity_with_loan_before = message.next_string()?;
+        order_state.initial_margin_change = message.next_string()?;
+        order_state.maintenance_margin_change = message.next_string()?;
+        order_state.equity_with_loan_change = message.next_string()?;
+    }
+    order_state.initial_margin_after = message.next_string()?;
+    order_state.maintenance_margin_after = message.next_string()?;
+    order_state.equity_with_loan_after = message.next_string()?;
+    order_state.commission = message.next_optional_double()?;
+    order_state.minimum_commission = message.next_optional_double()?;
+    order_state.maximum_commission = message.next_optional_double()?;
+    order_state.commission_currency = message.next_string()?;
+    order_state.warning_text = message.next_string()?;
+
     // eOrderDecoder.readVolRandomizeFlags();
     // eOrderDecoder.readPegToBenchParams();
     // eOrderDecoder.readConditions();

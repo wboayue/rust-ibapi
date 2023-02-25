@@ -210,12 +210,25 @@ pub enum ComboLegOpenClose {
     Unknown = 3,
 }
 
+impl ComboLegOpenClose {
+    // TODO - verify these values
+    pub fn from_i32(val: i32) -> Self {
+        match val {
+            0 => Self::Same,
+            1 => Self::Open,
+            2 => Self::Close,
+            3 => Self::Unknown,
+            _ => panic!("unsupported value: {val}"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 /// Delta and underlying price for Delta-Neutral combo orders.
 /// Underlying (STK or FUT), delta and underlying price goes into this attribute.
 pub struct DeltaNeutralContract {
     /// The unique contract identifier specifying the security. Used for Delta-Neutral Combo contracts.
-    pub contract_id: String,
+    pub contract_id: i32,
     /// The underlying stock or future delta. Used for Delta-Neutral Combo contracts.
     pub delta: f64,
     /// The price of the underlying. Used for Delta-Neutral Combo contracts.
