@@ -261,6 +261,19 @@ fn place_market_order() {
         assert!(false, "message[4] expected order status notification");
     }
 
+    if let Some(OrderNotification::OpenOrder(open_order)) = notifications.next() {
+        let order_state = &open_order.order_state;
+
+        assert_eq!(open_order.order_id, 13, "open_order.order_id");
+        assert_eq!(order_state.status, "Filled", "order_state.status");
+        assert_eq!(order_state.commission, Some(1.0), "order_state.commission");
+        assert_eq!(order_state.minimum_commission, None, "order_state.minimum_commission");
+        assert_eq!(order_state.maximum_commission, None, "order_state.maximum_commission");
+        assert_eq!(order_state.commission_currency, "USD", "order_state.commission_currency");
+    } else {
+        assert!(false, "message[5] expected an open order notification");
+    }
+
 }
 
 #[test]
