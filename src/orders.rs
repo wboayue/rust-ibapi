@@ -996,7 +996,7 @@ impl Iterator for OrderNotificationIterator {
                             None
                         }
                     }
-                },
+                }
                 message => {
                     info!("unexpected messsage: {message:?}");
                     None

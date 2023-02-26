@@ -433,7 +433,7 @@ pub fn decode_commission_report(_server_version: i32, message: &mut ResponseMess
     report.currency = message.next_string()?;
     report.realized_pnl = message.next_optional_double()?;
     report.yields = message.next_optional_double()?;
-    report.yield_redemption_date = message.next_string()?;  // TODO: date as string?
+    report.yield_redemption_date = message.next_string()?; // TODO: date as string?
 
     Ok(report)
 }

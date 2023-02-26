@@ -284,7 +284,6 @@ fn place_market_order() {
     } else {
         assert!(false, "message[6] expected a commission report notification");
     }
-
 }
 
 #[test]
