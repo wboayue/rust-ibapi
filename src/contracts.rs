@@ -396,7 +396,7 @@ pub fn request_contract_details<C: Client + Debug>(client: &mut C, contract: &Co
     let request_id = client.next_request_id();
     let packet = encode_request_contract_data(client.server_version(), request_id, contract)?;
 
-    let responses = client.send_message_for_request(request_id, packet)?;
+    let responses = client.send_request(request_id, packet)?;
 
     let mut contract_details: Vec<ContractDetails> = Vec::default();
 
@@ -643,7 +643,7 @@ pub fn request_matching_symbols<C: Client + Debug>(client: &mut C, pattern: &str
     let request_id = client.next_request_id();
     let request = encode_request_matching_symbols(request_id, pattern)?;
 
-    let mut responses = client.send_message_for_request(request_id, request)?;
+    let mut responses = client.send_request(request_id, request)?;
 
     if let Some(mut message) = responses.next() {
         match message.message_type() {

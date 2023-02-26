@@ -27,7 +27,7 @@ pub trait Client {
     fn next_request_id(&mut self) -> i32;
     fn server_version(&self) -> i32;
     fn send_message(&mut self, packet: RequestMessage) -> Result<()>;
-    fn send_message_for_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
+    fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
 
@@ -136,7 +136,7 @@ impl Client for IBClient {
         self.message_bus.write_message(&packet)
     }
 
-    fn send_message_for_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
+    fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
         debug!("send_message({:?}, {:?})", request_id, message);
         self.message_bus.write_message_for_request(request_id, &message)
     }

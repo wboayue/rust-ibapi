@@ -76,7 +76,7 @@ pub fn realtime_bars_with_options<C: Client + Debug>(
     let request_id = client.next_request_id();
     let packet = encode_request_realtime_bars(client.server_version(), request_id, contract, bar_size, what_to_show, use_rth, options)?;
 
-    let responses = client.send_message_for_request(request_id, packet)?;
+    let responses = client.send_request(request_id, packet)?;
 
     Ok(RealTimeBarIterator::new(client.server_version(), request_id, responses))
 }

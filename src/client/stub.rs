@@ -38,7 +38,7 @@ impl Client for ClientStub {
         Ok(())
     }
 
-    fn send_message_for_request(&mut self, _request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
+    fn send_request(&mut self, _request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
         self.request_messages.push(encode_message(&message));
 
         let (sender, receiver) = mpsc::channel();
