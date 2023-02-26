@@ -224,10 +224,19 @@ fn place_market_order() {
         assert_eq!(execution.time, "20230224  12:04:56", "execution.time");
         assert_eq!(execution.account_number, "DU1236109", "execution.account_number");
         assert_eq!(execution.exchange, "ISLAND", "execution.exchange");
-
-        // requestId, contract, exec
-        // *
-        //       |ISLAND|BOT|100|196.52|1376327563|100|0|100|196.52|||||2||".to_owned(),
+        assert_eq!(execution.side, "BOT", "execution.side");
+        assert_eq!(execution.shares, 100.0, "execution.shares");
+        assert_eq!(execution.price, 196.52, "execution.price");
+        assert_eq!(execution.perm_id, 1376327563, "execution.perm_id");
+        assert_eq!(execution.client_id, 100, "execution.client_id");
+        assert_eq!(execution.liquidation, 0, "execution.liquidation");
+        assert_eq!(execution.cumulative_quantity, 100.0, "execution.cumulative_quantity");
+        assert_eq!(execution.average_price, 196.52, "execution.average_price");
+        assert_eq!(execution.order_reference, "", "execution.order_reference");
+        assert_eq!(execution.ev_rule, "", "execution.ev_rule");
+        assert_eq!(execution.ev_multiplier, None, "execution.ev_multiplier");
+        assert_eq!(execution.model_code, "", "execution.model_code");
+        assert_eq!(execution.last_liquidity, Liquidity::RemovedLiquidity, "execution.last_liquidity");
     } else {
         assert!(false, "message[2] expected execution notification");
     }

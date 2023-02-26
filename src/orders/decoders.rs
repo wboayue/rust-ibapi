@@ -409,7 +409,7 @@ pub fn decode_execution_data(server_version: i32, message: &mut ResponseMessage)
     execution.average_price = message.next_double()?;
     execution.order_reference = message.next_string()?;
     execution.ev_rule = message.next_string()?;
-    execution.ev_multiplier = message.next_double()?;
+    execution.ev_multiplier = message.next_optional_double()?;
 
     if server_version >= server_versions::MODELS_SUPPORT {
         execution.model_code = message.next_string()?;

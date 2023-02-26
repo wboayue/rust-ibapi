@@ -812,19 +812,25 @@ pub struct CommissionReport {
 // {2, "Removed Liquidity"},
 // {3, "Liquidity Routed Out" }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub enum Liquidity {
     #[default]
-    None,
-    AddedLiquidity,
-    RemovedLiquidity,
-    LiquidityRoutedOut,
+    None = 0,
+    AddedLiquidity = 1,
+    RemovedLiquidity = 2,
+    LiquidityRoutedOut = 3,
 }
 
 // TODO fixme
 impl Liquidity {
     pub fn from_i32(val: i32) -> Self {
-        Liquidity::None
+        match val {
+            0 => Liquidity::None,
+            1 => Liquidity::AddedLiquidity,
+            2 => Liquidity::RemovedLiquidity,
+            3 => Liquidity::LiquidityRoutedOut,
+            _ => panic!("unsupported Liquidity({val})"),
+        }
     }
 }
 
@@ -869,7 +875,7 @@ pub struct Execution {
     pub ev_rule: String,
     /// Tells you approximately how much the market value of a contract would change if the price were to change by 1.
     /// It cannot be used to get market value by multiplying the price by the approximate multiplier.
-    pub ev_multiplier: f64,
+    pub ev_multiplier: Option<f64>,
     /// model code
     pub model_code: String,
     // The liquidity type of the execution. Requires TWS 968+ and API v973.05+. Python API specifically requires API v973.06+.
