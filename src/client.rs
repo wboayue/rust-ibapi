@@ -24,10 +24,17 @@ const UNSET_DOUBLE: &str = "1.7976931348623157E308";
 const UNSET_INTEGER: &str = "2147483647";
 
 pub trait Client {
+    /// Returns the next request ID
     fn next_request_id(&mut self) -> i32;
+    /// Returns the server version
     fn server_version(&self) -> i32;
+    /// Sends a message with no reply expected
     fn send_message(&mut self, packet: RequestMessage) -> Result<()>;
+    /// Sends a request with an expect reply
     fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
+    /// Submits an Order
+    fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
+    /// Checks that the server support the requested version.
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
 
@@ -139,6 +146,11 @@ impl Client for IBClient {
     fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
         debug!("send_message({:?}, {:?})", request_id, message);
         self.message_bus.write_message_for_request(request_id, &message)
+    }
+
+    fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
+        debug!("send_message({:?}, {:?})", order_id, message);
+        self.message_bus.write_message_for_request(order_id, &message)
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {

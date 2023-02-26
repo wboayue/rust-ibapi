@@ -50,6 +50,18 @@ impl Client for ClientStub {
         Ok(ResponsePacketPromise::new(receiver))
     }
 
+    fn send_order(&mut self, _order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
+        self.request_messages.push(encode_message(&message));
+
+        let (sender, receiver) = mpsc::channel();
+
+        for message in &self.response_messages {
+            sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
+        }
+
+        Ok(ResponsePacketPromise::new(receiver))
+    }
+
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
         if version <= self.server_version {
             Ok(())
