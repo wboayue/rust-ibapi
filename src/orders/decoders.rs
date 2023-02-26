@@ -421,3 +421,19 @@ pub fn decode_execution_data(server_version: i32, message: &mut ResponseMessage)
 
     Ok(execution_data)
 }
+
+pub fn decode_commission_report(_server_version: i32, message: &mut ResponseMessage) -> Result<CommissionReport> {
+    message.skip(); // message type
+    message.skip(); // message version
+
+    let mut report = CommissionReport::default();
+
+    report.execution_id = message.next_string()?;
+    report.commission = message.next_double()?;
+    report.currency = message.next_string()?;
+    report.realized_pnl = message.next_optional_double()?;
+    report.yields = message.next_optional_double()?;
+    report.yield_redemption_date = message.next_string()?;  // TODO: date as string?
+
+    Ok(report)
+}
