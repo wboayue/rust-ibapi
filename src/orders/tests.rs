@@ -38,12 +38,12 @@ fn place_market_order() {
 
     let mut notifications = result.unwrap();
 
-    if let Some(OrderNotification::OpenOrder(notification)) = notifications.next() {
-        assert_eq!(notification.order_id, 13, "notification.order_id");
+    if let Some(OrderNotification::OpenOrder(open_order)) = notifications.next() {
+        assert_eq!(open_order.order_id, 13, "open_order.order_id");
 
-        let contract = &notification.contract;
-        let order = &notification.order;
-        let order_state = &notification.order_state;
+        let contract = &open_order.contract;
+        let order = &open_order.order;
+        let order_state = &open_order.order_state;
 
         assert_eq!(contract.contract_id, 76792991, "contract.contract_id");
         assert_eq!(contract.symbol, "TSLA", "contract.symbol");
@@ -241,7 +241,26 @@ fn place_market_order() {
         assert!(false, "message[2] expected execution notification");
     }
 
-    // 11 execution data
+    if let Some(OrderNotification::OpenOrder(open_order)) = notifications.next() {
+        let order_state = &open_order.order_state;
+
+        assert_eq!(open_order.order_id, 13, "open_order.order_id");
+        assert_eq!(order_state.status, "Filled", "order_state.status");
+    } else {
+        assert!(false, "message[3] expected an open order notification");
+    }
+
+    if let Some(OrderNotification::OrderStatus(order_status)) = notifications.next() {
+        assert_eq!(order_status.order_id, 13, "order_status.order_id");
+        assert_eq!(order_status.status, "Filled", "order_status.status");
+        assert_eq!(order_status.filled, 100.0, "order_status.filled");
+        assert_eq!(order_status.remaining, 0.0, "order_status.remaining");
+        assert_eq!(order_status.average_fill_price, 196.52, "order_status.average_fill_price");
+        assert_eq!(order_status.last_fill_price, 196.52, "order_status.last_fill_price");
+    } else {
+        assert!(false, "message[4] expected order status notification");
+    }
+
 }
 
 #[test]
@@ -283,10 +302,3 @@ fn place_combo_market_order() {
 
     assert!(results.is_ok(), "failed to place order: {:?}", results.err());
 }
-
-// 11:49:32:189 <- 3-12-0-AAPL-STK--0.0---SMART--USD-----BUY-100-MKT-------0--1-0-0-0-0-0-0-0--0--------0---1-0---0---0-0--0------0-----0-----------0---0-0---0--0-0-0-0--1.7976931348623157e+308-1.7976931348623157e+308-1.7976931348623157e+308-1.7976931348623157e+308-1.7976931348623157e+308-0----1.7976931348623157e+308-----0-0-0--2147483647-2147483647-0-
-// 11:49:32:797 -> -- �5-12-265598-AAPL-STK--0-?--SMART-USD-AAPL-NMS-BUY-100-MKT-0.0-0.0-DAY--DU1236109--0--123-45587459-0-0-0--45587459.0/DU1236109/100----------0---1-0------2147483647-0-0-0--3-0-0--0-0--0-None--0----?-0-0--0-0------0-0-0-2147483647-2147483647---0--IB-0-0--0-0-Submitted-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308------0-0-0-None-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-0----0-1-0-0-0---0----+3-12-Submitted-0-100-0-45587459-0-0-123--0-
-// 11:49:32:834 -> ---�11--1-12-265598-AAPL-STK--0.0---ISLAND-USD-AAPL-NMS-0000e0d5.64305db8.01.01-20230223  11:49:33-DU1236109-ISLAND-BOT-100-149.23-45587459-123-0-100-149.23-----2-
-// 11:49:32:835 -> -- �5-12-265598-AAPL-STK--0-?--SMART-USD-AAPL-NMS-BUY-100-MKT-0.0-0.0-DAY--DU1236109--0--123-45587459-0-0-0--45587459.0/DU1236109/100----------0---1-0------2147483647-0-0-0--3-0-0--0-0--0-None--0----?-0-0--0-0------0-0-0-2147483647-2147483647---0--IB-0-0--0-0-Filled-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308------0-0-0-None-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-0----0-1-0-0-0---0----23-12-Filled-100-0-149.23-45587459-0-149.23-123--0-
-// 11:49:32:836 -> -- �5-12-265598-AAPL-STK--0-?--SMART-USD-AAPL-NMS-BUY-100-MKT-0.0-0.0-DAY--DU1236109--0--123-45587459-0-0-0--45587459.0/DU1236109/100----------0---1-0------2147483647-0-0-0--3-0-0--0-0--0-None--0----?-0-0--0-0------0-0-0-2147483647-2147483647---0--IB-0-0--0-0-Filled-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.0---USD--0-0-0-None-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-1.7976931348623157E308-0----0-1-0-0-0---0----23-12-Filled-100-0-149.23-45587459-0-149.23-123--0-
-// 11:49:32:837 -> ---T59-1-0000e0d5.64305db8.01.01-1.0-USD-1.7976931348623157E308-1.7976931348623157E308--
