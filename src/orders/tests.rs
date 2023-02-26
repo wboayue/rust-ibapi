@@ -3,7 +3,7 @@ use crate::client::stub::ClientStub;
 use crate::contracts::{contract_samples, Contract, SecurityType};
 
 #[test]
-fn place_market_order() {
+fn place_order() {
     let mut client = ClientStub::new(server_versions::SIZE_RULES);
 
     client.response_messages = vec![
@@ -287,7 +287,7 @@ fn place_market_order() {
 }
 
 #[test]
-fn place_limit_order() {
+fn encode_limit_order() {
     let mut client = ClientStub::new(server_versions::SIZE_RULES);
 
     client.response_messages = vec![];
@@ -307,7 +307,7 @@ fn place_limit_order() {
 }
 
 #[test]
-fn place_combo_market_order() {
+fn encode_combo_market_order() {
     let mut client = ClientStub::new(server_versions::SIZE_RULES);
 
     client.response_messages = vec![];
