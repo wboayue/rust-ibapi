@@ -24,17 +24,21 @@ const UNSET_DOUBLE: &str = "1.7976931348623157E308";
 const UNSET_INTEGER: &str = "2147483647";
 
 pub trait Client {
-    /// Returns the next request ID
+    /// Returns the next request ID.
     fn next_request_id(&mut self) -> i32;
-    /// Returns the server version
+    /// Returns and increments the order ID.
+    fn next_order_id(&mut self) -> i32;
+    /// Sets the current value of order ID.
+    fn set_order_id(&mut self,  order_id: i32) -> i32;       
+    /// Returns the server version.
     fn server_version(&self) -> i32;
-    /// Sends a message with no reply expected
+    /// Sends a message without an expected reply.
     fn send_message(&mut self, packet: RequestMessage) -> Result<()>;
-    /// Sends a request with an expect reply
+    /// Sends a request with and waits for reply.
     fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
-    /// Submits an Order
+    /// Submits an order and waits for reply.
     fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
-    /// Checks that the server support the requested version.
+    /// Ensures server is at least the requested version.
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
 
@@ -49,21 +53,22 @@ pub struct IBClient {
     // Ids of managed accounts
     pub managed_accounts: String,
 
-    client_id: i32,
+    client_id: i32, // ID of client.
     message_bus: Box<dyn MessageBus>,
-    next_request_id: i32,
+    next_request_id: i32,   // Next available request_id.
+    order_id: i32,  // Next available order_id. Starts with value returned on connection.
 }
 
 impl IBClient {
     /// Opens connection to TWS workstation or gateway.
     pub fn connect(connection_string: &str) -> Result<IBClient> {
+       debug!("connecting to server with #{:?}", connection_string);
+
         let message_bus = Box::new(TcpMessageBus::connect(connection_string)?);
         IBClient::do_connect(connection_string, message_bus)
     }
 
     fn do_connect(connection_string: &str, message_bus: Box<dyn MessageBus>) -> Result<IBClient> {
-        debug!("connecting to server with #{:?}", connection_string);
-
         let mut client = IBClient {
             server_version: 0,
             server_time: String::from(""),
@@ -72,6 +77,7 @@ impl IBClient {
             message_bus,
             client_id: 100,
             next_request_id: 9000,
+            order_id: -1,
         };
 
         client.handshake()?;
@@ -133,6 +139,16 @@ impl Client for IBClient {
     fn next_request_id(&mut self) -> i32 {
         self.next_request_id += 1;
         self.next_request_id
+    }
+
+    fn next_order_id(&mut self) -> i32 {
+        self.order_id += 1;
+        self.order_id
+    }
+
+    fn set_order_id(&mut self, order_id: i32) -> i32 {
+        self.order_id = order_id;
+        self.order_id
     }
 
     fn server_version(&self) -> i32 {

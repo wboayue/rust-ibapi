@@ -10,6 +10,7 @@ pub struct ClientStub {
     pub response_messages: Vec<String>,
     pub next_request_id: i32,
     pub server_version: i32,
+    pub order_id: i32,
 }
 
 impl ClientStub {
@@ -27,6 +28,16 @@ impl Client for ClientStub {
         let tmp = self.next_request_id;
         self.next_request_id += 1;
         tmp
+    }
+
+    fn next_order_id(&mut self) -> i32 {
+        self.order_id += 1;
+        self.order_id
+    }
+
+    fn set_order_id(&mut self, order_id: i32) -> i32 {
+        self.order_id = order_id;
+        self.order_id
     }
 
     fn server_version(&self) -> i32 {
