@@ -1,3 +1,4 @@
+use std::convert::From;
 use std::fmt::Debug;
 use std::string::ToString;
 
@@ -210,9 +211,9 @@ pub enum ComboLegOpenClose {
     Unknown = 3,
 }
 
-impl ComboLegOpenClose {
+impl From<i32> for ComboLegOpenClose {
     // TODO - verify these values
-    pub fn from_i32(val: i32) -> Self {
+    fn from(val: i32) -> Self {
         match val {
             0 => Self::Same,
             1 => Self::Open,

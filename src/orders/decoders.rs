@@ -156,7 +156,7 @@ pub fn decode_open_order(server_version: i32, message: &mut ResponseMessage) -> 
             ratio,
             action,
             exchange,
-            open_close: ComboLegOpenClose::from_i32(open_close),
+            open_close: ComboLegOpenClose::from(open_close),
             short_sale_slot,
             designated_location,
             exempt_code,
@@ -272,7 +272,7 @@ pub fn decode_open_order(server_version: i32, message: &mut ResponseMessage) -> 
         let conditions_count = message.next_int()?;
         for _ in 0..conditions_count {
             let order_condition = message.next_int()?;
-            order.conditions.push(OrderCondition::from_i32(order_condition));
+            order.conditions.push(OrderCondition::from(order_condition));
         }
         if conditions_count > 0 {
             order.conditions_ignore_rth = message.next_bool()?;
@@ -416,7 +416,7 @@ pub fn decode_execution_data(server_version: i32, message: &mut ResponseMessage)
     }
 
     if server_version >= server_versions::LAST_LIQUIDITY {
-        execution.last_liquidity = Liquidity::from_i32(message.next_int()?);
+        execution.last_liquidity = Liquidity::from(message.next_int()?);
     }
 
     Ok(execution_data)
