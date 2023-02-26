@@ -5,8 +5,8 @@ use clap::{arg, ArgMatches, Command};
 use log::{debug, info};
 
 use ibapi::client::IBClient;
-use ibapi::contracts::{self, Contract};
-use ibapi::orders::{self, order_builder, Order, OrderNotification};
+use ibapi::contracts::{Contract};
+use ibapi::orders::{self, order_builder, OrderNotification};
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
