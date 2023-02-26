@@ -201,15 +201,30 @@ fn place_market_order() {
     }
 
     if let Some(OrderNotification::ExecutionData(execution_data)) = notifications.next() {
+        let contract = execution_data.contract;
+        let execution = execution_data.execution;
+
         assert_eq!(execution_data.request_id, -1, "execution_data.request_id");
-        assert_eq!(execution_data.execution.order_id, 13, "execution_data.execution.order_id");
-        assert_eq!(execution_data.contract.contract_id, 76792991, "execution_data.contract.contract_id");
-        assert_eq!(execution_data.contract.symbol, "TSLA", "execution_data.contract.symbol");
-        assert_eq!(execution_data.contract.security_type, SecurityType::Stock, "execution_data.contract.security_type");
+        assert_eq!(execution.order_id, 13, "execution.order_id");
+        assert_eq!(contract.contract_id, 76792991, "contract.contract_id");
+        assert_eq!(contract.symbol, "TSLA", "contract.symbol");
+        assert_eq!(contract.security_type, SecurityType::Stock, "contract.security_type");
+        assert_eq!(contract.last_trade_date_or_contract_month, "", "contract.last_trade_date_or_contract_month");
+        assert_eq!(contract.strike, 0.0, "contract.strike");
+        assert_eq!(contract.right, "", "contract.right");
+        assert_eq!(contract.multiplier, "", "contract.multiplier");
+        assert_eq!(contract.exchange, "ISLAND", "contract.exchange");
+        assert_eq!(contract.currency, "USD", "contract.currency");
+        assert_eq!(contract.local_symbol, "TSLA", "contract.local_symbol");
+        assert_eq!(contract.trading_class, "NMS", "contract.trading_class");
+        assert_eq!(execution.execution_id, "00025b46.63f8f39c.01.01", "execution.execution_id");
+        assert_eq!(execution.time, "20230224  12:04:56", "execution.time");
+        assert_eq!(execution.account_number, "DU1236109", "execution.account_number");
+        assert_eq!(execution.exchange, "ISLAND", "execution.exchange");
     
         // requestId, contract, exec
-        //                         *
-//        "11|-1|13|76792991|TSLA|STK||0.0|||ISLAND|USD|TSLA|NMS|00025b46.63f8f39c.01.01|20230224  12:04:56|DU1236109|ISLAND|BOT|100|196.52|1376327563|100|0|100|196.52|||||2||".to_owned(),
+        // *
+//       |ISLAND|BOT|100|196.52|1376327563|100|0|100|196.52|||||2||".to_owned(),
 
     } else {
         assert!(false, "message[2] expected execution notification");

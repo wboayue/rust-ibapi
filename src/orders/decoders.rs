@@ -378,13 +378,30 @@ pub fn decode_execution_data(server_version: i32, message: &mut ResponseMessage)
     };
 
     let mut execution_data = ExecutionData::default();
+    let contract = &mut execution_data.contract;
+    let execution = &mut execution_data.execution;
 
     execution_data.request_id = message.next_int()?;
-    execution_data.execution.order_id = message.next_int()?;
-    execution_data.contract.contract_id = message.next_int()?;
-    execution_data.contract.symbol = message.next_string()?;
+    execution.order_id = message.next_int()?;
+    contract.contract_id = message.next_int()?;
+    contract.symbol = message.next_string()?;
     let secutity_type = message.next_string()?;
-    execution_data.contract.security_type = SecurityType::from(&secutity_type);
+    contract.security_type = SecurityType::from(&secutity_type);
+    contract.last_trade_date_or_contract_month = message.next_string()?;
+    contract.strike = message.next_double()?;
+    contract.right = message.next_string()?;
+    contract.multiplier = message.next_string()?;
+    contract.exchange = message.next_string()?;
+    contract.currency = message.next_string()?;
+    contract.local_symbol = message.next_string()?;
+    contract.trading_class = message.next_string()?;
+    execution.execution_id = message.next_string()?;
+    execution.time = message.next_string()?;
+    execution.account_number = message.next_string()?;
+    execution.exchange = message.next_string()?;
+    execution.side = message.next_string()?;
+    execution.shares = message.next_double()?;
+    execution.price = message.next_double()?;
  
     Ok(execution_data)
 }
