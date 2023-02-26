@@ -1,7 +1,8 @@
+use std::convert::From;
 use std::fmt::Debug;
 
 use anyhow::Result;
-use log::{debug, info};
+use log::{debug, error, info};
 
 use crate::client::transport::ResponsePacketPromise;
 use crate::client::{Client, RequestMessage, ResponseMessage};
@@ -691,8 +692,8 @@ pub enum OrderCondition {
     PercentChange = 7,
 }
 
-impl OrderCondition {
-    pub fn from_i32(val: i32) -> Self {
+impl From<i32> for OrderCondition {
+    fn from(val: i32) -> Self {
         match val {
             1 => OrderCondition::Price,
             3 => OrderCondition::Time,
@@ -816,9 +817,8 @@ pub enum Liquidity {
     LiquidityRoutedOut = 3,
 }
 
-// TODO fixme
-impl Liquidity {
-    pub fn from_i32(val: i32) -> Self {
+impl From<i32> for Liquidity {
+    fn from(val: i32) -> Self {
         match val {
             0 => Liquidity::None,
             1 => Liquidity::AddedLiquidity,
