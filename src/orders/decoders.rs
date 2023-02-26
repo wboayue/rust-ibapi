@@ -402,6 +402,22 @@ pub fn decode_execution_data(server_version: i32, message: &mut ResponseMessage)
     execution.side = message.next_string()?;
     execution.shares = message.next_double()?;
     execution.price = message.next_double()?;
- 
+    execution.perm_id = message.next_int()?;
+    execution.client_id = message.next_int()?;
+    execution.liquidation = message.next_int()?;
+    execution.cumulative_quantity = message.next_double()?;
+    execution.average_price = message.next_double()?;
+    execution.order_reference = message.next_string()?;
+    execution.ev_rule = message.next_string()?;
+    execution.ev_multiplier = message.next_double()?;
+
+    if server_version >= server_versions::MODELS_SUPPORT {
+        execution.model_code = message.next_string()?;
+    }
+
+    if server_version >= server_versions::LAST_LIQUIDITY {
+        execution.last_liquidity = Liquidity::from_i32(message.next_int()?);
+    }
+
     Ok(execution_data)
 }

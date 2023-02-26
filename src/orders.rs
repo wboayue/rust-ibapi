@@ -9,8 +9,8 @@ use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContra
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
 
-mod encoders;
 mod decoders;
+mod encoders;
 
 /// Make sure to test using only your paper trading account when applicable. A good way of finding out if an order type/exchange combination
 /// is possible is by trying to place such order manually using the TWS.
@@ -821,6 +821,13 @@ pub enum Liquidity {
     LiquidityRoutedOut,
 }
 
+// TODO fixme
+impl Liquidity {
+    pub fn from_i32(val: i32) -> Self {
+        Liquidity::None
+    }
+}
+
 /// Describes an order's execution.
 #[derive(Clone, Debug, Default)]
 pub struct Execution {
@@ -978,7 +985,7 @@ impl Iterator for OrderNotificationIterator {
                             None
                         }
                     }
-                },
+                }
                 IncomingMessages::CommissionsReport => None,
                 _ => {
                     info!("unexpected message: {:?}", message);
