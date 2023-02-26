@@ -19,9 +19,7 @@ fn main() -> anyhow::Result<()> {
         .arg(arg!(--futures <SYMBOL>))
         .get_matches();
 
-    let connection_string = matches
-        .get_one::<String>("connection_string")
-        .expect("connection_string is required");
+    let connection_string = matches.get_one::<String>("connection_string").expect("connection_string is required");
     let contract = extract_contract(&matches).expect("error parsing --stock or --future");
 
     println!("connection_string: {connection_string:?}");
@@ -29,13 +27,8 @@ fn main() -> anyhow::Result<()> {
 
     let mut client = IBClient::connect("odin:4002")?;
 
-    let bars = streaming::realtime_bars(
-        &mut client,
-        &contract,
-        &BarSize::Secs5,
-        &WhatToShow::Trades,
-        false,
-    )?;
+    let bars = streaming::realtime_bars(&mut client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
+
     for (i, bar) in bars.enumerate() {
         println!("bar: {i:?} {bar:?}");
 
@@ -44,27 +37,17 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    // let mut contract = Contract::stock(stock_symbol);
-    // contract.currency = "USD".to_string();
-    // debug!("contract template: {contract:?}");
-
     thread::sleep(Duration::from_secs(5));
 
     Ok(())
 }
 
 fn extract_contract(matches: &ArgMatches) -> Option<Contract> {
-    if matches.contains_id("stock") {
-        let symbol = matches
-            .get_one::<String>("stock")
-            .expect("error parsing stock symbol");
-
+    if let Some(symbol) = matches.get_one::<String>("stock") {
         Some(Contract::stock(&symbol.to_uppercase()))
-    } else {
-        let symbol = matches
-            .get_one::<String>("futures")
-            .expect("error parsing futures symbol");
-
+    } else if let Some(symbol) = matches.get_one::<String>("futures") {
         Some(Contract::futures(&symbol.to_uppercase()))
+    } else {
+        None
     }
 }

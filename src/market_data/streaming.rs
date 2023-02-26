@@ -53,14 +53,7 @@ pub fn realtime_bars<C: Client + Debug>(
     what_to_show: &WhatToShow,
     use_rth: bool,
 ) -> Result<RealTimeBarIterator> {
-    realtime_bars_with_options(
-        client,
-        contract,
-        bar_size,
-        what_to_show,
-        use_rth,
-        Vec::default(),
-    )
+    realtime_bars_with_options(client, contract, bar_size, what_to_show, use_rth, Vec::default())
 }
 
 pub fn realtime_bars_with_options<C: Client + Debug>(
@@ -71,10 +64,7 @@ pub fn realtime_bars_with_options<C: Client + Debug>(
     use_rth: bool,
     options: Vec<TagValue>,
 ) -> Result<RealTimeBarIterator> {
-    client.check_server_version(
-        server_versions::REAL_TIME_BARS,
-        "It does not support real time bars.",
-    )?;
+    client.check_server_version(server_versions::REAL_TIME_BARS, "It does not support real time bars.")?;
 
     if !contract.trading_class.is_empty() || contract.contract_id > 0 {
         client.check_server_version(
@@ -84,23 +74,11 @@ pub fn realtime_bars_with_options<C: Client + Debug>(
     }
 
     let request_id = client.next_request_id();
-    let packet = encode_request_realtime_bars(
-        client.server_version(),
-        request_id,
-        contract,
-        bar_size,
-        what_to_show,
-        use_rth,
-        options,
-    )?;
+    let packet = encode_request_realtime_bars(client.server_version(), request_id, contract, bar_size, what_to_show, use_rth, options)?;
 
     let responses = client.send_message_for_request(request_id, packet)?;
 
-    Ok(RealTimeBarIterator::new(
-        client.server_version(),
-        request_id,
-        responses,
-    ))
+    Ok(RealTimeBarIterator::new(client.server_version(), request_id, responses))
 }
 
 pub struct RealTimeBarIterator {
@@ -110,11 +88,7 @@ pub struct RealTimeBarIterator {
 }
 
 impl RealTimeBarIterator {
-    fn new(
-        server_version: i32,
-        request_id: i32,
-        responses: ResponsePacketPromise,
-    ) -> RealTimeBarIterator {
+    fn new(server_version: i32, request_id: i32, responses: ResponsePacketPromise) -> RealTimeBarIterator {
         RealTimeBarIterator {
             server_version,
             request_id,

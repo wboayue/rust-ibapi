@@ -15,7 +15,7 @@ use std::time::Duration;
 use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use log::{debug, error, info};
-use time::macros::{datetime, format_description};
+use time::macros::format_description;
 use time::OffsetDateTime;
 
 use crate::client::{RequestMessage, ResponseMessage};
@@ -25,13 +25,11 @@ use crate::server_versions;
 pub trait MessageBus {
     fn read_packet(&mut self) -> Result<ResponseMessage>;
     fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponseMessage>;
+
     fn write_message(&mut self, packet: &RequestMessage) -> Result<()>;
-    fn write_message_for_request(
-        &mut self,
-        request_id: i32,
-        packet: &RequestMessage,
-    ) -> Result<ResponsePacketPromise>;
+    fn write_message_for_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
     fn write(&mut self, packet: &str) -> Result<()>;
+
     fn process_messages(&mut self, server_version: i32) -> Result<()>;
 }
 
@@ -51,6 +49,7 @@ unsafe impl Send for Outbox {}
 unsafe impl Sync for Outbox {}
 
 impl TcpMessageBus {
+    // establishes TCP connection to server
     pub fn connect(connection_string: &str) -> Result<TcpMessageBus> {
         let stream = TcpStream::connect(connection_string)?;
 
@@ -116,11 +115,7 @@ impl MessageBus for TcpMessageBus {
         Err(anyhow!("no way"))
     }
 
-    fn write_message_for_request(
-        &mut self,
-        request_id: i32,
-        packet: &RequestMessage,
-    ) -> Result<ResponsePacketPromise> {
+    fn write_message_for_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise> {
         let (sender, receiver) = mpsc::channel();
 
         self.add_sender(request_id, sender)?;
@@ -131,10 +126,10 @@ impl MessageBus for TcpMessageBus {
 
     fn write_message(&mut self, message: &RequestMessage) -> Result<()> {
         let encoded = message.encode();
-        debug!("{:?} ->", encoded);
+        debug!("{encoded:?} ->");
 
         let data = encoded.as_bytes();
-        let mut header = vec![];
+        let mut header = Vec::with_capacity(data.len());
         header.write_u32::<BigEndian>(data.len() as u32)?;
 
         self.writer.write_all(&header)?;
@@ -146,7 +141,7 @@ impl MessageBus for TcpMessageBus {
     }
 
     fn write(&mut self, data: &str) -> Result<()> {
-        debug!("{:?} ->", data);
+        debug!("{data:?} ->");
         self.writer.write_all(data.as_bytes())?;
         Ok(())
     }
@@ -179,11 +174,7 @@ impl MessageBus for TcpMessageBus {
     }
 }
 
-fn dispatch_message(
-    mut message: ResponseMessage,
-    server_version: i32,
-    requests: &Arc<RwLock<HashMap<i32, Outbox>>>,
-) {
+fn dispatch_message(message: ResponseMessage, server_version: i32, requests: &Arc<RwLock<HashMap<i32, Outbox>>>) {
     match message.message_type() {
         IncomingMessages::Error => {
             let request_id = message.peek_int(2).unwrap_or(-1);
@@ -191,17 +182,18 @@ fn dispatch_message(
             if request_id == UNSPECIFIED_REQUEST_ID {
                 error_event(server_version, message).unwrap();
             } else {
-                process_response(&requests, message);
+                process_response(requests, message);
             }
         }
         IncomingMessages::NextValidId => process_next_valid_id(server_version, message),
         IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
-        _ => process_response(&requests, message),
+        _ => process_response(requests, message),
     };
 }
 
 fn read_packet(mut reader: &TcpStream) -> Result<ResponseMessage> {
     let message_size = read_header(reader)?;
+    debug!("message size: {message_size:?}");
     let mut data = vec![0_u8; message_size];
 
     reader.read_exact(&mut data)?;
@@ -281,10 +273,7 @@ fn process_response(requests: &Arc<RwLock<HashMap<i32, Outbox>>>, packet: Respon
     let outbox = match collection.get(&request_id) {
         Some(outbox) => outbox,
         _ => {
-            debug!(
-                "no request found for request_id {:?} - {:?}",
-                request_id, packet
-            );
+            debug!("no request found for request_id {:?} - {:?}", request_id, packet);
             return;
         }
     };
@@ -359,7 +348,7 @@ impl MessageRecorder {
 
                     MessageRecorder {
                         enabled: true,
-                        recording_dir: recording_dir,
+                        recording_dir,
                     }
                 }
             }
@@ -384,11 +373,7 @@ impl MessageRecorder {
         }
 
         let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
-        fs::write(
-            self.request_file(record_id),
-            message.encode().replace("\0", "|"),
-        )
-        .unwrap();
+        fs::write(self.request_file(record_id), message.encode().replace('\0', "|")).unwrap();
     }
 
     fn record_response(&self, message: &ResponseMessage) {
@@ -397,11 +382,7 @@ impl MessageRecorder {
         }
 
         let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
-        fs::write(
-            self.response_file(record_id),
-            message.encode().replace("\0", "|"),
-        )
-        .unwrap();
+        fs::write(self.response_file(record_id), message.encode().replace('\0', "|")).unwrap();
     }
 }
 
@@ -420,12 +401,7 @@ mod test {
         let recorder = MessageRecorder::new();
 
         assert_eq!(true, recorder.enabled);
-        assert!(
-            &recorder.recording_dir.starts_with(&dir),
-            "{} != {}",
-            &recorder.recording_dir,
-            &dir
-        )
+        assert!(&recorder.recording_dir.starts_with(&dir), "{} != {}", &recorder.recording_dir, &dir)
     }
 
     #[test]
@@ -449,13 +425,7 @@ mod test {
             recording_dir: recording_dir,
         };
 
-        assert_eq!(
-            format!("{}/0001-request.msg", recorder.recording_dir),
-            recorder.request_file(1)
-        );
-        assert_eq!(
-            format!("{}/0002-response.msg", recorder.recording_dir),
-            recorder.response_file(2)
-        );
+        assert_eq!(format!("{}/0001-request.msg", recorder.recording_dir), recorder.request_file(1));
+        assert_eq!(format!("{}/0002-response.msg", recorder.recording_dir), recorder.response_file(2));
     }
 }

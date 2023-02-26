@@ -1,6 +1,8 @@
 use std::fmt;
 use std::ops::Index;
 use std::str::FromStr;
+use std::thread;
+use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use log::{debug, info};
@@ -18,16 +20,14 @@ const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
 const START_API: i32 = 71;
 const INFINITY_STR: &str = "Infinity";
+const UNSET_DOUBLE: &str = "1.7976931348623157E308";
+const UNSET_INTEGER: &str = "2147483647";
 
 pub trait Client {
     fn next_request_id(&mut self) -> i32;
     fn server_version(&self) -> i32;
     fn send_message(&mut self, packet: RequestMessage) -> Result<()>;
-    fn send_message_for_request(
-        &mut self,
-        request_id: i32,
-        message: RequestMessage,
-    ) -> Result<ResponsePacketPromise>;
+    fn send_message_for_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
 
@@ -59,7 +59,7 @@ impl IBClient {
 
         let mut client = IBClient {
             server_version: 0,
-            server_time: String::from("hello"),
+            server_time: String::from(""),
             next_valid_order_id: 0,
             managed_accounts: String::from(""),
             message_bus,
@@ -70,26 +70,33 @@ impl IBClient {
         client.handshake()?;
         client.start_api()?;
 
+        // will return receiver to next order id
         client.message_bus.process_messages(client.server_version)?;
+
+        // wait for next order id
+        thread::sleep(Duration::from_secs(2));
 
         Ok(client)
     }
 
+    // sends server handshake
     fn handshake(&mut self) -> Result<()> {
         self.message_bus.write("API\x00")?;
 
-        let prelude = &mut RequestMessage::default();
-        prelude.push_field(&format!("v{}..{}", MIN_SERVER_VERSION, MAX_SERVER_VERSION));
+        let prelude = &mut RequestMessage::new();
+        prelude.push_field(&format!("v{MIN_SERVER_VERSION}..{MAX_SERVER_VERSION}"));
 
         self.message_bus.write_message(prelude)?;
 
         let mut status = self.message_bus.read_packet()?;
+
         self.server_version = status.next_int()?;
         self.server_time = status.next_string()?;
 
         Ok(())
     }
 
+    // asks server to start processing messages
     fn start_api(&mut self) -> Result<()> {
         const VERSION: i32 = 2;
 
@@ -129,26 +136,16 @@ impl Client for IBClient {
         self.message_bus.write_message(&packet)
     }
 
-    fn send_message_for_request(
-        &mut self,
-        request_id: i32,
-        message: RequestMessage,
-    ) -> Result<ResponsePacketPromise> {
+    fn send_message_for_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
         debug!("send_message({:?}, {:?})", request_id, message);
-        self.message_bus
-            .write_message_for_request(request_id, &message)
+        self.message_bus.write_message_for_request(request_id, &message)
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
         if version <= self.server_version {
             Ok(())
         } else {
-            Err(anyhow!(
-                "server version {} required, got {}: {}",
-                version,
-                self.server_version,
-                message
-            ))
+            Err(anyhow!("server version {} required, got {}: {}", version, self.server_version, message))
         }
     }
 }
@@ -220,15 +217,9 @@ impl ResponseMessage {
 
     pub fn request_id(&self) -> Result<i32> {
         match self.message_type() {
-            IncomingMessages::ContractData
-            | IncomingMessages::TickByTick
-            | IncomingMessages::SymbolSamples => self.peek_int(1),
+            IncomingMessages::ContractData | IncomingMessages::TickByTick | IncomingMessages::SymbolSamples => self.peek_int(1),
             IncomingMessages::ContractDataEnd | IncomingMessages::RealTimeBars => self.peek_int(2),
-            _ => Err(anyhow!(
-                "error parsing field request id {:?}: {:?}",
-                self.message_type(),
-                self
-            )),
+            _ => Err(anyhow!("error parsing field request id {:?}: {:?}", self.message_type(), self)),
         }
     }
 
@@ -248,6 +239,27 @@ impl ResponseMessage {
             Ok(val) => Ok(val),
             Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
         }
+    }
+
+    pub fn next_optional_int(&mut self) -> Result<Option<i32>> {
+        let field = &self.fields[self.i];
+        self.i += 1;
+
+        if field.is_empty() || field == UNSET_INTEGER {
+            return Ok(None);
+        }
+
+        match field.parse::<i32>() {
+            Ok(val) => Ok(Some(val)),
+            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+        }
+    }
+
+    pub fn next_bool(&mut self) -> Result<bool> {
+        let field = &self.fields[self.i];
+        self.i += 1;
+
+        Ok(field == "1")
     }
 
     pub fn next_long(&mut self) -> Result<i64> {
@@ -282,7 +294,7 @@ impl ResponseMessage {
         let field = &self.fields[self.i];
         self.i += 1;
 
-        if field.is_empty() || field == "0" {
+        if field.is_empty() || field == "0" || field == "0.0" {
             return Ok(0.0);
         }
 
@@ -292,19 +304,20 @@ impl ResponseMessage {
         }
     }
 
-    pub fn next_double_max(&mut self) -> Result<f64> {
+    pub fn next_optional_double(&mut self) -> Result<Option<f64>> {
         let field = &self.fields[self.i];
         self.i += 1;
 
-        if field.is_empty() || field == "0" {
-            return Ok(f64::MAX);
+        if field.is_empty() || field == UNSET_DOUBLE {
+            return Ok(None);
         }
+
         if field == INFINITY_STR {
-            return Ok(f64::INFINITY);
+            return Ok(Some(f64::INFINITY));
         }
 
         match field.parse() {
-            Ok(val) => Ok(val),
+            Ok(val) => Ok(Some(val)),
             Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
         }
     }

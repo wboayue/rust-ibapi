@@ -38,19 +38,13 @@ impl Client for ClientStub {
         Ok(())
     }
 
-    fn send_message_for_request(
-        &mut self,
-        _request_id: i32,
-        message: RequestMessage,
-    ) -> Result<ResponsePacketPromise> {
+    fn send_message_for_request(&mut self, _request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
         self.request_messages.push(encode_message(&message));
 
         let (sender, receiver) = mpsc::channel();
 
         for message in &self.response_messages {
-            sender
-                .send(ResponseMessage::from(&message.replace("|", "\0")))
-                .unwrap();
+            sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
         Ok(ResponsePacketPromise::new(receiver))
@@ -60,12 +54,7 @@ impl Client for ClientStub {
         if version <= self.server_version {
             Ok(())
         } else {
-            Err(anyhow!(
-                "server version {} required, got {}: {}",
-                version,
-                self.server_version,
-                message
-            ))
+            Err(anyhow!("server version {} required, got {}: {}", version, self.server_version, message))
         }
     }
 }

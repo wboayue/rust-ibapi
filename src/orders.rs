@@ -1,11 +1,21 @@
 use std::fmt::Debug;
 
 use anyhow::Result;
+use log::{debug, info};
 
-use crate::client::{Client, RequestMessage};
-use crate::contracts::Contract;
-use crate::messages::OutgoingMessages;
+use crate::client::transport::ResponsePacketPromise;
+use crate::client::{Client, RequestMessage, ResponseMessage};
+use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
+
+mod decoders;
+mod encoders;
+
+/// Make sure to test using only your paper trading account when applicable. A good way of finding out if an order type/exchange combination
+/// is possible is by trying to place such order manually using the TWS.
+/// Before contacting our API support team please refer to the available documentation.
+pub mod order_builder;
 
 /// New description
 pub use crate::contracts::TagValue;
@@ -74,7 +84,7 @@ pub struct Order {
     /// If set to true, specifies that the order is a Sweep-to-Fill order.
     pub sweep_to_fill: bool,
     /// The publicly disclosed order size, used when placing Iceberg orders.
-    pub display_size: i32,
+    pub display_size: Option<i32>,
     /// Specifies how Simulated Stop, Stop-Limit and Trailing Stop orders are triggered.
     /// Valid values are:
     /// 0 - The default value. The "double bid/ask" function will be used for orders for OTC stocks and US options. All other orders will used the "last" function.
@@ -207,9 +217,9 @@ pub struct Order {
     /// Identifies third party order origin. Used only when deltaNeutralShortSaleSlot = 2.
     pub delta_neutral_designated_location: String,
     /// Specifies Basis Points for EFP order. The values increment in 0.01% = 1 basis point. For EFP orders only.
-    pub basis_points: f64,
+    pub basis_points: Option<f64>,
     /// Specifies the increment of the Basis Points. For EFP orders only.
-    pub basis_points_type: i32,
+    pub basis_points_type: Option<i32>,
     /// Defines the size of the first, or initial, order component. For Scale orders only.
     pub scale_init_level_size: Option<i32>,
     /// Defines the order size of the subsequent scale order components. For Scale orders only. Used in conjunction with scaleInitLevelSize().
@@ -354,7 +364,7 @@ pub struct Order {
     /// Defines the minimum trade quantity to fill. For IBKRATS orders.
     pub min_trade_qty: Option<i32>,
     /// Defines the minimum size to compete. For IBKRATS orders.
-    pub min_complete_size: Option<i32>,
+    pub min_compete_size: Option<i32>,
     /// Specifies the offset off the midpoint that will be applied to the order. For IBKRATS orders.
     pub compete_against_best_offset: Option<f64>,
     /// his offset is applied when the spread is an even number of cents wide. This offset must be in whole-penny increments or zero. For IBKRATS orders.
@@ -370,23 +380,23 @@ pub struct Order {
     /// Pegged-to-benchmark orders: indicates whether the order's pegged price should increase or decreases.
     pub is_pegged_change_amount_decrease: bool,
     /// Pegged-to-benchmark orders: amount by which the order's pegged price should move.
-    pub pegged_change_amount: f64,
+    pub pegged_change_amount: Option<f64>,
     /// Pegged-to-benchmark orders: the amount the reference contract needs to move to adjust the pegged order.
-    pub reference_change_amount: f64,
+    pub reference_change_amount: Option<f64>,
     /// Pegged-to-benchmark orders: the exchange against which we want to observe the reference contract.
     pub reference_exchange: String,
     /// Adjusted Stop orders: the parent order will be adjusted to the given type when the adjusted trigger price is penetrated.
     pub adjusted_order_type: String,
     /// Adjusted Stop orders: specifies the trigger price to execute.
-    pub trigger_price: f64,
+    pub trigger_price: Option<f64>,
     /// Adjusted Stop orders: specifies the price offset for the stop to move in increments.
-    pub lmt_price_offset: f64,
+    pub lmt_price_offset: Option<f64>,
     /// Adjusted Stop orders: specifies the stop price of the adjusted (STP) parent.
-    pub adjusted_stop_price: f64,
+    pub adjusted_stop_price: Option<f64>,
     /// Adjusted Stop orders: specifies the stop limit price of the adjusted (STPL LMT) parent.
-    pub adjusted_stop_limit_price: f64,
+    pub adjusted_stop_limit_price: Option<f64>,
     /// Adjusted Stop orders: specifies the trailing amount of the adjusted (TRAIL) parent.
-    pub adjusted_trailing_amount: f64,
+    pub adjusted_trailing_amount: Option<f64>,
     /// Adjusted Stop orders: specifies where the trailing unit is an amount (set to 0) or a percentage (set to 1)
     pub adjustable_trailing_unit: i32,
     /// Conditions determining when the order will be activated or canceled.
@@ -409,6 +419,149 @@ pub struct Order {
     pub post_to_ats: Option<i32>,
 }
 
+impl Default for Order {
+    fn default() -> Self {
+        Self {
+            order_id: 0,
+            solicited: false,
+            client_id: 0,
+            perm_id: 0,
+            action: Action::Buy,
+            total_quantity: 0.0,
+            order_type: "".to_owned(),
+            limit_price: None,
+            aux_price: None,
+            tif: "".to_owned(),
+            oca_group: "".to_owned(),
+            oca_type: 0,
+            order_ref: "".to_owned(),
+            transmit: true,
+            parent_id: 0,
+            block_order: false,
+            sweep_to_fill: false,
+            display_size: Some(0), // TODO - default to None?
+            trigger_method: 0,
+            outside_rth: false,
+            hidden: false,
+            good_after_time: "".to_owned(),
+            good_till_date: "".to_owned(),
+            override_percentage_constraints: false,
+            rule_80_a: None,
+            all_or_none: false,
+            min_qty: None,
+            percent_offset: None,
+            trail_stop_price: None,
+            trailing_percent: None,
+            fa_group: "".to_owned(),
+            fa_profile: "".to_owned(),
+            fa_method: "".to_owned(),
+            fa_percentage: "".to_owned(),
+            open_close: None,
+            origin: 0,
+            short_sale_slot: 0,
+            designated_location: "".to_owned(),
+            exempt_code: -1,
+            discretionary_amt: 0.0,
+            opt_out_smart_routing: false,
+            auction_strategy: Some(0), // TODO - use enum
+            starting_price: None,
+            stock_ref_price: None,
+            delta: None,
+            stock_range_lower: None,
+            stock_range_upper: None,
+            volatility: None,
+            volatility_type: None,
+            continuous_update: false,
+            reference_price_type: None,
+            delta_neutral_order_type: "".to_owned(),
+            delta_neutral_aux_price: None,
+            delta_neutral_con_id: 0,
+            delta_neutral_settling_firm: "".to_owned(),
+            delta_neutral_clearing_account: "".to_owned(),
+            delta_neutral_clearing_intent: "".to_owned(),
+            delta_neutral_open_close: "".to_owned(),
+            delta_neutral_short_sale: false,
+            delta_neutral_short_sale_slot: 0,
+            delta_neutral_designated_location: "".to_owned(),
+            basis_points: Some(0.0),
+            basis_points_type: Some(0),
+            scale_init_level_size: None,
+            scale_subs_level_size: None,
+            scale_price_increment: None,
+            scale_price_adjust_value: None,
+            scale_price_adjust_interval: None,
+            scale_profit_offset: None,
+            scale_auto_reset: false,
+            scale_init_position: None,
+            scale_init_fill_qty: None,
+            scale_random_percent: false,
+            hedge_type: "".to_owned(),
+            hedge_param: "".to_owned(),
+            account: "".to_owned(),
+            settling_firm: "".to_owned(),
+            clearing_account: "".to_owned(),
+            clearing_intent: "".to_owned(),
+            algo_strategy: "".to_owned(),
+            algo_params: vec![],
+            what_if: false,
+            algo_id: "".to_owned(),
+            not_held: false,
+            smart_combo_routing_params: vec![],
+            order_combo_legs: vec![],
+            order_misc_options: vec![],
+            active_start_time: "".to_owned(),
+            active_stop_time: "".to_owned(),
+            scale_table: "".to_owned(),
+            model_code: "".to_owned(),
+            ext_operator: "".to_owned(),
+            cash_qty: None,
+            mifid2_decision_maker: "".to_owned(),
+            mifid2_decision_algo: "".to_owned(),
+            mifid2_execution_trader: "".to_owned(),
+            mifid2_execution_algo: "".to_owned(),
+            dont_use_auto_price_for_hedge: false,
+            auto_cancel_date: "".to_owned(),
+            filled_quantity: 0.0,
+            ref_futures_con_id: 0,
+            auto_cancel_parent: false,
+            shareholder: "".to_owned(),
+            imbalance_only: false,
+            route_marketable_to_bbo: false,
+            parent_perm_id: 0,
+            advanced_error_override: "".to_owned(),
+            manual_order_time: "".to_owned(),
+            min_trade_qty: None,
+            min_compete_size: None,
+            compete_against_best_offset: None,
+            mid_offset_at_whole: None,
+            mid_offset_at_half: None,
+            randomize_size: false,
+            randomize_price: false,
+            reference_contract_id: 0,
+            is_pegged_change_amount_decrease: false,
+            pegged_change_amount: Some(0.0),
+            reference_change_amount: Some(0.0),
+            reference_exchange: "".to_owned(),
+            adjusted_order_type: "".to_owned(),
+            trigger_price: None,
+            lmt_price_offset: None,
+            adjusted_stop_price: None,
+            adjusted_stop_limit_price: None,
+            adjusted_trailing_amount: None,
+            adjustable_trailing_unit: 0,
+            conditions: vec![],
+            conditions_ignore_rth: false,
+            conditions_cancel_order: false,
+            soft_dollar_tier: SoftDollarTier::default(),
+            is_oms_container: false,
+            discretionary_up_to_limit_price: false,
+            use_price_mgmt_algo: false,
+            duration: None,
+            post_to_ats: None,
+        }
+    }
+}
+
 impl Order {
     pub fn is_delta_neutral(&self) -> bool {
         !self.delta_neutral_order_type.is_empty()
@@ -428,8 +581,9 @@ impl Order {
 /// For general account types, a SELL order will be able to enter a short position automatically if the order quantity is larger than your current long position.
 /// SSHORT is only supported for institutional account configured with Long/Short account segments or clearing with a separate account.
 /// SLONG is available in specially-configured institutional accounts to indicate that long position not yet delivered is being sold.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum Action {
+    #[default]
     Buy,
     Sell,
     /// SSHORT is only supported for institutional account configured with Long/Short account segments or clearing with a separate account.
@@ -449,7 +603,28 @@ impl ToString for Action {
     }
 }
 
-#[derive(Clone, Debug)]
+impl Action {
+    fn reverse(&self) -> Action {
+        match self {
+            Action::Buy => Action::Sell,
+            Action::Sell => Action::Buy,
+            Action::SellShort => Action::SellLong,
+            Action::SellLong => Action::SellShort,
+        }
+    }
+
+    pub fn from(name: &str) -> Self {
+        match name {
+            "BUY" => Self::Buy,
+            "SELL" => Self::Sell,
+            "SSHORT" => Self::SellShort,
+            "SLONG" => Self::SellLong,
+            &_ => todo!(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Rule80A {
     Individual,
     Agency,
@@ -478,6 +653,29 @@ impl ToString for Rule80A {
     }
 }
 
+impl Rule80A {
+    pub fn from(source: &str) -> Option<Self> {
+        match source {
+            "I" => Some(Rule80A::Individual),
+            "A" => Some(Rule80A::Agency),
+            "W" => Some(Rule80A::AgentOtherMember),
+            "J" => Some(Rule80A::IndividualPTIA),
+            "U" => Some(Rule80A::AgencyPTIA),
+            "M" => Some(Rule80A::AgentOtherMemberPTIA),
+            "K" => Some(Rule80A::IndividualPT),
+            "Y" => Some(Rule80A::AgencyPT),
+            "N" => Some(Rule80A::AgentOtherMemberPT),
+            _ => None,
+        }
+    }
+}
+
+enum AuctionStrategy {
+    Match,
+    Improvement,
+    Transparent,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct OrderComboLeg {
     price: Option<f64>,
@@ -493,6 +691,20 @@ pub enum OrderCondition {
     PercentChange = 7,
 }
 
+impl OrderCondition {
+    pub fn from_i32(val: i32) -> Self {
+        match val {
+            1 => OrderCondition::Price,
+            3 => OrderCondition::Time,
+            4 => OrderCondition::Volume,
+            5 => OrderCondition::Execution,
+            6 => OrderCondition::Volume,
+            7 => OrderCondition::PercentChange,
+            _ => panic!("unsupport order condition: {val}"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct SoftDollarTier {
     name: String,
@@ -500,33 +712,47 @@ pub struct SoftDollarTier {
     display_name: String,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct OpenOrder {
+    /// The order's unique id
+    order_id: i32,
+    /// The order's Contract.
+    contract: Contract,
+    /// The currently active order
+    order: Order,
+    /// The order's OrderState
+    order_state: OrderState,
+}
+
+/// Provides an active order's current state.
+#[derive(Clone, Debug, Default)]
 pub struct OrderState {
     /// The order's current status
     status: String,
     /// The account's current initial margin.
-    initial_margin_before: String,
+    initial_margin_before: Option<f64>,
     /// The account's current maintenance margin
-    maintenance_margin_before: String,
+    maintenance_margin_before: Option<f64>,
     /// The account's current equity with loan
-    equity_with_loan_before: String,
+    equity_with_loan_before: Option<f64>,
     /// The change of the account's initial margin.
-    initial_margin_change: String,
+    initial_margin_change: Option<f64>,
     /// The change of the account's maintenance margin
-    maintenance_margin_change: String,
+    maintenance_margin_change: Option<f64>,
     /// The change of the account's equity with loan
-    equity_with_loan_change: String,
+    equity_with_loan_change: Option<f64>,
     /// The order's impact on the account's initial margin.
-    initial_margin_after: String,
+    initial_margin_after: Option<f64>,
     /// The order's impact on the account's maintenance margin
-    maintenance_margin_after: String,
+    maintenance_margin_after: Option<f64>,
     /// Shows the impact the order would have on the account's equity with loan
-    equity_with_loan_after: String,
+    equity_with_loan_after: Option<f64>,
     /// The order's generated commission.
-    commission: f64,
+    commission: Option<f64>,
     // The execution's minimum commission.
-    minimum_commission: f64,
+    minimum_commission: Option<f64>,
     /// The executions maximum commission.
-    maximum_commission: f64,
+    maximum_commission: Option<f64>,
     /// The generated commission currency
     commission_currency: String,
     /// If the order is warranted, a descriptive message will be provided.
@@ -539,7 +765,7 @@ pub struct OrderState {
 /// Available for institutional clients to determine if this order is to open or close a position.
 /// When Action = "BUY" and OpenClose = "O" this will open a new position.
 /// When Action = "BUY" and OpenClose = "C" this will close and existing short position.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum OrderOpenClose {
     Open,
     Close,
@@ -554,67 +780,243 @@ impl ToString for OrderOpenClose {
     }
 }
 
-// place_order
-pub fn place_order<C: Client + Debug>(
-    client: &mut C,
+impl OrderOpenClose {
+    pub fn from(source: &str) -> Option<Self> {
+        match source {
+            "O" => Some(OrderOpenClose::Open),
+            "C" => Some(OrderOpenClose::Close),
+            _ => None,
+        }
+    }
+}
+
+/// Represents the commission generated by an execution.
+#[derive(Clone, Debug, Default)]
+pub struct CommissionReport {
+    /// the execution's id this commission belongs to.
+    pub execution_id: String,
+    /// the commissions cost.
+    pub commission: f64,
+    /// the reporting currency.
+    pub currency: String,
+    /// the realized profit and loss
+    pub realized_pnl: Option<f64>,
+    /// The income return.
+    pub yields: Option<f64>,
+    /// date expressed in yyyymmdd format.
+    pub yield_redemption_date: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum Liquidity {
+    #[default]
+    None = 0,
+    AddedLiquidity = 1,
+    RemovedLiquidity = 2,
+    LiquidityRoutedOut = 3,
+}
+
+// TODO fixme
+impl Liquidity {
+    pub fn from_i32(val: i32) -> Self {
+        match val {
+            0 => Liquidity::None,
+            1 => Liquidity::AddedLiquidity,
+            2 => Liquidity::RemovedLiquidity,
+            3 => Liquidity::LiquidityRoutedOut,
+            _ => panic!("unsupported Liquidity({val})"),
+        }
+    }
+}
+
+/// Describes an order's execution.
+#[derive(Clone, Debug, Default)]
+pub struct Execution {
+    /// The API client's order Id. May not be unique to an account.
+    pub order_id: i32,
+    /// The API client identifier which placed the order which originated this execution.
+    pub client_id: i32,
+    /// The execution's identifier. Each partial fill has a separate ExecId.
+    /// A correction is indicated by an ExecId which differs from a previous ExecId in only the digits after the final period,
+    /// e.g. an ExecId ending in ".02" would be a correction of a previous execution with an ExecId ending in ".01"
+    pub execution_id: String,
+    /// The execution's server time.
+    pub time: String,
+    /// The account to which the order was allocated.
+    pub account_number: String,
+    /// The exchange where the execution took place.
+    pub exchange: String,
+    /// Specifies if the transaction was buy or sale
+    /// BOT for bought, SLD for sold
+    pub side: String,
+    /// The number of shares filled.
+    pub shares: f64,
+    /// The order's execution price excluding commissions.
+    pub price: f64,
+    /// The TWS order identifier. The PermId can be 0 for trades originating outside IB.
+    pub perm_id: i32,
+    /// Identifies whether an execution occurred because of an IB-initiated liquidation.
+    pub liquidation: i32,
+    /// Cumulative quantity.
+    // Used in regular trades, combo trades and legs of the combo.
+    pub cumulative_quantity: f64,
+    /// Average price.
+    /// Used in regular trades, combo trades and legs of the combo. Does not include commissions.
+    pub average_price: f64,
+    /// The OrderRef is a user-customizable string that can be set from the API or TWS and will be associated with an order for its lifetime.
+    pub order_reference: String,
+    /// The Economic Value Rule name and the respective optional argument.
+    /// The two values should be separated by a colon. For example, aussieBond:YearsToExpiration=3. When the optional argument is not present, the first value will be followed by a colon.
+    pub ev_rule: String,
+    /// Tells you approximately how much the market value of a contract would change if the price were to change by 1.
+    /// It cannot be used to get market value by multiplying the price by the approximate multiplier.
+    pub ev_multiplier: Option<f64>,
+    /// model code
+    pub model_code: String,
+    // The liquidity type of the execution. Requires TWS 968+ and API v973.05+. Python API specifically requires API v973.06+.
+    pub last_liquidity: Liquidity,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ExecutionData {
+    pub request_id: i32,
+    pub contract: Contract,
+    pub execution: Execution,
+}
+
+#[derive(Clone, Debug)]
+pub enum OrderNotification {
+    OrderStatus(OrderStatus),
+    OpenOrder(OpenOrder),
+    ExecutionData(ExecutionData),
+    CommissionReport(CommissionReport),
+}
+
+// Gives the up-to-date information of an order every time it changes. Often there are duplicate orderStatus messages.
+#[derive(Clone, Debug, Default)]
+pub struct OrderStatus {
+    /// The order's client id.
     order_id: i32,
-    contract: &Contract,
-    order: &Order,
-) -> Result<()> {
+    /// The current status of the order. Possible values:
+    ///     PendingSubmit - indicates that you have transmitted the order, but have not yet received confirmation that it has been accepted by the order destination.
+    ///     PendingCancel - indicates that you have sent a request to cancel the order but have not yet received cancel confirmation from the order destination. At this point, your order is not confirmed canceled. It is not guaranteed that the cancellation will be successful.
+    ///     PreSubmitted - indicates that a simulated order type has been accepted by the IB system and that this order has yet to be elected. The order is held in the IB system until the election criteria are met. At that time the order is transmitted to the order destination as specified .
+    ///     Submitted - indicates that your order has been accepted by the system.
+    ///     ApiCancelled - after an order has been submitted and before it has been acknowledged, an API client client can request its cancelation, producing this state.
+    ///     Cancelled - indicates that the balance of your order has been confirmed canceled by the IB system. This could occur unexpectedly when IB or the destination has rejected your order.
+    ///     Filled - indicates that the order has been completely filled. Market orders executions will not always trigger a Filled status.
+    ///     Inactive - indicates that the order was received by the system but is no longer active because it was rejected or canceled.    
+    status: String,
+    /// Number of filled positions.
+    filled: f64,
+    /// The remnant positions.
+    remaining: f64,
+    /// Average filling price.
+    average_fill_price: f64,
+    /// The order's permId used by the TWS to identify orders.
+    perm_id: i32,
+    /// Parent's id. Used for bracket and auto trailing stop orders.
+    parent_id: i32,
+    /// Price at which the last positions were filled.
+    last_fill_price: f64,
+    /// API client which submitted the order.
+    client_id: i32,
+    /// This field is used to identify an order held when TWS is trying to locate shares for a short sell. The value used to indicate this is 'locate'.
+    why_held: String,
+    /// If an order has been capped, this indicates the current capped price. Requires TWS 967+ and API v973.04+. Python API specifically requires API v973.06+.
+    market_cap_price: f64,
+}
+
+// place_order
+pub fn place_order<C: Client + Debug>(client: &mut C, order_id: i32, contract: &Contract, order: &Order) -> Result<OrderNotificationIterator> {
     verify_order(client, order, order_id)?;
     verify_order_contract(client, contract, order_id)?;
 
+    info!("using server version {}", client.server_version());
+
     let request_id = client.next_request_id();
-    let message = encode_place_order(
-        client.server_version(),
-        request_id,
-        order_id,
-        contract,
-        order,
-    )?;
+    let message = encoders::encode_place_order(client.server_version(), request_id, order_id, contract, order)?;
 
-    let responses = client.send_message_for_request(request_id, message)?;
-    // return order status
+    let messages = client.send_message_for_request(request_id, message)?;
 
-    // let mut contract_details: Vec<ContractDetails> = Vec::default();
-
-    // for mut message in responses {
-    //     match message.message_type() {
-    //         IncomingMessages::ContractData => {
-    //             let decoded = decode_contract_details(client.server_version(), &mut message)?;
-    //             contract_details.push(decoded);
-    //         }
-    //         IncomingMessages::ContractDataEnd => {
-    //             break;
-    //         }
-    //         IncomingMessages::Error => {
-    //             error!("error: {:?}", message);
-    //             return Err(anyhow!("contract_details {:?}", message));
-    //         }
-    //         _ => {
-    //             error!("unexpected message: {:?}", message);
-    //         }
-    //     }
-    // }
-
-    Ok(())
+    Ok(OrderNotificationIterator {
+        messages,
+        server_version: client.server_version(),
+    })
 }
 
-fn verify_order<C: Client>(client: &mut C, order: &Order, order_id: i32) -> Result<()> {
+pub struct OrderNotificationIterator {
+    server_version: i32,
+    messages: ResponsePacketPromise,
+}
+
+impl Iterator for OrderNotificationIterator {
+    type Item = OrderNotification;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(mut message) = self.messages.next() {
+            // TODO: can generalize
+            match message.message_type() {
+                IncomingMessages::OpenOrder => {
+                    let result = decoders::decode_open_order(self.server_version, &mut message);
+                    match result {
+                        Ok(open_order) => Some(OrderNotification::OpenOrder(open_order)),
+                        Err(err) => {
+                            info!("error: {err:?}");
+                            None
+                        }
+                    }
+                }
+                IncomingMessages::OrderStatus => {
+                    let result = decoders::decode_order_status(self.server_version, &mut message);
+                    match result {
+                        Ok(order_status) => Some(OrderNotification::OrderStatus(order_status)),
+                        Err(err) => {
+                            info!("error: {err:?}");
+                            None
+                        }
+                    }
+                }
+                IncomingMessages::ExecutionData => {
+                    let result = decoders::decode_execution_data(self.server_version, &mut message);
+                    match result {
+                        Ok(execution_data) => Some(OrderNotification::ExecutionData(execution_data)),
+                        Err(err) => {
+                            info!("error: {err:?}");
+                            None
+                        }
+                    }
+                }
+                IncomingMessages::CommissionsReport => {
+                    let result = decoders::decode_commission_report(self.server_version, &mut message);
+                    match result {
+                        Ok(report) => Some(OrderNotification::CommissionReport(report)),
+                        Err(err) => {
+                            info!("error: {err:?}");
+                            None
+                        }
+                    }
+                }
+                message => {
+                    info!("unexpected messsage: {message:?}");
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    }
+}
+
+fn verify_order<C: Client>(client: &mut C, order: &Order, _order_id: i32) -> Result<()> {
     let is_bag_order: bool = false; // StringsAreEqual(Constants.BagSecType, contract.SecType)
 
     if order.scale_init_level_size.is_some() || order.scale_price_increment.is_some() {
-        client.check_server_version(
-            server_versions::SCALE_ORDERS,
-            "It does not support Scale orders.",
-        )?
+        client.check_server_version(server_versions::SCALE_ORDERS, "It does not support Scale orders.")?
     }
 
     if order.what_if {
-        client.check_server_version(
-            server_versions::WHAT_IF_ORDERS,
-            "It does not support what-if orders.",
-        )?
+        client.check_server_version(server_versions::WHAT_IF_ORDERS, "It does not support what-if orders.")?
     }
 
     if order.scale_subs_level_size.is_some() {
@@ -625,31 +1027,19 @@ fn verify_order<C: Client>(client: &mut C, order: &Order, order_id: i32) -> Resu
     }
 
     if !order.algo_strategy.is_empty() {
-        client.check_server_version(
-            server_versions::ALGO_ORDERS,
-            "It does not support algo orders.",
-        )?
+        client.check_server_version(server_versions::ALGO_ORDERS, "It does not support algo orders.")?
     }
 
     if order.not_held {
-        client.check_server_version(
-            server_versions::NOT_HELD,
-            "It does not support not_held parameter.",
-        )?
+        client.check_server_version(server_versions::NOT_HELD, "It does not support not_held parameter.")?
     }
 
     if order.exempt_code != -1 {
-        client.check_server_version(
-            server_versions::SSHORTX,
-            "It does not support exempt_code parameter.",
-        )?
+        client.check_server_version(server_versions::SSHORTX, "It does not support exempt_code parameter.")?
     }
 
     if !order.hedge_type.is_empty() {
-        client.check_server_version(
-            server_versions::HEDGE_ORDERS,
-            "It does not support hedge orders.",
-        )?
+        client.check_server_version(server_versions::HEDGE_ORDERS, "It does not support hedge orders.")?
     }
 
     if order.opt_out_smart_routing {
@@ -665,9 +1055,9 @@ fn verify_order<C: Client>(client: &mut C, order: &Order, order_id: i32) -> Resu
         || !order.delta_neutral_clearing_intent.is_empty()
     {
         client.check_server_version(
-                server_versions::DELTA_NEUTRAL_CONID,
-                "It does not support delta_neutral parameters: con_id, settling_firm, clearing_account, clearing_intent.",
-            )?
+            server_versions::DELTA_NEUTRAL_CONID,
+            "It does not support delta_neutral parameters: con_id, settling_firm, clearing_account, clearing_intent.",
+        )?
     }
 
     if !order.delta_neutral_open_close.is_empty()
@@ -676,9 +1066,9 @@ fn verify_order<C: Client>(client: &mut C, order: &Order, order_id: i32) -> Resu
         || !order.delta_neutral_designated_location.is_empty()
     {
         client.check_server_version(
-                server_versions::DELTA_NEUTRAL_OPEN_CLOSE,
-                "It does not support delta_neutral parameters: open_close, short_sale, short_saleSlot, designated_location",
-            )?
+            server_versions::DELTA_NEUTRAL_OPEN_CLOSE,
+            "It does not support delta_neutral parameters: open_close, short_sale, short_saleSlot, designated_location",
+        )?
     }
 
     if (order.scale_price_increment > Some(0.0))
@@ -696,12 +1086,7 @@ fn verify_order<C: Client>(client: &mut C, order: &Order, order_id: i32) -> Resu
             )?
     }
 
-    if is_bag_order
-        && order
-            .order_combo_legs
-            .iter()
-            .any(|combo_leg| combo_leg.price.is_some())
-    {
+    if is_bag_order && order.order_combo_legs.iter().any(|combo_leg| combo_leg.price.is_some()) {
         client.check_server_version(
             server_versions::ORDER_COMBO_LEGS_PRICE,
             "It does not support per-leg prices for order combo legs.",
@@ -709,23 +1094,14 @@ fn verify_order<C: Client>(client: &mut C, order: &Order, order_id: i32) -> Resu
     }
 
     if order.trailing_percent.is_some() {
-        client.check_server_version(
-            server_versions::TRAILING_PERCENT,
-            "It does not support trailing percent parameter.",
-        )?
+        client.check_server_version(server_versions::TRAILING_PERCENT, "It does not support trailing percent parameter.")?
     }
 
     if !order.algo_id.is_empty() {
-        client.check_server_version(
-            server_versions::ALGO_ID,
-            "It does not support algo_id parameter",
-        )?
+        client.check_server_version(server_versions::ALGO_ID, "It does not support algo_id parameter")?
     }
 
-    if !order.scale_table.is_empty()
-        || !order.active_start_time.is_empty()
-        || !order.active_stop_time.is_empty()
-    {
+    if !order.scale_table.is_empty() || !order.active_start_time.is_empty() || !order.active_stop_time.is_empty() {
         client.check_server_version(
             server_versions::SCALE_TABLE,
             "It does not support scale_table, active_start_time nor active_stop_time parameters.",
@@ -733,24 +1109,15 @@ fn verify_order<C: Client>(client: &mut C, order: &Order, order_id: i32) -> Resu
     }
 
     if !order.ext_operator.is_empty() {
-        client.check_server_version(
-            server_versions::EXT_OPERATOR,
-            "It does not support ext_operator parameter",
-        )?
+        client.check_server_version(server_versions::EXT_OPERATOR, "It does not support ext_operator parameter")?
     }
 
     if order.cash_qty.is_some() {
-        client.check_server_version(
-            server_versions::CASH_QTY,
-            "It does not support cash_qty parameter",
-        )?
+        client.check_server_version(server_versions::CASH_QTY, "It does not support cash_qty parameter")?
     }
 
     if !order.mifid2_execution_trader.is_empty() || !order.mifid2_execution_algo.is_empty() {
-        client.check_server_version(
-            server_versions::DECISION_MAKER,
-            "It does not support MIFID II execution parameters",
-        )?
+        client.check_server_version(server_versions::DECISION_MAKER, "It does not support MIFID II execution parameters")?
     }
 
     if order.dont_use_auto_price_for_hedge {
@@ -761,45 +1128,27 @@ fn verify_order<C: Client>(client: &mut C, order: &Order, order_id: i32) -> Resu
     }
 
     if order.is_oms_container {
-        client.check_server_version(
-            server_versions::ORDER_CONTAINER,
-            "It does not support oms container parameter",
-        )?
+        client.check_server_version(server_versions::ORDER_CONTAINER, "It does not support oms container parameter")?
     }
 
     if order.discretionary_up_to_limit_price {
-        client.check_server_version(
-            server_versions::D_PEG_ORDERS,
-            "It does not support D-Peg orders",
-        )?
+        client.check_server_version(server_versions::D_PEG_ORDERS, "It does not support D-Peg orders")?
     }
 
     if order.use_price_mgmt_algo {
-        client.check_server_version(
-            server_versions::PRICE_MGMT_ALGO,
-            "It does not support Use Price Management Algo requests",
-        )?
+        client.check_server_version(server_versions::PRICE_MGMT_ALGO, "It does not support Use Price Management Algo requests")?
     }
 
     if order.duration.is_some() {
-        client.check_server_version(
-            server_versions::DURATION,
-            "It does not support duration attribute",
-        )?
+        client.check_server_version(server_versions::DURATION, "It does not support duration attribute")?
     }
 
     if order.post_to_ats.is_some() {
-        client.check_server_version(
-            server_versions::POST_TO_ATS,
-            "It does not support post_to_ats attribute",
-        )?
+        client.check_server_version(server_versions::POST_TO_ATS, "It does not support post_to_ats attribute")?
     }
 
     if order.auto_cancel_parent {
-        client.check_server_version(
-            server_versions::AUTO_CANCEL_PARENT,
-            "It does not support auto_cancel_parent attribute",
-        )?
+        client.check_server_version(server_versions::AUTO_CANCEL_PARENT, "It does not support auto_cancel_parent attribute")?
     }
 
     if !order.advanced_error_override.is_empty() {
@@ -810,14 +1159,11 @@ fn verify_order<C: Client>(client: &mut C, order: &Order, order_id: i32) -> Resu
     }
 
     if !order.manual_order_time.is_empty() {
-        client.check_server_version(
-            server_versions::MANUAL_ORDER_TIME,
-            "It does not support manual order time attribute",
-        )?
+        client.check_server_version(server_versions::MANUAL_ORDER_TIME, "It does not support manual order time attribute")?
     }
 
     if order.min_trade_qty.is_some()
-        || order.min_complete_size.is_some()
+        || order.min_compete_size.is_some()
         || order.compete_against_best_offset.is_some()
         || order.mid_offset_at_whole.is_some()
         || order.mid_offset_at_half.is_some()
@@ -831,50 +1177,29 @@ fn verify_order<C: Client>(client: &mut C, order: &Order, order_id: i32) -> Resu
     Ok(())
 }
 
-fn verify_order_contract<C: Client>(
-    client: &mut C,
-    contract: &Contract,
-    order_id: i32,
-) -> Result<()> {
-    if contract.combo_legs.iter().any(|combo_leg| {
-        combo_leg.short_sale_slot != 0 || !combo_leg.designated_location.is_empty()
-    }) {
-        client.check_server_version(
-            server_versions::SSHORT_COMBO_LEGS,
-            "It does not support SSHORT flag for combo legs",
-        )?
-    }
-
-    if contract.delta_neutral_contract.is_some() {
-        client.check_server_version(
-            server_versions::DELTA_NEUTRAL,
-            "It does not support delta-neutral orders",
-        )?
-    }
-
-    if contract.contract_id > 0 {
-        client.check_server_version(
-            server_versions::PLACE_ORDER_CONID,
-            "It does not support contract_id parameter",
-        )?
-    }
-
-    if !contract.security_id_type.is_empty() || !contract.security_id.is_empty() {
-        client.check_server_version(
-            server_versions::SEC_ID_TYPE,
-            "It does not support sec_id_type and sec_id parameters",
-        )?
-    }
-
+fn verify_order_contract<C: Client>(client: &mut C, contract: &Contract, _order_id: i32) -> Result<()> {
     if contract
         .combo_legs
         .iter()
-        .any(|combo_leg| combo_leg.exempt_code != -1)
+        .any(|combo_leg| combo_leg.short_sale_slot != 0 || !combo_leg.designated_location.is_empty())
     {
-        client.check_server_version(
-            server_versions::SSHORTX,
-            "It does not support exempt_code parameter",
-        )?
+        client.check_server_version(server_versions::SSHORT_COMBO_LEGS, "It does not support SSHORT flag for combo legs")?
+    }
+
+    if contract.delta_neutral_contract.is_some() {
+        client.check_server_version(server_versions::DELTA_NEUTRAL, "It does not support delta-neutral orders")?
+    }
+
+    if contract.contract_id > 0 {
+        client.check_server_version(server_versions::PLACE_ORDER_CONID, "It does not support contract_id parameter")?
+    }
+
+    if !contract.security_id_type.is_empty() || !contract.security_id.is_empty() {
+        client.check_server_version(server_versions::SEC_ID_TYPE, "It does not support sec_id_type and sec_id parameters")?
+    }
+
+    if contract.combo_legs.iter().any(|combo_leg| combo_leg.exempt_code != -1) {
+        client.check_server_version(server_versions::SSHORTX, "It does not support exempt_code parameter")?
     }
 
     if !contract.trading_class.is_empty() {
@@ -885,387 +1210,6 @@ fn verify_order_contract<C: Client>(
     }
 
     Ok(())
-}
-
-fn encode_place_order(
-    server_version: i32,
-    request_id: i32,
-    order_id: i32,
-    contract: &Contract,
-    order: &Order,
-) -> Result<RequestMessage> {
-    let mut message = RequestMessage::default();
-    let message_version = message_version_for(server_version);
-
-    message.push_field(&OutgoingMessages::PlaceOrder);
-
-    if server_version < server_versions::ORDER_CONTAINER {
-        message.push_field(&message_version);
-    }
-
-    message.push_field(&order_id);
-
-    if server_version >= server_versions::PLACE_ORDER_CONID {
-        message.push_field(&contract.contract_id);
-    }
-    message.push_field(&contract.symbol);
-    message.push_field(&contract.security_type);
-    message.push_field(&contract.last_trade_date_or_contract_month);
-    message.push_field(&contract.strike);
-    message.push_field(&contract.right);
-    message.push_field(&contract.multiplier);
-    message.push_field(&contract.exchange);
-    message.push_field(&contract.primary_exchange);
-    message.push_field(&contract.currency);
-    message.push_field(&contract.local_symbol);
-    if server_version >= server_versions::TRADING_CLASS {
-        message.push_field(&contract.trading_class);
-    }
-    if server_version >= server_versions::SEC_ID_TYPE {
-        message.push_field(&contract.security_id_type);
-        message.push_field(&contract.security_id);
-    }
-
-    message.push_field(&order.action);
-
-    if server_version >= server_versions::FRACTIONAL_POSITIONS {
-        message.push_field(&order.total_quantity);
-    } else {
-        message.push_field(&(order.total_quantity as i32));
-    }
-
-    message.push_field(&order.order_type);
-    if server_version < server_versions::ORDER_COMBO_LEGS_PRICE {
-        message.push_field(&f64_max_to_zero(order.limit_price));
-    } else {
-        message.push_field(&order.limit_price);
-    }
-    if server_version < server_versions::TRAILING_PERCENT {
-        message.push_field(&f64_max_to_zero(order.aux_price));
-    } else {
-        message.push_field(&order.aux_price);
-    }
-
-    // extended order fields
-    message.push_field(&order.tif);
-    message.push_field(&order.oca_group);
-    message.push_field(&order.account);
-    message.push_field(&order.open_close);
-    message.push_field(&order.origin);
-    message.push_field(&order.order_ref);
-    message.push_field(&order.transmit);
-    message.push_field(&order.order_id);
-
-    message.push_field(&order.block_order);
-    message.push_field(&order.sweep_to_fill);
-    message.push_field(&order.display_size);
-    message.push_field(&order.trigger_method);
-    message.push_field(&order.outside_rth);
-
-    message.push_field(&order.hidden);
-
-    // Contract combo legs for BAG requests
-    if contract.is_bag() {
-        message.push_field(&contract.combo_legs.len());
-
-        for combo_leg in &contract.combo_legs {
-            message.push_field(&combo_leg.contract_id);
-            message.push_field(&combo_leg.ratio);
-            message.push_field(&combo_leg.action);
-            message.push_field(&combo_leg.exchange);
-            message.push_field(&combo_leg.open_close);
-
-            if server_version >= server_versions::SSHORT_COMBO_LEGS {
-                message.push_field(&combo_leg.short_sale_slot);
-                message.push_field(&combo_leg.designated_location);
-            }
-            if server_version >= server_versions::SSHORTX_OLD {
-                message.push_field(&combo_leg.exempt_code);
-            }
-        }
-    }
-
-    // Order combo legs for BAG requests
-    if server_version >= server_versions::ORDER_COMBO_LEGS_PRICE && contract.is_bag() {
-        message.push_field(&order.order_combo_legs.len());
-
-        for combo_leg in &order.order_combo_legs {
-            message.push_field(&combo_leg.price);
-        }
-    }
-
-    if server_version >= server_versions::SMART_COMBO_ROUTING_PARAMS && contract.is_bag() {
-        message.push_field(&order.smart_combo_routing_params.len());
-
-        for tag_value in &order.smart_combo_routing_params {
-            message.push_field(&tag_value.tag);
-            message.push_field(&tag_value.value);
-        }
-    }
-
-    message.push_field(&""); // deprecated sharesAllocation field
-    message.push_field(&order.discretionary_amt);
-    message.push_field(&order.good_after_time);
-    message.push_field(&order.good_till_date);
-    message.push_field(&order.fa_group);
-    message.push_field(&order.fa_method);
-    message.push_field(&order.fa_percentage);
-    message.push_field(&order.fa_profile);
-
-    if server_version >= server_versions::MODELS_SUPPORT {
-        message.push_field(&order.model_code);
-    }
-
-    message.push_field(&order.short_sale_slot);
-    message.push_field(&order.designated_location);
-
-    if server_version >= server_versions::SSHORTX_OLD {
-        message.push_field(&order.exempt_code);
-    }
-
-    message.push_field(&order.oca_type);
-    message.push_field(&order.rule_80_a);
-    message.push_field(&order.settling_firm);
-    message.push_field(&order.all_or_none);
-    message.push_field(&order.min_qty);
-    message.push_field(&order.percent_offset);
-    message.push_field(&false);
-    message.push_field(&false);
-    message.push_field(&Option::<f64>::None);
-    message.push_field(&order.auction_strategy);
-    message.push_field(&order.starting_price);
-    message.push_field(&order.stock_ref_price);
-    message.push_field(&order.delta);
-    message.push_field(&order.stock_range_lower);
-    message.push_field(&order.stock_range_upper);
-    message.push_field(&order.override_percentage_constraints);
-
-    // Volitility orders
-    message.push_field(&order.volatility);
-    message.push_field(&order.volatility_type);
-    message.push_field(&order.delta_neutral_order_type);
-    message.push_field(&order.delta_neutral_aux_price);
-
-    if server_version >= server_versions::DELTA_NEUTRAL_CONID && order.is_delta_neutral() {
-        message.push_field(&order.delta_neutral_con_id);
-        message.push_field(&order.delta_neutral_settling_firm);
-        message.push_field(&order.delta_neutral_clearing_account);
-        message.push_field(&order.delta_neutral_clearing_intent);
-    }
-
-    if server_version >= server_versions::DELTA_NEUTRAL_OPEN_CLOSE && order.is_delta_neutral() {
-        message.push_field(&order.delta_neutral_open_close);
-        message.push_field(&order.delta_neutral_short_sale);
-        message.push_field(&order.delta_neutral_short_sale_slot);
-        message.push_field(&order.delta_neutral_designated_location);
-    }
-
-    message.push_field(&order.continuous_update);
-    message.push_field(&order.reference_price_type);
-
-    message.push_field(&order.trail_stop_price);
-    if server_version >= server_versions::TRAILING_PERCENT {
-        message.push_field(&order.trailing_percent);
-    }
-
-    if server_version >= server_versions::SCALE_ORDERS {
-        if server_version >= server_versions::SCALE_ORDERS2 {
-            message.push_field(&order.scale_init_level_size);
-            message.push_field(&order.scale_subs_level_size);
-        } else {
-            message.push_field(&"");
-            message.push_field(&order.scale_init_level_size);
-        }
-        message.push_field(&order.scale_price_increment);
-    }
-
-    if server_version >= server_versions::SCALE_ORDERS3 && order.is_scale_order() {
-        message.push_field(&order.scale_price_adjust_value);
-        message.push_field(&order.scale_price_adjust_interval);
-        message.push_field(&order.scale_profit_offset);
-        message.push_field(&order.scale_auto_reset);
-        message.push_field(&order.scale_init_position);
-        message.push_field(&order.scale_init_fill_qty);
-        message.push_field(&order.scale_random_percent);
-    }
-
-    if server_version >= server_versions::SCALE_TABLE {
-        message.push_field(&order.scale_table);
-        message.push_field(&order.active_start_time);
-        message.push_field(&order.active_stop_time);
-    }
-
-    if server_version >= server_versions::HEDGE_ORDERS {
-        message.push_field(&order.hedge_type);
-        if !order.hedge_type.is_empty() {
-            message.push_field(&order.hedge_param);
-        }
-    }
-
-    if server_version >= server_versions::OPT_OUT_SMART_ROUTING {
-        message.push_field(&order.opt_out_smart_routing);
-    }
-
-    if server_version >= server_versions::PTA_ORDERS {
-        message.push_field(&order.clearing_account);
-        message.push_field(&order.clearing_intent);
-    }
-
-    if server_version >= server_versions::NOT_HELD {
-        message.push_field(&order.not_held);
-    }
-
-    if server_version >= server_versions::DELTA_NEUTRAL {
-        if let Some(delta_neutral_contract) = &contract.delta_neutral_contract {
-            message.push_field(&true);
-            message.push_field(&delta_neutral_contract.contract_id);
-            message.push_field(&delta_neutral_contract.delta);
-            message.push_field(&delta_neutral_contract.price);
-        } else {
-            message.push_field(&false);
-        }
-    }
-
-    if server_version >= server_versions::ALGO_ORDERS {
-        message.push_field(&order.algo_strategy);
-        if !order.algo_strategy.is_empty() {
-            message.push_field(&order.algo_params.len());
-            for tag_value in &order.algo_params {
-                message.push_field(&tag_value.tag);
-                message.push_field(&tag_value.value);
-            }
-        }
-    }
-
-    if server_version >= server_versions::ALGO_ID {
-        message.push_field(&order.algo_id);
-    }
-
-    if server_version >= server_versions::WHAT_IF_ORDERS {
-        message.push_field(&order.what_if);
-    }
-
-    if server_version >= server_versions::LINKING {
-        // TODO default of XYZ
-        //        message.push_field(&order.order_misc_options);
-        message.push_field(&"XYZ");
-    }
-
-    if server_version >= server_versions::RANDOMIZE_SIZE_AND_PRICE {
-        message.push_field(&order.randomize_size);
-        message.push_field(&order.randomize_price);
-    }
-
-    if server_version >= server_versions::PEGGED_TO_BENCHMARK {
-        if order.order_type == "PEG BENCH" {
-            message.push_field(&order.reference_contract_id);
-            message.push_field(&order.is_pegged_change_amount_decrease);
-            message.push_field(&order.pegged_change_amount);
-            message.push_field(&order.reference_change_amount);
-            message.push_field(&order.reference_exchange);
-        }
-
-        if !order.conditions.is_empty() {
-            message.push_field(&order.conditions.len());
-            for condition in &order.conditions {
-                // verify
-                // https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EClient.cs#L1187
-                message.push_field(condition);
-            }
-
-            message.push_field(&order.conditions_ignore_rth);
-            message.push_field(&order.conditions_cancel_order);
-        }
-
-        message.push_field(&order.adjusted_order_type);
-        message.push_field(&order.trigger_price);
-        message.push_field(&order.lmt_price_offset);
-        message.push_field(&order.adjusted_stop_price);
-        message.push_field(&order.adjusted_stop_limit_price);
-        message.push_field(&order.adjusted_trailing_amount);
-        message.push_field(&order.adjustable_trailing_unit);
-    }
-
-    if server_version >= server_versions::EXT_OPERATOR {
-        message.push_field(&order.ext_operator);
-    }
-
-    if server_version >= server_versions::SOFT_DOLLAR_TIER {
-        message.push_field(&order.soft_dollar_tier.name);
-        message.push_field(&order.soft_dollar_tier.value);
-    }
-
-    if server_version >= server_versions::CASH_QTY {
-        message.push_field(&order.cash_qty);
-    }
-
-    if server_version >= server_versions::DECISION_MAKER {
-        message.push_field(&order.mifid2_decision_maker);
-        message.push_field(&order.mifid2_decision_algo);
-    }
-
-    if server_version >= server_versions::MIFID_EXECUTION {
-        message.push_field(&order.mifid2_execution_trader);
-        message.push_field(&order.mifid2_execution_algo);
-    }
-
-    if server_version >= server_versions::AUTO_PRICE_FOR_HEDGE {
-        message.push_field(&order.dont_use_auto_price_for_hedge);
-    }
-
-    if server_version >= server_versions::ORDER_CONTAINER {
-        message.push_field(&order.is_oms_container);
-    }
-
-    if server_version >= server_versions::D_PEG_ORDERS {
-        message.push_field(&order.discretionary_up_to_limit_price);
-    }
-
-    if server_version >= server_versions::PRICE_MGMT_ALGO {
-        message.push_field(&order.use_price_mgmt_algo);
-    }
-
-    if server_version >= server_versions::DURATION {
-        message.push_field(&order.duration);
-    }
-
-    if server_version >= server_versions::POST_TO_ATS {
-        message.push_field(&order.post_to_ats);
-    }
-
-    if server_version >= server_versions::AUTO_CANCEL_PARENT {
-        message.push_field(&order.auto_cancel_parent);
-    }
-
-    if server_version >= server_versions::ADVANCED_ORDER_REJECT {
-        message.push_field(&order.advanced_error_override);
-    }
-
-    if server_version >= server_versions::MANUAL_ORDER_TIME {
-        message.push_field(&order.manual_order_time);
-    }
-
-    if server_version >= server_versions::PEGBEST_PEGMID_OFFSETS {
-        if contract.exchange == "IBKRATS" {
-            message.push_field(&order.min_trade_qty);
-        }
-        let mut send_mid_offsets = false;
-        if order.order_type == "PEG BEST" {
-            message.push_field(&order.min_complete_size);
-            message.push_field(&order.compete_against_best_offset);
-            if order.compete_against_best_offset == COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID {
-                send_mid_offsets = true;
-            }
-        } else if order.order_type == "PEG MID" {
-            send_mid_offsets = true;
-        }
-        if send_mid_offsets {
-            message.push_field(&order.mid_offset_at_whole);
-            message.push_field(&order.mid_offset_at_half);
-        }
-    }
-
-    Ok(message)
 }
 
 //https://github.com/InteractiveBrokers/tws-api/blob/b3f6c3de83cff4e636776cea38ece09e2c1b81d1/source/csharpclient/client/IBParamsList.cs
@@ -1312,3 +1256,6 @@ pub fn request_executions<C: Client + Debug>() {
 }
 
 pub fn request_market_rule<C: Client + Debug>(market_rule_id: i32) {}
+
+#[cfg(test)]
+mod tests;

@@ -8,9 +8,15 @@ use crate::client::{Client, RequestMessage, ResponseMessage};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
 
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+pub(crate) mod contract_samples;
+
 // Models
 
-#[derive(Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 /// SecurityType enumerates available security types
 pub enum SecurityType {
     /// Stock (or ETF)
@@ -79,7 +85,7 @@ impl SecurityType {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 /// Contract describes an instrument's definition
 pub struct Contract {
     /// The unique IB contract identifier.
@@ -131,6 +137,7 @@ impl Contract {
             symbol: symbol.to_string(),
             security_type: SecurityType::Stock,
             currency: "USD".to_string(),
+            exchange: "SMART".to_string(),
             ..Default::default()
         }
     }
@@ -167,7 +174,7 @@ impl Contract {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 // ComboLeg represents a leg within combo orders.
 pub struct ComboLeg {
     /// The Contract's IB's unique id.
@@ -203,12 +210,25 @@ pub enum ComboLegOpenClose {
     Unknown = 3,
 }
 
-#[derive(Debug, Default)]
+impl ComboLegOpenClose {
+    // TODO - verify these values
+    pub fn from_i32(val: i32) -> Self {
+        match val {
+            0 => Self::Same,
+            1 => Self::Open,
+            2 => Self::Close,
+            3 => Self::Unknown,
+            _ => panic!("unsupported value: {val}"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
 /// Delta and underlying price for Delta-Neutral combo orders.
 /// Underlying (STK or FUT), delta and underlying price goes into this attribute.
 pub struct DeltaNeutralContract {
     /// The unique contract identifier specifying the security. Used for Delta-Neutral Combo contracts.
-    pub contract_id: String,
+    pub contract_id: i32,
     /// The underlying stock or future delta. Used for Delta-Neutral Combo contracts.
     pub delta: f64,
     /// The price of the underlying. Used for Delta-Neutral Combo contracts.
@@ -343,10 +363,7 @@ pub struct TagValue {
 ///     Ok(())
 /// }
 /// ```
-pub fn request_contract_details<C: Client + Debug>(
-    client: &mut C,
-    contract: &Contract,
-) -> Result<Vec<ContractDetails>> {
+pub fn request_contract_details<C: Client + Debug>(client: &mut C, contract: &Contract) -> Result<Vec<ContractDetails>> {
     if !contract.security_id_type.is_empty() || !contract.security_id.is_empty() {
         client.check_server_version(
             server_versions::SEC_ID_TYPE,
@@ -404,11 +421,7 @@ pub fn request_contract_details<C: Client + Debug>(
     Ok(contract_details)
 }
 
-fn encode_request_contract_data(
-    server_version: i32,
-    request_id: i32,
-    contract: &Contract,
-) -> Result<RequestMessage> {
+fn encode_request_contract_data(server_version: i32, request_id: i32, contract: &Contract) -> Result<RequestMessage> {
     const VERSION: i32 = 8;
 
     let mut packet = RequestMessage::default();
@@ -438,13 +451,8 @@ fn encode_request_contract_data(
         packet.push_field(&contract.exchange);
         packet.push_field(&contract.primary_exchange);
     } else if server_version >= server_versions::LINKING {
-        if !contract.primary_exchange.is_empty()
-            && (contract.exchange == "BEST" || contract.exchange == "SMART")
-        {
-            packet.push_field(&format!(
-                "{}:{}",
-                contract.exchange, contract.primary_exchange
-            ));
+        if !contract.primary_exchange.is_empty() && (contract.exchange == "BEST" || contract.exchange == "SMART") {
+            packet.push_field(&format!("{}:{}", contract.exchange, contract.primary_exchange));
         } else {
             packet.push_field(&contract.exchange);
         }
@@ -470,10 +478,7 @@ fn encode_request_contract_data(
     Ok(packet)
 }
 
-fn decode_contract_details(
-    server_version: i32,
-    message: &mut ResponseMessage,
-) -> Result<ContractDetails> {
+fn decode_contract_details(server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails> {
     message.skip(); // message type
 
     let mut message_version = 8;
@@ -505,8 +510,7 @@ fn decode_contract_details(
     contract.contract.trading_class = message.next_string()?;
     contract.contract.contract_id = message.next_int()?;
     contract.min_tick = message.next_double()?;
-    if (server_versions::MD_SIZE_MULTIPLIER..server_versions::SIZE_RULES).contains(&server_version)
-    {
+    if (server_versions::MD_SIZE_MULTIPLIER..server_versions::SIZE_RULES).contains(&server_version) {
         message.next_int()?; // mdSizeMultiplier no longer used
     }
     contract.contract.multiplier = message.next_string()?;
@@ -560,9 +564,7 @@ fn decode_contract_details(
     if server_version > server_versions::STOCK_TYPE {
         contract.stock_type = message.next_string()?;
     }
-    if (server_versions::FRACTIONAL_SIZE_SUPPORT..server_versions::SIZE_RULES)
-        .contains(&server_version)
-    {
+    if (server_versions::FRACTIONAL_SIZE_SUPPORT..server_versions::SIZE_RULES).contains(&server_version) {
         message.next_double()?; // size min tick -- no longer used
     }
     if server_version >= server_versions::SIZE_RULES {
@@ -574,11 +576,7 @@ fn decode_contract_details(
     Ok(contract)
 }
 
-fn read_last_trade_date(
-    contract: &mut ContractDetails,
-    last_trade_date_or_contract_month: &str,
-    is_bond: bool,
-) -> Result<()> {
+fn read_last_trade_date(contract: &mut ContractDetails, last_trade_date_or_contract_month: &str, is_bond: bool) -> Result<()> {
     if last_trade_date_or_contract_month.is_empty() {
         return Ok(());
     }
@@ -638,14 +636,8 @@ pub struct ContractDescription {
 ///     Ok(())
 /// }
 /// ```
-pub fn request_matching_symbols<C: Client + Debug>(
-    client: &mut C,
-    pattern: &str,
-) -> Result<Vec<ContractDescription>> {
-    client.check_server_version(
-        server_versions::REQ_MATCHING_SYMBOLS,
-        "It does not support mathing symbols requests.",
-    )?;
+pub fn request_matching_symbols<C: Client + Debug>(client: &mut C, pattern: &str) -> Result<Vec<ContractDescription>> {
+    client.check_server_version(server_versions::REQ_MATCHING_SYMBOLS, "It does not support mathing symbols requests.")?;
 
     let request_id = client.next_request_id();
     let request = encode_request_matching_symbols(request_id, pattern)?;
@@ -681,10 +673,7 @@ fn encode_request_matching_symbols(request_id: i32, pattern: &str) -> Result<Req
     Ok(message)
 }
 
-fn decode_contract_descriptions(
-    server_version: i32,
-    message: &mut ResponseMessage,
-) -> Result<Vec<ContractDescription>> {
+fn decode_contract_descriptions(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ContractDescription>> {
     message.skip(); // message type
 
     let _request_id = message.next_int()?;
@@ -694,8 +683,7 @@ fn decode_contract_descriptions(
         return Ok(Vec::default());
     }
 
-    let mut contract_descriptions: Vec<ContractDescription> =
-        Vec::with_capacity(contract_descriptions_count as usize);
+    let mut contract_descriptions: Vec<ContractDescription> = Vec::with_capacity(contract_descriptions_count as usize);
 
     for _ in 0..contract_descriptions_count {
         let mut contract = Contract {
@@ -708,8 +696,7 @@ fn decode_contract_descriptions(
         };
 
         let derivative_security_types_count = message.next_int()?;
-        let mut derivative_security_types: Vec<String> =
-            Vec::with_capacity(derivative_security_types_count as usize);
+        let mut derivative_security_types: Vec<String> = Vec::with_capacity(derivative_security_types_count as usize);
         for _ in 0..derivative_security_types_count {
             derivative_security_types.push(message.next_string()?);
         }
@@ -727,6 +714,3 @@ fn decode_contract_descriptions(
 
     Ok(contract_descriptions)
 }
-
-#[cfg(test)]
-mod tests;

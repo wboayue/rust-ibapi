@@ -28,3 +28,14 @@ chore: (updating grunt tasks etc; no production code change)
 ```bash
 cargo llvm-cov --open
 ```
+
+# Debugging
+
+`IBAPI_RECORDING_DIR`
+
+IBAPI_RECORDING_DIR=/tmp
+```
+RUST_LOG=debug IBAPI_RECORDING_DIR=/tmp cargo run --bin find_contract_details
+```
+
+https://rust-lang.github.io/rustfmt/?version=v1.5.1&search=
