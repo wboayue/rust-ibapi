@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn encode_place_order(server_version: i32, request_id: i32, order_id: i32, contract: &Contract, order: &Order) -> Result<RequestMessage> {
+pub fn encode_place_order(server_version: i32, order_id: i32, contract: &Contract, order: &Order) -> Result<RequestMessage> {
     let mut message = RequestMessage::default();
     let message_version = message_version_for(server_version);
 

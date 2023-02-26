@@ -934,10 +934,9 @@ pub fn place_order<C: Client + Debug>(client: &mut C, order_id: i32, contract: &
 
     info!("using server version {}", client.server_version());
 
-    let request_id = client.next_request_id();
-    let message = encoders::encode_place_order(client.server_version(), request_id, order_id, contract, order)?;
+    let message = encoders::encode_place_order(client.server_version(), order_id, contract, order)?;
 
-    let messages = client.send_request(request_id, message)?;
+    let messages = client.send_order(order_id, message)?;
 
     Ok(OrderNotificationIterator {
         messages,
