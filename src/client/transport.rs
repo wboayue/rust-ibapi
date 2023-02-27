@@ -14,6 +14,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use crossbeam::channel;
 use log::{debug, error, info};
 use time::macros::format_description;
 use time::OffsetDateTime;
@@ -30,7 +31,7 @@ pub trait MessageBus {
     fn write_message_for_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
     fn write(&mut self, packet: &str) -> Result<()>;
 
-    fn process_messages(&mut self, server_version: i32) -> Result<()>;
+    fn process_messages(&mut self, server_version: i32, order_id_sender: channel::Sender<i32>) -> Result<()>;
 }
 
 #[derive(Debug)]
@@ -146,7 +147,7 @@ impl MessageBus for TcpMessageBus {
         Ok(())
     }
 
-    fn process_messages(&mut self, server_version: i32) -> Result<()> {
+    fn process_messages(&mut self, server_version: i32, order_id_sender: channel::Sender<i32>) -> Result<()> {
         let reader = Arc::clone(&self.reader);
         let requests = Arc::clone(&self.requests);
         let recorder = self.recorder.clone();

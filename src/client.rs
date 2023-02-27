@@ -5,6 +5,7 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::{anyhow, Result};
+use crossbeam::channel::bounded;
 use log::{debug, info};
 use time::OffsetDateTime;
 
@@ -34,7 +35,7 @@ pub trait Client {
     fn server_version(&self) -> i32;
     /// Sends a message without an expected reply.
     fn send_message(&mut self, packet: RequestMessage) -> Result<()>;
-    /// Sends a request with and waits for reply.
+    /// Sends a request and waits for reply.
     fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
     /// Submits an order and waits for reply.
     fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
@@ -83,13 +84,20 @@ impl IBClient {
         client.handshake()?;
         client.start_api()?;
 
+        let (order_id_sender, order_id_receiver) = bounded::<i32>(1);
+
         // will return receiver to next order id
-        client.message_bus.process_messages(client.server_version)?;
+        client.message_bus.process_messages(client.server_version, order_id_sender)?;
 
-        // wait for next order id
-        thread::sleep(Duration::from_secs(2));
-
-        Ok(client)
+        match order_id_receiver.recv() {
+            Ok(order_id) => {
+                client.order_id = order_id;
+                Ok(client)
+            },
+            Err(e) => {
+                Err(anyhow!("error receiving next order_id {e:?}"))
+            }
+        }
     }
 
     // sends server handshake
@@ -136,16 +144,21 @@ impl Drop for IBClient {
 }
 
 impl Client for IBClient {
+    /// Returns the next request ID.
     fn next_request_id(&mut self) -> i32 {
+        let request_id = self.next_request_id;
         self.next_request_id += 1;
-        self.next_request_id
+        request_id
     }
 
+    /// Returns and increments the order ID.
     fn next_order_id(&mut self) -> i32 {
+        let order_id = self.order_id;
         self.order_id += 1;
-        self.order_id
+        order_id
     }
 
+    /// Sets the current value of order ID.
     fn set_order_id(&mut self, order_id: i32) -> i32 {
         self.order_id = order_id;
         self.order_id
