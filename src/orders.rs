@@ -947,14 +947,14 @@ pub struct OrderStatus {
 /// use ibapi::client::{IBClient, Client};
 /// use ibapi::contracts::Contract;
 /// use ibapi::orders::{self, order_builder, OrderNotification};
-/// 
+///
 /// fn main() -> anyhow::Result<()> {
 ///     let mut client = IBClient::connect("localhost:4002")?;
 ///
 ///     let mut contract = Contract::stock("MSFT");
 ///     let order = order_builder::market_order(orders::Action::Buy, 100.0);
 ///     let order_id = client.next_order_id();
-/// 
+///
 ///     let notifications = orders::place_order(&mut client, order_id, &contract, &order)?;
 ///
 ///     for notification in notifications {
@@ -965,7 +965,7 @@ pub struct OrderStatus {
 ///             OrderNotification::OpenOrder(open_order) => println!("open order: {open_order:?}"),
 ///             OrderNotification::ExecutionData(execution) => println!("execution: {execution:?}"),
 ///             OrderNotification::CommissionReport(report) => println!("commision report: {report:?}"),
- ///        }
+///        }
 ///     }
 ///
 ///     Ok(())
