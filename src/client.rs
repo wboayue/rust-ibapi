@@ -3,7 +3,7 @@ use std::ops::Index;
 use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
-use log::{debug, info, error};
+use log::{debug, error, info};
 use time::OffsetDateTime;
 
 use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
@@ -27,7 +27,7 @@ pub trait Client {
     /// Returns the next order ID. Set at connection time then incremented on each call.
     fn next_order_id(&mut self) -> i32;
     /// Sets the current value of order ID.
-    fn set_order_id(&mut self,  order_id: i32) -> i32;       
+    fn set_order_id(&mut self, order_id: i32) -> i32;
     /// Returns the server version.
     fn server_version(&self) -> i32;
     /// Returns the server time at connection time.
@@ -52,12 +52,12 @@ pub struct IBClient {
     pub server_time: String,
     // Next valid order id
     pub next_valid_order_id: i32,
-    
+
     managed_accounts: String,
     client_id: i32, // ID of client.
     message_bus: Box<dyn MessageBus>,
-    next_request_id: i32,   // Next available request_id.
-    order_id: i32,  // Next available order_id. Starts with value returned on connection.
+    next_request_id: i32, // Next available request_id.
+    order_id: i32,        // Next available order_id. Starts with value returned on connection.
 }
 
 impl IBClient {
@@ -86,7 +86,7 @@ impl IBClient {
     /// }
     /// ```
     pub fn connect(connection_string: &str) -> Result<IBClient> {
-       debug!("connecting to server with #{:?}", connection_string);
+        debug!("connecting to server with #{:?}", connection_string);
 
         let message_bus = Box::new(TcpMessageBus::connect(connection_string)?);
         IBClient::do_connect(connection_string, message_bus)
@@ -167,7 +167,7 @@ impl IBClient {
                     message.skip(); // message version
 
                     self.order_id = message.next_int()?;
-                },
+                }
                 IncomingMessages::ManagedAccounts => {
                     saw_managed_accounts = true;
 
@@ -175,17 +175,17 @@ impl IBClient {
                     message.skip(); // message version
 
                     self.managed_accounts = message.next_string()?;
-                },
+                }
                 IncomingMessages::Error => {
                     error!("message: {message:?}")
-                },
+                }
                 _ => info!("message: {message:?}"),
             }
-            
+
             attempts += 1;
             if (saw_next_order_id && saw_managed_accounts) || attempts > MAX_ATTEMPTS {
                 break;
-            } 
+            }
         }
 
         Ok(())

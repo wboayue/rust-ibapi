@@ -3,7 +3,7 @@ use std::{thread, time};
 use clap::{arg, Command};
 use log::{debug, info};
 
-use ibapi::client::{IBClient, Client};
+use ibapi::client::{Client, IBClient};
 use ibapi::contracts::{self, Contract};
 
 fn main() -> anyhow::Result<()> {
