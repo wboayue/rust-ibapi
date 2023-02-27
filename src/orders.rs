@@ -892,12 +892,13 @@ pub enum OrderNotification {
     CommissionReport(CommissionReport),
 }
 
-// Gives the up-to-date information of an order every time it changes. Often there are duplicate orderStatus messages.
+/// Contains all relevant information on the current status of the order execution-wise (i.e. amount filled and pending, filling price, etc.).
 #[derive(Clone, Debug, Default)]
 pub struct OrderStatus {
     /// The order's client id.
     order_id: i32,
     /// The current status of the order. Possible values:
+    ///     ApiPending - indicates order has not yet been sent to IB server, for instance if there is a delay in receiving the security definition. Uncommonly received.
     ///     PendingSubmit - indicates that you have transmitted the order, but have not yet received confirmation that it has been accepted by the order destination.
     ///     PendingCancel - indicates that you have sent a request to cancel the order but have not yet received cancel confirmation from the order destination. At this point, your order is not confirmed canceled. It is not guaranteed that the cancellation will be successful.
     ///     PreSubmitted - indicates that a simulated order type has been accepted by the IB system and that this order has yet to be elected. The order is held in the IB system until the election criteria are met. At that time the order is transmitted to the order destination as specified .
@@ -927,12 +928,52 @@ pub struct OrderStatus {
     market_cap_price: f64,
 }
 
-// place_order
+// https://interactivebrokers.github.io/tws-api/order_submission.html
+
+/// Submits an [Order].
+///
+/// Submits an [Order] using [Client] for the given [Contract].
+/// Immediately after the order was submitted correctly, the TWS will start sending events concerning the order's activity via IBApi.EWrapper.openOrder and IBApi.EWrapper.orderStatus
+///
+/// # Arguments
+/// * `client` - [Client] used to communicate with server.
+/// * `order_id` - ID for [Order]. Get next valid ID using [Client::next_order_id].
+/// * `contract` - [Contract] to submit order for.
+/// * `order` - [Order] to sumbit.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ibapi::client::{IBClient, Client};
+/// use ibapi::contracts::Contract;
+/// use ibapi::orders::{self, order_builder, OrderNotification};
+/// 
+/// fn main() -> anyhow::Result<()> {
+///     let mut client = IBClient::connect("localhost:4002")?;
+///
+///     let mut contract = Contract::stock("MSFT");
+///     let order = order_builder::market_order(orders::Action::Buy, 100.0);
+///     let order_id = client.next_order_id();
+/// 
+///     let notifications = orders::place_order(&mut client, order_id, &contract, &order)?;
+///
+///     for notification in notifications {
+///         match notification {
+///             OrderNotification::OrderStatus(order_status) => {
+///                 println!("order status: {order_status:?}")
+///             }
+///             OrderNotification::OpenOrder(open_order) => println!("open order: {open_order:?}"),
+///             OrderNotification::ExecutionData(execution) => println!("execution: {execution:?}"),
+///             OrderNotification::CommissionReport(report) => println!("commision report: {report:?}"),
+ ///        }
+///     }
+///
+///     Ok(())
+/// }
+/// ```
 pub fn place_order<C: Client + Debug>(client: &mut C, order_id: i32, contract: &Contract, order: &Order) -> Result<OrderNotificationIterator> {
     verify_order(client, order, order_id)?;
     verify_order_contract(client, contract, order_id)?;
-
-    info!("using server version {}", client.server_version());
 
     let message = encoders::encode_place_order(client.server_version(), order_id, contract, order)?;
 
@@ -944,6 +985,7 @@ pub fn place_order<C: Client + Debug>(client: &mut C, order_id: i32, contract: &
     })
 }
 
+/// Supports iteration over [OrderNotification]
 pub struct OrderNotificationIterator {
     server_version: i32,
     messages: ResponsePacketPromise,

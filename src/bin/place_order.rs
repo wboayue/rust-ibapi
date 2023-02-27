@@ -38,8 +38,6 @@ fn main() -> anyhow::Result<()> {
     contract.currency = "USD".to_string();
     debug!("contract template {contract:?}");
 
-    thread::sleep(Duration::from_secs(2));
-
     // TODO - set next valid order_id
     let order_id = 14;
     let order = order_builder::market_order(orders::Action::Buy, 100.0);
