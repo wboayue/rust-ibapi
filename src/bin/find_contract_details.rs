@@ -3,7 +3,7 @@ use std::{thread, time};
 use clap::{arg, Command};
 use log::{debug, info};
 
-use ibapi::client::IBClient;
+use ibapi::client::{IBClient, Client};
 use ibapi::contracts::{self, Contract};
 
 fn main() -> anyhow::Result<()> {
@@ -23,6 +23,11 @@ fn main() -> anyhow::Result<()> {
     let mut client = IBClient::connect(connection_string)?;
 
     info!("connected {client:?}");
+
+    println!("server_version: {}", client.server_version());
+    println!("server_time: {}", client.server_time());
+    println!("managed_accounts: {}", client.managed_accounts());
+    println!("next_order_id: {}", client.next_order_id());
 
     let mut contract = Contract::stock(stock_symbol);
     contract.currency = "USD".to_string();

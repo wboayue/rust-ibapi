@@ -44,6 +44,16 @@ impl Client for ClientStub {
         self.server_version
     }
 
+    /// Returns the server version.
+    fn server_time(&self) -> String {
+        "200".to_owned()
+    }
+
+    /// Returns the managed accounts.
+    fn managed_accounts(&self) -> String {
+        "XYZ".to_owned()
+    }
+
     fn send_message(&mut self, message: RequestMessage) -> Result<()> {
         self.request_messages.push(encode_message(&message));
         Ok(())

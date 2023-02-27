@@ -24,14 +24,14 @@ use crate::messages::IncomingMessages;
 use crate::server_versions;
 
 pub trait MessageBus {
-    fn read_packet(&mut self) -> Result<ResponseMessage>;
+    fn read_message(&mut self) -> Result<ResponseMessage>;
     fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponseMessage>;
 
     fn write_message(&mut self, packet: &RequestMessage) -> Result<()>;
     fn write_message_for_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
     fn write(&mut self, packet: &str) -> Result<()>;
 
-    fn process_messages(&mut self, server_version: i32, order_id_sender: channel::Sender<i32>) -> Result<()>;
+    fn process_messages(&mut self, server_version: i32) -> Result<()>;
 }
 
 #[derive(Debug)]
@@ -88,7 +88,7 @@ impl TcpMessageBus {
 const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 impl MessageBus for TcpMessageBus {
-    fn read_packet(&mut self) -> Result<ResponseMessage> {
+    fn read_message(&mut self) -> Result<ResponseMessage> {
         read_packet(&self.reader)
     }
 
@@ -147,7 +147,7 @@ impl MessageBus for TcpMessageBus {
         Ok(())
     }
 
-    fn process_messages(&mut self, server_version: i32, order_id_sender: channel::Sender<i32>) -> Result<()> {
+    fn process_messages(&mut self, server_version: i32) -> Result<()> {
         let reader = Arc::clone(&self.reader);
         let requests = Arc::clone(&self.requests);
         let recorder = self.recorder.clone();
