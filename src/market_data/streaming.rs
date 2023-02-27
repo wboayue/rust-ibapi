@@ -1,12 +1,12 @@
 use std::fmt::Debug;
 use std::string::ToString;
 
-use anyhow::{anyhow, Result};
-use log::{error, info};
+use anyhow::Result;
+use log::error;
 
 use crate::client::transport::ResponsePacketPromise;
 use crate::client::{Client, RequestMessage, ResponseMessage};
-use crate::contracts::{Contract, ContractDetails};
+use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::orders::TagValue;
 use crate::server_versions;

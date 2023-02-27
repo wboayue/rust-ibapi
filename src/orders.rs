@@ -718,11 +718,11 @@ pub struct OpenOrder {
     /// The order's unique id
     order_id: i32,
     /// The order's Contract.
-    contract: Contract,
+    contract: Box<Contract>,
     /// The currently active order
-    order: Order,
+    order: Box<Order>,
     /// The order's OrderState
-    order_state: OrderState,
+    order_state: Box<OrderState>,
 }
 
 /// Provides an active order's current state.
@@ -880,8 +880,8 @@ pub struct Execution {
 #[derive(Clone, Debug, Default)]
 pub struct ExecutionData {
     pub request_id: i32,
-    pub contract: Contract,
-    pub execution: Execution,
+    pub contract: Box<Contract>,
+    pub execution: Box<Execution>,
 }
 
 #[derive(Clone, Debug)]

@@ -257,14 +257,12 @@ pub fn decode_open_order(server_version: i32, message: &mut ResponseMessage) -> 
     order.randomize_size = message.next_bool()?;
     order.randomize_price = message.next_bool()?;
 
-    if server_version >= server_versions::PEGGED_TO_BENCHMARK {
-        if order.order_type == "PEG BENCH" {
-            order.reference_contract_id = message.next_int()?;
-            order.is_pegged_change_amount_decrease = message.next_bool()?;
-            order.pegged_change_amount = message.next_optional_double()?;
-            order.reference_change_amount = message.next_optional_double()?;
-            order.reference_exchange = message.next_string()?;
-        }
+    if server_version >= server_versions::PEGGED_TO_BENCHMARK && order.order_type == "PEG BENCH" {
+        order.reference_contract_id = message.next_int()?;
+        order.is_pegged_change_amount_decrease = message.next_bool()?;
+        order.pegged_change_amount = message.next_optional_double()?;
+        order.reference_change_amount = message.next_optional_double()?;
+        order.reference_exchange = message.next_string()?;
     }
 
     // Conditions
@@ -426,14 +424,12 @@ pub fn decode_commission_report(_server_version: i32, message: &mut ResponseMess
     message.skip(); // message type
     message.skip(); // message version
 
-    let mut report = CommissionReport::default();
-
-    report.execution_id = message.next_string()?;
-    report.commission = message.next_double()?;
-    report.currency = message.next_string()?;
-    report.realized_pnl = message.next_optional_double()?;
-    report.yields = message.next_optional_double()?;
-    report.yield_redemption_date = message.next_string()?; // TODO: date as string?
-
-    Ok(report)
+    Ok(CommissionReport {
+        execution_id: message.next_string()?,
+        commission: message.next_double()?,
+        currency: message.next_string()?,
+        realized_pnl: message.next_optional_double()?,
+        yields: message.next_optional_double()?,
+        yield_redemption_date: message.next_string()?, // TODO: use date type?
+    })
 }
