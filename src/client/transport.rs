@@ -37,12 +37,16 @@ pub trait MessageBus {
 #[derive(Debug)]
 struct Outbox(Sender<ResponseMessage>);
 
+type OrdersHash = HashMap<i32, Sender<ResponseMessage>>;
+type RequestsHash = HashMap<i32, Outbox>;
+
 #[derive(Debug)]
 pub struct TcpMessageBus {
     reader: Arc<TcpStream>,
     writer: Box<TcpStream>,
     handles: Vec<JoinHandle<i32>>,
-    requests: Arc<RwLock<HashMap<i32, Outbox>>>,
+    requests: Arc<RwLock<RequestsHash>>,
+    orders: Arc<RwLock<OrdersHash>>,
     recorder: MessageRecorder,
 }
 
@@ -57,12 +61,14 @@ impl TcpMessageBus {
         let reader = Arc::new(stream.try_clone()?);
         let writer = Box::new(stream);
         let requests = Arc::new(RwLock::new(HashMap::default()));
+        let orders = Arc::new(RwLock::new(HashMap::default()));
 
         Ok(TcpMessageBus {
             reader,
             writer,
             handles: Vec::default(),
             requests,
+            orders,
             recorder: MessageRecorder::new(),
         })
     }
@@ -82,12 +88,10 @@ impl TcpMessageBus {
         Ok(())
     }
 
-    fn add_order(&mut self, request_id: i32, sender: Sender<ResponseMessage>) -> Result<()> {
-        let requests = Arc::clone(&self.requests);
-
-        match requests.write() {
+    fn add_order(&mut self, order_id: i32, sender: Sender<ResponseMessage>) -> Result<()> {
+        match self.orders.write() {
             Ok(mut hash) => {
-                hash.insert(request_id, Outbox(sender));
+                hash.insert(order_id, sender);
             }
             Err(e) => {
                 return Err(anyhow!("{}", e));
@@ -96,7 +100,6 @@ impl TcpMessageBus {
 
         Ok(())
     }
-
 }
 
 // impl read/write?
@@ -176,12 +179,13 @@ impl MessageBus for TcpMessageBus {
         let reader = Arc::clone(&self.reader);
         let requests = Arc::clone(&self.requests);
         let recorder = self.recorder.clone();
+        let orders = Arc::clone(&self.orders);
 
         let handle = thread::spawn(move || loop {
             match read_packet(&reader) {
                 Ok(message) => {
                     recorder.record_response(&message);
-                    dispatch_message(message, server_version, &requests);
+                    dispatch_message(message, server_version, &requests, &orders);
                 }
                 Err(err) => {
                     error!("error reading packet: {:?}", err);
@@ -200,7 +204,7 @@ impl MessageBus for TcpMessageBus {
     }
 }
 
-fn dispatch_message(message: ResponseMessage, server_version: i32, requests: &Arc<RwLock<HashMap<i32, Outbox>>>) {
+fn dispatch_message(message: ResponseMessage, server_version: i32, requests: &Arc<RwLock<HashMap<i32, Outbox>>>, orders: &Arc<RwLock<OrdersHash>>) {
     match message.message_type() {
         IncomingMessages::Error => {
             let request_id = message.peek_int(2).unwrap_or(-1);
@@ -213,6 +217,12 @@ fn dispatch_message(message: ResponseMessage, server_version: i32, requests: &Ar
         }
         IncomingMessages::NextValidId => process_next_valid_id(server_version, message),
         IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
+        IncomingMessages::OrderStatus
+        | IncomingMessages::OpenOrder
+        | IncomingMessages::OpenOrderEnd
+        | IncomingMessages::ExecutionData
+        | IncomingMessages::ExecutionDataEnd
+        | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders),
         _ => process_response(requests, message),
     };
 }
@@ -305,6 +315,51 @@ fn process_response(requests: &Arc<RwLock<HashMap<i32, Outbox>>>, packet: Respon
     };
 
     outbox.0.send(packet).unwrap();
+}
+
+fn process_order_notifications(message: ResponseMessage, requests: &Arc<RwLock<RequestsHash>>, orders: &Arc<RwLock<OrdersHash>>) {
+    match message.message_type() {
+        IncomingMessages::OrderStatus | IncomingMessages::OpenOrder => {
+            let order_id = message.peek_int(2).unwrap();
+            let orders_ = orders.read().unwrap();
+
+            let chan = match orders_.get(&order_id) {
+                Some(chan) => chan,
+                _ => {
+                    error!("no order found for order_id {:?} - {:?}", order_id, message);
+                    return;
+                }
+            };
+
+            chan.send(message).unwrap();
+        }
+        IncomingMessages::ExecutionData => {
+            // if let Some(channel) = get_order_channel(order_id) {
+
+            // } else if let Some(channel) = get_order_channel(request_id) {
+            // }
+
+            let order_id = message.peek_int(3).unwrap();
+            let orders_ = orders.read().unwrap();
+
+            let chan = match orders_.get(&order_id) {
+                Some(chan) => chan,
+                _ => {
+                    error!("no order found for order_id {:?} - {:?}", order_id, message);
+                    return;
+                }
+            };
+
+            chan.send(message).unwrap();
+        }
+        _ => (),
+    }
+    // IncomingMessages::OrderStatus
+    // | IncomingMessages::OpenOrder
+    // | IncomingMessages::OpenOrderEnd
+    // | IncomingMessages::ExecutionData
+    // | IncomingMessages::ExecutionDataEnd
+    // | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders),
 }
 
 #[derive(Debug)]
