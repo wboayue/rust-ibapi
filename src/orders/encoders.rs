@@ -382,3 +382,19 @@ pub fn encode_place_order(server_version: i32, order_id: i32, contract: &Contrac
 
     Ok(message)
 }
+
+fn f64_max_to_zero(num: Option<f64>) -> Option<f64> {
+    if num == Some(f64::MAX) {
+        Some(0.0)
+    } else {
+        num
+    }
+}
+
+fn message_version_for(server_version: i32) -> i32 {
+    if server_version < server_versions::NOT_HELD {
+        27
+    } else {
+        45
+    }
+}

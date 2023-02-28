@@ -2,7 +2,7 @@ use std::convert::From;
 use std::fmt::Debug;
 
 use anyhow::Result;
-use log::{debug, error, info};
+use log::info;
 
 use crate::client::transport::ResponsePacketPromise;
 use crate::client::{Client, RequestMessage, ResponseMessage};
@@ -671,7 +671,7 @@ impl Rule80A {
     }
 }
 
-enum AuctionStrategy {
+pub enum AuctionStrategy {
     Match,
     Improvement,
     Transparent,
@@ -701,16 +701,17 @@ impl From<i32> for OrderCondition {
             5 => OrderCondition::Execution,
             6 => OrderCondition::Volume,
             7 => OrderCondition::PercentChange,
-            _ => panic!("unsupport order condition: {val}"),
+            _ => panic!("OrderCondition({val}) is unsupported"),
         }
     }
 }
 
+/// Stores Soft Dollar Tier information.
 #[derive(Clone, Debug, Default)]
 pub struct SoftDollarTier {
-    name: String,
-    value: String,
-    display_name: String,
+    pub name: String,
+    pub value: String,
+    pub display_name: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -725,41 +726,47 @@ pub struct OpenOrder {
     order_state: Box<OrderState>,
 }
 
+impl Into<OrderNotification> for OpenOrder {
+    fn into(self) -> OrderNotification {
+        OrderNotification::OpenOrder(self)
+    }
+}
+
 /// Provides an active order's current state.
 #[derive(Clone, Debug, Default)]
 pub struct OrderState {
     /// The order's current status
-    status: String,
+    pub status: String,
     /// The account's current initial margin.
-    initial_margin_before: Option<f64>,
+    pub initial_margin_before: Option<f64>,
     /// The account's current maintenance margin
-    maintenance_margin_before: Option<f64>,
+    pub maintenance_margin_before: Option<f64>,
     /// The account's current equity with loan
-    equity_with_loan_before: Option<f64>,
+    pub equity_with_loan_before: Option<f64>,
     /// The change of the account's initial margin.
-    initial_margin_change: Option<f64>,
+    pub initial_margin_change: Option<f64>,
     /// The change of the account's maintenance margin
-    maintenance_margin_change: Option<f64>,
+    pub maintenance_margin_change: Option<f64>,
     /// The change of the account's equity with loan
-    equity_with_loan_change: Option<f64>,
+    pub equity_with_loan_change: Option<f64>,
     /// The order's impact on the account's initial margin.
-    initial_margin_after: Option<f64>,
+    pub initial_margin_after: Option<f64>,
     /// The order's impact on the account's maintenance margin
-    maintenance_margin_after: Option<f64>,
+    pub maintenance_margin_after: Option<f64>,
     /// Shows the impact the order would have on the account's equity with loan
-    equity_with_loan_after: Option<f64>,
+    pub equity_with_loan_after: Option<f64>,
     /// The order's generated commission.
-    commission: Option<f64>,
+    pub commission: Option<f64>,
     // The execution's minimum commission.
-    minimum_commission: Option<f64>,
+    pub minimum_commission: Option<f64>,
     /// The executions maximum commission.
-    maximum_commission: Option<f64>,
+    pub maximum_commission: Option<f64>,
     /// The generated commission currency
-    commission_currency: String,
+    pub commission_currency: String,
     /// If the order is warranted, a descriptive message will be provided.
-    warning_text: String,
-    completed_time: String,
-    completed_status: String,
+    pub warning_text: String,
+    // completed_time: String,
+    // completed_status: String,
 }
 
 /// For institutional customers only. Valid values are O (open) and C (close).
@@ -806,6 +813,12 @@ pub struct CommissionReport {
     pub yields: Option<f64>,
     /// date expressed in yyyymmdd format.
     pub yield_redemption_date: String,
+}
+
+impl Into<OrderNotification> for CommissionReport {
+    fn into(self) -> OrderNotification {
+        OrderNotification::CommissionReport(self)
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -884,6 +897,12 @@ pub struct ExecutionData {
     pub execution: Box<Execution>,
 }
 
+impl Into<OrderNotification> for ExecutionData {
+    fn into(self) -> OrderNotification {
+        OrderNotification::ExecutionData(self)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum OrderNotification {
     OrderStatus(OrderStatus),
@@ -926,6 +945,12 @@ pub struct OrderStatus {
     why_held: String,
     /// If an order has been capped, this indicates the current capped price. Requires TWS 967+ and API v973.04+. Python API specifically requires API v973.06+.
     market_cap_price: f64,
+}
+
+impl Into<OrderNotification> for OrderStatus {
+    fn into(self) -> OrderNotification {
+        OrderNotification::OrderStatus(self)
+    }
 }
 
 // https://interactivebrokers.github.io/tws-api/order_submission.html
@@ -995,48 +1020,33 @@ impl Iterator for OrderNotificationIterator {
     type Item = OrderNotification;
 
     fn next(&mut self) -> Option<Self::Item> {
+        fn convert<T: Into<OrderNotification>>(result: Result<T>) -> Option<OrderNotification> {
+            match result {
+                Ok(val) => Some(val.into()),
+                Err(err) => {
+                    info!("error: {err:?}");
+                    None
+                }
+            }
+        }
+
         if let Some(mut message) = self.messages.next() {
-            // TODO: can generalize
             match message.message_type() {
                 IncomingMessages::OpenOrder => {
                     let result = decoders::decode_open_order(self.server_version, &mut message);
-                    match result {
-                        Ok(open_order) => Some(OrderNotification::OpenOrder(open_order)),
-                        Err(err) => {
-                            info!("error: {err:?}");
-                            None
-                        }
-                    }
+                    convert(result)
                 }
                 IncomingMessages::OrderStatus => {
                     let result = decoders::decode_order_status(self.server_version, &mut message);
-                    match result {
-                        Ok(order_status) => Some(OrderNotification::OrderStatus(order_status)),
-                        Err(err) => {
-                            info!("error: {err:?}");
-                            None
-                        }
-                    }
+                    convert(result)
                 }
                 IncomingMessages::ExecutionData => {
                     let result = decoders::decode_execution_data(self.server_version, &mut message);
-                    match result {
-                        Ok(execution_data) => Some(OrderNotification::ExecutionData(execution_data)),
-                        Err(err) => {
-                            info!("error: {err:?}");
-                            None
-                        }
-                    }
+                    convert(result)
                 }
                 IncomingMessages::CommissionsReport => {
                     let result = decoders::decode_commission_report(self.server_version, &mut message);
-                    match result {
-                        Ok(report) => Some(OrderNotification::CommissionReport(report)),
-                        Err(err) => {
-                            info!("error: {err:?}");
-                            None
-                        }
-                    }
+                    convert(result)
                 }
                 message => {
                     info!("unexpected messsage: {message:?}");
@@ -1255,24 +1265,8 @@ fn verify_order_contract<C: Client>(client: &mut C, contract: &Contract, _order_
 
 //https://github.com/InteractiveBrokers/tws-api/blob/b3f6c3de83cff4e636776cea38ece09e2c1b81d1/source/csharpclient/client/IBParamsList.cs
 
-fn message_version_for(server_version: i32) -> i32 {
-    if server_version < server_versions::NOT_HELD {
-        27
-    } else {
-        45
-    }
-}
-
-fn f64_max_to_zero(num: Option<f64>) -> Option<f64> {
-    if num == Some(f64::MAX) {
-        Some(0.0)
-    } else {
-        num
-    }
-}
-
 // cancel_order
-pub fn cancel_order<C: Client + Debug>(client: &mut C, order_id: i32) -> Result<()> {
+pub fn cancel_order<C: Client + Debug>(_client: &mut C, _order_id: i32) -> Result<()> {
     Ok(())
 }
 
@@ -1296,7 +1290,7 @@ pub fn request_executions<C: Client + Debug>() {
     //    IBApi.Execution and IBApi.CommissionReport can be requested on demand via the IBApi.EClient.reqExecutions method which receives a IBApi.ExecutionFilter object as parameter to obtain only those executions matching the given criteria. An empty IBApi.ExecutionFilter object can be passed to obtain all previous executions.
 }
 
-pub fn request_market_rule<C: Client + Debug>(market_rule_id: i32) {}
+pub fn request_market_rule<C: Client + Debug>(_market_rule_id: i32) {}
 
 #[cfg(test)]
 mod tests;
