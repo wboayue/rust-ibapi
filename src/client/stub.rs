@@ -1,4 +1,4 @@
-use std::sync::mpsc;
+use crossbeam::channel::{self, Receiver, Sender};
 
 use anyhow::{anyhow, Result};
 
@@ -62,7 +62,7 @@ impl Client for ClientStub {
     fn send_request(&mut self, _request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
         self.request_messages.push(encode_message(&message));
 
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = channel::unbounded();
 
         for message in &self.response_messages {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
@@ -74,7 +74,7 @@ impl Client for ClientStub {
     fn send_order(&mut self, _order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
         self.request_messages.push(encode_message(&message));
 
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = channel::unbounded();
 
         for message in &self.response_messages {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();

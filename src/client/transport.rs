@@ -6,7 +6,6 @@ use std::io::Cursor;
 use std::iter::Iterator;
 use std::net::TcpStream;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
@@ -14,7 +13,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use crossbeam::channel;
+use crossbeam::channel::{self, Receiver, Sender};
 use log::{debug, error, info};
 use time::macros::format_description;
 use time::OffsetDateTime;
@@ -29,6 +28,7 @@ pub trait MessageBus {
 
     fn write_message(&mut self, packet: &RequestMessage) -> Result<()>;
     fn write_message_for_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
+    fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
     fn write(&mut self, packet: &str) -> Result<()>;
 
     fn process_messages(&mut self, server_version: i32) -> Result<()>;
@@ -67,7 +67,7 @@ impl TcpMessageBus {
         })
     }
 
-    fn add_sender(&mut self, request_id: i32, sender: Sender<ResponseMessage>) -> Result<()> {
+    fn add_request(&mut self, request_id: i32, sender: Sender<ResponseMessage>) -> Result<()> {
         let requests = Arc::clone(&self.requests);
 
         match requests.write() {
@@ -81,6 +81,22 @@ impl TcpMessageBus {
 
         Ok(())
     }
+
+    fn add_order(&mut self, request_id: i32, sender: Sender<ResponseMessage>) -> Result<()> {
+        let requests = Arc::clone(&self.requests);
+
+        match requests.write() {
+            Ok(mut hash) => {
+                hash.insert(request_id, Outbox(sender));
+            }
+            Err(e) => {
+                return Err(anyhow!("{}", e));
+            }
+        }
+
+        Ok(())
+    }
+
 }
 
 // impl read/write?
@@ -117,10 +133,19 @@ impl MessageBus for TcpMessageBus {
     }
 
     fn write_message_for_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise> {
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = channel::unbounded();
 
-        self.add_sender(request_id, sender)?;
+        self.add_request(request_id, sender)?;
         self.write_message(packet)?;
+
+        Ok(ResponsePacketPromise::new(receiver))
+    }
+
+    fn send_order_message(&mut self, order_id: i32, message: &RequestMessage) -> Result<ResponsePacketPromise> {
+        let (sender, receiver) = channel::unbounded();
+
+        self.add_order(order_id, sender)?;
+        self.write_message(message)?;
 
         Ok(ResponsePacketPromise::new(receiver))
     }

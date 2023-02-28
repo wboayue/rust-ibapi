@@ -726,12 +726,6 @@ pub struct OpenOrder {
     order_state: Box<OrderState>,
 }
 
-impl Into<OrderNotification> for OpenOrder {
-    fn into(self) -> OrderNotification {
-        OrderNotification::OpenOrder(self)
-    }
-}
-
 /// Provides an active order's current state.
 #[derive(Clone, Debug, Default)]
 pub struct OrderState {
@@ -815,12 +809,6 @@ pub struct CommissionReport {
     pub yield_redemption_date: String,
 }
 
-impl Into<OrderNotification> for CommissionReport {
-    fn into(self) -> OrderNotification {
-        OrderNotification::CommissionReport(self)
-    }
-}
-
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum Liquidity {
     #[default]
@@ -897,18 +885,36 @@ pub struct ExecutionData {
     pub execution: Box<Execution>,
 }
 
-impl Into<OrderNotification> for ExecutionData {
-    fn into(self) -> OrderNotification {
-        OrderNotification::ExecutionData(self)
-    }
-}
-
 #[derive(Clone, Debug)]
 pub enum OrderNotification {
     OrderStatus(OrderStatus),
     OpenOrder(OpenOrder),
     ExecutionData(ExecutionData),
     CommissionReport(CommissionReport),
+}
+
+impl From<OrderStatus> for OrderNotification {
+    fn from(val: OrderStatus) -> Self {
+        OrderNotification::OrderStatus(val)
+    }
+}
+
+impl From<OpenOrder> for OrderNotification {
+    fn from(val: OpenOrder) -> Self {
+        OrderNotification::OpenOrder(val)
+    }
+}
+
+impl From<ExecutionData> for OrderNotification {
+    fn from(val: ExecutionData) -> Self {
+        OrderNotification::ExecutionData(val)
+    }
+}
+
+impl From<CommissionReport> for OrderNotification {
+    fn from(val: CommissionReport) -> Self {
+        OrderNotification::CommissionReport(val)
+    }
 }
 
 /// Contains all relevant information on the current status of the order execution-wise (i.e. amount filled and pending, filling price, etc.).
@@ -946,14 +952,6 @@ pub struct OrderStatus {
     /// If an order has been capped, this indicates the current capped price. Requires TWS 967+ and API v973.04+. Python API specifically requires API v973.06+.
     market_cap_price: f64,
 }
-
-impl Into<OrderNotification> for OrderStatus {
-    fn into(self) -> OrderNotification {
-        OrderNotification::OrderStatus(self)
-    }
-}
-
-// https://interactivebrokers.github.io/tws-api/order_submission.html
 
 /// Submits an [Order].
 ///
@@ -1010,6 +1008,8 @@ pub fn place_order<C: Client + Debug>(client: &mut C, order_id: i32, contract: &
     })
 }
 
+// https://interactivebrokers.github.io/tws-api/order_submission.html
+
 /// Supports iteration over [OrderNotification]
 pub struct OrderNotificationIterator {
     server_version: i32,
@@ -1019,6 +1019,7 @@ pub struct OrderNotificationIterator {
 impl Iterator for OrderNotificationIterator {
     type Item = OrderNotification;
 
+    /// Returns the next [OrderNotification]. Waits up to x seconds for next [OrderNotification].
     fn next(&mut self) -> Option<Self::Item> {
         fn convert<T: Into<OrderNotification>>(result: Result<T>) -> Option<OrderNotification> {
             match result {
@@ -1059,6 +1060,7 @@ impl Iterator for OrderNotificationIterator {
     }
 }
 
+// Verifies that Order is properly formed.
 fn verify_order<C: Client>(client: &mut C, order: &Order, _order_id: i32) -> Result<()> {
     let is_bag_order: bool = false; // StringsAreEqual(Constants.BagSecType, contract.SecType)
 
@@ -1228,6 +1230,7 @@ fn verify_order<C: Client>(client: &mut C, order: &Order, _order_id: i32) -> Res
     Ok(())
 }
 
+// Verifies that Contract is properly formed.
 fn verify_order_contract<C: Client>(client: &mut C, contract: &Contract, _order_id: i32) -> Result<()> {
     if contract
         .combo_legs

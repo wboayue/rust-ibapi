@@ -243,8 +243,8 @@ impl Client for IBClient {
     }
 
     fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
-        debug!("send_message({:?}, {:?})", order_id, message);
-        self.message_bus.write_message_for_request(order_id, &message)
+        debug!("send_order({:?}, {:?})", order_id, message);
+        self.message_bus.send_order_message(order_id, &message)
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
