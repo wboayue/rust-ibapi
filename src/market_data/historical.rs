@@ -103,7 +103,7 @@ pub fn histogram_data<C: Client + Debug>(client: &C, contract: &Contract, use_rt
     // " S (seconds) - " D (days)
     // " W (weeks) - " M (months)
     // " Y (years)
-    print!("{:?} {:?} {:?} {:?}", client, contract, use_rth, period);
+    print!("{client:?} {contract:?} {use_rth:?} {period:?}");
     Err(anyhow!("not implemented!"))
 }
 

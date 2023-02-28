@@ -219,12 +219,12 @@ fn dispatch_message(message: ResponseMessage, server_version: i32, requests: &Ar
         }
         IncomingMessages::NextValidId => process_next_valid_id(server_version, message),
         IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
-        IncomingMessages::OrderStatus
-        | IncomingMessages::OpenOrder
-        | IncomingMessages::OpenOrderEnd
-        | IncomingMessages::ExecutionData
-        | IncomingMessages::ExecutionDataEnd
-        | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders),
+        // IncomingMessages::OrderStatus
+        // | IncomingMessages::OpenOrder
+        // | IncomingMessages::OpenOrderEnd
+        // | IncomingMessages::ExecutionData
+        // | IncomingMessages::ExecutionDataEnd
+        // | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders),
         _ => process_response(requests, message),
     };
 }
@@ -319,46 +319,24 @@ fn process_response(requests: &Arc<RwLock<HashMap<i32, Outbox>>>, packet: Respon
     outbox.0.send(packet).unwrap();
 }
 
-fn process_order_notifications(message: ResponseMessage, requests: &Arc<RwLock<RequestsHash>>, orders: &Arc<RwLock<OrdersHash>>) {
+fn process_order_notifications(message: ResponseMessage, requests: &Arc<SenderHash<ResponseMessage>>, orders: &Arc<SenderHash<ResponseMessage>>) {
     match message.message_type() {
         IncomingMessages::OrderStatus | IncomingMessages::OpenOrder => {
             let order_id = message.peek_int(2).unwrap();
-            let orders_ = orders.read().unwrap();
-
-            let chan = match orders_.get(&order_id) {
-                Some(chan) => chan,
-                _ => {
-                    error!("no order found for order_id {:?} - {:?}", order_id, message);
-                    return;
-                }
-            };
-
-            chan.send(message).unwrap();
+            if let Err(e) = orders.send(order_id, message) {
+                error!("error routing message for order_id({order_id})");
+            }
         }
         IncomingMessages::ExecutionData => {
             let order_id = message.peek_int(3).unwrap();
-            let orders_ = orders.read().unwrap();
+            if let Err(e) = orders.send(order_id, message.clone()) {
+                error!("error routing message for order_id({order_id})");
 
-            let chan = match orders_.get(&order_id) {
-                Some(chan) => chan,
-                _ => {
-                    let request_id = message.peek_int(2).unwrap();
-                    let requests_ = requests.read().unwrap();
-
-                    let chan = match requests_.get(&request_id) {
-                        Some(chan) => chan,
-                        _ => {
-                            error!("no order found for order_id {:?} - {:?}", request_id, message);
-                            return;
-                        }
-                    };
-
-                    chan.0.send(message).unwrap();
-                    return;
+                let request_id = message.peek_int(2).unwrap();
+                if let Err(e) = requests.send(order_id, message) {
+                    error!("error routing message for order_id({request_id})");
                 }
-            };
-
-            chan.send(message).unwrap();
+            }
         }
         _ => (),
     }
@@ -370,16 +348,29 @@ fn process_order_notifications(message: ResponseMessage, requests: &Arc<RwLock<R
     // | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders),
 }
 
-// struct SenderHash<T> {
-//     container: RwLock<HashMap<i32, Sender<T>>>
-// }
+struct SenderHash<T> {
+    container: RwLock<HashMap<i32, Sender<T>>>,
+}
 
-// impl <T>SenderHash<T> {
-//     pub fn get(&self, id: i32) -> Option<&Sender<T>> {
-//         let hash = self.container.read().unwrap();
-//         hash.get(&id)
-//     }
-// }
+impl<T> SenderHash<T> {
+    pub fn send(&self, id: i32, msg: T) -> Result<()> {
+        let hash = self.container.read().unwrap();
+        let chan = hash.get(&id).unwrap();
+        chan.send(msg).unwrap();
+        Ok(())
+    }
+    pub fn put(&self, id: i32, msg: Sender<T>) -> Result<()> {
+        let mut hash = self.container.write().unwrap();
+        let chan = hash.get(&id).unwrap();
+        hash.insert(id, msg).unwrap();
+        Ok(())
+    }
+    pub fn remove(&self, id: i32) -> Result<()> {
+        let mut hash = self.container.write().unwrap();
+        hash.remove(&id).unwrap();
+        Ok(())
+    }
+}
 
 // type OrdersHash = HashMap<i32, Sender<ResponseMessage>>;
 // type RequestsHash = HashMap<i32, Outbox>;
@@ -409,7 +400,7 @@ impl ResponsePacketPromise {
     }
 
     pub fn signal(&self, id: i32) {
-        // self.signals.send(id).unwrap()
+        self.signals.send(id);
     }
 }
 

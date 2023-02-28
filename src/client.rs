@@ -305,7 +305,7 @@ pub trait ToField {
     fn to_field(&self) -> String;
 }
 
-#[derive(Default, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct ResponseMessage {
     pub i: usize,
     pub fields: Vec<String>,
