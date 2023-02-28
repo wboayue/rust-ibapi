@@ -24,7 +24,6 @@ use crate::server_versions;
 
 pub trait MessageBus {
     fn read_message(&mut self) -> Result<ResponseMessage>;
-    fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponseMessage>;
 
     fn write_message(&mut self, packet: &RequestMessage) -> Result<()>;
     fn write_message_for_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
@@ -37,16 +36,13 @@ pub trait MessageBus {
 #[derive(Debug)]
 struct Outbox(Sender<ResponseMessage>);
 
-type OrdersHash = HashMap<i32, Sender<ResponseMessage>>;
-type RequestsHash = HashMap<i32, Outbox>;
-
 #[derive(Debug)]
 pub struct TcpMessageBus {
     reader: Arc<TcpStream>,
     writer: Box<TcpStream>,
     handles: Vec<JoinHandle<i32>>,
-    requests: Arc<RwLock<RequestsHash>>,
-    orders: Arc<RwLock<OrdersHash>>,
+    requests: Arc<SenderHash<ResponseMessage>>,
+    orders: Arc<SenderHash<ResponseMessage>>,
     recorder: MessageRecorder,
 }
 
@@ -60,8 +56,8 @@ impl TcpMessageBus {
 
         let reader = Arc::new(stream.try_clone()?);
         let writer = Box::new(stream);
-        let requests = Arc::new(RwLock::new(HashMap::default()));
-        let orders = Arc::new(RwLock::new(HashMap::default()));
+        let requests = Arc::new(SenderHash::new());
+        let orders = Arc::new(SenderHash::new());
 
         Ok(TcpMessageBus {
             reader,
@@ -74,30 +70,14 @@ impl TcpMessageBus {
     }
 
     fn add_request(&mut self, request_id: i32, sender: Sender<ResponseMessage>) -> Result<()> {
-        let requests = Arc::clone(&self.requests);
+        println!("self.requests: {:?}", self.requests);
 
-        match requests.write() {
-            Ok(mut hash) => {
-                hash.insert(request_id, Outbox(sender));
-            }
-            Err(e) => {
-                return Err(anyhow!("{}", e));
-            }
-        }
-
+        self.requests.insert(request_id, sender)?;
         Ok(())
     }
 
     fn add_order(&mut self, order_id: i32, sender: Sender<ResponseMessage>) -> Result<()> {
-        match self.orders.write() {
-            Ok(mut hash) => {
-                hash.insert(order_id, sender);
-            }
-            Err(e) => {
-                return Err(anyhow!("{}", e));
-            }
-        }
-
+        self.orders.insert(order_id, sender)?;
         Ok(())
     }
 }
@@ -109,30 +89,6 @@ const UNSPECIFIED_REQUEST_ID: i32 = -1;
 impl MessageBus for TcpMessageBus {
     fn read_message(&mut self) -> Result<ResponseMessage> {
         read_packet(&self.reader)
-    }
-
-    fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponseMessage> {
-        debug!("read message for request_id {:?}", request_id);
-
-        let requests = Arc::clone(&self.requests);
-
-        let collection = requests.read().unwrap();
-        let _request = match collection.get(&request_id) {
-            Some(request) => request,
-            _ => {
-                return Err(anyhow!("no request found for request_id {:?}", request_id));
-            }
-        };
-
-        // debug!("found request {:?}", request);
-        // // FIXME still conviluted
-        // let data = request.rx.recv()?;
-
-        // let mut mut_collection = requests.write().unwrap();
-        // mut_collection.remove(&request_id);
-
-        // Ok(request.rx.recv()?)
-        Err(anyhow!("no way"))
     }
 
     fn write_message_for_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise> {
@@ -206,7 +162,7 @@ impl MessageBus for TcpMessageBus {
     }
 }
 
-fn dispatch_message(message: ResponseMessage, server_version: i32, requests: &Arc<RwLock<HashMap<i32, Outbox>>>, orders: &Arc<RwLock<OrdersHash>>) {
+fn dispatch_message(message: ResponseMessage, server_version: i32, requests: &Arc<SenderHash<ResponseMessage>>, orders: &Arc<SenderHash<ResponseMessage>>) {
     match message.message_type() {
         IncomingMessages::Error => {
             let request_id = message.peek_int(2).unwrap_or(-1);
@@ -219,12 +175,12 @@ fn dispatch_message(message: ResponseMessage, server_version: i32, requests: &Ar
         }
         IncomingMessages::NextValidId => process_next_valid_id(server_version, message),
         IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
-        // IncomingMessages::OrderStatus
-        // | IncomingMessages::OpenOrder
-        // | IncomingMessages::OpenOrderEnd
-        // | IncomingMessages::ExecutionData
-        // | IncomingMessages::ExecutionDataEnd
-        // | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders),
+        IncomingMessages::OrderStatus
+        | IncomingMessages::OpenOrder
+        | IncomingMessages::OpenOrderEnd
+        | IncomingMessages::ExecutionData
+        | IncomingMessages::ExecutionDataEnd
+        | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders),
         _ => process_response(requests, message),
     };
 }
@@ -304,19 +260,10 @@ fn process_managed_accounts(_server_version: i32, mut packet: ResponseMessage) {
     info!("managed accounts: {}", managed_accounts)
 }
 
-fn process_response(requests: &Arc<RwLock<HashMap<i32, Outbox>>>, packet: ResponseMessage) {
-    let collection = requests.read().unwrap();
+fn process_response(requests: &Arc<SenderHash<ResponseMessage>>, message: ResponseMessage) {
+    let request_id = message.request_id().unwrap_or(-1);
+    requests.send(request_id, message).unwrap();
 
-    let request_id = packet.request_id().unwrap_or(-1);
-    let outbox = match collection.get(&request_id) {
-        Some(outbox) => outbox,
-        _ => {
-            debug!("no request found for request_id {:?} - {:?}", request_id, packet);
-            return;
-        }
-    };
-
-    outbox.0.send(packet).unwrap();
 }
 
 fn process_order_notifications(message: ResponseMessage, requests: &Arc<SenderHash<ResponseMessage>>, orders: &Arc<SenderHash<ResponseMessage>>) {
@@ -324,61 +271,56 @@ fn process_order_notifications(message: ResponseMessage, requests: &Arc<SenderHa
         IncomingMessages::OrderStatus | IncomingMessages::OpenOrder => {
             let order_id = message.peek_int(2).unwrap();
             if let Err(e) = orders.send(order_id, message) {
-                error!("error routing message for order_id({order_id})");
+                error!("error routing message for order_id({order_id}): {e:?}");
             }
         }
         IncomingMessages::ExecutionData => {
             let order_id = message.peek_int(3).unwrap();
             if let Err(e) = orders.send(order_id, message.clone()) {
-                error!("error routing message for order_id({order_id})");
+                error!("error routing message for order_id({order_id}): {e:?}");
 
                 let request_id = message.peek_int(2).unwrap();
                 if let Err(e) = requests.send(order_id, message) {
-                    error!("error routing message for order_id({request_id})");
+                    error!("error routing message for order_id({request_id}): {e:?}");
                 }
             }
         }
         _ => (),
     }
-    // IncomingMessages::OrderStatus
-    // | IncomingMessages::OpenOrder
     // | IncomingMessages::OpenOrderEnd
-    // | IncomingMessages::ExecutionData
     // | IncomingMessages::ExecutionDataEnd
     // | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders),
 }
 
+
+#[derive(Debug)]
 struct SenderHash<T> {
-    container: RwLock<HashMap<i32, Sender<T>>>,
+    data: RwLock<HashMap<i32, Sender<T>>>,
 }
 
 impl<T> SenderHash<T> {
+    pub fn new() -> Self {
+        Self { data: RwLock::new(HashMap::<i32, Sender<T>>::new()) }
+    }
+
     pub fn send(&self, id: i32, msg: T) -> Result<()> {
-        let hash = self.container.read().unwrap();
+        let hash = self.data.read().unwrap();
         let chan = hash.get(&id).unwrap();
         chan.send(msg).unwrap();
         Ok(())
     }
-    pub fn put(&self, id: i32, msg: Sender<T>) -> Result<()> {
-        let mut hash = self.container.write().unwrap();
-        let chan = hash.get(&id).unwrap();
-        hash.insert(id, msg).unwrap();
+    pub fn insert(&self, id: i32, msg: Sender<T>) -> Result<()> {
+        println!("container: {:?}", self.data);
+        let mut guard = self.data.write().unwrap();
+        guard.insert(id, msg).unwrap();
         Ok(())
     }
     pub fn remove(&self, id: i32) -> Result<()> {
-        let mut hash = self.container.write().unwrap();
+        let mut hash = self.data.write().unwrap();
         hash.remove(&id).unwrap();
         Ok(())
     }
 }
-
-// type OrdersHash = HashMap<i32, Sender<ResponseMessage>>;
-// type RequestsHash = HashMap<i32, Outbox>;
-
-// fn orders_channel<'a>(order_id: i32, orders: &'a Arc<RwLock<OrdersHash>>) -> Option<&'a Sender<ResponseMessage>> {
-//     let hash = orders.read().unwrap();
-//     hash.
-// }
 
 #[derive(Debug)]
 pub struct ResponsePacketPromise {
