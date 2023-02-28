@@ -362,6 +362,10 @@ fn process_order_notifications(message: ResponseMessage, requests: &Arc<RwLock<R
     // | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders),
 }
 
+fn orders_channel(order_id: i32, orders: &Arc<RwLock<OrdersHash>>) -> Option<Sender<ResponseMessage>> {
+    None
+}
+
 #[derive(Debug)]
 pub struct ResponsePacketPromise {
     receiver: Receiver<ResponseMessage>,
