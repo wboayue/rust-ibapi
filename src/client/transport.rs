@@ -137,20 +137,22 @@ impl MessageBus for TcpMessageBus {
 
     fn write_message_for_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise> {
         let (sender, receiver) = channel::unbounded();
+        let (signals_out, signals_in) = channel::unbounded();
 
         self.add_request(request_id, sender)?;
         self.write_message(packet)?;
 
-        Ok(ResponsePacketPromise::new(receiver))
+        Ok(ResponsePacketPromise::new(receiver, signals_out))
     }
 
     fn send_order_message(&mut self, order_id: i32, message: &RequestMessage) -> Result<ResponsePacketPromise> {
         let (sender, receiver) = channel::unbounded();
+        let (signals_out, signals_in) = channel::unbounded();
 
         self.add_order(order_id, sender)?;
         self.write_message(message)?;
 
-        Ok(ResponsePacketPromise::new(receiver))
+        Ok(ResponsePacketPromise::new(receiver, signals_out))
     }
 
     fn write_message(&mut self, message: &RequestMessage) -> Result<()> {
@@ -334,18 +336,24 @@ fn process_order_notifications(message: ResponseMessage, requests: &Arc<RwLock<R
             chan.send(message).unwrap();
         }
         IncomingMessages::ExecutionData => {
-            // if let Some(channel) = get_order_channel(order_id) {
-
-            // } else if let Some(channel) = get_order_channel(request_id) {
-            // }
-
             let order_id = message.peek_int(3).unwrap();
             let orders_ = orders.read().unwrap();
 
             let chan = match orders_.get(&order_id) {
                 Some(chan) => chan,
                 _ => {
-                    error!("no order found for order_id {:?} - {:?}", order_id, message);
+                    let request_id = message.peek_int(2).unwrap();
+                    let requests_ = requests.read().unwrap();
+
+                    let chan = match requests_.get(&request_id) {
+                        Some(chan) => chan,
+                        _ => {
+                            error!("no order found for order_id {:?} - {:?}", request_id, message);
+                            return;
+                        }
+                    };
+
+                    chan.0.send(message).unwrap();
                     return;
                 }
             };
@@ -362,42 +370,53 @@ fn process_order_notifications(message: ResponseMessage, requests: &Arc<RwLock<R
     // | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders),
 }
 
-fn orders_channel(order_id: i32, orders: &Arc<RwLock<OrdersHash>>) -> Option<Sender<ResponseMessage>> {
-    None
-}
+// struct SenderHash<T> {
+//     container: RwLock<HashMap<i32, Sender<T>>>
+// }
 
-#[derive(Debug)]
-pub struct ResponsePacketPromise {
-    receiver: Receiver<ResponseMessage>,
-}
-
-impl ResponsePacketPromise {
-    pub fn new(receiver: Receiver<ResponseMessage>) -> ResponsePacketPromise {
-        ResponsePacketPromise { receiver }
-    }
-
-    pub fn message(&self) -> Result<ResponseMessage> {
-        // Duration::from_millis(100)
-
-        Ok(self.receiver.recv_timeout(Duration::from_millis(20000))?)
-        // return Err(anyhow!("no message"));
-    }
-}
-
-// impl IntoIterator for ResponsePacketPromise {
-//     type Item = ResponsePacket;
-//     type IntoIter = ResponsePacketIterator;
-//     fn into_iter(self) -> Self::IntoIter {
-//         todo!()
+// impl <T>SenderHash<T> {
+//     pub fn get(&self, id: i32) -> Option<&Sender<T>> {
+//         let hash = self.container.read().unwrap();
+//         hash.get(&id)
 //     }
 // }
 
-pub struct ResponsePacketIterator {}
+// type OrdersHash = HashMap<i32, Sender<ResponseMessage>>;
+// type RequestsHash = HashMap<i32, Outbox>;
+
+// fn orders_channel<'a>(order_id: i32, orders: &'a Arc<RwLock<OrdersHash>>) -> Option<&'a Sender<ResponseMessage>> {
+//     let hash = orders.read().unwrap();
+//     hash.
+// }
+
+#[derive(Debug)]
+pub struct ResponsePacketPromise {
+    messages: Receiver<ResponseMessage>, // for client to receive incoming messages
+    signals: Sender<i32>,                // for client to signal termination
+}
+
+impl ResponsePacketPromise {
+    pub fn new(messages: Receiver<ResponseMessage>, signals: Sender<i32>) -> ResponsePacketPromise {
+        ResponsePacketPromise { messages, signals }
+    }
+
+    #[deprecated]
+    pub fn message(&self) -> Result<ResponseMessage> {
+        // Duration::from_millis(100)
+
+        Ok(self.messages.recv_timeout(Duration::from_secs(20))?)
+        // return Err(anyhow!("no message"));
+    }
+
+    pub fn signal(&self, id: i32) {
+        // self.signals.send(id).unwrap()
+    }
+}
 
 impl Iterator for ResponsePacketPromise {
     type Item = ResponseMessage;
     fn next(&mut self) -> Option<Self::Item> {
-        match self.receiver.recv_timeout(Duration::from_millis(10000)) {
+        match self.messages.recv_timeout(Duration::from_secs(10)) {
             Err(e) => {
                 error!("error receiving packet: {:?}", e);
                 None

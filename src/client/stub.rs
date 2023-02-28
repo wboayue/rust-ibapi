@@ -63,24 +63,26 @@ impl Client for ClientStub {
         self.request_messages.push(encode_message(&message));
 
         let (sender, receiver) = channel::unbounded();
+        let (s1, r1) = channel::unbounded();
 
         for message in &self.response_messages {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(ResponsePacketPromise::new(receiver))
+        Ok(ResponsePacketPromise::new(receiver, s1))
     }
 
     fn send_order(&mut self, _order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
         self.request_messages.push(encode_message(&message));
 
         let (sender, receiver) = channel::unbounded();
+        let (s1, r1) = channel::unbounded();
 
         for message in &self.response_messages {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(ResponsePacketPromise::new(receiver))
+        Ok(ResponsePacketPromise::new(receiver, s1))
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
