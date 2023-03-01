@@ -383,7 +383,7 @@ pub fn encode_place_order(server_version: i32, order_id: i32, contract: &Contrac
     Ok(message)
 }
 
-pub fn encode_cancel_order(server_version: i32, order_id: i32, manual_order_cancel_time: &str) -> Result<RequestMessage> {    
+pub fn encode_cancel_order(server_version: i32, order_id: i32, manual_order_cancel_time: &str) -> Result<RequestMessage> {
     let mut message = RequestMessage::default();
     const VERSION: i32 = 1;
 

@@ -360,9 +360,9 @@ impl ResponsePacketPromise {
 impl Iterator for ResponsePacketPromise {
     type Item = ResponseMessage;
     fn next(&mut self) -> Option<Self::Item> {
-        match self.messages.recv_timeout(Duration::from_secs(10)) {
-            Err(e) => {
-                error!("error receiving packet: {:?}", e);
+        match self.messages.recv_timeout(Duration::from_secs(1)) {
+            Err(err) => {
+                info!("timeout receiving packet: {err}");
                 None
             }
             Ok(message) => Some(message),

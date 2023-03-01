@@ -1,5 +1,5 @@
 use std::convert::From;
-use std::fmt::Debug;
+use std::fmt::{self, Debug, Display};
 
 use anyhow::Result;
 use log::{error, info};
@@ -954,6 +954,15 @@ pub struct OrderStatus {
     market_cap_price: f64,
 }
 
+#[derive(Debug)]
+pub struct Notice(String);
+
+impl fmt::Display for Notice {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Submits an [Order].
 ///
 /// Submits an [Order] using [Client] for the given [Contract].
@@ -1300,27 +1309,72 @@ fn verify_order_contract<C: Client>(client: &mut C, contract: &Contract, _order_
 ///     let mut client = IBClient::connect("localhost:4002")?;
 ///
 ///     let order_id = 15;
-///     orders::cancel_order(&mut client, order_id, "")?;
-///
+///     let results = orders::cancel_order(&mut client, order_id, "")?;
+///     for result in results {
+///        println!("{result:?}");
+///     }
+/// 
 ///     Ok(())
 /// }
 /// ```
-pub fn cancel_order<C: Client + Debug>(client: &mut C, order_id: i32, manual_order_cancel_time: &str) -> Result<()> {
+pub fn cancel_order<C: Client + Debug>(client: &mut C, order_id: i32, manual_order_cancel_time: &str) -> Result<CancelOrderResultIterator> {
     if !manual_order_cancel_time.is_empty() {
-        client.check_server_version(server_versions::MANUAL_ORDER_TIME, "It does not support manual order cancel time attribute")?
+        client.check_server_version(
+            server_versions::MANUAL_ORDER_TIME,
+            "It does not support manual order cancel time attribute",
+        )?
     }
 
     let message = encoders::encode_cancel_order(client.server_version(), order_id, manual_order_cancel_time)?;
 
     let messages = client.send_order(order_id, message)?;
 
-    // Ok(OrderNotificationIterator {
-    //     messages,
-    //     order_id,
-    //     server_version: client.server_version(),
-    // })
+    Ok(CancelOrderResultIterator{
+        messages,
+        server_version: client.server_version(),
+    })
+}
 
-    Ok(())
+/// Enumerates possible results from cancelling an order.
+#[derive(Debug)]
+pub enum CancelOrderResult {
+    OrderStatus(OrderStatus),
+    Notice(Notice),
+}
+
+/// Supports iteration over [CancelOrderResult]
+pub struct CancelOrderResultIterator {
+    server_version: i32,
+    messages: ResponsePacketPromise,
+}
+
+impl Iterator for CancelOrderResultIterator {
+    type Item = CancelOrderResult;
+
+    /// Returns the next [CancelOrderResult]. Waits up to x seconds for next [CancelOrderResult].
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(mut message) = self.messages.next() {
+                match message.message_type() {
+                    IncomingMessages::OrderStatus => match decoders::decode_order_status(self.server_version, &mut message) {
+                        Ok(val) => return Some(CancelOrderResult::OrderStatus(val)),
+                        Err(err) => {
+                            error!("error decoding order status: {err}");
+                        }
+                    },
+                    IncomingMessages::Error => {
+                        let message = message.peek_string(4);
+                        return Some(CancelOrderResult::Notice(Notice(message)));
+                    }
+                    message => {
+                        error!("unexpected messsage: {message:?}");
+                    }
+                }
+            } else {
+                return None;
+            }
+        }
+    }
 }
 
 pub fn request_global_cancel<C: Client + Debug>() {}
