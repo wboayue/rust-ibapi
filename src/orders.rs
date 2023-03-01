@@ -989,6 +989,7 @@ pub struct OrderStatus {
 ///             OrderNotification::OpenOrder(open_order) => println!("open order: {open_order:?}"),
 ///             OrderNotification::ExecutionData(execution) => println!("execution: {execution:?}"),
 ///             OrderNotification::CommissionReport(report) => println!("commision report: {report:?}"),
+///             OrderNotification::Message(message) => println!("message: {message:?}"),
 ///        }
 ///     }
 ///
