@@ -6,7 +6,6 @@ use std::io::Cursor;
 use std::iter::Iterator;
 use std::net::TcpStream;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
@@ -14,6 +13,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use crossbeam::channel::{self, Receiver, Sender};
 use log::{debug, error, info};
 use time::macros::format_description;
 use time::OffsetDateTime;
@@ -23,30 +23,25 @@ use crate::messages::IncomingMessages;
 use crate::server_versions;
 
 pub trait MessageBus {
-    fn read_packet(&mut self) -> Result<ResponseMessage>;
-    fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponseMessage>;
+    fn read_message(&mut self) -> Result<ResponseMessage>;
 
     fn write_message(&mut self, packet: &RequestMessage) -> Result<()>;
     fn write_message_for_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
+    fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
     fn write(&mut self, packet: &str) -> Result<()>;
 
     fn process_messages(&mut self, server_version: i32) -> Result<()>;
 }
 
 #[derive(Debug)]
-struct Outbox(Sender<ResponseMessage>);
-
-#[derive(Debug)]
 pub struct TcpMessageBus {
     reader: Arc<TcpStream>,
     writer: Box<TcpStream>,
     handles: Vec<JoinHandle<i32>>,
-    requests: Arc<RwLock<HashMap<i32, Outbox>>>,
+    requests: Arc<SenderHash<ResponseMessage>>,
+    orders: Arc<SenderHash<ResponseMessage>>,
     recorder: MessageRecorder,
 }
-
-unsafe impl Send for Outbox {}
-unsafe impl Sync for Outbox {}
 
 impl TcpMessageBus {
     // establishes TCP connection to server
@@ -55,29 +50,26 @@ impl TcpMessageBus {
 
         let reader = Arc::new(stream.try_clone()?);
         let writer = Box::new(stream);
-        let requests = Arc::new(RwLock::new(HashMap::default()));
+        let requests = Arc::new(SenderHash::new());
+        let orders = Arc::new(SenderHash::new());
 
         Ok(TcpMessageBus {
             reader,
             writer,
             handles: Vec::default(),
             requests,
+            orders,
             recorder: MessageRecorder::new(),
         })
     }
 
-    fn add_sender(&mut self, request_id: i32, sender: Sender<ResponseMessage>) -> Result<()> {
-        let requests = Arc::clone(&self.requests);
+    fn add_request(&mut self, request_id: i32, sender: Sender<ResponseMessage>) -> Result<()> {
+        self.requests.insert(request_id, sender);
+        Ok(())
+    }
 
-        match requests.write() {
-            Ok(mut hash) => {
-                hash.insert(request_id, Outbox(sender));
-            }
-            Err(e) => {
-                return Err(anyhow!("{}", e));
-            }
-        }
-
+    fn add_order(&mut self, order_id: i32, sender: Sender<ResponseMessage>) -> Result<()> {
+        self.orders.insert(order_id, sender);
         Ok(())
     }
 }
@@ -87,41 +79,28 @@ impl TcpMessageBus {
 const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 impl MessageBus for TcpMessageBus {
-    fn read_packet(&mut self) -> Result<ResponseMessage> {
+    fn read_message(&mut self) -> Result<ResponseMessage> {
         read_packet(&self.reader)
     }
 
-    fn read_packet_for_request(&mut self, request_id: i32) -> Result<ResponseMessage> {
-        debug!("read message for request_id {:?}", request_id);
-
-        let requests = Arc::clone(&self.requests);
-
-        let collection = requests.read().unwrap();
-        let _request = match collection.get(&request_id) {
-            Some(request) => request,
-            _ => {
-                return Err(anyhow!("no request found for request_id {:?}", request_id));
-            }
-        };
-
-        // debug!("found request {:?}", request);
-        // // FIXME still conviluted
-        // let data = request.rx.recv()?;
-
-        // let mut mut_collection = requests.write().unwrap();
-        // mut_collection.remove(&request_id);
-
-        // Ok(request.rx.recv()?)
-        Err(anyhow!("no way"))
-    }
-
     fn write_message_for_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise> {
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = channel::unbounded();
+        let (signals_out, signals_in) = channel::unbounded();
 
-        self.add_sender(request_id, sender)?;
+        self.add_request(request_id, sender)?;
         self.write_message(packet)?;
 
-        Ok(ResponsePacketPromise::new(receiver))
+        Ok(ResponsePacketPromise::new(receiver, signals_out))
+    }
+
+    fn send_order_message(&mut self, order_id: i32, message: &RequestMessage) -> Result<ResponsePacketPromise> {
+        let (sender, receiver) = channel::unbounded();
+        let (signals_out, signals_in) = channel::unbounded();
+
+        self.add_order(order_id, sender)?;
+        self.write_message(message)?;
+
+        Ok(ResponsePacketPromise::new(receiver, signals_out))
     }
 
     fn write_message(&mut self, message: &RequestMessage) -> Result<()> {
@@ -150,12 +129,13 @@ impl MessageBus for TcpMessageBus {
         let reader = Arc::clone(&self.reader);
         let requests = Arc::clone(&self.requests);
         let recorder = self.recorder.clone();
+        let orders = Arc::clone(&self.orders);
 
         let handle = thread::spawn(move || loop {
             match read_packet(&reader) {
                 Ok(message) => {
                     recorder.record_response(&message);
-                    dispatch_message(message, server_version, &requests);
+                    dispatch_message(message, server_version, &requests, &orders);
                 }
                 Err(err) => {
                     error!("error reading packet: {:?}", err);
@@ -174,7 +154,12 @@ impl MessageBus for TcpMessageBus {
     }
 }
 
-fn dispatch_message(message: ResponseMessage, server_version: i32, requests: &Arc<RwLock<HashMap<i32, Outbox>>>) {
+fn dispatch_message(
+    message: ResponseMessage,
+    server_version: i32,
+    requests: &Arc<SenderHash<ResponseMessage>>,
+    orders: &Arc<SenderHash<ResponseMessage>>,
+) {
     match message.message_type() {
         IncomingMessages::Error => {
             let request_id = message.peek_int(2).unwrap_or(-1);
@@ -182,18 +167,24 @@ fn dispatch_message(message: ResponseMessage, server_version: i32, requests: &Ar
             if request_id == UNSPECIFIED_REQUEST_ID {
                 error_event(server_version, message).unwrap();
             } else {
-                process_response(requests, message);
+                process_response(requests, orders, message);
             }
         }
         IncomingMessages::NextValidId => process_next_valid_id(server_version, message),
         IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
-        _ => process_response(requests, message),
+        IncomingMessages::OrderStatus
+        | IncomingMessages::OpenOrder
+        | IncomingMessages::OpenOrderEnd
+        | IncomingMessages::ExecutionData
+        | IncomingMessages::ExecutionDataEnd
+        | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders),
+        _ => process_response(requests, orders, message),
     };
 }
 
 fn read_packet(mut reader: &TcpStream) -> Result<ResponseMessage> {
     let message_size = read_header(reader)?;
-    debug!("message size: {message_size:?}");
+    debug!("message size: {message_size}");
     let mut data = vec![0_u8; message_size];
 
     reader.read_exact(&mut data)?;
@@ -266,53 +257,110 @@ fn process_managed_accounts(_server_version: i32, mut packet: ResponseMessage) {
     info!("managed accounts: {}", managed_accounts)
 }
 
-fn process_response(requests: &Arc<RwLock<HashMap<i32, Outbox>>>, packet: ResponseMessage) {
-    let collection = requests.read().unwrap();
+fn process_response(requests: &Arc<SenderHash<ResponseMessage>>, orders: &Arc<SenderHash<ResponseMessage>>, message: ResponseMessage) {
+    let request_id = message.request_id().unwrap_or(-1); // pass in request id?
+    if requests.contains(request_id) {
+        requests.send(request_id, message).unwrap();
+    } else if orders.contains(request_id) {
+        orders.send(request_id, message).unwrap();
+    }
+}
 
-    let request_id = packet.request_id().unwrap_or(-1);
-    let outbox = match collection.get(&request_id) {
-        Some(outbox) => outbox,
-        _ => {
-            debug!("no request found for request_id {:?} - {:?}", request_id, packet);
-            return;
+fn process_order_notifications(message: ResponseMessage, requests: &Arc<SenderHash<ResponseMessage>>, orders: &Arc<SenderHash<ResponseMessage>>) {
+    match message.message_type() {
+        IncomingMessages::OrderStatus | IncomingMessages::OpenOrder | IncomingMessages::ExecutionData => {
+            if let Some(order_id) = message.order_id() {
+                if let Err(e) = orders.send(order_id, message) {
+                    error!("error routing message for order_id({order_id}): {e}");
+                }
+                return;
+            }
+
+            if let Some(request_id) = message.request_id() {
+                if let Err(e) = requests.send(request_id, message) {
+                    error!("error routing message for request_id({request_id}): {e}");
+                }
+                return;
+            }
+
+            error!("message has no order_id: {message:?}");
         }
-    };
+        _ => (),
+    }
+    // | IncomingMessages::OpenOrderEnd
+    // | IncomingMessages::ExecutionDataEnd
+    // | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders),
+}
 
-    outbox.0.send(packet).unwrap();
+#[derive(Debug)]
+struct SenderHash<T> {
+    data: RwLock<HashMap<i32, Sender<T>>>,
+}
+
+impl<T: std::fmt::Debug> SenderHash<T> {
+    pub fn new() -> Self {
+        Self {
+            data: RwLock::new(HashMap::new()),
+        }
+    }
+
+    pub fn send(&self, id: i32, message: T) -> Result<()> {
+        let senders = self.data.read().unwrap();
+        debug!("senders: {senders:?}");
+        if let Some(sender) = senders.get(&id) {
+            if let Err(err) = sender.send(message) {
+                error!("error sending: {id}, {err}")
+            }
+        } else {
+            error!("no recipient found for: {id}, {message:?}")
+        }
+        Ok(())
+    }
+
+    pub fn insert(&self, id: i32, message: Sender<T>) -> Option<Sender<T>> {
+        let mut senders = self.data.write().unwrap();
+        senders.insert(id, message)
+    }
+
+    pub fn remove(&self, id: i32) -> Option<Sender<T>> {
+        let mut senders = self.data.write().unwrap();
+        senders.remove(&id)
+    }
+
+    pub fn contains(&self, id: i32) -> bool {
+        let senders = self.data.read().unwrap();
+        senders.contains_key(&id)
+    }
 }
 
 #[derive(Debug)]
 pub struct ResponsePacketPromise {
-    receiver: Receiver<ResponseMessage>,
+    messages: Receiver<ResponseMessage>, // for client to receive incoming messages
+    signals: Sender<i32>,                // for client to signal termination
 }
 
 impl ResponsePacketPromise {
-    pub fn new(receiver: Receiver<ResponseMessage>) -> ResponsePacketPromise {
-        ResponsePacketPromise { receiver }
+    pub fn new(messages: Receiver<ResponseMessage>, signals: Sender<i32>) -> ResponsePacketPromise {
+        ResponsePacketPromise { messages, signals }
     }
 
+    #[deprecated]
     pub fn message(&self) -> Result<ResponseMessage> {
         // Duration::from_millis(100)
 
-        Ok(self.receiver.recv_timeout(Duration::from_millis(20000))?)
+        Ok(self.messages.recv_timeout(Duration::from_secs(20))?)
         // return Err(anyhow!("no message"));
     }
+
+    pub fn signal(&self, id: i32) {
+        self.signals.send(id);
+    }
 }
-
-// impl IntoIterator for ResponsePacketPromise {
-//     type Item = ResponsePacket;
-//     type IntoIter = ResponsePacketIterator;
-//     fn into_iter(self) -> Self::IntoIter {
-//         todo!()
-//     }
-// }
-
-pub struct ResponsePacketIterator {}
 
 impl Iterator for ResponsePacketPromise {
     type Item = ResponseMessage;
     fn next(&mut self) -> Option<Self::Item> {
-        match self.receiver.recv_timeout(Duration::from_millis(10000)) {
+        match self.messages.recv_timeout(Duration::from_secs(10)) {
             Err(e) => {
                 error!("error receiving packet: {:?}", e);
                 None
@@ -387,45 +435,4 @@ impl MessageRecorder {
 }
 
 #[cfg(test)]
-mod test {
-    use super::*;
-    use std::env;
-
-    #[test]
-    fn env_var_enables_recorder() {
-        let key = String::from("IBAPI_RECORDING_DIR");
-        let dir = String::from("/tmp/records");
-
-        env::set_var(&key, &dir);
-
-        let recorder = MessageRecorder::new();
-
-        assert_eq!(true, recorder.enabled);
-        assert!(&recorder.recording_dir.starts_with(&dir), "{} != {}", &recorder.recording_dir, &dir)
-    }
-
-    #[test]
-    fn recorder_is_disabled() {
-        let key = String::from("IBAPI_RECORDING_DIR");
-
-        env::set_var(&key, &"");
-
-        let recorder = MessageRecorder::new();
-
-        assert_eq!(false, recorder.enabled);
-        assert_eq!("", &recorder.recording_dir);
-    }
-
-    #[test]
-    fn recorder_generates_output_file() {
-        let recording_dir = String::from("/tmp/records");
-
-        let recorder = MessageRecorder {
-            enabled: true,
-            recording_dir: recording_dir,
-        };
-
-        assert_eq!(format!("{}/0001-request.msg", recorder.recording_dir), recorder.request_file(1));
-        assert_eq!(format!("{}/0002-response.msg", recorder.recording_dir), recorder.response_file(2));
-    }
-}
+mod tests;

@@ -133,6 +133,7 @@ pub struct Contract {
 
 impl Contract {
     /// Creates stock contract from specified symbol
+    /// currency default to USD and SMART exchange.
     pub fn stock(symbol: &str) -> Contract {
         Contract {
             symbol: symbol.to_string(),
@@ -339,7 +340,7 @@ pub struct TagValue {
 
 /// Requests contract information.
 ///
-/// This method will provide all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
+/// Provides all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
 ///
 /// # Arguments
 /// * `client` - [Client] with an active connection to gateway.
@@ -396,7 +397,7 @@ pub fn request_contract_details<C: Client + Debug>(client: &mut C, contract: &Co
     let request_id = client.next_request_id();
     let packet = encode_request_contract_data(client.server_version(), request_id, contract)?;
 
-    let responses = client.send_message_for_request(request_id, packet)?;
+    let responses = client.send_request(request_id, packet)?;
 
     let mut contract_details: Vec<ContractDetails> = Vec::default();
 
@@ -643,7 +644,7 @@ pub fn request_matching_symbols<C: Client + Debug>(client: &mut C, pattern: &str
     let request_id = client.next_request_id();
     let request = encode_request_matching_symbols(request_id, pattern)?;
 
-    let mut responses = client.send_message_for_request(request_id, request)?;
+    let mut responses = client.send_request(request_id, request)?;
 
     if let Some(mut message) = responses.next() {
         match message.message_type() {

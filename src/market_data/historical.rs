@@ -38,7 +38,7 @@ pub fn head_timestamp<C: Client + Debug>(client: &mut C, contract: &Contract, wh
     let request_id = client.next_request_id();
     let request = encode_head_timestamp(request_id, contract, what_to_show, use_rth)?;
 
-    let promise = client.send_message_for_request(request_id, request)?;
+    let promise = client.send_request(request_id, request)?;
     let mut response = promise.message()?;
 
     decode_head_timestamp(&mut response)
@@ -103,7 +103,7 @@ pub fn histogram_data<C: Client + Debug>(client: &C, contract: &Contract, use_rt
     // " S (seconds) - " D (days)
     // " W (weeks) - " M (months)
     // " Y (years)
-    print!("{:?} {:?} {:?} {:?}", client, contract, use_rth, period);
+    print!("{client:?} {contract:?} {use_rth:?} {period:?}");
     Err(anyhow!("not implemented!"))
 }
 

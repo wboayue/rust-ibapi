@@ -2,7 +2,7 @@ use std::convert::From;
 use std::fmt::Debug;
 
 use anyhow::Result;
-use log::{debug, error, info};
+use log::{error, info};
 
 use crate::client::transport::ResponsePacketPromise;
 use crate::client::{Client, RequestMessage, ResponseMessage};
@@ -671,7 +671,7 @@ impl Rule80A {
     }
 }
 
-enum AuctionStrategy {
+pub enum AuctionStrategy {
     Match,
     Improvement,
     Transparent,
@@ -701,16 +701,17 @@ impl From<i32> for OrderCondition {
             5 => OrderCondition::Execution,
             6 => OrderCondition::Volume,
             7 => OrderCondition::PercentChange,
-            _ => panic!("unsupport order condition: {val}"),
+            _ => panic!("OrderCondition({val}) is unsupported"),
         }
     }
 }
 
+/// Stores Soft Dollar Tier information.
 #[derive(Clone, Debug, Default)]
 pub struct SoftDollarTier {
-    name: String,
-    value: String,
-    display_name: String,
+    pub name: String,
+    pub value: String,
+    pub display_name: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -718,48 +719,48 @@ pub struct OpenOrder {
     /// The order's unique id
     order_id: i32,
     /// The order's Contract.
-    contract: Contract,
+    contract: Box<Contract>,
     /// The currently active order
-    order: Order,
+    order: Box<Order>,
     /// The order's OrderState
-    order_state: OrderState,
+    order_state: Box<OrderState>,
 }
 
 /// Provides an active order's current state.
 #[derive(Clone, Debug, Default)]
 pub struct OrderState {
     /// The order's current status
-    status: String,
+    pub status: String,
     /// The account's current initial margin.
-    initial_margin_before: Option<f64>,
+    pub initial_margin_before: Option<f64>,
     /// The account's current maintenance margin
-    maintenance_margin_before: Option<f64>,
+    pub maintenance_margin_before: Option<f64>,
     /// The account's current equity with loan
-    equity_with_loan_before: Option<f64>,
+    pub equity_with_loan_before: Option<f64>,
     /// The change of the account's initial margin.
-    initial_margin_change: Option<f64>,
+    pub initial_margin_change: Option<f64>,
     /// The change of the account's maintenance margin
-    maintenance_margin_change: Option<f64>,
+    pub maintenance_margin_change: Option<f64>,
     /// The change of the account's equity with loan
-    equity_with_loan_change: Option<f64>,
+    pub equity_with_loan_change: Option<f64>,
     /// The order's impact on the account's initial margin.
-    initial_margin_after: Option<f64>,
+    pub initial_margin_after: Option<f64>,
     /// The order's impact on the account's maintenance margin
-    maintenance_margin_after: Option<f64>,
+    pub maintenance_margin_after: Option<f64>,
     /// Shows the impact the order would have on the account's equity with loan
-    equity_with_loan_after: Option<f64>,
+    pub equity_with_loan_after: Option<f64>,
     /// The order's generated commission.
-    commission: Option<f64>,
+    pub commission: Option<f64>,
     // The execution's minimum commission.
-    minimum_commission: Option<f64>,
+    pub minimum_commission: Option<f64>,
     /// The executions maximum commission.
-    maximum_commission: Option<f64>,
+    pub maximum_commission: Option<f64>,
     /// The generated commission currency
-    commission_currency: String,
+    pub commission_currency: String,
     /// If the order is warranted, a descriptive message will be provided.
-    warning_text: String,
-    completed_time: String,
-    completed_status: String,
+    pub warning_text: String,
+    // completed_time: String,
+    // completed_status: String,
 }
 
 /// For institutional customers only. Valid values are O (open) and C (close).
@@ -880,8 +881,8 @@ pub struct Execution {
 #[derive(Clone, Debug, Default)]
 pub struct ExecutionData {
     pub request_id: i32,
-    pub contract: Contract,
-    pub execution: Execution,
+    pub contract: Box<Contract>,
+    pub execution: Box<Execution>,
 }
 
 #[derive(Clone, Debug)]
@@ -890,14 +891,40 @@ pub enum OrderNotification {
     OpenOrder(OpenOrder),
     ExecutionData(ExecutionData),
     CommissionReport(CommissionReport),
+    Message(String),
 }
 
-// Gives the up-to-date information of an order every time it changes. Often there are duplicate orderStatus messages.
+impl From<OrderStatus> for OrderNotification {
+    fn from(val: OrderStatus) -> Self {
+        OrderNotification::OrderStatus(val)
+    }
+}
+
+impl From<OpenOrder> for OrderNotification {
+    fn from(val: OpenOrder) -> Self {
+        OrderNotification::OpenOrder(val)
+    }
+}
+
+impl From<ExecutionData> for OrderNotification {
+    fn from(val: ExecutionData) -> Self {
+        OrderNotification::ExecutionData(val)
+    }
+}
+
+impl From<CommissionReport> for OrderNotification {
+    fn from(val: CommissionReport) -> Self {
+        OrderNotification::CommissionReport(val)
+    }
+}
+
+/// Contains all relevant information on the current status of the order execution-wise (i.e. amount filled and pending, filling price, etc.).
 #[derive(Clone, Debug, Default)]
 pub struct OrderStatus {
     /// The order's client id.
     order_id: i32,
     /// The current status of the order. Possible values:
+    ///     ApiPending - indicates order has not yet been sent to IB server, for instance if there is a delay in receiving the security definition. Uncommonly received.
     ///     PendingSubmit - indicates that you have transmitted the order, but have not yet received confirmation that it has been accepted by the order destination.
     ///     PendingCancel - indicates that you have sent a request to cancel the order but have not yet received cancel confirmation from the order destination. At this point, your order is not confirmed canceled. It is not guaranteed that the cancellation will be successful.
     ///     PreSubmitted - indicates that a simulated order type has been accepted by the IB system and that this order has yet to be elected. The order is held in the IB system until the election criteria are met. At that time the order is transmitted to the order destination as specified .
@@ -927,87 +954,128 @@ pub struct OrderStatus {
     market_cap_price: f64,
 }
 
-// place_order
+/// Submits an [Order].
+///
+/// Submits an [Order] using [Client] for the given [Contract].
+/// Immediately after the order was submitted correctly, the TWS will start sending events concerning the order's activity via IBApi.EWrapper.openOrder and IBApi.EWrapper.orderStatus
+///
+/// # Arguments
+/// * `client` - [Client] used to communicate with server.
+/// * `order_id` - ID for [Order]. Get next valid ID using [Client::next_order_id].
+/// * `contract` - [Contract] to submit order for.
+/// * `order` - [Order] to sumbit.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ibapi::client::{IBClient, Client};
+/// use ibapi::contracts::Contract;
+/// use ibapi::orders::{self, order_builder, OrderNotification};
+///
+/// fn main() -> anyhow::Result<()> {
+///     let mut client = IBClient::connect("localhost:4002")?;
+///
+///     let mut contract = Contract::stock("MSFT");
+///     let order = order_builder::market_order(orders::Action::Buy, 100.0);
+///     let order_id = client.next_order_id();
+///
+///     let notifications = orders::place_order(&mut client, order_id, &contract, &order)?;
+///
+///     for notification in notifications {
+///         match notification {
+///             OrderNotification::OrderStatus(order_status) => {
+///                 println!("order status: {order_status:?}")
+///             }
+///             OrderNotification::OpenOrder(open_order) => println!("open order: {open_order:?}"),
+///             OrderNotification::ExecutionData(execution) => println!("execution: {execution:?}"),
+///             OrderNotification::CommissionReport(report) => println!("commision report: {report:?}"),
+///             OrderNotification::Message(message) => println!("message: {message:?}"),
+///        }
+///     }
+///
+///     Ok(())
+/// }
+/// ```
 pub fn place_order<C: Client + Debug>(client: &mut C, order_id: i32, contract: &Contract, order: &Order) -> Result<OrderNotificationIterator> {
     verify_order(client, order, order_id)?;
     verify_order_contract(client, contract, order_id)?;
 
-    info!("using server version {}", client.server_version());
+    let message = encoders::encode_place_order(client.server_version(), order_id, contract, order)?;
 
-    let request_id = client.next_request_id();
-    let message = encoders::encode_place_order(client.server_version(), request_id, order_id, contract, order)?;
-
-    let messages = client.send_message_for_request(request_id, message)?;
+    let messages = client.send_order(order_id, message)?;
 
     Ok(OrderNotificationIterator {
         messages,
+        order_id,
         server_version: client.server_version(),
     })
 }
 
+// https://interactivebrokers.github.io/tws-api/order_submission.html
+
+/// Supports iteration over [OrderNotification]
 pub struct OrderNotificationIterator {
     server_version: i32,
+    order_id: i32,
     messages: ResponsePacketPromise,
 }
 
 impl Iterator for OrderNotificationIterator {
     type Item = OrderNotification;
 
+    /// Returns the next [OrderNotification]. Waits up to x seconds for next [OrderNotification].
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(mut message) = self.messages.next() {
-            // TODO: can generalize
-            match message.message_type() {
-                IncomingMessages::OpenOrder => {
-                    let result = decoders::decode_open_order(self.server_version, &mut message);
-                    match result {
-                        Ok(open_order) => Some(OrderNotification::OpenOrder(open_order)),
-                        Err(err) => {
-                            info!("error: {err:?}");
-                            None
-                        }
-                    }
-                }
-                IncomingMessages::OrderStatus => {
-                    let result = decoders::decode_order_status(self.server_version, &mut message);
-                    match result {
-                        Ok(order_status) => Some(OrderNotification::OrderStatus(order_status)),
-                        Err(err) => {
-                            info!("error: {err:?}");
-                            None
-                        }
-                    }
-                }
-                IncomingMessages::ExecutionData => {
-                    let result = decoders::decode_execution_data(self.server_version, &mut message);
-                    match result {
-                        Ok(execution_data) => Some(OrderNotification::ExecutionData(execution_data)),
-                        Err(err) => {
-                            info!("error: {err:?}");
-                            None
-                        }
-                    }
-                }
-                IncomingMessages::CommissionsReport => {
-                    let result = decoders::decode_commission_report(self.server_version, &mut message);
-                    match result {
-                        Ok(report) => Some(OrderNotification::CommissionReport(report)),
-                        Err(err) => {
-                            info!("error: {err:?}");
-                            None
-                        }
-                    }
-                }
-                message => {
-                    info!("unexpected messsage: {message:?}");
+        fn convert<T: Into<OrderNotification>>(result: Result<T>) -> Option<OrderNotification> {
+            match result {
+                Ok(val) => Some(val.into()),
+                Err(err) => {
+                    info!("error: {err:?}");
                     None
                 }
             }
-        } else {
-            None
+        }
+
+        loop {
+            if let Some(mut message) = self.messages.next() {
+                match message.message_type() {
+                    IncomingMessages::OpenOrder => {
+                        let open_order = decoders::decode_open_order(self.server_version, &mut message);
+                        return convert(open_order);
+                    }
+                    IncomingMessages::OrderStatus => {
+                        let order_status = decoders::decode_order_status(self.server_version, &mut message);
+                        return convert(order_status);
+                    }
+                    IncomingMessages::ExecutionData => {
+                        let executation_data = decoders::decode_execution_data(self.server_version, &mut message);
+                        return convert(executation_data);
+                    }
+                    IncomingMessages::CommissionsReport => {
+                        let commission_report = decoders::decode_commission_report(self.server_version, &mut message);
+                        return convert(commission_report);
+                    }
+                    IncomingMessages::Error => {
+                        let message = message.peek_string(4);
+                        return Some(OrderNotification::Message(message));
+                    }
+                    message => {
+                        error!("unexpected messsage: {message:?}");
+                    }
+                }
+            } else {
+                return None;
+            }
         }
     }
 }
 
+impl Drop for OrderNotificationIterator {
+    fn drop(&mut self) {
+        self.messages.signal(self.order_id);
+    }
+}
+
+// Verifies that Order is properly formed.
 fn verify_order<C: Client>(client: &mut C, order: &Order, _order_id: i32) -> Result<()> {
     let is_bag_order: bool = false; // StringsAreEqual(Constants.BagSecType, contract.SecType)
 
@@ -1177,6 +1245,7 @@ fn verify_order<C: Client>(client: &mut C, order: &Order, _order_id: i32) -> Res
     Ok(())
 }
 
+// Verifies that Contract is properly formed.
 fn verify_order_contract<C: Client>(client: &mut C, contract: &Contract, _order_id: i32) -> Result<()> {
     if contract
         .combo_legs
@@ -1214,24 +1283,8 @@ fn verify_order_contract<C: Client>(client: &mut C, contract: &Contract, _order_
 
 //https://github.com/InteractiveBrokers/tws-api/blob/b3f6c3de83cff4e636776cea38ece09e2c1b81d1/source/csharpclient/client/IBParamsList.cs
 
-fn message_version_for(server_version: i32) -> i32 {
-    if server_version < server_versions::NOT_HELD {
-        27
-    } else {
-        45
-    }
-}
-
-fn f64_max_to_zero(num: Option<f64>) -> Option<f64> {
-    if num == Some(f64::MAX) {
-        Some(0.0)
-    } else {
-        num
-    }
-}
-
 // cancel_order
-pub fn cancel_order<C: Client + Debug>(client: &mut C, order_id: i32) -> Result<()> {
+pub fn cancel_order<C: Client + Debug>(_client: &mut C, _order_id: i32) -> Result<()> {
     Ok(())
 }
 
@@ -1255,7 +1308,7 @@ pub fn request_executions<C: Client + Debug>() {
     //    IBApi.Execution and IBApi.CommissionReport can be requested on demand via the IBApi.EClient.reqExecutions method which receives a IBApi.ExecutionFilter object as parameter to obtain only those executions matching the given criteria. An empty IBApi.ExecutionFilter object can be passed to obtain all previous executions.
 }
 
-pub fn request_market_rule<C: Client + Debug>(market_rule_id: i32) {}
+pub fn request_market_rule<C: Client + Debug>(_market_rule_id: i32) {}
 
 #[cfg(test)]
 mod tests;

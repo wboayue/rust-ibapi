@@ -1,12 +1,12 @@
 use std::fmt::Debug;
 use std::string::ToString;
 
-use anyhow::{anyhow, Result};
-use log::{error, info};
+use anyhow::Result;
+use log::error;
 
 use crate::client::transport::ResponsePacketPromise;
 use crate::client::{Client, RequestMessage, ResponseMessage};
-use crate::contracts::{Contract, ContractDetails};
+use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::orders::TagValue;
 use crate::server_versions;
@@ -76,7 +76,7 @@ pub fn realtime_bars_with_options<C: Client + Debug>(
     let request_id = client.next_request_id();
     let packet = encode_request_realtime_bars(client.server_version(), request_id, contract, bar_size, what_to_show, use_rth, options)?;
 
-    let responses = client.send_message_for_request(request_id, packet)?;
+    let responses = client.send_request(request_id, packet)?;
 
     Ok(RealTimeBarIterator::new(client.server_version(), request_id, responses))
 }

@@ -1,16 +1,14 @@
 use std::fmt;
 use std::ops::Index;
 use std::str::FromStr;
-use std::thread;
-use std::time::Duration;
 
 use anyhow::{anyhow, Result};
-use log::{debug, info};
+use log::{debug, error, info};
 use time::OffsetDateTime;
 
 use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
 use crate::contracts::{ComboLegOpenClose, SecurityType};
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::{order_id_index, request_id_index, IncomingMessages, OutgoingMessages};
 use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A, TagValue};
 use crate::server_versions;
 
@@ -24,10 +22,25 @@ const UNSET_DOUBLE: &str = "1.7976931348623157E308";
 const UNSET_INTEGER: &str = "2147483647";
 
 pub trait Client {
+    /// Returns the next request ID.
     fn next_request_id(&mut self) -> i32;
+    /// Returns the next order ID. Set at connection time then incremented on each call.
+    fn next_order_id(&mut self) -> i32;
+    /// Sets the current value of order ID.
+    fn set_order_id(&mut self, order_id: i32) -> i32;
+    /// Returns the server version.
     fn server_version(&self) -> i32;
+    /// Returns the server time at connection time.
+    fn server_time(&self) -> String;
+    /// Returns the managed accounts.
+    fn managed_accounts(&self) -> String;
+    /// Sends a message without an expected reply.
     fn send_message(&mut self, packet: RequestMessage) -> Result<()>;
-    fn send_message_for_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
+    /// Sends a request and waits for reply.
+    fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
+    /// Submits an order and waits for reply.
+    fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
+    /// Ensures server is at least the requested version.
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
 
@@ -39,24 +52,47 @@ pub struct IBClient {
     pub server_time: String,
     // Next valid order id
     pub next_valid_order_id: i32,
-    // Ids of managed accounts
-    pub managed_accounts: String,
 
-    client_id: i32,
+    managed_accounts: String,
+    client_id: i32, // ID of client.
     message_bus: Box<dyn MessageBus>,
-    next_request_id: i32,
+    next_request_id: i32, // Next available request_id.
+    order_id: i32,        // Next available order_id. Starts with value returned on connection.
 }
 
 impl IBClient {
-    /// Opens connection to TWS workstation or gateway.
+    /// Establishes connection to TWS or Gateway
+    ///
+    /// Connects to server using the given connection string
+    ///
+    /// # Arguments
+    /// * `connection_string` - connection string in the following format [host]:[port]:[client_id].
+    ///                         client id is optional and defaults to 100.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::{IBClient, Client};
+    ///
+    /// fn main() -> anyhow::Result<()> {
+    ///     let mut client = IBClient::connect("localhost:4002")?;
+    ///
+    ///     println!("server_version: {}", client.server_version());
+    ///     println!("server_time: {}", client.server_time());
+    ///     println!("managed_accounts: {}", client.managed_accounts());
+    ///     println!("next_order_id: {}", client.next_order_id());
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn connect(connection_string: &str) -> Result<IBClient> {
+        debug!("connecting to server with #{:?}", connection_string);
+
         let message_bus = Box::new(TcpMessageBus::connect(connection_string)?);
         IBClient::do_connect(connection_string, message_bus)
     }
 
     fn do_connect(connection_string: &str, message_bus: Box<dyn MessageBus>) -> Result<IBClient> {
-        debug!("connecting to server with #{:?}", connection_string);
-
         let mut client = IBClient {
             server_version: 0,
             server_time: String::from(""),
@@ -65,16 +101,14 @@ impl IBClient {
             message_bus,
             client_id: 100,
             next_request_id: 9000,
+            order_id: -1,
         };
 
         client.handshake()?;
         client.start_api()?;
+        client.receive_account_info()?;
 
-        // will return receiver to next order id
         client.message_bus.process_messages(client.server_version)?;
-
-        // wait for next order id
-        thread::sleep(Duration::from_secs(2));
 
         Ok(client)
     }
@@ -88,7 +122,7 @@ impl IBClient {
 
         self.message_bus.write_message(prelude)?;
 
-        let mut status = self.message_bus.read_packet()?;
+        let mut status = self.message_bus.read_message()?;
 
         self.server_version = status.next_int()?;
         self.server_time = status.next_string()?;
@@ -114,6 +148,48 @@ impl IBClient {
 
         Ok(())
     }
+
+    // Fetches next order id and managed accounts.
+    fn receive_account_info(&mut self) -> Result<()> {
+        let mut saw_next_order_id: bool = false;
+        let mut saw_managed_accounts: bool = false;
+
+        let mut attempts = 0;
+        const MAX_ATTEMPTS: i32 = 100;
+        loop {
+            let mut message = self.message_bus.read_message()?;
+
+            match message.message_type() {
+                IncomingMessages::NextValidId => {
+                    saw_next_order_id = true;
+
+                    message.skip(); // message type
+                    message.skip(); // message version
+
+                    self.order_id = message.next_int()?;
+                }
+                IncomingMessages::ManagedAccounts => {
+                    saw_managed_accounts = true;
+
+                    message.skip(); // message type
+                    message.skip(); // message version
+
+                    self.managed_accounts = message.next_string()?;
+                }
+                IncomingMessages::Error => {
+                    error!("message: {message:?}")
+                }
+                _ => info!("message: {message:?}"),
+            }
+
+            attempts += 1;
+            if (saw_next_order_id && saw_managed_accounts) || attempts > MAX_ATTEMPTS {
+                break;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl Drop for IBClient {
@@ -123,22 +199,52 @@ impl Drop for IBClient {
 }
 
 impl Client for IBClient {
+    /// Returns the next request ID.
     fn next_request_id(&mut self) -> i32 {
+        let request_id = self.next_request_id;
         self.next_request_id += 1;
-        self.next_request_id
+        request_id
+    }
+
+    /// Returns and increments the order ID.
+    fn next_order_id(&mut self) -> i32 {
+        let order_id = self.order_id;
+        self.order_id += 1;
+        order_id
+    }
+
+    /// Sets the current value of order ID.
+    fn set_order_id(&mut self, order_id: i32) -> i32 {
+        self.order_id = order_id;
+        self.order_id
     }
 
     fn server_version(&self) -> i32 {
         self.server_version
     }
 
+    /// Returns the server version.
+    fn server_time(&self) -> String {
+        self.server_time.to_owned()
+    }
+
+    /// Returns the managed accounts.
+    fn managed_accounts(&self) -> String {
+        self.managed_accounts.to_owned()
+    }
+
     fn send_message(&mut self, packet: RequestMessage) -> Result<()> {
         self.message_bus.write_message(&packet)
     }
 
-    fn send_message_for_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
+    fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
         debug!("send_message({:?}, {:?})", request_id, message);
         self.message_bus.write_message_for_request(request_id, &message)
+    }
+
+    fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
+        debug!("send_order({:?}, {:?})", order_id, message);
+        self.message_bus.send_order_message(order_id, &message)
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
@@ -199,7 +305,7 @@ pub trait ToField {
     fn to_field(&self) -> String;
 }
 
-#[derive(Default, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct ResponseMessage {
     pub i: usize,
     pub fields: Vec<String>,
@@ -215,12 +321,22 @@ impl ResponseMessage {
         }
     }
 
-    pub fn request_id(&self) -> Result<i32> {
-        match self.message_type() {
-            IncomingMessages::ContractData | IncomingMessages::TickByTick | IncomingMessages::SymbolSamples => self.peek_int(1),
-            IncomingMessages::ContractDataEnd | IncomingMessages::RealTimeBars => self.peek_int(2),
-            _ => Err(anyhow!("error parsing field request id {:?}: {:?}", self.message_type(), self)),
+    pub fn request_id(&self) -> Option<i32> {
+        if let Some(i) = request_id_index(self.message_type()) {
+            if let Ok(request_id) = self.peek_int(i) {
+                return Some(request_id);
+            }
         }
+        None
+    }
+
+    pub fn order_id(&self) -> Option<i32> {
+        if let Some(i) = order_id_index(self.message_type()) {
+            if let Ok(order_id) = self.peek_int(i) {
+                return Some(order_id);
+            }
+        }
+        None
     }
 
     pub fn peek_int(&self, i: usize) -> Result<i32> {
@@ -229,6 +345,10 @@ impl ResponseMessage {
             Ok(val) => Ok(val),
             Err(err) => Err(anyhow!("error parsing field {} {}: {}", i, field, err)),
         }
+    }
+
+    pub fn peek_string(&self, i: usize) -> String {
+        self.fields[i].to_owned()
     }
 
     pub fn next_int(&mut self) -> Result<i32> {

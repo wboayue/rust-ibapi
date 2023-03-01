@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn encode_place_order(server_version: i32, request_id: i32, order_id: i32, contract: &Contract, order: &Order) -> Result<RequestMessage> {
+pub fn encode_place_order(server_version: i32, order_id: i32, contract: &Contract, order: &Order) -> Result<RequestMessage> {
     let mut message = RequestMessage::default();
     let message_version = message_version_for(server_version);
 
@@ -381,4 +381,20 @@ pub fn encode_place_order(server_version: i32, request_id: i32, order_id: i32, c
     }
 
     Ok(message)
+}
+
+fn f64_max_to_zero(num: Option<f64>) -> Option<f64> {
+    if num == Some(f64::MAX) {
+        Some(0.0)
+    } else {
+        num
+    }
+}
+
+fn message_version_for(server_version: i32) -> i32 {
+    if server_version < server_versions::NOT_HELD {
+        27
+    } else {
+        45
+    }
 }

@@ -175,6 +175,26 @@ impl From<i32> for IncomingMessages {
     }
 }
 
+pub fn order_id_index(kind: IncomingMessages) -> Option<usize> {
+    match kind {
+        IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => Some(1),
+        IncomingMessages::ExecutionData => Some(2),
+        _ => None,
+    }
+}
+
+pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
+    match kind {
+        IncomingMessages::ContractData
+        | IncomingMessages::TickByTick
+        | IncomingMessages::SymbolSamples
+        | IncomingMessages::OpenOrder
+        | IncomingMessages::ExecutionData => Some(1),
+        IncomingMessages::ContractDataEnd | IncomingMessages::RealTimeBars | IncomingMessages::Error => Some(2),
+        _ => None,
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum OutgoingMessages {
     RequestMarketData = 1,
