@@ -1281,10 +1281,45 @@ fn verify_order_contract<C: Client>(client: &mut C, contract: &Contract, _order_
     Ok(())
 }
 
-//https://github.com/InteractiveBrokers/tws-api/blob/b3f6c3de83cff4e636776cea38ece09e2c1b81d1/source/csharpclient/client/IBParamsList.cs
+/// Cancels an open [Order].
+///
+/// Requests the cancelation of an open [Order].
+///
+/// # Arguments
+/// * `client` - [Client] used to communicate with server.
+/// * `order_id` - ID of [Order] to cancel.
+/// * `manual_order_cancel_time` - ID of [Order] to cancel.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ibapi::client::{IBClient, Client};
+/// use ibapi::orders;
+///
+/// fn main() -> anyhow::Result<()> {
+///     let mut client = IBClient::connect("localhost:4002")?;
+///
+///     let order_id = 15;
+///     orders::cancel_order(&mut client, order_id, "")?;
+///
+///     Ok(())
+/// }
+/// ```
+pub fn cancel_order<C: Client + Debug>(client: &mut C, order_id: i32, manual_order_cancel_time: &str) -> Result<()> {
+    if !manual_order_cancel_time.is_empty() {
+        client.check_server_version(server_versions::MANUAL_ORDER_TIME, "It does not support manual order cancel time attribute")?
+    }
 
-// cancel_order
-pub fn cancel_order<C: Client + Debug>(_client: &mut C, _order_id: i32) -> Result<()> {
+    let message = encoders::encode_cancel_order(client.server_version(), order_id, manual_order_cancel_time)?;
+
+    let messages = client.send_order(order_id, message)?;
+
+    // Ok(OrderNotificationIterator {
+    //     messages,
+    //     order_id,
+    //     server_version: client.server_version(),
+    // })
+
     Ok(())
 }
 
