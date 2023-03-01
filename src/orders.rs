@@ -1313,7 +1313,7 @@ fn verify_order_contract<C: Client>(client: &mut C, contract: &Contract, _order_
 ///     for result in results {
 ///        println!("{result:?}");
 ///     }
-/// 
+///
 ///     Ok(())
 /// }
 /// ```
@@ -1329,7 +1329,7 @@ pub fn cancel_order<C: Client + Debug>(client: &mut C, order_id: i32, manual_ord
 
     let messages = client.send_order(order_id, message)?;
 
-    Ok(CancelOrderResultIterator{
+    Ok(CancelOrderResultIterator {
         messages,
         server_version: client.server_version(),
     })
