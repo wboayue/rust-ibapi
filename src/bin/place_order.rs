@@ -4,7 +4,7 @@ use std::{thread, time};
 use clap::{arg, ArgMatches, Command};
 use log::{debug, info};
 
-use ibapi::client::IBClient;
+use ibapi::client::{IBClient, Client};
 use ibapi::contracts::Contract;
 use ibapi::orders::{self, order_builder, OrderNotification};
 
@@ -39,7 +39,8 @@ fn main() -> anyhow::Result<()> {
     debug!("contract template {contract:?}");
 
     // TODO - set next valid order_id
-    let order_id = 14;
+    let order_id = client.next_order_id();
+    println!("order_id: {order_id}");
     let order = order_builder::market_order(orders::Action::Buy, 100.0);
 
     println!("contract: {contract:?}, order: {order:?}");
@@ -54,10 +55,9 @@ fn main() -> anyhow::Result<()> {
             OrderNotification::OpenOrder(open_order) => println!("open order: {open_order:?}"),
             OrderNotification::ExecutionData(execution) => println!("execution: {execution:?}"),
             OrderNotification::CommissionReport(report) => println!("commision report: {report:?}"),
+            OrderNotification::Message(message) => println!("notice: {message}"),
         }
     }
-
-    thread::sleep(time::Duration::from_secs(5));
 
     Ok(())
 }

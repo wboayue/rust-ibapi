@@ -155,7 +155,7 @@ impl IBClient {
         let mut saw_managed_accounts: bool = false;
 
         let mut attempts = 0;
-        const MAX_ATTEMPTS: i32 = 10;
+        const MAX_ATTEMPTS: i32 = 100;
         loop {
             let mut message = self.message_bus.read_message()?;
 
@@ -323,8 +323,8 @@ impl ResponseMessage {
 
     pub fn request_id(&self) -> Result<i32> {
         match self.message_type() {
-            IncomingMessages::ContractData | IncomingMessages::TickByTick | IncomingMessages::SymbolSamples => self.peek_int(1),
-            IncomingMessages::ContractDataEnd | IncomingMessages::RealTimeBars => self.peek_int(2),
+            IncomingMessages::ContractData | IncomingMessages::TickByTick | IncomingMessages::SymbolSamples | IncomingMessages::OpenOrder => self.peek_int(1),
+            IncomingMessages::ContractDataEnd | IncomingMessages::RealTimeBars | IncomingMessages::Error => self.peek_int(2),
             _ => Err(anyhow!("error parsing field request id {:?}: {:?}", self.message_type(), self)),
         }
     }
@@ -335,6 +335,10 @@ impl ResponseMessage {
             Ok(val) => Ok(val),
             Err(err) => Err(anyhow!("error parsing field {} {}: {}", i, field, err)),
         }
+    }
+
+    pub fn peek_string(&self, i: usize) -> String {
+        self.fields[i].to_owned()
     }
 
     pub fn next_int(&mut self) -> Result<i32> {

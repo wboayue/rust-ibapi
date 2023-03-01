@@ -70,14 +70,12 @@ impl TcpMessageBus {
     }
 
     fn add_request(&mut self, request_id: i32, sender: Sender<ResponseMessage>) -> Result<()> {
-        println!("self.requests: {:?}", self.requests);
-
-        self.requests.insert(request_id, sender)?;
+        self.requests.insert(request_id, sender);
         Ok(())
     }
 
     fn add_order(&mut self, order_id: i32, sender: Sender<ResponseMessage>) -> Result<()> {
-        self.orders.insert(order_id, sender)?;
+        self.orders.insert(order_id, sender);
         Ok(())
     }
 }
@@ -162,7 +160,12 @@ impl MessageBus for TcpMessageBus {
     }
 }
 
-fn dispatch_message(message: ResponseMessage, server_version: i32, requests: &Arc<SenderHash<ResponseMessage>>, orders: &Arc<SenderHash<ResponseMessage>>) {
+fn dispatch_message(
+    message: ResponseMessage,
+    server_version: i32,
+    requests: &Arc<SenderHash<ResponseMessage>>,
+    orders: &Arc<SenderHash<ResponseMessage>>,
+) {
     match message.message_type() {
         IncomingMessages::Error => {
             let request_id = message.peek_int(2).unwrap_or(-1);
@@ -170,7 +173,7 @@ fn dispatch_message(message: ResponseMessage, server_version: i32, requests: &Ar
             if request_id == UNSPECIFIED_REQUEST_ID {
                 error_event(server_version, message).unwrap();
             } else {
-                process_response(requests, message);
+                process_response(requests, orders, message);
             }
         }
         IncomingMessages::NextValidId => process_next_valid_id(server_version, message),
@@ -181,13 +184,13 @@ fn dispatch_message(message: ResponseMessage, server_version: i32, requests: &Ar
         | IncomingMessages::ExecutionData
         | IncomingMessages::ExecutionDataEnd
         | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders),
-        _ => process_response(requests, message),
+        _ => process_response(requests, orders, message),
     };
 }
 
 fn read_packet(mut reader: &TcpStream) -> Result<ResponseMessage> {
     let message_size = read_header(reader)?;
-    debug!("message size: {message_size:?}");
+    debug!("message size: {message_size}");
     let mut data = vec![0_u8; message_size];
 
     reader.read_exact(&mut data)?;
@@ -260,28 +263,37 @@ fn process_managed_accounts(_server_version: i32, mut packet: ResponseMessage) {
     info!("managed accounts: {}", managed_accounts)
 }
 
-fn process_response(requests: &Arc<SenderHash<ResponseMessage>>, message: ResponseMessage) {
-    let request_id = message.request_id().unwrap_or(-1);
-    requests.send(request_id, message).unwrap();
-
+fn process_response(requests: &Arc<SenderHash<ResponseMessage>>, orders: &Arc<SenderHash<ResponseMessage>>, message: ResponseMessage) {
+    let request_id = message.request_id().unwrap_or(-1);    // pass in request id?
+    if requests.contains(request_id) {
+        requests.send(request_id, message).unwrap();
+    } else if orders.contains(request_id) {
+        orders.send(request_id, message).unwrap();
+    }
 }
 
 fn process_order_notifications(message: ResponseMessage, requests: &Arc<SenderHash<ResponseMessage>>, orders: &Arc<SenderHash<ResponseMessage>>) {
     match message.message_type() {
-        IncomingMessages::OrderStatus | IncomingMessages::OpenOrder => {
-            let order_id = message.peek_int(2).unwrap();
+        IncomingMessages::OrderStatus => {
+            let order_id = message.peek_int(1).unwrap();
             if let Err(e) = orders.send(order_id, message) {
-                error!("error routing message for order_id({order_id}): {e:?}");
+                error!("error routing message for order_id({order_id}): {e}");
+            }
+        }
+        IncomingMessages::OpenOrder => {
+            let order_id = message.peek_int(1).unwrap();
+            if let Err(e) = orders.send(order_id, message) {
+                error!("error routing message for order_id({order_id}): {e}");
             }
         }
         IncomingMessages::ExecutionData => {
             let order_id = message.peek_int(3).unwrap();
             if let Err(e) = orders.send(order_id, message.clone()) {
-                error!("error routing message for order_id({order_id}): {e:?}");
+                error!("error routing message for order_id({order_id}): {e}");
 
                 let request_id = message.peek_int(2).unwrap();
                 if let Err(e) = requests.send(order_id, message) {
-                    error!("error routing message for order_id({request_id}): {e:?}");
+                    error!("error routing message for order_id({request_id}): {e}");
                 }
             }
         }
@@ -292,33 +304,44 @@ fn process_order_notifications(message: ResponseMessage, requests: &Arc<SenderHa
     // | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders),
 }
 
-
 #[derive(Debug)]
 struct SenderHash<T> {
     data: RwLock<HashMap<i32, Sender<T>>>,
 }
 
-impl<T> SenderHash<T> {
+impl<T: std::fmt::Debug> SenderHash<T> {
     pub fn new() -> Self {
-        Self { data: RwLock::new(HashMap::<i32, Sender<T>>::new()) }
+        Self {
+            data: RwLock::new(HashMap::new()),
+        }
     }
 
-    pub fn send(&self, id: i32, msg: T) -> Result<()> {
-        let hash = self.data.read().unwrap();
-        let chan = hash.get(&id).unwrap();
-        chan.send(msg).unwrap();
+    pub fn send(&self, id: i32, message: T) -> Result<()> {
+        let senders = self.data.read().unwrap();
+        debug!("senders: {senders:?}");
+        if let Some(sender) = senders.get(&id) {
+            if let Err(err)= sender.send(message) {
+                error!("error sending: {id}, {err}")    
+            }
+        } else {
+            error!("no recipient found for: {id}, {message:?}")
+        }
         Ok(())
     }
-    pub fn insert(&self, id: i32, msg: Sender<T>) -> Result<()> {
-        println!("container: {:?}", self.data);
-        let mut guard = self.data.write().unwrap();
-        guard.insert(id, msg).unwrap();
-        Ok(())
+
+    pub fn insert(&self, id: i32, message: Sender<T>) -> Option<Sender<T>> {
+        let mut senders = self.data.write().unwrap();
+        senders.insert(id, message)
     }
-    pub fn remove(&self, id: i32) -> Result<()> {
-        let mut hash = self.data.write().unwrap();
-        hash.remove(&id).unwrap();
-        Ok(())
+
+    pub fn remove(&self, id: i32) -> Option<Sender<T>> {
+        let mut senders = self.data.write().unwrap();
+        senders.remove(&id)
+    }
+
+    pub fn contains(&self, id: i32) -> bool {
+        let senders = self.data.read().unwrap();
+        senders.contains_key(&id)
     }
 }
 

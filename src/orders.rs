@@ -2,7 +2,7 @@ use std::convert::From;
 use std::fmt::Debug;
 
 use anyhow::Result;
-use log::info;
+use log::{error, info};
 
 use crate::client::transport::ResponsePacketPromise;
 use crate::client::{Client, RequestMessage, ResponseMessage};
@@ -891,6 +891,7 @@ pub enum OrderNotification {
     OpenOrder(OpenOrder),
     ExecutionData(ExecutionData),
     CommissionReport(CommissionReport),
+    Message(String),
 }
 
 impl From<OrderStatus> for OrderNotification {
@@ -1051,8 +1052,13 @@ impl Iterator for OrderNotificationIterator {
                     let result = decoders::decode_commission_report(self.server_version, &mut message);
                     convert(result)
                 }
+                IncomingMessages::Error => {
+                    println!("{message:?}");
+                    let message = message.peek_string(4);
+                    Some(OrderNotification::Message(message))
+                }
                 message => {
-                    info!("unexpected messsage: {message:?}");
+                    error!("unexpected messsage: {message:?}");
                     None
                 }
             }

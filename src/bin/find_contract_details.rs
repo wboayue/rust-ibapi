@@ -34,11 +34,9 @@ fn main() -> anyhow::Result<()> {
     debug!("contract template: {contract:?}");
 
     let results = contracts::request_contract_details(&mut client, &contract)?;
-    for result in &results {
-        println!("contract: {result:?}");
+    for contract in &results {
+        println!("contract: {contract:?}");
     }
-
-    thread::sleep(time::Duration::from_secs(5));
 
     Ok(())
 }
