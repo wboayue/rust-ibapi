@@ -34,9 +34,6 @@ pub trait MessageBus {
 }
 
 #[derive(Debug)]
-struct Outbox(Sender<ResponseMessage>);
-
-#[derive(Debug)]
 pub struct TcpMessageBus {
     reader: Arc<TcpStream>,
     writer: Box<TcpStream>,
@@ -45,9 +42,6 @@ pub struct TcpMessageBus {
     orders: Arc<SenderHash<ResponseMessage>>,
     recorder: MessageRecorder,
 }
-
-unsafe impl Send for Outbox {}
-unsafe impl Sync for Outbox {}
 
 impl TcpMessageBus {
     // establishes TCP connection to server
