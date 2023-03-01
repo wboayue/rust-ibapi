@@ -1064,7 +1064,7 @@ impl Iterator for OrderNotificationIterator {
                 }
             } else {
                 return None;
-            }    
+            }
         }
     }
 }
