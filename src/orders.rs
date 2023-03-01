@@ -1035,36 +1035,36 @@ impl Iterator for OrderNotificationIterator {
             }
         }
 
-        if let Some(mut message) = self.messages.next() {
-            match message.message_type() {
-                IncomingMessages::OpenOrder => {
-                    let result = decoders::decode_open_order(self.server_version, &mut message);
-                    convert(result)
+        loop {
+            if let Some(mut message) = self.messages.next() {
+                match message.message_type() {
+                    IncomingMessages::OpenOrder => {
+                        let open_order = decoders::decode_open_order(self.server_version, &mut message);
+                        return convert(open_order);
+                    }
+                    IncomingMessages::OrderStatus => {
+                        let order_status = decoders::decode_order_status(self.server_version, &mut message);
+                        return convert(order_status);
+                    }
+                    IncomingMessages::ExecutionData => {
+                        let executation_data = decoders::decode_execution_data(self.server_version, &mut message);
+                        return convert(executation_data);
+                    }
+                    IncomingMessages::CommissionsReport => {
+                        let commission_report = decoders::decode_commission_report(self.server_version, &mut message);
+                        return convert(commission_report);
+                    }
+                    IncomingMessages::Error => {
+                        let message = message.peek_string(4);
+                        return Some(OrderNotification::Message(message));
+                    }
+                    message => {
+                        error!("unexpected messsage: {message:?}");
+                    }
                 }
-                IncomingMessages::OrderStatus => {
-                    let result = decoders::decode_order_status(self.server_version, &mut message);
-                    convert(result)
-                }
-                IncomingMessages::ExecutionData => {
-                    let result = decoders::decode_execution_data(self.server_version, &mut message);
-                    convert(result)
-                }
-                IncomingMessages::CommissionsReport => {
-                    let result = decoders::decode_commission_report(self.server_version, &mut message);
-                    convert(result)
-                }
-                IncomingMessages::Error => {
-                    println!("{message:?}");
-                    let message = message.peek_string(4);
-                    Some(OrderNotification::Message(message))
-                }
-                message => {
-                    error!("unexpected messsage: {message:?}");
-                    None
-                }
-            }
-        } else {
-            None
+            } else {
+                return None;
+            }    
         }
     }
 }

@@ -225,12 +225,12 @@ impl Client for IBClient {
 
     /// Returns the server version.
     fn server_time(&self) -> String {
-        self.server_time.clone()
+        self.server_time.to_owned()
     }
 
     /// Returns the managed accounts.
     fn managed_accounts(&self) -> String {
-        self.managed_accounts.clone()
+        self.managed_accounts.to_owned()
     }
 
     fn send_message(&mut self, packet: RequestMessage) -> Result<()> {
@@ -323,8 +323,8 @@ impl ResponseMessage {
 
     pub fn request_id(&self) -> Option<i32> {
         if let Some(i) = request_id_index(self.message_type()) {
-            if let Ok(order_id) = self.peek_int(i) {
-                return Some(order_id);
+            if let Ok(request_id) = self.peek_int(i) {
+                return Some(request_id);
             }
         }
         None
