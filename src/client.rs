@@ -8,7 +8,7 @@ use time::OffsetDateTime;
 
 use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
 use crate::contracts::{ComboLegOpenClose, SecurityType};
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::{order_id_index, request_id_index, IncomingMessages, OutgoingMessages};
 use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A, TagValue};
 use crate::server_versions;
 
@@ -321,14 +321,22 @@ impl ResponseMessage {
         }
     }
 
-    pub fn request_id(&self) -> Result<i32> {
-        match self.message_type() {
-            IncomingMessages::ContractData | IncomingMessages::TickByTick | IncomingMessages::SymbolSamples | IncomingMessages::OpenOrder => {
-                self.peek_int(1)
+    pub fn request_id(&self) -> Option<i32> {
+        if let Some(i) = request_id_index(self.message_type()) {
+            if let Ok(order_id) = self.peek_int(i) {
+                return Some(order_id);
             }
-            IncomingMessages::ContractDataEnd | IncomingMessages::RealTimeBars | IncomingMessages::Error => self.peek_int(2),
-            _ => Err(anyhow!("error parsing field request id {:?}: {:?}", self.message_type(), self)),
         }
+        None
+    }
+
+    pub fn order_id(&self) -> Option<i32> {
+        if let Some(i) = order_id_index(self.message_type()) {
+            if let Ok(order_id) = self.peek_int(i) {
+                return Some(order_id);
+            }
+        }
+        None
     }
 
     pub fn peek_int(&self, i: usize) -> Result<i32> {

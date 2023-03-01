@@ -268,28 +268,22 @@ fn process_response(requests: &Arc<SenderHash<ResponseMessage>>, orders: &Arc<Se
 
 fn process_order_notifications(message: ResponseMessage, requests: &Arc<SenderHash<ResponseMessage>>, orders: &Arc<SenderHash<ResponseMessage>>) {
     match message.message_type() {
-        IncomingMessages::OrderStatus => {
-            let order_id = message.peek_int(1).unwrap();
-            if let Err(e) = orders.send(order_id, message) {
-                error!("error routing message for order_id({order_id}): {e}");
-            }
-        }
-        IncomingMessages::OpenOrder => {
-            let order_id = message.peek_int(1).unwrap();
-            if let Err(e) = orders.send(order_id, message) {
-                error!("error routing message for order_id({order_id}): {e}");
-            }
-        }
-        IncomingMessages::ExecutionData => {
-            let order_id = message.peek_int(3).unwrap();
-            if let Err(e) = orders.send(order_id, message.clone()) {
-                error!("error routing message for order_id({order_id}): {e}");
-
-                let request_id = message.peek_int(2).unwrap();
-                if let Err(e) = requests.send(order_id, message) {
-                    error!("error routing message for order_id({request_id}): {e}");
+        IncomingMessages::OrderStatus | IncomingMessages::OpenOrder | IncomingMessages::ExecutionData => {
+            if let Some(order_id) = message.order_id() {
+                if let Err(e) = orders.send(order_id, message) {
+                    error!("error routing message for order_id({order_id}): {e}");
                 }
+                return;
             }
+
+            if let Some(request_id) = message.request_id() {
+                if let Err(e) = requests.send(request_id, message) {
+                    error!("error routing message for request_id({request_id}): {e}");
+                }
+                return;
+            }
+
+            error!("message has no order_id: {message:?}");
         }
         _ => (),
     }
