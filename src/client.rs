@@ -323,7 +323,9 @@ impl ResponseMessage {
 
     pub fn request_id(&self) -> Result<i32> {
         match self.message_type() {
-            IncomingMessages::ContractData | IncomingMessages::TickByTick | IncomingMessages::SymbolSamples | IncomingMessages::OpenOrder => self.peek_int(1),
+            IncomingMessages::ContractData | IncomingMessages::TickByTick | IncomingMessages::SymbolSamples | IncomingMessages::OpenOrder => {
+                self.peek_int(1)
+            }
             IncomingMessages::ContractDataEnd | IncomingMessages::RealTimeBars | IncomingMessages::Error => self.peek_int(2),
             _ => Err(anyhow!("error parsing field request id {:?}: {:?}", self.message_type(), self)),
         }

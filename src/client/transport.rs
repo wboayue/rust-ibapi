@@ -264,7 +264,7 @@ fn process_managed_accounts(_server_version: i32, mut packet: ResponseMessage) {
 }
 
 fn process_response(requests: &Arc<SenderHash<ResponseMessage>>, orders: &Arc<SenderHash<ResponseMessage>>, message: ResponseMessage) {
-    let request_id = message.request_id().unwrap_or(-1);    // pass in request id?
+    let request_id = message.request_id().unwrap_or(-1); // pass in request id?
     if requests.contains(request_id) {
         requests.send(request_id, message).unwrap();
     } else if orders.contains(request_id) {
@@ -320,8 +320,8 @@ impl<T: std::fmt::Debug> SenderHash<T> {
         let senders = self.data.read().unwrap();
         debug!("senders: {senders:?}");
         if let Some(sender) = senders.get(&id) {
-            if let Err(err)= sender.send(message) {
-                error!("error sending: {id}, {err}")    
+            if let Err(err) = sender.send(message) {
+                error!("error sending: {id}, {err}")
             }
         } else {
             error!("no recipient found for: {id}, {message:?}")
