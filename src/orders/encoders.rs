@@ -398,6 +398,16 @@ pub fn encode_cancel_order(server_version: i32, order_id: i32, manual_order_canc
     Ok(message)
 }
 
+pub fn encode_request_global_cancel(_server_version: i32) -> Result<RequestMessage> {
+    let mut message = RequestMessage::default();
+    const VERSION: i32 = 1;
+
+    message.push_field(&OutgoingMessages::RequestGlobalCancel);
+    message.push_field(&VERSION);
+
+    Ok(message)
+}
+
 fn f64_max_to_zero(num: Option<f64>) -> Option<f64> {
     if num == Some(f64::MAX) {
         Some(0.0)

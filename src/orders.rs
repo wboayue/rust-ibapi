@@ -1297,7 +1297,7 @@ fn verify_order_contract<C: Client>(client: &mut C, contract: &Contract, _order_
 /// # Arguments
 /// * `client` - [Client] used to communicate with server.
 /// * `order_id` - ID of [Order] to cancel.
-/// * `manual_order_cancel_time` - ID of [Order] to cancel.
+/// * `manual_order_cancel_time` - can't find documentation. leave blank.
 ///
 /// # Examples
 ///
@@ -1377,7 +1377,43 @@ impl Iterator for CancelOrderResultIterator {
     }
 }
 
-pub fn request_global_cancel<C: Client + Debug>() {}
+/// Cancels all open [Order]s.
+///
+/// Requests the cancelation of all open [Order]s.
+///
+/// # Arguments
+/// * `client` - [Client] used to communicate with server.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ibapi::client::{IBClient, Client};
+/// use ibapi::orders;
+///
+/// fn main() -> anyhow::Result<()> {
+///     let mut client = IBClient::connect("localhost:4002")?;
+///
+///     let results = orders::request_global_cancel(&mut client)?;
+///     for result in results {
+///        println!("{result:?}");
+///     }
+///
+///     Ok(())
+/// }
+/// ```
+pub fn request_global_cancel<C: Client + Debug>(client: &mut C) -> Result<CancelOrderResultIterator> {
+    client.check_server_version(server_versions::REQ_GLOBAL_CANCEL, "It does not support global cancel requests.")?;
+
+    let request_id = client.next_request_id();
+    let message = encoders::encode_request_global_cancel(client.server_version())?;
+
+    let messages = client.send_order(request_id, message)?;
+
+    Ok(CancelOrderResultIterator {
+        messages,
+        server_version: client.server_version(),
+    })
+}
 
 pub fn check_order_status<C: Client + Debug>() {
     //    Immediately after the order was submitted correctly, the TWS will start sending events concerning the order's activity via IBApi.EWrapper.openOrder and IBApi.EWrapper.orderStatus
