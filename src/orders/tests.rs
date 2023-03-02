@@ -287,6 +287,43 @@ fn place_order() {
 }
 
 #[test]
+fn cancel_order() {
+    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+
+    client.response_messages = vec![
+        "3|41|Cancelled|0|100|0|71270927|0|0|100||0||".to_owned(),
+        "4|2|41|202|Order Canceled - reason:||".to_owned(),
+    ];
+
+    let order_id = 41;
+    let results = super::cancel_order(&mut client, order_id, "");
+
+    assert_eq!(client.request_messages[0], "4|1|41|");
+
+    assert!(results.is_ok(), "failed to cancel order: {:?}", results.err());
+
+    let mut results = results.unwrap();
+
+    if let Some(CancelOrderResult::OrderStatus(order_status)) = results.next() {
+        assert_eq!(order_status.order_id, 41, "order_status.order_id");
+        assert_eq!(order_status.status, "Cancelled", "order_status.status");
+        assert_eq!(order_status.filled, 0.0, "order_status.filled");
+        assert_eq!(order_status.remaining, 100.0, "order_status.remaining");
+        assert_eq!(order_status.average_fill_price, 0.0, "order_status.average_fill_price");
+        assert_eq!(order_status.perm_id, 71270927, "order_status.perm_id");
+        assert_eq!(order_status.parent_id, 0, "order_status.parent_id");
+        assert_eq!(order_status.last_fill_price, 0.0, "order_status.last_fill_price");
+        assert_eq!(order_status.client_id, 100, "order_status.client_id");
+        assert_eq!(order_status.why_held, "", "order_status.why_held");
+        assert_eq!(order_status.market_cap_price, 0.0, "order_status.market_cap_price");
+    }
+
+    if let Some(CancelOrderResult::Notice(Notice(message))) = results.next() {
+        assert_eq!(message, "Order Canceled - reason:", "order status notice");
+    }
+}
+
+#[test]
 fn encode_limit_order() {
     let mut client = ClientStub::new(server_versions::SIZE_RULES);
 
