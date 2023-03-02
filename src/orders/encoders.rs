@@ -383,6 +383,31 @@ pub fn encode_place_order(server_version: i32, order_id: i32, contract: &Contrac
     Ok(message)
 }
 
+pub fn encode_cancel_order(server_version: i32, order_id: i32, manual_order_cancel_time: &str) -> Result<RequestMessage> {
+    let mut message = RequestMessage::default();
+    const VERSION: i32 = 1;
+
+    message.push_field(&OutgoingMessages::CancelOrder);
+    message.push_field(&VERSION);
+    message.push_field(&order_id);
+
+    if server_version >= server_versions::MANUAL_ORDER_TIME {
+        message.push_field(&manual_order_cancel_time);
+    }
+
+    Ok(message)
+}
+
+pub fn encode_request_global_cancel(_server_version: i32) -> Result<RequestMessage> {
+    let mut message = RequestMessage::default();
+    const VERSION: i32 = 1;
+
+    message.push_field(&OutgoingMessages::RequestGlobalCancel);
+    message.push_field(&VERSION);
+
+    Ok(message)
+}
+
 fn f64_max_to_zero(num: Option<f64>) -> Option<f64> {
     if num == Some(f64::MAX) {
         Some(0.0)
