@@ -1393,26 +1393,20 @@ impl Iterator for CancelOrderResultIterator {
 /// fn main() -> anyhow::Result<()> {
 ///     let mut client = IBClient::connect("localhost:4002")?;
 ///
-///     let results = orders::request_global_cancel(&mut client)?;
-///     for result in results {
-///        println!("{result:?}");
-///     }
+///     orders::request_global_cancel(&mut client)?;
 ///
 ///     Ok(())
 /// }
 /// ```
-pub fn request_global_cancel<C: Client + Debug>(client: &mut C) -> Result<CancelOrderResultIterator> {
+pub fn request_global_cancel<C: Client + Debug>(client: &mut C) -> Result<()> {
     client.check_server_version(server_versions::REQ_GLOBAL_CANCEL, "It does not support global cancel requests.")?;
 
     let request_id = client.next_request_id();
     let message = encoders::encode_request_global_cancel(client.server_version())?;
 
-    let messages = client.send_order(request_id, message)?;
+    client.send_order(request_id, message)?;
 
-    Ok(CancelOrderResultIterator {
-        messages,
-        server_version: client.server_version(),
-    })
+    Ok(())
 }
 
 pub fn check_order_status<C: Client + Debug>() {

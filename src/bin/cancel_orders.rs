@@ -23,17 +23,18 @@ fn main() -> anyhow::Result<()> {
 
     let mut client = IBClient::connect(connection_string)?;
 
-    let results = if *global {
+    if *global {
         println!("Requesting global cancel.");
+
         orders::request_global_cancel(&mut client)?
     } else {
         println!("Cancelling order {order_id}");
-        orders::cancel_order(&mut client, *order_id, manual_order_cancel_time)?
-    };
 
-    for result in results {
-        println!("{result:?}");
-    }
+        let results = orders::cancel_order(&mut client, *order_id, manual_order_cancel_time)?;
+        for result in results {
+            println!("{result:?}");
+        }
+    };
 
     Ok(())
 }
