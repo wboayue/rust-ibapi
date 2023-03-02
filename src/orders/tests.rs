@@ -324,6 +324,19 @@ fn cancel_order() {
 }
 
 #[test]
+fn request_global_cancel() {
+    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+
+    client.response_messages = vec![
+    ];
+
+    let results = super::request_global_cancel(&mut client);
+
+    assert_eq!(client.request_messages[0], "58|1|");
+    assert!(results.is_ok(), "failed to cancel order: {:?}", results.err());
+}
+
+#[test]
 fn encode_limit_order() {
     let mut client = ClientStub::new(server_versions::SIZE_RULES);
 
