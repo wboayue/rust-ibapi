@@ -90,7 +90,7 @@ impl MessageBus for TcpMessageBus {
         self.add_request(request_id, sender)?;
         self.write_message(packet)?;
 
-        Ok(ResponsePacketPromise::new(receiver, signals_out))
+        Ok(ResponsePacketPromise::new(receiver, signals_out, Some(request_id), None))
     }
 
     fn send_order_message(&mut self, order_id: i32, message: &RequestMessage) -> Result<ResponsePacketPromise> {
@@ -100,7 +100,7 @@ impl MessageBus for TcpMessageBus {
         self.add_order(order_id, sender)?;
         self.write_message(message)?;
 
-        Ok(ResponsePacketPromise::new(receiver, signals_out))
+        Ok(ResponsePacketPromise::new(receiver, signals_out, None, Some(order_id)))
     }
 
     fn write_message(&mut self, message: &RequestMessage) -> Result<()> {
@@ -337,11 +337,18 @@ impl<T: std::fmt::Debug> SenderHash<T> {
 pub struct ResponsePacketPromise {
     messages: Receiver<ResponseMessage>, // for client to receive incoming messages
     signals: Sender<i32>,                // for client to signal termination
+    request_id: Option<i32>,             // initiating request_id
+    order_id: Option<i32>,               // initiating order_id
 }
 
 impl ResponsePacketPromise {
-    pub fn new(messages: Receiver<ResponseMessage>, signals: Sender<i32>) -> ResponsePacketPromise {
-        ResponsePacketPromise { messages, signals }
+    pub fn new(messages: Receiver<ResponseMessage>, signals: Sender<i32>, request_id: Option<i32>, order_id: Option<i32>) -> ResponsePacketPromise {
+        ResponsePacketPromise {
+            messages,
+            signals,
+            request_id,
+            order_id,
+        }
     }
 
     #[deprecated]

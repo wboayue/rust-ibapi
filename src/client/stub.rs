@@ -69,7 +69,7 @@ impl Client for ClientStub {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(ResponsePacketPromise::new(receiver, s1))
+        Ok(ResponsePacketPromise::new(receiver, s1, None, None))
     }
 
     fn send_order(&mut self, _order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
@@ -82,7 +82,7 @@ impl Client for ClientStub {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(ResponsePacketPromise::new(receiver, s1))
+        Ok(ResponsePacketPromise::new(receiver, s1, None, None))
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {

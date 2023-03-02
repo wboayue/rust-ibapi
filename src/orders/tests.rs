@@ -327,8 +327,7 @@ fn cancel_order() {
 fn request_global_cancel() {
     let mut client = ClientStub::new(server_versions::SIZE_RULES);
 
-    client.response_messages = vec![
-    ];
+    client.response_messages = vec![];
 
     let results = super::request_global_cancel(&mut client);
 
