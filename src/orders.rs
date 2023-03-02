@@ -1427,7 +1427,5 @@ pub fn request_executions<C: Client + Debug>() {
     //    IBApi.Execution and IBApi.CommissionReport can be requested on demand via the IBApi.EClient.reqExecutions method which receives a IBApi.ExecutionFilter object as parameter to obtain only those executions matching the given criteria. An empty IBApi.ExecutionFilter object can be passed to obtain all previous executions.
 }
 
-pub fn request_market_rule<C: Client + Debug>(_market_rule_id: i32) {}
-
 #[cfg(test)]
 mod tests;

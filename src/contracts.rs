@@ -716,3 +716,5 @@ fn decode_contract_descriptions(server_version: i32, message: &mut ResponseMessa
 
     Ok(contract_descriptions)
 }
+
+pub fn market_rule<C: Client + Debug>(_market_rule_id: i32) {}
