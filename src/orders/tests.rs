@@ -34,7 +34,7 @@ fn place_order() {
         "3|13|0|TSLA|STK||0|||SMART||USD|||||BUY|100|MKT|||||||0||1|0|0|0|0|0|0|0||0||||||||0||-1|0|||0|||0|0||0||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
     );
 
-    assert!(result.is_ok(), "failed to place order: {:?}", result.err());
+    assert!(result.is_ok(), "failed to place order: {}", result.err().unwrap());
 
     let mut notifications = result.unwrap();
 
@@ -300,7 +300,7 @@ fn cancel_order() {
 
     assert_eq!(client.request_messages[0], "4|1|41|");
 
-    assert!(results.is_ok(), "failed to cancel order: {:?}", results.err());
+    assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
 
     let mut results = results.unwrap();
 
@@ -324,15 +324,31 @@ fn cancel_order() {
 }
 
 #[test]
-fn request_global_cancel() {
+fn global_cancel() {
     let mut client = ClientStub::new(server_versions::SIZE_RULES);
 
     client.response_messages = vec![];
 
-    let results = super::request_global_cancel(&mut client);
+    let results = super::global_cancel(&mut client);
 
     assert_eq!(client.request_messages[0], "58|1|");
-    assert!(results.is_ok(), "failed to cancel order: {:?}", results.err());
+    assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
+}
+
+#[test]
+fn next_valid_order_id() {
+    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+
+    client.response_messages = vec![
+        "9|1|43||".to_owned()
+    ];
+
+    let results = super::next_valid_order_id(&mut client);
+
+    assert_eq!(client.request_messages[0], "8|1|0|");
+
+    assert!(results.is_ok(), "failed to request next order id: {}", results.err().unwrap());
+    assert_eq!(43, results.unwrap(), "next order id");
 }
 
 #[test]
@@ -352,7 +368,7 @@ fn encode_limit_order() {
         "3|12|0||FUT|202303|0|||EUREX||EUR|FGBL MAR 23||||BUY|10|LMT|500||||||0||1|0|0|0|0|0|0|0||0||||||||0||-1|0|||0|||0|0||0||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
     );
 
-    assert!(results.is_ok(), "failed to place order: {:?}", results.err());
+    assert!(results.is_ok(), "failed to place order: {}", results.err().unwrap());
 }
 
 #[test]
@@ -372,5 +388,5 @@ fn encode_combo_market_order() {
         "3|12|0|WTI|BAG||0|||SMART||USD|||||SELL|150|MKT|||||||0||1|0|0|0|0|0|0|0|2|55928698|1|BUY|IPE|0|0||0|55850663|1|SELL|IPE|0|0||0|0|1|NonGuaranteed|1||0||||||||0||-1|0|||0|||0|0||0||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
     );
 
-    assert!(results.is_ok(), "failed to place order: {:?}", results.err());
+    assert!(results.is_ok(), "failed to place order: {}", results.err().unwrap());
 }
