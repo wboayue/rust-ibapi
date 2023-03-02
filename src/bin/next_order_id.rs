@@ -3,8 +3,8 @@ use clap::{arg, Command};
 use ibapi::client::IBClient;
 use ibapi::orders;
 
-use std::time::Duration;
 use std::thread;
+use std::time::Duration;
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();

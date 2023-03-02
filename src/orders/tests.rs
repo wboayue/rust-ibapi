@@ -339,9 +339,7 @@ fn global_cancel() {
 fn next_valid_order_id() {
     let mut client = ClientStub::new(server_versions::SIZE_RULES);
 
-    client.response_messages = vec![
-        "9|1|43||".to_owned()
-    ];
+    client.response_messages = vec!["9|1|43||".to_owned()];
 
     let results = super::next_valid_order_id(&mut client);
 

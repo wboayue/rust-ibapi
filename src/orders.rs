@@ -1,7 +1,7 @@
 use std::convert::From;
 use std::fmt::{self, Debug, Display};
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use log::{error, info};
 
 use crate::client::transport::ResponsePacketPromise;
@@ -1457,7 +1457,7 @@ pub fn completed_orders<C: Client + Debug>() {
 /// Requests all open orders places by this specific API client (identified by the API client id). For client ID 0, this will bind previous manual TWS orders.
 pub fn open_orders<C: Client + Debug>() {
     // Active orders will be delivered via The openOrder callback and The orderStatus callback callbacks. When all orders have been sent to the client application you will receive a IBApi.EWrapper.openOrderEnd event:
-    // 
+    //
 }
 
 /// Requests all *current* open orders in associated accounts at the current moment. The existing orders will be received via the openOrder and orderStatus events.
@@ -1465,7 +1465,6 @@ pub fn open_orders<C: Client + Debug>() {
 pub fn all_open_orders<C: Client + Debug>() {
     // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EClient.cs#L1498
 }
-
 
 /// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
 /// @param autoBind if set to true, the newly created orders will be assigned an API order ID and implicitly associated with this client. If set to false, future orders will not be.
