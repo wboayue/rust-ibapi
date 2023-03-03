@@ -1,26 +1,24 @@
 use std::collections::HashMap;
-use std::env;
-use std::fs;
 use std::io::prelude::*;
 use std::io::Cursor;
 use std::iter::Iterator;
 use std::net::TcpStream;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use crossbeam::channel::{self, Receiver, Sender};
 use log::{debug, error, info};
-use time::macros::format_description;
-use time::OffsetDateTime;
 
 use crate::client::{RequestMessage, ResponseMessage};
 use crate::messages::IncomingMessages;
 use crate::server_versions;
+use recorder::MessageRecorder;
+
+mod recorder;
 
 pub trait MessageBus {
     fn read_message(&mut self) -> Result<ResponseMessage>;
@@ -28,6 +26,9 @@ pub trait MessageBus {
     fn write_message(&mut self, packet: &RequestMessage) -> Result<()>;
     fn write_message_for_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
     fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
+    fn send_order_id_message(&mut self, message: &RequestMessage) -> Result<ResponsePacketPromise>;
+    fn send_open_orders_message(&mut self, message: &RequestMessage) -> Result<ResponsePacketPromise>;
+
     fn write(&mut self, packet: &str) -> Result<()>;
 
     fn process_messages(&mut self, server_version: i32) -> Result<()>;
@@ -41,6 +42,29 @@ pub struct TcpMessageBus {
     requests: Arc<SenderHash<ResponseMessage>>,
     orders: Arc<SenderHash<ResponseMessage>>,
     recorder: MessageRecorder,
+    globals: GlobalChannels,
+}
+
+#[derive(Debug)]
+struct GlobalChannels {
+    order_ids_in: Arc<Sender<ResponseMessage>>,
+    order_ids_out: Arc<Mutex<Receiver<ResponseMessage>>>,
+    open_orders_in: Arc<Sender<ResponseMessage>>,
+    open_orders_out: Arc<Mutex<Receiver<ResponseMessage>>>,
+}
+
+impl GlobalChannels {
+    pub fn new() -> Self {
+        let (order_ids_in, order_ids_out) = channel::unbounded();
+        let (open_orders_in, open_orders_out) = channel::unbounded();
+
+        GlobalChannels {
+            order_ids_in: Arc::new(order_ids_in),
+            order_ids_out: Arc::new(Mutex::new(order_ids_out)),
+            open_orders_in: Arc::new(open_orders_in),
+            open_orders_out: Arc::new(Mutex::new(open_orders_out)),
+        }
+    }
 }
 
 impl TcpMessageBus {
@@ -60,6 +84,7 @@ impl TcpMessageBus {
             requests,
             orders,
             recorder: MessageRecorder::new(),
+            globals: GlobalChannels::new(),
         })
     }
 
@@ -101,6 +126,16 @@ impl MessageBus for TcpMessageBus {
         self.write_message(message)?;
 
         Ok(ResponsePacketPromise::new(receiver, signals_out, None, Some(order_id)))
+    }
+
+    fn send_order_id_message(&mut self, message: &RequestMessage) -> Result<ResponsePacketPromise> {
+        self.write_message(message)?;
+        Ok(ResponsePacketPromise::for_globals(Arc::clone(&self.globals.order_ids_out)))
+    }
+
+    fn send_open_orders_message(&mut self, message: &RequestMessage) -> Result<ResponsePacketPromise> {
+        self.write_message(message)?;
+        Ok(ResponsePacketPromise::for_globals(Arc::clone(&self.globals.open_orders_out)))
     }
 
     fn write_message(&mut self, message: &RequestMessage) -> Result<()> {
@@ -339,15 +374,31 @@ pub struct ResponsePacketPromise {
     signals: Sender<i32>,                // for client to signal termination
     request_id: Option<i32>,             // initiating request_id
     order_id: Option<i32>,               // initiating order_id
+    global_messages: Option<Arc<Mutex<Receiver<ResponseMessage>>>>,
 }
 
 impl ResponsePacketPromise {
-    pub fn new(messages: Receiver<ResponseMessage>, signals: Sender<i32>, request_id: Option<i32>, order_id: Option<i32>) -> ResponsePacketPromise {
+    pub fn new(messages: Receiver<ResponseMessage>, signals: Sender<i32>, request_id: Option<i32>, order_id: Option<i32>) -> Self {
         ResponsePacketPromise {
             messages,
             signals,
             request_id,
             order_id,
+            global_messages: None,
+        }
+    }
+
+    pub fn for_globals(global_receiver: Arc<Mutex<Receiver<ResponseMessage>>>) -> Self {
+        // TODO fixme:
+        let (sender, receiver) = channel::unbounded();
+        let (signals_out, signals_in) = channel::unbounded();
+
+        ResponsePacketPromise {
+            messages: receiver,
+            signals: signals_out,
+            request_id: None,
+            order_id: None,
+            global_messages: Some(global_receiver),
         }
     }
 
@@ -374,70 +425,6 @@ impl Iterator for ResponsePacketPromise {
             }
             Ok(message) => Some(message),
         }
-    }
-}
-
-static RECORDING_SEQ: AtomicUsize = AtomicUsize::new(0);
-
-#[derive(Clone, Debug)]
-struct MessageRecorder {
-    enabled: bool,
-    recording_dir: String,
-}
-
-impl MessageRecorder {
-    fn new() -> Self {
-        match env::var("IBAPI_RECORDING_DIR") {
-            Ok(dir) => {
-                if dir.is_empty() {
-                    MessageRecorder {
-                        enabled: false,
-                        recording_dir: String::from(""),
-                    }
-                } else {
-                    let format = format_description!("[year]-[month]-[day]-[hour]-[minute]");
-                    let now = OffsetDateTime::now_utc();
-                    let recording_dir = format!("{}/{}", dir, now.format(&format).unwrap());
-
-                    fs::create_dir_all(&recording_dir).unwrap();
-
-                    MessageRecorder {
-                        enabled: true,
-                        recording_dir,
-                    }
-                }
-            }
-            _ => MessageRecorder {
-                enabled: false,
-                recording_dir: String::from(""),
-            },
-        }
-    }
-
-    fn request_file(&self, record_id: usize) -> String {
-        format!("{}/{:04}-request.msg", self.recording_dir, record_id)
-    }
-
-    fn response_file(&self, record_id: usize) -> String {
-        format!("{}/{:04}-response.msg", self.recording_dir, record_id)
-    }
-
-    fn record_request(&self, message: &RequestMessage) {
-        if !self.enabled {
-            return;
-        }
-
-        let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
-        fs::write(self.request_file(record_id), message.encode().replace('\0', "|")).unwrap();
-    }
-
-    fn record_response(&self, message: &ResponseMessage) {
-        if !self.enabled {
-            return;
-        }
-
-        let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
-        fs::write(self.response_file(record_id), message.encode().replace('\0', "|")).unwrap();
     }
 }
 
