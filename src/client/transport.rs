@@ -26,8 +26,8 @@ pub trait MessageBus {
     fn write_message(&mut self, packet: &RequestMessage) -> Result<()>;
     fn write_message_for_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
     fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
-    fn send_order_id_message(&mut self, message: &RequestMessage) -> Result<ResponsePacketPromise>;
-    fn send_open_orders_message(&mut self, message: &RequestMessage) -> Result<ResponsePacketPromise>;
+    fn send_order_id_message(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise>;
+    fn send_open_orders_message(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise>;
 
     fn write(&mut self, packet: &str) -> Result<()>;
 
@@ -128,14 +128,14 @@ impl MessageBus for TcpMessageBus {
         Ok(ResponsePacketPromise::new(receiver, signals_out, None, Some(order_id)))
     }
 
-    fn send_order_id_message(&mut self, message: &RequestMessage) -> Result<ResponsePacketPromise> {
+    fn send_order_id_message(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise> {
         self.write_message(message)?;
-        Ok(ResponsePacketPromise::for_globals(Arc::clone(&self.globals.order_ids_out)))
+        Ok(GlobalResponsePacketPromise::new(Arc::clone(&self.globals.order_ids_out)))
     }
 
-    fn send_open_orders_message(&mut self, message: &RequestMessage) -> Result<ResponsePacketPromise> {
+    fn send_open_orders_message(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise> {
         self.write_message(message)?;
-        Ok(ResponsePacketPromise::for_globals(Arc::clone(&self.globals.open_orders_out)))
+        Ok(GlobalResponsePacketPromise::new(Arc::clone(&self.globals.open_orders_out)))
     }
 
     fn write_message(&mut self, message: &RequestMessage) -> Result<()> {
@@ -374,31 +374,15 @@ pub struct ResponsePacketPromise {
     signals: Sender<i32>,                // for client to signal termination
     request_id: Option<i32>,             // initiating request_id
     order_id: Option<i32>,               // initiating order_id
-    global_messages: Option<Arc<Mutex<Receiver<ResponseMessage>>>>,
 }
 
 impl ResponsePacketPromise {
     pub fn new(messages: Receiver<ResponseMessage>, signals: Sender<i32>, request_id: Option<i32>, order_id: Option<i32>) -> Self {
         ResponsePacketPromise {
-            messages,
-            signals,
+            messages: messages,
+            signals: signals,
             request_id,
             order_id,
-            global_messages: None,
-        }
-    }
-
-    pub fn for_globals(global_receiver: Arc<Mutex<Receiver<ResponseMessage>>>) -> Self {
-        // TODO fixme:
-        let (sender, receiver) = channel::unbounded();
-        let (signals_out, signals_in) = channel::unbounded();
-
-        ResponsePacketPromise {
-            messages: receiver,
-            signals: signals_out,
-            request_id: None,
-            order_id: None,
-            global_messages: Some(global_receiver),
         }
     }
 
@@ -421,12 +405,22 @@ impl Iterator for ResponsePacketPromise {
         match self.messages.recv_timeout(Duration::from_secs(5)) {
             Err(err) => {
                 info!("timeout receiving packet: {err}");
-                None
+                return None;
             }
-            Ok(message) => Some(message),
+            Ok(message) => return Some(message),
         }
     }
 }
 
+#[derive(Debug)]
+pub struct GlobalResponsePacketPromise {
+    messages: Arc<Mutex<Receiver<ResponseMessage>>>,
+}
+
+impl GlobalResponsePacketPromise {
+    pub fn new(messages: Arc<Mutex<Receiver<ResponseMessage>>>) -> Self {
+        Self { messages }
+    }
+}
 #[cfg(test)]
 mod tests;
