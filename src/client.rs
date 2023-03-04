@@ -239,7 +239,7 @@ impl Client for IBClient {
 
     fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
         debug!("send_message({:?}, {:?})", request_id, message);
-        self.message_bus.write_message_for_request(request_id, &message)
+        self.message_bus.send_generic_message(request_id, &message)
     }
 
     fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {

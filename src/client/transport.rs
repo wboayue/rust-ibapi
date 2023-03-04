@@ -24,7 +24,8 @@ pub trait MessageBus {
     fn read_message(&mut self) -> Result<ResponseMessage>;
 
     fn write_message(&mut self, packet: &RequestMessage) -> Result<()>;
-    fn write_message_for_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
+
+    fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
     fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
     fn send_order_id_message(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise>;
     fn send_open_orders_message(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise>;
@@ -43,6 +44,7 @@ pub struct TcpMessageBus {
     orders: Arc<SenderHash<ResponseMessage>>,
     recorder: MessageRecorder,
     globals: GlobalChannels,
+    signals: Vec<Receiver<i32>>,
 }
 
 #[derive(Debug)]
@@ -85,6 +87,7 @@ impl TcpMessageBus {
             orders,
             recorder: MessageRecorder::new(),
             globals: GlobalChannels::new(),
+            signals: Vec::new(),
         })
     }
 
@@ -99,8 +102,6 @@ impl TcpMessageBus {
     }
 }
 
-// impl read/write?
-
 const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 impl MessageBus for TcpMessageBus {
@@ -108,12 +109,13 @@ impl MessageBus for TcpMessageBus {
         read_packet(&self.reader)
     }
 
-    fn write_message_for_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise> {
+    fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise> {
         let (sender, receiver) = channel::unbounded();
         let (signals_out, signals_in) = channel::unbounded();
 
         self.add_request(request_id, sender)?;
         self.write_message(packet)?;
+        self.signals.push(signals_in);
 
         Ok(ResponsePacketPromise::new(receiver, signals_out, Some(request_id), None))
     }
@@ -124,6 +126,7 @@ impl MessageBus for TcpMessageBus {
 
         self.add_order(order_id, sender)?;
         self.write_message(message)?;
+        self.signals.push(signals_in);
 
         Ok(ResponsePacketPromise::new(receiver, signals_out, None, Some(order_id)))
     }
@@ -393,9 +396,17 @@ impl ResponsePacketPromise {
         Ok(self.messages.recv_timeout(Duration::from_secs(20))?)
         // return Err(anyhow!("no message"));
     }
+}
 
-    pub fn signal(&self, id: i32) {
-        self.signals.send(id).unwrap();
+impl Drop for ResponsePacketPromise {
+    fn drop(&mut self) {
+        if let Some(request_id) = self.request_id {
+            self.signals.send(request_id).unwrap();
+        }
+
+        if let Some(order_id) = self.order_id {
+            self.signals.send(order_id).unwrap();
+        }
     }
 }
 

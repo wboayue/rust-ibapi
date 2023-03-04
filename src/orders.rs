@@ -1015,7 +1015,6 @@ pub fn place_order<C: Client + Debug>(client: &mut C, order_id: i32, contract: &
 
     Ok(OrderNotificationIterator {
         messages,
-        order_id,
         server_version: client.server_version(),
     })
 }
@@ -1025,7 +1024,6 @@ pub fn place_order<C: Client + Debug>(client: &mut C, order_id: i32, contract: &
 /// Supports iteration over [OrderNotification]
 pub struct OrderNotificationIterator {
     server_version: i32,
-    order_id: i32,
     messages: ResponsePacketPromise,
 }
 
@@ -1075,12 +1073,6 @@ impl Iterator for OrderNotificationIterator {
                 return None;
             }
         }
-    }
-}
-
-impl Drop for OrderNotificationIterator {
-    fn drop(&mut self) {
-        self.messages.signal(self.order_id);
     }
 }
 
