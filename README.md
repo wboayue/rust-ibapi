@@ -12,9 +12,6 @@ https://github.com/InteractiveBrokers/tws-api/blob/5cb24aea5cef9d315985a7b13dea7
 
 RUST_LOG=debug cargo run --bin find_contract_details
 
-
-TODO: fix request/response channel leak
-
 feat: (new feature for the user, not a new feature for build script)
 fix: (bug fix for the user, not a fix to a build script)
 docs: (changes to the documentation)

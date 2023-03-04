@@ -379,8 +379,8 @@ pub struct ResponsePacketPromise {
 impl ResponsePacketPromise {
     pub fn new(messages: Receiver<ResponseMessage>, signals: Sender<i32>, request_id: Option<i32>, order_id: Option<i32>) -> Self {
         ResponsePacketPromise {
-            messages: messages,
-            signals: signals,
+            messages,
+            signals,
             request_id,
             order_id,
         }
@@ -395,7 +395,7 @@ impl ResponsePacketPromise {
     }
 
     pub fn signal(&self, id: i32) {
-        self.signals.send(id);
+        self.signals.send(id).unwrap();
     }
 }
 
@@ -405,9 +405,9 @@ impl Iterator for ResponsePacketPromise {
         match self.messages.recv_timeout(Duration::from_secs(5)) {
             Err(err) => {
                 info!("timeout receiving packet: {err}");
-                return None;
+                None
             }
-            Ok(message) => return Some(message),
+            Ok(message) => Some(message),
         }
     }
 }

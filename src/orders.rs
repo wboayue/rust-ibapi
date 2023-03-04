@@ -1435,7 +1435,6 @@ pub fn next_valid_order_id<C: Client + Debug>(client: &mut C) -> Result<i32> {
     let request_id = client.next_request_id();
     let message = encoders::encode_next_valid_order_id(client.server_version())?;
 
-    // TODO this should be on client
     let mut messages = client.send_order(request_id, message)?;
 
     if let Some(message) = messages.next() {
@@ -1456,8 +1455,7 @@ pub fn completed_orders<C: Client + Debug>() {
 
 /// Requests all open orders places by this specific API client (identified by the API client id). For client ID 0, this will bind previous manual TWS orders.
 pub fn open_orders<C: Client + Debug>() {
-    // Active orders will be delivered via The openOrder callback and The orderStatus callback callbacks. When all orders have been sent to the client application you will receive a IBApi.EWrapper.openOrderEnd event:
-    //
+    // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EClient.cs#L2286
 }
 
 /// Requests all *current* open orders in associated accounts at the current moment. The existing orders will be received via the openOrder and orderStatus events.

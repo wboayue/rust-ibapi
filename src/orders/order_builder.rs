@@ -120,7 +120,7 @@ pub fn pegged_to_market(action: Action, quantity: f64, market_offset: f64) -> Or
     Order {
         action,
         order_type: "PEG MKT".to_owned(),
-        total_quantity: quantity, // TODO: why was this 100?
+        total_quantity: quantity,
         aux_price: Some(market_offset),
         ..Order::default()
     }
