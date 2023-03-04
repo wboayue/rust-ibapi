@@ -1393,9 +1393,9 @@ impl Iterator for CancelOrderResultIterator {
 pub fn global_cancel<C: Client + Debug>(client: &mut C) -> Result<()> {
     client.check_server_version(server_versions::REQ_GLOBAL_CANCEL, "It does not support global cancel requests.")?;
 
-    let request_id = client.next_request_id();
-    let message = encoders::encode_global_cancel(client.server_version())?;
+    let message = encoders::encode_global_cancel()?;
 
+    let request_id = client.next_request_id();
     client.send_order(request_id, message)?;
 
     Ok(())
@@ -1424,7 +1424,7 @@ pub fn global_cancel<C: Client + Debug>(client: &mut C) -> Result<()> {
 /// }
 /// ```
 pub fn next_valid_order_id<C: Client + Debug>(client: &mut C) -> Result<i32> {
-    let message = encoders::encode_next_valid_order_id(client.server_version())?;
+    let message = encoders::encode_next_valid_order_id()?;
 
     let mut messages = client.request_next_order_id(message)?;
 
@@ -1443,40 +1443,89 @@ pub fn next_valid_order_id<C: Client + Debug>(client: &mut C) -> Result<i32> {
 /// Requests completed orders.\n
 /// * @param apiOnly - request only API orders.\n
 /// * @sa EWrapper::completedOrder, EWrapper::completedOrdersEnd
-pub fn completed_orders<C: Client + Debug>() {
+pub fn completed_orders<C: Client + Debug>(client: &mut C, api_only: bool) -> Result<()> {
+    client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
+
+    let message = encoders::encode_completed_orders(api_only)?;
+
+    let mut messages = client.request_open_orders(message)?;
+
     // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EClient.cs#L221
+
+    Ok(())
 }
 
 /// Requests all open orders places by this specific API client (identified by the API client id). For client ID 0, this will bind previous manual TWS orders.
-pub fn open_orders<C: Client + Debug>() {
+pub fn open_orders<C: Client + Debug>(client: &mut C) -> Result<()> {
+    let message = encoders::encode_open_orders()?;
+
+    let mut messages = client.request_open_orders(message)?;
+
     // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EClient.cs#L2286
+
+    Ok(())
 }
 
 /// Requests all *current* open orders in associated accounts at the current moment. The existing orders will be received via the openOrder and orderStatus events.
 /// Open orders are returned once; this function does not initiate a subscription
-pub fn all_open_orders<C: Client + Debug>() {
+pub fn all_open_orders<C: Client + Debug>(client: &mut C) -> Result<()> {
+    let message = encoders::encode_all_open_orders()?;
+
+    let mut messages = client.request_open_orders(message)?;
+
     // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EClient.cs#L1498
+
+    Ok(())
 }
 
 /// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
 /// @param autoBind if set to true, the newly created orders will be assigned an API order ID and implicitly associated with this client. If set to false, future orders will not be.
 /// @sa reqAllOpenOrders, reqOpenOrders, cancelOrder, reqGlobalCancel, EWrapper::openOrder, EWrapper::orderStatus
-pub fn auto_open_order() {
+pub fn auto_open_orders<C: Client + Debug>(client: &mut C, auto_bind: bool) -> Result<()> {
+    let message = encoders::encode_auto_open_orders(auto_bind)?;
+
+    let mut messages = client.request_open_orders(message)?;
+
     // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EClient.cs#L1516
+
+    Ok(())
 }
 
 //https://interactivebrokers.github.io/tws-api/classIBApi_1_1ExecutionFilter.html
 
-pub struct ExecutionFilter {}
+#[derive(Debug, Default)]
+pub struct ExecutionFilter {
+    /// The API client which placed the order.
+    pub client_id: Option<i32>,
+    /// The account to which the order was allocated to
+    pub account_code: String,
+    /// Time from which the executions will be returned yyyymmdd hh:mm:ss
+    /// Only those executions reported after the specified time will be returned.
+    pub time: String,
+    /// The instrument's symbol
+    pub symbol: String,
+    /// The Contract's security's type (i.e. STK, OPT...)
+    pub security_type: String,
+    /// The exchange at which the execution was produced
+    pub exchange: String,
+    /// The Contract's side (BUY or SELL)
+    pub side: String,
+}
 
 /// Requests current day's (since midnight) executions matching the filter.
 /// Only the current day's executions can be retrieved. Along with the executions, the CommissionReport will also be returned. The execution details will arrive at EWrapper:execDetails
 ///
 /// * @param filter the filter criteria used to determine which execution reports are returned.
 /// * @sa EWrapper::execDetails, EWrapper::commissionReport, ExecutionFilter
-pub fn executions<C: Client + Debug>() {
+pub fn executions<C: Client + Debug>(client: &mut C, filter: ExecutionFilter) -> Result<()> {
+    let request_id = client.next_request_id();
+    let message = encoders::encode_executions(client.server_version(), request_id, &filter)?;
+
+    let mut messages = client.send_request(request_id, message)?;
+
     // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EClient.cs#L1663
     //    IBApi.Execution and IBApi.CommissionReport can be requested on demand via the IBApi.EClient.reqExecutions method which receives a IBApi.ExecutionFilter object as parameter to obtain only those executions matching the given criteria. An empty IBApi.ExecutionFilter object can be passed to obtain all previous executions.
+    Ok(())
 }
 
 #[cfg(test)]

@@ -350,6 +350,87 @@ fn next_valid_order_id() {
 }
 
 #[test]
+fn completed_orders() {
+    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+
+    client.response_messages = vec!["9|1|43||".to_owned()];
+
+    let api_only = true;
+    let results = super::completed_orders(&mut client, api_only);
+
+    assert_eq!(client.request_messages[0], "99|1|");
+
+    assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
+    // assert_eq!(43, results.unwrap(), "next order id");
+}
+
+#[test]
+fn open_orders() {
+    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+
+    client.response_messages = vec!["9|1|43||".to_owned()];
+
+    let results = super::open_orders(&mut client);
+
+    assert_eq!(client.request_messages[0], "5|1|");
+
+    assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
+    // assert_eq!(43, results.unwrap(), "next order id");
+}
+
+#[test]
+fn all_open_orders() {
+    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+
+    client.response_messages = vec!["9|1|43||".to_owned()];
+
+    let results = super::all_open_orders(&mut client);
+
+    assert_eq!(client.request_messages[0], "16|1|");
+
+    assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
+    // assert_eq!(43, results.unwrap(), "next order id");
+}
+
+#[test]
+fn auto_open_orders() {
+    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+
+    client.response_messages = vec!["9|1|43||".to_owned()];
+
+    let api_only = true;
+    let results = super::auto_open_orders(&mut client, api_only);
+
+    assert_eq!(client.request_messages[0], "15|1|1|");
+
+    assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
+    // assert_eq!(43, results.unwrap(), "next order id");
+}
+
+#[test]
+fn executions() {
+    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+
+    client.response_messages = vec!["9|1|43||".to_owned()];
+
+    let filter = ExecutionFilter{
+        client_id: Some(100),
+        account_code: "xyz".to_owned(),
+        time: "yyyymmdd hh:mm:ss EST".to_owned(),
+        symbol: "TSLA".to_owned(),
+        security_type: "STK".to_owned(),
+        exchange: "ISLAND".to_owned(),
+        side: "BUY".to_owned(),
+    };
+    let results = super::executions(&mut client, filter);
+
+    assert_eq!(client.request_messages[0], "7|3|3000|100|xyz|yyyymmdd hh:mm:ss EST|TSLA|STK|ISLAND|BUY|");
+
+    assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
+    // assert_eq!(43, results.unwrap(), "next order id");
+}
+
+#[test]
 fn encode_limit_order() {
     let mut client = ClientStub::new(server_versions::SIZE_RULES);
 
