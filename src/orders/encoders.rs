@@ -465,7 +465,7 @@ pub fn encode_auto_open_orders(auto_bind: bool) -> Result<RequestMessage> {
     Ok(message)
 }
 
-pub fn encode_executions(server_version: i32, request_id: i32, filter: &ExecutionFilter)-> Result<RequestMessage> {
+pub fn encode_executions(server_version: i32, request_id: i32, filter: &ExecutionFilter) -> Result<RequestMessage> {
     const VERSION: i32 = 3;
 
     let mut message = RequestMessage::default();
@@ -479,12 +479,12 @@ pub fn encode_executions(server_version: i32, request_id: i32, filter: &Executio
 
     message.push_field(&filter.client_id);
     message.push_field(&filter.account_code);
-    message.push_field(&filter.time);   // "yyyyMMdd-HH:mm:ss" (UTC) or "yyyyMMdd HH:mm:ss timezone"
+    message.push_field(&filter.time); // "yyyyMMdd-HH:mm:ss" (UTC) or "yyyyMMdd HH:mm:ss timezone"
     message.push_field(&filter.symbol);
     message.push_field(&filter.security_type);
     message.push_field(&filter.exchange);
     message.push_field(&filter.side);
-    
+
     Ok(message)
 }
 

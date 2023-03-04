@@ -413,7 +413,7 @@ fn executions() {
 
     client.response_messages = vec!["9|1|43||".to_owned()];
 
-    let filter = ExecutionFilter{
+    let filter = ExecutionFilter {
         client_id: Some(100),
         account_code: "xyz".to_owned(),
         time: "yyyymmdd hh:mm:ss EST".to_owned(),
