@@ -27,8 +27,8 @@ pub trait MessageBus {
 
     fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
     fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
-    fn send_order_id_message(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise>;
-    fn send_open_orders_message(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise>;
+    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise>;
+    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise>;
 
     fn write(&mut self, packet: &str) -> Result<()>;
 
@@ -131,12 +131,12 @@ impl MessageBus for TcpMessageBus {
         Ok(ResponsePacketPromise::new(receiver, signals_out, None, Some(order_id)))
     }
 
-    fn send_order_id_message(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise> {
+    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise> {
         self.write_message(message)?;
         Ok(GlobalResponsePacketPromise::new(Arc::clone(&self.globals.order_ids_out)))
     }
 
-    fn send_open_orders_message(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise> {
+    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise> {
         self.write_message(message)?;
         Ok(GlobalResponsePacketPromise::new(Arc::clone(&self.globals.open_orders_out)))
     }
