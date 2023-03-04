@@ -43,16 +43,16 @@ pub struct TcpMessageBus {
     requests: Arc<SenderHash<ResponseMessage>>,
     orders: Arc<SenderHash<ResponseMessage>>,
     recorder: MessageRecorder,
-    globals: GlobalChannels,
+    globals: Arc<GlobalChannels>,
     signals: Vec<Receiver<i32>>,
 }
 
 #[derive(Debug)]
 struct GlobalChannels {
     order_ids_in: Arc<Sender<ResponseMessage>>,
-    order_ids_out: Arc<Mutex<Receiver<ResponseMessage>>>,
+    order_ids_out: Arc<Receiver<ResponseMessage>>,
     open_orders_in: Arc<Sender<ResponseMessage>>,
-    open_orders_out: Arc<Mutex<Receiver<ResponseMessage>>>,
+    open_orders_out: Arc<Receiver<ResponseMessage>>,
 }
 
 impl GlobalChannels {
@@ -62,9 +62,9 @@ impl GlobalChannels {
 
         GlobalChannels {
             order_ids_in: Arc::new(order_ids_in),
-            order_ids_out: Arc::new(Mutex::new(order_ids_out)),
+            order_ids_out: Arc::new(order_ids_out),
             open_orders_in: Arc::new(open_orders_in),
-            open_orders_out: Arc::new(Mutex::new(open_orders_out)),
+            open_orders_out: Arc::new(open_orders_out),
         }
     }
 }
@@ -86,7 +86,7 @@ impl TcpMessageBus {
             requests,
             orders,
             recorder: MessageRecorder::new(),
-            globals: GlobalChannels::new(),
+            globals: Arc::new(GlobalChannels::new()),
             signals: Vec::new(),
         })
     }
@@ -168,16 +168,16 @@ impl MessageBus for TcpMessageBus {
         let requests = Arc::clone(&self.requests);
         let recorder = self.recorder.clone();
         let orders = Arc::clone(&self.orders);
+        let globals = Arc::clone(&self.globals);
 
         let handle = thread::spawn(move || loop {
             match read_packet(&reader) {
                 Ok(message) => {
                     recorder.record_response(&message);
-                    dispatch_message(message, server_version, &requests, &orders);
+                    dispatch_message(message, server_version, &requests, &orders, &globals);
                 }
                 Err(err) => {
                     error!("error reading packet: {:?}", err);
-                    // thread::sleep(Duration::from_secs(1));
                     continue;
                 }
             };
@@ -197,6 +197,7 @@ fn dispatch_message(
     server_version: i32,
     requests: &Arc<SenderHash<ResponseMessage>>,
     orders: &Arc<SenderHash<ResponseMessage>>,
+    globals: &Arc<GlobalChannels>,
 ) {
     match message.message_type() {
         IncomingMessages::Error => {
@@ -208,7 +209,9 @@ fn dispatch_message(
                 process_response(requests, orders, message);
             }
         }
-        IncomingMessages::NextValidId => process_next_valid_id(server_version, message),
+        IncomingMessages::NextValidId => {
+            globals.order_ids_in.send(message).unwrap();
+        }
         IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
         IncomingMessages::OrderStatus
         | IncomingMessages::OpenOrder
@@ -277,14 +280,6 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<()> {
         );
         Ok(())
     }
-}
-
-fn process_next_valid_id(_server_version: i32, mut packet: ResponseMessage) {
-    packet.skip(); // message_id
-    packet.skip(); // version
-
-    let order_id = packet.next_string().unwrap_or_else(|_| String::default());
-    info!("next_valid_order_id: {}", order_id)
 }
 
 fn process_managed_accounts(_server_version: i32, mut packet: ResponseMessage) {
@@ -425,13 +420,27 @@ impl Iterator for ResponsePacketPromise {
 
 #[derive(Debug)]
 pub struct GlobalResponsePacketPromise {
-    messages: Arc<Mutex<Receiver<ResponseMessage>>>,
+    messages: Arc<Receiver<ResponseMessage>>,
 }
 
 impl GlobalResponsePacketPromise {
-    pub fn new(messages: Arc<Mutex<Receiver<ResponseMessage>>>) -> Self {
+    pub fn new(messages: Arc<Receiver<ResponseMessage>>) -> Self {
         Self { messages }
     }
 }
+
+impl Iterator for GlobalResponsePacketPromise {
+    type Item = ResponseMessage;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.messages.recv_timeout(Duration::from_secs(5)) {
+            Err(err) => {
+                info!("timeout receiving packet: {err}");
+                None
+            }
+            Ok(message) => Some(message),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;

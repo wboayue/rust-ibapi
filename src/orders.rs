@@ -1424,14 +1424,16 @@ pub fn global_cancel<C: Client + Debug>(client: &mut C) -> Result<()> {
 /// }
 /// ```
 pub fn next_valid_order_id<C: Client + Debug>(client: &mut C) -> Result<i32> {
-    let request_id = client.next_request_id();
     let message = encoders::encode_next_valid_order_id(client.server_version())?;
 
-    let mut messages = client.send_order(request_id, message)?;
+    let mut messages = client.request_next_order_id(message)?;
 
     if let Some(message) = messages.next() {
         let order_id_index = 2;
         let next_order_id = message.peek_int(order_id_index)?;
+
+        client.set_next_order_id(next_order_id);
+
         Ok(next_order_id)
     } else {
         Err(anyhow!("no response from server"))

@@ -3,9 +3,6 @@ use clap::{arg, Command};
 use ibapi::client::IBClient;
 use ibapi::orders;
 
-use std::thread;
-use std::time::Duration;
-
 fn main() -> anyhow::Result<()> {
     env_logger::init();
 
@@ -22,8 +19,6 @@ fn main() -> anyhow::Result<()> {
 
     let order_id = orders::next_valid_order_id(&mut client)?;
     println!("Next valid order id: {order_id}");
-
-    thread::sleep(Duration::from_secs(5));
 
     Ok(())
 }

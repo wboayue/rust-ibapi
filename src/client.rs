@@ -6,7 +6,7 @@ use anyhow::{anyhow, Result};
 use log::{debug, error, info};
 use time::OffsetDateTime;
 
-use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
+use self::transport::{GlobalResponsePacketPromise, MessageBus, ResponsePacketPromise, TcpMessageBus};
 use crate::contracts::{ComboLegOpenClose, SecurityType};
 use crate::messages::{order_id_index, request_id_index, IncomingMessages, OutgoingMessages};
 use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A, TagValue};
@@ -27,7 +27,7 @@ pub trait Client {
     /// Returns the next order ID. Set at connection time then incremented on each call.
     fn next_order_id(&mut self) -> i32;
     /// Sets the current value of order ID.
-    fn set_order_id(&mut self, order_id: i32) -> i32;
+    fn set_next_order_id(&mut self, order_id: i32) -> i32;
     /// Returns the server version.
     fn server_version(&self) -> i32;
     /// Returns the server time at connection time.
@@ -40,6 +40,8 @@ pub trait Client {
     fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
     /// Submits an order and waits for reply.
     fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
+    /// Sends request for the next valid order id.
+    fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise>;
     /// Ensures server is at least the requested version.
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
@@ -214,7 +216,7 @@ impl Client for IBClient {
     }
 
     /// Sets the current value of order ID.
-    fn set_order_id(&mut self, order_id: i32) -> i32 {
+    fn set_next_order_id(&mut self, order_id: i32) -> i32 {
         self.order_id = order_id;
         self.order_id
     }
@@ -245,6 +247,11 @@ impl Client for IBClient {
     fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
         debug!("send_order({:?}, {:?})", order_id, message);
         self.message_bus.send_order_message(order_id, &message)
+    }
+
+    /// Sends request for the next valid order id.
+    fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+        self.message_bus.send_order_id_message(&message)
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
