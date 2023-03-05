@@ -16,21 +16,22 @@ impl OrderDecoder {
         if server_version < server_versions::ORDER_CONTAINER {
             message.skip(); // message version
         }
-    
+
         Self {
             server_version,
             message,
             order_id: -1,
             contract: Contract::default(),
             order: Order::default(),
-            order_state: OrderState::default() }
+            order_state: OrderState::default(),
+        }
     }
 
     fn decode_order_id(&mut self) -> Result<()> {
         self.order_id = self.message.next_int()?;
         self.order.order_id = self.order_id;
 
-        Ok(())   
+        Ok(())
     }
 
     fn decode_contract_fields(&mut self) -> Result<()> {
@@ -39,10 +40,10 @@ impl OrderDecoder {
 
         contract.contract_id = message.next_int()?;
         contract.symbol = message.next_string()?;
-    
+
         let security_type = message.next_string()?;
         contract.security_type = SecurityType::from(&security_type);
-    
+
         contract.last_trade_date_or_contract_month = message.next_string()?;
         contract.strike = message.next_double()?;
         contract.right = message.next_string()?;
@@ -52,14 +53,14 @@ impl OrderDecoder {
         contract.local_symbol = message.next_string()?;
         contract.trading_class = message.next_string()?;
 
-        Ok(())   
+        Ok(())
     }
 
     fn decode_action(&mut self) -> Result<()> {
         let action = self.message.next_string()?;
         self.order.action = Action::from(&action);
 
-        Ok(())   
+        Ok(())
     }
 
     fn decode_total_quantity(&mut self) -> Result<()> {
@@ -96,6 +97,75 @@ impl OrderDecoder {
         self.order.account = self.message.next_string()?;
         Ok(())
     }
+
+    fn decode_open_close(&mut self) -> Result<()> {
+        let open_close = self.message.next_string()?;
+        self.order.open_close = OrderOpenClose::from(&open_close);
+        Ok(())
+    }
+
+    fn decode_origin(&mut self) -> Result<()> {
+        self.order.origin = self.message.next_int()?;
+        Ok(())
+    }
+
+    fn decode_order_ref(&mut self) -> Result<()> {
+        self.order.order_ref = self.message.next_string()?;
+        Ok(())
+    }
+
+    fn decode_client_id(&mut self) -> Result<()> {
+        self.order.client_id = self.message.next_int()?;
+        Ok(())
+    }
+
+    fn decode_perm_id(&mut self) -> Result<()> {
+        self.order.perm_id = self.message.next_int()?;
+        Ok(())
+    }
+
+    fn decode_outside_rth(&mut self) -> Result<()> {
+        self.order.outside_rth = self.message.next_bool()?;
+        Ok(())
+    }
+
+    fn decode_hidden(&mut self) -> Result<()> {
+        self.order.hidden = self.message.next_bool()?;
+        Ok(())
+    }
+
+    fn decode_discretionary_amt(&mut self) -> Result<()> {
+        self.order.discretionary_amt = self.message.next_double()?;
+        Ok(())
+    }
+
+    fn decode_good_after_time(&mut self) -> Result<()> {
+        self.order.good_after_time = self.message.next_string()?;
+        Ok(())
+    }
+
+    // skips deprecated shares_allocation field
+    fn skip_shares_allocation(&mut self) -> Result<()> {
+        self.message.skip();
+        Ok(())
+    }
+
+    fn decode_fa_params(&mut self) -> Result<()> {
+        self.order.fa_group = self.message.next_string()?;
+        self.order.fa_method = self.message.next_string()?;
+        self.order.fa_percentage = self.message.next_string()?;
+        if self.server_version < server_versions::FA_PROFILE_DESUPPORT {
+            self.order.fa_percentage = self.message.next_string()?;
+        }
+        Ok(())
+    }
+
+    fn decode_model_code(&mut self) -> Result<()> {
+        if self.server_version >= server_versions::MODELS_SUPPORT {
+            self.order.model_code = self.message.next_string()?;
+        }
+        Ok(())
+    }
 }
 pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> Result<OpenOrder> {
     let mut decoder = OrderDecoder::new(server_version, message);
@@ -116,6 +186,18 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
     decoder.decode_tif()?;
     decoder.decode_oca_group()?;
     decoder.decode_account()?;
+    decoder.decode_open_close()?;
+    decoder.decode_origin()?;
+    decoder.decode_order_ref()?;
+    decoder.decode_client_id()?;
+    decoder.decode_perm_id()?;
+    decoder.decode_outside_rth()?;
+    decoder.decode_hidden()?;
+    decoder.decode_discretionary_amt()?;
+    decoder.decode_good_after_time()?;
+    decoder.skip_shares_allocation()?;
+    decoder.decode_fa_params()?;
+    decoder.decode_model_code()?;
 
     open_order.order_id = decoder.order_id;
     open_order.contract = Box::new(decoder.contract);
@@ -127,31 +209,6 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
     let order_state = &mut open_order.order_state;
 
     let mut message = decoder.message.clone();
-
-    let open_close = message.next_string()?;
-    order.open_close = OrderOpenClose::from(&open_close);
-
-    order.origin = message.next_int()?;
-    order.order_ref = message.next_string()?;
-    order.client_id = message.next_int()?;
-    order.perm_id = message.next_int()?;
-    order.outside_rth = message.next_bool()?;
-    order.hidden = message.next_bool()?;
-    order.discretionary_amt = message.next_double()?;
-    order.good_after_time = message.next_string()?;
-
-    message.skip(); // skip deprecated shares_allocation field
-
-    order.fa_group = message.next_string()?;
-    order.fa_method = message.next_string()?;
-    order.fa_percentage = message.next_string()?;
-    if server_version < server_versions::FA_PROFILE_DESUPPORT {
-        order.fa_percentage = message.next_string()?;
-    }
-
-    if server_version > server_versions::MODELS_SUPPORT {
-        order.model_code = message.next_string()?;
-    }
 
     order.good_till_date = message.next_string()?;
     let rule_80_a = message.next_string()?;

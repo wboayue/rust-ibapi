@@ -1454,7 +1454,7 @@ pub fn completed_orders<C: Client + Debug>(client: &mut C, api_only: bool) -> Re
 
     // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EDecoder.cs#L417
 
-//    completedOrder(contract, order, orderState)
+    //    completedOrder(contract, order, orderState)
     Ok(OrdersIterator {
         server_version: client.server_version(),
         messages,
@@ -1483,15 +1483,15 @@ impl Iterator for OrdersIterator {
                     },
                     IncomingMessages::OpenOrder => {
                         decoders::decode_open_orders(self.server_version, message);
-                        return None
-                    },
+                        return None;
+                    }
                     IncomingMessages::CompletedOrdersEnd => {
                         return None;
-                    },
+                    }
                     IncomingMessages::Error => {
                         let message = message.peek_string(4);
                         return Some(CancelOrderResult::Notice(Notice(message)));
-                    },
+                    }
                     message => {
                         error!("unexpected messsage: {message:?}");
                     }
