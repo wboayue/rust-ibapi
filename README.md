@@ -25,6 +25,8 @@ chore: (updating grunt tasks etc; no production code change)
 https://github.com/taiki-e/cargo-llvm-cov
 
 ```bash
+cargo +stable install cargo-llvm-cov --locked
+
 cargo llvm-cov --open
 ```
 

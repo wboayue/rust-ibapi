@@ -165,6 +165,27 @@ impl OrderDecoder {
         }
         Ok(())
     }
+
+    fn decode_good_till_date(&mut self) -> Result<()> {
+        self.order.good_till_date = self.message.next_string()?;
+        Ok(())
+    }
+
+    fn decode_rule_80_a(&mut self) -> Result<()> {
+        let rule_80_a = self.message.next_string()?;
+        self.order.rule_80_a = Rule80A::from(&rule_80_a);
+        Ok(())
+    }
+
+    fn decode_percent_offset(&mut self) -> Result<()> {
+        self.order.percent_offset = self.message.next_optional_double()?;
+        Ok(())
+    }
+
+    fn decode_settling_firm(&mut self) -> Result<()> {
+        self.order.settling_firm = self.message.next_string()?;
+        Ok(())
+    }
 }
 pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> Result<OpenOrder> {
     let mut decoder = OrderDecoder::new(server_version, message);
@@ -197,6 +218,10 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
     decoder.skip_shares_allocation();
     decoder.decode_fa_params()?;
     decoder.decode_model_code()?;
+    decoder.decode_good_till_date()?;
+    decoder.decode_rule_80_a()?;
+    decoder.decode_percent_offset()?;
+    decoder.decode_settling_firm()?;
 
     open_order.order_id = decoder.order_id;
     open_order.contract = Box::new(decoder.contract);
@@ -208,12 +233,6 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
     let order_state = &mut open_order.order_state;
 
     let mut message = decoder.message.clone();
-
-    order.good_till_date = message.next_string()?;
-    let rule_80_a = message.next_string()?;
-    order.rule_80_a = Rule80A::from(&rule_80_a);
-    order.percent_offset = message.next_optional_double()?;
-    order.settling_firm = message.next_string()?;
 
     // Short sale params
     order.short_sale_slot = message.next_int()?;
