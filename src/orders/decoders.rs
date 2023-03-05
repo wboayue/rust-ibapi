@@ -145,9 +145,8 @@ impl OrderDecoder {
     }
 
     // skips deprecated shares_allocation field
-    fn skip_shares_allocation(&mut self) -> Result<()> {
+    fn skip_shares_allocation(&mut self) {
         self.message.skip();
-        Ok(())
     }
 
     fn decode_fa_params(&mut self) -> Result<()> {
@@ -195,7 +194,7 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
     decoder.decode_hidden()?;
     decoder.decode_discretionary_amt()?;
     decoder.decode_good_after_time()?;
-    decoder.skip_shares_allocation()?;
+    decoder.skip_shares_allocation();
     decoder.decode_fa_params()?;
     decoder.decode_model_code()?;
 
