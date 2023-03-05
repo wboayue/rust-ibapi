@@ -22,6 +22,8 @@ chore: (updating grunt tasks etc; no production code change)
 
 # Run Coverage Report
 
+https://github.com/taiki-e/cargo-llvm-cov
+
 ```bash
 cargo llvm-cov --open
 ```
