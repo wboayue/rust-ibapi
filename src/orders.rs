@@ -4,7 +4,7 @@ use std::fmt::{self, Debug, Display};
 use anyhow::{anyhow, Result};
 use log::{error, info};
 
-use crate::client::transport::ResponsePacketPromise;
+use crate::client::transport::{GlobalResponsePacketPromise, ResponsePacketPromise};
 use crate::client::{Client, RequestMessage, ResponseMessage};
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
@@ -1443,55 +1443,102 @@ pub fn next_valid_order_id<C: Client + Debug>(client: &mut C) -> Result<i32> {
 /// Requests completed orders.\n
 /// * @param apiOnly - request only API orders.\n
 /// * @sa EWrapper::completedOrder, EWrapper::completedOrdersEnd
-pub fn completed_orders<C: Client + Debug>(client: &mut C, api_only: bool) -> Result<()> {
+pub fn completed_orders<C: Client + Debug>(client: &mut C, api_only: bool) -> Result<OrdersIterator> {
     client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
 
     let message = encoders::encode_completed_orders(api_only)?;
 
-    let mut messages = client.request_open_orders(message)?;
+    let messages = client.request_orders(message)?;
 
     // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EClient.cs#L221
 
-    Ok(())
+    // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EDecoder.cs#L417
+
+    Ok(OrdersIterator {
+        server_version: client.server_version(),
+        messages,
+    })
+}
+
+pub struct OrdersIterator {
+    server_version: i32,
+    messages: GlobalResponsePacketPromise,
+}
+
+impl Iterator for OrdersIterator {
+    type Item = CancelOrderResult;
+
+    // FIXME needs correct implemetation
+    /// Returns the next [CancelOrderResult]. Waits up to x seconds for next [CancelOrderResult].
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(mut message) = self.messages.next() {
+                match message.message_type() {
+                    IncomingMessages::OrderStatus => match decoders::decode_order_status(self.server_version, &mut message) {
+                        Ok(val) => return Some(CancelOrderResult::OrderStatus(val)),
+                        Err(err) => {
+                            error!("error decoding order status: {err}");
+                        }
+                    },
+                    IncomingMessages::Error => {
+                        let message = message.peek_string(4);
+                        return Some(CancelOrderResult::Notice(Notice(message)));
+                    }
+                    message => {
+                        error!("unexpected messsage: {message:?}");
+                    }
+                }
+            } else {
+                return None;
+            }
+        }
+    }
 }
 
 /// Requests all open orders places by this specific API client (identified by the API client id). For client ID 0, this will bind previous manual TWS orders.
-pub fn open_orders<C: Client + Debug>(client: &mut C) -> Result<()> {
+/// * @sa EWrapper::openOrder, EWrapper::orderStatus, EWrapper::openOrderEnd
+pub fn open_orders<C: Client + Debug>(client: &mut C) -> Result<OrdersIterator> {
     let message = encoders::encode_open_orders()?;
 
-    let mut messages = client.request_open_orders(message)?;
+    let messages = client.request_orders(message)?;
 
-    // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EClient.cs#L2286
-
-    Ok(())
+    Ok(OrdersIterator {
+        server_version: client.server_version(),
+        messages,
+    })
 }
 
 /// Requests all *current* open orders in associated accounts at the current moment. The existing orders will be received via the openOrder and orderStatus events.
 /// Open orders are returned once; this function does not initiate a subscription
-pub fn all_open_orders<C: Client + Debug>(client: &mut C) -> Result<()> {
+/// @sa EWrapper::openOrder, EWrapper::orderStatus, EWrapper::openOrderEnd
+pub fn all_open_orders<C: Client + Debug>(client: &mut C) -> Result<OrdersIterator> {
     let message = encoders::encode_all_open_orders()?;
 
-    let mut messages = client.request_open_orders(message)?;
+    let messages = client.request_orders(message)?;
 
-    // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EClient.cs#L1498
+    // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EDecoder.cs#L1492
 
-    Ok(())
+    Ok(OrdersIterator {
+        server_version: client.server_version(),
+        messages,
+    })
 }
 
 /// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
 /// @param autoBind if set to true, the newly created orders will be assigned an API order ID and implicitly associated with this client. If set to false, future orders will not be.
-/// @sa reqAllOpenOrders, reqOpenOrders, cancelOrder, reqGlobalCancel, EWrapper::openOrder, EWrapper::orderStatus
-pub fn auto_open_orders<C: Client + Debug>(client: &mut C, auto_bind: bool) -> Result<()> {
+/// @sa EWrapper::openOrder, EWrapper::orderStatus
+pub fn auto_open_orders<C: Client + Debug>(client: &mut C, auto_bind: bool) -> Result<OrdersIterator> {
     let message = encoders::encode_auto_open_orders(auto_bind)?;
 
-    let mut messages = client.request_open_orders(message)?;
+    let messages = client.request_orders(message)?;
 
-    // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EClient.cs#L1516
+    // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EDecoder.cs#L1492
 
-    Ok(())
+    Ok(OrdersIterator {
+        server_version: client.server_version(),
+        messages,
+    })
 }
-
-//https://interactivebrokers.github.io/tws-api/classIBApi_1_1ExecutionFilter.html
 
 #[derive(Debug, Default)]
 pub struct ExecutionFilter {
@@ -1515,8 +1562,10 @@ pub struct ExecutionFilter {
 /// Requests current day's (since midnight) executions matching the filter.
 /// Only the current day's executions can be retrieved. Along with the executions, the CommissionReport will also be returned. The execution details will arrive at EWrapper:execDetails
 ///
+/// when requesting executions, a filter can be specified to receive only a subset of them
+///
 /// * @param filter the filter criteria used to determine which execution reports are returned.
-/// * @sa EWrapper::execDetails, EWrapper::commissionReport, ExecutionFilter
+/// * @sa EWrapper::execDetails, EWrapper::commissionReport
 pub fn executions<C: Client + Debug>(client: &mut C, filter: ExecutionFilter) -> Result<()> {
     let request_id = client.next_request_id();
     let message = encoders::encode_executions(client.server_version(), request_id, &filter)?;
@@ -1525,6 +1574,9 @@ pub fn executions<C: Client + Debug>(client: &mut C, filter: ExecutionFilter) ->
 
     // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EClient.cs#L1663
     //    IBApi.Execution and IBApi.CommissionReport can be requested on demand via the IBApi.EClient.reqExecutions method which receives a IBApi.ExecutionFilter object as parameter to obtain only those executions matching the given criteria. An empty IBApi.ExecutionFilter object can be passed to obtain all previous executions.
+
+    // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EDecoder.cs#L1702
+
     Ok(())
 }
 

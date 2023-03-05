@@ -43,7 +43,7 @@ pub trait Client {
     /// Sends request for the next valid order id.
     fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise>;
     /// Sends request for open orders.
-    fn request_open_orders(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise>;
+    fn request_orders(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise>;
     /// Ensures server is at least the requested version.
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
@@ -257,7 +257,7 @@ impl Client for IBClient {
     }
 
     /// Sends request for open orders.
-    fn request_open_orders(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+    fn request_orders(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
         self.message_bus.request_open_orders(&message)
     }
 
