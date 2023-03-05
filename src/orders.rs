@@ -1046,7 +1046,7 @@ impl Iterator for OrderNotificationIterator {
             if let Some(mut message) = self.messages.next() {
                 match message.message_type() {
                     IncomingMessages::OpenOrder => {
-                        let open_order = decoders::decode_open_order(self.server_version, &mut message);
+                        let open_order = decoders::decode_open_order(self.server_version, message);
                         return convert(open_order);
                     }
                     IncomingMessages::OrderStatus => {
@@ -1454,6 +1454,7 @@ pub fn completed_orders<C: Client + Debug>(client: &mut C, api_only: bool) -> Re
 
     // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EDecoder.cs#L417
 
+//    completedOrder(contract, order, orderState)
     Ok(OrdersIterator {
         server_version: client.server_version(),
         messages,
@@ -1474,16 +1475,23 @@ impl Iterator for OrdersIterator {
         loop {
             if let Some(mut message) = self.messages.next() {
                 match message.message_type() {
-                    IncomingMessages::OrderStatus => match decoders::decode_order_status(self.server_version, &mut message) {
-                        Ok(val) => return Some(CancelOrderResult::OrderStatus(val)),
+                    IncomingMessages::CompletedOrder => match decoders::decode_completed_orders(self.server_version, &mut message) {
+                        Ok(val) => return None,
                         Err(err) => {
                             error!("error decoding order status: {err}");
                         }
                     },
+                    IncomingMessages::OpenOrder => {
+                        decoders::decode_open_orders(self.server_version, message);
+                        return None
+                    },
+                    IncomingMessages::CompletedOrdersEnd => {
+                        return None;
+                    },
                     IncomingMessages::Error => {
                         let message = message.peek_string(4);
                         return Some(CancelOrderResult::Notice(Notice(message)));
-                    }
+                    },
                     message => {
                         error!("unexpected messsage: {message:?}");
                     }
@@ -1501,6 +1509,8 @@ pub fn open_orders<C: Client + Debug>(client: &mut C) -> Result<OrdersIterator> 
     let message = encoders::encode_open_orders()?;
 
     let messages = client.request_orders(message)?;
+
+    // eWrapper.openOrder(order.OrderId, contract, order, orderState);
 
     Ok(OrdersIterator {
         server_version: client.server_version(),
