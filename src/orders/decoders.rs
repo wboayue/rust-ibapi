@@ -205,6 +205,12 @@ impl OrderDecoder {
         self.order.delta = self.message.next_optional_double()?;
         Ok(())
     }
+
+    fn decode_peg_to_stock_or_vol_order_params(&mut self) -> Result<()> {
+        self.order.stock_range_lower = self.message.next_optional_double()?;
+        self.order.stock_range_upper = self.message.next_optional_double()?;
+        Ok(())
+    }
 }
 pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> Result<OpenOrder> {
     let mut decoder = OrderDecoder::new(server_version, message);
@@ -244,6 +250,7 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
     decoder.decode_short_sale_params()?;
     decoder.decode_auction_strategy()?;
     decoder.decode_box_order_params()?;
+    decoder.decode_peg_to_stock_or_vol_order_params()?;
 
     open_order.order_id = decoder.order_id;
     open_order.contract = Box::new(decoder.contract);
@@ -256,10 +263,6 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
 
     let mut message = decoder.message.clone();
 
-    // Peg to STK or volume order params
-    order.stock_range_lower = message.next_optional_double()?;
-    order.stock_range_upper = message.next_optional_double()?;
-
     order.display_size = message.next_optional_int()?;
     order.block_order = message.next_bool()?;
     order.sweep_to_fill = message.next_bool()?;
@@ -270,6 +273,17 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
     message.skip(); // ETradeOnly
     message.skip(); // FirmQuoteOnly
     message.skip(); // NbboPriceCap
+
+    // eOrderDecoder.readDisplaySize();
+    // eOrderDecoder.readOldStyleOutsideRth();
+    // eOrderDecoder.readBlockOrder();
+    // eOrderDecoder.readSweepToFill();
+    // eOrderDecoder.readAllOrNone();
+    // eOrderDecoder.readMinQty();
+    // eOrderDecoder.readOcaType();
+    // eOrderDecoder.skipETradeOnly();
+    // eOrderDecoder.skipFirmQuoteOnly();
+    // eOrderDecoder.skipNbboPriceCap();
 
     order.parent_id = message.next_int()?;
     order.trigger_method = message.next_int()?;
