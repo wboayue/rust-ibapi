@@ -186,6 +186,25 @@ impl OrderDecoder {
         self.order.settling_firm = self.message.next_string()?;
         Ok(())
     }
+
+    fn decode_short_sale_params(&mut self) -> Result<()> {
+        self.order.short_sale_slot = self.message.next_int()?;
+        self.order.designated_location = self.message.next_string()?;
+        self.order.exempt_code = self.message.next_int()?;
+        Ok(())
+    }
+
+    fn decode_auction_strategy(&mut self) -> Result<()> {
+        self.order.auction_strategy = self.message.next_optional_int()?;
+        Ok(())
+    }
+
+    fn decode_box_order_params(&mut self) -> Result<()> {
+        self.order.starting_price = self.message.next_optional_double()?;
+        self.order.stock_ref_price = self.message.next_optional_double()?;
+        self.order.delta = self.message.next_optional_double()?;
+        Ok(())
+    }
 }
 pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> Result<OpenOrder> {
     let mut decoder = OrderDecoder::new(server_version, message);
@@ -222,6 +241,9 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
     decoder.decode_rule_80_a()?;
     decoder.decode_percent_offset()?;
     decoder.decode_settling_firm()?;
+    decoder.decode_short_sale_params()?;
+    decoder.decode_auction_strategy()?;
+    decoder.decode_box_order_params()?;
 
     open_order.order_id = decoder.order_id;
     open_order.contract = Box::new(decoder.contract);
@@ -233,18 +255,6 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
     let order_state = &mut open_order.order_state;
 
     let mut message = decoder.message.clone();
-
-    // Short sale params
-    order.short_sale_slot = message.next_int()?;
-    order.designated_location = message.next_string()?;
-    order.exempt_code = message.next_int()?;
-
-    order.auction_strategy = message.next_optional_int()?;
-
-    // Box order paramas
-    order.starting_price = message.next_optional_double()?;
-    order.stock_ref_price = message.next_optional_double()?;
-    order.delta = message.next_optional_double()?;
 
     // Peg to STK or volume order params
     order.stock_range_lower = message.next_optional_double()?;
