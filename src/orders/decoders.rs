@@ -171,73 +171,73 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn decode_rule_80_a(&mut self) -> Result<()> {
+    fn read_rule_80_a(&mut self) -> Result<()> {
         let rule_80_a = self.message.next_string()?;
         self.order.rule_80_a = Rule80A::from(&rule_80_a);
         Ok(())
     }
 
-    fn decode_percent_offset(&mut self) -> Result<()> {
+    fn read_percent_offset(&mut self) -> Result<()> {
         self.order.percent_offset = self.message.next_optional_double()?;
         Ok(())
     }
 
-    fn decode_settling_firm(&mut self) -> Result<()> {
+    fn read_settling_firm(&mut self) -> Result<()> {
         self.order.settling_firm = self.message.next_string()?;
         Ok(())
     }
 
-    fn decode_short_sale_params(&mut self) -> Result<()> {
+    fn read_short_sale_params(&mut self) -> Result<()> {
         self.order.short_sale_slot = self.message.next_int()?;
         self.order.designated_location = self.message.next_string()?;
         self.order.exempt_code = self.message.next_int()?;
         Ok(())
     }
 
-    fn decode_auction_strategy(&mut self) -> Result<()> {
+    fn read_auction_strategy(&mut self) -> Result<()> {
         self.order.auction_strategy = self.message.next_optional_int()?;
         Ok(())
     }
 
-    fn decode_box_order_params(&mut self) -> Result<()> {
+    fn read_box_order_params(&mut self) -> Result<()> {
         self.order.starting_price = self.message.next_optional_double()?;
         self.order.stock_ref_price = self.message.next_optional_double()?;
         self.order.delta = self.message.next_optional_double()?;
         Ok(())
     }
 
-    fn decode_peg_to_stock_or_vol_order_params(&mut self) -> Result<()> {
+    fn read_peg_to_stock_or_vol_order_params(&mut self) -> Result<()> {
         self.order.stock_range_lower = self.message.next_optional_double()?;
         self.order.stock_range_upper = self.message.next_optional_double()?;
         Ok(())
     }
 
-    fn decode_display_size(&mut self) -> Result<()> {
+    fn read_display_size(&mut self) -> Result<()> {
         self.order.display_size = self.message.next_optional_int()?;
         Ok(())
     }
 
-    fn decode_block_order(&mut self) -> Result<()> {
+    fn read_block_order(&mut self) -> Result<()> {
         self.order.block_order = self.message.next_bool()?;
         Ok(())
     }
 
-    fn decode_sweep_to_fill(&mut self) -> Result<()> {
+    fn read_sweep_to_fill(&mut self) -> Result<()> {
         self.order.sweep_to_fill = self.message.next_bool()?;
         Ok(())
     }
 
-    fn decode_all_or_none(&mut self) -> Result<()> {
+    fn read_all_or_none(&mut self) -> Result<()> {
         self.order.all_or_none = self.message.next_bool()?;
         Ok(())
     }
 
-    fn decode_min_qty(&mut self) -> Result<()> {
+    fn read_min_qty(&mut self) -> Result<()> {
         self.order.min_qty = self.message.next_optional_int()?;
         Ok(())
     }
 
-    fn decode_oca_type(&mut self) -> Result<()> {
+    fn read_oca_type(&mut self) -> Result<()> {
         self.order.oca_type = self.message.next_int()?;
         Ok(())
     }
@@ -254,17 +254,17 @@ impl OrderDecoder {
         self.message.skip();
     }
 
-    fn decode_parent_id(&mut self) -> Result<()> {
+    fn read_parent_id(&mut self) -> Result<()> {
         self.order.parent_id = self.message.next_int()?;
         Ok(())
     }
 
-    fn decode_trigger_method(&mut self) -> Result<()> {
+    fn read_trigger_method(&mut self) -> Result<()> {
         self.order.trigger_method = self.message.next_int()?;
         Ok(())
     }
 
-    fn decode_volatility_order_params(&mut self) -> Result<()> {
+    fn read_volatility_order_params(&mut self) -> Result<()> {
         self.order.volatility = self.message.next_optional_double()?;
         self.order.volatility_type = self.message.next_optional_int()?;
         self.order.delta_neutral_order_type = self.message.next_string()?;
@@ -287,19 +287,19 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn decode_trail_params(&mut self) -> Result<()> {
+    fn read_trail_params(&mut self) -> Result<()> {
         self.order.trail_stop_price = self.message.next_optional_double()?;
         self.order.trailing_percent = self.message.next_optional_double()?;
         Ok(())
     }
 
-    fn decode_basis_points(&mut self) -> Result<()> {
+    fn read_basis_points(&mut self) -> Result<()> {
         self.order.basis_points = self.message.next_optional_double()?;
         self.order.basis_points_type = self.message.next_optional_int()?;
         Ok(())
     }
 
-    fn decode_combo_legs(&mut self) -> Result<()> {
+    fn read_combo_legs(&mut self) -> Result<()> {
         self.contract.combo_legs_description = self.message.next_string()?;
 
         let combo_legs_count = self.message.next_int()?;
@@ -335,7 +335,7 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn decode_smart_combo_routing_params(&mut self) -> Result<()> {
+    fn read_smart_combo_routing_params(&mut self) -> Result<()> {
         // smart combo routing params
         let smart_combo_routing_params_count = self.message.next_int()?;
         for _ in 0..smart_combo_routing_params_count {
@@ -348,7 +348,7 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn decode_scale_order_params(&mut self) -> Result<()> {
+    fn read_scale_order_params(&mut self) -> Result<()> {
         self.order.scale_init_level_size = self.message.next_optional_int()?;
         self.order.scale_subs_level_size = self.message.next_optional_int()?;
         self.order.scale_price_increment = self.message.next_optional_double()?;
@@ -368,7 +368,7 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn decode_hedge_params(&mut self) -> Result<()> {
+    fn read_hedge_params(&mut self) -> Result<()> {
         self.order.hedge_type = self.message.next_string()?;
         if !self.order.hedge_type.is_empty() {
             self.order.hedge_param = self.message.next_string()?;
@@ -456,31 +456,31 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
     decoder.read_fa_params()?;
     decoder.read_model_code()?;
     decoder.read_good_till_date()?;
-    decoder.decode_rule_80_a()?;
-    decoder.decode_percent_offset()?;
-    decoder.decode_settling_firm()?;
-    decoder.decode_short_sale_params()?;
-    decoder.decode_auction_strategy()?;
-    decoder.decode_box_order_params()?;
-    decoder.decode_peg_to_stock_or_vol_order_params()?;
-    decoder.decode_display_size()?;
-    decoder.decode_block_order()?;
-    decoder.decode_sweep_to_fill()?;
-    decoder.decode_all_or_none()?;
-    decoder.decode_min_qty()?;
-    decoder.decode_oca_type()?;
+    decoder.read_rule_80_a()?;
+    decoder.read_percent_offset()?;
+    decoder.read_settling_firm()?;
+    decoder.read_short_sale_params()?;
+    decoder.read_auction_strategy()?;
+    decoder.read_box_order_params()?;
+    decoder.read_peg_to_stock_or_vol_order_params()?;
+    decoder.read_display_size()?;
+    decoder.read_block_order()?;
+    decoder.read_sweep_to_fill()?;
+    decoder.read_all_or_none()?;
+    decoder.read_min_qty()?;
+    decoder.read_oca_type()?;
     decoder.skip_etrade_only();
     decoder.skip_firm_quote_only();
     decoder.skip_nbbo_price_cap();
-    decoder.decode_parent_id()?;
-    decoder.decode_trigger_method()?;
-    decoder.decode_volatility_order_params()?;
-    decoder.decode_trail_params()?;
-    decoder.decode_basis_points()?;
-    decoder.decode_combo_legs()?;
-    decoder.decode_smart_combo_routing_params()?;
-    decoder.decode_scale_order_params()?;
-    decoder.decode_hedge_params()?;
+    decoder.read_parent_id()?;
+    decoder.read_trigger_method()?;
+    decoder.read_volatility_order_params()?;
+    decoder.read_trail_params()?;
+    decoder.read_basis_points()?;
+    decoder.read_combo_legs()?;
+    decoder.read_smart_combo_routing_params()?;
+    decoder.read_scale_order_params()?;
+    decoder.read_hedge_params()?;
     decoder.read_opt_out_smart_routing()?;
     decoder.read_clearing_params()?;
     decoder.read_not_held()?;
