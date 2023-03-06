@@ -211,6 +211,198 @@ impl OrderDecoder {
         self.order.stock_range_upper = self.message.next_optional_double()?;
         Ok(())
     }
+
+    fn decode_display_size(&mut self) -> Result<()> {
+        self.order.display_size = self.message.next_optional_int()?;
+        Ok(())
+    }
+
+    fn decode_block_order(&mut self) -> Result<()> {
+        self.order.block_order = self.message.next_bool()?;
+        Ok(())
+    }
+
+    fn decode_sweep_to_fill(&mut self) -> Result<()> {
+        self.order.sweep_to_fill = self.message.next_bool()?;
+        Ok(())
+    }
+
+    fn decode_all_or_none(&mut self) -> Result<()> {
+        self.order.all_or_none = self.message.next_bool()?;
+        Ok(())
+    }
+
+    fn decode_min_qty(&mut self) -> Result<()> {
+        self.order.min_qty = self.message.next_optional_int()?;
+        Ok(())
+    }
+
+    fn decode_oca_type(&mut self) -> Result<()> {
+        self.order.oca_type = self.message.next_int()?;
+        Ok(())
+    }
+
+    fn skip_etrade_only(&mut self) {
+        self.message.skip();
+    }
+
+    fn skip_firm_quote_only(&mut self) {
+        self.message.skip();
+    }
+
+    fn skip_nbbo_price_cap(&mut self) {
+        self.message.skip();
+    }
+
+    fn decode_parent_id(&mut self) -> Result<()> {
+        self.order.parent_id = self.message.next_int()?;
+        Ok(())
+    }
+
+    fn decode_trigger_method(&mut self) -> Result<()> {
+        self.order.trigger_method = self.message.next_int()?;
+        Ok(())
+    }
+
+    fn decode_volatility_order_params(&mut self) -> Result<()> {
+        self.order.volatility = self.message.next_optional_double()?;
+        self.order.volatility_type = self.message.next_optional_int()?;
+        self.order.delta_neutral_order_type = self.message.next_string()?;
+        self.order.delta_neutral_aux_price = self.message.next_optional_double()?;
+
+        if self.order.is_delta_neutral() {
+            self.order.delta_neutral_con_id = self.message.next_int()?;
+            self.order.delta_neutral_settling_firm = self.message.next_string()?;
+            self.order.delta_neutral_clearing_account = self.message.next_string()?;
+            self.order.delta_neutral_clearing_intent = self.message.next_string()?;
+            self.order.delta_neutral_open_close = self.message.next_string()?;
+            self.order.delta_neutral_short_sale = self.message.next_bool()?;
+            self.order.delta_neutral_short_sale_slot = self.message.next_int()?;
+            self.order.delta_neutral_designated_location = self.message.next_string()?;
+        }
+
+        self.order.continuous_update = self.message.next_bool()?;
+        self.order.reference_price_type = self.message.next_optional_int()?;
+
+        Ok(())
+    }
+
+    fn decode_trail_params(&mut self) -> Result<()> {
+        self.order.trail_stop_price = self.message.next_optional_double()?;
+        self.order.trailing_percent = self.message.next_optional_double()?;
+        Ok(())
+    }
+
+    fn decode_basis_points(&mut self) -> Result<()> {
+        self.order.basis_points = self.message.next_optional_double()?;
+        self.order.basis_points_type = self.message.next_optional_int()?;
+        Ok(())
+    }
+
+    fn decode_combo_legs(&mut self) -> Result<()> {
+        self.contract.combo_legs_description = self.message.next_string()?;
+
+        let combo_legs_count = self.message.next_int()?;
+        for _ in 0..combo_legs_count {
+            let contract_id = self.message.next_int()?;
+            let ratio = self.message.next_int()?;
+            let action = self.message.next_string()?;
+            let exchange = self.message.next_string()?;
+            let open_close = self.message.next_int()?;
+            let short_sale_slot = self.message.next_int()?;
+            let designated_location = self.message.next_string()?;
+            let exempt_code = self.message.next_int()?;
+
+            self.contract.combo_legs.push(ComboLeg {
+                contract_id,
+                ratio,
+                action,
+                exchange,
+                open_close: ComboLegOpenClose::from(open_close),
+                short_sale_slot,
+                designated_location,
+                exempt_code,
+            });
+        }
+
+        let order_combo_legs_count = self.message.next_int()?;
+        for _ in 0..order_combo_legs_count {
+            let price = self.message.next_optional_double()?;
+
+            self.order.order_combo_legs.push(OrderComboLeg { price });
+        }
+
+        Ok(())
+    }
+
+    fn decode_smart_combo_routing_params(&mut self) -> Result<()> {
+        // smart combo routing params
+        let smart_combo_routing_params_count = self.message.next_int()?;
+        for _ in 0..smart_combo_routing_params_count {
+            self.order.smart_combo_routing_params.push(TagValue {
+                tag: self.message.next_string()?,
+                value: self.message.next_string()?,
+            });
+        }
+
+        Ok(())
+    }
+
+    fn decode_scale_order_params(&mut self) -> Result<()> {
+        self.order.scale_init_level_size = self.message.next_optional_int()?;
+        self.order.scale_subs_level_size = self.message.next_optional_int()?;
+        self.order.scale_price_increment = self.message.next_optional_double()?;
+
+        if let Some(scale_price_increment) = self.order.scale_price_increment {
+            if scale_price_increment > 0.0 {
+                self.order.scale_price_adjust_value = self.message.next_optional_double()?;
+                self.order.scale_price_adjust_interval = self.message.next_optional_int()?;
+                self.order.scale_profit_offset = self.message.next_optional_double()?;
+                self.order.scale_auto_reset = self.message.next_bool()?;
+                self.order.scale_init_position = self.message.next_optional_int()?;
+                self.order.scale_init_fill_qty = self.message.next_optional_int()?;
+                self.order.scale_random_percent = self.message.next_bool()?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn decode_hedge_params(&mut self) -> Result<()> {
+        self.order.hedge_type = self.message.next_string()?;
+        if !self.order.hedge_type.is_empty() {
+            self.order.hedge_param = self.message.next_string()?;
+        }
+        Ok(())
+    }
+
+    fn decode_opt_out_smart_routing(&mut self) -> Result<()> {
+        self.order.opt_out_smart_routing = self.message.next_bool()?;
+        Ok(())
+    }
+
+    fn decode_clearing_params(&mut self) -> Result<()> {
+        self.order.clearing_account = self.message.next_string()?;
+        self.order.clearing_intent = self.message.next_string()?;
+        Ok(())
+    }
+
+    fn decode_not_held(&mut self) -> Result<()> {
+        self.order.not_held = self.message.next_bool()?;
+        Ok(())
+    }
+
+    fn decode_delta_neutral(&mut self) -> Result<()> {
+        let has_delta_neutral_contract = self.message.next_bool()?;
+        if has_delta_neutral_contract {
+            self.contract.delta_neutral_contract = Some(DeltaNeutralContract {
+                contract_id: self.message.next_int()?,
+                delta: self.message.next_double()?,
+                price: self.message.next_double()?,
+            });
+        }
+        Ok(())
+    }
 }
 pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> Result<OpenOrder> {
     let mut decoder = OrderDecoder::new(server_version, message);
@@ -251,6 +443,28 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
     decoder.decode_auction_strategy()?;
     decoder.decode_box_order_params()?;
     decoder.decode_peg_to_stock_or_vol_order_params()?;
+    decoder.decode_display_size()?;
+    decoder.decode_block_order()?;
+    decoder.decode_sweep_to_fill()?;
+    decoder.decode_all_or_none()?;
+    decoder.decode_min_qty()?;
+    decoder.decode_oca_type()?;
+    decoder.skip_etrade_only();
+    decoder.skip_firm_quote_only();
+    decoder.skip_nbbo_price_cap();
+    decoder.decode_parent_id()?;
+    decoder.decode_trigger_method()?;
+    decoder.decode_volatility_order_params()?;
+    decoder.decode_trail_params()?;
+    decoder.decode_basis_points()?;
+    decoder.decode_combo_legs()?;
+    decoder.decode_smart_combo_routing_params()?;
+    decoder.decode_scale_order_params()?;
+    decoder.decode_hedge_params()?;
+    decoder.decode_opt_out_smart_routing()?;
+    decoder.decode_clearing_params()?;
+    decoder.decode_not_held()?;
+    decoder.decode_delta_neutral()?;
 
     open_order.order_id = decoder.order_id;
     open_order.contract = Box::new(decoder.contract);
@@ -262,141 +476,6 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
     let order_state = &mut open_order.order_state;
 
     let mut message = decoder.message.clone();
-
-    order.display_size = message.next_optional_int()?;
-    order.block_order = message.next_bool()?;
-    order.sweep_to_fill = message.next_bool()?;
-    order.all_or_none = message.next_bool()?;
-    order.min_qty = message.next_optional_int()?;
-    order.oca_type = message.next_int()?;
-
-    message.skip(); // ETradeOnly
-    message.skip(); // FirmQuoteOnly
-    message.skip(); // NbboPriceCap
-
-    // eOrderDecoder.readDisplaySize();
-    // eOrderDecoder.readOldStyleOutsideRth();
-    // eOrderDecoder.readBlockOrder();
-    // eOrderDecoder.readSweepToFill();
-    // eOrderDecoder.readAllOrNone();
-    // eOrderDecoder.readMinQty();
-    // eOrderDecoder.readOcaType();
-    // eOrderDecoder.skipETradeOnly();
-    // eOrderDecoder.skipFirmQuoteOnly();
-    // eOrderDecoder.skipNbboPriceCap();
-
-    order.parent_id = message.next_int()?;
-    order.trigger_method = message.next_int()?;
-
-    // Volatility order params
-    order.volatility = message.next_optional_double()?;
-    order.volatility_type = message.next_optional_int()?;
-    order.delta_neutral_order_type = message.next_string()?;
-    order.delta_neutral_aux_price = message.next_optional_double()?;
-
-    if order.is_delta_neutral() {
-        order.delta_neutral_con_id = message.next_int()?;
-        order.delta_neutral_settling_firm = message.next_string()?;
-        order.delta_neutral_clearing_account = message.next_string()?;
-        order.delta_neutral_clearing_intent = message.next_string()?;
-        order.delta_neutral_open_close = message.next_string()?;
-        order.delta_neutral_short_sale = message.next_bool()?;
-        order.delta_neutral_short_sale_slot = message.next_int()?;
-        order.delta_neutral_designated_location = message.next_string()?;
-    }
-
-    order.continuous_update = message.next_bool()?;
-    order.reference_price_type = message.next_optional_int()?;
-
-    // Trail parameters
-    order.trail_stop_price = message.next_optional_double()?;
-    order.trailing_percent = message.next_optional_double()?;
-
-    // Basic points
-    order.basis_points = message.next_optional_double()?;
-    order.basis_points_type = message.next_optional_int()?;
-
-    // Combo Legs
-    contract.combo_legs_description = message.next_string()?;
-
-    let combo_legs_count = message.next_int()?;
-    for _ in 0..combo_legs_count {
-        let contract_id = message.next_int()?;
-        let ratio = message.next_int()?;
-        let action = message.next_string()?;
-        let exchange = message.next_string()?;
-        let open_close = message.next_int()?;
-        let short_sale_slot = message.next_int()?;
-        let designated_location = message.next_string()?;
-        let exempt_code = message.next_int()?;
-
-        contract.combo_legs.push(ComboLeg {
-            contract_id,
-            ratio,
-            action,
-            exchange,
-            open_close: ComboLegOpenClose::from(open_close),
-            short_sale_slot,
-            designated_location,
-            exempt_code,
-        });
-    }
-
-    // smart combo routing params
-    let order_combo_legs_count = message.next_int()?;
-    for _ in 0..order_combo_legs_count {
-        let price = message.next_optional_double()?;
-
-        order.order_combo_legs.push(OrderComboLeg { price });
-    }
-
-    let smart_combo_routing_params_count = message.next_int()?;
-    for _ in 0..smart_combo_routing_params_count {
-        order.smart_combo_routing_params.push(TagValue {
-            tag: message.next_string()?,
-            value: message.next_string()?,
-        });
-    }
-
-    // scale order params
-    order.scale_init_level_size = message.next_optional_int()?;
-    order.scale_subs_level_size = message.next_optional_int()?;
-    order.scale_price_increment = message.next_optional_double()?;
-
-    if let Some(scale_price_increment) = order.scale_price_increment {
-        if scale_price_increment > 0.0 {
-            order.scale_price_adjust_value = message.next_optional_double()?;
-            order.scale_price_adjust_interval = message.next_optional_int()?;
-            order.scale_profit_offset = message.next_optional_double()?;
-            order.scale_auto_reset = message.next_bool()?;
-            order.scale_init_position = message.next_optional_int()?;
-            order.scale_init_fill_qty = message.next_optional_int()?;
-            order.scale_random_percent = message.next_bool()?;
-        }
-    }
-
-    // hedge params
-    order.hedge_type = message.next_string()?;
-    if !order.hedge_type.is_empty() {
-        order.hedge_param = message.next_string()?;
-    }
-
-    order.opt_out_smart_routing = message.next_bool()?;
-
-    order.clearing_account = message.next_string()?;
-    order.clearing_intent = message.next_string()?;
-
-    order.not_held = message.next_bool()?;
-
-    // delta neutral
-    let has_delta_neutral_contract = message.next_bool()?;
-    if has_delta_neutral_contract {
-        contract.delta_neutral_contract = Some(DeltaNeutralContract {
-            contract_id: message.next_int()?,
-            delta: message.next_double()?,
-            price: message.next_double()?,
-        });
-    }
 
     // algo params
     order.algo_strategy = message.next_string()?;
