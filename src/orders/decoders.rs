@@ -462,7 +462,7 @@ impl OrderDecoder {
             self.order.pegged_change_amount = self.message.next_optional_double()?;
             self.order.reference_change_amount = self.message.next_optional_double()?;
             self.order.reference_exchange = self.message.next_string()?;
-        }    
+        }
         Ok(())
     }
 
@@ -482,11 +482,110 @@ impl OrderDecoder {
         Ok(())
     }
 
-}
-pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> Result<OrderData> {
-    let mut decoder = OrderDecoder::new(server_version, message);
+    fn read_adjusted_order_params(&mut self) -> Result<()> {
+        if self.server_version >= server_versions::PEGGED_TO_BENCHMARK {
+            self.order.adjusted_order_type = self.message.next_string()?;
+            self.order.trigger_price = self.message.next_optional_double()?;
+            self.order.trail_stop_price = self.message.next_optional_double()?;
+            self.order.lmt_price_offset = self.message.next_optional_double()?;
+            self.order.adjusted_stop_price = self.message.next_optional_double()?;
+            self.order.adjusted_stop_limit_price = self.message.next_optional_double()?;
+            self.order.adjusted_trailing_amount = self.message.next_optional_double()?;
+            self.order.adjustable_trailing_unit = self.message.next_int()?;
+        }
+        Ok(())
+    }
 
-    let mut open_order = OrderData::default();
+    fn read_soft_dollar_tier(&mut self) -> Result<()> {
+        if self.server_version >= server_versions::SOFT_DOLLAR_TIER {
+            self.order.soft_dollar_tier = SoftDollarTier {
+                name: self.message.next_string()?,
+                value: self.message.next_string()?,
+                display_name: self.message.next_string()?,
+            };
+        }
+        Ok(())
+    }
+
+    fn read_cash_qty(&mut self) -> Result<()> {
+        if self.server_version >= server_versions::CASH_QTY {
+            self.order.cash_qty = self.message.next_optional_double()?;
+        }
+        Ok(())
+    }
+
+    fn read_dont_use_auto_price_for_hedge(&mut self) -> Result<()> {
+        if self.server_version >= server_versions::AUTO_PRICE_FOR_HEDGE {
+            self.order.dont_use_auto_price_for_hedge = self.message.next_bool()?;
+        }
+        Ok(())
+    }
+
+    fn read_is_oms_container(&mut self) -> Result<()> {
+        if self.server_version >= server_versions::ORDER_CONTAINER {
+            self.order.is_oms_container = self.message.next_bool()?;
+        }
+        Ok(())
+    }
+
+    fn read_discretionary_up_to_limit_price(&mut self) -> Result<()> {
+        if self.server_version >= server_versions::D_PEG_ORDERS {
+            self.order.discretionary_up_to_limit_price = self.message.next_bool()?;
+        }
+        Ok(())
+    }
+
+    fn read_use_price_mgmt_algo(&mut self) -> Result<()> {
+        if self.server_version >= server_versions::PRICE_MGMT_ALGO {
+            self.order.use_price_mgmt_algo = self.message.next_bool()?;
+        }
+        Ok(())
+    }
+
+    fn read_duration(&mut self) -> Result<()> {
+        if self.server_version >= server_versions::DURATION {
+            self.order.duration = self.message.next_optional_int()?;
+        }
+        Ok(())
+    }
+
+    fn read_post_to_ats(&mut self) -> Result<()> {
+        if self.server_version >= server_versions::POST_TO_ATS {
+            self.order.post_to_ats = self.message.next_optional_int()?;
+        }
+        Ok(())
+    }
+
+    fn read_auto_cancel_parent(&mut self) -> Result<()> {
+        if self.server_version >= server_versions::AUTO_CANCEL_PARENT {
+            self.order.auto_cancel_parent = self.message.next_bool()?;
+        }
+        Ok(())
+    }
+
+    fn read_peg_best_peg_mid_order_attributes(&mut self) -> Result<()> {
+        if self.server_version >= server_versions::PEGBEST_PEGMID_OFFSETS {
+            self.order.min_trade_qty = self.message.next_optional_int()?;
+            self.order.min_compete_size = self.message.next_optional_int()?;
+            self.order.compete_against_best_offset = self.message.next_optional_double()?;
+            self.order.mid_offset_at_whole = self.message.next_optional_double()?;
+            self.order.mid_offset_at_half = self.message.next_optional_double()?;
+        }
+        Ok(())
+    }
+
+    fn to_order_data(self) -> OrderData {
+        OrderData {
+            order_id: self.order_id,
+            contract: Box::new(self.contract),
+            order: Box::new(self.order),
+            order_state: Box::new(self.order_state),
+        }
+    }
+}
+
+pub fn decode_open_order(server_version: i32, message: ResponseMessage) -> Result<OrderData> {
+    let mut decoder = OrderDecoder::new(server_version, message);
 
     decoder.read_order_id()?;
 
@@ -550,77 +649,19 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
     decoder.read_vol_randomize_flags()?;
     decoder.read_peg_to_bench_params()?;
     decoder.read_conditions()?;
+    decoder.read_adjusted_order_params()?;
+    decoder.read_soft_dollar_tier()?;
+    decoder.read_cash_qty()?;
+    decoder.read_dont_use_auto_price_for_hedge()?;
+    decoder.read_is_oms_container()?;
+    decoder.read_discretionary_up_to_limit_price()?;
+    decoder.read_use_price_mgmt_algo()?;
+    decoder.read_duration()?;
+    decoder.read_post_to_ats()?;
+    decoder.read_auto_cancel_parent()?;
+    decoder.read_peg_best_peg_mid_order_attributes()?;
 
-    open_order.order_id = decoder.order_id;
-    open_order.contract = Box::new(decoder.contract);
-    open_order.order = Box::new(decoder.order);
-    open_order.order_state = Box::new(decoder.order_state);
-
-    let order = &mut open_order.order;
-
-    let mut message = decoder.message.clone();
-
-    // Adjusted order params
-    if server_version >= server_versions::PEGGED_TO_BENCHMARK {
-        order.adjusted_order_type = message.next_string()?;
-        order.trigger_price = message.next_optional_double()?;
-        order.trail_stop_price = message.next_optional_double()?;
-        order.lmt_price_offset = message.next_optional_double()?;
-        order.adjusted_stop_price = message.next_optional_double()?;
-        order.adjusted_stop_limit_price = message.next_optional_double()?;
-        order.adjusted_trailing_amount = message.next_optional_double()?;
-        order.adjustable_trailing_unit = message.next_int()?;
-    }
-
-    if server_version >= server_versions::SOFT_DOLLAR_TIER {
-        order.soft_dollar_tier = SoftDollarTier {
-            name: message.next_string()?,
-            value: message.next_string()?,
-            display_name: message.next_string()?,
-        };
-    }
-
-    if server_version >= server_versions::CASH_QTY {
-        order.cash_qty = message.next_optional_double()?;
-    }
-
-    if server_version >= server_versions::AUTO_PRICE_FOR_HEDGE {
-        order.dont_use_auto_price_for_hedge = message.next_bool()?;
-    }
-
-    if server_version >= server_versions::ORDER_CONTAINER {
-        order.is_oms_container = message.next_bool()?;
-    }
-
-    if server_version >= server_versions::D_PEG_ORDERS {
-        order.discretionary_up_to_limit_price = message.next_bool()?;
-    }
-
-    if server_version >= server_versions::PRICE_MGMT_ALGO {
-        order.use_price_mgmt_algo = message.next_bool()?;
-    }
-
-    if server_version >= server_versions::DURATION {
-        order.duration = message.next_optional_int()?;
-    }
-
-    if server_version >= server_versions::POST_TO_ATS {
-        order.post_to_ats = message.next_optional_int()?;
-    }
-
-    if server_version >= server_versions::AUTO_CANCEL_PARENT {
-        order.auto_cancel_parent = message.next_bool()?;
-    }
-
-    if server_version >= server_versions::PEGBEST_PEGMID_OFFSETS {
-        order.min_trade_qty = message.next_optional_int()?;
-        order.min_compete_size = message.next_optional_int()?;
-        order.compete_against_best_offset = message.next_optional_double()?;
-        order.mid_offset_at_whole = message.next_optional_double()?;
-        order.mid_offset_at_half = message.next_optional_double()?;
-    }
-
-    Ok(open_order)
+    Ok(decoder.to_order_data())
 }
 
 pub fn decode_order_status(server_version: i32, message: &mut ResponseMessage) -> Result<OrderStatus> {
