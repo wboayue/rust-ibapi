@@ -1475,14 +1475,14 @@ impl Iterator for OrdersIterator {
         loop {
             if let Some(mut message) = self.messages.next() {
                 match message.message_type() {
-                    IncomingMessages::CompletedOrder => match decoders::decode_completed_orders(self.server_version, &mut message) {
+                    IncomingMessages::CompletedOrder => match decoders::decode_completed_order(self.server_version, message) {
                         Ok(val) => return None,
                         Err(err) => {
                             error!("error decoding order status: {err}");
                         }
                     },
                     IncomingMessages::OpenOrder => {
-                        decoders::decode_open_orders(self.server_version, message);
+                        decoders::decode_open_order(self.server_version, message);
                         return None;
                     }
                     IncomingMessages::CompletedOrdersEnd => {

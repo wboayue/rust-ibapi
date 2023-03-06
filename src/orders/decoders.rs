@@ -576,6 +576,50 @@ impl OrderDecoder {
         Ok(())
     }
 
+    fn read_order_status(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn read_stop_price_and_limit_price_offset(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn read_auto_cancel_date(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn read_filled_quantity(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn read_ref_futures_contract_id(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn read_shareholder(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn read_imbalance_only(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn read_route_marketable_to_bbo(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn read_parent_perm_id(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn read_completed_time(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn read_completed_status(&mut self) -> Result<()> {
+        Ok(())
+    }
+
     fn to_order_data(self) -> OrderData {
         OrderData {
             order_id: self.order_id,
@@ -760,160 +804,74 @@ pub fn decode_commission_report(_server_version: i32, message: &mut ResponseMess
     })
 }
 
-pub fn decode_completed_orders(_server_version: i32, message: &mut ResponseMessage) -> Result<()> {
-    // // read contract fields
-    // eOrderDecoder.readContractFields();
-
-    // // read order fields
-    // eOrderDecoder.readAction();
-    // eOrderDecoder.readTotalQuantity();
-    // eOrderDecoder.readOrderType();
-    // eOrderDecoder.readLmtPrice();
-    // eOrderDecoder.readAuxPrice();
-    // eOrderDecoder.readTIF();
-    // eOrderDecoder.readOcaGroup();
-    // eOrderDecoder.readAccount();
-    // eOrderDecoder.readOpenClose();
-    // eOrderDecoder.readOrigin();
-    // eOrderDecoder.readOrderRef();
-    // eOrderDecoder.readPermId();
-    // eOrderDecoder.readOutsideRth();
-    // eOrderDecoder.readHidden();
-    // eOrderDecoder.readDiscretionaryAmount();
-    // eOrderDecoder.readGoodAfterTime();
-    // eOrderDecoder.readFAParams();
-    // eOrderDecoder.readModelCode();
-    // eOrderDecoder.readGoodTillDate();
-    // eOrderDecoder.readRule80A();
-    // eOrderDecoder.readPercentOffset();
-    // eOrderDecoder.readSettlingFirm();
-    // eOrderDecoder.readShortSaleParams();
-    // eOrderDecoder.readBoxOrderParams();
-    // eOrderDecoder.readPegToStkOrVolOrderParams();
-    // eOrderDecoder.readDisplaySize();
-    // eOrderDecoder.readSweepToFill();
-    // eOrderDecoder.readAllOrNone();
-    // eOrderDecoder.readMinQty();
-    // eOrderDecoder.readOcaType();
-    // eOrderDecoder.readTriggerMethod();
-    // eOrderDecoder.readVolOrderParams(false);
-    // eOrderDecoder.readTrailParams();
-    // eOrderDecoder.readComboLegs();
-    // eOrderDecoder.readSmartComboRoutingParams();
-    // eOrderDecoder.readScaleOrderParams();
-    // eOrderDecoder.readHedgeParams();
-    // eOrderDecoder.readClearingParams();
-    // eOrderDecoder.readNotHeld();
-    // eOrderDecoder.readDeltaNeutral();
-    // eOrderDecoder.readAlgoParams();
-    // eOrderDecoder.readSolicited();
-    // eOrderDecoder.readOrderStatus();
-    // eOrderDecoder.readVolRandomizeFlags();
-    // eOrderDecoder.readPegToBenchParams();
-    // eOrderDecoder.readConditions();
-    // eOrderDecoder.readStopPriceAndLmtPriceOffset();
-    // eOrderDecoder.readCashQty();
-    // eOrderDecoder.readDontUseAutoPriceForHedge();
-    // eOrderDecoder.readIsOmsContainer();
-    // eOrderDecoder.readAutoCancelDate();
-    // eOrderDecoder.readFilledQuantity();
-    // eOrderDecoder.readRefFuturesConId();
-    // eOrderDecoder.readAutoCancelParent();
-    // eOrderDecoder.readShareholder();
-    // eOrderDecoder.readImbalanceOnly();
-    // eOrderDecoder.readRouteMarketableToBbo();
-    // eOrderDecoder.readParentPermId();
-    // eOrderDecoder.readCompletedTime();
-    // eOrderDecoder.readCompletedStatus();
-    // eOrderDecoder.readPegBestPegMidOrderAttributes();
-
-    // eWrapper.completedOrder(contract, order, orderState);
-
-    Ok(())
-}
-
-pub fn decode_open_orders(server_version: i32, message: ResponseMessage) -> Result<()> {
+pub fn decode_completed_order(server_version: i32, message: ResponseMessage) -> Result<OrderData> {
     let mut decoder = OrderDecoder::new(server_version, message);
 
-    decoder.read_order_id()?;
-
-    // Contract fields
+    // read contract fields
     decoder.read_contract_fields()?;
 
-    // Order fields
+    // read order fields
     decoder.read_action()?;
+    decoder.read_total_quantity()?;
+    decoder.read_order_type()?;
+    decoder.read_limit_price()?;
+    decoder.read_aux_price()?;
+    decoder.read_tif()?;
+    decoder.read_oca_group()?;
+    decoder.read_account()?;
+    decoder.read_open_close()?;
+    decoder.read_origin()?;
+    decoder.read_order_ref()?;
+    decoder.read_perm_id()?;
+    decoder.read_outside_rth()?;
+    decoder.read_hidden()?;
+    decoder.read_discretionary_amt()?;
+    decoder.read_good_after_time()?;
+    decoder.read_fa_params()?;
+    decoder.read_model_code()?;
+    decoder.read_good_till_date()?;
+    decoder.read_rule_80_a()?;
+    decoder.read_percent_offset()?;
+    decoder.read_settling_firm()?;
+    decoder.read_short_sale_params()?;
+    decoder.read_box_order_params()?;
+    decoder.read_peg_to_stock_or_vol_order_params()?;
+    decoder.read_display_size()?;
+    decoder.read_sweep_to_fill()?;
+    decoder.read_all_or_none()?;
+    decoder.read_min_qty()?;
+    decoder.read_oca_type()?;
+    decoder.read_trigger_method()?;
+    decoder.read_volatility_order_params(false)?;
+    decoder.read_trail_params()?;
+    decoder.read_combo_legs()?;
+    decoder.read_smart_combo_routing_params()?;
+    decoder.read_scale_order_params()?;
+    decoder.read_hedge_params()?;
+    decoder.read_clearing_params()?;
+    decoder.read_not_held()?;
+    decoder.read_delta_neutral()?;
+    decoder.read_algo_params()?;
+    decoder.read_solicited()?;
+    decoder.read_order_status()?;
+    decoder.read_vol_randomize_flags()?;
+    decoder.read_peg_to_bench_params()?;
+    decoder.read_conditions()?;
+    decoder.read_stop_price_and_limit_price_offset()?;
+    decoder.read_cash_qty()?;
+    decoder.read_dont_use_auto_price_for_hedge()?;
+    decoder.read_is_oms_container()?;
+    decoder.read_auto_cancel_date()?;
+    decoder.read_filled_quantity()?;
+    decoder.read_ref_futures_contract_id()?;
+    decoder.read_auto_cancel_parent()?;
+    decoder.read_shareholder()?;
+    decoder.read_imbalance_only()?;
+    decoder.read_route_marketable_to_bbo()?;
+    decoder.read_parent_perm_id()?;
+    decoder.read_completed_time()?;
+    decoder.read_completed_status()?;
+    decoder.read_peg_best_peg_mid_order_attributes()?;
 
-    // // read order fields
-    // eOrderDecoder.readAction();
-    // eOrderDecoder.readTotalQuantity();
-    // eOrderDecoder.readOrderType();
-    // eOrderDecoder.readLmtPrice();
-    // eOrderDecoder.readAuxPrice();
-    // eOrderDecoder.readTIF();
-    // eOrderDecoder.readOcaGroup();
-    // eOrderDecoder.readAccount();
-    // eOrderDecoder.readOpenClose();
-    // eOrderDecoder.readOrigin();
-    // eOrderDecoder.readOrderRef();
-    // eOrderDecoder.readClientId();
-    // eOrderDecoder.readPermId();
-    // eOrderDecoder.readOutsideRth();
-    // eOrderDecoder.readHidden();
-    // eOrderDecoder.readDiscretionaryAmount();
-    // eOrderDecoder.readGoodAfterTime();
-    // eOrderDecoder.skipSharesAllocation();
-    // eOrderDecoder.readFAParams();
-    // eOrderDecoder.readModelCode();
-    // eOrderDecoder.readGoodTillDate();
-    // eOrderDecoder.readRule80A();
-    // eOrderDecoder.readPercentOffset();
-    // eOrderDecoder.readSettlingFirm();
-    // eOrderDecoder.readShortSaleParams();
-    // eOrderDecoder.readAuctionStrategy();
-    // eOrderDecoder.readBoxOrderParams();
-    // eOrderDecoder.readPegToStkOrVolOrderParams();
-    // eOrderDecoder.readDisplaySize();
-    // eOrderDecoder.readOldStyleOutsideRth();
-    // eOrderDecoder.readBlockOrder();
-    // eOrderDecoder.readSweepToFill();
-    // eOrderDecoder.readAllOrNone();
-    // eOrderDecoder.readMinQty();
-    // eOrderDecoder.readOcaType();
-    // eOrderDecoder.skipETradeOnly();
-    // eOrderDecoder.skipFirmQuoteOnly();
-    // eOrderDecoder.skipNbboPriceCap();
-    // eOrderDecoder.readParentId();
-    // eOrderDecoder.readTriggerMethod();
-    // eOrderDecoder.readVolOrderParams(true);
-    // eOrderDecoder.readTrailParams();
-    // eOrderDecoder.readBasisPoints();
-    // eOrderDecoder.readComboLegs();
-    // eOrderDecoder.readSmartComboRoutingParams();
-    // eOrderDecoder.readScaleOrderParams();
-    // eOrderDecoder.readHedgeParams();
-    // eOrderDecoder.readOptOutSmartRouting();
-    // eOrderDecoder.readClearingParams();
-    // eOrderDecoder.readNotHeld();
-    // eOrderDecoder.readDeltaNeutral();
-    // eOrderDecoder.readAlgoParams();
-    // eOrderDecoder.readSolicited();
-    // eOrderDecoder.readWhatIfInfoAndCommission();
-    // eOrderDecoder.readVolRandomizeFlags();
-    // eOrderDecoder.readPegToBenchParams();
-    // eOrderDecoder.readConditions();
-    // eOrderDecoder.readAdjustedOrderParams();
-    // eOrderDecoder.readSoftDollarTier();
-    // eOrderDecoder.readCashQty();
-    // eOrderDecoder.readDontUseAutoPriceForHedge();
-    // eOrderDecoder.readIsOmsContainer();
-    // eOrderDecoder.readDiscretionaryUpToLimitPrice();
-    // eOrderDecoder.readUsePriceMgmtAlgo();
-    // eOrderDecoder.readDuration();
-    // eOrderDecoder.readPostToAts();
-    // eOrderDecoder.readAutoCancelParent(MinServerVer.AUTO_CANCEL_PARENT);
-    // eOrderDecoder.readPegBestPegMidOrderAttributes();
-
-    // eWrapper.openOrder(order.OrderId, contract, order, orderState);
-
-    Ok(())
+    Ok(decoder.to_order_data())
 }
