@@ -264,7 +264,7 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_volatility_order_params(&mut self) -> Result<()> {
+    fn read_volatility_order_params(&mut self, read_open_order_attributes: bool) -> Result<()> {
         self.order.volatility = self.message.next_optional_double()?;
         self.order.volatility_type = self.message.next_optional_int()?;
         self.order.delta_neutral_order_type = self.message.next_string()?;
@@ -272,10 +272,12 @@ impl OrderDecoder {
 
         if self.order.is_delta_neutral() {
             self.order.delta_neutral_con_id = self.message.next_int()?;
-            self.order.delta_neutral_settling_firm = self.message.next_string()?;
-            self.order.delta_neutral_clearing_account = self.message.next_string()?;
-            self.order.delta_neutral_clearing_intent = self.message.next_string()?;
-            self.order.delta_neutral_open_close = self.message.next_string()?;
+            if read_open_order_attributes {
+                self.order.delta_neutral_settling_firm = self.message.next_string()?;
+                self.order.delta_neutral_clearing_account = self.message.next_string()?;
+                self.order.delta_neutral_clearing_intent = self.message.next_string()?;
+                self.order.delta_neutral_open_close = self.message.next_string()?;
+            }
             self.order.delta_neutral_short_sale = self.message.next_bool()?;
             self.order.delta_neutral_short_sale_slot = self.message.next_int()?;
             self.order.delta_neutral_designated_location = self.message.next_string()?;
@@ -587,12 +589,13 @@ impl OrderDecoder {
 pub fn decode_open_order(server_version: i32, message: ResponseMessage) -> Result<OrderData> {
     let mut decoder = OrderDecoder::new(server_version, message);
 
+    // read order id
     decoder.read_order_id()?;
 
-    // Contract fields
+    // read contract fields
     decoder.read_contract_fields()?;
 
-    // Order fields
+    // read order fields
     decoder.read_action()?;
     decoder.read_total_quantity()?;
     decoder.read_order_type()?;
@@ -632,7 +635,7 @@ pub fn decode_open_order(server_version: i32, message: ResponseMessage) -> Resul
     decoder.skip_nbbo_price_cap();
     decoder.read_parent_id()?;
     decoder.read_trigger_method()?;
-    decoder.read_volatility_order_params()?;
+    decoder.read_volatility_order_params(true)?;
     decoder.read_trail_params()?;
     decoder.read_basis_points()?;
     decoder.read_combo_legs()?;
