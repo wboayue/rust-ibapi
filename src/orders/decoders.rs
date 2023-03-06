@@ -424,10 +424,10 @@ impl OrderDecoder {
         Ok(())
     }
 }
-pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> Result<OpenOrder> {
+pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> Result<OrderData> {
     let mut decoder = OrderDecoder::new(server_version, message);
 
-    let mut open_order = OpenOrder::default();
+    let mut open_order = OrderData::default();
 
     decoder.read_order_id()?;
 

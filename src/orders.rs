@@ -715,7 +715,7 @@ pub struct SoftDollarTier {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct OpenOrder {
+pub struct OrderData {
     /// The order's unique id
     order_id: i32,
     /// The order's Contract.
@@ -888,7 +888,7 @@ pub struct ExecutionData {
 #[derive(Clone, Debug)]
 pub enum OrderNotification {
     OrderStatus(OrderStatus),
-    OpenOrder(OpenOrder),
+    OpenOrder(OrderData),
     ExecutionData(ExecutionData),
     CommissionReport(CommissionReport),
     Message(String),
@@ -900,8 +900,8 @@ impl From<OrderStatus> for OrderNotification {
     }
 }
 
-impl From<OpenOrder> for OrderNotification {
-    fn from(val: OpenOrder) -> Self {
+impl From<OrderData> for OrderNotification {
+    fn from(val: OrderData) -> Self {
         OrderNotification::OpenOrder(val)
     }
 }
