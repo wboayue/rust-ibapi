@@ -597,7 +597,7 @@ impl OrderDecoder {
     }
 
     fn read_ref_futures_contract_id(&mut self) -> Result<()> {
-        self.order.ref_futures_con_id = self.message.next_int()?;
+        self.order.ref_futures_con_id = self.message.next_optional_int()?;
         Ok(())
     }
 

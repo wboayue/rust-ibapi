@@ -225,7 +225,7 @@ impl From<i32> for ComboLegOpenClose {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Delta and underlying price for Delta-Neutral combo orders.
 /// Underlying (STK or FUT), delta and underlying price goes into this attribute.
 pub struct DeltaNeutralContract {

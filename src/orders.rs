@@ -347,7 +347,7 @@ pub struct Order {
     /// Specifies the initial order quantity to be filled.
     pub filled_quantity: f64,
     /// Identifies the reference future conId.
-    pub ref_futures_con_id: i32,
+    pub ref_futures_con_id: Option<i32>,
     /// Cancels the parent order if child order was cancelled.
     pub auto_cancel_parent: bool,
     /// Identifies the Shareholder.
@@ -523,7 +523,7 @@ impl Default for Order {
             dont_use_auto_price_for_hedge: false,
             auto_cancel_date: "".to_owned(),
             filled_quantity: 0.0,
-            ref_futures_con_id: 0,
+            ref_futures_con_id: Some(0),
             auto_cancel_parent: false,
             shareholder: "".to_owned(),
             imbalance_only: false,
