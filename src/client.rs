@@ -20,6 +20,7 @@ const START_API: i32 = 71;
 const INFINITY_STR: &str = "Infinity";
 const UNSET_DOUBLE: &str = "1.7976931348623157E308";
 const UNSET_INTEGER: &str = "2147483647";
+const UNSET_LONG: &str = "9223372036854775807";
 
 pub trait Client {
     /// Returns the next request ID.
@@ -402,6 +403,20 @@ impl ResponseMessage {
 
         match field.parse() {
             Ok(val) => Ok(val),
+            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+        }
+    }
+
+    pub fn next_optional_long(&mut self) -> Result<Option<i64>> {
+        let field = &self.fields[self.i];
+        self.i += 1;
+
+        if field.is_empty() || field == UNSET_LONG {
+            return Ok(None);
+        }
+
+        match field.parse::<i64>() {
+            Ok(val) => Ok(Some(val)),
             Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
         }
     }

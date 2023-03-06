@@ -216,9 +216,11 @@ fn dispatch_message(
         IncomingMessages::OrderStatus
         | IncomingMessages::OpenOrder
         | IncomingMessages::OpenOrderEnd
+        | IncomingMessages::CompletedOrder
+        | IncomingMessages::CompletedOrdersEnd
         | IncomingMessages::ExecutionData
         | IncomingMessages::ExecutionDataEnd
-        | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders),
+        | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders, globals),
         _ => process_response(requests, orders, message),
     };
 }
@@ -299,9 +301,14 @@ fn process_response(requests: &Arc<SenderHash<ResponseMessage>>, orders: &Arc<Se
     }
 }
 
-fn process_order_notifications(message: ResponseMessage, requests: &Arc<SenderHash<ResponseMessage>>, orders: &Arc<SenderHash<ResponseMessage>>) {
+fn process_order_notifications(
+    message: ResponseMessage,
+    requests: &Arc<SenderHash<ResponseMessage>>,
+    orders: &Arc<SenderHash<ResponseMessage>>,
+    globals: &Arc<GlobalChannels>,
+) {
     match message.message_type() {
-        IncomingMessages::OrderStatus | IncomingMessages::OpenOrder | IncomingMessages::ExecutionData => {
+        IncomingMessages::OrderStatus | IncomingMessages::ExecutionData => {
             if let Some(order_id) = message.order_id() {
                 if let Err(e) = orders.send(order_id, message) {
                     error!("error routing message for order_id({order_id}): {e}");
@@ -318,11 +325,38 @@ fn process_order_notifications(message: ResponseMessage, requests: &Arc<SenderHa
 
             error!("message has no order_id: {message:?}");
         }
+        IncomingMessages::OpenOrder => {
+            if let Some(order_id) = message.order_id() {
+                if orders.contains(order_id) {
+                    if let Err(e) = orders.send(order_id, message) {
+                        error!("error routing message for order_id({order_id}): {e}");
+                    }
+                } else {
+                    if let Err(e) = globals.open_orders_in.send(message) {
+                        error!("error sending IncomingMessages::OpenOrder: {e}");
+                    }
+                }
+            }
+        }
+        IncomingMessages::CompletedOrder => {
+            if let Err(e) = globals.open_orders_in.send(message) {
+                error!("error sending IncomingMessages::CompletedOrder: {e}");
+            }
+        }
+        IncomingMessages::OpenOrderEnd => {
+            if let Err(e) = globals.open_orders_in.send(message) {
+                error!("error sending IncomingMessages::OpenOrderEnd: {e}");
+            }
+        }
+        IncomingMessages::CompletedOrdersEnd => {
+            if let Err(e) = globals.open_orders_in.send(message) {
+                error!("error sending IncomingMessages::CompletedOrdersEnd: {e}");
+            }
+        }
         _ => (),
     }
-    // | IncomingMessages::OpenOrderEnd
     // | IncomingMessages::ExecutionDataEnd
-    // | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders),
+    // | IncomingMessages::CommissionsReport
 }
 
 #[derive(Debug)]

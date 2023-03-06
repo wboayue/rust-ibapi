@@ -357,7 +357,7 @@ pub struct Order {
     /// Routes market order to Best Bid Offer.
     pub route_marketable_to_bbo: bool,
     /// Parent order Id.
-    pub parent_perm_id: i32,
+    pub parent_perm_id: Option<i64>,
     /// Accepts a list with parameters obtained from advancedOrderRejectJson.
     pub advanced_error_override: String,
     /// Used by brokers and advisors when manually entering, modifying or cancelling orders at the direction of a client. Only used when allocating orders to specific groups or accounts. Excluding "All" group.
@@ -528,7 +528,7 @@ impl Default for Order {
             shareholder: "".to_owned(),
             imbalance_only: false,
             route_marketable_to_bbo: false,
-            parent_perm_id: 0,
+            parent_perm_id: None,
             advanced_error_override: "".to_owned(),
             manual_order_time: "".to_owned(),
             min_trade_qty: None,
@@ -881,8 +881,8 @@ pub struct Execution {
 #[derive(Clone, Debug, Default)]
 pub struct ExecutionData {
     pub request_id: i32,
-    pub contract: Box<Contract>,
-    pub execution: Box<Execution>,
+    pub contract: Contract,
+    pub execution: Execution,
 }
 
 #[derive(Clone, Debug)]
@@ -1443,7 +1443,7 @@ pub fn next_valid_order_id<C: Client + Debug>(client: &mut C) -> Result<i32> {
 /// Requests completed orders.\n
 /// * @param apiOnly - request only API orders.\n
 /// * @sa EWrapper::completedOrder, EWrapper::completedOrdersEnd
-pub fn completed_orders<C: Client + Debug>(client: &mut C, api_only: bool) -> Result<OrdersIterator> {
+pub fn completed_orders<C: Client + Debug>(client: &mut C, api_only: bool) -> Result<OrderDataIterator> {
     client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
 
     let message = encoders::encode_completed_orders(api_only)?;
@@ -1455,45 +1455,43 @@ pub fn completed_orders<C: Client + Debug>(client: &mut C, api_only: bool) -> Re
     // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EDecoder.cs#L417
 
     //    completedOrder(contract, order, orderState)
-    Ok(OrdersIterator {
+    Ok(OrderDataIterator {
         server_version: client.server_version(),
         messages,
     })
 }
 
-pub struct OrdersIterator {
+pub struct OrderDataIterator {
     server_version: i32,
     messages: GlobalResponsePacketPromise,
 }
 
-impl Iterator for OrdersIterator {
-    type Item = CancelOrderResult;
+impl Iterator for OrderDataIterator {
+    type Item = OrderData;
 
     // FIXME needs correct implemetation
-    /// Returns the next [CancelOrderResult]. Waits up to x seconds for next [CancelOrderResult].
+    /// Returns the next [OrderData]. Waits up to x seconds for next [OrderData].
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(mut message) = self.messages.next() {
                 match message.message_type() {
                     IncomingMessages::CompletedOrder => match decoders::decode_completed_order(self.server_version, message) {
-                        Ok(val) => return None,
+                        Ok(val) => return Some(val),
                         Err(err) => {
-                            error!("error decoding order status: {err}");
+                            error!("error decoding completed order: {err}");
                         }
                     },
-                    IncomingMessages::OpenOrder => {
-                        decoders::decode_open_order(self.server_version, message);
+                    IncomingMessages::OpenOrder => match decoders::decode_open_order(self.server_version, message) {
+                        Ok(val) => return Some(val),
+                        Err(err) => {
+                            error!("error decoding open order: {err}");
+                        }
+                    },
+                    IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => {
                         return None;
-                    }
-                    IncomingMessages::CompletedOrdersEnd => {
-                        return None;
-                    }
-                    IncomingMessages::Error => {
-                        let message = message.peek_string(4);
-                        return Some(CancelOrderResult::Notice(Notice(message)));
                     }
                     message => {
-                        error!("unexpected messsage: {message:?}");
+                        error!("order data iterator unexpected messsage: {message:?}");
                     }
                 }
             } else {
@@ -1505,14 +1503,12 @@ impl Iterator for OrdersIterator {
 
 /// Requests all open orders places by this specific API client (identified by the API client id). For client ID 0, this will bind previous manual TWS orders.
 /// * @sa EWrapper::openOrder, EWrapper::orderStatus, EWrapper::openOrderEnd
-pub fn open_orders<C: Client + Debug>(client: &mut C) -> Result<OrdersIterator> {
+pub fn open_orders<C: Client + Debug>(client: &mut C) -> Result<OrderDataIterator> {
     let message = encoders::encode_open_orders()?;
 
     let messages = client.request_orders(message)?;
 
-    // eWrapper.openOrder(order.OrderId, contract, order, orderState);
-
-    Ok(OrdersIterator {
+    Ok(OrderDataIterator {
         server_version: client.server_version(),
         messages,
     })
@@ -1521,14 +1517,12 @@ pub fn open_orders<C: Client + Debug>(client: &mut C) -> Result<OrdersIterator> 
 /// Requests all *current* open orders in associated accounts at the current moment. The existing orders will be received via the openOrder and orderStatus events.
 /// Open orders are returned once; this function does not initiate a subscription
 /// @sa EWrapper::openOrder, EWrapper::orderStatus, EWrapper::openOrderEnd
-pub fn all_open_orders<C: Client + Debug>(client: &mut C) -> Result<OrdersIterator> {
+pub fn all_open_orders<C: Client + Debug>(client: &mut C) -> Result<OrderDataIterator> {
     let message = encoders::encode_all_open_orders()?;
 
     let messages = client.request_orders(message)?;
 
-    // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EDecoder.cs#L1492
-
-    Ok(OrdersIterator {
+    Ok(OrderDataIterator {
         server_version: client.server_version(),
         messages,
     })
@@ -1537,14 +1531,12 @@ pub fn all_open_orders<C: Client + Debug>(client: &mut C) -> Result<OrdersIterat
 /// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
 /// @param autoBind if set to true, the newly created orders will be assigned an API order ID and implicitly associated with this client. If set to false, future orders will not be.
 /// @sa EWrapper::openOrder, EWrapper::orderStatus
-pub fn auto_open_orders<C: Client + Debug>(client: &mut C, auto_bind: bool) -> Result<OrdersIterator> {
+pub fn auto_open_orders<C: Client + Debug>(client: &mut C, auto_bind: bool) -> Result<OrderDataIterator> {
     let message = encoders::encode_auto_open_orders(auto_bind)?;
 
     let messages = client.request_orders(message)?;
 
-    // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EDecoder.cs#L1492
-
-    Ok(OrdersIterator {
+    Ok(OrderDataIterator {
         server_version: client.server_version(),
         messages,
     })

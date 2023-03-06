@@ -617,7 +617,7 @@ impl OrderDecoder {
     }
 
     fn read_parent_perm_id(&mut self) -> Result<()> {
-        self.order.parent_perm_id = self.message.next_int()?;
+        self.order.parent_perm_id = self.message.next_optional_long()?;
         Ok(())
     }
 

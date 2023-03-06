@@ -353,7 +353,10 @@ fn next_valid_order_id() {
 fn completed_orders() {
     let mut client = ClientStub::new(server_versions::SIZE_RULES);
 
-    client.response_messages = vec!["9|1|43||".to_owned()];
+    client.response_messages = vec![
+        "101|265598|AAPL|STK||0|?||SMART|USD|AAPL|NMS|BUY|0|MKT|0.0|0.0|DAY||DU1236109||0||1824933227|0|0|0|||||||||||0||-1||||||2147483647|0|0||3|0||0|None||0|0|0||0|0||||0|0|0|2147483647|2147483647||||IB|0|0||0|Filled|0|0|0|1.7976931348623157E308|1.7976931348623157E308|0|1|0||100|2147483647|0|Not an insider or substantial shareholder|0|0|9223372036854775807|20230306 12:28:30 America/Los_Angeles|Filled Size: 100|".to_owned(),
+        "102|".to_owned()
+    ];
 
     let api_only = true;
     let results = super::completed_orders(&mut client, api_only);
@@ -361,7 +364,13 @@ fn completed_orders() {
     assert_eq!(client.request_messages[0], "99|1|");
 
     assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
-    // assert_eq!(43, results.unwrap(), "next order id");
+
+    let mut results = results.unwrap();
+    if let Some(order_data) = results.next() {
+        println!("order data {order_data:?}")
+    } else {
+        assert!(false, "expected order data");
+    }
 }
 
 #[test]

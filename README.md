@@ -36,7 +36,7 @@ cargo llvm-cov --open
 
 IBAPI_RECORDING_DIR=/tmp
 ```
-RUST_LOG=debug IBAPI_RECORDING_DIR=/tmp cargo run --bin find_contract_details
+RUST_LOG=debug IBAPI_RECORDING_DIR=/tmp/records cargo run --bin find_contract_details
 ```
 
 https://rust-lang.github.io/rustfmt/?version=v1.5.1&search=
