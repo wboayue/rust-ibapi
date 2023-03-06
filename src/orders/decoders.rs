@@ -577,9 +577,9 @@ impl OrderDecoder {
     fn to_order_data(self) -> OrderData {
         OrderData {
             order_id: self.order_id,
-            contract: Box::new(self.contract),
-            order: Box::new(self.order),
-            order_state: Box::new(self.order_state),
+            contract: self.contract,
+            order: self.order,
+            order_state: self.order_state,
         }
     }
 }

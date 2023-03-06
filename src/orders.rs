@@ -717,13 +717,13 @@ pub struct SoftDollarTier {
 #[derive(Clone, Debug, Default)]
 pub struct OrderData {
     /// The order's unique id
-    order_id: i32,
+    pub order_id: i32,
     /// The order's Contract.
-    contract: Box<Contract>,
+    pub contract: Contract,
     /// The currently active order
-    order: Box<Order>,
+    pub order: Order,
     /// The order's OrderState
-    order_state: Box<OrderState>,
+    pub order_state: OrderState,
 }
 
 /// Provides an active order's current state.
