@@ -294,7 +294,7 @@ pub fn encode_place_order(server_version: i32, order_id: i32, contract: &Contrac
 
         message.push_field(&order.adjusted_order_type);
         message.push_field(&order.trigger_price);
-        message.push_field(&order.lmt_price_offset);
+        message.push_field(&order.limit_price_offset);
         message.push_field(&order.adjusted_stop_price);
         message.push_field(&order.adjusted_stop_limit_price);
         message.push_field(&order.adjusted_trailing_amount);

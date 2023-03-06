@@ -534,7 +534,7 @@ pub fn trailing_stop_limit(action: Action, quantity: f64, lmt_price_offset: f64,
         order_type: "TRAIL LIMIT".to_owned(),
         total_quantity: quantity,
         trail_stop_price: Some(trail_stop_price),
-        lmt_price_offset: Some(lmt_price_offset),
+        limit_price_offset: Some(lmt_price_offset),
         aux_price: Some(trailing_amount),
         ..Order::default()
     }

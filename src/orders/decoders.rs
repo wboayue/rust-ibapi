@@ -428,7 +428,7 @@ impl OrderDecoder {
 
     fn read_what_if_info_and_commission(&mut self) -> Result<()> {
         self.order.what_if = self.message.next_bool()?;
-        self.order_state.status = self.message.next_string()?;
+        self.read_order_status()?;
 
         if self.server_version >= server_versions::WHAT_IF_EXT_FIELDS {
             self.order_state.initial_margin_before = self.message.next_optional_double()?;
@@ -469,7 +469,6 @@ impl OrderDecoder {
     }
 
     fn read_conditions(&mut self) -> Result<()> {
-        // Conditions
         if self.server_version >= server_versions::PEGGED_TO_BENCHMARK {
             let conditions_count = self.message.next_int()?;
             for _ in 0..conditions_count {
@@ -489,7 +488,7 @@ impl OrderDecoder {
             self.order.adjusted_order_type = self.message.next_string()?;
             self.order.trigger_price = self.message.next_optional_double()?;
             self.order.trail_stop_price = self.message.next_optional_double()?;
-            self.order.lmt_price_offset = self.message.next_optional_double()?;
+            self.order.limit_price_offset = self.message.next_optional_double()?;
             self.order.adjusted_stop_price = self.message.next_optional_double()?;
             self.order.adjusted_stop_limit_price = self.message.next_optional_double()?;
             self.order.adjusted_trailing_amount = self.message.next_optional_double()?;
@@ -577,46 +576,58 @@ impl OrderDecoder {
     }
 
     fn read_order_status(&mut self) -> Result<()> {
+        self.order_state.status = self.message.next_string()?;
         Ok(())
     }
 
     fn read_stop_price_and_limit_price_offset(&mut self) -> Result<()> {
+        self.order.trail_stop_price = self.message.next_optional_double()?;
+        self.order.limit_price_offset = self.message.next_optional_double()?;
         Ok(())
     }
 
     fn read_auto_cancel_date(&mut self) -> Result<()> {
+        self.order.auto_cancel_date = self.message.next_string()?;
         Ok(())
     }
 
     fn read_filled_quantity(&mut self) -> Result<()> {
+        self.order.filled_quantity = self.message.next_double()?;
         Ok(())
     }
 
     fn read_ref_futures_contract_id(&mut self) -> Result<()> {
+        self.order.ref_futures_con_id = self.message.next_int()?;
         Ok(())
     }
 
     fn read_shareholder(&mut self) -> Result<()> {
+        self.order.shareholder = self.message.next_string()?;
         Ok(())
     }
 
     fn read_imbalance_only(&mut self) -> Result<()> {
+        self.order.imbalance_only = self.message.next_bool()?;
         Ok(())
     }
 
     fn read_route_marketable_to_bbo(&mut self) -> Result<()> {
+        self.order.route_marketable_to_bbo = self.message.next_bool()?;
         Ok(())
     }
 
     fn read_parent_perm_id(&mut self) -> Result<()> {
+        self.order.parent_perm_id = self.message.next_int()?;
         Ok(())
     }
 
     fn read_completed_time(&mut self) -> Result<()> {
+        self.order_state.completed_time = self.message.next_string()?;
         Ok(())
     }
 
     fn read_completed_status(&mut self) -> Result<()> {
+        self.order_state.completed_status = self.message.next_string()?;
         Ok(())
     }
 

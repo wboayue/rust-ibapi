@@ -159,7 +159,7 @@ fn place_order() {
         assert_eq!(order.adjusted_order_type, "None", "order.adjusted_order_type");
         assert_eq!(order.trigger_price, None, "order.trigger_price");
         assert_eq!(order.trail_stop_price, None, "order.trail_stop_price");
-        assert_eq!(order.lmt_price_offset, None, "order.lmt_price_offset");
+        assert_eq!(order.limit_price_offset, None, "order.lmt_price_offset");
         assert_eq!(order.adjusted_stop_price, None, "order.adjusted_stop_price");
         assert_eq!(order.adjusted_stop_limit_price, None, "order.adjusted_stop_limit_price");
         assert_eq!(order.adjusted_trailing_amount, None, "order.adjusted_trailing_amount");

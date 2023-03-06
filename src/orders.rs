@@ -391,7 +391,7 @@ pub struct Order {
     /// Adjusted Stop orders: specifies the trigger price to execute.
     pub trigger_price: Option<f64>,
     /// Adjusted Stop orders: specifies the price offset for the stop to move in increments.
-    pub lmt_price_offset: Option<f64>,
+    pub limit_price_offset: Option<f64>,
     /// Adjusted Stop orders: specifies the stop price of the adjusted (STP) parent.
     pub adjusted_stop_price: Option<f64>,
     /// Adjusted Stop orders: specifies the stop limit price of the adjusted (STPL LMT) parent.
@@ -545,7 +545,7 @@ impl Default for Order {
             reference_exchange: "".to_owned(),
             adjusted_order_type: "".to_owned(),
             trigger_price: None,
-            lmt_price_offset: None,
+            limit_price_offset: None,
             adjusted_stop_price: None,
             adjusted_stop_limit_price: None,
             adjusted_trailing_amount: None,
@@ -759,8 +759,8 @@ pub struct OrderState {
     pub commission_currency: String,
     /// If the order is warranted, a descriptive message will be provided.
     pub warning_text: String,
-    // completed_time: String,
-    // completed_status: String,
+    pub completed_time: String,
+    pub completed_status: String,
 }
 
 /// For institutional customers only. Valid values are O (open) and C (close).
