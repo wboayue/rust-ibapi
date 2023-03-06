@@ -27,14 +27,14 @@ impl OrderDecoder {
         }
     }
 
-    fn decode_order_id(&mut self) -> Result<()> {
+    fn read_order_id(&mut self) -> Result<()> {
         self.order_id = self.message.next_int()?;
         self.order.order_id = self.order_id;
 
         Ok(())
     }
 
-    fn decode_contract_fields(&mut self) -> Result<()> {
+    fn read_contract_fields(&mut self) -> Result<()> {
         let message = &mut self.message;
         let contract = &mut self.contract;
 
@@ -56,90 +56,90 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn decode_action(&mut self) -> Result<()> {
+    fn read_action(&mut self) -> Result<()> {
         let action = self.message.next_string()?;
         self.order.action = Action::from(&action);
 
         Ok(())
     }
 
-    fn decode_total_quantity(&mut self) -> Result<()> {
+    fn read_total_quantity(&mut self) -> Result<()> {
         self.order.total_quantity = self.message.next_double()?;
         Ok(())
     }
 
-    fn decode_order_type(&mut self) -> Result<()> {
+    fn read_order_type(&mut self) -> Result<()> {
         self.order.order_type = self.message.next_string()?;
         Ok(())
     }
 
-    fn decode_limit_price(&mut self) -> Result<()> {
+    fn read_limit_price(&mut self) -> Result<()> {
         self.order.limit_price = self.message.next_optional_double()?;
         Ok(())
     }
 
-    fn decode_aux_price(&mut self) -> Result<()> {
+    fn read_aux_price(&mut self) -> Result<()> {
         self.order.aux_price = self.message.next_optional_double()?;
         Ok(())
     }
 
-    fn decode_tif(&mut self) -> Result<()> {
+    fn read_tif(&mut self) -> Result<()> {
         self.order.tif = self.message.next_string()?;
         Ok(())
     }
 
-    fn decode_oca_group(&mut self) -> Result<()> {
+    fn read_oca_group(&mut self) -> Result<()> {
         self.order.oca_group = self.message.next_string()?;
         Ok(())
     }
 
-    fn decode_account(&mut self) -> Result<()> {
+    fn read_account(&mut self) -> Result<()> {
         self.order.account = self.message.next_string()?;
         Ok(())
     }
 
-    fn decode_open_close(&mut self) -> Result<()> {
+    fn read_open_close(&mut self) -> Result<()> {
         let open_close = self.message.next_string()?;
         self.order.open_close = OrderOpenClose::from(&open_close);
         Ok(())
     }
 
-    fn decode_origin(&mut self) -> Result<()> {
+    fn read_origin(&mut self) -> Result<()> {
         self.order.origin = self.message.next_int()?;
         Ok(())
     }
 
-    fn decode_order_ref(&mut self) -> Result<()> {
+    fn read_order_ref(&mut self) -> Result<()> {
         self.order.order_ref = self.message.next_string()?;
         Ok(())
     }
 
-    fn decode_client_id(&mut self) -> Result<()> {
+    fn read_client_id(&mut self) -> Result<()> {
         self.order.client_id = self.message.next_int()?;
         Ok(())
     }
 
-    fn decode_perm_id(&mut self) -> Result<()> {
+    fn read_perm_id(&mut self) -> Result<()> {
         self.order.perm_id = self.message.next_int()?;
         Ok(())
     }
 
-    fn decode_outside_rth(&mut self) -> Result<()> {
+    fn read_outside_rth(&mut self) -> Result<()> {
         self.order.outside_rth = self.message.next_bool()?;
         Ok(())
     }
 
-    fn decode_hidden(&mut self) -> Result<()> {
+    fn read_hidden(&mut self) -> Result<()> {
         self.order.hidden = self.message.next_bool()?;
         Ok(())
     }
 
-    fn decode_discretionary_amt(&mut self) -> Result<()> {
+    fn read_discretionary_amt(&mut self) -> Result<()> {
         self.order.discretionary_amt = self.message.next_double()?;
         Ok(())
     }
 
-    fn decode_good_after_time(&mut self) -> Result<()> {
+    fn read_good_after_time(&mut self) -> Result<()> {
         self.order.good_after_time = self.message.next_string()?;
         Ok(())
     }
@@ -149,7 +149,7 @@ impl OrderDecoder {
         self.message.skip();
     }
 
-    fn decode_fa_params(&mut self) -> Result<()> {
+    fn read_fa_params(&mut self) -> Result<()> {
         self.order.fa_group = self.message.next_string()?;
         self.order.fa_method = self.message.next_string()?;
         self.order.fa_percentage = self.message.next_string()?;
@@ -159,14 +159,14 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn decode_model_code(&mut self) -> Result<()> {
+    fn read_model_code(&mut self) -> Result<()> {
         if self.server_version >= server_versions::MODELS_SUPPORT {
             self.order.model_code = self.message.next_string()?;
         }
         Ok(())
     }
 
-    fn decode_good_till_date(&mut self) -> Result<()> {
+    fn read_good_till_date(&mut self) -> Result<()> {
         self.order.good_till_date = self.message.next_string()?;
         Ok(())
     }
@@ -403,39 +403,59 @@ impl OrderDecoder {
         }
         Ok(())
     }
+
+    fn decode_algo_params(&mut self) -> Result<()> {
+        self.order.algo_strategy = self.message.next_string()?;
+        if !self.order.algo_strategy.is_empty() {
+            let algo_params_count = self.message.next_int()?;
+            for _ in 0..algo_params_count {
+                self.order.algo_params.push(TagValue {
+                    tag: self.message.next_string()?,
+                    value: self.message.next_string()?,
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    fn read_solicited(&mut self) -> Result<()> {
+        self.order.solicited = self.message.next_bool()?;
+        Ok(())
+    }
 }
 pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> Result<OpenOrder> {
     let mut decoder = OrderDecoder::new(server_version, message);
 
     let mut open_order = OpenOrder::default();
 
-    decoder.decode_order_id()?;
+    decoder.read_order_id()?;
 
     // Contract fields
-    decoder.decode_contract_fields()?;
+    decoder.read_contract_fields()?;
 
     // Order fields
-    decoder.decode_action()?;
-    decoder.decode_total_quantity()?;
-    decoder.decode_order_type()?;
-    decoder.decode_limit_price()?;
-    decoder.decode_aux_price()?;
-    decoder.decode_tif()?;
-    decoder.decode_oca_group()?;
-    decoder.decode_account()?;
-    decoder.decode_open_close()?;
-    decoder.decode_origin()?;
-    decoder.decode_order_ref()?;
-    decoder.decode_client_id()?;
-    decoder.decode_perm_id()?;
-    decoder.decode_outside_rth()?;
-    decoder.decode_hidden()?;
-    decoder.decode_discretionary_amt()?;
-    decoder.decode_good_after_time()?;
+    decoder.read_action()?;
+    decoder.read_total_quantity()?;
+    decoder.read_order_type()?;
+    decoder.read_limit_price()?;
+    decoder.read_aux_price()?;
+    decoder.read_tif()?;
+    decoder.read_oca_group()?;
+    decoder.read_account()?;
+    decoder.read_open_close()?;
+    decoder.read_origin()?;
+    decoder.read_order_ref()?;
+    decoder.read_client_id()?;
+    decoder.read_perm_id()?;
+    decoder.read_outside_rth()?;
+    decoder.read_hidden()?;
+    decoder.read_discretionary_amt()?;
+    decoder.read_good_after_time()?;
     decoder.skip_shares_allocation();
-    decoder.decode_fa_params()?;
-    decoder.decode_model_code()?;
-    decoder.decode_good_till_date()?;
+    decoder.read_fa_params()?;
+    decoder.read_model_code()?;
+    decoder.read_good_till_date()?;
     decoder.decode_rule_80_a()?;
     decoder.decode_percent_offset()?;
     decoder.decode_settling_firm()?;
@@ -465,31 +485,18 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
     decoder.decode_clearing_params()?;
     decoder.decode_not_held()?;
     decoder.decode_delta_neutral()?;
+    decoder.decode_algo_params()?;
+    decoder.read_solicited()?;
 
     open_order.order_id = decoder.order_id;
     open_order.contract = Box::new(decoder.contract);
     open_order.order = Box::new(decoder.order);
     open_order.order_state = Box::new(decoder.order_state);
 
-    let contract = &mut open_order.contract;
     let order = &mut open_order.order;
     let order_state = &mut open_order.order_state;
 
     let mut message = decoder.message.clone();
-
-    // algo params
-    order.algo_strategy = message.next_string()?;
-    if !order.algo_strategy.is_empty() {
-        let algo_params_count = message.next_int()?;
-        for _ in 0..algo_params_count {
-            order.algo_params.push(TagValue {
-                tag: message.next_string()?,
-                value: message.next_string()?,
-            });
-        }
-    }
-
-    order.solicited = message.next_bool()?;
 
     // what_if and comission
     order.what_if = message.next_bool()?;
@@ -767,13 +774,13 @@ pub fn decode_completed_orders(_server_version: i32, message: &mut ResponseMessa
 pub fn decode_open_orders(server_version: i32, message: ResponseMessage) -> Result<()> {
     let mut decoder = OrderDecoder::new(server_version, message);
 
-    decoder.decode_order_id()?;
+    decoder.read_order_id()?;
 
     // Contract fields
-    decoder.decode_contract_fields()?;
+    decoder.read_contract_fields()?;
 
     // Order fields
-    decoder.decode_action()?;
+    decoder.read_action()?;
 
     // // read order fields
     // eOrderDecoder.readAction();
