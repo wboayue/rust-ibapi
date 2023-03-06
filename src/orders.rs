@@ -1440,9 +1440,14 @@ pub fn next_valid_order_id<C: Client + Debug>(client: &mut C) -> Result<i32> {
     }
 }
 
-/// Requests completed orders.\n
-/// * @param apiOnly - request only API orders.\n
-/// * @sa EWrapper::completedOrder, EWrapper::completedOrdersEnd
+/// Requests completed [Order]s.
+///
+/// # Arguments
+/// * `client` - [Client] used to communicate with server.
+/// * `api_only` - request only orders placed by the API.
+///
+/// # Examples
+///
 pub fn completed_orders<C: Client + Debug>(client: &mut C, api_only: bool) -> Result<OrderDataIterator> {
     client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
 
@@ -1450,41 +1455,49 @@ pub fn completed_orders<C: Client + Debug>(client: &mut C, api_only: bool) -> Re
 
     let messages = client.request_orders(message)?;
 
-    // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EClient.cs#L221
-
-    // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EDecoder.cs#L417
-
-    //    completedOrder(contract, order, orderState)
     Ok(OrderDataIterator {
         server_version: client.server_version(),
         messages,
     })
 }
 
+/// Enumerates possible results from querying an [Order].
+#[derive(Debug)]
+pub enum OrderDataResult {
+    OrderData(OrderData),
+    OrderStatus(OrderStatus),
+}
+
+/// Supports iteration over [OrderData].
 pub struct OrderDataIterator {
     server_version: i32,
     messages: GlobalResponsePacketPromise,
 }
 
 impl Iterator for OrderDataIterator {
-    type Item = OrderData;
+    type Item = OrderDataResult;
 
-    // FIXME needs correct implemetation
-    /// Returns the next [OrderData]. Waits up to x seconds for next [OrderData].
+    /// Returns the next [OrderDataResult]. Waits up to x seconds for next [OrderDataResult].
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(mut message) = self.messages.next() {
                 match message.message_type() {
                     IncomingMessages::CompletedOrder => match decoders::decode_completed_order(self.server_version, message) {
-                        Ok(val) => return Some(val),
+                        Ok(val) => return Some(OrderDataResult::OrderData(val)),
                         Err(err) => {
                             error!("error decoding completed order: {err}");
                         }
                     },
                     IncomingMessages::OpenOrder => match decoders::decode_open_order(self.server_version, message) {
-                        Ok(val) => return Some(val),
+                        Ok(val) => return Some(OrderDataResult::OrderData(val)),
                         Err(err) => {
                             error!("error decoding open order: {err}");
+                        }
+                    },
+                    IncomingMessages::OrderStatus => match decoders::decode_order_status(self.server_version, &mut message) {
+                        Ok(val) => return Some(OrderDataResult::OrderStatus(val)),
+                        Err(err) => {
+                            error!("error decoding order status: {err}");
                         }
                     },
                     IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => {

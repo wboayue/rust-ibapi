@@ -308,7 +308,7 @@ fn process_order_notifications(
     globals: &Arc<GlobalChannels>,
 ) {
     match message.message_type() {
-        IncomingMessages::OrderStatus | IncomingMessages::ExecutionData => {
+        IncomingMessages::ExecutionData => {
             if let Some(order_id) = message.order_id() {
                 if let Err(e) = orders.send(order_id, message) {
                     error!("error routing message for order_id({order_id}): {e}");
@@ -325,7 +325,7 @@ fn process_order_notifications(
 
             error!("message has no order_id: {message:?}");
         }
-        IncomingMessages::OpenOrder => {
+        IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => {
             if let Some(order_id) = message.order_id() {
                 if orders.contains(order_id) {
                     if let Err(e) = orders.send(order_id, message) {

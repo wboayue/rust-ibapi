@@ -366,7 +366,7 @@ fn completed_orders() {
     assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
 
     let mut results = results.unwrap();
-    if let Some(order_data) = results.next() {
+    if let Some(OrderDataResult::OrderData(order_data)) = results.next() {
         assert_eq!(order_data.order_id, -1, "open_order.order_id");
 
         let contract = &order_data.contract;
