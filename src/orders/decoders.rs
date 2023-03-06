@@ -376,23 +376,23 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn decode_opt_out_smart_routing(&mut self) -> Result<()> {
+    fn read_opt_out_smart_routing(&mut self) -> Result<()> {
         self.order.opt_out_smart_routing = self.message.next_bool()?;
         Ok(())
     }
 
-    fn decode_clearing_params(&mut self) -> Result<()> {
+    fn read_clearing_params(&mut self) -> Result<()> {
         self.order.clearing_account = self.message.next_string()?;
         self.order.clearing_intent = self.message.next_string()?;
         Ok(())
     }
 
-    fn decode_not_held(&mut self) -> Result<()> {
+    fn read_not_held(&mut self) -> Result<()> {
         self.order.not_held = self.message.next_bool()?;
         Ok(())
     }
 
-    fn decode_delta_neutral(&mut self) -> Result<()> {
+    fn read_delta_neutral(&mut self) -> Result<()> {
         let has_delta_neutral_contract = self.message.next_bool()?;
         if has_delta_neutral_contract {
             self.contract.delta_neutral_contract = Some(DeltaNeutralContract {
@@ -404,7 +404,7 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn decode_algo_params(&mut self) -> Result<()> {
+    fn read_algo_params(&mut self) -> Result<()> {
         self.order.algo_strategy = self.message.next_string()?;
         if !self.order.algo_strategy.is_empty() {
             let algo_params_count = self.message.next_int()?;
@@ -481,11 +481,11 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
     decoder.decode_smart_combo_routing_params()?;
     decoder.decode_scale_order_params()?;
     decoder.decode_hedge_params()?;
-    decoder.decode_opt_out_smart_routing()?;
-    decoder.decode_clearing_params()?;
-    decoder.decode_not_held()?;
-    decoder.decode_delta_neutral()?;
-    decoder.decode_algo_params()?;
+    decoder.read_opt_out_smart_routing()?;
+    decoder.read_clearing_params()?;
+    decoder.read_not_held()?;
+    decoder.read_delta_neutral()?;
+    decoder.read_algo_params()?;
     decoder.read_solicited()?;
 
     open_order.order_id = decoder.order_id;
