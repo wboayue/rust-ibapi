@@ -423,6 +423,65 @@ impl OrderDecoder {
         self.order.solicited = self.message.next_bool()?;
         Ok(())
     }
+
+    fn read_what_if_info_and_commission(&mut self) -> Result<()> {
+        self.order.what_if = self.message.next_bool()?;
+        self.order_state.status = self.message.next_string()?;
+
+        if self.server_version >= server_versions::WHAT_IF_EXT_FIELDS {
+            self.order_state.initial_margin_before = self.message.next_optional_double()?;
+            self.order_state.maintenance_margin_before = self.message.next_optional_double()?;
+            self.order_state.equity_with_loan_before = self.message.next_optional_double()?;
+            self.order_state.initial_margin_change = self.message.next_optional_double()?;
+            self.order_state.maintenance_margin_change = self.message.next_optional_double()?;
+            self.order_state.equity_with_loan_change = self.message.next_optional_double()?;
+        }
+
+        self.order_state.initial_margin_after = self.message.next_optional_double()?;
+        self.order_state.maintenance_margin_after = self.message.next_optional_double()?;
+        self.order_state.equity_with_loan_after = self.message.next_optional_double()?;
+        self.order_state.commission = self.message.next_optional_double()?;
+        self.order_state.minimum_commission = self.message.next_optional_double()?;
+        self.order_state.maximum_commission = self.message.next_optional_double()?;
+        self.order_state.commission_currency = self.message.next_string()?;
+        self.order_state.warning_text = self.message.next_string()?;
+
+        Ok(())
+    }
+
+    fn read_vol_randomize_flags(&mut self) -> Result<()> {
+        self.order.randomize_size = self.message.next_bool()?;
+        self.order.randomize_price = self.message.next_bool()?;
+        Ok(())
+    }
+
+    fn read_peg_to_bench_params(&mut self) -> Result<()> {
+        if self.server_version >= server_versions::PEGGED_TO_BENCHMARK && self.order.order_type == "PEG BENCH" {
+            self.order.reference_contract_id = self.message.next_int()?;
+            self.order.is_pegged_change_amount_decrease = self.message.next_bool()?;
+            self.order.pegged_change_amount = self.message.next_optional_double()?;
+            self.order.reference_change_amount = self.message.next_optional_double()?;
+            self.order.reference_exchange = self.message.next_string()?;
+        }    
+        Ok(())
+    }
+
+    fn read_conditions(&mut self) -> Result<()> {
+        // Conditions
+        if self.server_version >= server_versions::PEGGED_TO_BENCHMARK {
+            let conditions_count = self.message.next_int()?;
+            for _ in 0..conditions_count {
+                let order_condition = self.message.next_int()?;
+                self.order.conditions.push(OrderCondition::from(order_condition));
+            }
+            if conditions_count > 0 {
+                self.order.conditions_ignore_rth = self.message.next_bool()?;
+                self.order.conditions_cancel_order = self.message.next_bool()?;
+            }
+        }
+        Ok(())
+    }
+
 }
 pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> Result<OrderData> {
     let mut decoder = OrderDecoder::new(server_version, message);
@@ -487,6 +546,10 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
     decoder.read_delta_neutral()?;
     decoder.read_algo_params()?;
     decoder.read_solicited()?;
+    decoder.read_what_if_info_and_commission()?;
+    decoder.read_vol_randomize_flags()?;
+    decoder.read_peg_to_bench_params()?;
+    decoder.read_conditions()?;
 
     open_order.order_id = decoder.order_id;
     open_order.contract = Box::new(decoder.contract);
@@ -494,54 +557,8 @@ pub fn decode_open_order(server_version: i32, mut message: ResponseMessage) -> R
     open_order.order_state = Box::new(decoder.order_state);
 
     let order = &mut open_order.order;
-    let order_state = &mut open_order.order_state;
 
     let mut message = decoder.message.clone();
-
-    // what_if and comission
-    order.what_if = message.next_bool()?;
-    order_state.status = message.next_string()?;
-    if server_version >= server_versions::WHAT_IF_EXT_FIELDS {
-        order_state.initial_margin_before = message.next_optional_double()?;
-        order_state.maintenance_margin_before = message.next_optional_double()?;
-        order_state.equity_with_loan_before = message.next_optional_double()?;
-        order_state.initial_margin_change = message.next_optional_double()?;
-        order_state.maintenance_margin_change = message.next_optional_double()?;
-        order_state.equity_with_loan_change = message.next_optional_double()?;
-    }
-    order_state.initial_margin_after = message.next_optional_double()?;
-    order_state.maintenance_margin_after = message.next_optional_double()?;
-    order_state.equity_with_loan_after = message.next_optional_double()?;
-    order_state.commission = message.next_optional_double()?;
-    order_state.minimum_commission = message.next_optional_double()?;
-    order_state.maximum_commission = message.next_optional_double()?;
-    order_state.commission_currency = message.next_string()?;
-    order_state.warning_text = message.next_string()?;
-
-    // vol randomize flags
-    order.randomize_size = message.next_bool()?;
-    order.randomize_price = message.next_bool()?;
-
-    if server_version >= server_versions::PEGGED_TO_BENCHMARK && order.order_type == "PEG BENCH" {
-        order.reference_contract_id = message.next_int()?;
-        order.is_pegged_change_amount_decrease = message.next_bool()?;
-        order.pegged_change_amount = message.next_optional_double()?;
-        order.reference_change_amount = message.next_optional_double()?;
-        order.reference_exchange = message.next_string()?;
-    }
-
-    // Conditions
-    if server_version >= server_versions::PEGGED_TO_BENCHMARK {
-        let conditions_count = message.next_int()?;
-        for _ in 0..conditions_count {
-            let order_condition = message.next_int()?;
-            order.conditions.push(OrderCondition::from(order_condition));
-        }
-        if conditions_count > 0 {
-            order.conditions_ignore_rth = message.next_bool()?;
-            order.conditions_cancel_order = message.next_bool()?;
-        }
-    }
 
     // Adjusted order params
     if server_version >= server_versions::PEGGED_TO_BENCHMARK {
