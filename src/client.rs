@@ -16,7 +16,6 @@ pub(crate) mod transport;
 
 const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
-const START_API: i32 = 71;
 const INFINITY_STR: &str = "Infinity";
 const UNSET_DOUBLE: &str = "1.7976931348623157E308";
 const UNSET_INTEGER: &str = "2147483647";
@@ -141,7 +140,7 @@ impl IBClient {
 
         let prelude = &mut RequestMessage::default();
 
-        prelude.push_field(&START_API);
+        prelude.push_field(&OutgoingMessages::StartApi);
         prelude.push_field(&VERSION);
         prelude.push_field(&self.client_id);
 
