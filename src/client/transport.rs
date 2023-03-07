@@ -220,7 +220,7 @@ fn dispatch_message(
         | IncomingMessages::CompletedOrdersEnd
         | IncomingMessages::ExecutionData
         | IncomingMessages::ExecutionDataEnd
-        | IncomingMessages::CommissionsReport => process_order_notifications(message, requests, orders, globals),
+        | IncomingMessages::CommissionsReport => process_orders(message, requests, orders, globals),
         _ => process_response(requests, orders, message),
     };
 }
@@ -301,7 +301,7 @@ fn process_response(requests: &Arc<SenderHash<ResponseMessage>>, orders: &Arc<Se
     }
 }
 
-fn process_order_notifications(
+fn process_orders(
     message: ResponseMessage,
     requests: &Arc<SenderHash<ResponseMessage>>,
     orders: &Arc<SenderHash<ResponseMessage>>,
@@ -309,20 +309,21 @@ fn process_order_notifications(
 ) {
     match message.message_type() {
         IncomingMessages::ExecutionData => {
-            match message.order_id() {
+            // TODO map to execution
+            match (message.order_id(), message.request_id()) {
                 // First check matching orders channel
-                Some(order_id) if orders.contains(order_id) => {
+                (Some(order_id), _) if orders.contains(order_id) => {
                     if let Err(e) = orders.send(order_id, message) {
                         error!("error routing message for order_id({order_id}): {e}");
                     }
                 }
-                _ => {
-                    // Then try requests channel
-                    if let Some(request_id) = message.request_id() {
-                        if let Err(e) = requests.send(request_id, message) {
-                            error!("error routing message for request_id({request_id}): {e}");
-                        }
+                (_, Some(request_id)) if requests.contains(request_id) => {
+                    if let Err(e) = requests.send(request_id, message) {
+                        error!("error routing message for request_id({request_id}): {e}");
                     }
+                }
+                _ => {
+                    error!("could not route message {message:?}");
                 }
             }
         }
