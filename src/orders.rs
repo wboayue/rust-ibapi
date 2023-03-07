@@ -1662,6 +1662,27 @@ pub struct ExecutionFilter {
 /// * `filter` - filter criteria used to determine which execution reports are returned
 ///
 /// # Examples
+///
+/// ```no_run
+/// use ibapi::client::{IBClient, Client};
+/// use ibapi::orders::{self, ExecutionFilter};
+///
+/// fn main() -> anyhow::Result<()> {
+///     let mut client = IBClient::connect("localhost:4002")?;
+///     
+///     let filter = ExecutionFilter{
+///        side: "BUY".to_owned(),
+///        ..ExecutionFilter::default()
+///     };
+///
+///     let results = orders::executions(&mut client, filter)?;
+///     for execution_data in results {
+///        println!("{execution_data:?}")
+///     }
+///
+///     Ok(())
+/// }
+/// ```
 pub fn executions<C: Client + Debug>(client: &mut C, filter: ExecutionFilter) -> Result<ExecutionDataIterator> {
     let request_id = client.next_request_id();
     let message = encoders::encode_executions(client.server_version(), request_id, &filter)?;
@@ -1672,12 +1693,6 @@ pub fn executions<C: Client + Debug>(client: &mut C, filter: ExecutionFilter) ->
         server_version: client.server_version(),
         messages,
     })
-
-    // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EClient.cs#L1663
-    //    IBApi.Execution and IBApi.CommissionReport can be requested on demand via the IBApi.EClient.reqExecutions method which receives a IBApi.ExecutionFilter object as parameter to obtain only those executions matching the given criteria. An empty IBApi.ExecutionFilter object can be passed to obtain all previous executions.
-    // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EDecoder.cs#L1702
-
-    // Ok(())
 }
 
 /// Enumerates possible results from querying an [Execution].
