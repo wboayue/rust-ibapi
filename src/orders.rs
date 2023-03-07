@@ -1448,6 +1448,21 @@ pub fn next_valid_order_id<C: Client + Debug>(client: &mut C) -> Result<i32> {
 ///
 /// # Examples
 ///
+/// ```no_run
+/// use ibapi::client::{IBClient, Client};
+/// use ibapi::orders;
+///
+/// fn main() -> anyhow::Result<()> {
+///     let mut client = IBClient::connect("localhost:4002")?;
+///
+///     let results = orders::completed_orders(&mut client, false)?;
+///     for order_data in results {
+///        println!("{order_data:?}")
+///     }
+///
+///     Ok(())
+/// }
+/// ```
 pub fn completed_orders<C: Client + Debug>(client: &mut C, api_only: bool) -> Result<OrderDataIterator> {
     client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
 
@@ -1514,8 +1529,29 @@ impl Iterator for OrderDataIterator {
     }
 }
 
-/// Requests all open orders places by this specific API client (identified by the API client id). For client ID 0, this will bind previous manual TWS orders.
-/// * @sa EWrapper::openOrder, EWrapper::orderStatus, EWrapper::openOrderEnd
+/// Requests all open orders places by this specific API client (identified by the API client id).
+/// For client ID 0, this will bind previous manual TWS orders.
+///
+/// # Arguments
+/// * `client` - [Client] used to communicate with server.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ibapi::client::{IBClient, Client};
+/// use ibapi::orders;
+///
+/// fn main() -> anyhow::Result<()> {
+///     let mut client = IBClient::connect("localhost:4002")?;
+///
+///     let results = orders::open_orders(&mut client)?;
+///     for order_data in results {
+///        println!("{order_data:?}")
+///     }
+///
+///     Ok(())
+/// }
+/// ```
 pub fn open_orders<C: Client + Debug>(client: &mut C) -> Result<OrderDataIterator> {
     let message = encoders::encode_open_orders()?;
 
@@ -1527,9 +1563,29 @@ pub fn open_orders<C: Client + Debug>(client: &mut C) -> Result<OrderDataIterato
     })
 }
 
-/// Requests all *current* open orders in associated accounts at the current moment. The existing orders will be received via the openOrder and orderStatus events.
-/// Open orders are returned once; this function does not initiate a subscription
-/// @sa EWrapper::openOrder, EWrapper::orderStatus, EWrapper::openOrderEnd
+/// Requests all *current* open orders in associated accounts at the current moment.
+/// Open orders are returned once; this function does not initiate a subscription.
+///
+/// # Arguments
+/// * `client` - [Client] used to communicate with server.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ibapi::client::{IBClient, Client};
+/// use ibapi::orders;
+///
+/// fn main() -> anyhow::Result<()> {
+///     let mut client = IBClient::connect("localhost:4002")?;
+///
+///     let results = orders::all_open_orders(&mut client)?;
+///     for order_data in results {
+///        println!("{order_data:?}")
+///     }
+///
+///     Ok(())
+/// }
+/// ```
 pub fn all_open_orders<C: Client + Debug>(client: &mut C) -> Result<OrderDataIterator> {
     let message = encoders::encode_all_open_orders()?;
 
@@ -1542,11 +1598,32 @@ pub fn all_open_orders<C: Client + Debug>(client: &mut C) -> Result<OrderDataIte
 }
 
 /// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
-/// @param autoBind if set to true, the newly created orders will be assigned an API order ID and implicitly associated with this client. If set to false, future orders will not be.
-/// @sa EWrapper::openOrder, EWrapper::orderStatus
+///
+/// # Arguments
+/// * `client` - [Client] used to communicate with server.
+/// * `auto_bind` - if set to true, the newly created orders will be assigned an API order ID and implicitly associated with this client. If set to false, future orders will not be.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ibapi::client::{IBClient, Client};
+/// use ibapi::orders;
+///
+/// fn main() -> anyhow::Result<()> {
+///     let mut client = IBClient::connect("localhost:4002")?;
+///
+///     let results = orders::auto_open_orders(&mut client, false)?;
+///     for order_data in results {
+///        println!("{order_data:?}")
+///     }
+///
+///     Ok(())
+/// }
+/// ```
 pub fn auto_open_orders<C: Client + Debug>(client: &mut C, auto_bind: bool) -> Result<OrderDataIterator> {
     let message = encoders::encode_auto_open_orders(auto_bind)?;
 
+    // TODO this should probably not timeout.
     let messages = client.request_order_data(message)?;
 
     Ok(OrderDataIterator {
@@ -1556,6 +1633,7 @@ pub fn auto_open_orders<C: Client + Debug>(client: &mut C, auto_bind: bool) -> R
 }
 
 #[derive(Debug, Default)]
+/// Filter criteria used to determine which execution reports are returned.
 pub struct ExecutionFilter {
     /// The API client which placed the order.
     pub client_id: Option<i32>,
@@ -1575,12 +1653,15 @@ pub struct ExecutionFilter {
 }
 
 /// Requests current day's (since midnight) executions matching the filter.
-/// Only the current day's executions can be retrieved. Along with the executions, the CommissionReport will also be returned. The execution details will arrive at EWrapper:execDetails
 ///
-/// when requesting executions, a filter can be specified to receive only a subset of them
+/// Only the current day's executions can be retrieved.
+/// Along with the [ExecutionData], the [CommissionReport] will also be returned.
+/// When requesting executions, a filter can be specified to receive only a subset of them
 ///
-/// * @param filter the filter criteria used to determine which execution reports are returned.
-/// * @sa EWrapper::execDetails, EWrapper::commissionReport
+/// # Arguments
+/// * `filter` - filter criteria used to determine which execution reports are returned
+///
+/// # Examples
 pub fn executions<C: Client + Debug>(client: &mut C, filter: ExecutionFilter) -> Result<()> {
     let request_id = client.next_request_id();
     let message = encoders::encode_executions(client.server_version(), request_id, &filter)?;
