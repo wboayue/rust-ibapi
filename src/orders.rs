@@ -1666,7 +1666,7 @@ pub fn executions<C: Client + Debug>(client: &mut C, filter: ExecutionFilter) ->
     let request_id = client.next_request_id();
     let message = encoders::encode_executions(client.server_version(), request_id, &filter)?;
 
-    let mut messages = client.send_request(request_id, message)?;
+    let messages = client.send_request(request_id, message)?;
 
     Ok(ExecutionDataIterator {
         server_version: client.server_version(),

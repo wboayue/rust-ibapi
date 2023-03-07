@@ -437,14 +437,6 @@ impl ResponsePacketPromise {
             order_id,
         }
     }
-
-    #[deprecated]
-    pub fn message(&self) -> Result<ResponseMessage> {
-        // Duration::from_millis(100)
-
-        Ok(self.messages.recv_timeout(Duration::from_secs(20))?)
-        // return Err(anyhow!("no message"));
-    }
 }
 
 impl Drop for ResponsePacketPromise {

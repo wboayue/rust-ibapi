@@ -631,7 +631,7 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn to_order_data(self) -> OrderData {
+    fn into_order_data(self) -> OrderData {
         OrderData {
             order_id: self.order_id,
             contract: self.contract,
@@ -719,7 +719,7 @@ pub fn decode_open_order(server_version: i32, message: ResponseMessage) -> Resul
     decoder.read_auto_cancel_parent()?;
     decoder.read_peg_best_peg_mid_order_attributes()?;
 
-    Ok(decoder.to_order_data())
+    Ok(decoder.into_order_data())
 }
 
 pub fn decode_order_status(server_version: i32, message: &mut ResponseMessage) -> Result<OrderStatus> {
@@ -884,5 +884,5 @@ pub fn decode_completed_order(server_version: i32, message: ResponseMessage) -> 
     decoder.read_completed_status()?;
     decoder.read_peg_best_peg_mid_order_attributes()?;
 
-    Ok(decoder.to_order_data())
+    Ok(decoder.into_order_data())
 }

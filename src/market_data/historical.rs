@@ -38,10 +38,13 @@ pub fn head_timestamp<C: Client + Debug>(client: &mut C, contract: &Contract, wh
     let request_id = client.next_request_id();
     let request = encode_head_timestamp(request_id, contract, what_to_show, use_rth)?;
 
-    let promise = client.send_request(request_id, request)?;
-    let mut response = promise.message()?;
+    let mut promise = client.send_request(request_id, request)?;
 
-    decode_head_timestamp(&mut response)
+    if let Some(mut response) = promise.next() {
+        decode_head_timestamp(&mut response)
+    } else {
+        Err(anyhow!("did not receive head timestamp message"))
+    }
 }
 
 /// Encodes the head timestamp request

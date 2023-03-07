@@ -9,7 +9,7 @@ fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     let order_types = ["completed", "open", "all_open", "auto_open"];
-    let order_types: Vec<PossibleValue> = order_types.iter().map(|f| PossibleValue::new(f)).collect();
+    let order_types: Vec<PossibleValue> = order_types.iter().map(PossibleValue::new).collect();
 
     let matches = Command::new("orders")
         .version("1.0")
