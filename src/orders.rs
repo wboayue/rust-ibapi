@@ -1662,18 +1662,69 @@ pub struct ExecutionFilter {
 /// * `filter` - filter criteria used to determine which execution reports are returned
 ///
 /// # Examples
-pub fn executions<C: Client + Debug>(client: &mut C, filter: ExecutionFilter) -> Result<()> {
+pub fn executions<C: Client + Debug>(client: &mut C, filter: ExecutionFilter) -> Result<ExecutionDataIterator> {
     let request_id = client.next_request_id();
     let message = encoders::encode_executions(client.server_version(), request_id, &filter)?;
 
     let mut messages = client.send_request(request_id, message)?;
 
+    Ok(ExecutionDataIterator {
+        server_version: client.server_version(),
+        messages,
+    })
+
     // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EClient.cs#L1663
     //    IBApi.Execution and IBApi.CommissionReport can be requested on demand via the IBApi.EClient.reqExecutions method which receives a IBApi.ExecutionFilter object as parameter to obtain only those executions matching the given criteria. An empty IBApi.ExecutionFilter object can be passed to obtain all previous executions.
-
     // https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EDecoder.cs#L1702
 
-    Ok(())
+    // Ok(())
+}
+
+/// Enumerates possible results from querying an [Execution].
+#[derive(Debug)]
+pub enum ExecutionDataResult {
+    ExecutionData(ExecutionData),
+    CommissionReport(CommissionReport),
+}
+
+/// Supports iteration over [ExecutionDataResult].
+pub struct ExecutionDataIterator {
+    server_version: i32,
+    messages: ResponsePacketPromise,
+}
+
+impl Iterator for ExecutionDataIterator {
+    type Item = ExecutionDataResult;
+
+    /// Returns the next [OrderDataResult]. Waits up to x seconds for next [OrderDataResult].
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(mut message) = self.messages.next() {
+                match message.message_type() {
+                    IncomingMessages::ExecutionData => match decoders::decode_execution_data(self.server_version, &mut message) {
+                        Ok(val) => return Some(ExecutionDataResult::ExecutionData(val)),
+                        Err(err) => {
+                            error!("error decoding execution data: {err}");
+                        }
+                    },
+                    IncomingMessages::CommissionsReport => match decoders::decode_commission_report(self.server_version, &mut message) {
+                        Ok(val) => return Some(ExecutionDataResult::CommissionReport(val)),
+                        Err(err) => {
+                            error!("error decoding commission report: {err}");
+                        }
+                    },
+                    IncomingMessages::ExecutionDataEnd => {
+                        return None;
+                    }
+                    message => {
+                        error!("order data iterator unexpected messsage: {message:?}");
+                    }
+                }
+            } else {
+                return None;
+            }
+        }
+    }
 }
 
 #[cfg(test)]

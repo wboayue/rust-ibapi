@@ -309,21 +309,22 @@ fn process_order_notifications(
 ) {
     match message.message_type() {
         IncomingMessages::ExecutionData => {
-            if let Some(order_id) = message.order_id() {
-                if let Err(e) = orders.send(order_id, message) {
-                    error!("error routing message for order_id({order_id}): {e}");
+            match message.order_id() {
+                // First check matching orders channel
+                Some(order_id) if orders.contains(order_id) => {
+                    if let Err(e) = orders.send(order_id, message) {
+                        error!("error routing message for order_id({order_id}): {e}");
+                    }
+                },
+                _ => {
+                    // Then try requests channel
+                    if let Some(request_id) = message.request_id() {
+                        if let Err(e) = requests.send(request_id, message) {
+                            error!("error routing message for request_id({request_id}): {e}");
+                        }
+                    }
                 }
-                return;
             }
-
-            if let Some(request_id) = message.request_id() {
-                if let Err(e) = requests.send(request_id, message) {
-                    error!("error routing message for request_id({request_id}): {e}");
-                }
-                return;
-            }
-
-            error!("message has no order_id: {message:?}");
         }
         IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => {
             if let Some(order_id) = message.order_id() {
