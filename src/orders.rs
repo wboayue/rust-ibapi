@@ -1453,7 +1453,7 @@ pub fn completed_orders<C: Client + Debug>(client: &mut C, api_only: bool) -> Re
 
     let message = encoders::encode_completed_orders(api_only)?;
 
-    let messages = client.request_orders(message)?;
+    let messages = client.request_order_data(message)?;
 
     Ok(OrderDataIterator {
         server_version: client.server_version(),
@@ -1468,7 +1468,7 @@ pub enum OrderDataResult {
     OrderStatus(OrderStatus),
 }
 
-/// Supports iteration over [OrderData].
+/// Supports iteration over [OrderDataResult].
 pub struct OrderDataIterator {
     server_version: i32,
     messages: GlobalResponsePacketPromise,
@@ -1519,7 +1519,7 @@ impl Iterator for OrderDataIterator {
 pub fn open_orders<C: Client + Debug>(client: &mut C) -> Result<OrderDataIterator> {
     let message = encoders::encode_open_orders()?;
 
-    let messages = client.request_orders(message)?;
+    let messages = client.request_order_data(message)?;
 
     Ok(OrderDataIterator {
         server_version: client.server_version(),
@@ -1533,7 +1533,7 @@ pub fn open_orders<C: Client + Debug>(client: &mut C) -> Result<OrderDataIterato
 pub fn all_open_orders<C: Client + Debug>(client: &mut C) -> Result<OrderDataIterator> {
     let message = encoders::encode_all_open_orders()?;
 
-    let messages = client.request_orders(message)?;
+    let messages = client.request_order_data(message)?;
 
     Ok(OrderDataIterator {
         server_version: client.server_version(),
@@ -1547,7 +1547,7 @@ pub fn all_open_orders<C: Client + Debug>(client: &mut C) -> Result<OrderDataIte
 pub fn auto_open_orders<C: Client + Debug>(client: &mut C, auto_bind: bool) -> Result<OrderDataIterator> {
     let message = encoders::encode_auto_open_orders(auto_bind)?;
 
-    let messages = client.request_orders(message)?;
+    let messages = client.request_order_data(message)?;
 
     Ok(OrderDataIterator {
         server_version: client.server_version(),

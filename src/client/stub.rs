@@ -100,7 +100,7 @@ impl Client for ClientStub {
         Ok(GlobalResponsePacketPromise::new(Arc::new(receiver)))
     }
 
-    fn request_orders(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+    fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
         self.request_messages.push(encode_message(&message));
 
         let (sender, receiver) = channel::unbounded();
