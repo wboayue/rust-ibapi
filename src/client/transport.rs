@@ -315,7 +315,7 @@ fn process_order_notifications(
                     if let Err(e) = orders.send(order_id, message) {
                         error!("error routing message for order_id({order_id}): {e}");
                     }
-                },
+                }
                 _ => {
                     // Then try requests channel
                     if let Some(request_id) = message.request_id() {
