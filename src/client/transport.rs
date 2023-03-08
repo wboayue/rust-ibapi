@@ -117,7 +117,7 @@ impl MessageBus for TcpMessageBus {
         self.write_message(packet)?;
         self.signals.push(signals_in);
 
-        Ok(ResponsePacketPromise::new(receiver, signals_out, Some(request_id), None))
+        Ok(ResponsePacketPromise::new(receiver, signals_out, Some(request_id), None, Duration::from_secs(10)))
     }
 
     fn send_order_message(&mut self, order_id: i32, message: &RequestMessage) -> Result<ResponsePacketPromise> {
@@ -128,7 +128,7 @@ impl MessageBus for TcpMessageBus {
         self.write_message(message)?;
         self.signals.push(signals_in);
 
-        Ok(ResponsePacketPromise::new(receiver, signals_out, None, Some(order_id)))
+        Ok(ResponsePacketPromise::new(receiver, signals_out, None, Some(order_id), Duration::from_secs(10)))
     }
 
     fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise> {
@@ -448,15 +448,17 @@ pub struct ResponsePacketPromise {
     signals: Sender<i32>,                // for client to signal termination
     request_id: Option<i32>,             // initiating request_id
     order_id: Option<i32>,               // initiating order_id
+    timeout: Duration,                   // How long to wait for next message
 }
 
 impl ResponsePacketPromise {
-    pub fn new(messages: Receiver<ResponseMessage>, signals: Sender<i32>, request_id: Option<i32>, order_id: Option<i32>) -> Self {
+    pub fn new(messages: Receiver<ResponseMessage>, signals: Sender<i32>, request_id: Option<i32>, order_id: Option<i32>, timeout: Duration) -> Self {
         ResponsePacketPromise {
             messages,
             signals,
             request_id,
             order_id,
+            timeout,
         }
     }
 }
