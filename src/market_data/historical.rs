@@ -38,10 +38,13 @@ pub fn head_timestamp<C: Client + Debug>(client: &mut C, contract: &Contract, wh
     let request_id = client.next_request_id();
     let request = encode_head_timestamp(request_id, contract, what_to_show, use_rth)?;
 
-    let promise = client.send_request(request_id, request)?;
-    let mut response = promise.message()?;
+    let mut promise = client.send_request(request_id, request)?;
 
-    decode_head_timestamp(&mut response)
+    if let Some(mut response) = promise.next() {
+        decode_head_timestamp(&mut response)
+    } else {
+        Err(anyhow!("did not receive head timestamp message"))
+    }
 }
 
 /// Encodes the head timestamp request
@@ -121,10 +124,8 @@ pub fn historical_data<C: Client + Debug>(
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_barsize
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_what_to_show
-    print!(
-        "{:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?}",
-        client, contract, end, duration, bar_size, what_to_show, use_rth, keep_up_to_date
-    );
+    print!("{client:?} {contract:?} {end:?} {duration:?} {bar_size:?} {what_to_show:?} {use_rth:?} {keep_up_to_date:?}");
+
     Err(anyhow!("not implemented!"))
 }
 
@@ -142,10 +143,7 @@ pub fn historical_ticks<C: Client + Debug>(
     use_rth: i32,
     ignore_size: bool,
 ) -> Result<HistoricalTickIterator> {
-    print!(
-        "{:?} {:?} {:?} {:?} {:?} {:?} {:?}",
-        client, contract, start_date, end_date, number_of_ticks, use_rth, ignore_size
-    );
+    print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?} {ignore_size:?}");
     Err(anyhow!("not implemented!"))
 }
 
@@ -158,10 +156,8 @@ pub fn historical_ticks_bid_ask<C: Client + Debug>(
     use_rth: i32,
     ignore_size: bool,
 ) -> Result<HistoricalTickBidAskIterator> {
-    print!(
-        "{:?} {:?} {:?} {:?} {:?} {:?} {:?}",
-        client, contract, start_date, end_date, number_of_ticks, use_rth, ignore_size
-    );
+    print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?} {ignore_size:?}");
+
     Err(anyhow!("not implemented!"))
 }
 
@@ -174,10 +170,7 @@ pub fn historical_ticks_last<C: Client + Debug>(
     use_rth: i32,
     ignore_size: bool,
 ) -> Result<HistoricalTickLastIterator> {
-    print!(
-        "{:?} {:?} {:?} {:?} {:?} {:?} {:?}",
-        client, contract, start_date, end_date, number_of_ticks, use_rth, ignore_size
-    );
+    print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?} {ignore_size:?}");
     Err(anyhow!("not implemented!"))
 }
 

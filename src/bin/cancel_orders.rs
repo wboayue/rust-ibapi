@@ -26,7 +26,7 @@ fn main() -> anyhow::Result<()> {
     if *global {
         println!("Requesting global cancel.");
 
-        orders::request_global_cancel(&mut client)?
+        orders::global_cancel(&mut client)?
     } else {
         println!("Cancelling order {order_id}");
 

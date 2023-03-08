@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crossbeam::channel::{self, Receiver, Sender};
 
 use anyhow::{anyhow, Result};
@@ -35,7 +37,7 @@ impl Client for ClientStub {
         self.order_id
     }
 
-    fn set_order_id(&mut self, order_id: i32) -> i32 {
+    fn set_next_order_id(&mut self, order_id: i32) -> i32 {
         self.order_id = order_id;
         self.order_id
     }
@@ -69,7 +71,7 @@ impl Client for ClientStub {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(ResponsePacketPromise::new(receiver, s1))
+        Ok(ResponsePacketPromise::new(receiver, s1, None, None))
     }
 
     fn send_order(&mut self, _order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
@@ -82,7 +84,32 @@ impl Client for ClientStub {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(ResponsePacketPromise::new(receiver, s1))
+        Ok(ResponsePacketPromise::new(receiver, s1, None, None))
+    }
+
+    /// Sends request for the next valid order id.
+    fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+        self.request_messages.push(encode_message(&message));
+
+        let (sender, receiver) = channel::unbounded();
+
+        for message in &self.response_messages {
+            sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
+        }
+
+        Ok(GlobalResponsePacketPromise::new(Arc::new(receiver)))
+    }
+
+    fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+        self.request_messages.push(encode_message(&message));
+
+        let (sender, receiver) = channel::unbounded();
+
+        for message in &self.response_messages {
+            sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
+        }
+
+        Ok(GlobalResponsePacketPromise::new(Arc::new(receiver)))
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {

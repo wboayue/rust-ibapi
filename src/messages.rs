@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum IncomingMessages {
     NotValid = -1,
     TickPrice = 1,
@@ -178,7 +178,7 @@ impl From<i32> for IncomingMessages {
 pub fn order_id_index(kind: IncomingMessages) -> Option<usize> {
     match kind {
         IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => Some(1),
-        IncomingMessages::ExecutionData => Some(2),
+        IncomingMessages::ExecutionData | IncomingMessages::ExecutionDataEnd => Some(2),
         _ => None,
     }
 }
@@ -190,7 +190,7 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::SymbolSamples
         | IncomingMessages::OpenOrder
         | IncomingMessages::ExecutionData => Some(1),
-        IncomingMessages::ContractDataEnd | IncomingMessages::RealTimeBars | IncomingMessages::Error => Some(2),
+        IncomingMessages::ContractDataEnd | IncomingMessages::RealTimeBars | IncomingMessages::Error | IncomingMessages::ExecutionDataEnd => Some(2),
         _ => None,
     }
 }

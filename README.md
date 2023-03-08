@@ -12,9 +12,6 @@ https://github.com/InteractiveBrokers/tws-api/blob/5cb24aea5cef9d315985a7b13dea7
 
 RUST_LOG=debug cargo run --bin find_contract_details
 
-
-TODO: fix request/response channel leak
-
 feat: (new feature for the user, not a new feature for build script)
 fix: (bug fix for the user, not a fix to a build script)
 docs: (changes to the documentation)
@@ -25,7 +22,11 @@ chore: (updating grunt tasks etc; no production code change)
 
 # Run Coverage Report
 
+https://github.com/taiki-e/cargo-llvm-cov
+
 ```bash
+cargo +stable install cargo-llvm-cov --locked
+
 cargo llvm-cov --open
 ```
 
@@ -35,7 +36,7 @@ cargo llvm-cov --open
 
 IBAPI_RECORDING_DIR=/tmp
 ```
-RUST_LOG=debug IBAPI_RECORDING_DIR=/tmp cargo run --bin find_contract_details
+RUST_LOG=debug IBAPI_RECORDING_DIR=/tmp/records cargo run --bin find_contract_details
 ```
 
 https://rust-lang.github.io/rustfmt/?version=v1.5.1&search=

@@ -1,10 +1,10 @@
 use std::convert::From;
 use std::fmt::{self, Debug, Display};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use log::{error, info};
 
-use crate::client::transport::ResponsePacketPromise;
+use crate::client::transport::{GlobalResponsePacketPromise, ResponsePacketPromise};
 use crate::client::{Client, RequestMessage, ResponseMessage};
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
@@ -347,7 +347,7 @@ pub struct Order {
     /// Specifies the initial order quantity to be filled.
     pub filled_quantity: f64,
     /// Identifies the reference future conId.
-    pub ref_futures_con_id: i32,
+    pub ref_futures_con_id: Option<i32>,
     /// Cancels the parent order if child order was cancelled.
     pub auto_cancel_parent: bool,
     /// Identifies the Shareholder.
@@ -357,7 +357,7 @@ pub struct Order {
     /// Routes market order to Best Bid Offer.
     pub route_marketable_to_bbo: bool,
     /// Parent order Id.
-    pub parent_perm_id: i32,
+    pub parent_perm_id: Option<i64>,
     /// Accepts a list with parameters obtained from advancedOrderRejectJson.
     pub advanced_error_override: String,
     /// Used by brokers and advisors when manually entering, modifying or cancelling orders at the direction of a client. Only used when allocating orders to specific groups or accounts. Excluding "All" group.
@@ -391,7 +391,7 @@ pub struct Order {
     /// Adjusted Stop orders: specifies the trigger price to execute.
     pub trigger_price: Option<f64>,
     /// Adjusted Stop orders: specifies the price offset for the stop to move in increments.
-    pub lmt_price_offset: Option<f64>,
+    pub limit_price_offset: Option<f64>,
     /// Adjusted Stop orders: specifies the stop price of the adjusted (STP) parent.
     pub adjusted_stop_price: Option<f64>,
     /// Adjusted Stop orders: specifies the stop limit price of the adjusted (STPL LMT) parent.
@@ -523,12 +523,12 @@ impl Default for Order {
             dont_use_auto_price_for_hedge: false,
             auto_cancel_date: "".to_owned(),
             filled_quantity: 0.0,
-            ref_futures_con_id: 0,
+            ref_futures_con_id: Some(0),
             auto_cancel_parent: false,
             shareholder: "".to_owned(),
             imbalance_only: false,
             route_marketable_to_bbo: false,
-            parent_perm_id: 0,
+            parent_perm_id: None,
             advanced_error_override: "".to_owned(),
             manual_order_time: "".to_owned(),
             min_trade_qty: None,
@@ -545,7 +545,7 @@ impl Default for Order {
             reference_exchange: "".to_owned(),
             adjusted_order_type: "".to_owned(),
             trigger_price: None,
-            lmt_price_offset: None,
+            limit_price_offset: None,
             adjusted_stop_price: None,
             adjusted_stop_limit_price: None,
             adjusted_trailing_amount: None,
@@ -715,15 +715,15 @@ pub struct SoftDollarTier {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct OpenOrder {
+pub struct OrderData {
     /// The order's unique id
-    order_id: i32,
+    pub order_id: i32,
     /// The order's Contract.
-    contract: Box<Contract>,
+    pub contract: Contract,
     /// The currently active order
-    order: Box<Order>,
+    pub order: Order,
     /// The order's OrderState
-    order_state: Box<OrderState>,
+    pub order_state: OrderState,
 }
 
 /// Provides an active order's current state.
@@ -759,8 +759,8 @@ pub struct OrderState {
     pub commission_currency: String,
     /// If the order is warranted, a descriptive message will be provided.
     pub warning_text: String,
-    // completed_time: String,
-    // completed_status: String,
+    pub completed_time: String,
+    pub completed_status: String,
 }
 
 /// For institutional customers only. Valid values are O (open) and C (close).
@@ -881,14 +881,14 @@ pub struct Execution {
 #[derive(Clone, Debug, Default)]
 pub struct ExecutionData {
     pub request_id: i32,
-    pub contract: Box<Contract>,
-    pub execution: Box<Execution>,
+    pub contract: Contract,
+    pub execution: Execution,
 }
 
 #[derive(Clone, Debug)]
 pub enum OrderNotification {
     OrderStatus(OrderStatus),
-    OpenOrder(OpenOrder),
+    OpenOrder(OrderData),
     ExecutionData(ExecutionData),
     CommissionReport(CommissionReport),
     Message(String),
@@ -900,8 +900,8 @@ impl From<OrderStatus> for OrderNotification {
     }
 }
 
-impl From<OpenOrder> for OrderNotification {
-    fn from(val: OpenOrder) -> Self {
+impl From<OrderData> for OrderNotification {
+    fn from(val: OrderData) -> Self {
         OrderNotification::OpenOrder(val)
     }
 }
@@ -1015,7 +1015,6 @@ pub fn place_order<C: Client + Debug>(client: &mut C, order_id: i32, contract: &
 
     Ok(OrderNotificationIterator {
         messages,
-        order_id,
         server_version: client.server_version(),
     })
 }
@@ -1025,7 +1024,6 @@ pub fn place_order<C: Client + Debug>(client: &mut C, order_id: i32, contract: &
 /// Supports iteration over [OrderNotification]
 pub struct OrderNotificationIterator {
     server_version: i32,
-    order_id: i32,
     messages: ResponsePacketPromise,
 }
 
@@ -1048,7 +1046,7 @@ impl Iterator for OrderNotificationIterator {
             if let Some(mut message) = self.messages.next() {
                 match message.message_type() {
                     IncomingMessages::OpenOrder => {
-                        let open_order = decoders::decode_open_order(self.server_version, &mut message);
+                        let open_order = decoders::decode_open_order(self.server_version, message);
                         return convert(open_order);
                     }
                     IncomingMessages::OrderStatus => {
@@ -1075,12 +1073,6 @@ impl Iterator for OrderNotificationIterator {
                 return None;
             }
         }
-    }
-}
-
-impl Drop for OrderNotificationIterator {
-    fn drop(&mut self) {
-        self.messages.signal(self.order_id);
     }
 }
 
@@ -1393,41 +1385,362 @@ impl Iterator for CancelOrderResultIterator {
 /// fn main() -> anyhow::Result<()> {
 ///     let mut client = IBClient::connect("localhost:4002")?;
 ///
-///     orders::request_global_cancel(&mut client)?;
+///     orders::global_cancel(&mut client)?;
 ///
 ///     Ok(())
 /// }
 /// ```
-pub fn request_global_cancel<C: Client + Debug>(client: &mut C) -> Result<()> {
+pub fn global_cancel<C: Client + Debug>(client: &mut C) -> Result<()> {
     client.check_server_version(server_versions::REQ_GLOBAL_CANCEL, "It does not support global cancel requests.")?;
 
-    let request_id = client.next_request_id();
-    let message = encoders::encode_request_global_cancel(client.server_version())?;
+    let message = encoders::encode_global_cancel()?;
 
+    let request_id = client.next_request_id();
     client.send_order(request_id, message)?;
 
     Ok(())
 }
 
-pub fn check_order_status<C: Client + Debug>() {
-    //    Immediately after the order was submitted correctly, the TWS will start sending events concerning the order's activity via IBApi.EWrapper.openOrder and IBApi.EWrapper.orderStatus
+/// Cancels all open [Order]s.
+///
+/// Requests the cancelation of all open [Order]s.
+///
+/// # Arguments
+/// * `client` - [Client] used to communicate with server.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ibapi::client::{IBClient, Client};
+/// use ibapi::orders;
+///
+/// fn main() -> anyhow::Result<()> {
+///     let mut client = IBClient::connect("localhost:4002")?;
+///
+///     let next_valid_order_id = orders::next_valid_order_id(&mut client)?;
+///     println!("next_valid_order_id: {next_valid_order_id}");
+///
+///     Ok(())
+/// }
+/// ```
+pub fn next_valid_order_id<C: Client + Debug>(client: &mut C) -> Result<i32> {
+    let message = encoders::encode_next_valid_order_id()?;
+
+    let mut messages = client.request_next_order_id(message)?;
+
+    if let Some(message) = messages.next() {
+        let order_id_index = 2;
+        let next_order_id = message.peek_int(order_id_index)?;
+
+        client.set_next_order_id(next_order_id);
+
+        Ok(next_order_id)
+    } else {
+        Err(anyhow!("no response from server"))
+    }
 }
 
-pub fn request_open_orders<C: Client + Debug>() {
-    // Active orders will be delivered via The openOrder callback and The orderStatus callback callbacks. When all orders have been sent to the client application you will receive a IBApi.EWrapper.openOrderEnd event:
+/// Requests completed [Order]s.
+///
+/// # Arguments
+/// * `client` - [Client] used to communicate with server.
+/// * `api_only` - request only orders placed by the API.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ibapi::client::{IBClient, Client};
+/// use ibapi::orders;
+///
+/// fn main() -> anyhow::Result<()> {
+///     let mut client = IBClient::connect("localhost:4002")?;
+///
+///     let results = orders::completed_orders(&mut client, false)?;
+///     for order_data in results {
+///        println!("{order_data:?}")
+///     }
+///
+///     Ok(())
+/// }
+/// ```
+pub fn completed_orders<C: Client + Debug>(client: &mut C, api_only: bool) -> Result<OrderDataIterator> {
+    client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
+
+    let message = encoders::encode_completed_orders(api_only)?;
+
+    let messages = client.request_order_data(message)?;
+
+    Ok(OrderDataIterator {
+        server_version: client.server_version(),
+        messages,
+    })
 }
 
-pub fn request_all_open_orders<C: Client + Debug>() {}
-
-//https://interactivebrokers.github.io/tws-api/classIBApi_1_1ExecutionFilter.html
-
-pub struct ExecutionFilter {}
-
-pub fn request_executions<C: Client + Debug>() {
-    //    IBApi.Execution and IBApi.CommissionReport can be requested on demand via the IBApi.EClient.reqExecutions method which receives a IBApi.ExecutionFilter object as parameter to obtain only those executions matching the given criteria. An empty IBApi.ExecutionFilter object can be passed to obtain all previous executions.
+/// Enumerates possible results from querying an [Order].
+#[derive(Debug)]
+pub enum OrderDataResult {
+    OrderData(OrderData),
+    OrderStatus(OrderStatus),
 }
 
-pub fn request_market_rule<C: Client + Debug>(_market_rule_id: i32) {}
+/// Supports iteration over [OrderDataResult].
+pub struct OrderDataIterator {
+    server_version: i32,
+    messages: GlobalResponsePacketPromise,
+}
+
+impl Iterator for OrderDataIterator {
+    type Item = OrderDataResult;
+
+    /// Returns the next [OrderDataResult]. Waits up to x seconds for next [OrderDataResult].
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(mut message) = self.messages.next() {
+                match message.message_type() {
+                    IncomingMessages::CompletedOrder => match decoders::decode_completed_order(self.server_version, message) {
+                        Ok(val) => return Some(OrderDataResult::OrderData(val)),
+                        Err(err) => {
+                            error!("error decoding completed order: {err}");
+                        }
+                    },
+                    IncomingMessages::OpenOrder => match decoders::decode_open_order(self.server_version, message) {
+                        Ok(val) => return Some(OrderDataResult::OrderData(val)),
+                        Err(err) => {
+                            error!("error decoding open order: {err}");
+                        }
+                    },
+                    IncomingMessages::OrderStatus => match decoders::decode_order_status(self.server_version, &mut message) {
+                        Ok(val) => return Some(OrderDataResult::OrderStatus(val)),
+                        Err(err) => {
+                            error!("error decoding order status: {err}");
+                        }
+                    },
+                    IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => {
+                        return None;
+                    }
+                    message => {
+                        error!("order data iterator unexpected messsage: {message:?}");
+                    }
+                }
+            } else {
+                return None;
+            }
+        }
+    }
+}
+
+/// Requests all open orders places by this specific API client (identified by the API client id).
+/// For client ID 0, this will bind previous manual TWS orders.
+///
+/// # Arguments
+/// * `client` - [Client] used to communicate with server.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ibapi::client::{IBClient, Client};
+/// use ibapi::orders;
+///
+/// fn main() -> anyhow::Result<()> {
+///     let mut client = IBClient::connect("localhost:4002")?;
+///
+///     let results = orders::open_orders(&mut client)?;
+///     for order_data in results {
+///        println!("{order_data:?}")
+///     }
+///
+///     Ok(())
+/// }
+/// ```
+pub fn open_orders<C: Client + Debug>(client: &mut C) -> Result<OrderDataIterator> {
+    let message = encoders::encode_open_orders()?;
+
+    let messages = client.request_order_data(message)?;
+
+    Ok(OrderDataIterator {
+        server_version: client.server_version(),
+        messages,
+    })
+}
+
+/// Requests all *current* open orders in associated accounts at the current moment.
+/// Open orders are returned once; this function does not initiate a subscription.
+///
+/// # Arguments
+/// * `client` - [Client] used to communicate with server.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ibapi::client::{IBClient, Client};
+/// use ibapi::orders;
+///
+/// fn main() -> anyhow::Result<()> {
+///     let mut client = IBClient::connect("localhost:4002")?;
+///
+///     let results = orders::all_open_orders(&mut client)?;
+///     for order_data in results {
+///        println!("{order_data:?}")
+///     }
+///
+///     Ok(())
+/// }
+/// ```
+pub fn all_open_orders<C: Client + Debug>(client: &mut C) -> Result<OrderDataIterator> {
+    let message = encoders::encode_all_open_orders()?;
+
+    let messages = client.request_order_data(message)?;
+
+    Ok(OrderDataIterator {
+        server_version: client.server_version(),
+        messages,
+    })
+}
+
+/// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
+///
+/// # Arguments
+/// * `client` - [Client] used to communicate with server.
+/// * `auto_bind` - if set to true, the newly created orders will be assigned an API order ID and implicitly associated with this client. If set to false, future orders will not be.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ibapi::client::{IBClient, Client};
+/// use ibapi::orders;
+///
+/// fn main() -> anyhow::Result<()> {
+///     let mut client = IBClient::connect("localhost:4002")?;
+///
+///     let results = orders::auto_open_orders(&mut client, false)?;
+///     for order_data in results {
+///        println!("{order_data:?}")
+///     }
+///
+///     Ok(())
+/// }
+/// ```
+pub fn auto_open_orders<C: Client + Debug>(client: &mut C, auto_bind: bool) -> Result<OrderDataIterator> {
+    let message = encoders::encode_auto_open_orders(auto_bind)?;
+
+    // TODO this should probably not timeout.
+    let messages = client.request_order_data(message)?;
+
+    Ok(OrderDataIterator {
+        server_version: client.server_version(),
+        messages,
+    })
+}
+
+#[derive(Debug, Default)]
+/// Filter criteria used to determine which execution reports are returned.
+pub struct ExecutionFilter {
+    /// The API client which placed the order.
+    pub client_id: Option<i32>,
+    /// The account to which the order was allocated to
+    pub account_code: String,
+    /// Time from which the executions will be returned yyyymmdd hh:mm:ss
+    /// Only those executions reported after the specified time will be returned.
+    pub time: String,
+    /// The instrument's symbol
+    pub symbol: String,
+    /// The Contract's security's type (i.e. STK, OPT...)
+    pub security_type: String,
+    /// The exchange at which the execution was produced
+    pub exchange: String,
+    /// The Contract's side (BUY or SELL)
+    pub side: String,
+}
+
+/// Requests current day's (since midnight) executions matching the filter.
+///
+/// Only the current day's executions can be retrieved.
+/// Along with the [ExecutionData], the [CommissionReport] will also be returned.
+/// When requesting executions, a filter can be specified to receive only a subset of them
+///
+/// # Arguments
+/// * `filter` - filter criteria used to determine which execution reports are returned
+///
+/// # Examples
+///
+/// ```no_run
+/// use ibapi::client::{IBClient, Client};
+/// use ibapi::orders::{self, ExecutionFilter};
+///
+/// fn main() -> anyhow::Result<()> {
+///     let mut client = IBClient::connect("localhost:4002")?;
+///     
+///     let filter = ExecutionFilter{
+///        side: "BUY".to_owned(),
+///        ..ExecutionFilter::default()
+///     };
+///
+///     let results = orders::executions(&mut client, filter)?;
+///     for execution_data in results {
+///        println!("{execution_data:?}")
+///     }
+///
+///     Ok(())
+/// }
+/// ```
+pub fn executions<C: Client + Debug>(client: &mut C, filter: ExecutionFilter) -> Result<ExecutionDataIterator> {
+    let request_id = client.next_request_id();
+    let message = encoders::encode_executions(client.server_version(), request_id, &filter)?;
+
+    let messages = client.send_request(request_id, message)?;
+
+    Ok(ExecutionDataIterator {
+        server_version: client.server_version(),
+        messages,
+    })
+}
+
+/// Enumerates possible results from querying an [Execution].
+#[derive(Debug)]
+pub enum ExecutionDataResult {
+    ExecutionData(ExecutionData),
+    CommissionReport(CommissionReport),
+}
+
+/// Supports iteration over [ExecutionDataResult].
+pub struct ExecutionDataIterator {
+    server_version: i32,
+    messages: ResponsePacketPromise,
+}
+
+impl Iterator for ExecutionDataIterator {
+    type Item = ExecutionDataResult;
+
+    /// Returns the next [OrderDataResult]. Waits up to x seconds for next [OrderDataResult].
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(mut message) = self.messages.next() {
+                match message.message_type() {
+                    IncomingMessages::ExecutionData => match decoders::decode_execution_data(self.server_version, &mut message) {
+                        Ok(val) => return Some(ExecutionDataResult::ExecutionData(val)),
+                        Err(err) => {
+                            error!("error decoding execution data: {err}");
+                        }
+                    },
+                    IncomingMessages::CommissionsReport => match decoders::decode_commission_report(self.server_version, &mut message) {
+                        Ok(val) => return Some(ExecutionDataResult::CommissionReport(val)),
+                        Err(err) => {
+                            error!("error decoding commission report: {err}");
+                        }
+                    },
+                    IncomingMessages::ExecutionDataEnd => {
+                        return None;
+                    }
+                    message => {
+                        error!("order data iterator unexpected messsage: {message:?}");
+                    }
+                }
+            } else {
+                return None;
+            }
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests;

@@ -35,7 +35,6 @@ fn main() -> anyhow::Result<()> {
     contract.currency = "USD".to_string();
     debug!("contract template {contract:?}");
 
-    // TODO - set next valid order_id
     let order_id = client.next_order_id();
     println!("order_id: {order_id}");
     let order = order_builder::market_order(orders::Action::Buy, 100.0);
@@ -62,13 +61,7 @@ fn main() -> anyhow::Result<()> {
 fn get_order(matches: &ArgMatches) -> Option<(String, i32)> {
     if let Some(quantity) = matches.get_one::<i32>("buy") {
         Some(("BUY".to_string(), *quantity))
-    } else if let Some(quantity) = matches.get_one::<i32>("sell") {
-        Some(("SELL".to_string(), *quantity))
     } else {
-        None
+        matches.get_one::<i32>("sell").map(|quantity| ("SELL".to_string(), *quantity))
     }
 }
-
-// MarketOrder(action:str, quantity:Decimal):
-
-// https://github.com/InteractiveBrokers/tws-api/blob/master/samples/Python/Testbed/OrderSamples.py

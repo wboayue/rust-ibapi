@@ -45,9 +45,9 @@ fn main() -> anyhow::Result<()> {
 fn extract_contract(matches: &ArgMatches) -> Option<Contract> {
     if let Some(symbol) = matches.get_one::<String>("stock") {
         Some(Contract::stock(&symbol.to_uppercase()))
-    } else if let Some(symbol) = matches.get_one::<String>("futures") {
-        Some(Contract::futures(&symbol.to_uppercase()))
     } else {
-        None
+        matches
+            .get_one::<String>("futures")
+            .map(|symbol| Contract::futures(&symbol.to_uppercase()))
     }
 }

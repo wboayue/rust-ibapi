@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.66"
 byteorder = "1.4.3"
-clap = "4.1.4"
+clap = "4.1.8"
 crossbeam = "0.8.2"
 env_logger = "0.9.3"
 log = "0.4.17"

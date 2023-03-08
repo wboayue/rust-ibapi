@@ -294,7 +294,7 @@ pub fn encode_place_order(server_version: i32, order_id: i32, contract: &Contrac
 
         message.push_field(&order.adjusted_order_type);
         message.push_field(&order.trigger_price);
-        message.push_field(&order.lmt_price_offset);
+        message.push_field(&order.limit_price_offset);
         message.push_field(&order.adjusted_stop_price);
         message.push_field(&order.adjusted_stop_limit_price);
         message.push_field(&order.adjusted_trailing_amount);
@@ -384,8 +384,9 @@ pub fn encode_place_order(server_version: i32, order_id: i32, contract: &Contrac
 }
 
 pub fn encode_cancel_order(server_version: i32, order_id: i32, manual_order_cancel_time: &str) -> Result<RequestMessage> {
-    let mut message = RequestMessage::default();
     const VERSION: i32 = 1;
+
+    let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::CancelOrder);
     message.push_field(&VERSION);
@@ -398,12 +399,91 @@ pub fn encode_cancel_order(server_version: i32, order_id: i32, manual_order_canc
     Ok(message)
 }
 
-pub fn encode_request_global_cancel(_server_version: i32) -> Result<RequestMessage> {
-    let mut message = RequestMessage::default();
+pub fn encode_global_cancel() -> Result<RequestMessage> {
     const VERSION: i32 = 1;
+
+    let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::RequestGlobalCancel);
     message.push_field(&VERSION);
+
+    Ok(message)
+}
+
+pub fn encode_next_valid_order_id() -> Result<RequestMessage> {
+    const VERSION: i32 = 1;
+
+    let mut message = RequestMessage::default();
+
+    message.push_field(&OutgoingMessages::RequestIds);
+    message.push_field(&VERSION);
+    message.push_field(&0);
+
+    Ok(message)
+}
+
+pub fn encode_completed_orders(api_only: bool) -> Result<RequestMessage> {
+    let mut message = RequestMessage::default();
+
+    message.push_field(&OutgoingMessages::ReqCompletedOrders);
+    message.push_field(&api_only);
+
+    Ok(message)
+}
+
+pub fn encode_open_orders() -> Result<RequestMessage> {
+    const VERSION: i32 = 1;
+
+    let mut message = RequestMessage::default();
+
+    message.push_field(&OutgoingMessages::RequestOpenOrders);
+    message.push_field(&VERSION);
+
+    Ok(message)
+}
+
+pub fn encode_all_open_orders() -> Result<RequestMessage> {
+    const VERSION: i32 = 1;
+
+    let mut message = RequestMessage::default();
+
+    message.push_field(&OutgoingMessages::RequestAllOpenOrders);
+    message.push_field(&VERSION);
+
+    Ok(message)
+}
+
+pub fn encode_auto_open_orders(auto_bind: bool) -> Result<RequestMessage> {
+    const VERSION: i32 = 1;
+
+    let mut message = RequestMessage::default();
+
+    message.push_field(&OutgoingMessages::RequestAutoOpenOrders);
+    message.push_field(&VERSION);
+    message.push_field(&auto_bind);
+
+    Ok(message)
+}
+
+pub fn encode_executions(server_version: i32, request_id: i32, filter: &ExecutionFilter) -> Result<RequestMessage> {
+    const VERSION: i32 = 3;
+
+    let mut message = RequestMessage::default();
+
+    message.push_field(&OutgoingMessages::RequestExecutions);
+    message.push_field(&VERSION);
+
+    if server_version >= server_versions::EXECUTION_DATA_CHAIN {
+        message.push_field(&request_id);
+    }
+
+    message.push_field(&filter.client_id);
+    message.push_field(&filter.account_code);
+    message.push_field(&filter.time); // "yyyyMMdd-HH:mm:ss" (UTC) or "yyyyMMdd HH:mm:ss timezone"
+    message.push_field(&filter.symbol);
+    message.push_field(&filter.security_type);
+    message.push_field(&filter.exchange);
+    message.push_field(&filter.side);
 
     Ok(message)
 }

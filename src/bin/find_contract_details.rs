@@ -1,5 +1,3 @@
-use std::{thread, time};
-
 use clap::{arg, Command};
 use log::{debug, info};
 

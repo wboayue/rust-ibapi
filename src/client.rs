@@ -6,7 +6,7 @@ use anyhow::{anyhow, Result};
 use log::{debug, error, info};
 use time::OffsetDateTime;
 
-use self::transport::{MessageBus, ResponsePacketPromise, TcpMessageBus};
+use self::transport::{GlobalResponsePacketPromise, MessageBus, ResponsePacketPromise, TcpMessageBus};
 use crate::contracts::{ComboLegOpenClose, SecurityType};
 use crate::messages::{order_id_index, request_id_index, IncomingMessages, OutgoingMessages};
 use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A, TagValue};
@@ -16,10 +16,10 @@ pub(crate) mod transport;
 
 const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
-const START_API: i32 = 71;
 const INFINITY_STR: &str = "Infinity";
 const UNSET_DOUBLE: &str = "1.7976931348623157E308";
 const UNSET_INTEGER: &str = "2147483647";
+const UNSET_LONG: &str = "9223372036854775807";
 
 pub trait Client {
     /// Returns the next request ID.
@@ -27,7 +27,7 @@ pub trait Client {
     /// Returns the next order ID. Set at connection time then incremented on each call.
     fn next_order_id(&mut self) -> i32;
     /// Sets the current value of order ID.
-    fn set_order_id(&mut self, order_id: i32) -> i32;
+    fn set_next_order_id(&mut self, order_id: i32) -> i32;
     /// Returns the server version.
     fn server_version(&self) -> i32;
     /// Returns the server time at connection time.
@@ -40,6 +40,10 @@ pub trait Client {
     fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
     /// Submits an order and waits for reply.
     fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
+    /// Sends request for the next valid order id.
+    fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise>;
+    /// Sends request for open orders.
+    fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise>;
     /// Ensures server is at least the requested version.
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
@@ -136,7 +140,7 @@ impl IBClient {
 
         let prelude = &mut RequestMessage::default();
 
-        prelude.push_field(&START_API);
+        prelude.push_field(&OutgoingMessages::StartApi);
         prelude.push_field(&VERSION);
         prelude.push_field(&self.client_id);
 
@@ -214,7 +218,7 @@ impl Client for IBClient {
     }
 
     /// Sets the current value of order ID.
-    fn set_order_id(&mut self, order_id: i32) -> i32 {
+    fn set_next_order_id(&mut self, order_id: i32) -> i32 {
         self.order_id = order_id;
         self.order_id
     }
@@ -239,12 +243,22 @@ impl Client for IBClient {
 
     fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
         debug!("send_message({:?}, {:?})", request_id, message);
-        self.message_bus.write_message_for_request(request_id, &message)
+        self.message_bus.send_generic_message(request_id, &message)
     }
 
     fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
         debug!("send_order({:?}, {:?})", order_id, message);
         self.message_bus.send_order_message(order_id, &message)
+    }
+
+    /// Sends request for the next valid order id.
+    fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+        self.message_bus.request_next_order_id(&message)
+    }
+
+    /// Sends request for open orders.
+    fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+        self.message_bus.request_open_orders(&message)
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
@@ -339,6 +353,14 @@ impl ResponseMessage {
         None
     }
 
+    pub fn execution_id(&self) -> Option<String> {
+        match self.message_type() {
+            IncomingMessages::ExecutionData => Some(self.peek_string(14)),
+            IncomingMessages::CommissionsReport => Some(self.peek_string(2)),
+            _ => None,
+        }
+    }
+
     pub fn peek_int(&self, i: usize) -> Result<i32> {
         let field = &self.fields[i];
         match field.parse() {
@@ -388,6 +410,20 @@ impl ResponseMessage {
 
         match field.parse() {
             Ok(val) => Ok(val),
+            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+        }
+    }
+
+    pub fn next_optional_long(&mut self) -> Result<Option<i64>> {
+        let field = &self.fields[self.i];
+        self.i += 1;
+
+        if field.is_empty() || field == UNSET_LONG {
+            return Ok(None);
+        }
+
+        match field.parse::<i64>() {
+            Ok(val) => Ok(Some(val)),
             Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
         }
     }

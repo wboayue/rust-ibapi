@@ -225,7 +225,7 @@ impl From<i32> for ComboLegOpenClose {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Delta and underlying price for Delta-Neutral combo orders.
 /// Underlying (STK or FUT), delta and underlying price goes into this attribute.
 pub struct DeltaNeutralContract {
@@ -716,3 +716,5 @@ fn decode_contract_descriptions(server_version: i32, message: &mut ResponseMessa
 
     Ok(contract_descriptions)
 }
+
+pub fn market_rule<C: Client + Debug>(_market_rule_id: i32) {}
