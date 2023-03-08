@@ -40,8 +40,8 @@ pub struct TcpMessageBus {
     reader: Arc<TcpStream>,
     writer: Box<TcpStream>,
     handles: Vec<JoinHandle<i32>>,
-    requests: Arc<SenderHash<ResponseMessage>>,
-    orders: Arc<SenderHash<ResponseMessage>>,
+    requests: Arc<SenderHash<i32, ResponseMessage>>,
+    orders: Arc<SenderHash<i32, ResponseMessage>>,
     recorder: MessageRecorder,
     globals: Arc<GlobalChannels>,
     signals: Vec<Receiver<i32>>,
@@ -169,12 +169,14 @@ impl MessageBus for TcpMessageBus {
         let recorder = self.recorder.clone();
         let orders = Arc::clone(&self.orders);
         let globals = Arc::clone(&self.globals);
+        let executions = SenderHash::<String, ResponseMessage>::new();
 
         let handle = thread::spawn(move || loop {
+
             match read_packet(&reader) {
                 Ok(message) => {
                     recorder.record_response(&message);
-                    dispatch_message(message, server_version, &requests, &orders, &globals);
+                    dispatch_message(message, server_version, &requests, &orders, &globals, &executions);
                 }
                 Err(err) => {
                     error!("error reading packet: {:?}", err);
@@ -195,9 +197,10 @@ impl MessageBus for TcpMessageBus {
 fn dispatch_message(
     message: ResponseMessage,
     server_version: i32,
-    requests: &Arc<SenderHash<ResponseMessage>>,
-    orders: &Arc<SenderHash<ResponseMessage>>,
+    requests: &Arc<SenderHash<i32,ResponseMessage>>,
+    orders: &Arc<SenderHash<i32, ResponseMessage>>,
     globals: &Arc<GlobalChannels>,
+    executions: &SenderHash<String, ResponseMessage>,
 ) {
     match message.message_type() {
         IncomingMessages::Error => {
@@ -220,7 +223,7 @@ fn dispatch_message(
         | IncomingMessages::CompletedOrdersEnd
         | IncomingMessages::ExecutionData
         | IncomingMessages::ExecutionDataEnd
-        | IncomingMessages::CommissionsReport => process_orders(message, requests, orders, globals),
+        | IncomingMessages::CommissionsReport => process_orders(message, requests, orders, executions, globals),
         _ => process_response(requests, orders, message),
     };
 }
@@ -292,33 +295,39 @@ fn process_managed_accounts(_server_version: i32, mut packet: ResponseMessage) {
     info!("managed accounts: {}", managed_accounts)
 }
 
-fn process_response(requests: &Arc<SenderHash<ResponseMessage>>, orders: &Arc<SenderHash<ResponseMessage>>, message: ResponseMessage) {
+fn process_response(requests: &Arc<SenderHash<i32, ResponseMessage>>, orders: &Arc<SenderHash<i32, ResponseMessage>>, message: ResponseMessage) {
     let request_id = message.request_id().unwrap_or(-1); // pass in request id?
-    if requests.contains(request_id) {
-        requests.send(request_id, message).unwrap();
-    } else if orders.contains(request_id) {
-        orders.send(request_id, message).unwrap();
+    if requests.contains(&request_id) {
+        requests.send(&request_id, message).unwrap();
+    } else if orders.contains(&request_id) {
+        orders.send(&request_id, message).unwrap();
     }
 }
 
 fn process_orders(
     message: ResponseMessage,
-    requests: &Arc<SenderHash<ResponseMessage>>,
-    orders: &Arc<SenderHash<ResponseMessage>>,
+    requests: &Arc<SenderHash<i32, ResponseMessage>>,
+    orders: &Arc<SenderHash<i32, ResponseMessage>>,
+    executions: &SenderHash<String, ResponseMessage>,
     globals: &Arc<GlobalChannels>,
 ) {
     match message.message_type() {
         IncomingMessages::ExecutionData => {
-            // TODO map to execution
             match (message.order_id(), message.request_id()) {
                 // First check matching orders channel
-                (Some(order_id), _) if orders.contains(order_id) => {
-                    if let Err(e) = orders.send(order_id, message) {
+                (Some(order_id), _) if orders.contains(&order_id) => {
+                    if let Err(e) = orders.send(&order_id, message) {
                         error!("error routing message for order_id({order_id}): {e}");
                     }
                 }
-                (_, Some(request_id)) if requests.contains(request_id) => {
-                    if let Err(e) = requests.send(request_id, message) {
+                (_, Some(request_id)) if requests.contains(&request_id) => {
+                    if let Some(sender) = requests.copy_sender(request_id) {
+                        if let Some(execution_id) = message.execution_id() {
+                            executions.insert(execution_id, sender);
+                        }
+                    }
+
+                    if let Err(e) = requests.send(&request_id, message) {
                         error!("error routing message for request_id({request_id}): {e}");
                     }
                 }
@@ -328,16 +337,15 @@ fn process_orders(
             }
         }
         IncomingMessages::ExecutionDataEnd => {
-            // TODO map to execution
             match (message.order_id(), message.request_id()) {
                 // First check matching orders channel
-                (Some(order_id), _) if orders.contains(order_id) => {
-                    if let Err(e) = orders.send(order_id, message) {
+                (Some(order_id), _) if orders.contains(&order_id) => {
+                    if let Err(e) = orders.send(&order_id, message) {
                         error!("error routing message for order_id({order_id}): {e}");
                     }
                 }
-                (_, Some(request_id)) if requests.contains(request_id) => {
-                    if let Err(e) = requests.send(request_id, message) {
+                (_, Some(request_id)) if requests.contains(&request_id) => {
+                    if let Err(e) = requests.send(&request_id, message) {
                         error!("error routing message for request_id({request_id}): {e}");
                     }
                 }
@@ -348,8 +356,8 @@ fn process_orders(
         }
         IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => {
             if let Some(order_id) = message.order_id() {
-                if orders.contains(order_id) {
-                    if let Err(e) = orders.send(order_id, message) {
+                if orders.contains(&order_id) {
+                    if let Err(e) = orders.send(&order_id, message) {
                         error!("error routing message for order_id({order_id}): {e}");
                     }
                 } else {
@@ -374,47 +382,62 @@ fn process_orders(
                 error!("error sending IncomingMessages::CompletedOrdersEnd: {e}");
             }
         }
+        IncomingMessages::CommissionsReport => {
+            if let Some(execution_id) = message.execution_id() {
+                if let Err(e) = executions.send(&execution_id, message) {
+                    error!("error sending commision report for execution {}: {}", execution_id, e);
+                }
+            } 
+        }
         _ => (),
     }
-    // | IncomingMessages::CommissionsReport
 }
 
 #[derive(Debug)]
-struct SenderHash<T> {
-    data: RwLock<HashMap<i32, Sender<T>>>,
+struct SenderHash<K, V> {
+    data: RwLock<HashMap<K, Sender<V>>>,
 }
 
-impl<T: std::fmt::Debug> SenderHash<T> {
+impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K, V> {
     pub fn new() -> Self {
         Self {
             data: RwLock::new(HashMap::new()),
         }
     }
 
-    pub fn send(&self, id: i32, message: T) -> Result<()> {
+    pub fn send(&self, id: &K, message: V) -> Result<()> {
         let senders = self.data.read().unwrap();
         debug!("senders: {senders:?}");
         if let Some(sender) = senders.get(&id) {
             if let Err(err) = sender.send(message) {
-                error!("error sending: {id}, {err}")
+                error!("error sending: {id:?}, {err}")
             }
         } else {
-            error!("no recipient found for: {id}, {message:?}")
+            error!("no recipient found for: {id:?}, {message:?}")
         }
         Ok(())
     }
 
-    pub fn insert(&self, id: i32, message: Sender<T>) -> Option<Sender<T>> {
+    pub fn copy_sender(&self, id: K) -> Option<Sender<V>> {
+        let senders = self.data.read().unwrap();
+        if let Some(sender) = senders.get(&id) {
+            Some(sender.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn insert(&self, id: K, message: Sender<V>) -> Option<Sender<V>> {
         let mut senders = self.data.write().unwrap();
         senders.insert(id, message)
     }
 
-    pub fn remove(&self, id: i32) -> Option<Sender<T>> {
+    pub fn remove(&self, id: &K) -> Option<Sender<V>> {
         let mut senders = self.data.write().unwrap();
         senders.remove(&id)
     }
 
-    pub fn contains(&self, id: i32) -> bool {
+    pub fn contains(&self, id: &K) -> bool {
         let senders = self.data.read().unwrap();
         senders.contains_key(&id)
     }

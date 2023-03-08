@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum IncomingMessages {
     NotValid = -1,
     TickPrice = 1,
