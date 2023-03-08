@@ -172,7 +172,6 @@ impl MessageBus for TcpMessageBus {
         let executions = SenderHash::<String, ResponseMessage>::new();
 
         let handle = thread::spawn(move || loop {
-
             match read_packet(&reader) {
                 Ok(message) => {
                     recorder.record_response(&message);
@@ -197,7 +196,7 @@ impl MessageBus for TcpMessageBus {
 fn dispatch_message(
     message: ResponseMessage,
     server_version: i32,
-    requests: &Arc<SenderHash<i32,ResponseMessage>>,
+    requests: &Arc<SenderHash<i32, ResponseMessage>>,
     orders: &Arc<SenderHash<i32, ResponseMessage>>,
     globals: &Arc<GlobalChannels>,
     executions: &SenderHash<String, ResponseMessage>,
@@ -387,7 +386,7 @@ fn process_orders(
                 if let Err(e) = executions.send(&execution_id, message) {
                     error!("error sending commision report for execution {}: {}", execution_id, e);
                 }
-            } 
+            }
         }
         _ => (),
     }

@@ -353,15 +353,11 @@ impl ResponseMessage {
         None
     }
 
-    pub fn execution_id(&self) -> Option<String>{
+    pub fn execution_id(&self) -> Option<String> {
         match self.message_type() {
-            IncomingMessages::ExecutionData => {
-                Some(self.peek_string(14))
-            },
-            IncomingMessages::CommissionsReport => {
-                Some(self.peek_string(2))
-            },
-            _ => None
+            IncomingMessages::ExecutionData => Some(self.peek_string(14)),
+            IncomingMessages::CommissionsReport => Some(self.peek_string(2)),
+            _ => None,
         }
     }
 
