@@ -636,7 +636,7 @@ impl ToField for Vec<TagValue> {
 }
 
 #[cfg(test)]
-pub(crate) mod tests;
+mod tests;
 
 #[cfg(test)]
 pub(crate) mod stub;

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use crossbeam::channel::{self, Receiver, Sender};
 
@@ -71,7 +71,7 @@ impl Client for ClientStub {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(ResponsePacketPromise::new(receiver, s1, None, None))
+        Ok(ResponsePacketPromise::new(receiver, s1, None, None, Duration::from_secs(5)))
     }
 
     fn send_order(&mut self, _order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
@@ -84,7 +84,7 @@ impl Client for ClientStub {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(ResponsePacketPromise::new(receiver, s1, None, None))
+        Ok(ResponsePacketPromise::new(receiver, s1, None, None, Duration::from_secs(5)))
     }
 
     /// Sends request for the next valid order id.
