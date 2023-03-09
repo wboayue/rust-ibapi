@@ -141,3 +141,11 @@ impl<'a> Drop for RealTimeBarIterator<'a> {
         self.cancel_realtime_bars()
     }
 }
+
+fn tick_by_tick_all_last() {}
+
+fn tick_by_tick_last() {}
+
+fn tick_by_tick_bid_ask() {}
+
+fn tick_by_tick_midpoint() {}
