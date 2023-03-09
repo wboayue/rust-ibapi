@@ -1,3 +1,5 @@
+use time::OffsetDateTime;
+
 use super::*;
 use crate::client::stub::ClientStub;
 
@@ -22,7 +24,9 @@ fn realtime_bars() {
     // Verify Responses
     let mut bars = bars.unwrap();
     if let Some(bar) = bars.next() {
-        assert_eq!(bar.date, "1678323335", "bar.date");
+        let timestamp = OffsetDateTime::from_unix_timestamp(1678323335).unwrap();
+
+        assert_eq!(bar.date, timestamp, "bar.date");
         assert_eq!(bar.open, 4028.75, "bar.open");
         assert_eq!(bar.high, 4029.00, "bar.high");
         assert_eq!(bar.low, 4028.25, "bar.low");
