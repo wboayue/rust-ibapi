@@ -117,7 +117,13 @@ impl MessageBus for TcpMessageBus {
         self.write_message(packet)?;
         self.signals.push(signals_in);
 
-        Ok(ResponsePacketPromise::new(receiver, signals_out, Some(request_id), None, Duration::from_secs(10)))
+        Ok(ResponsePacketPromise::new(
+            receiver,
+            signals_out,
+            Some(request_id),
+            None,
+            Duration::from_secs(10),
+        ))
     }
 
     fn send_order_message(&mut self, order_id: i32, message: &RequestMessage) -> Result<ResponsePacketPromise> {
@@ -128,7 +134,13 @@ impl MessageBus for TcpMessageBus {
         self.write_message(message)?;
         self.signals.push(signals_in);
 
-        Ok(ResponsePacketPromise::new(receiver, signals_out, None, Some(order_id), Duration::from_secs(10)))
+        Ok(ResponsePacketPromise::new(
+            receiver,
+            signals_out,
+            None,
+            Some(order_id),
+            Duration::from_secs(10),
+        ))
     }
 
     fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise> {

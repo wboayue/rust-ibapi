@@ -1,10 +1,11 @@
-pub mod historical;
+use time::OffsetDateTime;
 
+pub mod historical;
 pub mod streaming;
 
 #[derive(Clone, Debug)]
 pub struct RealTimeBar {
-    pub date: String,
+    pub date: OffsetDateTime,
     pub open: f64,
     pub high: f64,
     pub low: f64,
