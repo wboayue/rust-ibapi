@@ -478,7 +478,7 @@ impl Drop for ResponsePacketPromise {
 impl Iterator for ResponsePacketPromise {
     type Item = ResponseMessage;
     fn next(&mut self) -> Option<Self::Item> {
-        match self.messages.recv_timeout(Duration::from_secs(5)) {
+        match self.messages.recv_timeout(self.timeout) {
             Err(err) => {
                 info!("timeout receiving packet: {err}");
                 None
