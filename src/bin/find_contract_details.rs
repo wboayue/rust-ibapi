@@ -31,7 +31,7 @@ fn main() -> anyhow::Result<()> {
     contract.currency = "USD".to_string();
     debug!("contract template: {contract:?}");
 
-    let results = contracts::request_contract_details(&mut client, &contract)?;
+    let results = contracts::contract_details(&mut client, &contract)?;
     for contract in &results {
         println!("contract: {contract:?}");
     }
