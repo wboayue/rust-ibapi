@@ -4,7 +4,7 @@ use std::time::Duration;
 use clap::{arg, ArgMatches, Command};
 
 use ibapi::client::IBClient;
-use ibapi::contracts::{Contract, SecurityType};
+use ibapi::contracts::Contract;
 use ibapi::market_data::{streaming, BarSize, WhatToShow};
 
 fn main() -> anyhow::Result<()> {
@@ -48,13 +48,6 @@ fn extract_contract(matches: &ArgMatches) -> Option<Contract> {
     } else {
         matches
             .get_one::<String>("futures")
-            .map(|symbol| {
-                Contract {
-                    local_symbol: symbol.to_owned(),
-                    contract_id: 495512569,
-                    security_type: SecurityType::Future,
-                    ..Default::default()
-                }
-            })
+            .map(|symbol| Contract::futures(&symbol.to_uppercase()))
     }
 }
