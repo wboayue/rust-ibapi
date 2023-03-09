@@ -3,7 +3,7 @@ use log::info;
 
 use crate::{client::ResponseMessage, contracts::SecurityType, orders::TagValue, server_versions};
 
-use super::{Contract, ContractDescription, ContractDetails};
+use super::{Contract, ContractDescription, ContractDetails, MarketRule};
 
 pub(crate) fn contract_details(server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails> {
     message.skip(); // message type
@@ -174,9 +174,42 @@ pub(crate) fn contract_descriptions(server_version: i32, message: &mut ResponseM
     Ok(contract_descriptions)
 }
 
-pub(crate) fn market_rule(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ContractDescription>> {
+pub(crate) fn market_rule(server_version: i32, message: &mut ResponseMessage) -> Result<MarketRule> {
     message.skip(); // message type
-    Ok(Vec::new())
-}
+
+    let market_rule_id = message.next_int()?;
+
+    // int marketRuleId = ReadInt();
+    // PriceIncrement[] priceIncrements = new PriceIncrement[0];
+    // int nPriceIncrements = ReadInt();
 
 // "93", "26", "1", "0", "0.01", ""
+
+    // if (nPriceIncrements > 0)
+    // {
+    //     Array.Resize(ref priceIncrements, nPriceIncrements);
+
+    //     for (int i = 0; i < nPriceIncrements; ++i)
+    //     {
+    //         priceIncrements[i] = new PriceIncrement(ReadDouble(), ReadDouble());
+    //     }
+    // }
+
+    // eWrapper.marketRule(marketRuleId, priceIncrements);
+
+    message.skip(); // message type
+    Ok(MarketRule::default())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decode_market_rule() {
+        let mut message = ResponseMessage::from("12\012\0ad\0");
+    
+        
+        market_rule(12, &mut message);
+    }    
+}

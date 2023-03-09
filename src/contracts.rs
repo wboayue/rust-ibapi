@@ -493,7 +493,13 @@ pub fn matching_symbols<C: Client + Debug>(client: &mut C, pattern: &str) -> Res
 #[derive(Debug, Default)]
 pub struct MarketRule {
     pub market_rule_id: i32,
-    pub price_increments: Vec<f64>,
+    pub price_increments: Vec<PriceIncrement>,
+}
+
+#[derive(Debug, Default)]
+pub struct PriceIncrement {
+    pub low_edge: f64,
+    pub increment: f64,
 }
 
 /// Requests details about a given market rule
