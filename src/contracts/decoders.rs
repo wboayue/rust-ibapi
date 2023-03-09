@@ -173,3 +173,10 @@ pub(crate) fn contract_descriptions(server_version: i32, message: &mut ResponseM
 
     Ok(contract_descriptions)
 }
+
+pub(crate) fn market_rule(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ContractDescription>> {
+    message.skip(); // message type
+    Ok(Vec::new())
+}
+
+// "93", "26", "1", "0", "0.01", ""

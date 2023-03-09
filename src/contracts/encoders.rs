@@ -5,7 +5,7 @@ use crate::client::RequestMessage;
 use crate::messages::OutgoingMessages;
 use crate::server_versions;
 
-pub fn request_contract_data(server_version: i32, request_id: i32, contract: &Contract) -> Result<RequestMessage> {
+pub(crate) fn request_contract_data(server_version: i32, request_id: i32, contract: &Contract) -> Result<RequestMessage> {
     const VERSION: i32 = 8;
 
     let mut packet = RequestMessage::default();
@@ -62,12 +62,21 @@ pub fn request_contract_data(server_version: i32, request_id: i32, contract: &Co
     Ok(packet)
 }
 
-pub fn request_matching_symbols(request_id: i32, pattern: &str) -> Result<RequestMessage> {
+pub(crate) fn request_matching_symbols(request_id: i32, pattern: &str) -> Result<RequestMessage> {
     let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::RequestMatchingSymbols);
     message.push_field(&request_id);
     message.push_field(&pattern);
+
+    Ok(message)
+}
+
+pub(crate) fn request_market_rule(market_rule_id: i32) -> Result<RequestMessage> {
+    let mut message = RequestMessage::default();
+
+    message.push_field(&OutgoingMessages::RequestMarketRule);
+    message.push_field(&market_rule_id);
 
     Ok(message)
 }

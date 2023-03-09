@@ -5,8 +5,8 @@ use std::string::ToString;
 use anyhow::{anyhow, Result};
 use log::{error, info};
 
-use crate::client::{Client, RequestMessage, ResponseMessage};
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::client::{Client, RequestMessage};
+use crate::messages::{IncomingMessages};
 use crate::server_versions;
 
 mod decoders;
@@ -358,7 +358,7 @@ pub struct TagValue {
 ///     let mut client = IBClient::connect("localhost:4002")?;
 ///
 ///     let contract = Contract::stock("TSLA");
-///     let results = contracts::request_contract_details(&mut client, &contract)?;
+///     let results = contracts::contract_details(&mut client, &contract)?;
 ///
 ///     for contract_detail in &results {
 ///         println!("contract: {:?}", contract_detail);
@@ -454,7 +454,7 @@ pub struct ContractDescription {
 /// fn main() -> anyhow::Result<()> {
 ///     let mut client = IBClient::connect("localhost:4002")?;
 ///
-///     let contracts = contracts::request_matching_symbols(&mut client, "IB")?;
+///     let contracts = contracts::matching_symbols(&mut client, "IB")?;
 ///
 ///     for contract in &contracts {
 ///         println!("contract: {:?}", contract);
@@ -494,4 +494,14 @@ pub fn matching_symbols<C: Client + Debug>(client: &mut C, pattern: &str) -> Res
 ///
 /// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
 /// A list of market rule ids can be obtained by invoking [request_contract_details] on a particular contract. The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [ContractDetails].
-pub fn market_rule<C: Client + Debug>(_market_rule_id: i32) {}
+pub fn market_rule<C: Client + Debug>(client: &mut C, market_rule_id: i32) -> Result<Vec<ContractDescription>> {
+    client.check_server_version(server_versions::MARKET_RULES, "It does not support market rule requests.")?;
+
+    // let request_id = client.next_request_id();
+    let request = encoders::request_market_rule(market_rule_id)?;
+    // ewrapper markerrule
+    // TODO request marke rule
+    let mut responses = client.send_message(request)?;
+
+    Ok(Vec::default())
+}
