@@ -6,7 +6,7 @@ use anyhow::{anyhow, Result};
 use log::{error, info};
 
 use crate::client::{Client, RequestMessage};
-use crate::messages::{IncomingMessages};
+use crate::messages::IncomingMessages;
 use crate::server_versions;
 
 mod decoders;

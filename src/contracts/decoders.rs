@@ -1,9 +1,8 @@
 use anyhow::Result;
 use log::info;
 
+use super::{Contract, ContractDescription, ContractDetails, MarketRule, PriceIncrement};
 use crate::{client::ResponseMessage, contracts::SecurityType, orders::TagValue, server_versions};
-
-use super::{Contract, ContractDescription, ContractDetails, MarketRule};
 
 pub(crate) fn contract_details(server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails> {
     message.skip(); // message type
@@ -174,31 +173,22 @@ pub(crate) fn contract_descriptions(server_version: i32, message: &mut ResponseM
     Ok(contract_descriptions)
 }
 
-pub(crate) fn market_rule(server_version: i32, message: &mut ResponseMessage) -> Result<MarketRule> {
+pub(crate) fn market_rule(message: &mut ResponseMessage) -> Result<MarketRule> {
     message.skip(); // message type
 
-    let market_rule_id = message.next_int()?;
+    let mut market_rule = MarketRule::default();
 
-    // int marketRuleId = ReadInt();
-    // PriceIncrement[] priceIncrements = new PriceIncrement[0];
-    // int nPriceIncrements = ReadInt();
+    market_rule.market_rule_id = message.next_int()?;
 
-// "93", "26", "1", "0", "0.01", ""
+    let price_increments_count = message.next_int()?;
+    for _ in 0..price_increments_count {
+        market_rule.price_increments.push(PriceIncrement {
+            low_edge: message.next_double()?,
+            increment: message.next_double()?,
+        });
+    }
 
-    // if (nPriceIncrements > 0)
-    // {
-    //     Array.Resize(ref priceIncrements, nPriceIncrements);
-
-    //     for (int i = 0; i < nPriceIncrements; ++i)
-    //     {
-    //         priceIncrements[i] = new PriceIncrement(ReadDouble(), ReadDouble());
-    //     }
-    // }
-
-    // eWrapper.marketRule(marketRuleId, priceIncrements);
-
-    message.skip(); // message type
-    Ok(MarketRule::default())
+    Ok(market_rule)
 }
 
 #[cfg(test)]
@@ -207,9 +197,21 @@ mod tests {
 
     #[test]
     fn decode_market_rule() {
-        let mut message = ResponseMessage::from("12\012\0ad\0");
-    
-        
-        market_rule(12, &mut message);
-    }    
+        let mut message = ResponseMessage::from("93\026\01\00\00.01\0");
+
+        let results = market_rule(&mut message);
+
+        if let Ok(market_rule) = results {
+            assert_eq!(market_rule.market_rule_id, 26, "market_rule.market_rule_id");
+
+            assert_eq!(market_rule.price_increments.len(), 1, "market_rule.price_increments.len()");
+            assert_eq!(market_rule.price_increments[0].low_edge, 0.0, "market_rule.price_increments[0].low_edge");
+            assert_eq!(
+                market_rule.price_increments[0].increment, 0.01,
+                "market_rule.price_increments[0].increment"
+            );
+        } else if let Err(err) = results {
+            assert!(false, "error decoding market rule: {err}");
+        }
+    }
 }

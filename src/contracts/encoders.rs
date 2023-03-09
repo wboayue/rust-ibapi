@@ -80,3 +80,22 @@ pub(crate) fn request_market_rule(market_rule_id: i32) -> Result<RequestMessage>
 
     Ok(message)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn request_market_rule() {
+        let results = super::request_market_rule(26);
+
+        match results {
+            Ok(message) => {
+                assert_eq!(message.encode(), "91\026\0", "message.encode()");
+            }
+            Err(err) => {
+                assert!(false, "error encoding market rule request: {err}");
+            }
+        }
+    }
+}

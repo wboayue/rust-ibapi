@@ -24,7 +24,7 @@ fn main() -> anyhow::Result<()> {
 
     let results = contracts::market_rule(&mut client, *market_rule_id)?;
     println!("rule: {results:?}");
- 
+
     std::thread::sleep(std::time::Duration::from_secs(5));
 
     Ok(())
