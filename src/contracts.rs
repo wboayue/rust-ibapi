@@ -490,11 +490,17 @@ pub fn matching_symbols<C: Client + Debug>(client: &mut C, pattern: &str) -> Res
     Ok(Vec::default())
 }
 
+#[derive(Debug, Default)]
+pub struct MarketRule {
+    pub market_rule_id: i32,
+    pub price_increments: Vec<f64>,
+}
+
 /// Requests details about a given market rule
 ///
 /// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
 /// A list of market rule ids can be obtained by invoking [request_contract_details] on a particular contract. The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [ContractDetails].
-pub fn market_rule<C: Client + Debug>(client: &mut C, market_rule_id: i32) -> Result<Vec<ContractDescription>> {
+pub fn market_rule<C: Client + Debug>(client: &mut C, market_rule_id: i32) -> Result<MarketRule> {
     client.check_server_version(server_versions::MARKET_RULES, "It does not support market rule requests.")?;
 
     // let request_id = client.next_request_id();
@@ -503,5 +509,5 @@ pub fn market_rule<C: Client + Debug>(client: &mut C, market_rule_id: i32) -> Re
     // TODO request marke rule
     let mut responses = client.send_message(request)?;
 
-    Ok(Vec::default())
+    Ok(MarketRule::default())
 }

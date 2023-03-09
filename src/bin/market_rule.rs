@@ -23,10 +23,8 @@ fn main() -> anyhow::Result<()> {
     info!("connected {client:?}, using: {connection_string}");
 
     let results = contracts::market_rule(&mut client, *market_rule_id)?;
-    for result in &results {
-        println!("contract: {result:?}");
-    }
-
+    println!("rule: {results:?}");
+ 
     std::thread::sleep(std::time::Duration::from_secs(5));
 
     Ok(())
