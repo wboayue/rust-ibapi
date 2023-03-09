@@ -54,23 +54,23 @@ struct GlobalChannels {
     order_ids_out: Arc<Receiver<ResponseMessage>>,
     open_orders_in: Arc<Sender<ResponseMessage>>,
     open_orders_out: Arc<Receiver<ResponseMessage>>,
-    market_rule_in: Arc<Sender<ResponseMessage>>,
-    market_rule_out: Arc<Receiver<ResponseMessage>>,
+    send_market_rule: Arc<Sender<ResponseMessage>>,
+    recv_market_rule: Arc<Receiver<ResponseMessage>>,
 }
 
 impl GlobalChannels {
     pub fn new() -> Self {
         let (order_ids_in, order_ids_out) = channel::unbounded();
         let (open_orders_in, open_orders_out) = channel::unbounded();
-        let (market_rule_in, market_rule_out) = channel::unbounded();
+        let (send_market_rule, recv_market_rule) = channel::unbounded();
 
         GlobalChannels {
             order_ids_in: Arc::new(order_ids_in),
             order_ids_out: Arc::new(order_ids_out),
             open_orders_in: Arc::new(open_orders_in),
             open_orders_out: Arc::new(open_orders_out),
-            market_rule_in: Arc::new(market_rule_in),
-            market_rule_out: Arc::new(market_rule_out),
+            send_market_rule: Arc::new(send_market_rule),
+            recv_market_rule: Arc::new(recv_market_rule),
         }
     }
 }
@@ -161,7 +161,7 @@ impl MessageBus for TcpMessageBus {
 
     fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise> {
         self.write_message(message)?;
-        Ok(GlobalResponsePacketPromise::new(Arc::clone(&self.globals.market_rule_out)))
+        Ok(GlobalResponsePacketPromise::new(Arc::clone(&self.globals.recv_market_rule)))
     }
 
     fn write_message(&mut self, message: &RequestMessage) -> Result<()> {
@@ -238,7 +238,7 @@ fn dispatch_message(
             globals.order_ids_in.send(message).unwrap();
         }
         IncomingMessages::MarketRule => {
-            globals.market_rule_in.send(message).unwrap();
+            globals.send_market_rule.send(message).unwrap();
         }
         IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
         IncomingMessages::OrderStatus
