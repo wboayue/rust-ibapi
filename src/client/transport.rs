@@ -29,6 +29,7 @@ pub trait MessageBus {
     fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
     fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise>;
     fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise>;
+    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise>;
 
     fn write(&mut self, packet: &str) -> Result<()>;
 
@@ -53,18 +54,23 @@ struct GlobalChannels {
     order_ids_out: Arc<Receiver<ResponseMessage>>,
     open_orders_in: Arc<Sender<ResponseMessage>>,
     open_orders_out: Arc<Receiver<ResponseMessage>>,
+    send_market_rule: Arc<Sender<ResponseMessage>>,
+    recv_market_rule: Arc<Receiver<ResponseMessage>>,
 }
 
 impl GlobalChannels {
     pub fn new() -> Self {
         let (order_ids_in, order_ids_out) = channel::unbounded();
         let (open_orders_in, open_orders_out) = channel::unbounded();
+        let (send_market_rule, recv_market_rule) = channel::unbounded();
 
         GlobalChannels {
             order_ids_in: Arc::new(order_ids_in),
             order_ids_out: Arc::new(order_ids_out),
             open_orders_in: Arc::new(open_orders_in),
             open_orders_out: Arc::new(open_orders_out),
+            send_market_rule: Arc::new(send_market_rule),
+            recv_market_rule: Arc::new(recv_market_rule),
         }
     }
 }
@@ -153,6 +159,11 @@ impl MessageBus for TcpMessageBus {
         Ok(GlobalResponsePacketPromise::new(Arc::clone(&self.globals.open_orders_out)))
     }
 
+    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise> {
+        self.write_message(message)?;
+        Ok(GlobalResponsePacketPromise::new(Arc::clone(&self.globals.recv_market_rule)))
+    }
+
     fn write_message(&mut self, message: &RequestMessage) -> Result<()> {
         let encoded = message.encode();
         debug!("{encoded:?} ->");
@@ -226,6 +237,9 @@ fn dispatch_message(
         IncomingMessages::NextValidId => {
             globals.order_ids_in.send(message).unwrap();
         }
+        IncomingMessages::MarketRule => {
+            globals.send_market_rule.send(message).unwrap();
+        }
         IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
         IncomingMessages::OrderStatus
         | IncomingMessages::OpenOrder
@@ -275,20 +289,12 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<()> {
         let request_id = packet.next_int()?;
         let error_code = packet.next_int()?;
         let error_message = packet.next_string()?;
-        // let error_message = if server_version >= server_versions::ENCODE_MSG_ASCII7 {
-        //     // Regex.Unescape(ReadString()) : ReadString();
-        //     packet.next_string()?
-        // } else {
-        //     packet.next_string()?
-        // };
+
+        // if 322 forward to market_rule_id
 
         let mut advanced_order_reject_json: String = "".to_string();
         if server_version >= server_versions::ADVANCED_ORDER_REJECT {
             advanced_order_reject_json = packet.next_string()?;
-            // if (!Util.StringIsEmpty(tempStr))
-            // {
-            //     advancedOrderRejectJson = Regex.Unescape(tempStr);
-            // }
         }
         error!(
             "request_id: {}, error_code: {}, error_message: {}, advanced_order_reject_json: {}",
@@ -419,7 +425,7 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
     pub fn send(&self, id: &K, message: V) -> Result<()> {
         let senders = self.data.read().unwrap();
         debug!("senders: {senders:?}");
-        if let Some(sender) = senders.get(&id) {
+        if let Some(sender) = senders.get(id) {
             if let Err(err) = sender.send(message) {
                 error!("error sending: {id:?}, {err}")
             }
@@ -431,11 +437,7 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
 
     pub fn copy_sender(&self, id: K) -> Option<Sender<V>> {
         let senders = self.data.read().unwrap();
-        if let Some(sender) = senders.get(&id) {
-            Some(sender.clone())
-        } else {
-            None
-        }
+        senders.get(&id).cloned()
     }
 
     pub fn insert(&self, id: K, message: Sender<V>) -> Option<Sender<V>> {
@@ -445,12 +447,12 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
 
     pub fn remove(&self, id: &K) -> Option<Sender<V>> {
         let mut senders = self.data.write().unwrap();
-        senders.remove(&id)
+        senders.remove(id)
     }
 
     pub fn contains(&self, id: &K) -> bool {
         let senders = self.data.read().unwrap();
-        senders.contains_key(&id)
+        senders.contains_key(id)
     }
 }
 

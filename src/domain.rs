@@ -102,11 +102,6 @@ pub struct FamilyCode {
     pub family_code_str: String,
 }
 
-pub struct PriceIncrement {
-    pub low_edge: f64,
-    pub increment: f64,
-}
-
 #[derive(Clone, Debug)]
 pub struct NewsProvider {
     pub code: String,

@@ -112,6 +112,18 @@ impl Client for ClientStub {
         Ok(GlobalResponsePacketPromise::new(Arc::new(receiver)))
     }
 
+    fn request_market_rule(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+        self.request_messages.push(encode_message(&message));
+
+        let (sender, receiver) = channel::unbounded();
+
+        for message in &self.response_messages {
+            sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
+        }
+
+        Ok(GlobalResponsePacketPromise::new(Arc::new(receiver)))
+    }
+
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
         if version <= self.server_version {
             Ok(())
@@ -124,3 +136,15 @@ impl Client for ClientStub {
 fn encode_message(message: &RequestMessage) -> String {
     message.encode().replace("\0", "|")
 }
+
+// fn global_request(&mut me: ClientStub, message: &RequestMessag) -> Result<GlobalResponsePacketPromise> {
+//     me.request_messages.push(encode_message(&message));
+
+//     let (sender, receiver) = channel::unbounded();
+
+//     for message in &me.response_messages {
+//         sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
+//     }
+
+//     Ok(GlobalResponsePacketPromise::new(Arc::new(receiver)))
+// }

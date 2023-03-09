@@ -22,7 +22,7 @@ fn main() -> anyhow::Result<()> {
 
     info!("connected {client:?}, using: {connection_string}");
 
-    let results = contracts::request_matching_symbols(&mut client, pattern)?;
+    let results = contracts::matching_symbols(&mut client, pattern)?;
     for result in &results {
         println!("contract: {result:?}");
     }
