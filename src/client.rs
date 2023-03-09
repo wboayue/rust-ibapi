@@ -40,10 +40,14 @@ pub trait Client {
     fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
     /// Submits an order and waits for reply.
     fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
+
     /// Sends request for the next valid order id.
     fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise>;
     /// Sends request for open orders.
     fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise>;
+    /// Sends request for market rule.
+    fn request_market_rule(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise>;
+
     /// Ensures server is at least the requested version.
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
 }
@@ -259,6 +263,11 @@ impl Client for IBClient {
     /// Sends request for open orders.
     fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
         self.message_bus.request_open_orders(&message)
+    }
+
+    /// Sends request for market rule.
+    fn request_market_rule(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+        self.message_bus.request_market_rule(&message)
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {

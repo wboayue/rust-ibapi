@@ -509,11 +509,12 @@ pub struct PriceIncrement {
 pub fn market_rule<C: Client + Debug>(client: &mut C, market_rule_id: i32) -> Result<MarketRule> {
     client.check_server_version(server_versions::MARKET_RULES, "It does not support market rule requests.")?;
 
-    // let request_id = client.next_request_id();
     let request = encoders::request_market_rule(market_rule_id)?;
-    // ewrapper markerrule
-    // TODO request marke rule
-    let mut responses = client.send_message(request)?;
 
-    Ok(MarketRule::default())
+    let mut responses = client.request_market_rule(request)?;
+
+    match responses.next() {
+        Some(mut message) => Ok(decoders::market_rule(&mut message)?),
+        None => Err(anyhow!("no market rule found")),
+    }
 }
