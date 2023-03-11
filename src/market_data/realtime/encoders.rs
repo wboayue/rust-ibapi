@@ -99,3 +99,14 @@ pub fn tick_by_tick(
 
     Ok(message)
 }
+
+pub fn cancel_tick_by_tick(request_id: i32) -> Result<RequestMessage> {
+    const VERSION: i32 = 1;
+
+    let mut message = RequestMessage::default();
+
+    message.push_field(&OutgoingMessages::CancelTickByTickData);
+    message.push_field(&request_id);
+
+    Ok(message)
+}

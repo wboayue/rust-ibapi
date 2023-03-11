@@ -77,6 +77,7 @@ pub struct Bar {
     pub count: i32,
 }
 
+#[derive(Debug)]
 pub struct Trade {
     /// Tick type: "Last" or "AllLast"
     pub tick_type: String,
@@ -94,6 +95,7 @@ pub struct Trade {
     pub special_conditions: String,
 }
 
+#[derive(Debug)]
 pub struct TradeAttribute {
     pub past_limit: bool,
     pub unreported: bool,

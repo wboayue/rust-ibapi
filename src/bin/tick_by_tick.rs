@@ -1,11 +1,11 @@
 use std::thread;
 use std::time::Duration;
 
-use clap::{arg, ArgMatches, Command};
+use clap::{arg, Command};
 
 use ibapi::client::IBClient;
 use ibapi::contracts::Contract;
-use ibapi::market_data::{realtime, BarSize, WhatToShow};
+use ibapi::market_data::realtime;
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
@@ -24,22 +24,22 @@ fn main() -> anyhow::Result<()> {
     let connection_string = matches.get_one::<String>("connection_string").expect("connection_string is required");
     println!("connection_string: {connection_string}");
 
-    let client = IBClient::connect(&connection_string)?;
+    let mut client = IBClient::connect(&connection_string)?;
 
     if let Some(symbol) = matches.get_one::<String>("last") {
-        stream_last(&client, &symbol.to_uppercase());
+        stream_last(&mut client, &symbol.to_uppercase())?;
     }
 
     if let Some(symbol) = matches.get_one::<String>("all_last") {
-        stream_all_last(&client, &symbol.to_uppercase());
+        stream_all_last(&mut client, &symbol.to_uppercase())?;
     }
 
     if let Some(symbol) = matches.get_one::<String>("bid_ask") {
-        stream_bid_ask(&client, &symbol.to_uppercase());
+        stream_bid_ask(&mut client, &symbol.to_uppercase());
     }
 
     if let Some(symbol) = matches.get_one::<String>("mid_point") {
-        stream_mid_point(&client, &symbol.to_uppercase());
+        stream_mid_point(&mut client, &symbol.to_uppercase());
     }
 
     thread::sleep(Duration::from_secs(5));
@@ -47,27 +47,46 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn stream_last(client: &IBClient, symbol: &str) {
-    // let bars = realtime::realtime_bars(&mut client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
+fn stream_last(client: &mut IBClient, symbol: &str) -> anyhow::Result<()> {
+    let contract = Contract::stock(symbol);
+    let ticks = realtime::tick_by_tick_last(client, &contract, 0, false)?;
 
-    // for (i, bar) in bars.enumerate() {
-    //     println!("bar: {i:?} {bar:?}");
+    for (i, tick) in ticks.enumerate().take(60) {
+        println!("tick: {i:?} {tick:?}");
+    }
 
-    //     if i > 60 {
-    //         break;
-    //     }
+    Ok(())
+}
+
+fn stream_all_last(client: &mut IBClient, symbol: &str) -> anyhow::Result<()> {
+    let contract = Contract::stock(symbol);
+    let ticks = realtime::tick_by_tick_all_last(client, &contract, 0, false)?;
+
+    for (i, tick) in ticks.enumerate().take(60) {
+        println!("tick: {i:?} {tick:?}");
+    }
+
+    Ok(())
+}
+
+fn stream_bid_ask(client: &mut IBClient, symbol: &str) {
+    let contract = Contract::stock(symbol);
+    // let ticks = realtime::tick_by_tick_bid_ask(client, &contract, 0, false)?;
+
+    // for (i, tick) in ticks.enumerate().take(60) {
+    //     println!("tick: {i:?} {tick:?}");
     // }
 
+    // Ok(())
 }
 
-fn stream_all_last(client: &IBClient, symbol: &str) {
-    
-}
+fn stream_mid_point(client: &mut IBClient, symbol: &str) {
+    let contract = Contract::stock(symbol);
+    // let ticks = realtime::tick_by_tick_midpoint(client, &contract, 0, false)?;
 
-fn stream_bid_ask(client: &IBClient, symbol: &str) {
-    
-}
+    // for (i, tick) in ticks.enumerate().take(60) {
+    //     println!("tick: {i:?} {tick:?}");
+    // }
 
-fn stream_mid_point(client: &IBClient, symbol: &str) {
-    
+    // Ok(())
 }

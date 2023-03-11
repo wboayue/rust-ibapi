@@ -193,9 +193,10 @@ pub struct TradeIterator<'a, C: Client> {
 impl<'a, C: Client> TradeIterator<'a, C> {
     /// Cancels request to stream [Trade] ticks
     fn cancel(&mut self) {
-        let message = encoders::cancel_realtime_bars(self.request_id).unwrap();
-
-        self.client.send_message(message).unwrap();
+        if self.client.server_version() >= server_versions::TICK_BY_TICK {
+            let message = encoders::cancel_tick_by_tick(self.request_id).unwrap();
+            self.client.send_message(message).unwrap();
+        }
     }
 }
 
@@ -209,22 +210,17 @@ impl<'a, C: Client> Iterator for TradeIterator<'a, C> {
     type Item = Trade;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(mut message) = self.responses.next() {
-            match message.message_type() {
-                IncomingMessages::TickByTick => match decoders::trade_tick(&mut message) {
-                    Ok(tick) => Some(tick),
-                    Err(e) => {
-                        error!("unexpected message: {e:?}");
-                        None
-                    }
+        loop {
+            match self.responses.next() {
+                Some(mut message) => match message.message_type() {
+                    IncomingMessages::TickByTick => match decoders::trade_tick(&mut message) {
+                        Ok(tick) => return Some(tick),
+                        Err(e) => error!("unexpected message {message:?}: {e:?}"),
+                    },
+                    _ => error!("unexpected message {message:?}"),
                 },
-                _ => {
-                    error!("unexpected message: {message:?}");
-                    None
-                }
+                None => return None,
             }
-        } else {
-            None
         }
     }
 }
