@@ -155,8 +155,8 @@ pub fn tick_by_tick_all_last<C: Client + Debug>(client: &mut C, contract: &Contr
     let server_version = client.server_version();
     let request_id = client.next_request_id();
 
-    encoders::tick_by_tick(server_version, request_id, contract, "AllLast", number_of_ticks, ignore_size);
-    
+    let message = encoders::tick_by_tick(server_version, request_id, contract, "AllLast", number_of_ticks, ignore_size)?;
+
     Ok(())
 }
 
@@ -180,8 +180,13 @@ fn validate_tick_by_tick_request<C: Client + Debug>(client: &C, _contract: &Cont
 /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
 /// * `number_of_ticks` - number of ticks.
 /// * `ignore_size` - ignore size flag.
-pub fn tick_by_tick_last<C: Client + Debug>(client: &C, contract: &Contract, number_of_ticks: i32, ignore_size: bool)  -> anyhow::Result<()> {
+pub fn tick_by_tick_last<C: Client + Debug>(client: &mut C, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> anyhow::Result<()> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
+
+    let server_version = client.server_version();
+    let request_id = client.next_request_id();
+
+    let message = encoders::tick_by_tick(server_version, request_id, contract, "Last", number_of_ticks, ignore_size)?;
 
     Ok(())
 }
@@ -193,8 +198,13 @@ pub fn tick_by_tick_last<C: Client + Debug>(client: &C, contract: &Contract, num
 /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
 /// * `number_of_ticks` - number of ticks.
 /// * `ignore_size` - ignore size flag.
-pub fn tick_by_tick_bid_ask<C: Client + Debug>(client: &C, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> anyhow::Result<()> {
+pub fn tick_by_tick_bid_ask<C: Client + Debug>(client: &mut C, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> anyhow::Result<()> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
+
+    let server_version = client.server_version();
+    let request_id = client.next_request_id();
+
+    let message = encoders::tick_by_tick(server_version, request_id, contract, "BidAsk", number_of_ticks, ignore_size)?;
 
     Ok(())
 }
@@ -206,8 +216,13 @@ pub fn tick_by_tick_bid_ask<C: Client + Debug>(client: &C, contract: &Contract, 
 /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
 /// * `number_of_ticks` - number of ticks.
 /// * `ignore_size` - ignore size flag.
-pub fn tick_by_tick_midpoint<C: Client + Debug>(client: &C, contract: &Contract, number_of_ticks: i32, ignore_size: bool)  -> anyhow::Result<()> {
+pub fn tick_by_tick_midpoint<C: Client + Debug>(client: &mut C, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> anyhow::Result<()> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
+
+    let server_version = client.server_version();
+    let request_id = client.next_request_id();
+
+    let message = encoders::tick_by_tick(server_version, request_id, contract, "MidPoint", number_of_ticks, ignore_size)?;
 
     Ok(())
 }
