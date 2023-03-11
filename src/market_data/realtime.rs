@@ -1,16 +1,16 @@
-use std::{fmt::Debug, num};
+use std::{fmt::Debug, marker::PhantomData, num};
 
 use anyhow::Result;
 use log::error;
 
-use crate::client::transport::ResponsePacketPromise;
 use crate::client::Client;
+use crate::client::{transport::ResponsePacketPromise, ResponseMessage};
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::orders::TagValue;
 use crate::server_versions;
 
-use super::{BarSize, RealTimeBar, WhatToShow};
+use super::{BarSize, RealTimeBar, Trade, WhatToShow};
 
 mod decoders;
 mod encoders;
@@ -149,7 +149,12 @@ impl<'a> Drop for RealTimeBarIterator<'a> {
 /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
 /// * `number_of_ticks` - number of ticks.
 /// * `ignore_size` - ignore size flag.
-pub fn tick_by_tick_all_last<C: Client + Debug>(client: &mut C, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> anyhow::Result<()> {
+pub fn tick_by_tick_all_last<'a, C: Client + Debug>(
+    client: &'a mut C,
+    contract: &Contract,
+    number_of_ticks: i32,
+    ignore_size: bool,
+) -> anyhow::Result<TradeIterator<'a, C>> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -157,7 +162,13 @@ pub fn tick_by_tick_all_last<C: Client + Debug>(client: &mut C, contract: &Contr
 
     let message = encoders::tick_by_tick(server_version, request_id, contract, "AllLast", number_of_ticks, ignore_size)?;
 
-    Ok(())
+    let responses = client.send_request(request_id, message)?;
+
+    Ok(TradeIterator {
+        client,
+        request_id,
+        responses,
+    })
 }
 
 fn validate_tick_by_tick_request<C: Client + Debug>(client: &C, _contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> anyhow::Result<()> {
@@ -173,6 +184,51 @@ fn validate_tick_by_tick_request<C: Client + Debug>(client: &C, _contract: &Cont
     Ok(())
 }
 
+pub struct TradeIterator<'a, C: Client> {
+    client: &'a mut C,
+    request_id: i32,
+    responses: ResponsePacketPromise,
+}
+
+impl<'a, C: Client> TradeIterator<'a, C> {
+    /// Cancels request to stream [Trade] ticks
+    fn cancel(&mut self) {
+        let message = encoders::cancel_realtime_bars(self.request_id).unwrap();
+
+        self.client.send_message(message).unwrap();
+    }
+}
+
+impl<'a, C: Client> Drop for TradeIterator<'a, C> {
+    fn drop(&mut self) {
+        self.cancel()
+    }
+}
+
+impl<'a, C: Client> Iterator for TradeIterator<'a, C> {
+    type Item = Trade;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(mut message) = self.responses.next() {
+            match message.message_type() {
+                IncomingMessages::TickByTick => match decoders::trade_tick(&mut message) {
+                    Ok(tick) => Some(tick),
+                    Err(e) => {
+                        error!("unexpected message: {e:?}");
+                        None
+                    }
+                },
+                _ => {
+                    error!("unexpected message: {message:?}");
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    }
+}
+
 /// Requests tick by tick Last ticks.
 ///
 /// # Arguments
@@ -180,15 +236,25 @@ fn validate_tick_by_tick_request<C: Client + Debug>(client: &C, _contract: &Cont
 /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
 /// * `number_of_ticks` - number of ticks.
 /// * `ignore_size` - ignore size flag.
-pub fn tick_by_tick_last<C: Client + Debug>(client: &mut C, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> anyhow::Result<()> {
+pub fn tick_by_tick_last<'a, C: Client + Debug>(
+    client: &'a mut C,
+    contract: &Contract,
+    number_of_ticks: i32,
+    ignore_size: bool,
+) -> anyhow::Result<TradeIterator<'a, C>> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
     let request_id = client.next_request_id();
 
     let message = encoders::tick_by_tick(server_version, request_id, contract, "Last", number_of_ticks, ignore_size)?;
+    let responses = client.send_request(request_id, message)?;
 
-    Ok(())
+    Ok(TradeIterator {
+        client,
+        request_id,
+        responses,
+    })
 }
 
 /// Requests tick by tick BidAsk ticks.
