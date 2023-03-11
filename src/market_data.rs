@@ -1,7 +1,7 @@
 use time::OffsetDateTime;
 
 pub mod historical;
-pub mod streaming;
+pub mod realtime;
 
 #[derive(Clone, Debug)]
 pub struct RealTimeBar {

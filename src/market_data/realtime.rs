@@ -30,13 +30,13 @@ mod tests;
 /// ```no_run
 /// use ibapi::client::IBClient;
 /// use ibapi::contracts::{self, Contract};
-/// use ibapi::market_data::{streaming, BarSize, WhatToShow};
+/// use ibapi::market_data::{realtime, BarSize, WhatToShow};
 ///
 /// fn main() -> anyhow::Result<()> {
 ///     let mut client = IBClient::connect("localhost:4002")?;
 ///
 ///     let contract = Contract::stock("TSLA");
-///     let bars = streaming::realtime_bars(&mut client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
+///     let bars = realtime::realtime_bars(&mut client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
 ///
 ///     for (i, bar) in bars.enumerate() {
 ///         println!("bar[{i}]: {bar:?}");
