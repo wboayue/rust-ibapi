@@ -65,3 +65,35 @@ pub fn cancel_realtime_bars(request_id: i32) -> Result<RequestMessage> {
 
     Ok(message)
 }
+
+pub fn tick_by_tick(server_version: i32,
+    request_id: i32,
+    contract: &Contract,
+    tick_type: &str,
+    number_of_ticks: i32,
+    ignore_size: bool) -> Result<RequestMessage> {
+        let mut message = RequestMessage::default();
+
+        message.push_field(&OutgoingMessages::ReqTickByTickData);
+        message.push_field(&request_id);
+        message.push_field(&contract.contract_id);
+        message.push_field(&contract.symbol);
+        message.push_field(&contract.security_type);
+        message.push_field(&contract.last_trade_date_or_contract_month);
+        message.push_field(&contract.strike);
+        message.push_field(&contract.right);
+        message.push_field(&contract.multiplier);
+        message.push_field(&contract.exchange);
+        message.push_field(&contract.primary_exchange);
+        message.push_field(&contract.currency);
+        message.push_field(&contract.local_symbol);
+        message.push_field(&contract.trading_class);
+        message.push_field(&tick_type);
+    
+        if server_version >= server_versions::TICK_BY_TICK_IGNORE_SIZE {
+            message.push_field(&number_of_ticks);
+            message.push_field(&ignore_size);
+        }
+
+    Ok(message)
+}

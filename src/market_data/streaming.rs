@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, num};
 
 use anyhow::Result;
 use log::error;
@@ -142,10 +142,72 @@ impl<'a> Drop for RealTimeBarIterator<'a> {
     }
 }
 
-fn tick_by_tick_all_last() {}
+/// Requests tick by tick AllLast ticks.
+///
+/// # Arguments
+/// * `client` - [Client] with an active connection to gateway.
+/// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
+/// * `number_of_ticks` - number of ticks.
+/// * `ignore_size` - ignore size flag.
+pub fn tick_by_tick_all_last<C: Client + Debug>(client: &mut C, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> anyhow::Result<()> {
+    validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
-fn tick_by_tick_last() {}
+    let server_version = client.server_version();
+    let request_id = client.next_request_id();
 
-fn tick_by_tick_bid_ask() {}
+    encoders::tick_by_tick(server_version, request_id, contract, "AllLast", number_of_ticks, ignore_size);
+    
+    Ok(())
+}
 
-fn tick_by_tick_midpoint() {}
+fn validate_tick_by_tick_request<C: Client + Debug>(client: &C, _contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> anyhow::Result<()> {
+    client.check_server_version(server_versions::TICK_BY_TICK, "It does not support tick-by-tick requests.")?;
+
+    if number_of_ticks != 0 || ignore_size {
+        client.check_server_version(
+            server_versions::TICK_BY_TICK_IGNORE_SIZE,
+            "It does not support ignoreSize and numberOfTicks parameters in tick-by-tick requests.",
+        )?;
+    }
+
+    Ok(())
+}
+
+/// Requests tick by tick Last ticks.
+///
+/// # Arguments
+/// * `client` - [Client] with an active connection to gateway.
+/// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
+/// * `number_of_ticks` - number of ticks.
+/// * `ignore_size` - ignore size flag.
+pub fn tick_by_tick_last<C: Client + Debug>(client: &C, contract: &Contract, number_of_ticks: i32, ignore_size: bool)  -> anyhow::Result<()> {
+    validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
+
+    Ok(())
+}
+
+/// Requests tick by tick BidAsk ticks.
+///
+/// # Arguments
+/// * `client` - [Client] with an active connection to gateway.
+/// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
+/// * `number_of_ticks` - number of ticks.
+/// * `ignore_size` - ignore size flag.
+pub fn tick_by_tick_bid_ask<C: Client + Debug>(client: &C, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> anyhow::Result<()> {
+    validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
+
+    Ok(())
+}
+
+/// Requests tick by tick MidPoint ticks.
+///
+/// # Arguments
+/// * `client` - [Client] with an active connection to gateway.
+/// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
+/// * `number_of_ticks` - number of ticks.
+/// * `ignore_size` - ignore size flag.
+pub fn tick_by_tick_midpoint<C: Client + Debug>(client: &C, contract: &Contract, number_of_ticks: i32, ignore_size: bool)  -> anyhow::Result<()> {
+    validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
+
+    Ok(())
+}
