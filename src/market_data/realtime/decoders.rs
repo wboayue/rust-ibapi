@@ -101,8 +101,5 @@ pub fn mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint> {
 
     let mid_point = message.next_double()?;
 
-    Ok(MidPoint {
-        time: date,
-        mid_point,
-    })
+    Ok(MidPoint { time: date, mid_point })
 }
