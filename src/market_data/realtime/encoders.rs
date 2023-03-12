@@ -221,7 +221,7 @@ mod tests {
                 assert_eq!(message[13], contract.local_symbol, "message.local_symbol");
                 assert_eq!(message[14], contract.trading_class, "message.trading_class");
                 assert_eq!(message[15], "0", "message.bar_size");
-                assert_eq!(message[16], what_to_show.to_string(), "message.what_to_show"); // implement to_field
+                assert_eq!(message[16], what_to_show.to_field(), "message.what_to_show"); // implement to_field
                 assert_eq!(message[17], use_rth.to_field(), "message.use_rth");
                 assert_eq!(message[18], "", "message.options"); // TODO what should this be?
             }

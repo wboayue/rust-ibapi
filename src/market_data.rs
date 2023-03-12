@@ -1,5 +1,7 @@
 use time::OffsetDateTime;
 
+use crate::client::ToField;
+
 pub mod historical;
 pub mod realtime;
 
@@ -34,6 +36,12 @@ impl ToString for WhatToShow {
             Self::Bid => "BID".to_string(),
             Self::Ask => "ASK".to_string(),
         }
+    }
+}
+
+impl ToField for WhatToShow {
+    fn to_field(&self) -> String {
+        self.to_string()
     }
 }
 

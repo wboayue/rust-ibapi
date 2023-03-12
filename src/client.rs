@@ -8,6 +8,7 @@ use time::OffsetDateTime;
 
 use self::transport::{GlobalResponsePacketPromise, MessageBus, ResponsePacketPromise, TcpMessageBus};
 use crate::contracts::{ComboLegOpenClose, SecurityType};
+use crate::market_data::WhatToShow;
 use crate::messages::{order_id_index, request_id_index, IncomingMessages, OutgoingMessages};
 use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A, TagValue};
 use crate::server_versions;
