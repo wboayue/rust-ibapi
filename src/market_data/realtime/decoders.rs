@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{self, Result};
 use time::OffsetDateTime;
 
 use crate::{
@@ -12,25 +12,17 @@ pub fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<RealTimeBar>
     message.skip(); // message request id
 
     let date = message.next_long()?; // long, convert to date
-    let open = message.next_double()?;
-    let high = message.next_double()?;
-    let low = message.next_double()?;
-    let close = message.next_double()?;
-    let volume = message.next_double()?;
-    let wap = message.next_double()?;
-    let count = message.next_int()?;
-
-    let timestamp = OffsetDateTime::from_unix_timestamp(date).unwrap();
+    let date = OffsetDateTime::from_unix_timestamp(date).unwrap();
 
     Ok(RealTimeBar {
-        date: timestamp,
-        open,
-        high,
-        low,
-        close,
-        volume,
-        wap,
-        count,
+        date,
+        open: message.next_double()?,
+        high: message.next_double()?,
+        low: message.next_double()?,
+        close: message.next_double()?,
+        volume: message.next_double()?,
+        wap: message.next_double()?,
+        count: message.next_int()?,
     })
 }
 
@@ -38,30 +30,30 @@ pub fn trade_tick(message: &mut ResponseMessage) -> Result<Trade> {
     message.skip(); // message type
     message.skip(); // message request id
 
-    //https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EDecoder.cs#L507
+    let tick_type = message.next_int()?;
+    if tick_type != 1 || tick_type != 2 {
+        return Err(anyhow::anyhow!("Unexpected tick_type: {tick_type}"));
+    }
 
     let date = message.next_long()?; // long, convert to date
+    let date = OffsetDateTime::from_unix_timestamp(date).unwrap();
     let price = message.next_double()?;
-    let size = message.next_double()?;
-    let low = message.next_double()?;
-    let close = message.next_double()?;
-    let volume = message.next_double()?;
-    let wap = message.next_double()?;
-    let count = message.next_int()?;
-
-    let timestamp = OffsetDateTime::from_unix_timestamp(date).unwrap();
+    let size = message.next_long()?;
+    let mask = message.next_int()?;
+    let exchange = message.next_string()?;
+    let special_conditions = message.next_string()?;
 
     Ok(Trade {
-        tick_type: "todo".to_owned(),
-        time: OffsetDateTime::now_utc(),
-        price: 0.0,
-        size: 0,
+        tick_type: tick_type.to_string(),
+        time: date,
+        price,
+        size,
         trade_attribute: TradeAttribute {
-            past_limit: false,
-            unreported: false,
+            past_limit: mask & 0x1 != 0,
+            unreported: mask & 0x2 != 0,
         },
-        exchange: "todo".to_owned(),
-        special_conditions: "todo".to_owned(),
+        exchange,
+        special_conditions,
     })
 }
 
@@ -69,28 +61,28 @@ pub fn bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk> {
     message.skip(); // message type
     message.skip(); // message request id
 
-    //https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EDecoder.cs#L507
+    let tick_type = message.next_int()?;
+    if tick_type != 3 {
+        return Err(anyhow::anyhow!("Unexpected tick_type: {tick_type}"));
+    }
 
     let date = message.next_long()?; // long, convert to date
-    let price = message.next_double()?;
-    let size = message.next_double()?;
-    let low = message.next_double()?;
-    let close = message.next_double()?;
-    let volume = message.next_double()?;
-    let wap = message.next_double()?;
-    let count = message.next_int()?;
-
-    let timestamp = OffsetDateTime::from_unix_timestamp(date).unwrap();
+    let date = OffsetDateTime::from_unix_timestamp(date).unwrap();
+    let bid_price = message.next_double()?;
+    let ask_price = message.next_double()?;
+    let bid_size = message.next_long()?;
+    let ask_size = message.next_long()?;
+    let mask = message.next_int()?;
 
     Ok(BidAsk {
-        time: OffsetDateTime::now_utc(),
-        bid_price: 0.0,
-        ask_price: 0.0,
-        bid_size: 0,
-        ask_size: 0,
+        time: date,
+        bid_price,
+        ask_price,
+        bid_size,
+        ask_size,
         bid_ask_attribute: BidAskAttribute {
-            bid_past_low: todo!(),
-            ask_past_high: todo!(),
+            bid_past_low: mask & 0x1 != 0,
+            ask_past_high: mask & 0x2 != 0,
         },
     })
 }
@@ -99,18 +91,18 @@ pub fn mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint> {
     message.skip(); // message type
     message.skip(); // message request id
 
-    //https://github.com/InteractiveBrokers/tws-api/blob/255ec4bcfd0060dea38d4dff8c46293179b0f79c/source/csharpclient/client/EDecoder.cs#L507
+    let tick_type = message.next_int()?;
+    if tick_type != 4 {
+        return Err(anyhow::anyhow!("Unexpected tick_type: {tick_type}"));
+    }
 
     let date = message.next_long()?; // long, convert to date
-    let price = message.next_double()?;
-    let size = message.next_double()?;
-    let low = message.next_double()?;
-    let close = message.next_double()?;
-    let volume = message.next_double()?;
-    let wap = message.next_double()?;
-    let count = message.next_int()?;
+    let date = OffsetDateTime::from_unix_timestamp(date).unwrap();
 
-    let timestamp = OffsetDateTime::from_unix_timestamp(date).unwrap();
+    let mid_point = message.next_double()?;
 
-    Ok(MidPoint {})
+    Ok(MidPoint {
+        time: date,
+        mid_point,
+    })
 }

@@ -114,4 +114,9 @@ pub struct HistogramData {
     pub count: i32,
 }
 
-pub struct MidPoint {}
+pub struct MidPoint {
+    /// The trade's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
+    pub time: OffsetDateTime,
+    /// mid point
+    pub mid_point: f64,
+}
