@@ -111,7 +111,7 @@ pub fn cancel_tick_by_tick(request_id: i32) -> Result<RequestMessage> {
 
 #[cfg(test)]
 mod tests {
-    use crate::contracts::contract_samples;
+    use crate::{client::ToField, contracts::contract_samples};
 
     use super::*;
 
@@ -140,7 +140,7 @@ mod tests {
 
         match results {
             Ok(message) => {
-                assert_eq!(message[0], "51", "message.type");
+                assert_eq!(message[0], OutgoingMessages::CancelRealTimeBars.to_field(), "message.type");
                 assert_eq!(message[1], "1", "message.version");
                 assert_eq!(message[2], request_id.to_string(), "message.request_id");
             }
@@ -163,23 +163,23 @@ mod tests {
 
         match results {
             Ok(message) => {
-                assert_eq!(message[0], "97", "message.type");
-                assert_eq!(message[1], request_id.to_string(), "message.request_id");
-                assert_eq!(message[2], contract.contract_id.to_string(), "message.contract_id");
+                assert_eq!(message[0], OutgoingMessages::ReqTickByTickData.to_field(), "message.type");
+                assert_eq!(message[1], request_id.to_field(), "message.request_id");
+                assert_eq!(message[2], contract.contract_id.to_field(), "message.contract_id");
                 assert_eq!(message[3], contract.symbol, "message.symbol");
-                assert_eq!(message[4], "FUT", "message.security_type");
+                assert_eq!(message[4], contract.security_type.to_field(), "message.security_type");
                 assert_eq!(
                     message[5], contract.last_trade_date_or_contract_month,
                     "message.last_trade_date_or_contract_month"
                 );
-                assert_eq!(message[6], "0", "message.strike");
-                assert_eq!(message[7], "", "message.right");
-                assert_eq!(message[8], "", "message.multiplier");
-                assert_eq!(message[9], "EUREX", "message.exchange");
-                assert_eq!(message[10], "", "message.primary_exchange");
-                assert_eq!(message[11], "EUR", "message.currency");
-                assert_eq!(message[12], "", "message.local_symbol");
-                assert_eq!(message[13], "", "message.trading_class");
+                assert_eq!(message[6], contract.strike.to_field(), "message.strike");
+                assert_eq!(message[7], contract.right, "message.right");
+                assert_eq!(message[8], contract.multiplier, "message.multiplier");
+                assert_eq!(message[9], contract.exchange, "message.exchange");
+                assert_eq!(message[10], contract.primary_exchange, "message.primary_exchange");
+                assert_eq!(message[11], contract.currency, "message.currency");
+                assert_eq!(message[12], contract.local_symbol, "message.local_symbol");
+                assert_eq!(message[13], contract.trading_class, "message.trading_class");
                 assert_eq!(message[14], tick_type, "message.tick_type");
             }
             Err(err) => {
