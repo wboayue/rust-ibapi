@@ -207,6 +207,19 @@ mod tests {
                     "50\08\09000\00\0GBL\0FUT\0202303\00\0\0\0EUREX\0\0EUR\0\0\00\0TRADES\01\0\0",
                     "message.encode()"
                 );
+
+                assert_eq!(message[0], OutgoingMessages::RequestRealTimeBars.to_field(), "message.type");
+                assert_eq!(message[1], "8", "message.version");
+                assert_eq!(message[2], request_id.to_field(), "message.request_id");
+                assert_eq!(message[3], contract.contract_id.to_field(), "message.contract_id");
+                assert_eq!(message[4], contract.symbol, "message.symbol");
+                assert_eq!(message[5], contract.security_type.to_field(), "message.security_type");
+                assert_eq!(
+                    message[6], contract.last_trade_date_or_contract_month,
+                    "message.last_trade_date_or_contract_month"
+                );
+
+                // packet.push_field(&contract.last_trade_date_or_contract_month);
             }
             Err(err) => {
                 assert!(false, "error encoding realtime_bars request: {err}");
