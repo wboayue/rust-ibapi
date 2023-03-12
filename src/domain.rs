@@ -1,5 +1,3 @@
-use time::OffsetDateTime;
-
 pub struct DepthMktDataDescription {
     pub exchange: String,
     pub sec_type: String,

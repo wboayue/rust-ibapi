@@ -105,3 +105,7 @@ pub struct HistogramData {
     pub price: f64,
     pub count: i32,
 }
+
+pub struct MidPoint {
+
+}
