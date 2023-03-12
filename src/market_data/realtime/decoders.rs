@@ -3,7 +3,7 @@ use time::OffsetDateTime;
 
 use crate::{
     client::ResponseMessage,
-    market_data::{BidAsk, BidAskAttribute, RealTimeBar, Trade, TradeAttribute, MidPoint},
+    market_data::{BidAsk, BidAskAttribute, MidPoint, RealTimeBar, Trade, TradeAttribute},
 };
 
 pub fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<RealTimeBar> {
@@ -112,5 +112,5 @@ pub fn mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint> {
 
     let timestamp = OffsetDateTime::from_unix_timestamp(date).unwrap();
 
-    Ok(MidPoint {  })
+    Ok(MidPoint {})
 }

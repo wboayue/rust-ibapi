@@ -106,6 +106,4 @@ pub struct HistogramData {
     pub count: i32,
 }
 
-pub struct MidPoint {
-
-}
+pub struct MidPoint {}

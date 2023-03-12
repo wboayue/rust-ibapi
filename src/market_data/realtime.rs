@@ -3,14 +3,14 @@ use std::fmt::Debug;
 use anyhow::Result;
 use log::error;
 
-use crate::client::{transport::ResponsePacketPromise, ResponseMessage};
 use crate::client::Client;
+use crate::client::{transport::ResponsePacketPromise, ResponseMessage};
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::orders::TagValue;
 use crate::server_versions;
 
-use super::{BarSize, BidAsk, RealTimeBar, Trade, WhatToShow, MidPoint};
+use super::{BarSize, BidAsk, MidPoint, RealTimeBar, Trade, WhatToShow};
 
 mod decoders;
 mod encoders;
@@ -221,7 +221,12 @@ pub fn tick_by_tick_bid_ask<'a, C: Client + Debug>(
 /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
 /// * `number_of_ticks` - number of ticks.
 /// * `ignore_size` - ignore size flag.
-pub fn tick_by_tick_midpoint<'a, C: Client + Debug>(client: &'a mut C, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<MidPointIterator<'a, C>> {
+pub fn tick_by_tick_midpoint<'a, C: Client + Debug>(
+    client: &'a mut C,
+    contract: &Contract,
+    number_of_ticks: i32,
+    ignore_size: bool,
+) -> Result<MidPointIterator<'a, C>> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();

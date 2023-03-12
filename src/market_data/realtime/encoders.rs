@@ -123,7 +123,8 @@ mod tests {
 
         match results {
             Ok(message) => {
-                assert_eq!(message.encode(), "98\09000\0", "message.encode()");
+                assert_eq!(message[0], "98", "message.type");
+                assert_eq!(message[1], request_id.to_string(), "message.request_id");
             }
             Err(err) => {
                 assert!(false, "error encoding cancel_tick_by_tick request: {err}");
@@ -139,7 +140,9 @@ mod tests {
 
         match results {
             Ok(message) => {
-                assert_eq!(message.encode(), "51\01\09000\0", "message.encode()");
+                assert_eq!(message[0], "51", "message.type");
+                assert_eq!(message[1], "1", "message.version");
+                assert_eq!(message[2], request_id.to_string(), "message.request_id");
             }
             Err(err) => {
                 assert!(false, "error encoding cancel_tick_by_tick request: {err}");
@@ -155,12 +158,29 @@ mod tests {
         let tick_type = "AllLast";
         let number_of_ticks = 1;
         let ignore_size = true;
-    
+
         let results = super::tick_by_tick(server_version, request_id, &contract, tick_type, number_of_ticks, ignore_size);
 
         match results {
             Ok(message) => {
-                assert_eq!(message.encode(), "97\09000\00\0GBL\0FUT\0202303\00\0\0\0EUREX\0\0EUR\0\0\0AllLast\0", "message.encode()");
+                assert_eq!(message[0], "97", "message.type");
+                assert_eq!(message[1], request_id.to_string(), "message.request_id");
+                assert_eq!(message[2], contract.contract_id.to_string(), "message.contract_id");
+                assert_eq!(message[3], contract.symbol, "message.symbol");
+                assert_eq!(message[4], "FUT", "message.security_type");
+                assert_eq!(
+                    message[5], contract.last_trade_date_or_contract_month,
+                    "message.last_trade_date_or_contract_month"
+                );
+                assert_eq!(message[6], "0", "message.strike");
+                assert_eq!(message[7], "", "message.right");
+                assert_eq!(message[8], "", "message.multiplier");
+                assert_eq!(message[9], "EUREX", "message.exchange");
+                assert_eq!(message[10], "", "message.primary_exchange");
+                assert_eq!(message[11], "EUR", "message.currency");
+                assert_eq!(message[12], "", "message.local_symbol");
+                assert_eq!(message[13], "", "message.trading_class");
+                assert_eq!(message[14], tick_type, "message.tick_type");
             }
             Err(err) => {
                 assert!(false, "error encoding tick_by_tick request: {err}");
@@ -182,7 +202,11 @@ mod tests {
 
         match results {
             Ok(message) => {
-                assert_eq!(message.encode(), "50\08\09000\00\0GBL\0FUT\0202303\00\0\0\0EUREX\0\0EUR\0\0\00\0TRADES\01\0\0", "message.encode()");
+                assert_eq!(
+                    message.encode(),
+                    "50\08\09000\00\0GBL\0FUT\0202303\00\0\0\0EUREX\0\0EUR\0\0\00\0TRADES\01\0\0",
+                    "message.encode()"
+                );
             }
             Err(err) => {
                 assert!(false, "error encoding realtime_bars request: {err}");
