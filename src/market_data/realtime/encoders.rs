@@ -202,12 +202,6 @@ mod tests {
 
         match results {
             Ok(message) => {
-                assert_eq!(
-                    message.encode(),
-                    "50\08\09000\00\0GBL\0FUT\0202303\00\0\0\0EUREX\0\0EUR\0\0\00\0TRADES\01\0\0",
-                    "message.encode()"
-                );
-
                 assert_eq!(message[0], OutgoingMessages::RequestRealTimeBars.to_field(), "message.type");
                 assert_eq!(message[1], "8", "message.version");
                 assert_eq!(message[2], request_id.to_field(), "message.request_id");
@@ -218,8 +212,18 @@ mod tests {
                     message[6], contract.last_trade_date_or_contract_month,
                     "message.last_trade_date_or_contract_month"
                 );
-
-                // packet.push_field(&contract.last_trade_date_or_contract_month);
+                assert_eq!(message[7], contract.strike.to_field(), "message.strike");
+                assert_eq!(message[8], contract.right, "message.right");
+                assert_eq!(message[9], contract.multiplier, "message.multiplier");
+                assert_eq!(message[10], contract.exchange, "message.exchange");
+                assert_eq!(message[11], contract.primary_exchange, "message.primary_exchange");
+                assert_eq!(message[12], contract.currency, "message.currency");
+                assert_eq!(message[13], contract.local_symbol, "message.local_symbol");
+                assert_eq!(message[14], contract.trading_class, "message.trading_class");
+                assert_eq!(message[15], "0", "message.bar_size");
+                assert_eq!(message[16], what_to_show.to_string(), "message.what_to_show"); // implement to_field
+                assert_eq!(message[17], use_rth.to_field(), "message.use_rth");
+                assert_eq!(message[18], "", "message.options"); // TODO what should this be?
             }
             Err(err) => {
                 assert!(false, "error encoding realtime_bars request: {err}");
