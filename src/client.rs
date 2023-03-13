@@ -101,7 +101,7 @@ impl IBClient {
         IBClient::do_connect(message_bus)
     }
 
-    pub(crate) fn do_connect(message_bus: Box<dyn MessageBus>) -> Result<IBClient> {
+    fn do_connect(message_bus: Box<dyn MessageBus>) -> Result<IBClient> {
         let mut client = IBClient {
             server_version: 0,
             server_time: String::from(""),
