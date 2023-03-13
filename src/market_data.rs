@@ -45,6 +45,7 @@ impl ToField for WhatToShow {
     }
 }
 
+#[derive(Debug)]
 pub struct BidAsk {
     /// The spread's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     pub time: OffsetDateTime,
@@ -60,6 +61,7 @@ pub struct BidAsk {
     pub bid_ask_attribute: BidAskAttribute,
 }
 
+#[derive(Debug)]
 pub struct BidAskAttribute {
     pub bid_past_low: bool,
     pub ask_past_high: bool,
@@ -109,11 +111,13 @@ pub struct TradeAttribute {
     pub unreported: bool,
 }
 
+#[derive(Debug)]
 pub struct HistogramData {
     pub price: f64,
     pub count: i32,
 }
 
+#[derive(Debug)]
 pub struct MidPoint {
     /// The trade's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     pub time: OffsetDateTime,
