@@ -98,10 +98,10 @@ impl IBClient {
         debug!("connecting to server with #{:?}", connection_string);
 
         let message_bus = Box::new(TcpMessageBus::connect(connection_string)?);
-        IBClient::do_connect(connection_string, message_bus)
+        IBClient::do_connect(message_bus)
     }
 
-    pub(crate) fn do_connect(connection_string: &str, message_bus: Box<dyn MessageBus>) -> Result<IBClient> {
+    pub(crate) fn do_connect(message_bus: Box<dyn MessageBus>) -> Result<IBClient> {
         let mut client = IBClient {
             server_version: 0,
             server_time: String::from(""),
