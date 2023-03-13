@@ -35,7 +35,7 @@ pub trait MessageBus {
 
     fn process_messages(&mut self, server_version: i32) -> Result<()>;
 
-    fn request_messages(&self) -> Vec<String> {
+    fn request_messages(&self) -> Vec<RequestMessage> {
         vec![]
     }
 }

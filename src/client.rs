@@ -122,9 +122,9 @@ impl IBClient {
         Ok(client)
     }
 
-    pub(crate) fn do_stub(message_bus: Box<dyn MessageBus>) -> Result<IBClient> {
-        let mut client = IBClient {
-            server_version: 0,
+    pub(crate) fn stubbed(message_bus: Box<dyn MessageBus>, server_version: i32) -> IBClient {
+        IBClient {
+            server_version: server_version,
             server_time: String::from(""),
             next_valid_order_id: 0,
             managed_accounts: String::from(""),
@@ -132,9 +132,7 @@ impl IBClient {
             client_id: 100,
             next_request_id: 9000,
             order_id: -1,
-        };
-
-        Ok(client)
+        }
     }
 
     // sends server handshake
@@ -305,7 +303,7 @@ impl fmt::Debug for IBClient {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct RequestMessage {
     fields: Vec<String>,
 }

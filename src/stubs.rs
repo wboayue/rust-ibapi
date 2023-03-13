@@ -5,7 +5,7 @@ use crossbeam::channel::{self, Receiver, Sender};
 use crate::client::{transport::{MessageBus, ResponsePacketPromise}, ResponseMessage, RequestMessage};
 
 pub struct MessageBusStub {
-    pub request_messages: Vec<String>,
+    pub request_messages: Vec<RequestMessage>,
     pub response_messages: Vec<String>,
     // pub next_request_id: i32,
     // pub server_version: i32,
@@ -14,7 +14,7 @@ pub struct MessageBusStub {
 
 impl MessageBus for MessageBusStub {
 
-    fn request_messages(&self) -> Vec<String> {
+    fn request_messages(&self) -> Vec<RequestMessage> {
         self.request_messages.clone()
     }
 
@@ -23,7 +23,7 @@ impl MessageBus for MessageBusStub {
     }
 
     fn write_message(&mut self, message: &crate::client::RequestMessage) -> anyhow::Result<()> {
-        self.request_messages.push(encode_message(&message));
+        self.request_messages.push(message.clone());
         Ok(())
     }
 
@@ -32,7 +32,7 @@ impl MessageBus for MessageBusStub {
         request_id: i32,
         message: &crate::client::RequestMessage,
     ) -> anyhow::Result<crate::client::transport::ResponsePacketPromise> {
-        self.request_messages.push(encode_message(&message));
+        self.request_messages.push(message.clone());
 
         let (sender, receiver) = channel::unbounded();
         let (s1, r1) = channel::unbounded();
