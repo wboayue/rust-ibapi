@@ -8,6 +8,7 @@ use time::OffsetDateTime;
 
 use self::transport::{GlobalResponsePacketPromise, MessageBus, ResponsePacketPromise, TcpMessageBus};
 use crate::contracts::{ComboLegOpenClose, SecurityType};
+use crate::market_data::WhatToShow;
 use crate::messages::{order_id_index, request_id_index, IncomingMessages, OutgoingMessages};
 use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A, TagValue};
 use crate::server_versions;
@@ -63,7 +64,7 @@ pub struct IBClient {
 
     managed_accounts: String,
     client_id: i32, // ID of client.
-    message_bus: Box<dyn MessageBus>,
+    pub(crate) message_bus: Box<dyn MessageBus>,
     next_request_id: i32, // Next available request_id.
     order_id: i32,        // Next available order_id. Starts with value returned on connection.
 }
@@ -97,10 +98,10 @@ impl IBClient {
         debug!("connecting to server with #{:?}", connection_string);
 
         let message_bus = Box::new(TcpMessageBus::connect(connection_string)?);
-        IBClient::do_connect(connection_string, message_bus)
+        IBClient::do_connect(message_bus)
     }
 
-    fn do_connect(connection_string: &str, message_bus: Box<dyn MessageBus>) -> Result<IBClient> {
+    fn do_connect(message_bus: Box<dyn MessageBus>) -> Result<IBClient> {
         let mut client = IBClient {
             server_version: 0,
             server_time: String::from(""),
@@ -119,6 +120,19 @@ impl IBClient {
         client.message_bus.process_messages(client.server_version)?;
 
         Ok(client)
+    }
+
+    pub(crate) fn stubbed(message_bus: Box<dyn MessageBus>, server_version: i32) -> IBClient {
+        IBClient {
+            server_version: server_version,
+            server_time: String::from(""),
+            next_valid_order_id: 0,
+            managed_accounts: String::from(""),
+            message_bus,
+            client_id: 100,
+            next_request_id: 9000,
+            order_id: -1,
+        }
     }
 
     // sends server handshake
@@ -289,7 +303,7 @@ impl fmt::Debug for IBClient {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct RequestMessage {
     fields: Vec<String>,
 }
