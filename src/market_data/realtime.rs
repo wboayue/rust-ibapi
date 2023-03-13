@@ -3,8 +3,8 @@ use std::fmt::Debug;
 use anyhow::Result;
 use log::error;
 
-use crate::client::Client;
-use crate::client::{transport::ResponsePacketPromise, ResponseMessage};
+use crate::client::transport::ResponsePacketPromise;
+use crate::client::{Client, IBClient};
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::orders::TagValue;
@@ -49,8 +49,8 @@ mod tests;
 ///     Ok(())
 /// }
 /// ```
-pub fn realtime_bars<'a, C: Client + Debug>(
-    client: &'a mut C,
+pub fn realtime_bars<'a>(
+    client: &'a mut IBClient,
     contract: &Contract,
     bar_size: &BarSize,
     what_to_show: &WhatToShow,
@@ -92,7 +92,7 @@ pub fn realtime_bars<'a, C: Client + Debug>(
 /// }
 /// ```
 pub fn realtime_bars_with_options<'a>(
-    client: &'a mut dyn Client,
+    client: &'a mut IBClient,
     contract: &Contract,
     bar_size: &BarSize,
     what_to_show: &WhatToShow,
@@ -123,12 +123,12 @@ pub fn realtime_bars_with_options<'a>(
 /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
 /// * `number_of_ticks` - number of ticks.
 /// * `ignore_size` - ignore size flag.
-pub fn tick_by_tick_all_last<'a, C: Client + Debug>(
-    client: &'a mut C,
+pub fn tick_by_tick_all_last<'a>(
+    client: &'a mut IBClient,
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> anyhow::Result<TradeIterator<'a, C>> {
+) -> anyhow::Result<TradeIterator<'a>> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -165,12 +165,12 @@ fn validate_tick_by_tick_request<C: Client + Debug>(client: &C, _contract: &Cont
 /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
 /// * `number_of_ticks` - number of ticks.
 /// * `ignore_size` - ignore size flag.
-pub fn tick_by_tick_last<'a, C: Client + Debug>(
-    client: &'a mut C,
+pub fn tick_by_tick_last<'a>(
+    client: &'a mut IBClient,
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> anyhow::Result<TradeIterator<'a, C>> {
+) -> anyhow::Result<TradeIterator<'a>> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -189,16 +189,16 @@ pub fn tick_by_tick_last<'a, C: Client + Debug>(
 /// Requests tick by tick BidAsk ticks.
 ///
 /// # Arguments
-/// * `client` - [Client] with an active connection to gateway.
+/// * `client` - [IBClient] with an active connection to gateway.
 /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
 /// * `number_of_ticks` - number of ticks.
 /// * `ignore_size` - ignore size flag.
-pub fn tick_by_tick_bid_ask<'a, C: Client + Debug>(
-    client: &'a mut C,
+pub fn tick_by_tick_bid_ask<'a>(
+    client: &'a mut IBClient,
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<BidAskIterator<'a, C>> {
+) -> Result<BidAskIterator<'a>> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -217,16 +217,16 @@ pub fn tick_by_tick_bid_ask<'a, C: Client + Debug>(
 /// Requests tick by tick MidPoint ticks.
 ///
 /// # Arguments
-/// * `client` - [Client] with an active connection to gateway.
+/// * `client` - [IBClient] with an active connection to gateway.
 /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
 /// * `number_of_ticks` - number of ticks.
 /// * `ignore_size` - ignore size flag.
-pub fn tick_by_tick_midpoint<'a, C: Client + Debug>(
-    client: &'a mut C,
+pub fn tick_by_tick_midpoint<'a>(
+    client: &'a mut IBClient,
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<MidPointIterator<'a, C>> {
+) -> Result<MidPointIterator<'a>> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -305,20 +305,20 @@ impl<'a> Drop for RealTimeBarIterator<'a> {
 }
 
 /// TradeIterator supports iteration over [Trade] ticks.
-pub struct TradeIterator<'a, C: Client> {
-    client: &'a mut C,
+pub struct TradeIterator<'a> {
+    client: &'a mut IBClient,
     request_id: i32,
     responses: ResponsePacketPromise,
 }
 
-impl<'a, C: Client> Drop for TradeIterator<'a, C> {
+impl<'a> Drop for TradeIterator<'a> {
     // Ensures tick by tick request is cancelled
     fn drop(&mut self) {
         cancel_tick_by_tick(self.client, self.request_id);
     }
 }
 
-impl<'a, C: Client> Iterator for TradeIterator<'a, C> {
+impl<'a> Iterator for TradeIterator<'a> {
     type Item = Trade;
 
     /// Advances the iterator and returns the next value.
@@ -339,8 +339,8 @@ impl<'a, C: Client> Iterator for TradeIterator<'a, C> {
 }
 
 /// BidAskIterator supports iteration over [BidAsk] ticks.
-pub struct BidAskIterator<'a, C: Client> {
-    client: &'a mut C,
+pub struct BidAskIterator<'a> {
+    client: &'a mut IBClient,
     request_id: i32,
     responses: ResponsePacketPromise,
 }
@@ -353,14 +353,14 @@ fn cancel_tick_by_tick(client: &mut dyn Client, request_id: i32) {
     }
 }
 
-impl<'a, C: Client> Drop for BidAskIterator<'a, C> {
+impl<'a> Drop for BidAskIterator<'a> {
     // Ensures tick by tick request is cancelled
     fn drop(&mut self) {
         cancel_tick_by_tick(self.client, self.request_id);
     }
 }
 
-impl<'a, C: Client> Iterator for BidAskIterator<'a, C> {
+impl<'a> Iterator for BidAskIterator<'a> {
     type Item = BidAsk;
 
     /// Advances the iterator and returns the next value.
@@ -381,20 +381,20 @@ impl<'a, C: Client> Iterator for BidAskIterator<'a, C> {
 }
 
 /// MidPointIterator supports iteration over [MidPoint] ticks.
-pub struct MidPointIterator<'a, C: Client> {
-    client: &'a mut C,
+pub struct MidPointIterator<'a> {
+    client: &'a mut IBClient,
     request_id: i32,
     responses: ResponsePacketPromise,
 }
 
-impl<'a, C: Client> Drop for MidPointIterator<'a, C> {
+impl<'a> Drop for MidPointIterator<'a> {
     // Ensures tick by tick request is cancelled
     fn drop(&mut self) {
         cancel_tick_by_tick(self.client, self.request_id);
     }
 }
 
-impl<'a, C: Client> Iterator for MidPointIterator<'a, C> {
+impl<'a> Iterator for MidPointIterator<'a> {
     type Item = MidPoint;
 
     /// Advances the iterator and returns the next value.
