@@ -132,7 +132,7 @@ impl MessageBus for TcpMessageBus {
             signals_out,
             Some(request_id),
             None,
-            Duration::from_secs(10),
+            Duration::from_secs(30),
         ))
     }
 

@@ -31,7 +31,7 @@ pub fn trade_tick(message: &mut ResponseMessage) -> Result<Trade> {
     message.skip(); // message request id
 
     let tick_type = message.next_int()?;
-    if tick_type != 1 || tick_type != 2 {
+    if !(tick_type == 1 || tick_type == 2) {
         return Err(anyhow::anyhow!("Unexpected tick_type: {tick_type}"));
     }
 
@@ -102,4 +102,28 @@ pub fn mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint> {
     let mid_point = message.next_double()?;
 
     Ok(MidPoint { time: date, mid_point })
+}
+
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decode_trade_tick() {
+        let mut message = ResponseMessage::from("99\09000\01\01678740829\03895.25\07\02\0\0\0");
+
+        let results = trade_tick(&mut message);
+
+        if let Ok(trade) = results {
+            assert_eq!(trade.tick_type, "1", "trade.tick_type");
+            assert_eq!(trade.time, OffsetDateTime::from_unix_timestamp(1678740829).unwrap(), "trade.time");
+            assert_eq!(trade.price, 3895.25, "trade.price");
+            assert_eq!(trade.size, 7, "trade.size");
+            assert_eq!(trade.trade_attribute.past_limit, false, "trade.trade_attribute.past_limit");
+            assert_eq!(trade.trade_attribute.unreported, true, "trade.trade_attribute.unreported");
+            assert_eq!(trade.exchange, "", "trade.exchange");
+            assert_eq!(trade.special_conditions, "", "trade.special_conditions");
+        } else if let Err(err) = results {
+            assert!(false, "error decoding trade tick rule: {err}");
+        }
+    }
 }

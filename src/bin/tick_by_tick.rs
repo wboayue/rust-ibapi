@@ -48,18 +48,39 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn stream_last(client: &mut IBClient, symbol: &str) -> anyhow::Result<()> {
-    let contract = Contract::stock(symbol);
+    let contract = contract_zn();
     let ticks = realtime::tick_by_tick_last(client, &contract, 0, false)?;
 
-    for (i, tick) in ticks.enumerate().take(60) {
+    for (i, tick) in ticks.enumerate() {
         println!("tick: {i:?} {tick:?}");
     }
 
     Ok(())
 }
 
+fn contract_es() -> Contract {
+    let mut contract = Contract::futures("ES");
+    contract.exchange = "CME".to_owned();
+    contract.contract_id = 495512569;
+    contract
+}
+
+fn contract_gc() -> Contract {
+    let mut contract = Contract::futures("GC");
+    contract.exchange = "COMEX".to_owned();
+    contract.contract_id = 605552438;
+    contract
+}
+
+fn contract_zn() -> Contract {
+    let mut contract = Contract::futures("ZN");
+    contract.exchange = "CBOT".to_owned();
+    contract.contract_id = 568735904;
+    contract
+}
+
 fn stream_all_last(client: &mut IBClient, symbol: &str) -> anyhow::Result<()> {
-    let contract = Contract::stock(symbol);
+    let contract = contract_es();
     let ticks = realtime::tick_by_tick_all_last(client, &contract, 0, false)?;
 
     for (i, tick) in ticks.enumerate().take(60) {
