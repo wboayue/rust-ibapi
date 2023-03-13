@@ -64,7 +64,7 @@ pub struct IBClient {
 
     managed_accounts: String,
     client_id: i32, // ID of client.
-    message_bus: Box<dyn MessageBus>,
+    pub(crate) message_bus: Box<dyn MessageBus>,
     next_request_id: i32, // Next available request_id.
     order_id: i32,        // Next available order_id. Starts with value returned on connection.
 }
@@ -118,6 +118,21 @@ impl IBClient {
         client.receive_account_info()?;
 
         client.message_bus.process_messages(client.server_version)?;
+
+        Ok(client)
+    }
+
+    pub(crate) fn do_stub(message_bus: Box<dyn MessageBus>) -> Result<IBClient> {
+        let mut client = IBClient {
+            server_version: 0,
+            server_time: String::from(""),
+            next_valid_order_id: 0,
+            managed_accounts: String::from(""),
+            message_bus,
+            client_id: 100,
+            next_request_id: 9000,
+            order_id: -1,
+        };
 
         Ok(client)
     }
