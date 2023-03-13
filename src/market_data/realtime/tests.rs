@@ -19,6 +19,7 @@ fn realtime_bars() {
     });
 
 
+    // IBClient::stubbed(stub, server_versions::SIZE_RULES)
     let mut client = IBClient::do_stub(stub).unwrap();
     client.server_version = server_versions::SIZE_RULES;
 
