@@ -140,7 +140,7 @@ mod tests {
             assert_eq!(bid_ask.bid_size, 9, "bid_ask.bid_size");
             assert_eq!(bid_ask.ask_size, 11, "bid_ask.ask_size");
             assert_eq!(bid_ask.bid_ask_attribute.bid_past_low, true, "bid_ask.bid_ask_attribute.bid_past_low");
-            assert_eq!(bid_ask.bid_ask_attribute.ask_past_high, false, "bid_ask.bid_ask_attribute.ask_past_high");        
+            assert_eq!(bid_ask.bid_ask_attribute.ask_past_high, false, "bid_ask.bid_ask_attribute.ask_past_high");
         } else if let Err(err) = results {
             assert!(false, "error decoding trade tick: {err}");
         }
@@ -159,5 +159,4 @@ mod tests {
             assert!(false, "error decoding mid point tick: {err}");
         }
     }
-
 }
