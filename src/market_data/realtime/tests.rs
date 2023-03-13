@@ -10,9 +10,7 @@ use crate::stubs::MessageBusStub;
 fn realtime_bars() {
     let message_bus = Box::new(MessageBusStub {
         request_messages: vec![],
-        response_messages: vec![
-            "50|3|9001|1678323335|4028.75|4029.00|4028.25|4028.50|2|4026.75|1|".to_owned()
-        ],
+        response_messages: vec!["50|3|9001|1678323335|4028.75|4029.00|4028.25|4028.50|2|4026.75|1|".to_owned()],
     });
 
     let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -49,18 +47,30 @@ fn realtime_bars() {
 
     // Verify Requests
     let realtime_bars_request = &request_messages[0];
-    assert_eq!(realtime_bars_request[0], OutgoingMessages::RequestRealTimeBars.to_field(), "message.message_type");
+    assert_eq!(
+        realtime_bars_request[0],
+        OutgoingMessages::RequestRealTimeBars.to_field(),
+        "message.message_type"
+    );
     assert_eq!(realtime_bars_request[1], "8", "message.version");
     assert_eq!(realtime_bars_request[2], "9000", "message.request_id");
     assert_eq!(realtime_bars_request[3], contract.contract_id.to_field(), "message.contract_id");
     assert_eq!(realtime_bars_request[4], contract.symbol.to_field(), "message.symbol");
     assert_eq!(realtime_bars_request[5], contract.security_type.to_field(), "message.security_type");
-    assert_eq!(realtime_bars_request[6], contract.last_trade_date_or_contract_month.to_field(), "message.last_trade_date_or_contract_month");
+    assert_eq!(
+        realtime_bars_request[6],
+        contract.last_trade_date_or_contract_month.to_field(),
+        "message.last_trade_date_or_contract_month"
+    );
     assert_eq!(realtime_bars_request[7], contract.strike.to_field(), "message.strike");
     assert_eq!(realtime_bars_request[8], contract.right.to_field(), "message.right");
     assert_eq!(realtime_bars_request[9], contract.multiplier.to_field(), "message.multiplier");
     assert_eq!(realtime_bars_request[10], contract.exchange.to_field(), "message.exchange");
-    assert_eq!(realtime_bars_request[11], contract.primary_exchange.to_field(), "message.primary_exchange");
+    assert_eq!(
+        realtime_bars_request[11],
+        contract.primary_exchange.to_field(),
+        "message.primary_exchange"
+    );
     assert_eq!(realtime_bars_request[12], contract.currency.to_field(), "message.currency");
     assert_eq!(realtime_bars_request[13], contract.local_symbol.to_field(), "message.local_symbol");
     assert_eq!(realtime_bars_request[14], contract.trading_class.to_field(), "message.trading_class");
