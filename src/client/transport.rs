@@ -229,9 +229,11 @@ impl MessageBus for TcpMessageBus {
             for signal in &signal_recv {
                 match signal {
                     Signal::Request(request_id) => {
+                        debug!("releasing request_id {}, requests.len()={}", request_id, requests.len());
                         requests.remove(&request_id);
                     },
                     Signal::Order(order_id) => {
+                        debug!("releasing order_id {}, orders.len()={}", order_id, requests.len());
                         orders.remove(&order_id);
                     },
                 }
@@ -482,6 +484,12 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         let senders = self.data.read().unwrap();
         senders.contains_key(id)
     }
+
+    pub fn len(&self) -> usize {
+        let senders = self.data.read().unwrap();
+        senders.len()
+    }
+
 }
 
 #[derive(Debug)]
