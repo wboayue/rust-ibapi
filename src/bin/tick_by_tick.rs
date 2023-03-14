@@ -39,7 +39,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     if let Some(symbol) = matches.get_one::<String>("mid_point") {
-        stream_mid_point(&mut client, &symbol.to_uppercase());
+        stream_mid_point(&mut client, &symbol.to_uppercase())?;
     }
 
     thread::sleep(Duration::from_secs(5));
@@ -54,7 +54,7 @@ fn stream_last(client: &mut IBClient, symbol: &str) -> anyhow::Result<()> {
     for (i, tick) in ticks.enumerate().take(60) {
         println!("tick: {i:?} {tick:?}");
     }
-
+    
     Ok(())
 }
 

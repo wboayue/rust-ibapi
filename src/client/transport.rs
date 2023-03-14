@@ -229,12 +229,12 @@ impl MessageBus for TcpMessageBus {
             for signal in &signal_recv {
                 match signal {
                     Signal::Request(request_id) => {
-                        debug!("releasing request_id {}, requests.len()={}", request_id, requests.len());
                         requests.remove(&request_id);
+                        debug!("released request_id {}, requests.len()={}", request_id, requests.len());
                     },
                     Signal::Order(order_id) => {
-                        debug!("releasing order_id {}, orders.len()={}", order_id, requests.len());
                         orders.remove(&order_id);
+                        debug!("released order_id {}, orders.len()={}", order_id, requests.len());
                     },
                 }
             }
