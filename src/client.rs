@@ -122,6 +122,7 @@ impl IBClient {
         Ok(client)
     }
 
+    #[cfg(test)]
     pub(crate) fn stubbed(message_bus: Box<dyn MessageBus>, server_version: i32) -> IBClient {
         IBClient {
             server_version: server_version,
