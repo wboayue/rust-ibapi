@@ -221,6 +221,25 @@ impl MessageBus for TcpMessageBus {
 
         self.handles.push(handle);
 
+        let requests = Arc::clone(&self.requests);
+        let orders = Arc::clone(&self.orders);
+        let signal_recv = self.signals_recv.clone();
+
+        let handle = thread::spawn(move || loop {
+            for signal in &signal_recv {
+                match signal {
+                    Signal::Request(request_id) => {
+                        requests.remove(&request_id);
+                    },
+                    Signal::Order(order_id) => {
+                        orders.remove(&order_id);
+                    },
+                }
+            }
+        });
+
+        self.handles.push(handle);
+
         Ok(())
     }
 }
