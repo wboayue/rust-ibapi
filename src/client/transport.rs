@@ -3,7 +3,7 @@ use std::io::prelude::*;
 use std::io::Cursor;
 use std::iter::Iterator;
 use std::net::TcpStream;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -49,7 +49,13 @@ pub struct TcpMessageBus {
     orders: Arc<SenderHash<i32, ResponseMessage>>,
     recorder: MessageRecorder,
     globals: Arc<GlobalChannels>,
-    signals: Vec<Receiver<i32>>,
+    signals_send: Sender<Signal>,
+    signals_recv: Receiver<Signal>,
+}
+
+pub enum Signal {
+    Request(i32),
+    Order(i32),
 }
 
 #[derive(Debug)]
@@ -89,6 +95,8 @@ impl TcpMessageBus {
         let requests = Arc::new(SenderHash::new());
         let orders = Arc::new(SenderHash::new());
 
+        let (signals_send, signals_recv) = channel::unbounded();
+
         Ok(TcpMessageBus {
             reader,
             writer,
@@ -97,7 +105,8 @@ impl TcpMessageBus {
             orders,
             recorder: MessageRecorder::new(),
             globals: Arc::new(GlobalChannels::new()),
-            signals: Vec::new(),
+            signals_send,
+            signals_recv,
         })
     }
 
@@ -121,15 +130,13 @@ impl MessageBus for TcpMessageBus {
 
     fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise> {
         let (sender, receiver) = channel::unbounded();
-        let (signals_out, signals_in) = channel::unbounded();
 
         self.add_request(request_id, sender)?;
         self.write_message(packet)?;
-        self.signals.push(signals_in);
 
         Ok(ResponsePacketPromise::new(
             receiver,
-            signals_out,
+            self.signals_send.clone(),
             Some(request_id),
             None,
             Duration::from_secs(10),
@@ -138,15 +145,13 @@ impl MessageBus for TcpMessageBus {
 
     fn send_order_message(&mut self, order_id: i32, message: &RequestMessage) -> Result<ResponsePacketPromise> {
         let (sender, receiver) = channel::unbounded();
-        let (signals_out, signals_in) = channel::unbounded();
 
         self.add_order(order_id, sender)?;
         self.write_message(message)?;
-        self.signals.push(signals_in);
 
         Ok(ResponsePacketPromise::new(
             receiver,
-            signals_out,
+            self.signals_send.clone(),
             None,
             Some(order_id),
             Duration::from_secs(10),
@@ -463,14 +468,20 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
 #[derive(Debug)]
 pub struct ResponsePacketPromise {
     messages: Receiver<ResponseMessage>, // for client to receive incoming messages
-    signals: Sender<i32>,                // for client to signal termination
+    signals: Sender<Signal>,             // for client to signal termination
     request_id: Option<i32>,             // initiating request_id
     order_id: Option<i32>,               // initiating order_id
     timeout: Duration,                   // How long to wait for next message
 }
 
 impl ResponsePacketPromise {
-    pub fn new(messages: Receiver<ResponseMessage>, signals: Sender<i32>, request_id: Option<i32>, order_id: Option<i32>, timeout: Duration) -> Self {
+    pub fn new(
+        messages: Receiver<ResponseMessage>,
+        signals: Sender<Signal>,
+        request_id: Option<i32>,
+        order_id: Option<i32>,
+        timeout: Duration,
+    ) -> Self {
         ResponsePacketPromise {
             messages,
             signals,
@@ -484,11 +495,11 @@ impl ResponsePacketPromise {
 impl Drop for ResponsePacketPromise {
     fn drop(&mut self) {
         if let Some(request_id) = self.request_id {
-            self.signals.send(request_id).unwrap();
+            self.signals.send(Signal::Request(request_id)).unwrap();
         }
 
         if let Some(order_id) = self.order_id {
-            self.signals.send(order_id).unwrap();
+            self.signals.send(Signal::Order(order_id)).unwrap();
         }
     }
 }
