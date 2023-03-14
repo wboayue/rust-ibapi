@@ -17,31 +17,47 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
 
-      - run: cargo test
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run Tests
+        run: cargo test --verbose
+        env:
+          CARGO_INCREMENTAL: '0'
+          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
+          RUSTDOCFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
+
+      - name: rust-grcov
+        uses: actions-rs/grcov@v0.1.5
 
       - name: Generate test result and coverage report
         run: |
           mkdir test-results;
           cargo install cargo2junit;
           cargo test -- -Z unstable-options --format json | cargo2junit > test-results/tests.xml;
+
       - name: Create test summary
         uses: test-summary/action@dist
         with:
           paths: test-results/**/*.xml
         if: always()
-      # - name: Test Reporter
-      #   uses: dorny/test-reporter@v1.6.0
-      #   with:
-      #     # artifact: test-results            # artifact name
-      #     name: JUNIT Tests                 # Name of the check run which will be created
-      #     path: test-results/*.xml                     # Path to test results (inside artifact .zip)
-      #     reporter: java-junit              # Format of test results        
-      #   if: always()
+
+      - name: Codecov
+        # You may pin to the exact commit or the version.
+        # uses: codecov/codecov-action@81cd2dc8148241f03f5839d295e000b8f761e378
+        uses: codecov/codecov-action@v3.1.0
+        with:
+          # Repository upload token - get it from codecov.io. Required only for private repositories
+          # token: # optional
+          # Specify whether the Codecov output should be verbose
+          verbose: true
+          fail_ci_if_error: true
+
   coverage:
     runs-on: ubuntu-latest
 
