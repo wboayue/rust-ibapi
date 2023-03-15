@@ -4,7 +4,7 @@ use std::fmt::{self, Debug, Display};
 use anyhow::{anyhow, Result};
 use log::{error, info};
 
-use crate::client::transport::{GlobalResponsePacketPromise, ResponsePacketPromise};
+use crate::client::transport::{GlobalResponseIterator, ResponseIterator};
 use crate::client::{Client, RequestMessage, ResponseMessage};
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
@@ -1024,7 +1024,7 @@ pub fn place_order<C: Client + Debug>(client: &mut C, order_id: i32, contract: &
 /// Supports iteration over [OrderNotification]
 pub struct OrderNotificationIterator {
     server_version: i32,
-    messages: ResponsePacketPromise,
+    messages: ResponseIterator,
 }
 
 impl Iterator for OrderNotificationIterator {
@@ -1337,7 +1337,7 @@ pub enum CancelOrderResult {
 /// Supports iteration over [CancelOrderResult]
 pub struct CancelOrderResultIterator {
     server_version: i32,
-    messages: ResponsePacketPromise,
+    messages: ResponseIterator,
 }
 
 impl Iterator for CancelOrderResultIterator {
@@ -1486,7 +1486,7 @@ pub enum OrderDataResult {
 /// Supports iteration over [OrderDataResult].
 pub struct OrderDataIterator {
     server_version: i32,
-    messages: GlobalResponsePacketPromise,
+    messages: GlobalResponseIterator,
 }
 
 impl Iterator for OrderDataIterator {
@@ -1705,7 +1705,7 @@ pub enum ExecutionDataResult {
 /// Supports iteration over [ExecutionDataResult].
 pub struct ExecutionDataIterator {
     server_version: i32,
-    messages: ResponsePacketPromise,
+    messages: ResponseIterator,
 }
 
 impl Iterator for ExecutionDataIterator {

@@ -61,7 +61,7 @@ impl Client for ClientStub {
         Ok(())
     }
 
-    fn send_request(&mut self, _request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
+    fn send_request(&mut self, _request_id: i32, message: RequestMessage) -> Result<ResponseIterator> {
         self.request_messages.push(encode_message(&message));
 
         let (sender, receiver) = channel::unbounded();
@@ -71,10 +71,10 @@ impl Client for ClientStub {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(ResponsePacketPromise::new(receiver, s1, None, None, Duration::from_secs(5)))
+        Ok(ResponseIterator::new(receiver, s1, None, None, Duration::from_secs(5)))
     }
 
-    fn send_order(&mut self, _order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
+    fn send_order(&mut self, _order_id: i32, message: RequestMessage) -> Result<ResponseIterator> {
         self.request_messages.push(encode_message(&message));
 
         let (sender, receiver) = channel::unbounded();
@@ -84,11 +84,11 @@ impl Client for ClientStub {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(ResponsePacketPromise::new(receiver, s1, None, None, Duration::from_secs(5)))
+        Ok(ResponseIterator::new(receiver, s1, None, None, Duration::from_secs(5)))
     }
 
     /// Sends request for the next valid order id.
-    fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+    fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
         self.request_messages.push(encode_message(&message));
 
         let (sender, receiver) = channel::unbounded();
@@ -97,10 +97,10 @@ impl Client for ClientStub {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(GlobalResponsePacketPromise::new(Arc::new(receiver)))
+        Ok(GlobalResponseIterator::new(Arc::new(receiver)))
     }
 
-    fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+    fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
         self.request_messages.push(encode_message(&message));
 
         let (sender, receiver) = channel::unbounded();
@@ -109,10 +109,10 @@ impl Client for ClientStub {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(GlobalResponsePacketPromise::new(Arc::new(receiver)))
+        Ok(GlobalResponseIterator::new(Arc::new(receiver)))
     }
 
-    fn request_market_rule(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+    fn request_market_rule(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
         self.request_messages.push(encode_message(&message));
 
         let (sender, receiver) = channel::unbounded();
@@ -121,7 +121,7 @@ impl Client for ClientStub {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(GlobalResponsePacketPromise::new(Arc::new(receiver)))
+        Ok(GlobalResponseIterator::new(Arc::new(receiver)))
     }
 
     fn check_server_version(&self, version: i32, message: &str) -> Result<()> {

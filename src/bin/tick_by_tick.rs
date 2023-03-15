@@ -54,7 +54,7 @@ fn stream_last(client: &mut IBClient, symbol: &str) -> anyhow::Result<()> {
     for (i, tick) in ticks.enumerate().take(60) {
         println!("tick: {i:?} {tick:?}");
     }
-    
+
     Ok(())
 }
 

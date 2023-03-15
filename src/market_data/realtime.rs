@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use anyhow::Result;
 use log::error;
 
-use crate::client::transport::ResponsePacketPromise;
+use crate::client::transport::ResponseIterator;
 use crate::client::{Client, IBClient};
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
@@ -248,11 +248,11 @@ pub fn tick_by_tick_midpoint<'a>(
 pub struct RealTimeBarIterator<'a> {
     client: &'a mut dyn Client,
     request_id: i32,
-    responses: ResponsePacketPromise,
+    responses: ResponseIterator,
 }
 
 impl<'a> RealTimeBarIterator<'a> {
-    fn new(client: &'a mut dyn Client, request_id: i32, responses: ResponsePacketPromise) -> RealTimeBarIterator<'a> {
+    fn new(client: &'a mut dyn Client, request_id: i32, responses: ResponseIterator) -> RealTimeBarIterator<'a> {
         RealTimeBarIterator {
             client,
             request_id,
@@ -308,7 +308,7 @@ impl<'a> Drop for RealTimeBarIterator<'a> {
 pub struct TradeIterator<'a> {
     client: &'a mut IBClient,
     request_id: i32,
-    responses: ResponsePacketPromise,
+    responses: ResponseIterator,
 }
 
 impl<'a> Drop for TradeIterator<'a> {
@@ -342,7 +342,7 @@ impl<'a> Iterator for TradeIterator<'a> {
 pub struct BidAskIterator<'a> {
     client: &'a mut IBClient,
     request_id: i32,
-    responses: ResponsePacketPromise,
+    responses: ResponseIterator,
 }
 
 /// Cancels the tick by tick request
@@ -384,7 +384,7 @@ impl<'a> Iterator for BidAskIterator<'a> {
 pub struct MidPointIterator<'a> {
     client: &'a mut IBClient,
     request_id: i32,
-    responses: ResponsePacketPromise,
+    responses: ResponseIterator,
 }
 
 impl<'a> Drop for MidPointIterator<'a> {

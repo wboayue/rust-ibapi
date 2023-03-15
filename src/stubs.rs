@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crossbeam::channel;
 
-use crate::client::transport::{GlobalResponsePacketPromise, MessageBus, ResponsePacketPromise};
+use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator};
 use crate::client::{RequestMessage, ResponseMessage};
 
 pub struct MessageBusStub {
@@ -28,7 +28,7 @@ impl MessageBus for MessageBusStub {
         Ok(())
     }
 
-    fn send_generic_message(&mut self, request_id: i32, message: &RequestMessage) -> anyhow::Result<ResponsePacketPromise> {
+    fn send_generic_message(&mut self, request_id: i32, message: &RequestMessage) -> anyhow::Result<ResponseIterator> {
         self.request_messages.push(message.clone());
 
         let (sender, receiver) = channel::unbounded();
@@ -38,10 +38,10 @@ impl MessageBus for MessageBusStub {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(ResponsePacketPromise::new(receiver, s1, None, None, Duration::from_secs(5)))
+        Ok(ResponseIterator::new(receiver, s1, None, None, Duration::from_secs(5)))
     }
 
-    fn send_order_message(&mut self, request_id: i32, message: &RequestMessage) -> anyhow::Result<ResponsePacketPromise> {
+    fn send_order_message(&mut self, request_id: i32, message: &RequestMessage) -> anyhow::Result<ResponseIterator> {
         self.request_messages.push(message.clone());
 
         let (sender, receiver) = channel::unbounded();
@@ -51,10 +51,10 @@ impl MessageBus for MessageBusStub {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(ResponsePacketPromise::new(receiver, s1, None, None, Duration::from_secs(5)))
+        Ok(ResponseIterator::new(receiver, s1, None, None, Duration::from_secs(5)))
     }
 
-    fn request_next_order_id(&mut self, message: &RequestMessage) -> anyhow::Result<GlobalResponsePacketPromise> {
+    fn request_next_order_id(&mut self, message: &RequestMessage) -> anyhow::Result<GlobalResponseIterator> {
         self.request_messages.push(message.clone());
 
         let (sender, receiver) = channel::unbounded();
@@ -63,10 +63,10 @@ impl MessageBus for MessageBusStub {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(GlobalResponsePacketPromise::new(Arc::new(receiver)))
+        Ok(GlobalResponseIterator::new(Arc::new(receiver)))
     }
 
-    fn request_open_orders(&mut self, message: &RequestMessage) -> anyhow::Result<GlobalResponsePacketPromise> {
+    fn request_open_orders(&mut self, message: &RequestMessage) -> anyhow::Result<GlobalResponseIterator> {
         self.request_messages.push(message.clone());
 
         let (sender, receiver) = channel::unbounded();
@@ -75,10 +75,10 @@ impl MessageBus for MessageBusStub {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(GlobalResponsePacketPromise::new(Arc::new(receiver)))
+        Ok(GlobalResponseIterator::new(Arc::new(receiver)))
     }
 
-    fn request_market_rule(&mut self, message: &RequestMessage) -> anyhow::Result<GlobalResponsePacketPromise> {
+    fn request_market_rule(&mut self, message: &RequestMessage) -> anyhow::Result<GlobalResponseIterator> {
         self.request_messages.push(message.clone());
 
         let (sender, receiver) = channel::unbounded();
@@ -87,7 +87,7 @@ impl MessageBus for MessageBusStub {
             sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
         }
 
-        Ok(GlobalResponsePacketPromise::new(Arc::new(receiver)))
+        Ok(GlobalResponseIterator::new(Arc::new(receiver)))
     }
 
     fn write(&mut self, packet: &str) -> anyhow::Result<()> {

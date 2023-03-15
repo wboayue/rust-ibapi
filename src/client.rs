@@ -6,7 +6,7 @@ use anyhow::{anyhow, Result};
 use log::{debug, error, info};
 use time::OffsetDateTime;
 
-use self::transport::{GlobalResponsePacketPromise, MessageBus, ResponsePacketPromise, TcpMessageBus};
+use self::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::contracts::{ComboLegOpenClose, SecurityType};
 use crate::market_data::WhatToShow;
 use crate::messages::{order_id_index, request_id_index, IncomingMessages, OutgoingMessages};
@@ -38,16 +38,16 @@ pub trait Client {
     /// Sends a message without an expected reply.
     fn send_message(&mut self, packet: RequestMessage) -> Result<()>;
     /// Sends a request and waits for reply.
-    fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
+    fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator>;
     /// Submits an order and waits for reply.
-    fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
+    fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponseIterator>;
 
     /// Sends request for the next valid order id.
-    fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise>;
+    fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator>;
     /// Sends request for open orders.
-    fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise>;
+    fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator>;
     /// Sends request for market rule.
-    fn request_market_rule(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise>;
+    fn request_market_rule(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator>;
 
     /// Ensures server is at least the requested version.
     fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
@@ -260,28 +260,28 @@ impl Client for IBClient {
         self.message_bus.write_message(&packet)
     }
 
-    fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
+    fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator> {
         debug!("send_message({:?}, {:?})", request_id, message);
         self.message_bus.send_generic_message(request_id, &message)
     }
 
-    fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
+    fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponseIterator> {
         debug!("send_order({:?}, {:?})", order_id, message);
         self.message_bus.send_order_message(order_id, &message)
     }
 
     /// Sends request for the next valid order id.
-    fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+    fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
         self.message_bus.request_next_order_id(&message)
     }
 
     /// Sends request for open orders.
-    fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+    fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
         self.message_bus.request_open_orders(&message)
     }
 
     /// Sends request for market rule.
-    fn request_market_rule(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+    fn request_market_rule(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
         self.message_bus.request_market_rule(&message)
     }
 
