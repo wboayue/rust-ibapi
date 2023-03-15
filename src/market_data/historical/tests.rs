@@ -1,15 +1,16 @@
-use std::collections::VecDeque;
-
-use time::OffsetDateTime;
+use crate::stubs::MessageBusStub;
 
 use super::*;
-use crate::client::stub::ClientStub;
-use crate::client::ResponseMessage;
-use crate::contracts;
 
 #[test]
 fn test_head_timestamp() {
-    let mut client = ClientStub::default();
+    let mut message_bus = Box::new(MessageBusStub {
+        request_messages: vec![],
+        response_messages: vec!["9|1|43||".to_owned()],
+    });
+
+    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
+
     // client.response_packets = VecDeque::from([ResponseMessage::from("10\x0000\x00cc")]);
 
     let contract = Contract::stock("MSFT");

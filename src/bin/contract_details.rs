@@ -1,7 +1,7 @@
 use clap::{arg, Command};
 use log::{debug, info};
 
-use ibapi::client::{Client, IBClient};
+use ibapi::client::IBClient;
 use ibapi::contracts::{self, Contract};
 
 fn main() -> anyhow::Result<()> {

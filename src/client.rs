@@ -19,37 +19,6 @@ const UNSET_DOUBLE: &str = "1.7976931348623157E308";
 const UNSET_INTEGER: &str = "2147483647";
 const UNSET_LONG: &str = "9223372036854775807";
 
-pub trait Client {
-    /// Returns the next request ID.
-    fn next_request_id(&mut self) -> i32;
-    /// Returns the next order ID. Set at connection time then incremented on each call.
-    fn next_order_id(&mut self) -> i32;
-    /// Sets the current value of order ID.
-    fn set_next_order_id(&mut self, order_id: i32) -> i32;
-    /// Returns the server version.
-    fn server_version(&self) -> i32;
-    /// Returns the server time at connection time.
-    fn server_time(&self) -> String;
-    /// Returns the managed accounts.
-    fn managed_accounts(&self) -> String;
-    /// Sends a message without an expected reply.
-    fn send_message(&mut self, packet: RequestMessage) -> Result<()>;
-    /// Sends a request and waits for reply.
-    fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator>;
-    /// Submits an order and waits for reply.
-    fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponseIterator>;
-
-    /// Sends request for the next valid order id.
-    fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator>;
-    /// Sends request for open orders.
-    fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator>;
-    /// Sends request for market rule.
-    fn request_market_rule(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator>;
-
-    /// Ensures server is at least the requested version.
-    fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
-}
-
 pub struct IBClient {
     /// IB server version
     pub server_version: i32,
@@ -78,7 +47,7 @@ impl IBClient {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::client::{IBClient, Client};
+    /// use ibapi::client::{IBClient};
     ///
     /// fn main() -> anyhow::Result<()> {
     ///     let mut client = IBClient::connect("localhost:4002")?;
@@ -210,84 +179,83 @@ impl IBClient {
 
         Ok(())
     }
-}
 
-impl Drop for IBClient {
-    fn drop(&mut self) {
-        info!("dropping basic client")
-    }
-}
-
-impl Client for IBClient {
+    // Old Client interface
     /// Returns the next request ID.
-    fn next_request_id(&mut self) -> i32 {
+    pub fn next_request_id(&mut self) -> i32 {
         let request_id = self.next_request_id;
         self.next_request_id += 1;
         request_id
     }
 
     /// Returns and increments the order ID.
-    fn next_order_id(&mut self) -> i32 {
+    pub fn next_order_id(&mut self) -> i32 {
         let order_id = self.order_id;
         self.order_id += 1;
         order_id
     }
 
     /// Sets the current value of order ID.
-    fn set_next_order_id(&mut self, order_id: i32) -> i32 {
+    pub(crate) fn set_next_order_id(&mut self, order_id: i32) -> i32 {
         self.order_id = order_id;
         self.order_id
     }
 
-    fn server_version(&self) -> i32 {
+    pub fn server_version(&self) -> i32 {
         self.server_version
     }
 
     /// Returns the server version.
-    fn server_time(&self) -> String {
+    pub fn server_time(&self) -> String {
         self.server_time.to_owned()
     }
 
     /// Returns the managed accounts.
-    fn managed_accounts(&self) -> String {
+    pub fn managed_accounts(&self) -> String {
         self.managed_accounts.to_owned()
     }
 
-    fn send_message(&mut self, packet: RequestMessage) -> Result<()> {
+    pub(crate) fn send_message(&mut self, packet: RequestMessage) -> Result<()> {
         self.message_bus.write_message(&packet)
     }
 
-    fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator> {
+    pub(crate) fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator> {
         debug!("send_message({:?}, {:?})", request_id, message);
         self.message_bus.send_generic_message(request_id, &message)
     }
 
-    fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponseIterator> {
+    pub(crate) fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponseIterator> {
         debug!("send_order({:?}, {:?})", order_id, message);
         self.message_bus.send_order_message(order_id, &message)
     }
 
     /// Sends request for the next valid order id.
-    fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
+    pub(crate) fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
         self.message_bus.request_next_order_id(&message)
     }
 
     /// Sends request for open orders.
-    fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
+    pub(crate) fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
         self.message_bus.request_open_orders(&message)
     }
 
     /// Sends request for market rule.
-    fn request_market_rule(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
+    pub(crate) fn request_market_rule(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
         self.message_bus.request_market_rule(&message)
     }
 
-    fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
+    pub(crate) fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
         if version <= self.server_version {
             Ok(())
         } else {
             Err(anyhow!("server version {} required, got {}: {}", version, self.server_version, message))
         }
+    }
+}
+
+impl Drop for IBClient {
+    fn drop(&mut self) {
+        info!("dropping basic client")
     }
 }
 
@@ -324,6 +292,12 @@ impl RequestMessage {
     pub fn encode(&self) -> String {
         let mut data = self.fields.join("\0");
         data.push('\0');
+        data
+    }
+
+    pub(crate) fn encode_simple(&self) -> String {
+        let mut data = self.fields.join("|");
+        data.push('|');
         data
     }
 }
@@ -519,6 +493,3 @@ impl ResponseMessage {
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(test)]
-pub(crate) mod stub;

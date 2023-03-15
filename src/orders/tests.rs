@@ -1,20 +1,24 @@
 use super::*;
-use crate::client::stub::ClientStub;
+
 use crate::contracts::{contract_samples, Contract, SecurityType};
+use crate::stubs::MessageBusStub;
 
 #[test]
 fn place_order() {
-    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+    let mut message_bus = Box::new(MessageBusStub{
+        request_messages: vec![],
+        response_messages: vec![
+            "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1236109||0||100|1376327563|0|0|0||1376327563.0/DU1236109/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
+            "3|13|PreSubmitted|0|100|0|1376327563|0|0|100||0||".to_owned(),
+            "11|-1|13|76792991|TSLA|STK||0.0|||ISLAND|USD|TSLA|NMS|00025b46.63f8f39c.01.01|20230224  12:04:56|DU1236109|ISLAND|BOT|100|196.52|1376327563|100|0|100|196.52|||||2||".to_owned(),
+            "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1236109||0||100|1376327563|0|0|0||1376327563.0/DU1236109/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Filled|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
+            "3|13|Filled|100|0|196.52|1376327563|0|196.52|100||0||".to_owned(),
+            "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1236109||0||100|1376327563|0|0|0||1376327563.0/DU1236109/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Filled|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.0|||USD||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
+            "59|1|00025b46.63f8f39c.01.01|1.0|USD|1.7976931348623157E308|1.7976931348623157E308|||".to_owned(),
+        ]
+    });
 
-    client.response_messages = vec![
-        "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1236109||0||100|1376327563|0|0|0||1376327563.0/DU1236109/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
-        "3|13|PreSubmitted|0|100|0|1376327563|0|0|100||0||".to_owned(),
-        "11|-1|13|76792991|TSLA|STK||0.0|||ISLAND|USD|TSLA|NMS|00025b46.63f8f39c.01.01|20230224  12:04:56|DU1236109|ISLAND|BOT|100|196.52|1376327563|100|0|100|196.52|||||2||".to_owned(),
-        "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1236109||0||100|1376327563|0|0|0||1376327563.0/DU1236109/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Filled|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
-        "3|13|Filled|100|0|196.52|1376327563|0|196.52|100||0||".to_owned(),
-        "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1236109||0||100|1376327563|0|0|0||1376327563.0/DU1236109/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Filled|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.0|||USD||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
-        "59|1|00025b46.63f8f39c.01.01|1.0|USD|1.7976931348623157E308|1.7976931348623157E308|||".to_owned(),
-    ];
+    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let contract = Contract {
         symbol: "TSLA".to_owned(),
@@ -29,8 +33,10 @@ fn place_order() {
 
     let result = super::place_order(&mut client, order_id, &contract, &order);
 
+    let request_messages = client.message_bus.request_messages();
+
     assert_eq!(
-        client.request_messages[0],
+        request_messages[0].encode().replace('\0', "|"),
         "3|13|0|TSLA|STK||0|||SMART||USD|||||BUY|100|MKT|||||||0||1|0|0|0|0|0|0|0||0||||||||0||-1|0|||0|||0|0||0||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
     );
 
@@ -288,17 +294,22 @@ fn place_order() {
 
 #[test]
 fn cancel_order() {
-    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+    let mut message_bus = Box::new(MessageBusStub {
+        request_messages: vec![],
+        response_messages: vec![
+            "3|41|Cancelled|0|100|0|71270927|0|0|100||0||".to_owned(),
+            "4|2|41|202|Order Canceled - reason:||".to_owned(),
+        ],
+    });
 
-    client.response_messages = vec![
-        "3|41|Cancelled|0|100|0|71270927|0|0|100||0||".to_owned(),
-        "4|2|41|202|Order Canceled - reason:||".to_owned(),
-    ];
+    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let order_id = 41;
     let results = super::cancel_order(&mut client, order_id, "");
 
-    assert_eq!(client.request_messages[0], "4|1|41|");
+    let request_messages = client.message_bus.request_messages();
+
+    assert_eq!(request_messages[0].encode(), "4\01\041\0");
 
     assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
 
@@ -325,25 +336,35 @@ fn cancel_order() {
 
 #[test]
 fn global_cancel() {
-    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+    let mut message_bus = Box::new(MessageBusStub {
+        request_messages: vec![],
+        response_messages: vec![],
+    });
 
-    client.response_messages = vec![];
+    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let results = super::global_cancel(&mut client);
 
-    assert_eq!(client.request_messages[0], "58|1|");
+    let request_messages = client.message_bus.request_messages();
+
+    assert_eq!(request_messages[0].encode(), "58\01\0");
     assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
 }
 
 #[test]
 fn next_valid_order_id() {
-    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+    let mut message_bus = Box::new(MessageBusStub {
+        request_messages: vec![],
+        response_messages: vec!["9|1|43||".to_owned()],
+    });
 
-    client.response_messages = vec!["9|1|43||".to_owned()];
+    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let results = super::next_valid_order_id(&mut client);
 
-    assert_eq!(client.request_messages[0], "8|1|0|");
+    let request_messages = client.message_bus.request_messages();
+
+    assert_eq!(request_messages[0].encode(), "8\01\00\0");
 
     assert!(results.is_ok(), "failed to request next order id: {}", results.err().unwrap());
     assert_eq!(43, results.unwrap(), "next order id");
@@ -351,17 +372,22 @@ fn next_valid_order_id() {
 
 #[test]
 fn completed_orders() {
-    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+    let mut message_bus = Box::new(MessageBusStub{
+        request_messages: vec![],
+        response_messages: vec![
+            "101|265598|AAPL|STK||0|?||SMART|USD|AAPL|NMS|BUY|0|MKT|0.0|0.0|DAY||DU1236109||0||1824933227|0|0|0|||||||||||0||-1||||||2147483647|0|0||3|0||0|None||0|0|0||0|0||||0|0|0|2147483647|2147483647||||IB|0|0||0|Filled|0|0|0|1.7976931348623157E308|1.7976931348623157E308|0|1|0||100|2147483647|0|Not an insider or substantial shareholder|0|0|9223372036854775807|20230306 12:28:30 America/Los_Angeles|Filled Size: 100|".to_owned(),
+            "102|".to_owned(),
+        ],
+    });
 
-    client.response_messages = vec![
-        "101|265598|AAPL|STK||0|?||SMART|USD|AAPL|NMS|BUY|0|MKT|0.0|0.0|DAY||DU1236109||0||1824933227|0|0|0|||||||||||0||-1||||||2147483647|0|0||3|0||0|None||0|0|0||0|0||||0|0|0|2147483647|2147483647||||IB|0|0||0|Filled|0|0|0|1.7976931348623157E308|1.7976931348623157E308|0|1|0||100|2147483647|0|Not an insider or substantial shareholder|0|0|9223372036854775807|20230306 12:28:30 America/Los_Angeles|Filled Size: 100|".to_owned(),
-        "102|".to_owned()
-    ];
+    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let api_only = true;
     let results = super::completed_orders(&mut client, api_only);
 
-    assert_eq!(client.request_messages[0], "99|1|");
+    let request_messages = client.message_bus.request_messages();
+
+    assert_eq!(request_messages[0].encode(), "99\01\0");
 
     assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
 
@@ -482,49 +508,67 @@ fn completed_orders() {
 
 #[test]
 fn open_orders() {
-    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+    let mut message_bus = Box::new(MessageBusStub {
+        request_messages: vec![],
+        response_messages: vec!["9|1|43||".to_owned()],
+    });
 
-    client.response_messages = vec!["9|1|43||".to_owned()];
+    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let results = super::open_orders(&mut client);
 
-    assert_eq!(client.request_messages[0], "5|1|");
+    let request_messages = client.message_bus.request_messages();
+
+    assert_eq!(request_messages[0].encode_simple(), "5|1|");
 
     assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
 }
 
 #[test]
 fn all_open_orders() {
-    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+    let mut message_bus = Box::new(MessageBusStub {
+        request_messages: vec![],
+        response_messages: vec!["9|1|43||".to_owned()],
+    });
 
-    client.response_messages = vec!["9|1|43||".to_owned()];
+    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let results = super::all_open_orders(&mut client);
 
-    assert_eq!(client.request_messages[0], "16|1|");
+    let request_messages = client.message_bus.request_messages();
+
+    assert_eq!(request_messages[0].encode_simple(), "16|1|");
 
     assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
 }
 
 #[test]
 fn auto_open_orders() {
-    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+    let mut message_bus = Box::new(MessageBusStub {
+        request_messages: vec![],
+        response_messages: vec!["9|1|43||".to_owned()],
+    });
 
-    client.response_messages = vec!["9|1|43||".to_owned()];
+    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let api_only = true;
     let results = super::auto_open_orders(&mut client, api_only);
 
-    assert_eq!(client.request_messages[0], "15|1|1|");
+    let request_messages = client.message_bus.request_messages();
+
+    assert_eq!(request_messages[0].encode_simple(), "15|1|1|");
 
     assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
 }
 
 #[test]
 fn executions() {
-    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+    let mut message_bus = Box::new(MessageBusStub {
+        request_messages: vec![],
+        response_messages: vec!["9|1|43||".to_owned()],
+    });
 
-    client.response_messages = vec!["9|1|43||".to_owned()];
+    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let filter = ExecutionFilter {
         client_id: Some(100),
@@ -537,7 +581,12 @@ fn executions() {
     };
     let results = super::executions(&mut client, filter);
 
-    assert_eq!(client.request_messages[0], "7|3|3000|100|xyz|yyyymmdd hh:mm:ss EST|TSLA|STK|ISLAND|BUY|");
+    let request_messages = client.message_bus.request_messages();
+
+    assert_eq!(
+        request_messages[0].encode_simple(),
+        "7|3|9000|100|xyz|yyyymmdd hh:mm:ss EST|TSLA|STK|ISLAND|BUY|"
+    );
 
     assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
     // assert_eq!(43, results.unwrap(), "next order id");
@@ -545,9 +594,12 @@ fn executions() {
 
 #[test]
 fn encode_limit_order() {
-    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+    let mut message_bus = Box::new(MessageBusStub {
+        request_messages: vec![],
+        response_messages: vec![],
+    });
 
-    client.response_messages = vec![];
+    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let order_id = 12;
     let contract = contract_samples::future_with_local_symbol();
@@ -555,8 +607,10 @@ fn encode_limit_order() {
 
     let results = super::place_order(&mut client, order_id, &contract, &order);
 
+    let request_messages = client.message_bus.request_messages();
+
     assert_eq!(
-        client.request_messages[0],
+        request_messages[0].encode_simple(),
         "3|12|0||FUT|202303|0|||EUREX||EUR|FGBL MAR 23||||BUY|10|LMT|500||||||0||1|0|0|0|0|0|0|0||0||||||||0||-1|0|||0|||0|0||0||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
     );
 
@@ -565,9 +619,12 @@ fn encode_limit_order() {
 
 #[test]
 fn encode_combo_market_order() {
-    let mut client = ClientStub::new(server_versions::SIZE_RULES);
+    let mut message_bus = Box::new(MessageBusStub {
+        request_messages: vec![],
+        response_messages: vec![],
+    });
 
-    client.response_messages = vec![];
+    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let order_id = 12; // get next order id
     let contract = contract_samples::smart_future_combo_contract();
@@ -575,8 +632,10 @@ fn encode_combo_market_order() {
 
     let results = super::place_order(&mut client, order_id, &contract, &order);
 
+    let request_messages = client.message_bus.request_messages();
+
     assert_eq!(
-        client.request_messages[0],
+        request_messages[0].encode_simple(),
         "3|12|0|WTI|BAG||0|||SMART||USD|||||SELL|150|MKT|||||||0||1|0|0|0|0|0|0|0|2|55928698|1|BUY|IPE|0|0||0|55850663|1|SELL|IPE|0|0||0|0|1|NonGuaranteed|1||0||||||||0||-1|0|||0|||0|0||0||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
     );
 

@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
 
-use crate::client::{Client, RequestMessage, ResponseMessage};
+use crate::client::{IBClient, RequestMessage, ResponseMessage};
 use crate::contracts::Contract;
 use crate::domain::TickAttribBidAsk;
 use crate::server_versions;
@@ -32,7 +32,7 @@ use crate::server_versions;
 ///         Ok(())
 ///     }
 /// ```
-pub fn head_timestamp<C: Client + Debug>(client: &mut C, contract: &Contract, what_to_show: &str, use_rth: bool) -> Result<OffsetDateTime> {
+pub fn head_timestamp(client: &mut IBClient, contract: &Contract, what_to_show: &str, use_rth: bool) -> Result<OffsetDateTime> {
     client.check_server_version(server_versions::REQ_HEAD_TIMESTAMP, "It does not support head time stamp requests.")?;
 
     let request_id = client.next_request_id();
@@ -102,7 +102,7 @@ fn decode_head_timestamp(packet: &mut ResponseMessage) -> Result<OffsetDateTime>
 }
 
 /// Returns data histogram of specified contract
-pub fn histogram_data<C: Client + Debug>(client: &C, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator> {
+pub fn histogram_data(client: &IBClient, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator> {
     // " S (seconds) - " D (days)
     // " W (weeks) - " M (months)
     // " Y (years)
@@ -111,8 +111,8 @@ pub fn histogram_data<C: Client + Debug>(client: &C, contract: &Contract, use_rt
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn historical_data<C: Client + Debug>(
-    client: &C,
+pub fn historical_data(
+    client: &IBClient,
     contract: &Contract,
     end: &OffsetDateTime,
     duration: &str,
@@ -129,13 +129,13 @@ pub fn historical_data<C: Client + Debug>(
     Err(anyhow!("not implemented!"))
 }
 
-pub fn historical_schedule<C: Client + Debug>(client: &C, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator> {
+pub fn historical_schedule(client: &IBClient, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator> {
     print!("{client:?} {contract:?} {use_rth:?} {period:?}");
     Err(anyhow!("not implemented!"))
 }
 
-pub fn historical_ticks<C: Client + Debug>(
-    client: &C,
+pub fn historical_ticks(
+    client: &IBClient,
     contract: &Contract,
     start_date: Option<OffsetDateTime>,
     end_date: Option<OffsetDateTime>,
@@ -147,8 +147,8 @@ pub fn historical_ticks<C: Client + Debug>(
     Err(anyhow!("not implemented!"))
 }
 
-pub fn historical_ticks_bid_ask<C: Client + Debug>(
-    client: &C,
+pub fn historical_ticks_bid_ask(
+    client: &IBClient,
     contract: &Contract,
     start_date: Option<OffsetDateTime>,
     end_date: Option<OffsetDateTime>,
@@ -161,8 +161,8 @@ pub fn historical_ticks_bid_ask<C: Client + Debug>(
     Err(anyhow!("not implemented!"))
 }
 
-pub fn historical_ticks_last<C: Client + Debug>(
-    client: &C,
+pub fn historical_ticks_last(
+    client: &IBClient,
     contract: &Contract,
     start_date: Option<OffsetDateTime>,
     end_date: Option<OffsetDateTime>,

@@ -1,7 +1,7 @@
 use clap::{arg, ArgMatches, Command};
 use log::{debug, info};
 
-use ibapi::client::{Client, IBClient};
+use ibapi::client::IBClient;
 use ibapi::contracts::Contract;
 use ibapi::orders::{self, order_builder, OrderNotification};
 
