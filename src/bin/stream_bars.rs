@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use clap::{arg, ArgMatches, Command};
 
-use ibapi::client::IBClient;
+use ibapi::client::Client;
 use ibapi::contracts::Contract;
 use ibapi::market_data::{realtime, BarSize, WhatToShow};
 
@@ -25,7 +25,7 @@ fn main() -> anyhow::Result<()> {
     println!("connection_string: {connection_string:?}");
     println!("contract: {contract:?}");
 
-    let mut client = IBClient::connect("odin:4002")?;
+    let mut client = Client::connect("odin:4002")?;
 
     let bars = realtime::realtime_bars(&mut client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
 

@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
 
-use crate::client::{IBClient, RequestMessage, ResponseMessage};
+use crate::client::{Client, RequestMessage, ResponseMessage};
 use crate::contracts::Contract;
 use crate::domain::TickAttribBidAsk;
 use crate::server_versions;
@@ -14,12 +14,12 @@ use crate::server_versions;
 /// Returns the timestamp of earliest available historical data for a contract and data type.
 /// ```no_run
 ///     use anyhow::Result;
-///     use ibapi::client::IBClient;
+///     use ibapi::client::Client;
 ///     use ibapi::contracts::{self, Contract};
 ///     use ibapi::market_data::historical;
 ///
 ///     fn main() -> Result<()> {
-///         let mut client = IBClient::connect("localhost:4002")?;
+///         let mut client = Client::connect("localhost:4002")?;
 ///
 ///         let contract = Contract::stock("MSFT");
 ///         let what_to_show = "trades";
@@ -32,7 +32,7 @@ use crate::server_versions;
 ///         Ok(())
 ///     }
 /// ```
-pub fn head_timestamp(client: &mut IBClient, contract: &Contract, what_to_show: &str, use_rth: bool) -> Result<OffsetDateTime> {
+pub fn head_timestamp(client: &mut Client, contract: &Contract, what_to_show: &str, use_rth: bool) -> Result<OffsetDateTime> {
     client.check_server_version(server_versions::REQ_HEAD_TIMESTAMP, "It does not support head time stamp requests.")?;
 
     let request_id = client.next_request_id();
@@ -102,7 +102,7 @@ fn decode_head_timestamp(packet: &mut ResponseMessage) -> Result<OffsetDateTime>
 }
 
 /// Returns data histogram of specified contract
-pub fn histogram_data(client: &IBClient, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator> {
+pub fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator> {
     // " S (seconds) - " D (days)
     // " W (weeks) - " M (months)
     // " Y (years)
@@ -112,7 +112,7 @@ pub fn histogram_data(client: &IBClient, contract: &Contract, use_rth: bool, per
 
 #[allow(clippy::too_many_arguments)]
 pub fn historical_data(
-    client: &IBClient,
+    client: &Client,
     contract: &Contract,
     end: &OffsetDateTime,
     duration: &str,
@@ -129,13 +129,13 @@ pub fn historical_data(
     Err(anyhow!("not implemented!"))
 }
 
-pub fn historical_schedule(client: &IBClient, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator> {
+pub fn historical_schedule(client: &Client, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator> {
     print!("{client:?} {contract:?} {use_rth:?} {period:?}");
     Err(anyhow!("not implemented!"))
 }
 
 pub fn historical_ticks(
-    client: &IBClient,
+    client: &Client,
     contract: &Contract,
     start_date: Option<OffsetDateTime>,
     end_date: Option<OffsetDateTime>,
@@ -148,7 +148,7 @@ pub fn historical_ticks(
 }
 
 pub fn historical_ticks_bid_ask(
-    client: &IBClient,
+    client: &Client,
     contract: &Contract,
     start_date: Option<OffsetDateTime>,
     end_date: Option<OffsetDateTime>,
@@ -162,7 +162,7 @@ pub fn historical_ticks_bid_ask(
 }
 
 pub fn historical_ticks_last(
-    client: &IBClient,
+    client: &Client,
     contract: &Contract,
     start_date: Option<OffsetDateTime>,
     end_date: Option<OffsetDateTime>,

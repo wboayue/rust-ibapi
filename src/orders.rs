@@ -5,7 +5,7 @@ use anyhow::{anyhow, Result};
 use log::{error, info};
 
 use crate::client::transport::{GlobalResponseIterator, ResponseIterator};
-use crate::client::{IBClient, RequestMessage, ResponseMessage};
+use crate::client::{Client, RequestMessage, ResponseMessage};
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
@@ -1020,12 +1020,12 @@ impl fmt::Display for Notice {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{IBClient};
+/// use ibapi::client::{Client};
 /// use ibapi::contracts::Contract;
 /// use ibapi::orders::{self, order_builder, OrderNotification};
 ///
 /// fn main() -> anyhow::Result<()> {
-///     let mut client = IBClient::connect("localhost:4002")?;
+///     let mut client = Client::connect("localhost:4002")?;
 ///
 ///     let mut contract = Contract::stock("MSFT");
 ///     let order = order_builder::market_order(orders::Action::Buy, 100.0);
@@ -1048,7 +1048,7 @@ impl fmt::Display for Notice {
 ///     Ok(())
 /// }
 /// ```
-pub fn place_order(client: &mut IBClient, order_id: i32, contract: &Contract, order: &Order) -> Result<OrderNotificationIterator> {
+pub fn place_order(client: &mut Client, order_id: i32, contract: &Contract, order: &Order) -> Result<OrderNotificationIterator> {
     verify_order(client, order, order_id)?;
     verify_order_contract(client, contract, order_id)?;
 
@@ -1120,7 +1120,7 @@ impl Iterator for OrderNotificationIterator {
 }
 
 // Verifies that Order is properly formed.
-fn verify_order(client: &mut IBClient, order: &Order, _order_id: i32) -> Result<()> {
+fn verify_order(client: &mut Client, order: &Order, _order_id: i32) -> Result<()> {
     let is_bag_order: bool = false; // StringsAreEqual(Constants.BagSecType, contract.SecType)
 
     if order.scale_init_level_size.is_some() || order.scale_price_increment.is_some() {
@@ -1290,7 +1290,7 @@ fn verify_order(client: &mut IBClient, order: &Order, _order_id: i32) -> Result<
 }
 
 // Verifies that Contract is properly formed.
-fn verify_order_contract(client: &mut IBClient, contract: &Contract, _order_id: i32) -> Result<()> {
+fn verify_order_contract(client: &mut Client, contract: &Contract, _order_id: i32) -> Result<()> {
     if contract
         .combo_legs
         .iter()
@@ -1337,11 +1337,11 @@ fn verify_order_contract(client: &mut IBClient, contract: &Contract, _order_id: 
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{IBClient};
+/// use ibapi::client::{Client};
 /// use ibapi::orders;
 ///
 /// fn main() -> anyhow::Result<()> {
-///     let mut client = IBClient::connect("localhost:4002")?;
+///     let mut client = Client::connect("localhost:4002")?;
 ///
 ///     let order_id = 15;
 ///     let results = orders::cancel_order(&mut client, order_id, "")?;
@@ -1352,7 +1352,7 @@ fn verify_order_contract(client: &mut IBClient, contract: &Contract, _order_id: 
 ///     Ok(())
 /// }
 /// ```
-pub fn cancel_order(client: &mut IBClient, order_id: i32, manual_order_cancel_time: &str) -> Result<CancelOrderResultIterator> {
+pub fn cancel_order(client: &mut Client, order_id: i32, manual_order_cancel_time: &str) -> Result<CancelOrderResultIterator> {
     if !manual_order_cancel_time.is_empty() {
         client.check_server_version(
             server_versions::MANUAL_ORDER_TIME,
@@ -1422,18 +1422,18 @@ impl Iterator for CancelOrderResultIterator {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{IBClient};
+/// use ibapi::client::{Client};
 /// use ibapi::orders;
 ///
 /// fn main() -> anyhow::Result<()> {
-///     let mut client = IBClient::connect("localhost:4002")?;
+///     let mut client = Client::connect("localhost:4002")?;
 ///
 ///     orders::global_cancel(&mut client)?;
 ///
 ///     Ok(())
 /// }
 /// ```
-pub fn global_cancel(client: &mut IBClient) -> Result<()> {
+pub fn global_cancel(client: &mut Client) -> Result<()> {
     client.check_server_version(server_versions::REQ_GLOBAL_CANCEL, "It does not support global cancel requests.")?;
 
     let message = encoders::encode_global_cancel()?;
@@ -1454,11 +1454,11 @@ pub fn global_cancel(client: &mut IBClient) -> Result<()> {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{IBClient};
+/// use ibapi::client::{Client};
 /// use ibapi::orders;
 ///
 /// fn main() -> anyhow::Result<()> {
-///     let mut client = IBClient::connect("localhost:4002")?;
+///     let mut client = Client::connect("localhost:4002")?;
 ///
 ///     let next_valid_order_id = orders::next_valid_order_id(&mut client)?;
 ///     println!("next_valid_order_id: {next_valid_order_id}");
@@ -1466,7 +1466,7 @@ pub fn global_cancel(client: &mut IBClient) -> Result<()> {
 ///     Ok(())
 /// }
 /// ```
-pub fn next_valid_order_id(client: &mut IBClient) -> Result<i32> {
+pub fn next_valid_order_id(client: &mut Client) -> Result<i32> {
     let message = encoders::encode_next_valid_order_id()?;
 
     let mut messages = client.request_next_order_id(message)?;
@@ -1492,11 +1492,11 @@ pub fn next_valid_order_id(client: &mut IBClient) -> Result<i32> {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{IBClient};
+/// use ibapi::client::{Client};
 /// use ibapi::orders;
 ///
 /// fn main() -> anyhow::Result<()> {
-///     let mut client = IBClient::connect("localhost:4002")?;
+///     let mut client = Client::connect("localhost:4002")?;
 ///
 ///     let results = orders::completed_orders(&mut client, false)?;
 ///     for order_data in results {
@@ -1506,7 +1506,7 @@ pub fn next_valid_order_id(client: &mut IBClient) -> Result<i32> {
 ///     Ok(())
 /// }
 /// ```
-pub fn completed_orders(client: &mut IBClient, api_only: bool) -> Result<OrderDataIterator> {
+pub fn completed_orders(client: &mut Client, api_only: bool) -> Result<OrderDataIterator> {
     client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
 
     let message = encoders::encode_completed_orders(api_only)?;
@@ -1581,11 +1581,11 @@ impl Iterator for OrderDataIterator {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{IBClient};
+/// use ibapi::client::{Client};
 /// use ibapi::orders;
 ///
 /// fn main() -> anyhow::Result<()> {
-///     let mut client = IBClient::connect("localhost:4002")?;
+///     let mut client = Client::connect("localhost:4002")?;
 ///
 ///     let results = orders::open_orders(&mut client)?;
 ///     for order_data in results {
@@ -1595,7 +1595,7 @@ impl Iterator for OrderDataIterator {
 ///     Ok(())
 /// }
 /// ```
-pub fn open_orders(client: &mut IBClient) -> Result<OrderDataIterator> {
+pub fn open_orders(client: &mut Client) -> Result<OrderDataIterator> {
     let message = encoders::encode_open_orders()?;
 
     let messages = client.request_order_data(message)?;
@@ -1615,11 +1615,11 @@ pub fn open_orders(client: &mut IBClient) -> Result<OrderDataIterator> {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{IBClient};
+/// use ibapi::client::{Client};
 /// use ibapi::orders;
 ///
 /// fn main() -> anyhow::Result<()> {
-///     let mut client = IBClient::connect("localhost:4002")?;
+///     let mut client = Client::connect("localhost:4002")?;
 ///
 ///     let results = orders::all_open_orders(&mut client)?;
 ///     for order_data in results {
@@ -1629,7 +1629,7 @@ pub fn open_orders(client: &mut IBClient) -> Result<OrderDataIterator> {
 ///     Ok(())
 /// }
 /// ```
-pub fn all_open_orders(client: &mut IBClient) -> Result<OrderDataIterator> {
+pub fn all_open_orders(client: &mut Client) -> Result<OrderDataIterator> {
     let message = encoders::encode_all_open_orders()?;
 
     let messages = client.request_order_data(message)?;
@@ -1649,11 +1649,11 @@ pub fn all_open_orders(client: &mut IBClient) -> Result<OrderDataIterator> {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{IBClient};
+/// use ibapi::client::{Client};
 /// use ibapi::orders;
 ///
 /// fn main() -> anyhow::Result<()> {
-///     let mut client = IBClient::connect("localhost:4002")?;
+///     let mut client = Client::connect("localhost:4002")?;
 ///
 ///     let results = orders::auto_open_orders(&mut client, false)?;
 ///     for order_data in results {
@@ -1663,7 +1663,7 @@ pub fn all_open_orders(client: &mut IBClient) -> Result<OrderDataIterator> {
 ///     Ok(())
 /// }
 /// ```
-pub fn auto_open_orders(client: &mut IBClient, auto_bind: bool) -> Result<OrderDataIterator> {
+pub fn auto_open_orders(client: &mut Client, auto_bind: bool) -> Result<OrderDataIterator> {
     let message = encoders::encode_auto_open_orders(auto_bind)?;
 
     // TODO this should probably not timeout.
@@ -1707,11 +1707,11 @@ pub struct ExecutionFilter {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{IBClient};
+/// use ibapi::client::{Client};
 /// use ibapi::orders::{self, ExecutionFilter};
 ///
 /// fn main() -> anyhow::Result<()> {
-///     let mut client = IBClient::connect("localhost:4002")?;
+///     let mut client = Client::connect("localhost:4002")?;
 ///     
 ///     let filter = ExecutionFilter{
 ///        side: "BUY".to_owned(),
@@ -1726,7 +1726,7 @@ pub struct ExecutionFilter {
 ///     Ok(())
 /// }
 /// ```
-pub fn executions(client: &mut IBClient, filter: ExecutionFilter) -> Result<ExecutionDataIterator> {
+pub fn executions(client: &mut Client, filter: ExecutionFilter) -> Result<ExecutionDataIterator> {
     let request_id = client.next_request_id();
     let message = encoders::encode_executions(client.server_version(), request_id, &filter)?;
 

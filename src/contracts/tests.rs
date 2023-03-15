@@ -13,7 +13,7 @@ fn request_stock_contract_details() {
         ]
     });
 
-    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let contract = Contract::stock("TSLA");
 

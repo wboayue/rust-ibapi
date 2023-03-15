@@ -2,7 +2,7 @@ use anyhow::Result;
 use log::error;
 
 use crate::client::transport::ResponseIterator;
-use crate::client::IBClient;
+use crate::client::Client;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::orders::TagValue;
@@ -20,18 +20,18 @@ mod tests;
 /// This method will provide all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
 ///
 /// # Arguments
-/// * `client` - [IBClient] with an active connection to gateway.
+/// * `client` - [Client] with an active connection to gateway.
 /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
 ///
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::IBClient;
+/// use ibapi::client::Client;
 /// use ibapi::contracts::{self, Contract};
 /// use ibapi::market_data::{realtime, BarSize, WhatToShow};
 ///
 /// fn main() -> anyhow::Result<()> {
-///     let mut client = IBClient::connect("localhost:4002")?;
+///     let mut client = Client::connect("localhost:4002")?;
 ///
 ///     let contract = Contract::stock("TSLA");
 ///     let bars = realtime::realtime_bars(&mut client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
@@ -48,7 +48,7 @@ mod tests;
 /// }
 /// ```
 pub fn realtime_bars<'a>(
-    client: &'a mut IBClient,
+    client: &'a mut Client,
     contract: &Contract,
     bar_size: &BarSize,
     what_to_show: &WhatToShow,
@@ -62,18 +62,18 @@ pub fn realtime_bars<'a>(
 /// This method will provide all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
 ///
 /// # Arguments
-/// * `client` - [IBClient] with an active connection to gateway.
+/// * `client` - [Client] with an active connection to gateway.
 /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
 ///
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::IBClient;
+/// use ibapi::client::Client;
 /// use ibapi::contracts::{self, Contract};
 /// use ibapi::market_data::{realtime, BarSize, WhatToShow};
 ///
 /// fn main() -> anyhow::Result<()> {
-///     let mut client = IBClient::connect("localhost:4002")?;
+///     let mut client = Client::connect("localhost:4002")?;
 ///
 ///     let contract = Contract::stock("TSLA");
 ///     let bars = realtime::realtime_bars(&mut client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
@@ -90,7 +90,7 @@ pub fn realtime_bars<'a>(
 /// }
 /// ```
 pub fn realtime_bars_with_options<'a>(
-    client: &'a mut IBClient,
+    client: &'a mut Client,
     contract: &Contract,
     bar_size: &BarSize,
     what_to_show: &WhatToShow,
@@ -117,12 +117,12 @@ pub fn realtime_bars_with_options<'a>(
 /// Requests tick by tick AllLast ticks.
 ///
 /// # Arguments
-/// * `client` - [IBClient] with an active connection to gateway.
+/// * `client` - [Client] with an active connection to gateway.
 /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
 /// * `number_of_ticks` - number of ticks.
 /// * `ignore_size` - ignore size flag.
 pub fn tick_by_tick_all_last<'a>(
-    client: &'a mut IBClient,
+    client: &'a mut Client,
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
@@ -143,7 +143,7 @@ pub fn tick_by_tick_all_last<'a>(
 }
 
 // Validates that server supports the given request.
-fn validate_tick_by_tick_request(client: &IBClient, _contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> anyhow::Result<()> {
+fn validate_tick_by_tick_request(client: &Client, _contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> anyhow::Result<()> {
     client.check_server_version(server_versions::TICK_BY_TICK, "It does not support tick-by-tick requests.")?;
 
     if number_of_ticks != 0 || ignore_size {
@@ -164,7 +164,7 @@ fn validate_tick_by_tick_request(client: &IBClient, _contract: &Contract, number
 /// * `number_of_ticks` - number of ticks.
 /// * `ignore_size` - ignore size flag.
 pub fn tick_by_tick_last<'a>(
-    client: &'a mut IBClient,
+    client: &'a mut Client,
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
@@ -187,16 +187,11 @@ pub fn tick_by_tick_last<'a>(
 /// Requests tick by tick BidAsk ticks.
 ///
 /// # Arguments
-/// * `client` - [IBClient] with an active connection to gateway.
+/// * `client` - [Client] with an active connection to gateway.
 /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
 /// * `number_of_ticks` - number of ticks.
 /// * `ignore_size` - ignore size flag.
-pub fn tick_by_tick_bid_ask<'a>(
-    client: &'a mut IBClient,
-    contract: &Contract,
-    number_of_ticks: i32,
-    ignore_size: bool,
-) -> Result<BidAskIterator<'a>> {
+pub fn tick_by_tick_bid_ask<'a>(client: &'a mut Client, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<BidAskIterator<'a>> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -215,12 +210,12 @@ pub fn tick_by_tick_bid_ask<'a>(
 /// Requests tick by tick MidPoint ticks.
 ///
 /// # Arguments
-/// * `client` - [IBClient] with an active connection to gateway.
+/// * `client` - [Client] with an active connection to gateway.
 /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
 /// * `number_of_ticks` - number of ticks.
 /// * `ignore_size` - ignore size flag.
 pub fn tick_by_tick_midpoint<'a>(
-    client: &'a mut IBClient,
+    client: &'a mut Client,
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
@@ -244,13 +239,13 @@ pub fn tick_by_tick_midpoint<'a>(
 
 /// RealTimeBarIterator supports iteration over [RealTimeBar] ticks.
 pub struct RealTimeBarIterator<'a> {
-    client: &'a mut IBClient,
+    client: &'a mut Client,
     request_id: i32,
     responses: ResponseIterator,
 }
 
 impl<'a> RealTimeBarIterator<'a> {
-    fn new(client: &'a mut IBClient, request_id: i32, responses: ResponseIterator) -> RealTimeBarIterator<'a> {
+    fn new(client: &'a mut Client, request_id: i32, responses: ResponseIterator) -> RealTimeBarIterator<'a> {
         RealTimeBarIterator {
             client,
             request_id,
@@ -304,7 +299,7 @@ impl<'a> Drop for RealTimeBarIterator<'a> {
 
 /// TradeIterator supports iteration over [Trade] ticks.
 pub struct TradeIterator<'a> {
-    client: &'a mut IBClient,
+    client: &'a mut Client,
     request_id: i32,
     responses: ResponseIterator,
 }
@@ -338,13 +333,13 @@ impl<'a> Iterator for TradeIterator<'a> {
 
 /// BidAskIterator supports iteration over [BidAsk] ticks.
 pub struct BidAskIterator<'a> {
-    client: &'a mut IBClient,
+    client: &'a mut Client,
     request_id: i32,
     responses: ResponseIterator,
 }
 
 /// Cancels the tick by tick request
-fn cancel_tick_by_tick(client: &mut IBClient, request_id: i32) {
+fn cancel_tick_by_tick(client: &mut Client, request_id: i32) {
     if client.server_version() >= server_versions::TICK_BY_TICK {
         let message = encoders::cancel_tick_by_tick(request_id).unwrap();
         client.send_message(message).unwrap();
@@ -380,7 +375,7 @@ impl<'a> Iterator for BidAskIterator<'a> {
 
 /// MidPointIterator supports iteration over [MidPoint] ticks.
 pub struct MidPointIterator<'a> {
-    client: &'a mut IBClient,
+    client: &'a mut Client,
     request_id: i32,
     responses: ResponseIterator,
 }

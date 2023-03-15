@@ -18,7 +18,7 @@ fn place_order() {
         ]
     });
 
-    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let contract = Contract {
         symbol: "TSLA".to_owned(),
@@ -302,7 +302,7 @@ fn cancel_order() {
         ],
     });
 
-    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let order_id = 41;
     let results = super::cancel_order(&mut client, order_id, "");
@@ -341,7 +341,7 @@ fn global_cancel() {
         response_messages: vec![],
     });
 
-    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let results = super::global_cancel(&mut client);
 
@@ -358,7 +358,7 @@ fn next_valid_order_id() {
         response_messages: vec!["9|1|43||".to_owned()],
     });
 
-    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let results = super::next_valid_order_id(&mut client);
 
@@ -380,7 +380,7 @@ fn completed_orders() {
         ],
     });
 
-    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let api_only = true;
     let results = super::completed_orders(&mut client, api_only);
@@ -513,7 +513,7 @@ fn open_orders() {
         response_messages: vec!["9|1|43||".to_owned()],
     });
 
-    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let results = super::open_orders(&mut client);
 
@@ -531,7 +531,7 @@ fn all_open_orders() {
         response_messages: vec!["9|1|43||".to_owned()],
     });
 
-    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let results = super::all_open_orders(&mut client);
 
@@ -549,7 +549,7 @@ fn auto_open_orders() {
         response_messages: vec!["9|1|43||".to_owned()],
     });
 
-    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let api_only = true;
     let results = super::auto_open_orders(&mut client, api_only);
@@ -568,7 +568,7 @@ fn executions() {
         response_messages: vec!["9|1|43||".to_owned()],
     });
 
-    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let filter = ExecutionFilter {
         client_id: Some(100),
@@ -599,7 +599,7 @@ fn encode_limit_order() {
         response_messages: vec![],
     });
 
-    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let order_id = 12;
     let contract = contract_samples::future_with_local_symbol();
@@ -624,7 +624,7 @@ fn encode_combo_market_order() {
         response_messages: vec![],
     });
 
-    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let order_id = 12; // get next order id
     let contract = contract_samples::smart_future_combo_contract();

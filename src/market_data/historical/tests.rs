@@ -9,7 +9,7 @@ fn test_head_timestamp() {
         response_messages: vec!["9|1|43||".to_owned()],
     });
 
-    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     // client.response_packets = VecDeque::from([ResponseMessage::from("10\x0000\x00cc")]);
 

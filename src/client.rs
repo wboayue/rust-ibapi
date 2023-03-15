@@ -19,7 +19,7 @@ const UNSET_DOUBLE: &str = "1.7976931348623157E308";
 const UNSET_INTEGER: &str = "2147483647";
 const UNSET_LONG: &str = "9223372036854775807";
 
-pub struct IBClient {
+pub struct Client {
     /// IB server version
     pub server_version: i32,
     /// IB Server time
@@ -35,7 +35,7 @@ pub struct IBClient {
     order_id: i32,        // Next available order_id. Starts with value returned on connection.
 }
 
-impl IBClient {
+impl Client {
     /// Establishes connection to TWS or Gateway
     ///
     /// Connects to server using the given connection string
@@ -47,10 +47,10 @@ impl IBClient {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::client::{IBClient};
+    /// use ibapi::client::{Client};
     ///
     /// fn main() -> anyhow::Result<()> {
-    ///     let mut client = IBClient::connect("localhost:4002")?;
+    ///     let mut client = Client::connect("localhost:4002")?;
     ///
     ///     println!("server_version: {}", client.server_version());
     ///     println!("server_time: {}", client.server_time());
@@ -60,15 +60,15 @@ impl IBClient {
     ///     Ok(())
     /// }
     /// ```
-    pub fn connect(connection_string: &str) -> Result<IBClient> {
+    pub fn connect(connection_string: &str) -> Result<Client> {
         debug!("connecting to server with #{:?}", connection_string);
 
         let message_bus = Box::new(TcpMessageBus::connect(connection_string)?);
-        IBClient::do_connect(message_bus)
+        Client::do_connect(message_bus)
     }
 
-    fn do_connect(message_bus: Box<dyn MessageBus>) -> Result<IBClient> {
-        let mut client = IBClient {
+    fn do_connect(message_bus: Box<dyn MessageBus>) -> Result<Client> {
+        let mut client = Client {
             server_version: 0,
             server_time: String::from(""),
             next_valid_order_id: 0,
@@ -89,8 +89,8 @@ impl IBClient {
     }
 
     #[cfg(test)]
-    pub(crate) fn stubbed(message_bus: Box<dyn MessageBus>, server_version: i32) -> IBClient {
-        IBClient {
+    pub(crate) fn stubbed(message_bus: Box<dyn MessageBus>, server_version: i32) -> Client {
+        Client {
             server_version: server_version,
             server_time: String::from(""),
             next_valid_order_id: 0,
@@ -253,15 +253,15 @@ impl IBClient {
     }
 }
 
-impl Drop for IBClient {
+impl Drop for Client {
     fn drop(&mut self) {
         info!("dropping basic client")
     }
 }
 
-impl fmt::Debug for IBClient {
+impl fmt::Debug for Client {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("IbClient")
+        f.debug_struct("Client")
             .field("server_version", &self.server_version)
             .field("server_time", &self.server_time)
             .field("client_id", &self.client_id)

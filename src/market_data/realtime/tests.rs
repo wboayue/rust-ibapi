@@ -13,7 +13,7 @@ fn realtime_bars() {
         response_messages: vec!["50|3|9001|1678323335|4028.75|4029.00|4028.25|4028.50|2|4026.75|1|".to_owned()],
     });
 
-    let mut client = IBClient::stubbed(message_bus, server_versions::SIZE_RULES);
+    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let contract = contract_samples::future_with_local_symbol();
     let bar_size = BarSize::Secs5;

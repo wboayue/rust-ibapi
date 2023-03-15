@@ -12,10 +12,10 @@
 //! Fast and easy queue abstraction.
 //!```no_run
 //!     use anyhow;
-//!     use ibapi::client::IBClient;     
+//!     use ibapi::client::Client;     
 //!     
 //!     fn main() -> anyhow::Result<()> {
-//!         let client = IBClient::connect("localhost:4002:100")?;
+//!         let client = Client::connect("localhost:4002:100")?;
 //!         println!("Client: {:?}", client);
 //!         Ok(())
 //!     }
