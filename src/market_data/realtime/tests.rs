@@ -1,10 +1,10 @@
 use time::OffsetDateTime;
 
 use super::*;
-use crate::client::ToField;
 use crate::contracts::contract_samples;
 use crate::messages::OutgoingMessages;
 use crate::stubs::MessageBusStub;
+use crate::ToField;
 
 #[test]
 fn realtime_bars() {

@@ -1,5 +1,5 @@
 use std::convert::From;
-use std::fmt::{self, Debug, Display};
+use std::fmt::{self, Debug};
 
 use anyhow::{anyhow, Result};
 use log::{error, info};
@@ -9,6 +9,7 @@ use crate::client::{Client, RequestMessage, ResponseMessage};
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
+use crate::{encode_option_field, ToField};
 
 mod decoders;
 mod encoders;
@@ -593,6 +594,12 @@ pub enum Action {
     SellLong,
 }
 
+impl ToField for Action {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
 impl ToString for Action {
     fn to_string(&self) -> String {
         match self {
@@ -636,6 +643,18 @@ pub enum Rule80A {
     IndividualPT,
     AgencyPT,
     AgentOtherMemberPT,
+}
+
+impl ToField for Rule80A {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToField for Option<Rule80A> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
 }
 
 impl ToString for Rule80A {
@@ -690,6 +709,18 @@ pub enum OrderCondition {
     Execution = 5,
     Volume = 6,
     PercentChange = 7,
+}
+
+impl ToField for OrderCondition {
+    fn to_field(&self) -> String {
+        (*self as u8).to_string()
+    }
+}
+
+impl ToField for Option<OrderCondition> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
 }
 
 impl From<i32> for OrderCondition {
@@ -771,6 +802,18 @@ pub struct OrderState {
 pub enum OrderOpenClose {
     Open,
     Close,
+}
+
+impl ToField for OrderOpenClose {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToField for Option<OrderOpenClose> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
 }
 
 impl ToString for OrderOpenClose {

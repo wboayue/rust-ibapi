@@ -7,11 +7,8 @@ use log::{debug, error, info};
 use time::OffsetDateTime;
 
 use self::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
-use crate::contracts::{ComboLegOpenClose, SecurityType};
-use crate::market_data::WhatToShow;
 use crate::messages::{order_id_index, request_id_index, IncomingMessages, OutgoingMessages};
-use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A, TagValue};
-use crate::server_versions;
+use crate::{server_versions, ToField};
 
 pub(crate) mod transport;
 
@@ -339,10 +336,6 @@ impl Index<usize> for RequestMessage {
     }
 }
 
-pub trait ToField {
-    fn to_field(&self) -> String;
-}
-
 #[derive(Clone, Default, Debug)]
 pub struct ResponseMessage {
     pub i: usize,
@@ -521,141 +514,6 @@ impl ResponseMessage {
         let mut data = self.fields.join("\0");
         data.push('\0');
         data
-    }
-}
-
-impl ToField for bool {
-    fn to_field(&self) -> String {
-        if *self {
-            String::from("1")
-        } else {
-            String::from("0")
-        }
-    }
-}
-
-impl ToField for String {
-    fn to_field(&self) -> String {
-        self.clone()
-    }
-}
-
-impl ToField for &str {
-    fn to_field(&self) -> String {
-        <&str>::clone(self).to_string()
-    }
-}
-
-impl ToField for usize {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToField for i32 {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToField for Option<i32> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
-}
-
-impl ToField for f64 {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToField for Option<f64> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
-}
-
-impl ToField for SecurityType {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToField for Option<SecurityType> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
-}
-
-impl ToField for OutgoingMessages {
-    fn to_field(&self) -> String {
-        (*self as i32).to_string()
-    }
-}
-
-impl ToField for Action {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToField for ComboLegOpenClose {
-    fn to_field(&self) -> String {
-        (*self as u8).to_string()
-    }
-}
-
-impl ToField for OrderOpenClose {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToField for Option<OrderOpenClose> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
-}
-
-impl ToField for Rule80A {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToField for Option<Rule80A> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
-}
-
-impl ToField for OrderCondition {
-    fn to_field(&self) -> String {
-        (*self as u8).to_string()
-    }
-}
-
-impl ToField for Option<OrderCondition> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
-}
-
-fn encode_option_field<T: ToField>(val: &Option<T>) -> String {
-    match val {
-        Some(val) => val.to_field(),
-        None => String::from(""),
-    }
-}
-
-impl ToField for Vec<TagValue> {
-    fn to_field(&self) -> String {
-        let mut values = Vec::new();
-        for tag_value in self {
-            values.push(format!("{}={};", tag_value.tag, tag_value.value))
-        }
-        values.concat()
     }
 }
 

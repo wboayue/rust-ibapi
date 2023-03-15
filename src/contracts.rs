@@ -6,8 +6,9 @@ use anyhow::{anyhow, Result};
 use log::{error, info};
 
 use crate::client::{Client, RequestMessage};
+use crate::encode_option_field;
 use crate::messages::IncomingMessages;
-use crate::server_versions;
+use crate::{server_versions, ToField};
 
 mod decoders;
 mod encoders;
@@ -47,6 +48,18 @@ pub enum SecurityType {
     News,
     /// Mutual fund
     MutualFund,
+}
+
+impl ToField for SecurityType {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToField for Option<SecurityType> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
 }
 
 impl ToString for SecurityType {
@@ -214,6 +227,12 @@ pub enum ComboLegOpenClose {
     Unknown = 3,
 }
 
+impl ToField for ComboLegOpenClose {
+    fn to_field(&self) -> String {
+        (*self as u8).to_string()
+    }
+}
+
 impl From<i32> for ComboLegOpenClose {
     // TODO - verify these values
     fn from(val: i32) -> Self {
@@ -336,6 +355,16 @@ pub struct ContractDetails {
 pub struct TagValue {
     pub tag: String,
     pub value: String,
+}
+
+impl ToField for Vec<TagValue> {
+    fn to_field(&self) -> String {
+        let mut values = Vec::new();
+        for tag_value in self {
+            values.push(format!("{}={};", tag_value.tag, tag_value.value))
+        }
+        values.concat()
+    }
 }
 
 // API
