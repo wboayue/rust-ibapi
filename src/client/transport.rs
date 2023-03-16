@@ -326,10 +326,11 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<()> {
         if server_version >= server_versions::ADVANCED_ORDER_REJECT {
             advanced_order_reject_json = packet.next_string()?;
         }
-        error!(
+        debug!(
             "request_id: {}, error_code: {}, error_message: {}, advanced_order_reject_json: {}",
             request_id, error_code, error_message, advanced_order_reject_json
         );
+        println!("[{error_code}] {error_message}");
         Ok(())
     }
 }
