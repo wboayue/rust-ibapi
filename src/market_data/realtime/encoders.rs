@@ -111,7 +111,7 @@ pub fn cancel_tick_by_tick(request_id: i32) -> Result<RequestMessage> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{client::ToField, contracts::contract_samples};
+    use crate::{contracts::contract_samples, ToField};
 
     use super::*;
 

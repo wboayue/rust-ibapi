@@ -1,11 +1,9 @@
 use std::collections::HashMap;
-use std::io::prelude::*;
-use std::io::Cursor;
+use std::io::{prelude::*, Cursor};
 use std::iter::Iterator;
 use std::net::TcpStream;
 use std::sync::{Arc, RwLock};
-use std::thread;
-use std::thread::JoinHandle;
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use anyhow::Result;
@@ -25,11 +23,11 @@ pub trait MessageBus {
 
     fn write_message(&mut self, packet: &RequestMessage) -> Result<()>;
 
-    fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
-    fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise>;
-    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise>;
-    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise>;
-    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise>;
+    fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator>;
+    fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator>;
+    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator>;
+    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator>;
+    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator>;
 
     fn write(&mut self, packet: &str) -> Result<()>;
 
@@ -128,13 +126,13 @@ impl MessageBus for TcpMessageBus {
         read_packet(&self.reader)
     }
 
-    fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponsePacketPromise> {
+    fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator> {
         let (sender, receiver) = channel::unbounded();
 
         self.add_request(request_id, sender)?;
         self.write_message(packet)?;
 
-        Ok(ResponsePacketPromise::new(
+        Ok(ResponseIterator::new(
             receiver,
             self.signals_send.clone(),
             Some(request_id),
@@ -143,13 +141,13 @@ impl MessageBus for TcpMessageBus {
         ))
     }
 
-    fn send_order_message(&mut self, order_id: i32, message: &RequestMessage) -> Result<ResponsePacketPromise> {
+    fn send_order_message(&mut self, order_id: i32, message: &RequestMessage) -> Result<ResponseIterator> {
         let (sender, receiver) = channel::unbounded();
 
         self.add_order(order_id, sender)?;
         self.write_message(message)?;
 
-        Ok(ResponsePacketPromise::new(
+        Ok(ResponseIterator::new(
             receiver,
             self.signals_send.clone(),
             None,
@@ -158,19 +156,19 @@ impl MessageBus for TcpMessageBus {
         ))
     }
 
-    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise> {
+    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator> {
         self.write_message(message)?;
-        Ok(GlobalResponsePacketPromise::new(Arc::clone(&self.globals.order_ids_out)))
+        Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.order_ids_out)))
     }
 
-    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise> {
+    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator> {
         self.write_message(message)?;
-        Ok(GlobalResponsePacketPromise::new(Arc::clone(&self.globals.open_orders_out)))
+        Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.open_orders_out)))
     }
 
-    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponsePacketPromise> {
+    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator> {
         self.write_message(message)?;
-        Ok(GlobalResponsePacketPromise::new(Arc::clone(&self.globals.recv_market_rule)))
+        Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.recv_market_rule)))
     }
 
     fn write_message(&mut self, message: &RequestMessage) -> Result<()> {
@@ -231,11 +229,11 @@ impl MessageBus for TcpMessageBus {
                     Signal::Request(request_id) => {
                         requests.remove(&request_id);
                         debug!("released request_id {}, requests.len()={}", request_id, requests.len());
-                    },
+                    }
                     Signal::Order(order_id) => {
                         orders.remove(&order_id);
                         debug!("released order_id {}, orders.len()={}", order_id, requests.len());
-                    },
+                    }
                 }
             }
         });
@@ -490,11 +488,10 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         let senders = self.data.read().unwrap();
         senders.len()
     }
-
 }
 
 #[derive(Debug)]
-pub struct ResponsePacketPromise {
+pub struct ResponseIterator {
     messages: Receiver<ResponseMessage>, // for client to receive incoming messages
     signals: Sender<Signal>,             // for client to signal termination
     request_id: Option<i32>,             // initiating request_id
@@ -502,7 +499,7 @@ pub struct ResponsePacketPromise {
     timeout: Duration,                   // How long to wait for next message
 }
 
-impl ResponsePacketPromise {
+impl ResponseIterator {
     pub fn new(
         messages: Receiver<ResponseMessage>,
         signals: Sender<Signal>,
@@ -510,7 +507,7 @@ impl ResponsePacketPromise {
         order_id: Option<i32>,
         timeout: Duration,
     ) -> Self {
-        ResponsePacketPromise {
+        ResponseIterator {
             messages,
             signals,
             request_id,
@@ -520,7 +517,7 @@ impl ResponsePacketPromise {
     }
 }
 
-impl Drop for ResponsePacketPromise {
+impl Drop for ResponseIterator {
     fn drop(&mut self) {
         if let Some(request_id) = self.request_id {
             self.signals.send(Signal::Request(request_id)).unwrap();
@@ -532,7 +529,7 @@ impl Drop for ResponsePacketPromise {
     }
 }
 
-impl Iterator for ResponsePacketPromise {
+impl Iterator for ResponseIterator {
     type Item = ResponseMessage;
     fn next(&mut self) -> Option<Self::Item> {
         match self.messages.recv_timeout(self.timeout) {
@@ -546,17 +543,17 @@ impl Iterator for ResponsePacketPromise {
 }
 
 #[derive(Debug)]
-pub struct GlobalResponsePacketPromise {
+pub struct GlobalResponseIterator {
     messages: Arc<Receiver<ResponseMessage>>,
 }
 
-impl GlobalResponsePacketPromise {
+impl GlobalResponseIterator {
     pub fn new(messages: Arc<Receiver<ResponseMessage>>) -> Self {
         Self { messages }
     }
 }
 
-impl Iterator for GlobalResponsePacketPromise {
+impl Iterator for GlobalResponseIterator {
     type Item = ResponseMessage;
     fn next(&mut self) -> Option<Self::Item> {
         match self.messages.recv_timeout(Duration::from_secs(5)) {

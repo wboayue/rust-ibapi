@@ -1,7 +1,7 @@
 use clap::{arg, Command};
 use log::info;
 
-use ibapi::client::IBClient;
+use ibapi::client::Client;
 use ibapi::contracts;
 
 fn main() -> anyhow::Result<()> {
@@ -18,7 +18,7 @@ fn main() -> anyhow::Result<()> {
     let connection_string = matches.get_one::<String>("connection_string").expect("connection_string is required");
     let market_rule_id = matches.get_one::<i32>("market_rule_id").expect("market rule id is required");
 
-    let mut client = IBClient::connect(connection_string)?;
+    let mut client = Client::connect(connection_string)?;
 
     info!("connected {client:?}, using: {connection_string}");
 

@@ -1,6 +1,6 @@
 use time::OffsetDateTime;
 
-use crate::client::ToField;
+use crate::ToField;
 
 pub mod historical;
 pub mod realtime;

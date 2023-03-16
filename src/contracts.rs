@@ -6,8 +6,9 @@ use anyhow::{anyhow, Result};
 use log::{error, info};
 
 use crate::client::{Client, RequestMessage};
+use crate::encode_option_field;
 use crate::messages::IncomingMessages;
-use crate::server_versions;
+use crate::{server_versions, ToField};
 
 mod decoders;
 mod encoders;
@@ -47,6 +48,18 @@ pub enum SecurityType {
     News,
     /// Mutual fund
     MutualFund,
+}
+
+impl ToField for SecurityType {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToField for Option<SecurityType> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
 }
 
 impl ToString for SecurityType {
@@ -214,6 +227,12 @@ pub enum ComboLegOpenClose {
     Unknown = 3,
 }
 
+impl ToField for ComboLegOpenClose {
+    fn to_field(&self) -> String {
+        (*self as u8).to_string()
+    }
+}
+
 impl From<i32> for ComboLegOpenClose {
     // TODO - verify these values
     fn from(val: i32) -> Self {
@@ -338,6 +357,16 @@ pub struct TagValue {
     pub value: String,
 }
 
+impl ToField for Vec<TagValue> {
+    fn to_field(&self) -> String {
+        let mut values = Vec::new();
+        for tag_value in self {
+            values.push(format!("{}={};", tag_value.tag, tag_value.value))
+        }
+        values.concat()
+    }
+}
+
 // API
 
 /// Requests contract information.
@@ -351,11 +380,11 @@ pub struct TagValue {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::IBClient;
+/// use ibapi::client::Client;
 /// use ibapi::contracts::{self, Contract};
 ///
 /// fn main() -> anyhow::Result<()> {
-///     let mut client = IBClient::connect("localhost:4002")?;
+///     let mut client = Client::connect("localhost:4002")?;
 ///
 ///     let contract = Contract::stock("TSLA");
 ///     let results = contracts::contract_details(&mut client, &contract)?;
@@ -367,7 +396,7 @@ pub struct TagValue {
 ///     Ok(())
 /// }
 /// ```
-pub fn contract_details<C: Client + Debug>(client: &mut C, contract: &Contract) -> Result<Vec<ContractDetails>> {
+pub fn contract_details(client: &mut Client, contract: &Contract) -> Result<Vec<ContractDetails>> {
     verify_contract(client, contract)?;
 
     let request_id = client.next_request_id();
@@ -400,7 +429,7 @@ pub fn contract_details<C: Client + Debug>(client: &mut C, contract: &Contract) 
     Ok(contract_details)
 }
 
-fn verify_contract<C: Client + Debug>(client: &mut C, contract: &Contract) -> Result<()> {
+fn verify_contract(client: &mut Client, contract: &Contract) -> Result<()> {
     if !contract.security_id_type.is_empty() || !contract.security_id.is_empty() {
         client.check_server_version(
             server_versions::SEC_ID_TYPE,
@@ -448,11 +477,11 @@ pub struct ContractDescription {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::IBClient;
+/// use ibapi::client::Client;
 /// use ibapi::contracts;
 ///
 /// fn main() -> anyhow::Result<()> {
-///     let mut client = IBClient::connect("localhost:4002")?;
+///     let mut client = Client::connect("localhost:4002")?;
 ///
 ///     let contracts = contracts::matching_symbols(&mut client, "IB")?;
 ///
@@ -463,7 +492,7 @@ pub struct ContractDescription {
 ///     Ok(())
 /// }
 /// ```
-pub fn matching_symbols<C: Client + Debug>(client: &mut C, pattern: &str) -> Result<Vec<ContractDescription>> {
+pub fn matching_symbols(client: &mut Client, pattern: &str) -> Result<Vec<ContractDescription>> {
     client.check_server_version(server_versions::REQ_MATCHING_SYMBOLS, "It does not support mathing symbols requests.")?;
 
     let request_id = client.next_request_id();
@@ -506,7 +535,7 @@ pub struct PriceIncrement {
 ///
 /// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
 /// A list of market rule ids can be obtained by invoking [request_contract_details] on a particular contract. The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [ContractDetails].
-pub fn market_rule<C: Client + Debug>(client: &mut C, market_rule_id: i32) -> Result<MarketRule> {
+pub fn market_rule(client: &mut Client, market_rule_id: i32) -> Result<MarketRule> {
     client.check_server_version(server_versions::MARKET_RULES, "It does not support market rule requests.")?;
 
     let request = encoders::request_market_rule(market_rule_id)?;

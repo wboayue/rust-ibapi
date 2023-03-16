@@ -1,7 +1,7 @@
 use clap::{arg, ArgMatches, Command};
 use log::{debug, info};
 
-use ibapi::client::{Client, IBClient};
+use ibapi::client::Client;
 use ibapi::contracts::Contract;
 use ibapi::orders::{self, order_builder, OrderNotification};
 
@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
 
     println!("connection_string: {connection_string}, stock_symbol: {stock_symbol}");
 
-    let mut client = IBClient::connect("odin:4002")?;
+    let mut client = Client::connect("odin:4002")?;
 
     info!("Connected {client:?}");
 

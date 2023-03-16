@@ -6,12 +6,9 @@ use anyhow::{anyhow, Result};
 use log::{debug, error, info};
 use time::OffsetDateTime;
 
-use self::transport::{GlobalResponsePacketPromise, MessageBus, ResponsePacketPromise, TcpMessageBus};
-use crate::contracts::{ComboLegOpenClose, SecurityType};
-use crate::market_data::WhatToShow;
+use self::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::messages::{order_id_index, request_id_index, IncomingMessages, OutgoingMessages};
-use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A, TagValue};
-use crate::server_versions;
+use crate::{server_versions, ToField};
 
 pub(crate) mod transport;
 
@@ -22,38 +19,7 @@ const UNSET_DOUBLE: &str = "1.7976931348623157E308";
 const UNSET_INTEGER: &str = "2147483647";
 const UNSET_LONG: &str = "9223372036854775807";
 
-pub trait Client {
-    /// Returns the next request ID.
-    fn next_request_id(&mut self) -> i32;
-    /// Returns the next order ID. Set at connection time then incremented on each call.
-    fn next_order_id(&mut self) -> i32;
-    /// Sets the current value of order ID.
-    fn set_next_order_id(&mut self, order_id: i32) -> i32;
-    /// Returns the server version.
-    fn server_version(&self) -> i32;
-    /// Returns the server time at connection time.
-    fn server_time(&self) -> String;
-    /// Returns the managed accounts.
-    fn managed_accounts(&self) -> String;
-    /// Sends a message without an expected reply.
-    fn send_message(&mut self, packet: RequestMessage) -> Result<()>;
-    /// Sends a request and waits for reply.
-    fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
-    /// Submits an order and waits for reply.
-    fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise>;
-
-    /// Sends request for the next valid order id.
-    fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise>;
-    /// Sends request for open orders.
-    fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise>;
-    /// Sends request for market rule.
-    fn request_market_rule(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise>;
-
-    /// Ensures server is at least the requested version.
-    fn check_server_version(&self, version: i32, message: &str) -> Result<()>;
-}
-
-pub struct IBClient {
+pub struct Client {
     /// IB server version
     pub server_version: i32,
     /// IB Server time
@@ -69,7 +35,7 @@ pub struct IBClient {
     order_id: i32,        // Next available order_id. Starts with value returned on connection.
 }
 
-impl IBClient {
+impl Client {
     /// Establishes connection to TWS or Gateway
     ///
     /// Connects to server using the given connection string
@@ -81,10 +47,10 @@ impl IBClient {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::client::{IBClient, Client};
+    /// use ibapi::client::{Client};
     ///
     /// fn main() -> anyhow::Result<()> {
-    ///     let mut client = IBClient::connect("localhost:4002")?;
+    ///     let mut client = Client::connect("localhost:4002")?;
     ///
     ///     println!("server_version: {}", client.server_version());
     ///     println!("server_time: {}", client.server_time());
@@ -94,15 +60,15 @@ impl IBClient {
     ///     Ok(())
     /// }
     /// ```
-    pub fn connect(connection_string: &str) -> Result<IBClient> {
+    pub fn connect(connection_string: &str) -> Result<Client> {
         debug!("connecting to server with #{:?}", connection_string);
 
         let message_bus = Box::new(TcpMessageBus::connect(connection_string)?);
-        IBClient::do_connect(message_bus)
+        Client::do_connect(message_bus)
     }
 
-    fn do_connect(message_bus: Box<dyn MessageBus>) -> Result<IBClient> {
-        let mut client = IBClient {
+    fn do_connect(message_bus: Box<dyn MessageBus>) -> Result<Client> {
+        let mut client = Client {
             server_version: 0,
             server_time: String::from(""),
             next_valid_order_id: 0,
@@ -123,8 +89,8 @@ impl IBClient {
     }
 
     #[cfg(test)]
-    pub(crate) fn stubbed(message_bus: Box<dyn MessageBus>, server_version: i32) -> IBClient {
-        IBClient {
+    pub(crate) fn stubbed(message_bus: Box<dyn MessageBus>, server_version: i32) -> Client {
+        Client {
             server_version: server_version,
             server_time: String::from(""),
             next_valid_order_id: 0,
@@ -213,79 +179,72 @@ impl IBClient {
 
         Ok(())
     }
-}
 
-impl Drop for IBClient {
-    fn drop(&mut self) {
-        info!("dropping basic client")
-    }
-}
-
-impl Client for IBClient {
+    // Old Client interface
     /// Returns the next request ID.
-    fn next_request_id(&mut self) -> i32 {
+    pub fn next_request_id(&mut self) -> i32 {
         let request_id = self.next_request_id;
         self.next_request_id += 1;
         request_id
     }
 
     /// Returns and increments the order ID.
-    fn next_order_id(&mut self) -> i32 {
+    pub fn next_order_id(&mut self) -> i32 {
         let order_id = self.order_id;
         self.order_id += 1;
         order_id
     }
 
     /// Sets the current value of order ID.
-    fn set_next_order_id(&mut self, order_id: i32) -> i32 {
+    pub(crate) fn set_next_order_id(&mut self, order_id: i32) -> i32 {
         self.order_id = order_id;
         self.order_id
     }
 
-    fn server_version(&self) -> i32 {
+    pub fn server_version(&self) -> i32 {
         self.server_version
     }
 
     /// Returns the server version.
-    fn server_time(&self) -> String {
+    pub fn server_time(&self) -> String {
         self.server_time.to_owned()
     }
 
     /// Returns the managed accounts.
-    fn managed_accounts(&self) -> String {
+    pub fn managed_accounts(&self) -> String {
         self.managed_accounts.to_owned()
     }
 
-    fn send_message(&mut self, packet: RequestMessage) -> Result<()> {
+    pub(crate) fn send_message(&mut self, packet: RequestMessage) -> Result<()> {
         self.message_bus.write_message(&packet)
     }
 
-    fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
+    pub(crate) fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator> {
         debug!("send_message({:?}, {:?})", request_id, message);
         self.message_bus.send_generic_message(request_id, &message)
     }
 
-    fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponsePacketPromise> {
+    pub(crate) fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponseIterator> {
         debug!("send_order({:?}, {:?})", order_id, message);
         self.message_bus.send_order_message(order_id, &message)
     }
 
     /// Sends request for the next valid order id.
-    fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+    pub(crate) fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
         self.message_bus.request_next_order_id(&message)
     }
 
     /// Sends request for open orders.
-    fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+    pub(crate) fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
         self.message_bus.request_open_orders(&message)
     }
 
     /// Sends request for market rule.
-    fn request_market_rule(&mut self, message: RequestMessage) -> Result<GlobalResponsePacketPromise> {
+    pub(crate) fn request_market_rule(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
         self.message_bus.request_market_rule(&message)
     }
 
-    fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
+    pub(crate) fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
         if version <= self.server_version {
             Ok(())
         } else {
@@ -294,9 +253,15 @@ impl Client for IBClient {
     }
 }
 
-impl fmt::Debug for IBClient {
+impl Drop for Client {
+    fn drop(&mut self) {
+        info!("dropping basic client")
+    }
+}
+
+impl fmt::Debug for Client {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("IbClient")
+        f.debug_struct("Client")
             .field("server_version", &self.server_version)
             .field("server_time", &self.server_time)
             .field("client_id", &self.client_id)
@@ -329,6 +294,12 @@ impl RequestMessage {
         data.push('\0');
         data
     }
+
+    pub(crate) fn encode_simple(&self) -> String {
+        let mut data = self.fields.join("|");
+        data.push('|');
+        data
+    }
 }
 
 impl Index<usize> for RequestMessage {
@@ -337,10 +308,6 @@ impl Index<usize> for RequestMessage {
     fn index(&self, i: usize) -> &Self::Output {
         &self.fields[i]
     }
-}
-
-pub trait ToField {
-    fn to_field(&self) -> String;
 }
 
 #[derive(Clone, Default, Debug)]
@@ -524,143 +491,5 @@ impl ResponseMessage {
     }
 }
 
-impl ToField for bool {
-    fn to_field(&self) -> String {
-        if *self {
-            String::from("1")
-        } else {
-            String::from("0")
-        }
-    }
-}
-
-impl ToField for String {
-    fn to_field(&self) -> String {
-        self.clone()
-    }
-}
-
-impl ToField for &str {
-    fn to_field(&self) -> String {
-        <&str>::clone(self).to_string()
-    }
-}
-
-impl ToField for usize {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToField for i32 {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToField for Option<i32> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
-}
-
-impl ToField for f64 {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToField for Option<f64> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
-}
-
-impl ToField for SecurityType {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToField for Option<SecurityType> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
-}
-
-impl ToField for OutgoingMessages {
-    fn to_field(&self) -> String {
-        (*self as i32).to_string()
-    }
-}
-
-impl ToField for Action {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToField for ComboLegOpenClose {
-    fn to_field(&self) -> String {
-        (*self as u8).to_string()
-    }
-}
-
-impl ToField for OrderOpenClose {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToField for Option<OrderOpenClose> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
-}
-
-impl ToField for Rule80A {
-    fn to_field(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl ToField for Option<Rule80A> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
-}
-
-impl ToField for OrderCondition {
-    fn to_field(&self) -> String {
-        (*self as u8).to_string()
-    }
-}
-
-impl ToField for Option<OrderCondition> {
-    fn to_field(&self) -> String {
-        encode_option_field(self)
-    }
-}
-
-fn encode_option_field<T: ToField>(val: &Option<T>) -> String {
-    match val {
-        Some(val) => val.to_field(),
-        None => String::from(""),
-    }
-}
-
-impl ToField for Vec<TagValue> {
-    fn to_field(&self) -> String {
-        let mut values = Vec::new();
-        for tag_value in self {
-            values.push(format!("{}={};", tag_value.tag, tag_value.value))
-        }
-        values.concat()
-    }
-}
-
 #[cfg(test)]
 mod tests;
-
-#[cfg(test)]
-pub(crate) mod stub;

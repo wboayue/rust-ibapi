@@ -12,10 +12,10 @@
 //! Fast and easy queue abstraction.
 //!```no_run
 //!     use anyhow;
-//!     use ibapi::client::IBClient;     
+//!     use ibapi::client::Client;     
 //!     
 //!     fn main() -> anyhow::Result<()> {
-//!         let client = IBClient::connect("localhost:4002:100")?;
+//!         let client = Client::connect("localhost:4002:100")?;
 //!         println!("Client: {:?}", client);
 //!         Ok(())
 //!     }
@@ -47,3 +47,67 @@ mod messages;
 mod server_versions;
 
 pub(crate) mod stubs;
+
+// TODO make public to crate only
+pub trait ToField {
+    fn to_field(&self) -> String;
+}
+
+impl ToField for bool {
+    fn to_field(&self) -> String {
+        if *self {
+            String::from("1")
+        } else {
+            String::from("0")
+        }
+    }
+}
+
+impl ToField for String {
+    fn to_field(&self) -> String {
+        self.clone()
+    }
+}
+
+impl ToField for &str {
+    fn to_field(&self) -> String {
+        <&str>::clone(self).to_string()
+    }
+}
+
+impl ToField for usize {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToField for i32 {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToField for Option<i32> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
+impl ToField for f64 {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToField for Option<f64> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
+fn encode_option_field<T: ToField>(val: &Option<T>) -> String {
+    match val {
+        Some(val) => val.to_field(),
+        None => String::from(""),
+    }
+}

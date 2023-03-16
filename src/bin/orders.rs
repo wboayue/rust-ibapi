@@ -2,7 +2,7 @@ use anyhow::Ok;
 use clap::builder::PossibleValue;
 use clap::{arg, Command};
 
-use ibapi::client::IBClient;
+use ibapi::client::Client;
 use ibapi::orders::{self, OrderDataIterator};
 
 fn main() -> anyhow::Result<()> {
@@ -22,7 +22,7 @@ fn main() -> anyhow::Result<()> {
     let connection_string = matches.get_one::<String>("connection_string").unwrap();
     let order_type = matches.get_one::<String>("TYPE").unwrap();
 
-    let mut client = IBClient::connect(connection_string)?;
+    let mut client = Client::connect(connection_string)?;
 
     match order_type.as_str() {
         "open" => {
