@@ -1,5 +1,5 @@
 [![Build](https://github.com/wboayue/rust-ibapi/workflows/ci/badge.svg)](https://github.com/wboayue/rust-ibapi/actions/workflows/ci.yml)
-[![License:MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License:MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 <!-- [![codecov](https://codecov.io/gh/wboayue/ibapi/branch/main/graph/badge.svg)](https://codecov.io/gh/wboayue/ibapi) -->
 
@@ -9,13 +9,11 @@ An implementation of the Interactive Brokers API for Rust. There are other Rust 
 algorithmic trading solutions.
 
 
-
 https://github.com/xd009642/tarpaulin
 coveralls
 
 https://interactivebrokers.github.io/tws-api/introduction.html
 
-RUST_LOG=debug 
 
 // https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EClient.cs
 // https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EDecoder.cs#L733
@@ -33,9 +31,14 @@ cargo install cargo-tarpaulin
 cargo tarpaulin -o html
 ```
 
-# Debugging
+# Troubleshooting
+
+## Logs
+RUST_LOG=debug 
 
 `IBAPI_RECORDING_DIR`
+
+## Message spy
 
 IBAPI_RECORDING_DIR=/tmp
 ```
