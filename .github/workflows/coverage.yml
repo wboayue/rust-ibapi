@@ -1,0 +1,27 @@
+name: coverage
+
+on:
+  workflow_run:
+      workflows:
+        - build
+      branches:
+        # - main
+        - "*"
+      types:
+        - completed
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+      - name: coverage
+        # run: cargo run --release -- tarpaulin --engine llvm --follow-exec --post-test-delay 10 --coveralls ${{ secrets.COVERALLS_TOKEN }} 
+        run: cargo run --release -- tarpaulin --engine llvm --follow-exec --post-test-delay 10

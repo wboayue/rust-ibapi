@@ -25,16 +25,6 @@ jobs:
       - name: Build
         run: cargo build --verbose
 
-      - name: Run Tests
-        run: cargo test --verbose
-        env:
-          CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
-          RUSTDOCFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
-
-      - name: rust-grcov
-        uses: actions-rs/grcov@v0.1.5
-
       - name: Generate test result and coverage report
         run: |
           mkdir test-results;
@@ -46,31 +36,3 @@ jobs:
         with:
           paths: test-results/**/*.xml
         if: always()
-
-      - name: Codecov
-        # You may pin to the exact commit or the version.
-        # uses: codecov/codecov-action@81cd2dc8148241f03f5839d295e000b8f761e378
-        uses: codecov/codecov-action@v3.1.0
-        with:
-          # Repository upload token - get it from codecov.io. Required only for private repositories
-          # token: # optional
-          # Specify whether the Codecov output should be verbose
-          verbose: true
-          fail_ci_if_error: true
-
-  coverage:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-      - name: Install Rust
-        run: rustup update stable
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-      - name: Generate code coverage
-        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
-      # - name: Upload coverage to Codecov
-      #   uses: codecov/codecov-action@v3
-      #   with:
-      #     files: lcov.info
-      #     fail_ci_if_error: true
