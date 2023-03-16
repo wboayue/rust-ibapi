@@ -1,9 +1,15 @@
-# rust-ibapi
-An implementation of the Interactive Brokers API for Rust
+[![Build](https://github.com/wboayue/rust-ibapi/workflows/ci/badge.svg)](https://github.com/wboayue/rust-ibapi/actions/workflows/ci.yml)
+[![License:MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-[![test](https://github.com/wboayue/rust-ibapi/workflows/ci/badge.svg)](https://github.com/wboayue/rust-ibapi/actions/workflows/ci.yml)
 <!-- [![codecov](https://codecov.io/gh/wboayue/ibapi/branch/main/graph/badge.svg)](https://codecov.io/gh/wboayue/ibapi) -->
 
+# Introduction
+
+An implementation of the Interactive Brokers API for Rust
+
+# https://github.com/xd009642/tarpaulin
+
+coveralls
 
 https://interactivebrokers.github.io/tws-api/introduction.html
 
