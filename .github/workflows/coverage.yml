@@ -24,6 +24,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly
+      - name: install tarpaulin
+        run: cargo install cargo-tarpaulin
       - name: coverage
-        # run: cargo run --release -- tarpaulin --engine llvm --follow-exec --post-test-delay 10 --coveralls ${{ secrets.COVERALLS_TOKEN }} 
-        run: cargo run --release -- tarpaulin --engine llvm --follow-exec --post-test-delay 10
+        # run: cargo tarpaulin --engine llvm --follow-exec --post-test-delay 10 --coveralls ${{ secrets.COVERALLS_TOKEN }} 
+        run: cargo tarpaulin --engine llvm --follow-exec --post-test-delay 10
