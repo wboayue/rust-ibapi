@@ -1,3 +1,5 @@
+use crate::ToField;
+
 #[derive(Debug, PartialEq)]
 pub enum IncomingMessages {
     NotValid = -1,
@@ -277,4 +279,10 @@ pub enum OutgoingMessages {
     ReqWshEventData = 102,
     CancelWshEventData = 103,
     ReqUserInfo = 104,
+}
+
+impl ToField for OutgoingMessages {
+    fn to_field(&self) -> String {
+        (*self as i32).to_string()
+    }
 }

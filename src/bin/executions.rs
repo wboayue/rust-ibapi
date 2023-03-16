@@ -1,7 +1,7 @@
 use anyhow::Ok;
 use clap::{arg, Command};
 
-use ibapi::client::IBClient;
+use ibapi::client::Client;
 use ibapi::orders::{self, ExecutionFilter};
 
 fn main() -> anyhow::Result<()> {
@@ -53,7 +53,7 @@ fn main() -> anyhow::Result<()> {
         filter.side = side.to_owned();
     }
 
-    let mut client = IBClient::connect(connection_string)?;
+    let mut client = Client::connect(connection_string)?;
 
     let executions = orders::executions(&mut client, filter)?;
     for execution in executions {

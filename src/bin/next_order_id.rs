@@ -1,6 +1,6 @@
 use clap::{arg, Command};
 
-use ibapi::client::IBClient;
+use ibapi::client::Client;
 use ibapi::orders;
 
 fn main() -> anyhow::Result<()> {
@@ -15,7 +15,7 @@ fn main() -> anyhow::Result<()> {
 
     let connection_string = matches.get_one::<String>("connection_string").unwrap();
 
-    let mut client = IBClient::connect(connection_string)?;
+    let mut client = Client::connect(connection_string)?;
 
     let order_id = orders::next_valid_order_id(&mut client)?;
     println!("Next valid order id: {order_id}");

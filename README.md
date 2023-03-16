@@ -1,6 +1,10 @@
 # rust-ibapi
 An implementation of the Interactive Brokers API for Rust
 
+[![test](https://github.com/wboayue/rust-ibapi/workflows/ci/badge.svg)](https://github.com/wboayue/rust-ibapi/actions/workflows/ci.yml)
+<!-- [![codecov](https://codecov.io/gh/wboayue/ibapi/branch/main/graph/badge.svg)](https://codecov.io/gh/wboayue/ibapi) -->
+
+
 https://interactivebrokers.github.io/tws-api/introduction.html
 
 RUST_LOG=debug 
