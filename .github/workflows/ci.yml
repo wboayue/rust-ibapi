@@ -25,13 +25,13 @@ jobs:
       - name: Build
         run: cargo build --verbose
 
-      - name: Generate test result and coverage report
+      - name: Generate test results
         run: |
           mkdir test-results;
           cargo install cargo2junit;
           cargo test -- -Z unstable-options --format json | cargo2junit > test-results/tests.xml;
 
-      - name: Create test summary
+      - name: Create Github test summary
         uses: test-summary/action@dist
         with:
           paths: test-results/**/*.xml
