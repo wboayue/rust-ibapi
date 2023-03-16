@@ -5,10 +5,12 @@
 
 # Introduction
 
-An implementation of the Interactive Brokers API for Rust
+An implementation of the Interactive Brokers API for Rust. There are other Rust implementations but the tend to port event driven style of the official Interactive Brokers API. I find code written in a synchronous style easier to understand when implmenting
+algorithmic trading solutions.
 
-# https://github.com/xd009642/tarpaulin
 
+
+https://github.com/xd009642/tarpaulin
 coveralls
 
 https://interactivebrokers.github.io/tws-api/introduction.html
@@ -22,22 +24,13 @@ https://github.com/InteractiveBrokers/tws-api/blob/5cb24aea5cef9d315985a7b13dea7
 
 RUST_LOG=debug cargo run --bin find_contract_details
 
-feat: (new feature for the user, not a new feature for build script)
-fix: (bug fix for the user, not a fix to a build script)
-docs: (changes to the documentation)
-style: (formatting, missing semi colons, etc; no production code change)
-refactor: (refactoring production code, eg. renaming a variable)
-test: (adding missing tests, refactoring tests; no production code change)
-chore: (updating grunt tasks etc; no production code change)
-
 # Run Coverage Report
 
 https://github.com/taiki-e/cargo-llvm-cov
 
 ```bash
-cargo +stable install cargo-llvm-cov --locked
-
-cargo llvm-cov --open
+cargo install cargo-tarpaulin
+cargo tarpaulin -o html
 ```
 
 # Debugging
