@@ -13,48 +13,26 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-
-      - run: cargo test
-
-      - name: Generate test result and coverage report
-        run: |
-          mkdir test-results;
-          cargo install cargo2junit;
-          cargo test -- -Z unstable-options --format json | cargo2junit > test-results/tests.xml;
-      - name: Create test summary
-        uses: test-summary/action@dist
-        with:
-          paths: test-results/**/*.xml
-        if: always()
-      # - name: Test Reporter
-      #   uses: dorny/test-reporter@v1.6.0
-      #   with:
-      #     # artifact: test-results            # artifact name
-      #     name: JUNIT Tests                 # Name of the check run which will be created
-      #     path: test-results/*.xml                     # Path to test results (inside artifact .zip)
-      #     reporter: java-junit              # Format of test results        
-      #   if: always()
-  coverage:
+  build:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
-      - name: Install Rust
-        run: rustup update stable
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-      - name: Generate code coverage
-        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
-      # - name: Upload coverage to Codecov
-      #   uses: codecov/codecov-action@v3
-      #   with:
-      #     files: lcov.info
-      #     fail_ci_if_error: true
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Generate test results
+        run: |
+          mkdir test-results;
+          cargo install cargo2junit;
+          cargo test -- -Z unstable-options --format json | cargo2junit > test-results/tests.xml;
+
+      - name: Create Github test summary
+        uses: test-summary/action@dist
+        with:
+          paths: test-results/**/*.xml
+        if: always()
