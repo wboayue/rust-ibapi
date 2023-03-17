@@ -12,6 +12,18 @@ In progress. Issue list here. Contributions are welcome.
 
 ## Installation
 
+Run the following Cargo command in your project directory:
+
+```bash
+cargo add ibapi
+```
+
+Or add the following line to your Cargo.toml:
+
+```
+ibapi = "0.1.0"
+```
+
 ## Example 
 
 ## Documentation
