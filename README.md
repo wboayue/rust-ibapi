@@ -8,7 +8,7 @@
 An implementation of the Interactive Brokers API for Rust. There are other Rust implementations but the tend to port event driven style of the official Interactive Brokers API. I find code written in a synchronous style easier to understand when implmenting
 algorithmic trading solutions.
 
-In progress. Issue list here. Contributions are welcome.
+In progress. Target: API 10.20. Issue list here. Contributions are welcome.
 
 ## Installation
 
