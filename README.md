@@ -5,11 +5,11 @@
 
 ## Introduction
 
-An implementation of the Interactive Brokers [TWS API](https://interactivebrokers.github.io/tws-api/introduction.html) for Rust. The official TWS API and most independent implementations provide an event driven API. This implementation provides a synchronous API that simplifies the development of trading strategies.
+An implementation of the Interactive Brokers [TWS API](https://interactivebrokers.github.io/tws-api/introduction.html) for Rust. The official TWS API is an event driven API. This implementation provides a synchronous API that simplifies the development of trading strategies.
 
-This is a work in progress and targets support for TWS API 10.20. Primary reference for the implementation was the CSharp code of the [official TWS API](https://github.com/InteractiveBrokers/tws-api-public).
+This is a work in progress and targets support for TWS API 10.20. The primary reference for the implementation is the CSharp code of the [official API](https://github.com/InteractiveBrokers/tws-api-public).
 
-List of open issues are tracked [here](https://github.com/wboayue/rust-ibapi/issues). If you run into an issue or need a missing feature, check the [issues list](https://github.com/wboayue/rust-ibapi/issues) first and report the issue if it's not tracked.
+List of open issues are tracked [here](https://github.com/wboayue/rust-ibapi/issues). If you run into an issue or need a missing feature, check the [issues list](https://github.com/wboayue/rust-ibapi/issues) first and report the issue if it is not already tracked.
 
 Contributions are welcome. Open a pull request.
 
@@ -32,13 +32,3 @@ ibapi = "0.1.0"
 ## Documentation
 
 API documentation is located [here](https://docs.rs/ibapi/0.1.0/ibapi)
-
-## Troubleshooting
-
-`RUST_LOG=debug` 
-
-`IBAPI_RECORDING_DIR`
-
-## Message spy
-
-`IBAPI_RECORDING_DIR=/tmp`
