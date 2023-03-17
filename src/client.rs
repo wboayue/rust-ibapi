@@ -21,12 +21,10 @@ const UNSET_LONG: &str = "9223372036854775807";
 
 pub struct Client {
     /// IB server version
-    pub server_version: i32,
+    pub(crate) server_version: i32,
     /// IB Server time
     //    pub server_time: OffsetDateTime,
-    pub server_time: String,
-    // Next valid order id
-    pub next_valid_order_id: i32,
+    pub(crate) server_time: String,
 
     managed_accounts: String,
     client_id: i32, // ID of client.
@@ -71,7 +69,6 @@ impl Client {
         let mut client = Client {
             server_version: 0,
             server_time: String::from(""),
-            next_valid_order_id: 0,
             managed_accounts: String::from(""),
             message_bus,
             client_id: 100,
@@ -93,7 +90,6 @@ impl Client {
         Client {
             server_version: server_version,
             server_time: String::from(""),
-            next_valid_order_id: 0,
             managed_accounts: String::from(""),
             message_bus,
             client_id: 100,
@@ -205,7 +201,7 @@ impl Client {
         self.server_version
     }
 
-    /// Returns the server version.
+    /// The time of the server when the client connected 
     pub fn server_time(&self) -> String {
         self.server_time.to_owned()
     }
