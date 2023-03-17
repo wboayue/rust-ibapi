@@ -19,6 +19,9 @@ const UNSET_DOUBLE: &str = "1.7976931348623157E308";
 const UNSET_INTEGER: &str = "2147483647";
 const UNSET_LONG: &str = "9223372036854775807";
 
+/// TWS API Client. Manages the connection to TWS or Gateway.
+/// Tracks some global information such as server version and server time.
+/// Supports generation of order ids
 pub struct Client {
     /// IB server version
     pub(crate) server_version: i32,
@@ -201,7 +204,7 @@ impl Client {
         self.server_version
     }
 
-    /// The time of the server when the client connected 
+    /// The time of the server when the client connected
     pub fn server_time(&self) -> String {
         self.server_time.to_owned()
     }

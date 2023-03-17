@@ -26,6 +26,9 @@
 //!```
 
 /// TSW API Client.
+///
+/// The Client establishes the connection to TWS or the Gateway.
+/// It manages the routing of messages between TWS and the application.
 pub mod client;
 
 /// Describes primary data structures used by the model.
