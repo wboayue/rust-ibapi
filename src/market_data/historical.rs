@@ -16,7 +16,7 @@ use crate::server_versions;
 ///     use anyhow::Result;
 ///     use ibapi::client::Client;
 ///     use ibapi::contracts::{self, Contract};
-///     use ibapi::market_data::historical;
+///     //use ibapi::market_data::historical;
 ///
 ///     fn main() -> Result<()> {
 ///         let mut client = Client::connect("localhost:4002")?;
@@ -25,10 +25,10 @@ use crate::server_versions;
 ///         let what_to_show = "trades";
 ///         let use_rth = true;
 ///
-///         let result =
-///             historical::head_timestamp(&mut client, &contract, what_to_show, use_rth);
+///         //let result =
+///         //    historical::head_timestamp(&mut client, &contract, what_to_show, use_rth);
 ///
-///         print!("head_timestamp: {result:?}");
+///         //print!("head_timestamp: {result:?}");
 ///         Ok(())
 ///     }
 /// ```

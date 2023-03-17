@@ -491,7 +491,7 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
 }
 
 #[derive(Debug)]
-pub struct ResponseIterator {
+pub(crate) struct ResponseIterator {
     messages: Receiver<ResponseMessage>, // for client to receive incoming messages
     signals: Sender<Signal>,             // for client to signal termination
     request_id: Option<i32>,             // initiating request_id
@@ -500,7 +500,7 @@ pub struct ResponseIterator {
 }
 
 impl ResponseIterator {
-    pub fn new(
+    pub(crate) fn new(
         messages: Receiver<ResponseMessage>,
         signals: Sender<Signal>,
         request_id: Option<i32>,
@@ -543,7 +543,7 @@ impl Iterator for ResponseIterator {
 }
 
 #[derive(Debug)]
-pub struct GlobalResponseIterator {
+pub(crate) struct GlobalResponseIterator {
     messages: Arc<Receiver<ResponseMessage>>,
 }
 

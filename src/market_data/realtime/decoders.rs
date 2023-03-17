@@ -6,7 +6,7 @@ use crate::{
     market_data::{BidAsk, BidAskAttribute, MidPoint, RealTimeBar, Trade, TradeAttribute},
 };
 
-pub fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<RealTimeBar> {
+pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<RealTimeBar> {
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
@@ -26,7 +26,7 @@ pub fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<RealTimeBar>
     })
 }
 
-pub fn trade_tick(message: &mut ResponseMessage) -> Result<Trade> {
+pub(crate) fn trade_tick(message: &mut ResponseMessage) -> Result<Trade> {
     message.skip(); // message type
     message.skip(); // message request id
 
@@ -57,7 +57,7 @@ pub fn trade_tick(message: &mut ResponseMessage) -> Result<Trade> {
     })
 }
 
-pub fn bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk> {
+pub(crate) fn bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk> {
     message.skip(); // message type
     message.skip(); // message request id
 
@@ -87,7 +87,7 @@ pub fn bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk> {
     })
 }
 
-pub fn mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint> {
+pub(crate) fn mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint> {
     message.skip(); // message type
     message.skip(); // message request id
 
@@ -104,6 +104,7 @@ pub fn mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint> {
     Ok(MidPoint { time: date, mid_point })
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 
