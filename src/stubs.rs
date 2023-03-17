@@ -6,7 +6,7 @@ use crossbeam::channel;
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator};
 use crate::client::{RequestMessage, ResponseMessage};
 
-pub struct MessageBusStub {
+pub(crate) struct MessageBusStub {
     pub request_messages: Vec<RequestMessage>,
     pub response_messages: Vec<String>,
     // pub next_request_id: i32,

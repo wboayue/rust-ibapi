@@ -48,7 +48,7 @@ pub fn head_timestamp(client: &mut Client, contract: &Contract, what_to_show: &s
 }
 
 /// Encodes the head timestamp request
-pub fn encode_head_timestamp(request_id: i32, contract: &Contract, what_to_show: &str, use_rth: bool) -> Result<RequestMessage> {
+pub(crate) fn encode_head_timestamp(request_id: i32, contract: &Contract, what_to_show: &str, use_rth: bool) -> Result<RequestMessage> {
     let mut packet = RequestMessage::default();
 
     packet.push_field(&12);

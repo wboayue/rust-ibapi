@@ -18,7 +18,7 @@ use recorder::MessageRecorder;
 
 mod recorder;
 
-pub trait MessageBus {
+pub(crate) trait MessageBus {
     fn read_message(&mut self) -> Result<ResponseMessage>;
 
     fn write_message(&mut self, packet: &RequestMessage) -> Result<()>;

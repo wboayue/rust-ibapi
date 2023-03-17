@@ -174,7 +174,7 @@ impl Contract {
         self.security_type == SecurityType::Spread
     }
 
-    pub fn push_fields(&self, message: &mut RequestMessage) {
+    pub(crate) fn push_fields(&self, message: &mut RequestMessage) {
         message.push_field(&self.contract_id);
         message.push_field(&self.symbol);
         message.push_field(&self.security_type);

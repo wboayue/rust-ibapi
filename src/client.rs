@@ -270,7 +270,7 @@ impl fmt::Debug for Client {
 }
 
 #[derive(Default, Debug, Clone)]
-pub struct RequestMessage {
+pub(crate) struct RequestMessage {
     fields: Vec<String>,
 }
 
