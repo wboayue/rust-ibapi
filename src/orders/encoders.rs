@@ -422,7 +422,7 @@ pub(crate) fn encode_next_valid_order_id() -> Result<RequestMessage> {
     Ok(message)
 }
 
-pub(crate)fn encode_completed_orders(api_only: bool) -> Result<RequestMessage> {
+pub(crate) fn encode_completed_orders(api_only: bool) -> Result<RequestMessage> {
     let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::ReqCompletedOrders);

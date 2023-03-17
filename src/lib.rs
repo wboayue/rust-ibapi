@@ -10,7 +10,7 @@
 //! This is a work in progress and targets support for TWS API 10.20. The primary reference for this implementation is the [C# source code](https://github.com/InteractiveBrokers/tws-api-public).
 //!
 //! The initial release focuses on APIs for [contracts](crate::contracts), [realtime data](crate::market_data::realtime) and [order management](crate::orders).
-//! 
+//!
 //! The list of open issues are tracked [here](https://github.com/wboayue/rust-ibapi/issues). If you run into an issue or need a missing feature, check the [issues list](https://github.com/wboayue/rust-ibapi/issues) first and then report the issue if it is not already tracked.
 //!
 //!```no_run
