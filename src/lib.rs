@@ -25,6 +25,8 @@
 //!     }
 //!```
 
+use std::error::Error;
+
 /// TSW API Client.
 ///
 /// The Client establishes the connection to TWS or the Gateway.
@@ -56,6 +58,8 @@ mod messages;
 mod server_versions;
 
 pub(crate) mod stubs;
+
+type IbApiError = Box<dyn Error + Send + 'static>;
 
 pub(crate) trait ToField {
     fn to_field(&self) -> String;
