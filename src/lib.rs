@@ -279,10 +279,10 @@ impl Client {
     /// use ibapi::market_data::{realtime, BarSize, WhatToShow};
     ///
     /// fn main() -> anyhow::Result<()> {
-    ///     let mut client = Client::connect("localhost:4002")?;
+    ///     let client = Client::connect("localhost:4002")?;
     ///
     ///     let contract = Contract::stock("TSLA");
-    ///     let bars = realtime::realtime_bars(&mut client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
+    ///     let bars = client.realtime_bars(&contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
     ///
     ///     for (i, bar) in bars.enumerate().take(60) {
     ///         println!("bar[{i}]: {bar:?}");
@@ -300,6 +300,8 @@ impl Client {
     ) -> Result<RealTimeBarIterator<'a>> {
         realtime::realtime_bars_with_options(&self, contract, bar_size, what_to_show, use_rth, Vec::default())
     }
+
+    // Private interface
 
     pub(crate) fn send_message(&self, packet: RequestMessage) -> Result<()> {
         self.message_bus.borrow_mut().write_message(&packet)
