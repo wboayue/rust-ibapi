@@ -367,7 +367,7 @@ impl Client {
         realtime::realtime_bars_with_options(self, contract, bar_size, what_to_show, use_rth, Vec::default())
     }
 
-    // Private interface
+    // == Internal Use == 
 
     #[cfg(test)]
     pub(crate) fn stubbed(message_bus: RefCell<Box<dyn MessageBus>>, server_version: i32) -> Client {
