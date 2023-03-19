@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
 
     println!("connection_string: {connection_string}, stock_symbol: {stock_symbol}");
 
-    let mut client = Client::connect("odin:4002")?;
+    let client = Client::connect("odin:4002")?;
 
     info!("Connected {client:?}");
 
@@ -41,7 +41,7 @@ fn main() -> anyhow::Result<()> {
 
     println!("contract: {contract:?}, order: {order:?}");
 
-    let results = orders::place_order(&mut client, order_id, &contract, &order)?;
+    let results = client.place_order(order_id, &contract, &order)?;
 
     for status in results {
         match status {

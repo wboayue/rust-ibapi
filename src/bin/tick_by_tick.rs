@@ -24,7 +24,7 @@ fn main() -> anyhow::Result<()> {
     let connection_string = matches.get_one::<String>("connection_string").expect("connection_string is required");
     println!("connection_string: {connection_string}");
 
-    let mut client = Client::connect(&connection_string)?;
+    let mut client = Client::connect(connection_string)?;
 
     if let Some(symbol) = matches.get_one::<String>("last") {
         stream_last(&mut client, &symbol.to_uppercase())?;

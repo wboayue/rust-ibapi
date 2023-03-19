@@ -2,7 +2,7 @@ use anyhow::Ok;
 use clap::builder::PossibleValue;
 use clap::{arg, Command};
 
-use ibapi::orders::{self, OrderDataIterator};
+use ibapi::orders::{self, OrderDataResult};
 use ibapi::Client;
 
 fn main() -> anyhow::Result<()> {
@@ -22,27 +22,27 @@ fn main() -> anyhow::Result<()> {
     let connection_string = matches.get_one::<String>("connection_string").unwrap();
     let order_type = matches.get_one::<String>("TYPE").unwrap();
 
-    let mut client = Client::connect(connection_string)?;
+    let client = Client::connect(connection_string)?;
 
     match order_type.as_str() {
         "open" => {
             println!("Open orders:");
-            let orders = orders::open_orders(&mut client)?;
+            let orders = client.open_orders()?;
             print_orders(orders);
         }
         "all_open" => {
             println!("All open orders:");
-            let orders = orders::all_open_orders(&mut client)?;
+            let orders = orders::all_open_orders(&client)?;
             print_orders(orders);
         }
         "auto_open" => {
             println!("Auto open orders:");
-            let orders = orders::auto_open_orders(&mut client, false)?;
+            let orders = orders::auto_open_orders(&client, false)?;
             print_orders(orders);
         }
         "completed" => {
             println!("Completed orders:");
-            let orders = orders::completed_orders(&mut client, false)?;
+            let orders = orders::completed_orders(&client, false)?;
             print_orders(orders);
         }
         kind => {
@@ -53,7 +53,7 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn print_orders(orders: OrderDataIterator) {
+fn print_orders(orders: impl Iterator<Item = OrderDataResult>) {
     for order in orders {
         println!("order: {order:?}")
     }

@@ -1007,49 +1007,10 @@ impl fmt::Display for Notice {
     }
 }
 
-/// Submits an [Order].
-///
-/// Submits an [Order] using [Client] for the given [Contract].
-/// Immediately after the order was submitted correctly, the TWS will start sending events concerning the order's activity via IBApi.EWrapper.openOrder and IBApi.EWrapper.orderStatus
-///
-/// # Arguments
-/// * `client` - [Client] used to communicate with server.
-/// * `order_id` - ID for [Order]. Get next valid ID using [Client::next_order_id].
-/// * `contract` - [Contract] to submit order for.
-/// * `order` - [Order] to sumbit.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::{Client};
-/// use ibapi::contracts::Contract;
-/// use ibapi::orders::{self, order_builder, OrderNotification};
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let mut contract = Contract::stock("MSFT");
-///     let order = order_builder::market_order(orders::Action::Buy, 100.0);
-///     let order_id = client.next_order_id();
-///
-///     let notifications = orders::place_order(&mut client, order_id, &contract, &order)?;
-///
-///     for notification in notifications {
-///         match notification {
-///             OrderNotification::OrderStatus(order_status) => {
-///                 println!("order status: {order_status:?}")
-///             }
-///             OrderNotification::OpenOrder(open_order) => println!("open order: {open_order:?}"),
-///             OrderNotification::ExecutionData(execution) => println!("execution: {execution:?}"),
-///             OrderNotification::CommissionReport(report) => println!("commision report: {report:?}"),
-///             OrderNotification::Message(message) => println!("message: {message:?}"),
-///        }
-///     }
-///
-///     Ok(())
-/// }
-/// ```
-pub fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<OrderNotificationIterator> {
+// Submits an Order.
+// After the order is submitted correctly, events will be returned concerning the order's activity.
+// https://interactivebrokers.github.io/tws-api/order_submission.html
+pub(crate) fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<impl Iterator<Item = OrderNotification>> {
     verify_order(client, order, order_id)?;
     verify_order_contract(client, contract, order_id)?;
 
@@ -1063,10 +1024,8 @@ pub fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &
     })
 }
 
-// https://interactivebrokers.github.io/tws-api/order_submission.html
-
-/// Supports iteration over [OrderNotification]
-pub struct OrderNotificationIterator {
+// Supports iteration over OrderNotification
+pub(crate) struct OrderNotificationIterator {
     server_version: i32,
     messages: ResponseIterator,
 }
@@ -1507,7 +1466,7 @@ pub fn next_valid_order_id(client: &mut Client) -> Result<i32> {
 ///     Ok(())
 /// }
 /// ```
-pub fn completed_orders(client: &mut Client, api_only: bool) -> Result<OrderDataIterator> {
+pub fn completed_orders(client: &Client, api_only: bool) -> Result<OrderDataIterator> {
     client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
 
     let message = encoders::encode_completed_orders(api_only)?;
@@ -1579,24 +1538,7 @@ impl Iterator for OrderDataIterator {
 /// # Arguments
 /// * `client` - [Client] used to communicate with server.
 ///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::Client;
-/// use ibapi::orders;
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let results = orders::open_orders(&mut client)?;
-///     for order_data in results {
-///        println!("{order_data:?}")
-///     }
-///
-///     Ok(())
-/// }
-/// ```
-pub fn open_orders(client: &mut Client) -> Result<OrderDataIterator> {
+pub(crate) fn open_orders(client: &Client) -> Result<OrderDataIterator> {
     let message = encoders::encode_open_orders()?;
 
     let messages = client.request_order_data(message)?;
@@ -1630,7 +1572,7 @@ pub fn open_orders(client: &mut Client) -> Result<OrderDataIterator> {
 ///     Ok(())
 /// }
 /// ```
-pub fn all_open_orders(client: &mut Client) -> Result<OrderDataIterator> {
+pub fn all_open_orders(client: &Client) -> Result<OrderDataIterator> {
     let message = encoders::encode_all_open_orders()?;
 
     let messages = client.request_order_data(message)?;
@@ -1664,7 +1606,7 @@ pub fn all_open_orders(client: &mut Client) -> Result<OrderDataIterator> {
 ///     Ok(())
 /// }
 /// ```
-pub fn auto_open_orders(client: &mut Client, auto_bind: bool) -> Result<OrderDataIterator> {
+pub fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<OrderDataIterator> {
     let message = encoders::encode_auto_open_orders(auto_bind)?;
 
     // TODO this should probably not timeout.

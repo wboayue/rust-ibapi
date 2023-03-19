@@ -1,21 +1,10 @@
+use std::collections::VecDeque;
 use std::error::Error;
 
 use ibapi::contracts::Contract;
-use ibapi::market_data::{realtime, BarSize, RealTimeBar, WhatToShow};
-use ibapi::orders::{self, order_builder};
+use ibapi::market_data::{BarSize, RealTimeBar, WhatToShow};
+use ibapi::orders::{order_builder, Action};
 use ibapi::Client;
-
-struct BreakoutPeriod {
-    high: f64,
-    low: f64,
-}
-
-impl BreakoutPeriod {
-    fn ready(&self) -> bool {
-        false
-    }
-    fn consume(&self, bar: &RealTimeBar) {}
-}
 
 fn main() -> Result<(), Box<dyn Error>> {
     let client = Client::connect("localhost:4002")?;
@@ -23,27 +12,61 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let bars = client.realtime_bars(&contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
 
-    let breakout = BreakoutPeriod { high: 0.0, low: 0.0 };
+    let mut breakout = BreakoutPeriod::new(30);
 
     for bar in bars {
         breakout.consume(&bar);
 
-        if !breakout.ready() {
+        // Make sure we have enough data and no stop order is active.
+        if !breakout.ready() || client.open_orders()?.count() > 0 {
             continue;
         }
 
-        if bar.close > breakout.high {
+        // Trade long only
+        if bar.close > breakout.high() {
             let order_id = client.next_order_id();
-            let order = order_builder::market_order(orders::Action::Buy, 100.0);
-            let results = orders::place_order(&client, order_id, &contract, &order)?;
-        }
-
-        if bar.close < breakout.low {
-            let order_id = client.next_order_id();
-            let order = order_builder::trailing_stop(orders::Action::Sell, 100.0, 0.3, bar.close);
-            let results = orders::place_order(&client, order_id, &contract, &order)?;
+            let order = order_builder::market_order(Action::Buy, 100.0);
+            let results = client.place_order(order_id, &contract, &order)?;
         }
     }
 
     Ok(())
+}
+
+struct BreakoutPeriod {
+    highs: VecDeque<f64>,
+    lows: VecDeque<f64>,
+    size: usize,
+}
+
+impl BreakoutPeriod {
+    fn new(size: usize) -> BreakoutPeriod {
+        BreakoutPeriod {
+            highs: VecDeque::with_capacity(size + 1),
+            lows: VecDeque::with_capacity(size + 1),
+            size,
+        }
+    }
+
+    fn ready(&self) -> bool {
+        self.highs.len() >= self.size
+    }
+
+    fn consume(&mut self, bar: &RealTimeBar) {
+        self.highs.push_back(bar.high);
+        self.lows.push_back(bar.low);
+
+        if self.highs.len() > self.size {
+            self.highs.pop_front();
+            self.lows.pop_front();
+        }
+    }
+
+    fn high(&self) -> f64 {
+        *self.highs.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(&1.0)
+    }
+
+    fn low(&self) -> f64 {
+        *self.lows.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(&1.0)
+    }
 }

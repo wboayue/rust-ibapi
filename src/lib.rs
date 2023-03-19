@@ -62,6 +62,7 @@ use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseItera
 use crate::client::RequestMessage;
 use crate::market_data::realtime;
 use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::orders::{Order, OrderDataResult, OrderNotification};
 
 type IbApiError = Box<dyn Error + Send + 'static>;
 
@@ -250,6 +251,84 @@ impl Client {
         self.managed_accounts.to_owned()
     }
 
+    // === Orders ===
+
+    /// Submits an [Order].
+    ///
+    /// Submits an [Order] using [Client] for the given [Contract].
+    /// Immediately after the order was submitted correctly, the TWS will start sending events concerning the order's activity via IBApi.EWrapper.openOrder and IBApi.EWrapper.orderStatus
+    ///
+    /// # Arguments
+    /// * `client` - [Client] used to communicate with server.
+    /// * `order_id` - ID for [Order]. Get next valid ID using [Client::next_order_id].
+    /// * `contract` - [Contract] to submit order for.
+    /// * `order` - [Order] to sumbit.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::{Client};
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::orders::{order_builder, Action, OrderNotification};
+    ///
+    /// fn main() -> anyhow::Result<()> {
+    ///     let client = Client::connect("localhost:4002")?;
+    ///
+    ///     let contract = Contract::stock("MSFT");
+    ///     let order = order_builder::market_order(Action::Buy, 100.0);
+    ///     let order_id = client.next_order_id();
+    ///
+    ///     let notifications = client.place_order(order_id, &contract, &order)?;
+    ///
+    ///     for notification in notifications {
+    ///         match notification {
+    ///             OrderNotification::OrderStatus(order_status) => {
+    ///                 println!("order status: {order_status:?}")
+    ///             }
+    ///             OrderNotification::OpenOrder(open_order) => println!("open order: {open_order:?}"),
+    ///             OrderNotification::ExecutionData(execution) => println!("execution: {execution:?}"),
+    ///             OrderNotification::CommissionReport(report) => println!("commision report: {report:?}"),
+    ///             OrderNotification::Message(message) => println!("message: {message:?}"),
+    ///        }
+    ///     }
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<impl Iterator<Item = OrderNotification>> {
+        orders::place_order(self, order_id, contract, order)
+    }
+
+    /// Requests all open orders places by this specific API client (identified by the API client id).
+    /// For client ID 0, this will bind previous manual TWS orders.
+    ///
+    /// # Arguments
+    /// * `client` - [Client] used to communicate with server.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::error::Error;
+    ///
+    /// use ibapi::Client;
+    ///
+    /// fn main() -> Result<(), Box<dyn Error>> {
+    ///     let client = Client::connect("localhost:4002")?;
+    ///
+    ///     let results = client.open_orders()?;
+    ///     for order_data in results {
+    ///        println!("{order_data:?}")
+    ///     }
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn open_orders(&self) -> Result<impl Iterator<Item = OrderDataResult>> {
+        orders::open_orders(self)
+    }
+
+    // === Market Data ===
+
     /// Requests realtime bars.
     ///
     /// This method will provide all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
@@ -285,7 +364,7 @@ impl Client {
         what_to_show: &WhatToShow,
         use_rth: bool,
     ) -> Result<RealTimeBarIterator<'a>> {
-        realtime::realtime_bars_with_options(&self, contract, bar_size, what_to_show, use_rth, Vec::default())
+        realtime::realtime_bars_with_options(self, contract, bar_size, what_to_show, use_rth, Vec::default())
     }
 
     // Private interface
@@ -323,7 +402,7 @@ impl Client {
     }
 
     /// Sends request for open orders.
-    pub(crate) fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
+    pub(crate) fn request_order_data(&self, message: RequestMessage) -> Result<GlobalResponseIterator> {
         self.message_bus.borrow_mut().request_open_orders(&message)
     }
 
