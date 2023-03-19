@@ -311,7 +311,7 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<()> {
 
     if version < 2 {
         let message = packet.next_string()?;
-        error!("version 2 erorr: {}", message);
+        error!("version 2 error: {}", message);
         Ok(())
     } else {
         let request_id = packet.next_int()?;
@@ -431,7 +431,7 @@ fn process_orders(
         IncomingMessages::CommissionsReport => {
             if let Some(execution_id) = message.execution_id() {
                 if let Err(e) = executions.send(&execution_id, message) {
-                    error!("error sending commision report for execution {}: {}", execution_id, e);
+                    error!("error sending commission report for execution {}: {}", execution_id, e);
                 }
             }
         }

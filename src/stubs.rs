@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
+use std::cell::RefCell;
 
 use crossbeam::channel;
 
@@ -7,7 +8,7 @@ use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseItera
 use crate::client::{RequestMessage, ResponseMessage};
 
 pub(crate) struct MessageBusStub {
-    pub request_messages: Vec<RequestMessage>,
+    pub request_messages: RefCell<Vec<RequestMessage>>,
     pub response_messages: Vec<String>,
     // pub next_request_id: i32,
     // pub server_version: i32,
@@ -16,7 +17,7 @@ pub(crate) struct MessageBusStub {
 
 impl MessageBus for MessageBusStub {
     fn request_messages(&self) -> Vec<RequestMessage> {
-        self.request_messages.clone()
+        self.request_messages.borrow().clone()
     }
 
     fn read_message(&mut self) -> anyhow::Result<ResponseMessage> {
@@ -24,12 +25,12 @@ impl MessageBus for MessageBusStub {
     }
 
     fn write_message(&mut self, message: &RequestMessage) -> anyhow::Result<()> {
-        self.request_messages.push(message.clone());
+        self.request_messages.borrow_mut().push(message.clone());
         Ok(())
     }
 
     fn send_generic_message(&mut self, request_id: i32, message: &RequestMessage) -> anyhow::Result<ResponseIterator> {
-        self.request_messages.push(message.clone());
+        self.request_messages.borrow_mut().push(message.clone());
 
         let (sender, receiver) = channel::unbounded();
         let (s1, r1) = channel::unbounded();
@@ -42,7 +43,7 @@ impl MessageBus for MessageBusStub {
     }
 
     fn send_order_message(&mut self, request_id: i32, message: &RequestMessage) -> anyhow::Result<ResponseIterator> {
-        self.request_messages.push(message.clone());
+        self.request_messages.borrow_mut().push(message.clone());
 
         let (sender, receiver) = channel::unbounded();
         let (s1, r1) = channel::unbounded();
@@ -55,7 +56,7 @@ impl MessageBus for MessageBusStub {
     }
 
     fn request_next_order_id(&mut self, message: &RequestMessage) -> anyhow::Result<GlobalResponseIterator> {
-        self.request_messages.push(message.clone());
+        self.request_messages.borrow_mut().push(message.clone());
 
         let (sender, receiver) = channel::unbounded();
 
@@ -67,7 +68,7 @@ impl MessageBus for MessageBusStub {
     }
 
     fn request_open_orders(&mut self, message: &RequestMessage) -> anyhow::Result<GlobalResponseIterator> {
-        self.request_messages.push(message.clone());
+        self.request_messages.borrow_mut().push(message.clone());
 
         let (sender, receiver) = channel::unbounded();
 
@@ -79,7 +80,7 @@ impl MessageBus for MessageBusStub {
     }
 
     fn request_market_rule(&mut self, message: &RequestMessage) -> anyhow::Result<GlobalResponseIterator> {
-        self.request_messages.push(message.clone());
+        self.request_messages.borrow_mut().push(message.clone());
 
         let (sender, receiver) = channel::unbounded();
 

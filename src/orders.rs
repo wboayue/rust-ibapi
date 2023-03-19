@@ -1048,7 +1048,7 @@ impl fmt::Display for Notice {
 ///     Ok(())
 /// }
 /// ```
-pub fn place_order(client: &mut Client, order_id: i32, contract: &Contract, order: &Order) -> Result<OrderNotificationIterator> {
+pub fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<OrderNotificationIterator> {
     verify_order(client, order, order_id)?;
     verify_order_contract(client, contract, order_id)?;
 
@@ -1097,8 +1097,8 @@ impl Iterator for OrderNotificationIterator {
                         return convert(order_status);
                     }
                     IncomingMessages::ExecutionData => {
-                        let executation_data = decoders::decode_execution_data(self.server_version, &mut message);
-                        return convert(executation_data);
+                        let execution_data = decoders::decode_execution_data(self.server_version, &mut message);
+                        return convert(execution_data);
                     }
                     IncomingMessages::CommissionsReport => {
                         let commission_report = decoders::decode_commission_report(self.server_version, &mut message);
@@ -1109,7 +1109,7 @@ impl Iterator for OrderNotificationIterator {
                         return Some(OrderNotification::Message(message));
                     }
                     message => {
-                        error!("unexpected messsage: {message:?}");
+                        error!("unexpected message: {message:?}");
                     }
                 }
             } else {
@@ -1120,7 +1120,7 @@ impl Iterator for OrderNotificationIterator {
 }
 
 // Verifies that Order is properly formed.
-fn verify_order(client: &mut Client, order: &Order, _order_id: i32) -> Result<()> {
+fn verify_order(client: &Client, order: &Order, _order_id: i32) -> Result<()> {
     let is_bag_order: bool = false; // StringsAreEqual(Constants.BagSecType, contract.SecType)
 
     if order.scale_init_level_size.is_some() || order.scale_price_increment.is_some() {
@@ -1290,7 +1290,7 @@ fn verify_order(client: &mut Client, order: &Order, _order_id: i32) -> Result<()
 }
 
 // Verifies that Contract is properly formed.
-fn verify_order_contract(client: &mut Client, contract: &Contract, _order_id: i32) -> Result<()> {
+fn verify_order_contract(client: &Client, contract: &Contract, _order_id: i32) -> Result<()> {
     if contract
         .combo_legs
         .iter()
