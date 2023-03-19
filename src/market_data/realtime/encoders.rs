@@ -7,7 +7,7 @@ use crate::messages::OutgoingMessages;
 use crate::orders::TagValue;
 use crate::server_versions;
 
-pub fn encode_request_realtime_bars(
+pub(crate) fn encode_request_realtime_bars(
     server_version: i32,
     ticker_id: i32,
     contract: &Contract,
@@ -54,7 +54,7 @@ pub fn encode_request_realtime_bars(
     Ok(packet)
 }
 
-pub fn cancel_realtime_bars(request_id: i32) -> Result<RequestMessage> {
+pub(crate) fn cancel_realtime_bars(request_id: i32) -> Result<RequestMessage> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::default();
@@ -66,7 +66,7 @@ pub fn cancel_realtime_bars(request_id: i32) -> Result<RequestMessage> {
     Ok(message)
 }
 
-pub fn tick_by_tick(
+pub(crate) fn tick_by_tick(
     server_version: i32,
     request_id: i32,
     contract: &Contract,
@@ -100,7 +100,7 @@ pub fn tick_by_tick(
     Ok(message)
 }
 
-pub fn cancel_tick_by_tick(request_id: i32) -> Result<RequestMessage> {
+pub(crate) fn cancel_tick_by_tick(request_id: i32) -> Result<RequestMessage> {
     let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::CancelTickByTickData);

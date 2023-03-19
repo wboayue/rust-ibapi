@@ -1,17 +1,20 @@
+use std::cell::RefCell;
+
 use time::OffsetDateTime;
 
-use super::*;
 use crate::contracts::contract_samples;
 use crate::messages::OutgoingMessages;
 use crate::stubs::MessageBusStub;
 use crate::ToField;
 
+use super::*;
+
 #[test]
 fn realtime_bars() {
-    let message_bus = Box::new(MessageBusStub {
-        request_messages: vec![],
+    let message_bus = RefCell::new(Box::new(MessageBusStub {
+        request_messages: RefCell::new(vec![]),
         response_messages: vec!["50|3|9001|1678323335|4028.75|4029.00|4028.25|4028.50|2|4026.75|1|".to_owned()],
-    });
+    }));
 
     let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
@@ -43,7 +46,7 @@ fn realtime_bars() {
     // Should trigger cancel realtime bars
     drop(bars);
 
-    let request_messages = client.message_bus.request_messages();
+    let request_messages = client.message_bus.borrow().request_messages();
 
     // Verify Requests
     let realtime_bars_request = &request_messages[0];

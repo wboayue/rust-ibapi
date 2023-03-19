@@ -1,6 +1,8 @@
 use std::fmt;
 use std::ops::Index;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicI32, Ordering};
+use std::cell::RefCell;
 
 use anyhow::{anyhow, Result};
 use log::{debug, error, info};
@@ -19,20 +21,21 @@ const UNSET_DOUBLE: &str = "1.7976931348623157E308";
 const UNSET_INTEGER: &str = "2147483647";
 const UNSET_LONG: &str = "9223372036854775807";
 
+/// TWS API Client. Manages the connection to TWS or Gateway.
+/// Tracks some global information such as server version and server time.
+/// Supports generation of order ids
 pub struct Client {
     /// IB server version
-    pub server_version: i32,
+    pub(crate) server_version: i32,
     /// IB Server time
     //    pub server_time: OffsetDateTime,
-    pub server_time: String,
-    // Next valid order id
-    pub next_valid_order_id: i32,
+    pub(crate) server_time: String,
 
     managed_accounts: String,
     client_id: i32, // ID of client.
-    pub(crate) message_bus: Box<dyn MessageBus>,
-    next_request_id: i32, // Next available request_id.
-    order_id: i32,        // Next available order_id. Starts with value returned on connection.
+    pub(crate) message_bus: RefCell<Box<dyn MessageBus>>,
+    next_request_id: AtomicI32, // Next available request_id.
+    order_id: AtomicI32,        // Next available order_id. Starts with value returned on connection.
 }
 
 impl Client {
@@ -63,55 +66,53 @@ impl Client {
     pub fn connect(connection_string: &str) -> Result<Client> {
         debug!("connecting to server with #{:?}", connection_string);
 
-        let message_bus = Box::new(TcpMessageBus::connect(connection_string)?);
+        let message_bus = RefCell::new(Box::new(TcpMessageBus::connect(connection_string)?));
         Client::do_connect(message_bus)
     }
 
-    fn do_connect(message_bus: Box<dyn MessageBus>) -> Result<Client> {
+    fn do_connect(message_bus: RefCell<Box<dyn MessageBus>>) -> Result<Client> {
         let mut client = Client {
             server_version: 0,
             server_time: String::from(""),
-            next_valid_order_id: 0,
             managed_accounts: String::from(""),
             message_bus,
             client_id: 100,
-            next_request_id: 9000,
-            order_id: -1,
+            next_request_id: AtomicI32::new(9000),
+            order_id: AtomicI32::new(-1),
         };
 
         client.handshake()?;
         client.start_api()?;
         client.receive_account_info()?;
 
-        client.message_bus.process_messages(client.server_version)?;
+        client.message_bus.borrow_mut().process_messages(client.server_version)?;
 
         Ok(client)
     }
 
     #[cfg(test)]
-    pub(crate) fn stubbed(message_bus: Box<dyn MessageBus>, server_version: i32) -> Client {
+    pub(crate) fn stubbed(message_bus: RefCell<Box<dyn MessageBus>>, server_version: i32) -> Client {
         Client {
             server_version: server_version,
             server_time: String::from(""),
-            next_valid_order_id: 0,
             managed_accounts: String::from(""),
             message_bus,
             client_id: 100,
-            next_request_id: 9000,
-            order_id: -1,
+            next_request_id: AtomicI32::new(9000),
+            order_id: AtomicI32::new(-1),
         }
     }
 
     // sends server handshake
     fn handshake(&mut self) -> Result<()> {
-        self.message_bus.write("API\x00")?;
+        self.message_bus.borrow_mut().write("API\x00")?;
 
         let prelude = &mut RequestMessage::new();
         prelude.push_field(&format!("v{MIN_SERVER_VERSION}..{MAX_SERVER_VERSION}"));
 
-        self.message_bus.write_message(prelude)?;
+        self.message_bus.borrow_mut().write_message(prelude)?;
 
-        let mut status = self.message_bus.read_message()?;
+        let mut status = self.message_bus.borrow_mut().read_message()?;
 
         self.server_version = status.next_int()?;
         self.server_time = status.next_string()?;
@@ -133,7 +134,7 @@ impl Client {
             prelude.push_field(&"");
         }
 
-        self.message_bus.write_message(prelude)?;
+        self.message_bus.borrow_mut().write_message(prelude)?;
 
         Ok(())
     }
@@ -146,7 +147,7 @@ impl Client {
         let mut attempts = 0;
         const MAX_ATTEMPTS: i32 = 100;
         loop {
-            let mut message = self.message_bus.read_message()?;
+            let mut message = self.message_bus.borrow_mut().read_message()?;
 
             match message.message_type() {
                 IncomingMessages::NextValidId => {
@@ -155,7 +156,7 @@ impl Client {
                     message.skip(); // message type
                     message.skip(); // message version
 
-                    self.order_id = message.next_int()?;
+                    self.order_id.store(message.next_int()?, Ordering::Relaxed);
                 }
                 IncomingMessages::ManagedAccounts => {
                     saw_managed_accounts = true;
@@ -182,30 +183,25 @@ impl Client {
 
     // Old Client interface
     /// Returns the next request ID.
-    pub fn next_request_id(&mut self) -> i32 {
-        let request_id = self.next_request_id;
-        self.next_request_id += 1;
-        request_id
+    pub fn next_request_id(&self) -> i32 {
+        self.next_request_id.fetch_add(1, Ordering::Relaxed)
     }
 
     /// Returns and increments the order ID.
-    pub fn next_order_id(&mut self) -> i32 {
-        let order_id = self.order_id;
-        self.order_id += 1;
-        order_id
+    pub fn next_order_id(&self) -> i32 {
+        self.order_id.fetch_add(1, Ordering::Relaxed)
     }
 
     /// Sets the current value of order ID.
-    pub(crate) fn set_next_order_id(&mut self, order_id: i32) -> i32 {
-        self.order_id = order_id;
-        self.order_id
+    pub(crate) fn set_next_order_id(&self, order_id: i32) {
+        self.order_id.store(order_id, Ordering::Relaxed)
     }
 
     pub fn server_version(&self) -> i32 {
         self.server_version
     }
 
-    /// Returns the server version.
+    /// The time of the server when the client connected
     pub fn server_time(&self) -> String {
         self.server_time.to_owned()
     }
@@ -215,33 +211,33 @@ impl Client {
         self.managed_accounts.to_owned()
     }
 
-    pub(crate) fn send_message(&mut self, packet: RequestMessage) -> Result<()> {
-        self.message_bus.write_message(&packet)
+    pub(crate) fn send_message(&self, packet: RequestMessage) -> Result<()> {
+        self.message_bus.borrow_mut().write_message(&packet)
     }
 
-    pub(crate) fn send_request(&mut self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator> {
+    pub(crate) fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator> {
         debug!("send_message({:?}, {:?})", request_id, message);
-        self.message_bus.send_generic_message(request_id, &message)
+        self.message_bus.borrow_mut().send_generic_message(request_id, &message)
     }
 
-    pub(crate) fn send_order(&mut self, order_id: i32, message: RequestMessage) -> Result<ResponseIterator> {
+    pub(crate) fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<ResponseIterator> {
         debug!("send_order({:?}, {:?})", order_id, message);
-        self.message_bus.send_order_message(order_id, &message)
+        self.message_bus.borrow_mut().send_order_message(order_id, &message)
     }
 
     /// Sends request for the next valid order id.
     pub(crate) fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
-        self.message_bus.request_next_order_id(&message)
+        self.message_bus.borrow_mut().request_next_order_id(&message)
     }
 
     /// Sends request for open orders.
     pub(crate) fn request_order_data(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
-        self.message_bus.request_open_orders(&message)
+        self.message_bus.borrow_mut().request_open_orders(&message)
     }
 
     /// Sends request for market rule.
     pub(crate) fn request_market_rule(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
-        self.message_bus.request_market_rule(&message)
+        self.message_bus.borrow_mut().request_market_rule(&message)
     }
 
     pub(crate) fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
@@ -270,7 +266,7 @@ impl fmt::Debug for Client {
 }
 
 #[derive(Default, Debug, Clone)]
-pub struct RequestMessage {
+pub(crate) struct RequestMessage {
     fields: Vec<String>,
 }
 
@@ -311,7 +307,7 @@ impl Index<usize> for RequestMessage {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct ResponseMessage {
+pub(crate) struct ResponseMessage {
     pub i: usize,
     pub fields: Vec<String>,
 }

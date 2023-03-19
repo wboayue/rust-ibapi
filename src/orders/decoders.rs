@@ -641,7 +641,7 @@ impl OrderDecoder {
     }
 }
 
-pub fn decode_open_order(server_version: i32, message: ResponseMessage) -> Result<OrderData> {
+pub(crate) fn decode_open_order(server_version: i32, message: ResponseMessage) -> Result<OrderData> {
     let mut decoder = OrderDecoder::new(server_version, message);
 
     // read order id
@@ -722,7 +722,7 @@ pub fn decode_open_order(server_version: i32, message: ResponseMessage) -> Resul
     Ok(decoder.into_order_data())
 }
 
-pub fn decode_order_status(server_version: i32, message: &mut ResponseMessage) -> Result<OrderStatus> {
+pub(crate) fn decode_order_status(server_version: i32, message: &mut ResponseMessage) -> Result<OrderStatus> {
     message.skip(); // message type
 
     if server_version < server_versions::MARKET_CAP_PRICE {
@@ -749,7 +749,7 @@ pub fn decode_order_status(server_version: i32, message: &mut ResponseMessage) -
     Ok(order_status)
 }
 
-pub fn decode_execution_data(server_version: i32, message: &mut ResponseMessage) -> Result<ExecutionData> {
+pub(crate) fn decode_execution_data(server_version: i32, message: &mut ResponseMessage) -> Result<ExecutionData> {
     message.skip(); // message type
 
     if server_version < server_versions::LAST_LIQUIDITY {
@@ -801,7 +801,7 @@ pub fn decode_execution_data(server_version: i32, message: &mut ResponseMessage)
     Ok(execution_data)
 }
 
-pub fn decode_commission_report(_server_version: i32, message: &mut ResponseMessage) -> Result<CommissionReport> {
+pub(crate) fn decode_commission_report(_server_version: i32, message: &mut ResponseMessage) -> Result<CommissionReport> {
     message.skip(); // message type
     message.skip(); // message version
 
@@ -815,7 +815,7 @@ pub fn decode_commission_report(_server_version: i32, message: &mut ResponseMess
     })
 }
 
-pub fn decode_completed_order(server_version: i32, message: ResponseMessage) -> Result<OrderData> {
+pub(crate) fn decode_completed_order(server_version: i32, message: ResponseMessage) -> Result<OrderData> {
     let mut decoder = OrderDecoder::new(server_version, message);
 
     // read contract fields

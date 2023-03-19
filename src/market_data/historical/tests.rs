@@ -1,13 +1,15 @@
+use std::cell::RefCell;
+
 use crate::stubs::MessageBusStub;
 
 use super::*;
 
 #[test]
 fn test_head_timestamp() {
-    let mut message_bus = Box::new(MessageBusStub {
-        request_messages: vec![],
+    let mut message_bus = RefCell::new(Box::new(MessageBusStub {
+        request_messages: RefCell::new(vec![]),
         response_messages: vec!["9|1|43||".to_owned()],
-    });
+    }));
 
     let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 

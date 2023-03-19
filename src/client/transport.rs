@@ -18,7 +18,7 @@ use recorder::MessageRecorder;
 
 mod recorder;
 
-pub trait MessageBus {
+pub(crate) trait MessageBus {
     fn read_message(&mut self) -> Result<ResponseMessage>;
 
     fn write_message(&mut self, packet: &RequestMessage) -> Result<()>;
@@ -311,7 +311,7 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<()> {
 
     if version < 2 {
         let message = packet.next_string()?;
-        error!("version 2 erorr: {}", message);
+        error!("version 2 error: {}", message);
         Ok(())
     } else {
         let request_id = packet.next_int()?;
@@ -431,7 +431,7 @@ fn process_orders(
         IncomingMessages::CommissionsReport => {
             if let Some(execution_id) = message.execution_id() {
                 if let Err(e) = executions.send(&execution_id, message) {
-                    error!("error sending commision report for execution {}: {}", execution_id, e);
+                    error!("error sending commission report for execution {}: {}", execution_id, e);
                 }
             }
         }
@@ -491,7 +491,7 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
 }
 
 #[derive(Debug)]
-pub struct ResponseIterator {
+pub(crate) struct ResponseIterator {
     messages: Receiver<ResponseMessage>, // for client to receive incoming messages
     signals: Sender<Signal>,             // for client to signal termination
     request_id: Option<i32>,             // initiating request_id
@@ -500,7 +500,7 @@ pub struct ResponseIterator {
 }
 
 impl ResponseIterator {
-    pub fn new(
+    pub(crate) fn new(
         messages: Receiver<ResponseMessage>,
         signals: Sender<Signal>,
         request_id: Option<i32>,
@@ -543,7 +543,7 @@ impl Iterator for ResponseIterator {
 }
 
 #[derive(Debug)]
-pub struct GlobalResponseIterator {
+pub(crate) struct GlobalResponseIterator {
     messages: Arc<Receiver<ResponseMessage>>,
 }
 

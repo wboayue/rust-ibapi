@@ -48,7 +48,7 @@ mod tests;
 /// }
 /// ```
 pub fn realtime_bars<'a>(
-    client: &'a mut Client,
+    client: &'a Client,
     contract: &Contract,
     bar_size: &BarSize,
     what_to_show: &WhatToShow,
@@ -90,7 +90,7 @@ pub fn realtime_bars<'a>(
 /// }
 /// ```
 pub fn realtime_bars_with_options<'a>(
-    client: &'a mut Client,
+    client: &'a Client,
     contract: &Contract,
     bar_size: &BarSize,
     what_to_show: &WhatToShow,
@@ -239,13 +239,13 @@ pub fn tick_by_tick_midpoint<'a>(
 
 /// RealTimeBarIterator supports iteration over [RealTimeBar] ticks.
 pub struct RealTimeBarIterator<'a> {
-    client: &'a mut Client,
+    client: &'a Client,
     request_id: i32,
     responses: ResponseIterator,
 }
 
 impl<'a> RealTimeBarIterator<'a> {
-    fn new(client: &'a mut Client, request_id: i32, responses: ResponseIterator) -> RealTimeBarIterator<'a> {
+    fn new(client: &'a Client, request_id: i32, responses: ResponseIterator) -> RealTimeBarIterator<'a> {
         RealTimeBarIterator {
             client,
             request_id,
