@@ -26,7 +26,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         if bar.close > breakout.high() {
             let order_id = client.next_order_id();
             let order = order_builder::market_order(Action::Buy, 100.0);
+
             let results = client.place_order(order_id, &contract, &order)?;
+            for status in results {
+                println!("order status: {status:?}")
+            }
         }
     }
 
@@ -35,7 +39,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 struct BreakoutPeriod {
     highs: VecDeque<f64>,
-    lows: VecDeque<f64>,
     size: usize,
 }
 
@@ -43,7 +46,6 @@ impl BreakoutPeriod {
     fn new(size: usize) -> BreakoutPeriod {
         BreakoutPeriod {
             highs: VecDeque::with_capacity(size + 1),
-            lows: VecDeque::with_capacity(size + 1),
             size,
         }
     }
@@ -54,19 +56,13 @@ impl BreakoutPeriod {
 
     fn consume(&mut self, bar: &RealTimeBar) {
         self.highs.push_back(bar.high);
-        self.lows.push_back(bar.low);
 
         if self.highs.len() > self.size {
             self.highs.pop_front();
-            self.lows.pop_front();
         }
     }
 
     fn high(&self) -> f64 {
         *self.highs.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(&1.0)
-    }
-
-    fn low(&self) -> f64 {
-        *self.lows.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(&1.0)
     }
 }
