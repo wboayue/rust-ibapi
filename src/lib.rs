@@ -143,19 +143,6 @@ impl Client {
         Ok(client)
     }
 
-    #[cfg(test)]
-    pub(crate) fn stubbed(message_bus: RefCell<Box<dyn MessageBus>>, server_version: i32) -> Client {
-        Client {
-            server_version: server_version,
-            server_time: String::from(""),
-            managed_accounts: String::from(""),
-            message_bus,
-            client_id: 100,
-            next_request_id: AtomicI32::new(9000),
-            order_id: AtomicI32::new(-1),
-        }
-    }
-
     // sends server handshake
     fn handshake(&mut self) -> Result<()> {
         self.message_bus.borrow_mut().write("API\x00")?;
@@ -302,6 +289,19 @@ impl Client {
     }
 
     // Private interface
+
+    #[cfg(test)]
+    pub(crate) fn stubbed(message_bus: RefCell<Box<dyn MessageBus>>, server_version: i32) -> Client {
+        Client {
+            server_version: server_version,
+            server_time: String::from(""),
+            managed_accounts: String::from(""),
+            message_bus,
+            client_id: 100,
+            next_request_id: AtomicI32::new(9000),
+            order_id: AtomicI32::new(-1),
+        }
+    }
 
     pub(crate) fn send_message(&self, packet: RequestMessage) -> Result<()> {
         self.message_bus.borrow_mut().write_message(&packet)
