@@ -1,7 +1,7 @@
 use clap::{arg, Command};
 
-use ibapi::Client;
 use ibapi::orders;
+use ibapi::Client;
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();

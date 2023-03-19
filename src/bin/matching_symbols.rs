@@ -1,8 +1,8 @@
 use clap::{arg, Command};
 use log::info;
 
-use ibapi::Client;
 use ibapi::contracts;
+use ibapi::Client;
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();

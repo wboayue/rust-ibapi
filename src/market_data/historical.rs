@@ -3,11 +3,11 @@ use std::fmt::Debug;
 use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
 
-use crate::Client;
 use crate::client::{RequestMessage, ResponseMessage};
 use crate::contracts::Contract;
 use crate::domain::TickAttribBidAsk;
 use crate::server_versions;
+use crate::Client;
 
 // https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EClient.cs
 // https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EDecoder.cs#L733

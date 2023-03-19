@@ -1,9 +1,9 @@
 use std::error::Error;
 
-use ibapi::Client;
-use ibapi::contracts::{Contract};
-use ibapi::market_data::{RealTimeBar, realtime, BarSize, WhatToShow};
+use ibapi::contracts::Contract;
+use ibapi::market_data::{realtime, BarSize, RealTimeBar, WhatToShow};
 use ibapi::orders::{self, order_builder};
+use ibapi::Client;
 
 struct BreakoutPeriod {
     high: f64,
@@ -14,8 +14,7 @@ impl BreakoutPeriod {
     fn ready(&self) -> bool {
         false
     }
-    fn consume(&self, bar: &RealTimeBar) {
-    }
+    fn consume(&self, bar: &RealTimeBar) {}
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -24,10 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let bars = realtime::realtime_bars(&client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
 
-    let breakout = BreakoutPeriod{
-        high: 0.0,
-        low: 0.0,
-    };
+    let breakout = BreakoutPeriod { high: 0.0, low: 0.0 };
 
     for bar in bars {
         breakout.consume(&bar);

@@ -1,8 +1,8 @@
 use anyhow::Ok;
 use clap::{arg, Command};
 
-use ibapi::Client;
 use ibapi::orders::{self, ExecutionFilter};
+use ibapi::Client;
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();

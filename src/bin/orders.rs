@@ -2,8 +2,8 @@ use anyhow::Ok;
 use clap::builder::PossibleValue;
 use clap::{arg, Command};
 
-use ibapi::Client;
 use ibapi::orders::{self, OrderDataIterator};
+use ibapi::Client;
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();

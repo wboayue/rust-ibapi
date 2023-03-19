@@ -5,10 +5,10 @@ use std::string::ToString;
 use anyhow::{anyhow, Result};
 use log::{error, info};
 
-use crate::Client;
-use crate::client::{RequestMessage};
+use crate::client::RequestMessage;
 use crate::encode_option_field;
 use crate::messages::IncomingMessages;
+use crate::Client;
 use crate::{server_versions, ToField};
 
 mod decoders;

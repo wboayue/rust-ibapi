@@ -3,9 +3,9 @@ use std::time::Duration;
 
 use clap::{arg, Command};
 
-use ibapi::Client;
 use ibapi::contracts::Contract;
 use ibapi::market_data::realtime;
+use ibapi::Client;
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();

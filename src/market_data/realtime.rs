@@ -2,11 +2,11 @@ use anyhow::Result;
 use log::error;
 
 use crate::client::transport::ResponseIterator;
-use crate::Client;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::orders::TagValue;
 use crate::server_versions;
+use crate::Client;
 
 use super::{BarSize, BidAsk, MidPoint, RealTimeBar, Trade, WhatToShow};
 

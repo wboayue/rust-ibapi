@@ -4,12 +4,12 @@ use std::fmt::{self, Debug};
 use anyhow::{anyhow, Result};
 use log::{error, info};
 
-use crate::Client;
 use crate::client::transport::{GlobalResponseIterator, ResponseIterator};
 use crate::client::{RequestMessage, ResponseMessage};
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
+use crate::Client;
 use crate::{encode_option_field, ToField};
 
 mod decoders;
