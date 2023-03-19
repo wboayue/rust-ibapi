@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let client = Client::connect("localhost:4002")?;
     let contract = Contract::stock("TSLA");
 
-    let bars = realtime::realtime_bars(&client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
+    let bars = client.realtime_bars(&contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
 
     let breakout = BreakoutPeriod { high: 0.0, low: 0.0 };
 

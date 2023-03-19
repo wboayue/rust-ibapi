@@ -53,10 +53,14 @@ use std::fmt::Debug;
 use std::sync::atomic::{AtomicI32, Ordering};
 
 use anyhow::{anyhow, Result};
+use contracts::Contract;
 use log::{debug, error, info};
+use market_data::realtime::RealTimeBarIterator;
+use market_data::{BarSize, WhatToShow};
 
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::client::RequestMessage;
+use crate::market_data::realtime;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 
 type IbApiError = Box<dyn Error + Send + 'static>;
@@ -230,7 +234,6 @@ impl Client {
         Ok(())
     }
 
-    // Old Client interface
     /// Returns the next request ID.
     pub fn next_request_id(&self) -> i32 {
         self.next_request_id.fetch_add(1, Ordering::Relaxed)
@@ -258,6 +261,44 @@ impl Client {
     /// Returns the managed accounts.
     pub fn managed_accounts(&self) -> String {
         self.managed_accounts.to_owned()
+    }
+
+    /// Requests realtime bars.
+    ///
+    /// This method will provide all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
+    ///
+    /// # Arguments
+    /// * `client` - [Client] with an active connection to gateway.
+    /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::{self, Contract};
+    /// use ibapi::market_data::{realtime, BarSize, WhatToShow};
+    ///
+    /// fn main() -> anyhow::Result<()> {
+    ///     let mut client = Client::connect("localhost:4002")?;
+    ///
+    ///     let contract = Contract::stock("TSLA");
+    ///     let bars = realtime::realtime_bars(&mut client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
+    ///
+    ///     for (i, bar) in bars.enumerate().take(60) {
+    ///         println!("bar[{i}]: {bar:?}");
+    ///     }
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn realtime_bars<'a>(
+        &'a self,
+        contract: &Contract,
+        bar_size: &BarSize,
+        what_to_show: &WhatToShow,
+        use_rth: bool,
+    ) -> Result<RealTimeBarIterator<'a>> {
+        realtime::realtime_bars_with_options(&self, contract, bar_size, what_to_show, use_rth, Vec::default())
     }
 
     pub(crate) fn send_message(&self, packet: RequestMessage) -> Result<()> {
