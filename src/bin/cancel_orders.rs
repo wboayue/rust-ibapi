@@ -1,6 +1,6 @@
 use clap::{arg, Command};
 
-use ibapi::client::Client;
+use ibapi::Client;
 use ibapi::orders;
 
 fn main() -> anyhow::Result<()> {

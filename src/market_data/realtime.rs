@@ -2,7 +2,7 @@ use anyhow::Result;
 use log::error;
 
 use crate::client::transport::ResponseIterator;
-use crate::client::Client;
+use crate::Client;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::orders::TagValue;
@@ -26,7 +26,7 @@ mod tests;
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::Client;
+/// use ibapi::Client;
 /// use ibapi::contracts::{self, Contract};
 /// use ibapi::market_data::{realtime, BarSize, WhatToShow};
 ///
@@ -68,7 +68,7 @@ pub fn realtime_bars<'a>(
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::Client;
+/// use ibapi::Client;
 /// use ibapi::contracts::{self, Contract};
 /// use ibapi::market_data::{realtime, BarSize, WhatToShow};
 ///

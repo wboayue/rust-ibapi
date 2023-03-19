@@ -2,7 +2,7 @@ use anyhow::Ok;
 use clap::builder::PossibleValue;
 use clap::{arg, Command};
 
-use ibapi::client::Client;
+use ibapi::Client;
 use ibapi::orders::{self, OrderDataIterator};
 
 fn main() -> anyhow::Result<()> {

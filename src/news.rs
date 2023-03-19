@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use anyhow::{anyhow, Result};
 
-use crate::{client::Client, domain::NewsProvider};
+use crate::{Client, domain::NewsProvider};
 
 // https://interactivebrokers.github.io/tws-api/news.html
 

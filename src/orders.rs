@@ -4,8 +4,9 @@ use std::fmt::{self, Debug};
 use anyhow::{anyhow, Result};
 use log::{error, info};
 
+use crate::Client;
 use crate::client::transport::{GlobalResponseIterator, ResponseIterator};
-use crate::client::{Client, RequestMessage, ResponseMessage};
+use crate::client::{RequestMessage, ResponseMessage};
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
@@ -1020,7 +1021,7 @@ impl fmt::Display for Notice {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{Client};
+/// use ibapi::{Client};
 /// use ibapi::contracts::Contract;
 /// use ibapi::orders::{self, order_builder, OrderNotification};
 ///
@@ -1337,7 +1338,7 @@ fn verify_order_contract(client: &Client, contract: &Contract, _order_id: i32) -
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{Client};
+/// use ibapi::{Client};
 /// use ibapi::orders;
 ///
 /// fn main() -> anyhow::Result<()> {
@@ -1422,7 +1423,7 @@ impl Iterator for CancelOrderResultIterator {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{Client};
+/// use ibapi::{Client};
 /// use ibapi::orders;
 ///
 /// fn main() -> anyhow::Result<()> {
@@ -1454,7 +1455,7 @@ pub fn global_cancel(client: &mut Client) -> Result<()> {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{Client};
+/// use ibapi::{Client};
 /// use ibapi::orders;
 ///
 /// fn main() -> anyhow::Result<()> {
@@ -1492,7 +1493,7 @@ pub fn next_valid_order_id(client: &mut Client) -> Result<i32> {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{Client};
+/// use ibapi::{Client};
 /// use ibapi::orders;
 ///
 /// fn main() -> anyhow::Result<()> {
@@ -1581,7 +1582,7 @@ impl Iterator for OrderDataIterator {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{Client};
+/// use ibapi::Client;
 /// use ibapi::orders;
 ///
 /// fn main() -> anyhow::Result<()> {
@@ -1615,7 +1616,7 @@ pub fn open_orders(client: &mut Client) -> Result<OrderDataIterator> {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{Client};
+/// use ibapi::{Client};
 /// use ibapi::orders;
 ///
 /// fn main() -> anyhow::Result<()> {
@@ -1649,7 +1650,7 @@ pub fn all_open_orders(client: &mut Client) -> Result<OrderDataIterator> {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{Client};
+/// use ibapi::{Client};
 /// use ibapi::orders;
 ///
 /// fn main() -> anyhow::Result<()> {
@@ -1707,7 +1708,7 @@ pub struct ExecutionFilter {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::{Client};
+/// use ibapi::{Client};
 /// use ibapi::orders::{self, ExecutionFilter};
 ///
 /// fn main() -> anyhow::Result<()> {

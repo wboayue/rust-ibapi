@@ -5,7 +5,8 @@ use std::string::ToString;
 use anyhow::{anyhow, Result};
 use log::{error, info};
 
-use crate::client::{Client, RequestMessage};
+use crate::Client;
+use crate::client::{RequestMessage};
 use crate::encode_option_field;
 use crate::messages::IncomingMessages;
 use crate::{server_versions, ToField};
@@ -203,7 +204,7 @@ pub struct ComboLeg {
     // The destination exchange to which the order will be routed.
     pub exchange: String,
     /// Specifies whether an order is an open or closing order.
-    /// For instituational customers to determine if this order is to open or close a position.
+    /// For institutional customers to determine if this order is to open or close a position.
     pub open_close: ComboLegOpenClose,
     /// For stock legs when doing short selling. Set to 1 = clearing broker, 2 = third party.
     pub short_sale_slot: i32,
@@ -380,7 +381,7 @@ impl ToField for Vec<TagValue> {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::Client;
+/// use ibapi::Client;
 /// use ibapi::contracts::{self, Contract};
 ///
 /// fn main() -> anyhow::Result<()> {
@@ -477,7 +478,7 @@ pub struct ContractDescription {
 /// # Examples
 ///
 /// ```no_run
-/// use ibapi::client::Client;
+/// use ibapi::Client;
 /// use ibapi::contracts;
 ///
 /// fn main() -> anyhow::Result<()> {

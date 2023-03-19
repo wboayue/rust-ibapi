@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use ibapi::client::Client;
+use ibapi::Client;
 use ibapi::contracts::{Contract};
 use ibapi::market_data::{RealTimeBar, realtime, BarSize, WhatToShow};
 use ibapi::orders::{self, order_builder};

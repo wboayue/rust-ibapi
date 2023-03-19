@@ -1,7 +1,7 @@
 use anyhow::Ok;
 use clap::{arg, Command};
 
-use ibapi::client::Client;
+use ibapi::Client;
 use ibapi::orders::{self, ExecutionFilter};
 
 fn main() -> anyhow::Result<()> {

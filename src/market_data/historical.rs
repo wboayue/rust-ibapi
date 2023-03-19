@@ -3,7 +3,8 @@ use std::fmt::Debug;
 use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
 
-use crate::client::{Client, RequestMessage, ResponseMessage};
+use crate::Client;
+use crate::client::{RequestMessage, ResponseMessage};
 use crate::contracts::Contract;
 use crate::domain::TickAttribBidAsk;
 use crate::server_versions;
@@ -14,7 +15,7 @@ use crate::server_versions;
 /// Returns the timestamp of earliest available historical data for a contract and data type.
 /// ```no_run
 ///     use anyhow::Result;
-///     use ibapi::client::Client;
+///     use ibapi::Client;
 ///     use ibapi::contracts::{self, Contract};
 ///     //use ibapi::market_data::historical;
 ///

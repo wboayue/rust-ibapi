@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use clap::{arg, Command};
 
-use ibapi::client::Client;
+use ibapi::Client;
 use ibapi::contracts::Contract;
 use ibapi::market_data::realtime;
 
