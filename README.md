@@ -75,7 +75,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 ### Accounts
 
-* positions
+* [positions](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.positions)
 
 ### Contracts
 

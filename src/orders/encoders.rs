@@ -503,3 +503,6 @@ fn message_version_for(server_version: i32) -> i32 {
         45
     }
 }
+
+#[cfg(test)]
+mod tests;

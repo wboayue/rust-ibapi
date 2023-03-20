@@ -70,3 +70,6 @@ impl MessageRecorder {
         format!("{}/{:04}-response.msg", self.recording_dir, record_id)
     }
 }
+
+#[cfg(test)]
+mod tests;
