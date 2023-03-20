@@ -8,17 +8,19 @@ use ibapi::Client;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let client = Client::connect("localhost:4002")?;
-    let contract = Contract::stock("TSLA");
+
+    let symbol = "TSLA";
+    let contract = Contract::stock(symbol);
 
     let bars = client.realtime_bars(&contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
 
-    let mut breakout = BreakoutPeriod::new(30);
+    let mut breakout = Breakout::new(30);
 
     for bar in bars {
         breakout.consume(&bar);
 
         // Make sure we have enough data and no stop order is active.
-        if !breakout.ready() || client.open_orders()?.count() > 0 {
+        if !breakout.ready() || has_position(&client, symbol) {
             continue;
         }
 
@@ -37,14 +39,22 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-struct BreakoutPeriod {
+fn has_position(client: &Client, symbol: &str) -> bool {
+    if let Ok(mut positions) = client.positions() {
+        positions.find(|p| p.contract.symbol == symbol).is_some()
+    } else {
+        false
+    }
+}
+
+struct Breakout {
     highs: VecDeque<f64>,
     size: usize,
 }
 
-impl BreakoutPeriod {
-    fn new(size: usize) -> BreakoutPeriod {
-        BreakoutPeriod {
+impl Breakout {
+    fn new(size: usize) -> Breakout {
+        Breakout {
             highs: VecDeque::with_capacity(size + 1),
             size,
         }

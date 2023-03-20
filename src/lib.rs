@@ -58,13 +58,14 @@ use log::{debug, error, info};
 use market_data::realtime::RealTimeBarIterator;
 use market_data::{BarSize, WhatToShow};
 
+use crate::accounts::Position;
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::client::RequestMessage;
 use crate::market_data::realtime;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
 
-type IbApiError = Box<dyn Error + Send + 'static>;
+pub type IbApiError = Box<dyn Error + Send>;
 
 // Client
 
@@ -249,6 +250,12 @@ impl Client {
     /// Returns the managed accounts.
     pub fn managed_accounts(&self) -> String {
         self.managed_accounts.to_owned()
+    }
+
+    // === Accounts ===
+
+    pub fn positions(&self) -> core::result::Result<impl Iterator<Item = Position>, IbApiError> {
+        accounts::positions(self)
     }
 
     // === Orders ===
