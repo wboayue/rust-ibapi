@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let bars = client.realtime_bars(&contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
 
-    let mut breakout = Breakout::new(30);
+    let mut breakout = BreakoutChannel::new(30);
 
     for bar in bars {
         breakout.consume(&bar);
@@ -47,14 +47,14 @@ fn has_position(client: &Client, symbol: &str) -> bool {
     }
 }
 
-struct Breakout {
+struct BreakoutChannel {
     highs: VecDeque<f64>,
     size: usize,
 }
 
-impl Breakout {
-    fn new(size: usize) -> Breakout {
-        Breakout {
+impl BreakoutChannel {
+    fn new(size: usize) -> BreakoutChannel {
+        BreakoutChannel {
             highs: VecDeque::with_capacity(size + 1),
             size,
         }

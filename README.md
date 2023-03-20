@@ -13,7 +13,7 @@ The list of open issues are tracked [here](https://github.com/wboayue/rust-ibapi
 
 Contributions are welcome. Open a pull request.
 
-## Example 
+## Example
 
 ```rust
 use std::error::Error;
@@ -70,3 +70,35 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 ```
+
+## Implemented APIs
+
+### Accounts
+
+* positions
+
+### Contracts
+
+* contract_details
+* market_rule
+* matching_symbols
+
+### Market Data
+
+* realtime_bars
+* tick_by_tick_all_last
+* tick_by_tick_bid_ask
+* tick_by_tick_last
+* tick_by_tick_midpoint
+
+### Orders
+
+* all_open_orders
+* auto_open_orders
+* cancel_order
+* completed_orders
+* executions
+* global_cancel
+* next_valid_order_id
+* open_orders
+* place_order
