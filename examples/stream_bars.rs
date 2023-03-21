@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
 
     let client = Client::connect("odin:4002")?;
 
-    let bars = realtime::realtime_bars(&client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
+    let bars = realtime::realtime_bars(&client, &contract, &BarSize::Sec5, &WhatToShow::Trades, false)?;
 
     for (i, bar) in bars.enumerate().take(60) {
         println!("bar: {i:?} {bar:?}");

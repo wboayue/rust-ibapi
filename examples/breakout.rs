@@ -12,9 +12,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let symbol = "TSLA";
     let contract = Contract::stock(symbol);
 
-    let bars = client.realtime_bars(&contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
+    let bars = client.realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, false)?;
 
-    let mut breakout = Breakout::new(30);
+    let mut breakout = BreakoutChannel::new(30);
 
     for bar in bars {
         // One bar will be delivered every tick.
@@ -50,14 +50,14 @@ fn has_position(client: &Client, symbol: &str) -> bool {
     }
 }
 
-struct Breakout {
+struct BreakoutChannel {
     highs: VecDeque<f64>,
     size: usize,
 }
 
-impl Breakout {
-    fn new(size: usize) -> Breakout {
-        Breakout {
+impl BreakoutChannel {
+    fn new(size: usize) -> BreakoutChannel {
+        BreakoutChannel {
             highs: VecDeque::with_capacity(size + 1),
             size,
         }

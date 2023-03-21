@@ -388,7 +388,7 @@ impl Client {
     ///     let client = Client::connect("localhost:4002")?;
     ///
     ///     let contract = Contract::stock("TSLA");
-    ///     let bars = client.realtime_bars(&contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
+    ///     let bars = client.realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, false)?;
     ///
     ///     for (i, bar) in bars.enumerate().take(60) {
     ///         println!("bar[{i}]: {bar:?}");
