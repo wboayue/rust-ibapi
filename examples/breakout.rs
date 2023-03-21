@@ -17,6 +17,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut breakout = Breakout::new(30);
 
     for bar in bars {
+        // One bar will be delivered every tick.
+        // If code here executes longer than bar interval. will receive late bar.
+
         breakout.consume(&bar);
 
         // Make sure we have enough data and no stop order is active.

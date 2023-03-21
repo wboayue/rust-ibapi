@@ -397,7 +397,7 @@ impl ToField for Vec<TagValue> {
 ///     Ok(())
 /// }
 /// ```
-pub fn contract_details(client: &mut Client, contract: &Contract) -> Result<Vec<ContractDetails>> {
+pub fn contract_details(client: &Client, contract: &Contract) -> Result<Vec<ContractDetails>> {
     verify_contract(client, contract)?;
 
     let request_id = client.next_request_id();
@@ -430,7 +430,7 @@ pub fn contract_details(client: &mut Client, contract: &Contract) -> Result<Vec<
     Ok(contract_details)
 }
 
-fn verify_contract(client: &mut Client, contract: &Contract) -> Result<()> {
+fn verify_contract(client: &Client, contract: &Contract) -> Result<()> {
     if !contract.security_id_type.is_empty() || !contract.security_id.is_empty() {
         client.check_server_version(
             server_versions::SEC_ID_TYPE,

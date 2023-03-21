@@ -53,7 +53,7 @@ use std::fmt::Debug;
 use std::sync::atomic::{AtomicI32, Ordering};
 
 use anyhow::{anyhow, Result};
-use contracts::Contract;
+use contracts::{Contract};
 use log::{debug, error, info};
 use market_data::realtime::RealTimeBarIterator;
 use market_data::{BarSize, WhatToShow};
@@ -256,6 +256,39 @@ impl Client {
 
     pub fn positions(&self) -> core::result::Result<impl Iterator<Item = Position>, IbApiError> {
         accounts::positions(self)
+    }
+
+    // === Contracts ===
+
+    /// Requests contract information.
+    ///
+    /// Provides all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
+    ///
+    /// # Arguments
+    /// * `client` - [Client] with an active connection to gateway.
+    /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::{self, Contract};
+    ///
+    /// fn main() -> anyhow::Result<()> {
+    ///     let mut client = Client::connect("localhost:4002")?;
+    ///
+    ///     let contract = Contract::stock("TSLA");
+    ///     let results = contracts::contract_details(&mut client, &contract)?;
+    ///
+    ///     for contract_detail in &results {
+    ///         println!("contract: {:?}", contract_detail);
+    ///     }
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn contract_details(&self, contract: &Contract) -> Result<impl Iterator<Item=contracts::ContractDetails>> {
+        Ok(contracts::contract_details(self, contract)?.into_iter())
     }
 
     // === Orders ===
