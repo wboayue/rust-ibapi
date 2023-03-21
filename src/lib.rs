@@ -53,7 +53,7 @@ use std::fmt::Debug;
 use std::sync::atomic::{AtomicI32, Ordering};
 
 use anyhow::{anyhow, Result};
-use contracts::{Contract};
+use contracts::Contract;
 use log::{debug, error, info};
 use market_data::realtime::RealTimeBarIterator;
 use market_data::{BarSize, WhatToShow};
@@ -87,7 +87,7 @@ pub struct Client {
     pub(crate) server_time: String,
 
     managed_accounts: String,
-    client_id: i32, // ID of client.
+    client_id: String, // ID of client.
     pub(crate) message_bus: RefCell<Box<dyn MessageBus>>,
     next_request_id: AtomicI32, // Next available request_id.
     order_id: AtomicI32,        // Next available order_id. Starts with value returned on connection.
@@ -119,19 +119,26 @@ impl Client {
     /// }
     /// ```
     pub fn connect(connection_string: &str) -> Result<Client> {
-        debug!("connecting to server with #{:?}", connection_string);
+        let parts: Vec<&str> = connection_string.split(":").collect();
+        let (connection_string, client_id): (String, String) = match parts.len() {
+            2 => (format!("{}:{}", parts[0], parts[1]), "100".into()),
+            3 => (format!("{}:{}", parts[0], parts[1]), parts[2].into()),
+            _ => (connection_string.into(), "100".into()),
+        };
 
-        let message_bus = RefCell::new(Box::new(TcpMessageBus::connect(connection_string)?));
-        Client::do_connect(message_bus)
+        debug!("connecting to server with {:?}", connection_string);
+
+        let message_bus = RefCell::new(Box::new(TcpMessageBus::connect(&connection_string)?));
+        Client::do_connect(&client_id, message_bus)
     }
 
-    fn do_connect(message_bus: RefCell<Box<dyn MessageBus>>) -> Result<Client> {
+    fn do_connect(client_id: &str, message_bus: RefCell<Box<dyn MessageBus>>) -> Result<Client> {
         let mut client = Client {
             server_version: 0,
             server_time: String::from(""),
             managed_accounts: String::from(""),
             message_bus,
-            client_id: 100,
+            client_id: client_id.into(),
             next_request_id: AtomicI32::new(9000),
             order_id: AtomicI32::new(-1),
         };
@@ -287,7 +294,7 @@ impl Client {
     ///     Ok(())
     /// }
     /// ```
-    pub fn contract_details(&self, contract: &Contract) -> Result<impl Iterator<Item=contracts::ContractDetails>> {
+    pub fn contract_details(&self, contract: &Contract) -> Result<impl Iterator<Item = contracts::ContractDetails>> {
         Ok(contracts::contract_details(self, contract)?.into_iter())
     }
 
@@ -302,7 +309,7 @@ impl Client {
     /// * `client` - [Client] used to communicate with server.
     /// * `order_id` - ID for [Order]. Get next valid ID using [Client::next_order_id].
     /// * `contract` - [Contract] to submit order for.
-    /// * `order` - [Order] to sumbit.
+    /// * `order` - [Order] to submit.
     ///
     /// # Examples
     ///
@@ -407,7 +414,7 @@ impl Client {
         realtime::realtime_bars_with_options(self, contract, bar_size, what_to_show, use_rth, Vec::default())
     }
 
-    // == Internal Use == 
+    // == Internal Use ==
 
     #[cfg(test)]
     pub(crate) fn stubbed(message_bus: RefCell<Box<dyn MessageBus>>, server_version: i32) -> Client {
@@ -416,7 +423,7 @@ impl Client {
             server_time: String::from(""),
             managed_accounts: String::from(""),
             message_bus,
-            client_id: 100,
+            client_id: "100".into(),
             next_request_id: AtomicI32::new(9000),
             order_id: AtomicI32::new(-1),
         }

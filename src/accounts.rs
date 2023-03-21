@@ -1,4 +1,4 @@
-use crate::contracts::{Contract};
+use crate::contracts::Contract;
 use crate::{Client, IbApiError};
 
 #[derive(Debug)]
