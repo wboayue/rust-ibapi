@@ -19,7 +19,7 @@ fn realtime_bars() {
     let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let contract = contract_samples::future_with_local_symbol();
-    let bar_size = BarSize::Secs5;
+    let bar_size = BarSize::Sec5;
     let what_to_show = WhatToShow::Trades;
     let use_rth = true;
 

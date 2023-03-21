@@ -34,7 +34,7 @@ mod tests;
 ///     let mut client = Client::connect("localhost:4002")?;
 ///
 ///     let contract = Contract::stock("TSLA");
-///     let bars = realtime::realtime_bars(&mut client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
+///     let bars = realtime::realtime_bars(&mut client, &contract, &BarSize::Sec5, &WhatToShow::Trades, false)?;
 ///
 ///     for (i, bar) in bars.enumerate() {
 ///         println!("bar[{i}]: {bar:?}");
@@ -76,7 +76,7 @@ pub fn realtime_bars<'a>(
 ///     let mut client = Client::connect("localhost:4002")?;
 ///
 ///     let contract = Contract::stock("TSLA");
-///     let bars = realtime::realtime_bars(&mut client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
+///     let bars = realtime::realtime_bars(&mut client, &contract, &BarSize::Sec5, &WhatToShow::Trades, false)?;
 ///
 ///     for (i, bar) in bars.enumerate() {
 ///         println!("bar[{i}]: {bar:?}");

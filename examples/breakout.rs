@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let symbol = "TSLA";
     let contract = Contract::stock(symbol);
 
-    let bars = client.realtime_bars(&contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
+    let bars = client.realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, false)?;
 
     let mut breakout = BreakoutChannel::new(30);
 

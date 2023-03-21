@@ -18,7 +18,18 @@ pub struct RealTimeBar {
 }
 
 pub enum BarSize {
-    Secs5,
+    Sec,
+    Sec5,
+    Sec15,
+    Sec30,
+    Min,
+    Min2,
+    Min3,
+    Min5,
+    Min15,
+    Min30,
+    Hour,
+    Day,
 }
 
 pub enum WhatToShow {
