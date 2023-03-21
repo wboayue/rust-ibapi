@@ -15,38 +15,7 @@ mod encoders;
 #[cfg(test)]
 mod tests;
 
-/// Requests realtime bars.
-///
-/// This method will provide all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
-///
-/// # Arguments
-/// * `client` - [Client] with an active connection to gateway.
-/// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::Client;
-/// use ibapi::contracts::{self, Contract};
-/// use ibapi::market_data::{realtime, BarSize, WhatToShow};
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let contract = Contract::stock("TSLA");
-///     let bars = realtime::realtime_bars(&mut client, &contract, &BarSize::Sec5, &WhatToShow::Trades, false)?;
-///
-///     for (i, bar) in bars.enumerate() {
-///         println!("bar[{i}]: {bar:?}");
-///
-///         if i > 60 {
-///             break;
-///         }
-///     }
-///
-///     Ok(())
-/// }
-/// ```
+// Requests realtime bars.
 pub fn realtime_bars<'a>(
     client: &'a Client,
     contract: &Contract,
@@ -57,38 +26,7 @@ pub fn realtime_bars<'a>(
     realtime_bars_with_options(client, contract, bar_size, what_to_show, use_rth, Vec::default())
 }
 
-/// Requests realtime bars.
-///
-/// This method will provide all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
-///
-/// # Arguments
-/// * `client` - [Client] with an active connection to gateway.
-/// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::Client;
-/// use ibapi::contracts::{self, Contract};
-/// use ibapi::market_data::{realtime, BarSize, WhatToShow};
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let contract = Contract::stock("TSLA");
-///     let bars = realtime::realtime_bars(&mut client, &contract, &BarSize::Sec5, &WhatToShow::Trades, false)?;
-///
-///     for (i, bar) in bars.enumerate() {
-///         println!("bar[{i}]: {bar:?}");
-///
-///         if i > 60 {
-///             break;
-///         }
-///     }
-///
-///     Ok(())
-/// }
-/// ```
+// Requests realtime bars.
 pub fn realtime_bars_with_options<'a>(
     client: &'a Client,
     contract: &Contract,

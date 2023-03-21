@@ -39,6 +39,16 @@ pub enum WhatToShow {
     Ask,
 }
 
+// TRADES
+// MIDPOINT
+// BID
+// ASK
+// BID_ASK
+// HISTORICAL_VOLATILITY
+// OPTION_IMPLIED_VOLATILITY
+// FEE_RATE
+// SCHEDULE
+
 impl ToString for WhatToShow {
     fn to_string(&self) -> String {
         match self {
