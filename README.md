@@ -7,7 +7,7 @@
 
 An implementation of the Interactive Brokers [TWS API](https://interactivebrokers.github.io/tws-api/introduction.html) for Rust.
 This implementation is not a direct port of the offical TWS API.
-It provides a synchronous API simplifies the development of trading strategies.
+It provides a synchronous API that simplifies the development of trading strategies.
 
 This is a work in progress and was tested against TWS 10.20. The primary reference for this implementation is the [C# source code](https://github.com/InteractiveBrokers/tws-api-public).
 
