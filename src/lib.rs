@@ -298,7 +298,6 @@ impl Client {
         Ok(contracts::contract_details(self, contract)?.into_iter())
     }
 
-
     /// Requests details about a given market rule
     ///
     /// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
@@ -331,11 +330,100 @@ impl Client {
     ///     Ok(())
     /// }
     /// ```
-    pub fn matching_symbols(&self, pattern: &str) -> Result<impl Iterator<Item=contracts::ContractDescription>> {
+    pub fn matching_symbols(&self, pattern: &str) -> Result<impl Iterator<Item = contracts::ContractDescription>> {
         Ok(contracts::matching_symbols(self, pattern)?.into_iter())
     }
 
     // === Orders ===
+
+    /// Requests current day's (since midnight) executions matching the filter.
+    ///
+    /// Only the current day's executions can be retrieved.
+    /// Along with the [ExecutionData], the [CommissionReport] will also be returned.
+    /// When requesting executions, a filter can be specified to receive only a subset of them
+    ///
+    /// # Arguments
+    /// * `filter` - filter criteria used to determine which execution reports are returned
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::{Client};
+    /// use ibapi::orders::{self, ExecutionFilter};
+    ///
+    /// fn main() -> anyhow::Result<()> {
+    ///     let mut client = Client::connect("localhost:4002")?;
+    ///     
+    ///     let filter = ExecutionFilter{
+    ///        side: "BUY".to_owned(),
+    ///        ..ExecutionFilter::default()
+    ///     };
+    ///
+    ///     let results = client.executions(filter)?;
+    ///     for execution_data in results {
+    ///        println!("{execution_data:?}")
+    ///     }
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn executions(&self, filter: orders::ExecutionFilter) -> Result<impl Iterator<Item = orders::ExecutionDataResult>> {
+        orders::executions(self, filter)
+    }
+
+    /// Cancels all open [Order]s.
+    ///
+    /// Requests the cancelation of all open [Order]s.
+    ///
+    /// # Arguments
+    /// * `client` - [Client] used to communicate with server.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::{Client};
+    /// use ibapi::orders;
+    ///
+    /// fn main() -> anyhow::Result<()> {
+    ///     let mut client = Client::connect("localhost:4002")?;
+    ///
+    ///     let next_valid_order_id = orders::next_valid_order_id(&mut client)?;
+    ///     println!("next_valid_order_id: {next_valid_order_id}");
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn next_valid_order_id(&self) -> Result<i32> {
+        orders::next_valid_order_id(self)
+    }
+
+    /// Requests all open orders places by this specific API client (identified by the API client id).
+    /// For client ID 0, this will bind previous manual TWS orders.
+    ///
+    /// # Arguments
+    /// * `client` - [Client] used to communicate with server.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::error::Error;
+    ///
+    /// use ibapi::Client;
+    ///
+    /// fn main() -> Result<(), Box<dyn Error>> {
+    ///     let client = Client::connect("localhost:4002")?;
+    ///
+    ///     let results = client.open_orders()?;
+    ///     for order_data in results {
+    ///        println!("{order_data:?}")
+    ///     }
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn open_orders(&self) -> Result<impl Iterator<Item = OrderDataResult>> {
+        orders::open_orders(self)
+    }
 
     /// Submits an [Order].
     ///
@@ -381,34 +469,6 @@ impl Client {
     /// ```
     pub fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<impl Iterator<Item = OrderNotification>> {
         orders::place_order(self, order_id, contract, order)
-    }
-
-    /// Requests all open orders places by this specific API client (identified by the API client id).
-    /// For client ID 0, this will bind previous manual TWS orders.
-    ///
-    /// # Arguments
-    /// * `client` - [Client] used to communicate with server.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use std::error::Error;
-    ///
-    /// use ibapi::Client;
-    ///
-    /// fn main() -> Result<(), Box<dyn Error>> {
-    ///     let client = Client::connect("localhost:4002")?;
-    ///
-    ///     let results = client.open_orders()?;
-    ///     for order_data in results {
-    ///        println!("{order_data:?}")
-    ///     }
-    ///
-    ///     Ok(())
-    /// }
-    /// ```
-    pub fn open_orders(&self) -> Result<impl Iterator<Item = OrderDataResult>> {
-        orders::open_orders(self)
     }
 
     // === Market Data ===
@@ -481,7 +541,7 @@ impl Client {
     }
 
     /// Sends request for the next valid order id.
-    pub(crate) fn request_next_order_id(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
+    pub(crate) fn request_next_order_id(&self, message: RequestMessage) -> Result<GlobalResponseIterator> {
         self.message_bus.borrow_mut().request_next_order_id(&message)
     }
 

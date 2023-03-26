@@ -1,5 +1,5 @@
 use crate::contracts::{ComboLegOpenClose, SecurityType};
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::OutgoingMessages;
 use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A};
 
 use super::*;

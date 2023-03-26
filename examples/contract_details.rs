@@ -1,35 +1,16 @@
-use clap::{arg, Command};
-use log::{debug, info};
-
-use ibapi::contracts::{self, Contract};
+use ibapi::contracts::Contract;
 use ibapi::Client;
 
 fn main() -> anyhow::Result<()> {
-    env_logger::init();
-
-    let matches = Command::new("find_contract_details")
-        .version("1.0")
-        .author("Wil Boayue <wil.boayue@gmail.com>")
-        .about("Finds contract details")
-        .arg(arg!(--connection_string <VALUE>).default_value("odin:4002"))
-        .arg(arg!(--stock <VALUE>).required(true))
-        .get_matches();
-
-    let connection_string = matches.get_one::<String>("connection_string").expect("connection_string is required");
-    let stock_symbol = matches.get_one::<String>("stock").expect("stock symbol is required");
-
-    let client = Client::connect(connection_string)?;
-
-    info!("connected {client:?}");
+    let client = Client::connect("localhost:4002")?;
 
     println!("server_version: {}", client.server_version());
     println!("server_time: {}", client.server_time());
     println!("managed_accounts: {}", client.managed_accounts());
     println!("next_order_id: {}", client.next_order_id());
 
-    let mut contract = Contract::stock(stock_symbol);
+    let mut contract = Contract::stock("TSLA");
     contract.currency = "USD".to_string();
-    debug!("contract template: {contract:?}");
 
     let results = client.contract_details(&contract)?;
     for contract in results {

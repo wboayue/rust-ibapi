@@ -1426,7 +1426,7 @@ pub fn global_cancel(client: &mut Client) -> Result<()> {
 ///     Ok(())
 /// }
 /// ```
-pub fn next_valid_order_id(client: &mut Client) -> Result<i32> {
+pub fn next_valid_order_id(client: &Client) -> Result<i32> {
     let message = encoders::encode_next_valid_order_id()?;
 
     let mut messages = client.request_next_order_id(message)?;
@@ -1638,38 +1638,15 @@ pub struct ExecutionFilter {
     pub side: String,
 }
 
-/// Requests current day's (since midnight) executions matching the filter.
-///
-/// Only the current day's executions can be retrieved.
-/// Along with the [ExecutionData], the [CommissionReport] will also be returned.
-/// When requesting executions, a filter can be specified to receive only a subset of them
-///
-/// # Arguments
-/// * `filter` - filter criteria used to determine which execution reports are returned
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::{Client};
-/// use ibapi::orders::{self, ExecutionFilter};
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///     
-///     let filter = ExecutionFilter{
-///        side: "BUY".to_owned(),
-///        ..ExecutionFilter::default()
-///     };
-///
-///     let results = orders::executions(&mut client, filter)?;
-///     for execution_data in results {
-///        println!("{execution_data:?}")
-///     }
-///
-///     Ok(())
-/// }
-/// ```
-pub fn executions(client: &mut Client, filter: ExecutionFilter) -> Result<ExecutionDataIterator> {
+// Requests current day's (since midnight) executions matching the filter.
+//
+// Only the current day's executions can be retrieved.
+// Along with the [ExecutionData], the [CommissionReport] will also be returned.
+// When requesting executions, a filter can be specified to receive only a subset of them
+//
+// # Arguments
+// * `filter` - filter criteria used to determine which execution reports are returned
+pub(crate) fn executions(client: &Client, filter: ExecutionFilter) -> Result<ExecutionDataIterator> {
     let request_id = client.next_request_id();
     let message = encoders::encode_executions(client.server_version(), request_id, &filter)?;
 
