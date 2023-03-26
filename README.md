@@ -6,19 +6,19 @@
 ## Introduction
 
 An implementation of the Interactive Brokers [TWS API](https://interactivebrokers.github.io/tws-api/introduction.html) for Rust.
-The implementation does not aim to be a direct port of the offical TWS API.
-It provides a synchronous API that should simplify the development of trading strategies.
+This implementation is not a direct port of the offical TWS API.
+It provides a synchronous API simplifies the development of trading strategies.
 
 This is a work in progress and was tested against TWS 10.20. The primary reference for this implementation is the [C# source code](https://github.com/InteractiveBrokers/tws-api-public).
 
 Open issues are tracked [here](https://github.com/wboayue/rust-ibapi/issues). 
-If you run into a problem or require a missing feature, check the [issues list](https://github.com/wboayue/rust-ibapi/issues) before reporting a new issue.
+If you run into a problem or need a missing feature, check the [issues list](https://github.com/wboayue/rust-ibapi/issues) before reporting a new issue.
 
 Contributions are welcome.
 
 ## Example
 
-The following example will give you a flavor for the API style. It is not a recommendation of a trading strategy.
+The following example gives a flavor of the API style. It is not a trading strategy recommendation.
 
 ```rust
 use std::error::Error;
