@@ -370,34 +370,14 @@ impl ToField for Vec<TagValue> {
 
 // === API ===
 
-/// Requests contract information.
-///
-/// Provides all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
-///
-/// # Arguments
-/// * `client` - [Client] with an active connection to gateway.
-/// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::Client;
-/// use ibapi::contracts::{self, Contract};
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let contract = Contract::stock("TSLA");
-///     let results = contracts::contract_details(&mut client, &contract)?;
-///
-///     for contract_detail in &results {
-///         println!("contract: {:?}", contract_detail);
-///     }
-///
-///     Ok(())
-/// }
-/// ```
-pub fn contract_details(client: &Client, contract: &Contract) -> Result<Vec<ContractDetails>> {
+// Requests contract information.
+//
+// Provides all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
+//
+// # Arguments
+// * `client` - [Client] with an active connection to gateway.
+// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
+pub(crate) fn contract_details(client: &Client, contract: &Contract) -> Result<Vec<ContractDetails>> {
     verify_contract(client, contract)?;
 
     let request_id = client.next_request_id();
@@ -469,31 +449,12 @@ pub struct ContractDescription {
     pub derivative_security_types: Vec<String>,
 }
 
-/// Requests matching stock symbols.
-///
-/// # Arguments
-/// * `client` - [Client] with an active connection to gateway.
-/// * `pattern` - Either start of ticker symbol or (for larger strings) company name.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::Client;
-/// use ibapi::contracts;
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let contracts = contracts::matching_symbols(&mut client, "IB")?;
-///
-///     for contract in &contracts {
-///         println!("contract: {:?}", contract);
-///     }
-///
-///     Ok(())
-/// }
-/// ```
-pub fn matching_symbols(client: &mut Client, pattern: &str) -> Result<Vec<ContractDescription>> {
+// Requests matching stock symbols.
+//
+// # Arguments
+// * `client` - [Client] with an active connection to gateway.
+// * `pattern` - Either start of ticker symbol or (for larger strings) company name.
+pub(crate) fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<ContractDescription>> {
     client.check_server_version(server_versions::REQ_MATCHING_SYMBOLS, "It does not support mathing symbols requests.")?;
 
     let request_id = client.next_request_id();
@@ -536,7 +497,7 @@ pub struct PriceIncrement {
 ///
 /// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
 /// A list of market rule ids can be obtained by invoking [request_contract_details] on a particular contract. The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [ContractDetails].
-pub fn market_rule(client: &mut Client, market_rule_id: i32) -> Result<MarketRule> {
+pub(crate) fn market_rule(client: &Client, market_rule_id: i32) -> Result<MarketRule> {
     client.check_server_version(server_versions::MARKET_RULES, "It does not support market rule requests.")?;
 
     let request = encoders::request_market_rule(market_rule_id)?;

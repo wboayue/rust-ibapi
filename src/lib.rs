@@ -285,9 +285,9 @@ impl Client {
     ///     let mut client = Client::connect("localhost:4002")?;
     ///
     ///     let contract = Contract::stock("TSLA");
-    ///     let results = contracts::contract_details(&mut client, &contract)?;
+    ///     let results = client.contract_details(&contract)?;
     ///
-    ///     for contract_detail in &results {
+    ///     for contract_detail in results {
     ///         println!("contract: {:?}", contract_detail);
     ///     }
     ///
@@ -296,6 +296,43 @@ impl Client {
     /// ```
     pub fn contract_details(&self, contract: &Contract) -> Result<impl Iterator<Item = contracts::ContractDetails>> {
         Ok(contracts::contract_details(self, contract)?.into_iter())
+    }
+
+
+    /// Requests details about a given market rule
+    ///
+    /// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
+    /// A list of market rule ids can be obtained by invoking [request_contract_details] on a particular contract. The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [ContractDetails].
+    pub fn market_rule(&self, market_rule_id: i32) -> Result<contracts::MarketRule> {
+        Ok(contracts::market_rule(self, market_rule_id)?)
+    }
+
+    /// Requests matching stock symbols.
+    ///
+    /// # Arguments
+    /// * `client` - [Client] with an active connection to gateway.
+    /// * `pattern` - Either start of ticker symbol or (for larger strings) company name.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts;
+    ///
+    /// fn main() -> anyhow::Result<()> {
+    ///     let mut client = Client::connect("localhost:4002")?;
+    ///
+    ///     let contracts = client.matching_symbols("IB")?;
+    ///
+    ///     for contract in contracts {
+    ///         println!("contract: {:?}", contract);
+    ///     }
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn matching_symbols(&self, pattern: &str) -> Result<impl Iterator<Item=contracts::ContractDescription>> {
+        Ok(contracts::matching_symbols(self, pattern)?.into_iter())
     }
 
     // === Orders ===
@@ -454,7 +491,7 @@ impl Client {
     }
 
     /// Sends request for market rule.
-    pub(crate) fn request_market_rule(&mut self, message: RequestMessage) -> Result<GlobalResponseIterator> {
+    pub(crate) fn request_market_rule(&self, message: RequestMessage) -> Result<GlobalResponseIterator> {
         self.message_bus.borrow_mut().request_market_rule(&message)
     }
 

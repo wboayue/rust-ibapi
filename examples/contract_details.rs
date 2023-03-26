@@ -18,7 +18,7 @@ fn main() -> anyhow::Result<()> {
     let connection_string = matches.get_one::<String>("connection_string").expect("connection_string is required");
     let stock_symbol = matches.get_one::<String>("stock").expect("stock symbol is required");
 
-    let mut client = Client::connect(connection_string)?;
+    let client = Client::connect(connection_string)?;
 
     info!("connected {client:?}");
 
@@ -31,8 +31,8 @@ fn main() -> anyhow::Result<()> {
     contract.currency = "USD".to_string();
     debug!("contract template: {contract:?}");
 
-    let results = contracts::contract_details(&mut client, &contract)?;
-    for contract in &results {
+    let results = client.contract_details(&contract)?;
+    for contract in results {
         println!("contract: {contract:?}");
     }
 
