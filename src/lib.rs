@@ -336,6 +336,33 @@ impl Client {
 
     // === Orders ===
 
+    /// Cancels an open [Order].
+    ///
+    /// # Arguments
+    /// * `order_id` - ID of [Order] to cancel.
+    /// * `manual_order_cancel_time` - can't find documentation. leave blank.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// fn main() -> anyhow::Result<()> {
+    ///     let client = Client::connect("localhost:4002")?;
+    ///
+    ///     let order_id = 15;
+    ///     let results = client.cancel_order(order_id, "")?;
+    ///     for result in results {
+    ///        println!("{result:?}");
+    ///     }
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn cancel_order(&self, order_id: i32, manual_order_cancel_time: &str) -> Result<impl Iterator<Item = orders::CancelOrderResult>> {
+        orders::cancel_order(self, order_id, manual_order_cancel_time)
+    }
+
     /// Requests current day's (since midnight) executions matching the filter.
     ///
     /// Only the current day's executions can be retrieved.
@@ -369,6 +396,25 @@ impl Client {
     /// ```
     pub fn executions(&self, filter: orders::ExecutionFilter) -> Result<impl Iterator<Item = orders::ExecutionDataResult>> {
         orders::executions(self, filter)
+    }
+
+    /// Cancels all open [Order]s.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// fn main() -> anyhow::Result<()> {
+    ///     let mut client = Client::connect("localhost:4002")?;
+    ///
+    ///     client.global_cancel()?;
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn global_cancel(&self) -> Result<()> {
+        orders::global_cancel(self)
     }
 
     /// Cancels all open [Order]s.

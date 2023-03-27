@@ -1285,34 +1285,8 @@ fn verify_order_contract(client: &Client, contract: &Contract, _order_id: i32) -
     Ok(())
 }
 
-/// Cancels an open [Order].
-///
-/// Requests the cancelation of an open [Order].
-///
-/// # Arguments
-/// * `client` - [Client] used to communicate with server.
-/// * `order_id` - ID of [Order] to cancel.
-/// * `manual_order_cancel_time` - can't find documentation. leave blank.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::{Client};
-/// use ibapi::orders;
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let order_id = 15;
-///     let results = orders::cancel_order(&mut client, order_id, "")?;
-///     for result in results {
-///        println!("{result:?}");
-///     }
-///
-///     Ok(())
-/// }
-/// ```
-pub fn cancel_order(client: &mut Client, order_id: i32, manual_order_cancel_time: &str) -> Result<CancelOrderResultIterator> {
+// Cancels an open [Order].
+pub(crate) fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_time: &str) -> Result<CancelOrderResultIterator> {
     if !manual_order_cancel_time.is_empty() {
         client.check_server_version(
             server_versions::MANUAL_ORDER_TIME,
@@ -1372,28 +1346,8 @@ impl Iterator for CancelOrderResultIterator {
     }
 }
 
-/// Cancels all open [Order]s.
-///
-/// Requests the cancelation of all open [Order]s.
-///
-/// # Arguments
-/// * `client` - [Client] used to communicate with server.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::{Client};
-/// use ibapi::orders;
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     orders::global_cancel(&mut client)?;
-///
-///     Ok(())
-/// }
-/// ```
-pub fn global_cancel(client: &mut Client) -> Result<()> {
+// Cancels all open [Order]s.
+pub(crate) fn global_cancel(client: &Client) -> Result<()> {
     client.check_server_version(server_versions::REQ_GLOBAL_CANCEL, "It does not support global cancel requests.")?;
 
     let message = encoders::encode_global_cancel()?;
@@ -1404,28 +1358,7 @@ pub fn global_cancel(client: &mut Client) -> Result<()> {
     Ok(())
 }
 
-/// Cancels all open [Order]s.
-///
-/// Requests the cancelation of all open [Order]s.
-///
-/// # Arguments
-/// * `client` - [Client] used to communicate with server.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::{Client};
-/// use ibapi::orders;
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let next_valid_order_id = orders::next_valid_order_id(&mut client)?;
-///     println!("next_valid_order_id: {next_valid_order_id}");
-///
-///     Ok(())
-/// }
-/// ```
+// Gets next valid order id
 pub fn next_valid_order_id(client: &Client) -> Result<i32> {
     let message = encoders::encode_next_valid_order_id()?;
 

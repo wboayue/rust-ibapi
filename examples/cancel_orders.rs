@@ -1,6 +1,5 @@
 use clap::{arg, Command};
 
-use ibapi::orders;
 use ibapi::Client;
 
 fn main() -> anyhow::Result<()> {
@@ -21,16 +20,16 @@ fn main() -> anyhow::Result<()> {
     let manual_order_cancel_time = matches.get_one::<String>("manual_order_cancel_time").unwrap();
     let global = matches.get_one::<bool>("global").unwrap();
 
-    let mut client = Client::connect(connection_string)?;
+    let client = Client::connect(connection_string)?;
 
     if *global {
         println!("Requesting global cancel.");
 
-        orders::global_cancel(&mut client)?
+        client.global_cancel()?
     } else {
         println!("Cancelling order {order_id}");
 
-        let results = orders::cancel_order(&mut client, *order_id, manual_order_cancel_time)?;
+        let results = client.cancel_order(*order_id, manual_order_cancel_time)?;
         for result in results {
             println!("{result:?}");
         }

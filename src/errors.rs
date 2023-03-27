@@ -5,19 +5,19 @@ pub enum Error {
     // Git(git2::Error),
     // Errors raised by us...
     Regular(ErrorKind),
-    Simple(String)
+    Simple(String),
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ErrorKind {
-    NotAuthorized
+    NotAuthorized,
 }
 
 impl ErrorKind {
     fn as_str(&self) -> &str {
         match *self {
             // ErrorKind::NotFound => "not found",
-            ErrorKind::NotAuthorized => "not authorized"
+            ErrorKind::NotAuthorized => "not authorized",
         }
     }
 }
