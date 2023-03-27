@@ -18,7 +18,18 @@ pub struct RealTimeBar {
 }
 
 pub enum BarSize {
-    Secs5,
+    Sec,
+    Sec5,
+    Sec15,
+    Sec30,
+    Min,
+    Min2,
+    Min3,
+    Min5,
+    Min15,
+    Min30,
+    Hour,
+    Day,
 }
 
 pub enum WhatToShow {
@@ -27,6 +38,16 @@ pub enum WhatToShow {
     Bid,
     Ask,
 }
+
+// TRADES
+// MIDPOINT
+// BID
+// ASK
+// BID_ASK
+// HISTORICAL_VOLATILITY
+// OPTION_IMPLIED_VOLATILITY
+// FEE_RATE
+// SCHEDULE
 
 impl ToString for WhatToShow {
     fn to_string(&self) -> String {

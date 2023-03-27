@@ -6,7 +6,7 @@ use super::*;
 
 #[test]
 fn test_head_timestamp() {
-    let mut message_bus = RefCell::new(Box::new(MessageBusStub {
+    let message_bus = RefCell::new(Box::new(MessageBusStub {
         request_messages: RefCell::new(vec![]),
         response_messages: vec!["9|1|43||".to_owned()],
     }));

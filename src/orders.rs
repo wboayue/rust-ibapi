@@ -5,10 +5,11 @@ use anyhow::{anyhow, Result};
 use log::{error, info};
 
 use crate::client::transport::{GlobalResponseIterator, ResponseIterator};
-use crate::client::{Client, RequestMessage, ResponseMessage};
+use crate::client::{RequestMessage, ResponseMessage};
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
+use crate::Client;
 use crate::{encode_option_field, ToField};
 
 mod decoders;
@@ -1006,49 +1007,10 @@ impl fmt::Display for Notice {
     }
 }
 
-/// Submits an [Order].
-///
-/// Submits an [Order] using [Client] for the given [Contract].
-/// Immediately after the order was submitted correctly, the TWS will start sending events concerning the order's activity via IBApi.EWrapper.openOrder and IBApi.EWrapper.orderStatus
-///
-/// # Arguments
-/// * `client` - [Client] used to communicate with server.
-/// * `order_id` - ID for [Order]. Get next valid ID using [Client::next_order_id].
-/// * `contract` - [Contract] to submit order for.
-/// * `order` - [Order] to sumbit.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::client::{Client};
-/// use ibapi::contracts::Contract;
-/// use ibapi::orders::{self, order_builder, OrderNotification};
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let mut contract = Contract::stock("MSFT");
-///     let order = order_builder::market_order(orders::Action::Buy, 100.0);
-///     let order_id = client.next_order_id();
-///
-///     let notifications = orders::place_order(&mut client, order_id, &contract, &order)?;
-///
-///     for notification in notifications {
-///         match notification {
-///             OrderNotification::OrderStatus(order_status) => {
-///                 println!("order status: {order_status:?}")
-///             }
-///             OrderNotification::OpenOrder(open_order) => println!("open order: {open_order:?}"),
-///             OrderNotification::ExecutionData(execution) => println!("execution: {execution:?}"),
-///             OrderNotification::CommissionReport(report) => println!("commision report: {report:?}"),
-///             OrderNotification::Message(message) => println!("message: {message:?}"),
-///        }
-///     }
-///
-///     Ok(())
-/// }
-/// ```
-pub fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<OrderNotificationIterator> {
+// Submits an Order.
+// After the order is submitted correctly, events will be returned concerning the order's activity.
+// https://interactivebrokers.github.io/tws-api/order_submission.html
+pub(crate) fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<impl Iterator<Item = OrderNotification>> {
     verify_order(client, order, order_id)?;
     verify_order_contract(client, contract, order_id)?;
 
@@ -1062,10 +1024,8 @@ pub fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &
     })
 }
 
-// https://interactivebrokers.github.io/tws-api/order_submission.html
-
-/// Supports iteration over [OrderNotification]
-pub struct OrderNotificationIterator {
+// Supports iteration over OrderNotification
+pub(crate) struct OrderNotificationIterator {
     server_version: i32,
     messages: ResponseIterator,
 }
@@ -1325,34 +1285,8 @@ fn verify_order_contract(client: &Client, contract: &Contract, _order_id: i32) -
     Ok(())
 }
 
-/// Cancels an open [Order].
-///
-/// Requests the cancelation of an open [Order].
-///
-/// # Arguments
-/// * `client` - [Client] used to communicate with server.
-/// * `order_id` - ID of [Order] to cancel.
-/// * `manual_order_cancel_time` - can't find documentation. leave blank.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::client::{Client};
-/// use ibapi::orders;
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let order_id = 15;
-///     let results = orders::cancel_order(&mut client, order_id, "")?;
-///     for result in results {
-///        println!("{result:?}");
-///     }
-///
-///     Ok(())
-/// }
-/// ```
-pub fn cancel_order(client: &mut Client, order_id: i32, manual_order_cancel_time: &str) -> Result<CancelOrderResultIterator> {
+// Cancels an open [Order].
+pub(crate) fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_time: &str) -> Result<CancelOrderResultIterator> {
     if !manual_order_cancel_time.is_empty() {
         client.check_server_version(
             server_versions::MANUAL_ORDER_TIME,
@@ -1412,28 +1346,8 @@ impl Iterator for CancelOrderResultIterator {
     }
 }
 
-/// Cancels all open [Order]s.
-///
-/// Requests the cancelation of all open [Order]s.
-///
-/// # Arguments
-/// * `client` - [Client] used to communicate with server.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::client::{Client};
-/// use ibapi::orders;
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     orders::global_cancel(&mut client)?;
-///
-///     Ok(())
-/// }
-/// ```
-pub fn global_cancel(client: &mut Client) -> Result<()> {
+// Cancels all open [Order]s.
+pub(crate) fn global_cancel(client: &Client) -> Result<()> {
     client.check_server_version(server_versions::REQ_GLOBAL_CANCEL, "It does not support global cancel requests.")?;
 
     let message = encoders::encode_global_cancel()?;
@@ -1444,29 +1358,8 @@ pub fn global_cancel(client: &mut Client) -> Result<()> {
     Ok(())
 }
 
-/// Cancels all open [Order]s.
-///
-/// Requests the cancelation of all open [Order]s.
-///
-/// # Arguments
-/// * `client` - [Client] used to communicate with server.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::client::{Client};
-/// use ibapi::orders;
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let next_valid_order_id = orders::next_valid_order_id(&mut client)?;
-///     println!("next_valid_order_id: {next_valid_order_id}");
-///
-///     Ok(())
-/// }
-/// ```
-pub fn next_valid_order_id(client: &mut Client) -> Result<i32> {
+// Gets next valid order id
+pub(crate) fn next_valid_order_id(client: &Client) -> Result<i32> {
     let message = encoders::encode_next_valid_order_id()?;
 
     let mut messages = client.request_next_order_id(message)?;
@@ -1483,30 +1376,8 @@ pub fn next_valid_order_id(client: &mut Client) -> Result<i32> {
     }
 }
 
-/// Requests completed [Order]s.
-///
-/// # Arguments
-/// * `client` - [Client] used to communicate with server.
-/// * `api_only` - request only orders placed by the API.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::client::{Client};
-/// use ibapi::orders;
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let results = orders::completed_orders(&mut client, false)?;
-///     for order_data in results {
-///        println!("{order_data:?}")
-///     }
-///
-///     Ok(())
-/// }
-/// ```
-pub fn completed_orders(client: &mut Client, api_only: bool) -> Result<OrderDataIterator> {
+// Requests completed [Order]s.
+pub(crate) fn completed_orders(client: &Client, api_only: bool) -> Result<OrderDataIterator> {
     client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
 
     let message = encoders::encode_completed_orders(api_only)?;
@@ -1578,24 +1449,7 @@ impl Iterator for OrderDataIterator {
 /// # Arguments
 /// * `client` - [Client] used to communicate with server.
 ///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::client::{Client};
-/// use ibapi::orders;
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let results = orders::open_orders(&mut client)?;
-///     for order_data in results {
-///        println!("{order_data:?}")
-///     }
-///
-///     Ok(())
-/// }
-/// ```
-pub fn open_orders(client: &mut Client) -> Result<OrderDataIterator> {
+pub(crate) fn open_orders(client: &Client) -> Result<OrderDataIterator> {
     let message = encoders::encode_open_orders()?;
 
     let messages = client.request_order_data(message)?;
@@ -1606,30 +1460,9 @@ pub fn open_orders(client: &mut Client) -> Result<OrderDataIterator> {
     })
 }
 
-/// Requests all *current* open orders in associated accounts at the current moment.
-/// Open orders are returned once; this function does not initiate a subscription.
-///
-/// # Arguments
-/// * `client` - [Client] used to communicate with server.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::client::{Client};
-/// use ibapi::orders;
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let results = orders::all_open_orders(&mut client)?;
-///     for order_data in results {
-///        println!("{order_data:?}")
-///     }
-///
-///     Ok(())
-/// }
-/// ```
-pub fn all_open_orders(client: &mut Client) -> Result<OrderDataIterator> {
+// Requests all *current* open orders in associated accounts at the current moment.
+// Open orders are returned once; this function does not initiate a subscription.
+pub(crate) fn all_open_orders(client: &Client) -> Result<OrderDataIterator> {
     let message = encoders::encode_all_open_orders()?;
 
     let messages = client.request_order_data(message)?;
@@ -1640,30 +1473,8 @@ pub fn all_open_orders(client: &mut Client) -> Result<OrderDataIterator> {
     })
 }
 
-/// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
-///
-/// # Arguments
-/// * `client` - [Client] used to communicate with server.
-/// * `auto_bind` - if set to true, the newly created orders will be assigned an API order ID and implicitly associated with this client. If set to false, future orders will not be.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::client::{Client};
-/// use ibapi::orders;
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let results = orders::auto_open_orders(&mut client, false)?;
-///     for order_data in results {
-///        println!("{order_data:?}")
-///     }
-///
-///     Ok(())
-/// }
-/// ```
-pub fn auto_open_orders(client: &mut Client, auto_bind: bool) -> Result<OrderDataIterator> {
+// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
+pub(crate) fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<OrderDataIterator> {
     let message = encoders::encode_auto_open_orders(auto_bind)?;
 
     // TODO this should probably not timeout.
@@ -1695,38 +1506,15 @@ pub struct ExecutionFilter {
     pub side: String,
 }
 
-/// Requests current day's (since midnight) executions matching the filter.
-///
-/// Only the current day's executions can be retrieved.
-/// Along with the [ExecutionData], the [CommissionReport] will also be returned.
-/// When requesting executions, a filter can be specified to receive only a subset of them
-///
-/// # Arguments
-/// * `filter` - filter criteria used to determine which execution reports are returned
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::client::{Client};
-/// use ibapi::orders::{self, ExecutionFilter};
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///     
-///     let filter = ExecutionFilter{
-///        side: "BUY".to_owned(),
-///        ..ExecutionFilter::default()
-///     };
-///
-///     let results = orders::executions(&mut client, filter)?;
-///     for execution_data in results {
-///        println!("{execution_data:?}")
-///     }
-///
-///     Ok(())
-/// }
-/// ```
-pub fn executions(client: &mut Client, filter: ExecutionFilter) -> Result<ExecutionDataIterator> {
+// Requests current day's (since midnight) executions matching the filter.
+//
+// Only the current day's executions can be retrieved.
+// Along with the [ExecutionData], the [CommissionReport] will also be returned.
+// When requesting executions, a filter can be specified to receive only a subset of them
+//
+// # Arguments
+// * `filter` - filter criteria used to determine which execution reports are returned
+pub(crate) fn executions(client: &Client, filter: ExecutionFilter) -> Result<ExecutionDataIterator> {
     let request_id = client.next_request_id();
     let message = encoders::encode_executions(client.server_version(), request_id, &filter)?;
 

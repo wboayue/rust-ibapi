@@ -193,7 +193,7 @@ mod tests {
         let request_id = 9000;
         let server_version = server_versions::TICK_BY_TICK;
         let contract = contract_samples::simple_future();
-        let bar_size = BarSize::Secs5;
+        let bar_size = BarSize::Sec5;
         let what_to_show = WhatToShow::Trades;
         let use_rth = true;
         let options = vec![];

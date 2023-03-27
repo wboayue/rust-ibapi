@@ -1,0 +1,20 @@
+#!/bin/bash
+
+ME="${0##*/}"
+
+function cover() {
+    # cargo install cargo-tarpaulin
+    
+    cargo tarpaulin -o html
+    echo "coverage report saved to tarpaulin-report.html"
+}
+
+function usage {
+  echo "usage: $ME cover                # generates coverage report"
+  echo "       $ME tag <version>        # tags branch with the specified version"
+}
+
+case $1 in
+  cover)        cover "${@:2}";;
+  *)            usage;;    
+esac

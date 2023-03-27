@@ -5,15 +5,20 @@
 
 ## Introduction
 
-An implementation of the Interactive Brokers [TWS API](https://interactivebrokers.github.io/tws-api/introduction.html) for Rust. The official TWS API is an event driven API. This implementation provides a synchronous API that simplifies the development of trading strategies.
+An implementation of the Interactive Brokers [TWS API](https://interactivebrokers.github.io/tws-api/introduction.html) for Rust.
+This implementation is not a direct port of the offical TWS API.
+It provides a synchronous API that simplifies the development of trading strategies.
 
-This is a work in progress and targets support for TWS API 10.20. The primary reference for this implementation is the [C# source code](https://github.com/InteractiveBrokers/tws-api-public).
+This is a work in progress and was tested using TWS 10.20. The primary reference for this implementation is the [C# source code](https://github.com/InteractiveBrokers/tws-api-public).
 
-The list of open issues are tracked [here](https://github.com/wboayue/rust-ibapi/issues). If you run into an issue or need a missing feature, check the [issues list](https://github.com/wboayue/rust-ibapi/issues) first and then report the issue if it is not already tracked.
+Open issues are tracked [here](https://github.com/wboayue/rust-ibapi/issues). 
+If you run into a problem or need a missing feature, check the [issues list](https://github.com/wboayue/rust-ibapi/issues) before reporting a new issue.
 
-Contributions are welcome. Open a pull request.
+Contributions are welcome.
 
-## Example 
+## Example
+
+The following example gives a flavor of the API style. It is not a trading strategy recommendation.
 
 ```rust
 use std::error::Error;
@@ -70,3 +75,35 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 ```
+
+## Available APIs
+
+### Accounts
+
+* [positions](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.positions)
+
+### Contracts
+
+* contract_details
+* market_rule
+* matching_symbols
+
+### Market Data
+
+* realtime_bars
+* tick_by_tick_all_last
+* tick_by_tick_bid_ask
+* tick_by_tick_last
+* tick_by_tick_midpoint
+
+### Orders
+
+* all_open_orders
+* auto_open_orders
+* cancel_order
+* completed_orders
+* executions
+* global_cancel
+* next_valid_order_id
+* open_orders
+* place_order

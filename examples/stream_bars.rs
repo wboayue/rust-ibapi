@@ -3,9 +3,9 @@ use std::time::Duration;
 
 use clap::{arg, ArgMatches, Command};
 
-use ibapi::client::Client;
 use ibapi::contracts::Contract;
-use ibapi::market_data::{realtime, BarSize, WhatToShow};
+use ibapi::market_data::{BarSize, WhatToShow};
+use ibapi::Client;
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
@@ -25,16 +25,12 @@ fn main() -> anyhow::Result<()> {
     println!("connection_string: {connection_string:?}");
     println!("contract: {contract:?}");
 
-    let mut client = Client::connect("odin:4002")?;
+    let client = Client::connect("odin:4002")?;
 
-    let bars = realtime::realtime_bars(&mut client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
+    let bars = client.realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, false)?;
 
-    for (i, bar) in bars.enumerate() {
+    for (i, bar) in bars.enumerate().take(60) {
         println!("bar: {i:?} {bar:?}");
-
-        if i > 60 {
-            break;
-        }
     }
 
     thread::sleep(Duration::from_secs(5));
