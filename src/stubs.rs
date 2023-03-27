@@ -91,6 +91,18 @@ impl MessageBus for MessageBusStub {
         Ok(GlobalResponseIterator::new(Arc::new(receiver)))
     }
 
+    fn request_positions(&mut self, message: &RequestMessage) -> anyhow::Result<GlobalResponseIterator> {
+        self.request_messages.borrow_mut().push(message.clone());
+
+        let (sender, receiver) = channel::unbounded();
+
+        for message in &self.response_messages {
+            sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
+        }
+
+        Ok(GlobalResponseIterator::new(Arc::new(receiver)))
+    }
+
     fn write(&mut self, packet: &str) -> anyhow::Result<()> {
         Ok(())
     }

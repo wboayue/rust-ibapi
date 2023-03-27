@@ -59,7 +59,7 @@ use market_data::{BarSize, RealTimeBar, WhatToShow};
 
 use crate::accounts::Position;
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
-use crate::client::RequestMessage;
+use crate::client::{RequestMessage, ResponseMessage};
 use crate::market_data::realtime;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
@@ -260,6 +260,7 @@ impl Client {
 
     // === Accounts ===
 
+    // Get current positions for all accessible accounts.
     pub fn positions(&self) -> core::result::Result<impl Iterator<Item = Position>, Error> {
         accounts::positions(self)
     }
@@ -398,16 +399,14 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() -> anyhow::Result<()> {
-    ///     let client = Client::connect("localhost:4002")?;
+    /// fn main() {
+    ///     let client = Client::connect("localhost:4002").expect("connection failed");
     ///
     ///     let order_id = 15;
-    ///     let results = client.cancel_order(order_id, "")?;
+    ///     let results = client.cancel_order(order_id, "").expect("request failed");
     ///     for result in results {
     ///        println!("{result:?}");
     ///     }
-    ///
-    ///     Ok(())
     /// }
     /// ```
     pub fn cancel_order(&self, order_id: i32, manual_order_cancel_time: &str) -> Result<impl Iterator<Item = orders::CancelOrderResult>> {
@@ -736,6 +735,11 @@ impl Client {
     /// Sends request for market rule.
     pub(crate) fn request_market_rule(&self, message: RequestMessage) -> Result<GlobalResponseIterator> {
         self.message_bus.borrow_mut().request_market_rule(&message)
+    }
+
+    /// Sends request for positions.
+    pub(crate) fn request_positions(&self, message: RequestMessage) -> Result<GlobalResponseIterator> {
+        self.message_bus.borrow_mut().request_positions(&message)
     }
 
     pub(crate) fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
