@@ -1,6 +1,6 @@
 use crate::client::ResponseMessage;
 use crate::contracts::SecurityType;
-use crate::{Error};
+use crate::Error;
 
 use super::Position;
 
@@ -24,7 +24,7 @@ pub(crate) fn position(_server_version: i32, message: &mut ResponseMessage) -> R
     position.contract.currency = message.next_string()?;
     position.contract.local_symbol = message.next_string()?;
 
-    if message_version >= 2  {
+    if message_version >= 2 {
         position.contract.trading_class = message.next_string()?;
     }
 

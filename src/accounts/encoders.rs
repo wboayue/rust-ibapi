@@ -1,6 +1,6 @@
-use crate::Error;
 use crate::client::RequestMessage;
 use crate::messages::OutgoingMessages;
+use crate::Error;
 
 pub(crate) fn request_positions() -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;

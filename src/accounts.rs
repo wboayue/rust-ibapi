@@ -3,10 +3,10 @@ use log::error;
 use crate::client::transport::GlobalResponseIterator;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
-use crate::{Client, Error, server_versions};
+use crate::{server_versions, Client, Error};
 
-mod encoders;
 mod decoders;
+mod encoders;
 
 #[derive(Debug, Default)]
 pub struct Position {
@@ -19,10 +19,7 @@ pub struct Position {
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.
 pub(crate) fn positions(client: &Client) -> Result<impl Iterator<Item = Position>, Error> {
-    client.check_server_version(
-        server_versions::ACCOUNT_SUMMARY,
-        "It does not support position requests.",
-    )?;
+    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position requests.")?;
 
     let message = encoders::request_positions()?;
 
