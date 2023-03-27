@@ -279,6 +279,9 @@ fn dispatch_message(
         IncomingMessages::MarketRule => {
             globals.send_market_rule.send(message).unwrap();
         }
+        IncomingMessages::Position | IncomingMessages::PositionEnd => {
+            globals.send_positions.send(message).unwrap();
+        }
         IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
         IncomingMessages::OrderStatus
         | IncomingMessages::OpenOrder

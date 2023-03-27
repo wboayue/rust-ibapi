@@ -31,7 +31,22 @@ pub(crate) fn positions(client: &Client) -> Result<impl Iterator<Item = Position
     })
 }
 
-/// Supports iteration over [Position].
+pub(crate) fn cancel_positions(client: &Client) -> Result<impl Iterator<Item = Position>, Error> {
+    // TODO implement cancel
+    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position requests.")?;
+
+    let message = encoders::request_positions()?;
+
+    let messages = client.request_order_data(message)?;
+
+    Ok(PositionIterator {
+        server_version: client.server_version(),
+        messages,
+    })
+}
+
+
+// Supports iteration over [Position].
 pub struct PositionIterator {
     server_version: i32,
     messages: GlobalResponseIterator,
@@ -40,7 +55,7 @@ pub struct PositionIterator {
 impl Iterator for PositionIterator {
     type Item = Position;
 
-    /// Returns the next [Position]. Waits up to x seconds for next [OrderDataResult].
+    // Returns the next [Position]. Waits up to x seconds for next [OrderDataResult].
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(mut message) = self.messages.next() {
@@ -65,5 +80,3 @@ impl Iterator for PositionIterator {
         }
     }
 }
-
-// cancelPositions, EWrapper::position, EWrapper::positionEnd
