@@ -1359,7 +1359,7 @@ pub(crate) fn global_cancel(client: &Client) -> Result<()> {
 }
 
 // Gets next valid order id
-pub fn next_valid_order_id(client: &Client) -> Result<i32> {
+pub(crate) fn next_valid_order_id(client: &Client) -> Result<i32> {
     let message = encoders::encode_next_valid_order_id()?;
 
     let mut messages = client.request_next_order_id(message)?;
@@ -1376,30 +1376,8 @@ pub fn next_valid_order_id(client: &Client) -> Result<i32> {
     }
 }
 
-/// Requests completed [Order]s.
-///
-/// # Arguments
-/// * `client` - [Client] used to communicate with server.
-/// * `api_only` - request only orders placed by the API.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::{Client};
-/// use ibapi::orders;
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let results = orders::completed_orders(&mut client, false)?;
-///     for order_data in results {
-///        println!("{order_data:?}")
-///     }
-///
-///     Ok(())
-/// }
-/// ```
-pub fn completed_orders(client: &Client, api_only: bool) -> Result<OrderDataIterator> {
+// Requests completed [Order]s.
+pub(crate) fn completed_orders(client: &Client, api_only: bool) -> Result<OrderDataIterator> {
     client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
 
     let message = encoders::encode_completed_orders(api_only)?;
@@ -1482,30 +1460,9 @@ pub(crate) fn open_orders(client: &Client) -> Result<OrderDataIterator> {
     })
 }
 
-/// Requests all *current* open orders in associated accounts at the current moment.
-/// Open orders are returned once; this function does not initiate a subscription.
-///
-/// # Arguments
-/// * `client` - [Client] used to communicate with server.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::{Client};
-/// use ibapi::orders;
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let results = orders::all_open_orders(&mut client)?;
-///     for order_data in results {
-///        println!("{order_data:?}")
-///     }
-///
-///     Ok(())
-/// }
-/// ```
-pub fn all_open_orders(client: &Client) -> Result<OrderDataIterator> {
+// Requests all *current* open orders in associated accounts at the current moment.
+// Open orders are returned once; this function does not initiate a subscription.
+pub(crate) fn all_open_orders(client: &Client) -> Result<OrderDataIterator> {
     let message = encoders::encode_all_open_orders()?;
 
     let messages = client.request_order_data(message)?;
@@ -1516,30 +1473,8 @@ pub fn all_open_orders(client: &Client) -> Result<OrderDataIterator> {
     })
 }
 
-/// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
-///
-/// # Arguments
-/// * `client` - [Client] used to communicate with server.
-/// * `auto_bind` - if set to true, the newly created orders will be assigned an API order ID and implicitly associated with this client. If set to false, future orders will not be.
-///
-/// # Examples
-///
-/// ```no_run
-/// use ibapi::{Client};
-/// use ibapi::orders;
-///
-/// fn main() -> anyhow::Result<()> {
-///     let mut client = Client::connect("localhost:4002")?;
-///
-///     let results = orders::auto_open_orders(&mut client, false)?;
-///     for order_data in results {
-///        println!("{order_data:?}")
-///     }
-///
-///     Ok(())
-/// }
-/// ```
-pub fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<OrderDataIterator> {
+// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
+pub(crate) fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<OrderDataIterator> {
     let message = encoders::encode_auto_open_orders(auto_bind)?;
 
     // TODO this should probably not timeout.

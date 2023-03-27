@@ -32,17 +32,17 @@ fn main() -> anyhow::Result<()> {
         }
         "all_open" => {
             println!("All open orders:");
-            let orders = orders::all_open_orders(&client)?;
+            let orders = client.all_open_orders()?;
             print_orders(orders);
         }
         "auto_open" => {
             println!("Auto open orders:");
-            let orders = orders::auto_open_orders(&client, false)?;
+            let orders = client.auto_open_orders(false)?;
             print_orders(orders);
         }
         "completed" => {
             println!("Completed orders:");
-            let orders = orders::completed_orders(&client, false)?;
+            let orders = client.completed_orders(false)?;
             print_orders(orders);
         }
         kind => {

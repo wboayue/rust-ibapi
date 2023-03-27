@@ -336,6 +336,58 @@ impl Client {
 
     // === Orders ===
 
+    /// Requests all *current* open orders in associated accounts at the current moment.
+    /// Open orders are returned once; this function does not initiate a subscription.
+    ///
+    /// # Arguments
+    /// * `client` - [Client] used to communicate with server.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// fn main() -> anyhow::Result<()> {
+    ///     let mut client = Client::connect("localhost:4002")?;
+    ///
+    ///     let results = client.all_open_orders()?;
+    ///     for order_data in results {
+    ///        println!("{order_data:?}")
+    ///     }
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn all_open_orders(&self) -> Result<impl Iterator<Item = orders::OrderDataResult>> {
+        orders::all_open_orders(self)
+    }
+
+    /// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
+    ///
+    /// # Arguments
+    /// * `client` - [Client] used to communicate with server.
+    /// * `auto_bind` - if set to true, the newly created orders will be assigned an API order ID and implicitly associated with this client. If set to false, future orders will not be.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::{Client};
+    ///
+    /// fn main() -> anyhow::Result<()> {
+    ///     let mut client = Client::connect("localhost:4002")?;
+    ///
+    ///     let results = client.auto_open_orders(false)?;
+    ///     for order_data in results {
+    ///        println!("{order_data:?}")
+    ///     }
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn auto_open_orders(&self, auto_bind: bool) -> Result<impl Iterator<Item = orders::OrderDataResult>> {
+        orders::auto_open_orders(self, auto_bind)
+    }
+
     /// Cancels an open [Order].
     ///
     /// # Arguments
@@ -361,6 +413,31 @@ impl Client {
     /// ```
     pub fn cancel_order(&self, order_id: i32, manual_order_cancel_time: &str) -> Result<impl Iterator<Item = orders::CancelOrderResult>> {
         orders::cancel_order(self, order_id, manual_order_cancel_time)
+    }
+
+    /// Requests completed [Order]s.
+    ///
+    /// # Arguments
+    /// * `api_only` - request only orders placed by the API.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// fn main() -> anyhow::Result<()> {
+    ///     let mut client = Client::connect("localhost:4002")?;
+    ///
+    ///     let results = client.completed_orders(false)?;
+    ///     for order_data in results {
+    ///        println!("{order_data:?}")
+    ///     }
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn completed_orders(&self, api_only: bool) -> Result<impl Iterator<Item = orders::OrderDataResult>> {
+        orders::completed_orders(self, api_only)
     }
 
     /// Requests current day's (since midnight) executions matching the filter.
@@ -427,13 +504,12 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::{Client};
-    /// use ibapi::orders;
+    /// use ibapi::Client;
     ///
     /// fn main() -> anyhow::Result<()> {
     ///     let mut client = Client::connect("localhost:4002")?;
     ///
-    ///     let next_valid_order_id = orders::next_valid_order_id(&mut client)?;
+    ///     let next_valid_order_id = client.next_valid_order_id()?;
     ///     println!("next_valid_order_id: {next_valid_order_id}");
     ///
     ///     Ok(())
