@@ -55,8 +55,7 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use anyhow::{anyhow, Result};
 use contracts::Contract;
 use log::{debug, error, info};
-use market_data::realtime::RealTimeBarIterator;
-use market_data::{BarSize, WhatToShow};
+use market_data::{BarSize, RealTimeBar, WhatToShow};
 
 use crate::accounts::Position;
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
@@ -496,8 +495,6 @@ impl Client {
 
     /// Cancels all open [Order]s.
     ///
-    /// Requests the cancelation of all open [Order]s.
-    ///
     /// # Arguments
     /// * `client` - [Client] used to communicate with server.
     ///
@@ -581,7 +578,7 @@ impl Client {
     ///             }
     ///             OrderNotification::OpenOrder(open_order) => println!("open order: {open_order:?}"),
     ///             OrderNotification::ExecutionData(execution) => println!("execution: {execution:?}"),
-    ///             OrderNotification::CommissionReport(report) => println!("commision report: {report:?}"),
+    ///             OrderNotification::CommissionReport(report) => println!("commission report: {report:?}"),
     ///             OrderNotification::Message(message) => println!("message: {message:?}"),
     ///        }
     ///     }
@@ -629,7 +626,7 @@ impl Client {
         bar_size: &BarSize,
         what_to_show: &WhatToShow,
         use_rth: bool,
-    ) -> Result<RealTimeBarIterator<'a>> {
+    ) -> Result<impl Iterator<Item = RealTimeBar> + 'a> {
         realtime::realtime_bars_with_options(self, contract, bar_size, what_to_show, use_rth, Vec::default())
     }
 

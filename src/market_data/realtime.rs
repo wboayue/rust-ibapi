@@ -16,7 +16,7 @@ mod encoders;
 mod tests;
 
 // Requests realtime bars.
-pub fn realtime_bars<'a>(
+pub(crate) fn realtime_bars<'a>(
     client: &'a Client,
     contract: &Contract,
     bar_size: &BarSize,
@@ -27,7 +27,7 @@ pub fn realtime_bars<'a>(
 }
 
 // Requests realtime bars.
-pub fn realtime_bars_with_options<'a>(
+pub(crate) fn realtime_bars_with_options<'a>(
     client: &'a Client,
     contract: &Contract,
     bar_size: &BarSize,
