@@ -630,6 +630,70 @@ impl Client {
         realtime::realtime_bars_with_options(self, contract, bar_size, what_to_show, use_rth, Vec::default())
     }
 
+    /// Requests tick by tick AllLast ticks.
+    ///
+    /// # Arguments
+    /// * `client` - [Client] with an active connection to gateway.
+    /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
+    /// * `number_of_ticks` - number of ticks.
+    /// * `ignore_size` - ignore size flag.
+    pub fn tick_by_tick_all_last<'a>(
+        &'a self,
+        contract: &Contract,
+        number_of_ticks: i32,
+        ignore_size: bool,
+    ) -> Result<impl Iterator<Item = market_data::Trade> + 'a> {
+        realtime::tick_by_tick_all_last(self, contract, number_of_ticks, ignore_size)
+    }
+
+    /// Requests tick by tick BidAsk ticks.
+    ///
+    /// # Arguments
+    /// * `client` - [Client] with an active connection to gateway.
+    /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
+    /// * `number_of_ticks` - number of ticks.
+    /// * `ignore_size` - ignore size flag.
+    pub fn tick_by_tick_bid_ask<'a>(
+        &'a self,
+        contract: &Contract,
+        number_of_ticks: i32,
+        ignore_size: bool,
+    ) -> Result<impl Iterator<Item = market_data::BidAsk> + 'a> {
+        realtime::tick_by_tick_bid_ask(self, contract, number_of_ticks, ignore_size)
+    }
+
+    /// Requests tick by tick Last ticks.
+    ///
+    /// # Arguments
+    /// * `client` - [Client] with an active connection to gateway.
+    /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
+    /// * `number_of_ticks` - number of ticks.
+    /// * `ignore_size` - ignore size flag.
+    pub fn tick_by_tick_last<'a>(
+        &'a self,
+        contract: &Contract,
+        number_of_ticks: i32,
+        ignore_size: bool,
+    ) -> Result<impl Iterator<Item = market_data::Trade> + 'a> {
+        realtime::tick_by_tick_last(self, contract, number_of_ticks, ignore_size)
+    }
+
+    /// Requests tick by tick MidPoint ticks.
+    ///
+    /// # Arguments
+    /// * `client` - [Client] with an active connection to gateway.
+    /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
+    /// * `number_of_ticks` - number of ticks.
+    /// * `ignore_size` - ignore size flag.
+    pub fn tick_by_tick_midpoint<'a>(
+        &'a self,
+        contract: &Contract,
+        number_of_ticks: i32,
+        ignore_size: bool,
+    ) -> Result<impl Iterator<Item = market_data::MidPoint> + 'a> {
+        realtime::tick_by_tick_midpoint(self, contract, number_of_ticks, ignore_size)
+    }
+
     // == Internal Use ==
 
     #[cfg(test)]

@@ -4,7 +4,7 @@ use std::time::Duration;
 use clap::{arg, ArgMatches, Command};
 
 use ibapi::contracts::Contract;
-use ibapi::market_data::{realtime, BarSize, WhatToShow};
+use ibapi::market_data::{BarSize, WhatToShow};
 use ibapi::Client;
 
 fn main() -> anyhow::Result<()> {
@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
 
     let client = Client::connect("odin:4002")?;
 
-    let bars = realtime::realtime_bars(&client, &contract, &BarSize::Sec5, &WhatToShow::Trades, false)?;
+    let bars = client.realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, false)?;
 
     for (i, bar) in bars.enumerate().take(60) {
         println!("bar: {i:?} {bar:?}");

@@ -52,19 +52,13 @@ pub(crate) fn realtime_bars_with_options<'a>(
     Ok(RealTimeBarIterator::new(client, request_id, responses))
 }
 
-/// Requests tick by tick AllLast ticks.
-///
-/// # Arguments
-/// * `client` - [Client] with an active connection to gateway.
-/// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
-/// * `number_of_ticks` - number of ticks.
-/// * `ignore_size` - ignore size flag.
-pub fn tick_by_tick_all_last<'a>(
-    client: &'a mut Client,
+// Requests tick by tick AllLast ticks.
+pub(crate) fn tick_by_tick_all_last<'a>(
+    client: &'a Client,
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> anyhow::Result<TradeIterator<'a>> {
+) -> Result<impl Iterator<Item = Trade> + 'a> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -94,15 +88,9 @@ fn validate_tick_by_tick_request(client: &Client, _contract: &Contract, number_o
     Ok(())
 }
 
-/// Requests tick by tick Last ticks.
-///
-/// # Arguments
-/// * `client` - [Client] with an active connection to gateway.
-/// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
-/// * `number_of_ticks` - number of ticks.
-/// * `ignore_size` - ignore size flag.
-pub fn tick_by_tick_last<'a>(
-    client: &'a mut Client,
+// Requests tick by tick Last ticks.
+pub(crate) fn tick_by_tick_last<'a>(
+    client: &'a Client,
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
@@ -122,14 +110,13 @@ pub fn tick_by_tick_last<'a>(
     })
 }
 
-/// Requests tick by tick BidAsk ticks.
-///
-/// # Arguments
-/// * `client` - [Client] with an active connection to gateway.
-/// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
-/// * `number_of_ticks` - number of ticks.
-/// * `ignore_size` - ignore size flag.
-pub fn tick_by_tick_bid_ask<'a>(client: &'a mut Client, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<BidAskIterator<'a>> {
+// Requests tick by tick BidAsk ticks.
+pub(crate) fn tick_by_tick_bid_ask<'a>(
+    client: &'a Client,
+    contract: &Contract,
+    number_of_ticks: i32,
+    ignore_size: bool,
+) -> Result<BidAskIterator<'a>> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -145,15 +132,9 @@ pub fn tick_by_tick_bid_ask<'a>(client: &'a mut Client, contract: &Contract, num
     })
 }
 
-/// Requests tick by tick MidPoint ticks.
-///
-/// # Arguments
-/// * `client` - [Client] with an active connection to gateway.
-/// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
-/// * `number_of_ticks` - number of ticks.
-/// * `ignore_size` - ignore size flag.
-pub fn tick_by_tick_midpoint<'a>(
-    client: &'a mut Client,
+// Requests tick by tick MidPoint ticks.
+pub(crate) fn tick_by_tick_midpoint<'a>(
+    client: &'a Client,
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
@@ -237,7 +218,7 @@ impl<'a> Drop for RealTimeBarIterator<'a> {
 
 /// TradeIterator supports iteration over [Trade] ticks.
 pub struct TradeIterator<'a> {
-    client: &'a mut Client,
+    client: &'a Client,
     request_id: i32,
     responses: ResponseIterator,
 }
@@ -271,13 +252,13 @@ impl<'a> Iterator for TradeIterator<'a> {
 
 /// BidAskIterator supports iteration over [BidAsk] ticks.
 pub struct BidAskIterator<'a> {
-    client: &'a mut Client,
+    client: &'a Client,
     request_id: i32,
     responses: ResponseIterator,
 }
 
 /// Cancels the tick by tick request
-fn cancel_tick_by_tick(client: &mut Client, request_id: i32) {
+fn cancel_tick_by_tick(client: &Client, request_id: i32) {
     if client.server_version() >= server_versions::TICK_BY_TICK {
         let message = encoders::cancel_tick_by_tick(request_id).unwrap();
         client.send_message(message).unwrap();
@@ -313,7 +294,7 @@ impl<'a> Iterator for BidAskIterator<'a> {
 
 /// MidPointIterator supports iteration over [MidPoint] ticks.
 pub struct MidPointIterator<'a> {
-    client: &'a mut Client,
+    client: &'a Client,
     request_id: i32,
     responses: ResponseIterator,
 }

@@ -49,7 +49,7 @@ fn main() -> anyhow::Result<()> {
 
 fn stream_last(client: &mut Client, symbol: &str) -> anyhow::Result<()> {
     let contract = contract_es();
-    let ticks = realtime::tick_by_tick_last(client, &contract, 0, false)?;
+    let ticks = client.tick_by_tick_last(&contract, 0, false)?;
 
     for (i, tick) in ticks.enumerate().take(60) {
         println!("tick: {i:?} {tick:?}");
@@ -79,9 +79,9 @@ fn contract_zn() -> Contract {
     contract
 }
 
-fn stream_all_last(client: &mut Client, symbol: &str) -> anyhow::Result<()> {
+fn stream_all_last(client: &Client, symbol: &str) -> anyhow::Result<()> {
     let contract = contract_es();
-    let ticks = realtime::tick_by_tick_all_last(client, &contract, 0, false)?;
+    let ticks = client.tick_by_tick_all_last(&contract, 0, false)?;
 
     for (i, tick) in ticks.enumerate().take(60) {
         println!("tick: {i:?} {tick:?}");
@@ -92,7 +92,7 @@ fn stream_all_last(client: &mut Client, symbol: &str) -> anyhow::Result<()> {
 
 fn stream_bid_ask(client: &mut Client, symbol: &str) -> anyhow::Result<()> {
     let contract = contract_es();
-    let ticks = realtime::tick_by_tick_bid_ask(client, &contract, 0, false)?;
+    let ticks = client.tick_by_tick_bid_ask(&contract, 0, false)?;
 
     for (i, tick) in ticks.enumerate().take(60) {
         println!("tick: {i:?} {tick:?}");
@@ -103,7 +103,7 @@ fn stream_bid_ask(client: &mut Client, symbol: &str) -> anyhow::Result<()> {
 
 fn stream_mid_point(client: &mut Client, symbol: &str) -> anyhow::Result<()> {
     let contract = contract_es();
-    let ticks = realtime::tick_by_tick_midpoint(client, &contract, 0, false)?;
+    let ticks = client.tick_by_tick_midpoint(&contract, 0, false)?;
 
     for (i, tick) in ticks.enumerate().take(60) {
         println!("tick: {i:?} {tick:?}");
