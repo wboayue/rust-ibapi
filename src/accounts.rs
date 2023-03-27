@@ -1,5 +1,5 @@
 use crate::contracts::Contract;
-use crate::{Client, IbApiError};
+use crate::{Client, Error};
 
 #[derive(Debug)]
 pub struct Position {
@@ -9,6 +9,6 @@ pub struct Position {
     pub average_cost: f64,
 }
 
-pub(crate) fn positions(client: &Client) -> Result<impl Iterator<Item = Position>, IbApiError> {
+pub(crate) fn positions(client: &Client) -> Result<impl Iterator<Item = Position>, Error> {
     Ok(Vec::<Position>::new().into_iter())
 }

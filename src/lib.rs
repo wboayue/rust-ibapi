@@ -38,6 +38,7 @@ mod constants;
 pub mod contracts;
 /// Describes primary data structures used by the model.
 pub(crate) mod domain;
+pub mod errors;
 /// APIs for retrieving market data
 pub mod market_data;
 mod messages;
@@ -48,7 +49,6 @@ mod server_versions;
 pub(crate) mod stubs;
 
 use std::cell::RefCell;
-use std::error::Error;
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicI32, Ordering};
 
@@ -65,7 +65,7 @@ use crate::market_data::realtime;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
 
-pub type IbApiError = Box<dyn Error + Send>;
+pub use errors::Error;
 
 // Client
 
@@ -261,7 +261,7 @@ impl Client {
 
     // === Accounts ===
 
-    pub fn positions(&self) -> core::result::Result<impl Iterator<Item = Position>, IbApiError> {
+    pub fn positions(&self) -> core::result::Result<impl Iterator<Item = Position>, Error> {
         accounts::positions(self)
     }
 
