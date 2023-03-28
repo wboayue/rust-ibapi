@@ -18,40 +18,38 @@ pub struct Position {
 
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.
-pub(crate) fn positions(client: &Client) -> Result<impl Iterator<Item = Position>, Error> {
+pub(crate) fn positions<'a>(client: &'a Client) -> Result<impl Iterator<Item = Position> + 'a, Error> {
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position requests.")?;
 
     let message = encoders::request_positions()?;
 
-    let messages = client.request_order_data(message)?;
+    let messages = client.request_positions(message)?;
 
     Ok(PositionIterator {
+        client: &client,
         server_version: client.server_version(),
         messages,
     })
 }
 
-pub(crate) fn cancel_positions(client: &Client) -> Result<impl Iterator<Item = Position>, Error> {
-    // TODO implement cancel
-    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position requests.")?;
+pub(crate) fn cancel_positions(client: &Client) -> Result<(), Error> {
+    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position cancellation.")?;
 
-    let message = encoders::request_positions()?;
+    let message = encoders::cancel_positions()?;
 
-    let messages = client.request_order_data(message)?;
+    client.request_positions(message)?;
 
-    Ok(PositionIterator {
-        server_version: client.server_version(),
-        messages,
-    })
+    Ok(())
 }
 
 // Supports iteration over [Position].
-pub struct PositionIterator {
+pub struct PositionIterator<'a> {
+    client: &'a Client,
     server_version: i32,
     messages: GlobalResponseIterator,
 }
 
-impl Iterator for PositionIterator {
+impl<'a> Iterator for PositionIterator<'a> {
     type Item = Position;
 
     // Returns the next [Position]. Waits up to x seconds for next [OrderDataResult].
@@ -66,11 +64,11 @@ impl Iterator for PositionIterator {
                         }
                     },
                     IncomingMessages::PositionEnd => {
-                        // cancel positions
+                        cancel_positions(self.client);
                         return None;
                     }
                     message => {
-                        error!("order data iterator unexpected messsage: {message:?}");
+                        error!("order data iterator unexpected message: {message:?}");
                     }
                 }
             } else {

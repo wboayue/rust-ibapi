@@ -3,14 +3,20 @@ use crate::messages::OutgoingMessages;
 use crate::Error;
 
 pub(crate) fn request_positions() -> Result<RequestMessage, Error> {
-    const VERSION: i32 = 1;
+    encode_simple(OutgoingMessages::RequestPositions, 1)
+}
 
+fn encode_simple(message_type: OutgoingMessages, version: i32) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 
-    message.push_field(&OutgoingMessages::RequestPositions);
-    message.push_field(&VERSION);
+    message.push_field(&message_type);
+    message.push_field(&version);
 
     Ok(message)
+}
+
+pub(crate) fn cancel_positions() -> Result<RequestMessage, Error> {
+    encode_simple(OutgoingMessages::CancelPositions, 1)
 }
 
 #[cfg(test)]
