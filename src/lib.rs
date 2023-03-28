@@ -64,6 +64,7 @@ use crate::market_data::realtime;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
 
+#[doc(inline)]
 pub use errors::Error;
 
 // Client
