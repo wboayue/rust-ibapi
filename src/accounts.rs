@@ -57,14 +57,16 @@ impl<'a> Iterator for PositionIterator<'a> {
         loop {
             if let Some(mut message) = self.messages.next() {
                 match message.message_type() {
-                    IncomingMessages::Position => match decoders::position(self.server_version, &mut message) {
+                    IncomingMessages::Position => match decoders::position(&mut message) {
                         Ok(val) => return Some(val),
                         Err(err) => {
                             error!("error decoding execution data: {err}");
                         }
                     },
                     IncomingMessages::PositionEnd => {
-                        cancel_positions(self.client);
+                        if let Err(e) = cancel_positions(self.client) {
+                            error!("error cancelling positions: {e}")
+                        }
                         return None;
                     }
                     message => {
