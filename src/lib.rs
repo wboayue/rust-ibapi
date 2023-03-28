@@ -278,14 +278,12 @@ impl Client {
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
     ///
-    /// fn main() {
-    ///     let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let contract = Contract::stock("TSLA");
-    ///     let results = client.contract_details(&contract).expect("request failed");
-    ///     for contract_detail in results {
-    ///         println!("contract: {:?}", contract_detail);
-    ///     }
+    /// let contract = Contract::stock("TSLA");
+    /// let results = client.contract_details(&contract).expect("request failed");
+    /// for contract_detail in results {
+    ///     println!("contract: {:?}", contract_detail);
     /// }
     /// ```
     pub fn contract_details(&self, contract: &Contract) -> Result<impl Iterator<Item = contracts::ContractDetails>, Error> {
@@ -297,7 +295,7 @@ impl Client {
     /// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
     /// A list of market rule ids can be obtained by invoking [request_contract_details] on a particular contract. The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [ContractDetails].
     pub fn market_rule(&self, market_rule_id: i32) -> Result<contracts::MarketRule, Error> {
-        Ok(contracts::market_rule(self, market_rule_id)?)
+        contracts::market_rule(self, market_rule_id)
     }
 
     /// Requests matching stock symbols.
@@ -380,14 +378,12 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() {
-    ///     let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let order_id = 15;
-    ///     let results = client.cancel_order(order_id, "").expect("request failed");
-    ///     for result in results {
-    ///        println!("{result:?}");
-    ///     }
+    /// let order_id = 15;
+    /// let results = client.cancel_order(order_id, "").expect("request failed");
+    /// for result in results {
+    ///    println!("{result:?}");
     /// }
     /// ```
     pub fn cancel_order(&self, order_id: i32, manual_order_cancel_time: &str) -> Result<impl Iterator<Item = orders::CancelOrderResult>, Error> {
@@ -404,13 +400,11 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() {
-    ///     let mut client = Client::connect("localhost:4002").expect("connection failed");
+    /// let mut client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let results = client.completed_orders(false).expect("request failed");
-    ///     for order_data in results {
-    ///        println!("{order_data:?}")
-    ///     }
+    /// let results = client.completed_orders(false).expect("request failed");
+    /// for order_data in results {
+    ///    println!("{order_data:?}")
     /// }
     /// ```
     pub fn completed_orders(&self, api_only: bool) -> Result<impl Iterator<Item = orders::OrderDataResult>, Error> {
@@ -432,18 +426,16 @@ impl Client {
     /// use ibapi::Client;
     /// use ibapi::orders::ExecutionFilter;
     ///
-    /// fn main() {
-    ///     let mut client = Client::connect("localhost:4002").expect("connection failed");
+    /// let mut client = Client::connect("localhost:4002").expect("connection failed");
     ///     
-    ///     let filter = ExecutionFilter{
-    ///        side: "BUY".to_owned(),
-    ///        ..ExecutionFilter::default()
-    ///     };
+    /// let filter = ExecutionFilter{
+    ///    side: "BUY".to_owned(),
+    ///    ..ExecutionFilter::default()
+    /// };
     ///
-    ///     let results = client.executions(filter).expect("request failed");
-    ///     for execution_data in results {
-    ///        println!("{execution_data:?}")
-    ///     }
+    /// let results = client.executions(filter).expect("request failed");
+    /// for execution_data in results {
+    ///    println!("{execution_data:?}")
     /// }
     /// ```
     pub fn executions(&self, filter: orders::ExecutionFilter) -> Result<impl Iterator<Item = orders::ExecutionDataResult>, Error> {
@@ -457,11 +449,9 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() {
-    ///     let mut client = Client::connect("localhost:4002").expect("connection failed");
+    /// let mut client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     client.global_cancel().expect("request failed");
-    /// }
+    /// client.global_cancel().expect("request failed");
     /// ```
     pub fn global_cancel(&self) -> Result<(), Error> {
         orders::global_cancel(self)
@@ -474,12 +464,10 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() {
-    ///     let mut client = Client::connect("localhost:4002").expect("connection failed");
+    /// let mut client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let next_valid_order_id = client.next_valid_order_id().expect("request failed");
-    ///     println!("next_valid_order_id: {next_valid_order_id}");
-    /// }
+    /// let next_valid_order_id = client.next_valid_order_id().expect("request failed");
+    /// println!("next_valid_order_id: {next_valid_order_id}");
     /// ```
     pub fn next_valid_order_id(&self) -> Result<i32, Error> {
         orders::next_valid_order_id(self)
@@ -493,13 +481,11 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() {
-    ///     let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let results = client.open_orders().expect("request failed");
-    ///     for order_data in results {
-    ///        println!("{order_data:?}")
-    ///     }
+    /// let results = client.open_orders().expect("request failed");
+    /// for order_data in results {
+    ///    println!("{order_data:?}")
     /// }
     /// ```
     pub fn open_orders(&self) -> Result<impl Iterator<Item = OrderDataResult>, Error> {
@@ -523,26 +509,24 @@ impl Client {
     /// use ibapi::contracts::Contract;
     /// use ibapi::orders::{order_builder, Action, OrderNotification};
     ///
-    /// fn main() {
-    ///     let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let contract = Contract::stock("MSFT");
-    ///     let order = order_builder::market_order(Action::Buy, 100.0);
-    ///     let order_id = client.next_order_id();
+    /// let contract = Contract::stock("MSFT");
+    /// let order = order_builder::market_order(Action::Buy, 100.0);
+    /// let order_id = client.next_order_id();
     ///
-    ///     let notifications = client.place_order(order_id, &contract, &order).expect("request failed");
+    /// let notifications = client.place_order(order_id, &contract, &order).expect("request failed");
     ///
-    ///     for notification in notifications {
-    ///         match notification {
-    ///             OrderNotification::OrderStatus(order_status) => {
-    ///                 println!("order status: {order_status:?}")
-    ///             }
-    ///             OrderNotification::OpenOrder(open_order) => println!("open order: {open_order:?}"),
-    ///             OrderNotification::ExecutionData(execution) => println!("execution: {execution:?}"),
-    ///             OrderNotification::CommissionReport(report) => println!("commission report: {report:?}"),
-    ///             OrderNotification::Message(message) => println!("message: {message:?}"),
-    ///        }
-    ///     }
+    /// for notification in notifications {
+    ///     match notification {
+    ///         OrderNotification::OrderStatus(order_status) => {
+    ///             println!("order status: {order_status:?}")
+    ///         }
+    ///         OrderNotification::OpenOrder(open_order) => println!("open order: {open_order:?}"),
+    ///         OrderNotification::ExecutionData(execution) => println!("execution: {execution:?}"),
+    ///         OrderNotification::CommissionReport(report) => println!("commission report: {report:?}"),
+    ///         OrderNotification::Message(message) => println!("message: {message:?}"),
+    ///    }
     /// }
     /// ```
     pub fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<impl Iterator<Item = OrderNotification>, Error> {
@@ -565,15 +549,13 @@ impl Client {
     /// use ibapi::contracts::Contract;
     /// use ibapi::market_data::{BarSize, WhatToShow};
     ///
-    /// fn main() {
-    ///     let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let contract = Contract::stock("TSLA");
-    ///     let bars = client.realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, false).expect("request failed");
+    /// let contract = Contract::stock("TSLA");
+    /// let bars = client.realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, false).expect("request failed");
     ///
-    ///     for (i, bar) in bars.enumerate().take(60) {
-    ///         println!("bar[{i}]: {bar:?}");
-    ///     }
+    /// for (i, bar) in bars.enumerate().take(60) {
+    ///     println!("bar[{i}]: {bar:?}");
     /// }
     /// ```
     pub fn realtime_bars<'a>(
@@ -699,7 +681,11 @@ impl Client {
         if version <= self.server_version {
             Ok(())
         } else {
-            Err(Error::ServerVersion(version, self.server_version, message))
+            Err(Error::Regular(errors::ErrorKind::ServerVersion(
+                version,
+                self.server_version,
+                message.into(),
+            )))
         }
     }
 }

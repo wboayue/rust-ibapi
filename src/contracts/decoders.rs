@@ -1,10 +1,10 @@
-use anyhow::Result;
 use log::info;
 
-use super::{Contract, ContractDescription, ContractDetails, MarketRule, PriceIncrement};
-use crate::{client::ResponseMessage, contracts::SecurityType, orders::TagValue, server_versions};
+use crate::{client::ResponseMessage, contracts::SecurityType, orders::TagValue, server_versions, Error};
 
-pub(crate) fn contract_details(server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails> {
+use super::{Contract, ContractDescription, ContractDetails, MarketRule, PriceIncrement};
+
+pub(crate) fn contract_details(server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails, Error> {
     message.skip(); // message type
 
     let mut message_version = 8;
@@ -102,7 +102,7 @@ pub(crate) fn contract_details(server_version: i32, message: &mut ResponseMessag
     Ok(contract)
 }
 
-fn read_last_trade_date(contract: &mut ContractDetails, last_trade_date_or_contract_month: &str, is_bond: bool) -> Result<()> {
+fn read_last_trade_date(contract: &mut ContractDetails, last_trade_date_or_contract_month: &str, is_bond: bool) -> Result<(), Error> {
     if last_trade_date_or_contract_month.is_empty() {
         return Ok(());
     }
@@ -131,7 +131,7 @@ fn read_last_trade_date(contract: &mut ContractDetails, last_trade_date_or_contr
     Ok(())
 }
 
-pub(crate) fn contract_descriptions(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ContractDescription>> {
+pub(crate) fn contract_descriptions(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ContractDescription>, Error> {
     message.skip(); // message type
 
     let _request_id = message.next_int()?;
@@ -173,7 +173,7 @@ pub(crate) fn contract_descriptions(server_version: i32, message: &mut ResponseM
     Ok(contract_descriptions)
 }
 
-pub(crate) fn market_rule(message: &mut ResponseMessage) -> Result<MarketRule> {
+pub(crate) fn market_rule(message: &mut ResponseMessage) -> Result<MarketRule, Error> {
     message.skip(); // message type
 
     let mut market_rule = MarketRule::default();
