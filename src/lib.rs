@@ -106,15 +106,13 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() -> anyhow::Result<()> {
-    ///     let mut client = Client::connect("localhost:4002")?;
+    /// fn main() {
+    ///     let client = Client::connect("localhost:4002").expect("connection failed");
     ///
     ///     println!("server_version: {}", client.server_version());
     ///     println!("server_time: {}", client.server_time());
     ///     println!("managed_accounts: {}", client.managed_accounts());
     ///     println!("next_order_id: {}", client.next_order_id());
-    ///
-    ///     Ok(())
     /// }
     /// ```
     pub fn connect(connection_string: &str) -> Result<Client> {
@@ -272,26 +270,22 @@ impl Client {
     /// Provides all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
     ///
     /// # Arguments
-    /// * `client` - [Client] with an active connection to gateway.
     /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::Client;
-    /// use ibapi::contracts::{self, Contract};
+    /// use ibapi::contracts::Contract;
     ///
-    /// fn main() -> anyhow::Result<()> {
-    ///     let mut client = Client::connect("localhost:4002")?;
+    /// fn main() {
+    ///     let client = Client::connect("localhost:4002").expect("connection failed");
     ///
     ///     let contract = Contract::stock("TSLA");
-    ///     let results = client.contract_details(&contract)?;
-    ///
+    ///     let results = client.contract_details(&contract).expect("request failed");
     ///     for contract_detail in results {
     ///         println!("contract: {:?}", contract_detail);
     ///     }
-    ///
-    ///     Ok(())
     /// }
     /// ```
     pub fn contract_details(&self, contract: &Contract) -> Result<impl Iterator<Item = contracts::ContractDetails>> {
@@ -309,25 +303,20 @@ impl Client {
     /// Requests matching stock symbols.
     ///
     /// # Arguments
-    /// * `client` - [Client] with an active connection to gateway.
     /// * `pattern` - Either start of ticker symbol or (for larger strings) company name.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::Client;
-    /// use ibapi::contracts;
     ///
-    /// fn main() -> anyhow::Result<()> {
-    ///     let mut client = Client::connect("localhost:4002")?;
+    /// fn main() {
+    ///     let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let contracts = client.matching_symbols("IB")?;
-    ///
+    ///     let contracts = client.matching_symbols("IB").expect("request failed");
     ///     for contract in contracts {
     ///         println!("contract: {:?}", contract);
     ///     }
-    ///
-    ///     Ok(())
     /// }
     /// ```
     pub fn matching_symbols(&self, pattern: &str) -> Result<impl Iterator<Item = contracts::ContractDescription>> {
@@ -339,23 +328,18 @@ impl Client {
     /// Requests all *current* open orders in associated accounts at the current moment.
     /// Open orders are returned once; this function does not initiate a subscription.
     ///
-    /// # Arguments
-    /// * `client` - [Client] used to communicate with server.
-    ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() -> anyhow::Result<()> {
-    ///     let mut client = Client::connect("localhost:4002")?;
+    /// fn main() {
+    ///     let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let results = client.all_open_orders()?;
+    ///     let results = client.all_open_orders().expect("request failed");
     ///     for order_data in results {
     ///        println!("{order_data:?}")
     ///     }
-    ///
-    ///     Ok(())
     /// }
     /// ```
     pub fn all_open_orders(&self) -> Result<impl Iterator<Item = orders::OrderDataResult>> {
