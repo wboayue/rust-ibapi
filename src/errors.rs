@@ -10,17 +10,21 @@ pub enum Error {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ErrorKind {
-    NotAuthorized,
+    NotImplemented,
+    ServerVersion(i32, i32, String),
 }
 
 impl ErrorKind {
     fn as_str(&self) -> &str {
         match *self {
             // ErrorKind::NotFound => "not found",
-            ErrorKind::NotAuthorized => "not authorized",
+            ErrorKind::NotImplemented => "not implemented",
+            ErrorKind::ServerVersion(wanted, have, message) => &format!("server version {} required, got {}: {}", wanted, have, &message),
         }
     }
 }
+
+// Err(err) => Err(anyhow!("error parsing field {} {}: {}", i, field, err)),
 
 impl std::error::Error for Error {
     fn description(&self) -> &str {
@@ -40,12 +44,6 @@ impl std::fmt::Display for Error {
             Error::Regular(ref err) => write!(f, "A regular error occurred {:?}", err),
             Error::Simple(ref err) => write!(f, "A custom error occurred {:?}", err),
         }
-    }
-}
-
-impl From<anyhow::Error> for Error {
-    fn from(err: anyhow::Error) -> Error {
-        Error::Simple(err.to_string())
     }
 }
 

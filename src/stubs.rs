@@ -6,6 +6,7 @@ use crossbeam::channel;
 
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator};
 use crate::client::{RequestMessage, ResponseMessage};
+use crate::Error;
 
 pub(crate) struct MessageBusStub {
     pub request_messages: RefCell<Vec<RequestMessage>>,
@@ -20,16 +21,16 @@ impl MessageBus for MessageBusStub {
         self.request_messages.borrow().clone()
     }
 
-    fn read_message(&mut self) -> anyhow::Result<ResponseMessage> {
+    fn read_message(&mut self) -> Result<ResponseMessage, Error> {
         Ok(ResponseMessage::default())
     }
 
-    fn write_message(&mut self, message: &RequestMessage) -> anyhow::Result<()> {
+    fn write_message(&mut self, message: &RequestMessage) -> Result<(), Error> {
         self.request_messages.borrow_mut().push(message.clone());
         Ok(())
     }
 
-    fn send_generic_message(&mut self, request_id: i32, message: &RequestMessage) -> anyhow::Result<ResponseIterator> {
+    fn send_generic_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
         self.request_messages.borrow_mut().push(message.clone());
 
         let (sender, receiver) = channel::unbounded();
@@ -42,7 +43,7 @@ impl MessageBus for MessageBusStub {
         Ok(ResponseIterator::new(receiver, s1, None, None, Duration::from_secs(5)))
     }
 
-    fn send_order_message(&mut self, request_id: i32, message: &RequestMessage) -> anyhow::Result<ResponseIterator> {
+    fn send_order_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
         self.request_messages.borrow_mut().push(message.clone());
 
         let (sender, receiver) = channel::unbounded();
@@ -55,7 +56,7 @@ impl MessageBus for MessageBusStub {
         Ok(ResponseIterator::new(receiver, s1, None, None, Duration::from_secs(5)))
     }
 
-    fn request_next_order_id(&mut self, message: &RequestMessage) -> anyhow::Result<GlobalResponseIterator> {
+    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
         self.request_messages.borrow_mut().push(message.clone());
 
         let (sender, receiver) = channel::unbounded();
@@ -67,7 +68,7 @@ impl MessageBus for MessageBusStub {
         Ok(GlobalResponseIterator::new(Arc::new(receiver)))
     }
 
-    fn request_open_orders(&mut self, message: &RequestMessage) -> anyhow::Result<GlobalResponseIterator> {
+    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
         self.request_messages.borrow_mut().push(message.clone());
 
         let (sender, receiver) = channel::unbounded();
@@ -79,7 +80,7 @@ impl MessageBus for MessageBusStub {
         Ok(GlobalResponseIterator::new(Arc::new(receiver)))
     }
 
-    fn request_market_rule(&mut self, message: &RequestMessage) -> anyhow::Result<GlobalResponseIterator> {
+    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
         self.request_messages.borrow_mut().push(message.clone());
 
         let (sender, receiver) = channel::unbounded();
@@ -91,7 +92,7 @@ impl MessageBus for MessageBusStub {
         Ok(GlobalResponseIterator::new(Arc::new(receiver)))
     }
 
-    fn request_positions(&mut self, message: &RequestMessage) -> anyhow::Result<GlobalResponseIterator> {
+    fn request_positions(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
         self.request_messages.borrow_mut().push(message.clone());
 
         let (sender, receiver) = channel::unbounded();
@@ -103,11 +104,11 @@ impl MessageBus for MessageBusStub {
         Ok(GlobalResponseIterator::new(Arc::new(receiver)))
     }
 
-    fn write(&mut self, packet: &str) -> anyhow::Result<()> {
+    fn write(&mut self, packet: &str) -> Result<(), Error> {
         Ok(())
     }
 
-    fn process_messages(&mut self, server_version: i32) -> anyhow::Result<()> {
+    fn process_messages(&mut self, server_version: i32) -> Result<(), Error> {
         Ok(())
     }
 }

@@ -1,7 +1,6 @@
 use std::ops::Index;
 use std::str::FromStr;
 
-use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
 
 use crate::messages::{order_id_index, request_id_index, IncomingMessages};

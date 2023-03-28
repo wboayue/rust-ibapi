@@ -1,4 +1,3 @@
-use anyhow::Result;
 use log::error;
 
 use crate::client::transport::ResponseIterator;
@@ -6,7 +5,7 @@ use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::orders::TagValue;
 use crate::server_versions;
-use crate::Client;
+use crate::{Client, Error};
 
 use super::{BarSize, BidAsk, MidPoint, RealTimeBar, Trade, WhatToShow};
 
@@ -22,7 +21,7 @@ pub(crate) fn realtime_bars<'a>(
     bar_size: &BarSize,
     what_to_show: &WhatToShow,
     use_rth: bool,
-) -> Result<RealTimeBarIterator<'a>> {
+) -> Result<RealTimeBarIterator<'a>, Error> {
     realtime_bars_with_options(client, contract, bar_size, what_to_show, use_rth, Vec::default())
 }
 
@@ -34,7 +33,7 @@ pub(crate) fn realtime_bars_with_options<'a>(
     what_to_show: &WhatToShow,
     use_rth: bool,
     options: Vec<TagValue>,
-) -> Result<RealTimeBarIterator<'a>> {
+) -> Result<RealTimeBarIterator<'a>, Error> {
     client.check_server_version(server_versions::REAL_TIME_BARS, "It does not support real time bars.")?;
 
     if !contract.trading_class.is_empty() || contract.contract_id > 0 {
@@ -58,7 +57,7 @@ pub(crate) fn tick_by_tick_all_last<'a>(
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<impl Iterator<Item = Trade> + 'a> {
+) -> Result<impl Iterator<Item = Trade> + 'a, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -75,7 +74,7 @@ pub(crate) fn tick_by_tick_all_last<'a>(
 }
 
 // Validates that server supports the given request.
-fn validate_tick_by_tick_request(client: &Client, _contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> anyhow::Result<()> {
+fn validate_tick_by_tick_request(client: &Client, _contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<(), Error> {
     client.check_server_version(server_versions::TICK_BY_TICK, "It does not support tick-by-tick requests.")?;
 
     if number_of_ticks != 0 || ignore_size {
@@ -94,7 +93,7 @@ pub(crate) fn tick_by_tick_last<'a>(
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> anyhow::Result<TradeIterator<'a>> {
+) -> Result<TradeIterator<'a>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -116,7 +115,7 @@ pub(crate) fn tick_by_tick_bid_ask<'a>(
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<BidAskIterator<'a>> {
+) -> Result<BidAskIterator<'a>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -138,7 +137,7 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<MidPointIterator<'a>> {
+) -> Result<MidPointIterator<'a>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
