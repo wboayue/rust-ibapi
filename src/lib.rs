@@ -43,7 +43,7 @@ pub mod errors;
 pub mod market_data;
 mod messages;
 pub(crate) mod news;
-/// APIs for placing orders
+/// Datatypes for building and placing orders.
 pub mod orders;
 mod server_versions;
 pub(crate) mod stubs;

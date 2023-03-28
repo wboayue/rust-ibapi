@@ -45,7 +45,6 @@ pub(crate) fn cancel_positions(client: &Client) -> Result<impl Iterator<Item = P
     })
 }
 
-
 // Supports iteration over [Position].
 pub struct PositionIterator {
     server_version: i32,

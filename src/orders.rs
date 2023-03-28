@@ -1311,8 +1311,8 @@ pub enum CancelOrderResult {
     Notice(Notice),
 }
 
-/// Supports iteration over [CancelOrderResult]
-pub struct CancelOrderResultIterator {
+// Supports iteration over [CancelOrderResult]
+pub(crate) struct CancelOrderResultIterator {
     server_version: i32,
     messages: ResponseIterator,
 }
@@ -1398,7 +1398,7 @@ pub enum OrderDataResult {
 }
 
 /// Supports iteration over [OrderDataResult].
-pub struct OrderDataIterator {
+pub(crate) struct OrderDataIterator {
     server_version: i32,
     messages: GlobalResponseIterator,
 }
@@ -1534,7 +1534,7 @@ pub enum ExecutionDataResult {
 }
 
 /// Supports iteration over [ExecutionDataResult].
-pub struct ExecutionDataIterator {
+pub(crate) struct ExecutionDataIterator {
     server_version: i32,
     messages: ResponseIterator,
 }
