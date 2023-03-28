@@ -258,8 +258,8 @@ impl Client {
 
     // === Accounts ===
 
-    // Get current positions for all accessible accounts.
-    pub fn positions(&self) -> core::result::Result<impl Iterator<Item = Position>, Error> {
+    /// Get current positions for all accessible accounts.
+    pub fn positions<'a>(&'a self) -> core::result::Result<impl Iterator<Item = Position> + 'a, Error> {
         accounts::positions(self)
     }
 
@@ -349,23 +349,20 @@ impl Client {
     /// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
     ///
     /// # Arguments
-    /// * `client` - [Client] used to communicate with server.
     /// * `auto_bind` - if set to true, the newly created orders will be assigned an API order ID and implicitly associated with this client. If set to false, future orders will not be.
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::{Client};
+    /// use ibapi::Client;
     ///
-    /// fn main() -> anyhow::Result<()> {
-    ///     let mut client = Client::connect("localhost:4002")?;
+    /// fn main() {
+    ///     let mut client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let results = client.auto_open_orders(false)?;
+    ///     let results = client.auto_open_orders(false).expect("request failed");
     ///     for order_data in results {
     ///        println!("{order_data:?}")
     ///     }
-    ///
-    ///     Ok(())
     /// }
     /// ```
     pub fn auto_open_orders(&self, auto_bind: bool) -> Result<impl Iterator<Item = orders::OrderDataResult>> {
@@ -407,15 +404,13 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() -> anyhow::Result<()> {
-    ///     let mut client = Client::connect("localhost:4002")?;
+    /// fn main() {
+    ///     let mut client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let results = client.completed_orders(false)?;
+    ///     let results = client.completed_orders(false).expect("request failed");
     ///     for order_data in results {
     ///        println!("{order_data:?}")
     ///     }
-    ///
-    ///     Ok(())
     /// }
     /// ```
     pub fn completed_orders(&self, api_only: bool) -> Result<impl Iterator<Item = orders::OrderDataResult>> {
@@ -434,23 +429,21 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::{Client};
-    /// use ibapi::orders::{self, ExecutionFilter};
+    /// use ibapi::Client;
+    /// use ibapi::orders::ExecutionFilter;
     ///
-    /// fn main() -> anyhow::Result<()> {
-    ///     let mut client = Client::connect("localhost:4002")?;
+    /// fn main() {
+    ///     let mut client = Client::connect("localhost:4002").expect("connection failed");
     ///     
     ///     let filter = ExecutionFilter{
     ///        side: "BUY".to_owned(),
     ///        ..ExecutionFilter::default()
     ///     };
     ///
-    ///     let results = client.executions(filter)?;
+    ///     let results = client.executions(filter).expect("request failed");
     ///     for execution_data in results {
     ///        println!("{execution_data:?}")
     ///     }
-    ///
-    ///     Ok(())
     /// }
     /// ```
     pub fn executions(&self, filter: orders::ExecutionFilter) -> Result<impl Iterator<Item = orders::ExecutionDataResult>> {
@@ -464,12 +457,10 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() -> anyhow::Result<()> {
-    ///     let mut client = Client::connect("localhost:4002")?;
+    /// fn main() {
+    ///     let mut client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     client.global_cancel()?;
-    ///
-    ///     Ok(())
+    ///     client.global_cancel().expect("request failed");
     /// }
     /// ```
     pub fn global_cancel(&self) -> Result<()> {
@@ -478,21 +469,16 @@ impl Client {
 
     /// Cancels all open [Order]s.
     ///
-    /// # Arguments
-    /// * `client` - [Client] used to communicate with server.
-    ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() -> anyhow::Result<()> {
-    ///     let mut client = Client::connect("localhost:4002")?;
+    /// fn main() {
+    ///     let mut client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let next_valid_order_id = client.next_valid_order_id()?;
+    ///     let next_valid_order_id = client.next_valid_order_id().expect("request failed");
     ///     println!("next_valid_order_id: {next_valid_order_id}");
-    ///
-    ///     Ok(())
     /// }
     /// ```
     pub fn next_valid_order_id(&self) -> Result<i32> {
@@ -502,25 +488,18 @@ impl Client {
     /// Requests all open orders places by this specific API client (identified by the API client id).
     /// For client ID 0, this will bind previous manual TWS orders.
     ///
-    /// # Arguments
-    /// * `client` - [Client] used to communicate with server.
-    ///
     /// # Examples
     ///
     /// ```no_run
-    /// use std::error::Error;
-    ///
     /// use ibapi::Client;
     ///
-    /// fn main() -> Result<(), Box<dyn Error>> {
-    ///     let client = Client::connect("localhost:4002")?;
+    /// fn main() {
+    ///     let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let results = client.open_orders()?;
+    ///     let results = client.open_orders().expect("request failed");
     ///     for order_data in results {
     ///        println!("{order_data:?}")
     ///     }
-    ///
-    ///     Ok(())
     /// }
     /// ```
     pub fn open_orders(&self) -> Result<impl Iterator<Item = OrderDataResult>> {
@@ -533,7 +512,6 @@ impl Client {
     /// Immediately after the order was submitted correctly, the TWS will start sending events concerning the order's activity via IBApi.EWrapper.openOrder and IBApi.EWrapper.orderStatus
     ///
     /// # Arguments
-    /// * `client` - [Client] used to communicate with server.
     /// * `order_id` - ID for [Order]. Get next valid ID using [Client::next_order_id].
     /// * `contract` - [Contract] to submit order for.
     /// * `order` - [Order] to submit.
@@ -541,18 +519,18 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::{Client};
+    /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
     /// use ibapi::orders::{order_builder, Action, OrderNotification};
     ///
-    /// fn main() -> anyhow::Result<()> {
-    ///     let client = Client::connect("localhost:4002")?;
+    /// fn main() {
+    ///     let client = Client::connect("localhost:4002").expect("connection failed");
     ///
     ///     let contract = Contract::stock("MSFT");
     ///     let order = order_builder::market_order(Action::Buy, 100.0);
     ///     let order_id = client.next_order_id();
     ///
-    ///     let notifications = client.place_order(order_id, &contract, &order)?;
+    ///     let notifications = client.place_order(order_id, &contract, &order).expect("request failed");
     ///
     ///     for notification in notifications {
     ///         match notification {
@@ -565,8 +543,6 @@ impl Client {
     ///             OrderNotification::Message(message) => println!("message: {message:?}"),
     ///        }
     ///     }
-    ///
-    ///     Ok(())
     /// }
     /// ```
     pub fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<impl Iterator<Item = OrderNotification>> {
@@ -580,27 +556,24 @@ impl Client {
     /// This method will provide all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
     ///
     /// # Arguments
-    /// * `client` - [Client] with an active connection to gateway.
     /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::Client;
-    /// use ibapi::contracts::{self, Contract};
-    /// use ibapi::market_data::{realtime, BarSize, WhatToShow};
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::{BarSize, WhatToShow};
     ///
-    /// fn main() -> anyhow::Result<()> {
-    ///     let client = Client::connect("localhost:4002")?;
+    /// fn main() {
+    ///     let client = Client::connect("localhost:4002").expect("connection failed");
     ///
     ///     let contract = Contract::stock("TSLA");
-    ///     let bars = client.realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, false)?;
+    ///     let bars = client.realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, false).expect("request failed");
     ///
     ///     for (i, bar) in bars.enumerate().take(60) {
     ///         println!("bar[{i}]: {bar:?}");
     ///     }
-    ///
-    ///     Ok(())
     /// }
     /// ```
     pub fn realtime_bars<'a>(
@@ -616,7 +589,6 @@ impl Client {
     /// Requests tick by tick AllLast ticks.
     ///
     /// # Arguments
-    /// * `client` - [Client] with an active connection to gateway.
     /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
     /// * `number_of_ticks` - number of ticks.
     /// * `ignore_size` - ignore size flag.
@@ -632,7 +604,6 @@ impl Client {
     /// Requests tick by tick BidAsk ticks.
     ///
     /// # Arguments
-    /// * `client` - [Client] with an active connection to gateway.
     /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
     /// * `number_of_ticks` - number of ticks.
     /// * `ignore_size` - ignore size flag.
@@ -648,7 +619,6 @@ impl Client {
     /// Requests tick by tick Last ticks.
     ///
     /// # Arguments
-    /// * `client` - [Client] with an active connection to gateway.
     /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
     /// * `number_of_ticks` - number of ticks.
     /// * `ignore_size` - ignore size flag.
@@ -664,7 +634,6 @@ impl Client {
     /// Requests tick by tick MidPoint ticks.
     ///
     /// # Arguments
-    /// * `client` - [Client] with an active connection to gateway.
     /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
     /// * `number_of_ticks` - number of ticks.
     /// * `ignore_size` - ignore size flag.
