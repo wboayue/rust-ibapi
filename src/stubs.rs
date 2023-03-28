@@ -37,7 +37,7 @@ impl MessageBus for MessageBusStub {
         let (s1, r1) = channel::unbounded();
 
         for message in &self.response_messages {
-            sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
+            sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
         }
 
         Ok(ResponseIterator::new(receiver, s1, None, None, Duration::from_secs(5)))
@@ -50,7 +50,7 @@ impl MessageBus for MessageBusStub {
         let (s1, r1) = channel::unbounded();
 
         for message in &self.response_messages {
-            sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
+            sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
         }
 
         Ok(ResponseIterator::new(receiver, s1, None, None, Duration::from_secs(5)))
@@ -62,7 +62,7 @@ impl MessageBus for MessageBusStub {
         let (sender, receiver) = channel::unbounded();
 
         for message in &self.response_messages {
-            sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
+            sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
         }
 
         Ok(GlobalResponseIterator::new(Arc::new(receiver)))
@@ -74,7 +74,7 @@ impl MessageBus for MessageBusStub {
         let (sender, receiver) = channel::unbounded();
 
         for message in &self.response_messages {
-            sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
+            sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
         }
 
         Ok(GlobalResponseIterator::new(Arc::new(receiver)))
@@ -86,7 +86,7 @@ impl MessageBus for MessageBusStub {
         let (sender, receiver) = channel::unbounded();
 
         for message in &self.response_messages {
-            sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
+            sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
         }
 
         Ok(GlobalResponseIterator::new(Arc::new(receiver)))
@@ -98,7 +98,7 @@ impl MessageBus for MessageBusStub {
         let (sender, receiver) = channel::unbounded();
 
         for message in &self.response_messages {
-            sender.send(ResponseMessage::from(&message.replace("|", "\0"))).unwrap();
+            sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
         }
 
         Ok(GlobalResponseIterator::new(Arc::new(receiver)))
@@ -114,5 +114,5 @@ impl MessageBus for MessageBusStub {
 }
 
 fn encode_message(message: &RequestMessage) -> String {
-    message.encode().replace("\0", "|")
+    message.encode().replace('\0', "|")
 }

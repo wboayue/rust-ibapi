@@ -106,17 +106,15 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() {
-    ///     let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     println!("server_version: {}", client.server_version());
-    ///     println!("server_time: {}", client.server_time());
-    ///     println!("managed_accounts: {}", client.managed_accounts());
-    ///     println!("next_order_id: {}", client.next_order_id());
-    /// }
+    /// println!("server_version: {}", client.server_version());
+    /// println!("server_time: {}", client.server_time());
+    /// println!("managed_accounts: {}", client.managed_accounts());
+    /// println!("next_order_id: {}", client.next_order_id());
     /// ```
     pub fn connect(connection_string: &str) -> Result<Client, Error> {
-        let parts: Vec<&str> = connection_string.split(":").collect();
+        let parts: Vec<&str> = connection_string.split(':').collect();
         let (connection_string, client_id): (String, String) = match parts.len() {
             2 => (format!("{}:{}", parts[0], parts[1]), "100".into()),
             3 => (format!("{}:{}", parts[0], parts[1]), parts[2].into()),
@@ -308,13 +306,11 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() {
-    ///     let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let contracts = client.matching_symbols("IB").expect("request failed");
-    ///     for contract in contracts {
-    ///         println!("contract: {:?}", contract);
-    ///     }
+    /// let contracts = client.matching_symbols("IB").expect("request failed");
+    /// for contract in contracts {
+    ///     println!("contract: {:?}", contract);
     /// }
     /// ```
     pub fn matching_symbols(&self, pattern: &str) -> Result<impl Iterator<Item = contracts::ContractDescription>, Error> {
@@ -331,13 +327,11 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() {
-    ///     let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let results = client.all_open_orders().expect("request failed");
-    ///     for order_data in results {
-    ///        println!("{order_data:?}")
-    ///     }
+    /// let results = client.all_open_orders().expect("request failed");
+    /// for order_data in results {
+    ///    println!("{order_data:?}")
     /// }
     /// ```
     pub fn all_open_orders(&self) -> Result<impl Iterator<Item = orders::OrderDataResult>, Error> {
@@ -353,14 +347,12 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::Client;
+    /// 
+    /// let mut client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    /// fn main() {
-    ///     let mut client = Client::connect("localhost:4002").expect("connection failed");
-    ///
-    ///     let results = client.auto_open_orders(false).expect("request failed");
-    ///     for order_data in results {
-    ///        println!("{order_data:?}")
-    ///     }
+    /// let results = client.auto_open_orders(false).expect("request failed");
+    /// for order_data in results {
+    ///    println!("{order_data:?}")
     /// }
     /// ```
     pub fn auto_open_orders(&self, auto_bind: bool) -> Result<impl Iterator<Item = orders::OrderDataResult>, Error> {
