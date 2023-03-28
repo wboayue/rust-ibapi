@@ -28,6 +28,7 @@ pub(crate) trait MessageBus {
     fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator>;
     fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator>;
     fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator>;
+    fn request_positions(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator>;
 
     fn write(&mut self, packet: &str) -> Result<()>;
 
@@ -64,6 +65,8 @@ struct GlobalChannels {
     open_orders_out: Arc<Receiver<ResponseMessage>>,
     send_market_rule: Arc<Sender<ResponseMessage>>,
     recv_market_rule: Arc<Receiver<ResponseMessage>>,
+    send_positions: Arc<Sender<ResponseMessage>>,
+    recv_positions: Arc<Receiver<ResponseMessage>>,
 }
 
 impl GlobalChannels {
@@ -71,6 +74,7 @@ impl GlobalChannels {
         let (order_ids_in, order_ids_out) = channel::unbounded();
         let (open_orders_in, open_orders_out) = channel::unbounded();
         let (send_market_rule, recv_market_rule) = channel::unbounded();
+        let (send_positions, recv_positions) = channel::unbounded();
 
         GlobalChannels {
             order_ids_in: Arc::new(order_ids_in),
@@ -79,6 +83,8 @@ impl GlobalChannels {
             open_orders_out: Arc::new(open_orders_out),
             send_market_rule: Arc::new(send_market_rule),
             recv_market_rule: Arc::new(recv_market_rule),
+            send_positions: Arc::new(send_positions),
+            recv_positions: Arc::new(recv_positions),
         }
     }
 }
@@ -169,6 +175,11 @@ impl MessageBus for TcpMessageBus {
     fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator> {
         self.write_message(message)?;
         Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.recv_market_rule)))
+    }
+
+    fn request_positions(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator> {
+        self.write_message(message)?;
+        Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.recv_positions)))
     }
 
     fn write_message(&mut self, message: &RequestMessage) -> Result<()> {
@@ -267,6 +278,9 @@ fn dispatch_message(
         }
         IncomingMessages::MarketRule => {
             globals.send_market_rule.send(message).unwrap();
+        }
+        IncomingMessages::Position | IncomingMessages::PositionEnd => {
+            globals.send_positions.send(message).unwrap();
         }
         IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
         IncomingMessages::OrderStatus
