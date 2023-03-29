@@ -58,7 +58,7 @@ use market_data::{BarSize, RealTimeBar, WhatToShow};
 
 use crate::accounts::Position;
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
-use crate::client::RequestMessage;
+use crate::messages::RequestMessage;
 use crate::market_data::realtime;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::orders::{Order, OrderDataResult, OrderNotification};

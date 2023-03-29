@@ -1,5 +1,5 @@
 use super::Contract;
-use crate::client::RequestMessage;
+use crate::messages::RequestMessage;
 use crate::messages::OutgoingMessages;
 use crate::{server_versions, Error};
 

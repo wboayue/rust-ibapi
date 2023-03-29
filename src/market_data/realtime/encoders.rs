@@ -1,5 +1,5 @@
 use super::{BarSize, WhatToShow};
-use crate::client::RequestMessage;
+use crate::messages::RequestMessage;
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::orders::TagValue;

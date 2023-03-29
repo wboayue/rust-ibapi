@@ -1,4 +1,4 @@
-use crate::client::ResponseMessage;
+use crate::messages::ResponseMessage;
 use crate::contracts::SecurityType;
 use crate::Error;
 

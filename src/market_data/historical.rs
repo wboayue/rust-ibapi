@@ -1,6 +1,6 @@
 use time::OffsetDateTime;
 
-use crate::client::{RequestMessage, ResponseMessage};
+use crate::messages::{RequestMessage, ResponseMessage};
 use crate::contracts::Contract;
 use crate::domain::TickAttribBidAsk;
 use crate::server_versions;

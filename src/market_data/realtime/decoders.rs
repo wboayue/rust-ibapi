@@ -1,7 +1,7 @@
 use time::OffsetDateTime;
 
 use crate::{
-    client::ResponseMessage,
+    messages::ResponseMessage,
     market_data::{BidAsk, BidAskAttribute, MidPoint, RealTimeBar, Trade, TradeAttribute},
     Error,
 };
