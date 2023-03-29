@@ -4,9 +4,9 @@ use std::string::ToString;
 
 use log::{error, info};
 
-use crate::client::RequestMessage;
 use crate::encode_option_field;
 use crate::messages::IncomingMessages;
+use crate::messages::RequestMessage;
 use crate::Client;
 use crate::{server_versions, Error, ToField};
 

@@ -27,10 +27,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             continue;
         }
 
-        // Trade long only
         if bar.close > breakout.high() {
             let order_id = client.next_order_id();
             let order = order_builder::market_order(Action::Buy, 100.0);
+
+            let results = client.place_order(order_id, &contract, &order)?;
+            for status in results {
+                println!("order status: {status:?}")
+            }
+        }
+
+        if bar.close < breakout.low() {
+            let order_id = client.next_order_id();
+            let order = order_builder::market_order(Action::SellShort, 100.0);
 
             let results = client.place_order(order_id, &contract, &order)?;
             for status in results {
@@ -51,31 +60,35 @@ fn has_position(client: &Client, symbol: &str) -> bool {
 }
 
 struct BreakoutChannel {
-    highs: VecDeque<f64>,
+    ticks: VecDeque<(f64, f64)>,
     size: usize,
 }
 
 impl BreakoutChannel {
     fn new(size: usize) -> BreakoutChannel {
         BreakoutChannel {
-            highs: VecDeque::with_capacity(size + 1),
+            ticks: VecDeque::with_capacity(size + 1),
             size,
         }
     }
 
     fn ready(&self) -> bool {
-        self.highs.len() >= self.size
+        self.ticks.len() >= self.size
     }
 
     fn consume(&mut self, bar: &RealTimeBar) {
-        self.highs.push_back(bar.high);
+        self.ticks.push_back((bar.high, bar.low));
 
-        if self.highs.len() > self.size {
-            self.highs.pop_front();
+        if self.ticks.len() > self.size {
+            self.ticks.pop_front();
         }
     }
 
     fn high(&self) -> f64 {
-        *self.highs.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(&1.0)
+        self.ticks.iter().map(|x| x.0).max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap()
+    }
+
+    fn low(&self) -> f64 {
+        self.ticks.iter().map(|x| x.1).max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap()
     }
 }

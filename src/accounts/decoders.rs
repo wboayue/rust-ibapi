@@ -1,5 +1,5 @@
-use crate::client::ResponseMessage;
 use crate::contracts::SecurityType;
+use crate::messages::ResponseMessage;
 use crate::Error;
 
 use super::Position;

@@ -10,8 +10,8 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use crossbeam::channel::{self, Receiver, Sender};
 use log::{debug, error, info};
 
-use crate::client::{RequestMessage, ResponseMessage};
 use crate::messages::IncomingMessages;
+use crate::messages::{RequestMessage, ResponseMessage};
 use crate::{server_versions, Error};
 use recorder::MessageRecorder;
 

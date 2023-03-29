@@ -5,7 +5,7 @@ use std::time::Duration;
 use crossbeam::channel;
 
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator};
-use crate::client::{RequestMessage, ResponseMessage};
+use crate::messages::{RequestMessage, ResponseMessage};
 use crate::Error;
 
 pub(crate) struct MessageBusStub {
