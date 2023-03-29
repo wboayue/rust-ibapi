@@ -6,33 +6,32 @@ use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use crossbeam::channel::{self, Receiver, Sender};
 use log::{debug, error, info};
 
 use crate::client::{RequestMessage, ResponseMessage};
 use crate::messages::IncomingMessages;
-use crate::server_versions;
+use crate::{server_versions, Error};
 use recorder::MessageRecorder;
 
 mod recorder;
 
 pub(crate) trait MessageBus {
-    fn read_message(&mut self) -> Result<ResponseMessage>;
+    fn read_message(&mut self) -> Result<ResponseMessage, Error>;
 
-    fn write_message(&mut self, packet: &RequestMessage) -> Result<()>;
+    fn write_message(&mut self, packet: &RequestMessage) -> Result<(), Error>;
 
-    fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator>;
-    fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator>;
-    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator>;
-    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator>;
-    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator>;
-    fn request_positions(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator>;
+    fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator, Error>;
+    fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator, Error>;
+    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
+    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
+    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
+    fn request_positions(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
 
-    fn write(&mut self, packet: &str) -> Result<()>;
+    fn write(&mut self, packet: &str) -> Result<(), Error>;
 
-    fn process_messages(&mut self, server_version: i32) -> Result<()>;
+    fn process_messages(&mut self, server_version: i32) -> Result<(), Error>;
 
     fn request_messages(&self) -> Vec<RequestMessage> {
         vec![]
@@ -91,7 +90,7 @@ impl GlobalChannels {
 
 impl TcpMessageBus {
     // establishes TCP connection to server
-    pub fn connect(connection_string: &str) -> Result<TcpMessageBus> {
+    pub fn connect(connection_string: &str) -> Result<TcpMessageBus, Error> {
         let stream = TcpStream::connect(connection_string)?;
 
         let reader = Arc::new(stream.try_clone()?);
@@ -114,12 +113,12 @@ impl TcpMessageBus {
         })
     }
 
-    fn add_request(&mut self, request_id: i32, sender: Sender<ResponseMessage>) -> Result<()> {
+    fn add_request(&mut self, request_id: i32, sender: Sender<ResponseMessage>) -> Result<(), Error> {
         self.requests.insert(request_id, sender);
         Ok(())
     }
 
-    fn add_order(&mut self, order_id: i32, sender: Sender<ResponseMessage>) -> Result<()> {
+    fn add_order(&mut self, order_id: i32, sender: Sender<ResponseMessage>) -> Result<(), Error> {
         self.orders.insert(order_id, sender);
         Ok(())
     }
@@ -128,11 +127,11 @@ impl TcpMessageBus {
 const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 impl MessageBus for TcpMessageBus {
-    fn read_message(&mut self) -> Result<ResponseMessage> {
+    fn read_message(&mut self) -> Result<ResponseMessage, Error> {
         read_packet(&self.reader)
     }
 
-    fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator> {
+    fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator, Error> {
         let (sender, receiver) = channel::unbounded();
 
         self.add_request(request_id, sender)?;
@@ -147,7 +146,7 @@ impl MessageBus for TcpMessageBus {
         ))
     }
 
-    fn send_order_message(&mut self, order_id: i32, message: &RequestMessage) -> Result<ResponseIterator> {
+    fn send_order_message(&mut self, order_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
         let (sender, receiver) = channel::unbounded();
 
         self.add_order(order_id, sender)?;
@@ -162,27 +161,27 @@ impl MessageBus for TcpMessageBus {
         ))
     }
 
-    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator> {
+    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
         self.write_message(message)?;
         Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.order_ids_out)))
     }
 
-    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator> {
+    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
         self.write_message(message)?;
         Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.open_orders_out)))
     }
 
-    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator> {
+    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
         self.write_message(message)?;
         Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.recv_market_rule)))
     }
 
-    fn request_positions(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator> {
+    fn request_positions(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
         self.write_message(message)?;
         Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.recv_positions)))
     }
 
-    fn write_message(&mut self, message: &RequestMessage) -> Result<()> {
+    fn write_message(&mut self, message: &RequestMessage) -> Result<(), Error> {
         let encoded = message.encode();
         debug!("{encoded:?} ->");
 
@@ -198,13 +197,13 @@ impl MessageBus for TcpMessageBus {
         Ok(())
     }
 
-    fn write(&mut self, data: &str) -> Result<()> {
+    fn write(&mut self, data: &str) -> Result<(), Error> {
         debug!("{data:?} ->");
         self.writer.write_all(data.as_bytes())?;
         Ok(())
     }
 
-    fn process_messages(&mut self, server_version: i32) -> Result<()> {
+    fn process_messages(&mut self, server_version: i32) -> Result<(), Error> {
         let reader = Arc::clone(&self.reader);
         let requests = Arc::clone(&self.requests);
         let recorder = self.recorder.clone();
@@ -295,7 +294,7 @@ fn dispatch_message(
     };
 }
 
-fn read_packet(mut reader: &TcpStream) -> Result<ResponseMessage> {
+fn read_packet(mut reader: &TcpStream) -> Result<ResponseMessage, Error> {
     let message_size = read_header(reader)?;
     debug!("message size: {message_size}");
     let mut data = vec![0_u8; message_size];
@@ -308,7 +307,7 @@ fn read_packet(mut reader: &TcpStream) -> Result<ResponseMessage> {
     Ok(packet)
 }
 
-fn read_header(mut reader: &TcpStream) -> Result<usize> {
+fn read_header(mut reader: &TcpStream) -> Result<usize, Error> {
     let buffer = &mut [0_u8; 4];
     reader.read_exact(buffer)?;
 
@@ -318,7 +317,7 @@ fn read_header(mut reader: &TcpStream) -> Result<usize> {
     Ok(count as usize)
 }
 
-fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<()> {
+fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), Error> {
     packet.skip(); // message_id
 
     let version = packet.next_int()?;
@@ -465,7 +464,7 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
         }
     }
 
-    pub fn send(&self, id: &K, message: V) -> Result<()> {
+    pub fn send(&self, id: &K, message: V) -> Result<(), Error> {
         let senders = self.data.read().unwrap();
         debug!("senders: {senders:?}");
         if let Some(sender) = senders.get(id) {

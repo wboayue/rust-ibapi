@@ -43,7 +43,7 @@ pub mod errors;
 pub mod market_data;
 mod messages;
 pub(crate) mod news;
-/// Datatypes for building and placing orders.
+/// Data types for building and placing orders.
 pub mod orders;
 mod server_versions;
 pub(crate) mod stubs;
@@ -52,14 +52,13 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicI32, Ordering};
 
-use anyhow::{anyhow, Result};
 use contracts::Contract;
 use log::{debug, error, info};
 use market_data::{BarSize, RealTimeBar, WhatToShow};
 
 use crate::accounts::Position;
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
-use crate::client::{RequestMessage, ResponseMessage};
+use crate::client::RequestMessage;
 use crate::market_data::realtime;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
@@ -107,17 +106,15 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() {
-    ///     let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     println!("server_version: {}", client.server_version());
-    ///     println!("server_time: {}", client.server_time());
-    ///     println!("managed_accounts: {}", client.managed_accounts());
-    ///     println!("next_order_id: {}", client.next_order_id());
-    /// }
+    /// println!("server_version: {}", client.server_version());
+    /// println!("server_time: {}", client.server_time());
+    /// println!("managed_accounts: {}", client.managed_accounts());
+    /// println!("next_order_id: {}", client.next_order_id());
     /// ```
-    pub fn connect(connection_string: &str) -> Result<Client> {
-        let parts: Vec<&str> = connection_string.split(":").collect();
+    pub fn connect(connection_string: &str) -> Result<Client, Error> {
+        let parts: Vec<&str> = connection_string.split(':').collect();
         let (connection_string, client_id): (String, String) = match parts.len() {
             2 => (format!("{}:{}", parts[0], parts[1]), "100".into()),
             3 => (format!("{}:{}", parts[0], parts[1]), parts[2].into()),
@@ -130,7 +127,7 @@ impl Client {
         Client::do_connect(&client_id, message_bus)
     }
 
-    fn do_connect(client_id: &str, message_bus: RefCell<Box<dyn MessageBus>>) -> Result<Client> {
+    fn do_connect(client_id: &str, message_bus: RefCell<Box<dyn MessageBus>>) -> Result<Client, Error> {
         let mut client = Client {
             server_version: 0,
             server_time: String::from(""),
@@ -151,7 +148,7 @@ impl Client {
     }
 
     // sends server handshake
-    fn handshake(&mut self) -> Result<()> {
+    fn handshake(&mut self) -> Result<(), Error> {
         self.message_bus.borrow_mut().write("API\x00")?;
 
         let prelude = &mut RequestMessage::new();
@@ -168,7 +165,7 @@ impl Client {
     }
 
     // asks server to start processing messages
-    fn start_api(&mut self) -> Result<()> {
+    fn start_api(&mut self) -> Result<(), Error> {
         const VERSION: i32 = 2;
 
         let prelude = &mut RequestMessage::default();
@@ -187,7 +184,7 @@ impl Client {
     }
 
     // Fetches next order id and managed accounts.
-    fn receive_account_info(&mut self) -> Result<()> {
+    fn receive_account_info(&mut self) -> Result<(), Error> {
         let mut saw_next_order_id: bool = false;
         let mut saw_managed_accounts: bool = false;
 
@@ -260,6 +257,7 @@ impl Client {
     // === Accounts ===
 
     /// Get current positions for all accessible accounts.
+    #[allow(clippy::needless_lifetimes)]
     pub fn positions<'a>(&'a self) -> core::result::Result<impl Iterator<Item = Position> + 'a, Error> {
         accounts::positions(self)
     }
@@ -279,17 +277,15 @@ impl Client {
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
     ///
-    /// fn main() {
-    ///     let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let contract = Contract::stock("TSLA");
-    ///     let results = client.contract_details(&contract).expect("request failed");
-    ///     for contract_detail in results {
-    ///         println!("contract: {:?}", contract_detail);
-    ///     }
+    /// let contract = Contract::stock("TSLA");
+    /// let results = client.contract_details(&contract).expect("request failed");
+    /// for contract_detail in results {
+    ///     println!("contract: {:?}", contract_detail);
     /// }
     /// ```
-    pub fn contract_details(&self, contract: &Contract) -> Result<impl Iterator<Item = contracts::ContractDetails>> {
+    pub fn contract_details(&self, contract: &Contract) -> Result<impl Iterator<Item = contracts::ContractDetails>, Error> {
         Ok(contracts::contract_details(self, contract)?.into_iter())
     }
 
@@ -297,8 +293,8 @@ impl Client {
     ///
     /// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
     /// A list of market rule ids can be obtained by invoking [request_contract_details] on a particular contract. The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [ContractDetails].
-    pub fn market_rule(&self, market_rule_id: i32) -> Result<contracts::MarketRule> {
-        Ok(contracts::market_rule(self, market_rule_id)?)
+    pub fn market_rule(&self, market_rule_id: i32) -> Result<contracts::MarketRule, Error> {
+        contracts::market_rule(self, market_rule_id)
     }
 
     /// Requests matching stock symbols.
@@ -311,16 +307,14 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() {
-    ///     let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let contracts = client.matching_symbols("IB").expect("request failed");
-    ///     for contract in contracts {
-    ///         println!("contract: {:?}", contract);
-    ///     }
+    /// let contracts = client.matching_symbols("IB").expect("request failed");
+    /// for contract in contracts {
+    ///     println!("contract: {:?}", contract);
     /// }
     /// ```
-    pub fn matching_symbols(&self, pattern: &str) -> Result<impl Iterator<Item = contracts::ContractDescription>> {
+    pub fn matching_symbols(&self, pattern: &str) -> Result<impl Iterator<Item = contracts::ContractDescription>, Error> {
         Ok(contracts::matching_symbols(self, pattern)?.into_iter())
     }
 
@@ -334,16 +328,14 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() {
-    ///     let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let results = client.all_open_orders().expect("request failed");
-    ///     for order_data in results {
-    ///        println!("{order_data:?}")
-    ///     }
+    /// let results = client.all_open_orders().expect("request failed");
+    /// for order_data in results {
+    ///    println!("{order_data:?}")
     /// }
     /// ```
-    pub fn all_open_orders(&self) -> Result<impl Iterator<Item = orders::OrderDataResult>> {
+    pub fn all_open_orders(&self) -> Result<impl Iterator<Item = orders::OrderDataResult>, Error> {
         orders::all_open_orders(self)
     }
 
@@ -357,16 +349,14 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() {
-    ///     let mut client = Client::connect("localhost:4002").expect("connection failed");
+    /// let mut client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let results = client.auto_open_orders(false).expect("request failed");
-    ///     for order_data in results {
-    ///        println!("{order_data:?}")
-    ///     }
+    /// let results = client.auto_open_orders(false).expect("request failed");
+    /// for order_data in results {
+    ///    println!("{order_data:?}")
     /// }
     /// ```
-    pub fn auto_open_orders(&self, auto_bind: bool) -> Result<impl Iterator<Item = orders::OrderDataResult>> {
+    pub fn auto_open_orders(&self, auto_bind: bool) -> Result<impl Iterator<Item = orders::OrderDataResult>, Error> {
         orders::auto_open_orders(self, auto_bind)
     }
 
@@ -381,17 +371,15 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() {
-    ///     let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let order_id = 15;
-    ///     let results = client.cancel_order(order_id, "").expect("request failed");
-    ///     for result in results {
-    ///        println!("{result:?}");
-    ///     }
+    /// let order_id = 15;
+    /// let results = client.cancel_order(order_id, "").expect("request failed");
+    /// for result in results {
+    ///    println!("{result:?}");
     /// }
     /// ```
-    pub fn cancel_order(&self, order_id: i32, manual_order_cancel_time: &str) -> Result<impl Iterator<Item = orders::CancelOrderResult>> {
+    pub fn cancel_order(&self, order_id: i32, manual_order_cancel_time: &str) -> Result<impl Iterator<Item = orders::CancelOrderResult>, Error> {
         orders::cancel_order(self, order_id, manual_order_cancel_time)
     }
 
@@ -405,16 +393,14 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() {
-    ///     let mut client = Client::connect("localhost:4002").expect("connection failed");
+    /// let mut client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let results = client.completed_orders(false).expect("request failed");
-    ///     for order_data in results {
-    ///        println!("{order_data:?}")
-    ///     }
+    /// let results = client.completed_orders(false).expect("request failed");
+    /// for order_data in results {
+    ///    println!("{order_data:?}")
     /// }
     /// ```
-    pub fn completed_orders(&self, api_only: bool) -> Result<impl Iterator<Item = orders::OrderDataResult>> {
+    pub fn completed_orders(&self, api_only: bool) -> Result<impl Iterator<Item = orders::OrderDataResult>, Error> {
         orders::completed_orders(self, api_only)
     }
 
@@ -433,21 +419,19 @@ impl Client {
     /// use ibapi::Client;
     /// use ibapi::orders::ExecutionFilter;
     ///
-    /// fn main() {
-    ///     let mut client = Client::connect("localhost:4002").expect("connection failed");
+    /// let mut client = Client::connect("localhost:4002").expect("connection failed");
     ///     
-    ///     let filter = ExecutionFilter{
-    ///        side: "BUY".to_owned(),
-    ///        ..ExecutionFilter::default()
-    ///     };
+    /// let filter = ExecutionFilter{
+    ///    side: "BUY".to_owned(),
+    ///    ..ExecutionFilter::default()
+    /// };
     ///
-    ///     let results = client.executions(filter).expect("request failed");
-    ///     for execution_data in results {
-    ///        println!("{execution_data:?}")
-    ///     }
+    /// let results = client.executions(filter).expect("request failed");
+    /// for execution_data in results {
+    ///    println!("{execution_data:?}")
     /// }
     /// ```
-    pub fn executions(&self, filter: orders::ExecutionFilter) -> Result<impl Iterator<Item = orders::ExecutionDataResult>> {
+    pub fn executions(&self, filter: orders::ExecutionFilter) -> Result<impl Iterator<Item = orders::ExecutionDataResult>, Error> {
         orders::executions(self, filter)
     }
 
@@ -458,13 +442,11 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() {
-    ///     let mut client = Client::connect("localhost:4002").expect("connection failed");
+    /// let mut client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     client.global_cancel().expect("request failed");
-    /// }
+    /// client.global_cancel().expect("request failed");
     /// ```
-    pub fn global_cancel(&self) -> Result<()> {
+    pub fn global_cancel(&self) -> Result<(), Error> {
         orders::global_cancel(self)
     }
 
@@ -475,14 +457,12 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() {
-    ///     let mut client = Client::connect("localhost:4002").expect("connection failed");
+    /// let mut client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let next_valid_order_id = client.next_valid_order_id().expect("request failed");
-    ///     println!("next_valid_order_id: {next_valid_order_id}");
-    /// }
+    /// let next_valid_order_id = client.next_valid_order_id().expect("request failed");
+    /// println!("next_valid_order_id: {next_valid_order_id}");
     /// ```
-    pub fn next_valid_order_id(&self) -> Result<i32> {
+    pub fn next_valid_order_id(&self) -> Result<i32, Error> {
         orders::next_valid_order_id(self)
     }
 
@@ -494,16 +474,14 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// fn main() {
-    ///     let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let results = client.open_orders().expect("request failed");
-    ///     for order_data in results {
-    ///        println!("{order_data:?}")
-    ///     }
+    /// let results = client.open_orders().expect("request failed");
+    /// for order_data in results {
+    ///    println!("{order_data:?}")
     /// }
     /// ```
-    pub fn open_orders(&self) -> Result<impl Iterator<Item = OrderDataResult>> {
+    pub fn open_orders(&self) -> Result<impl Iterator<Item = OrderDataResult>, Error> {
         orders::open_orders(self)
     }
 
@@ -524,29 +502,27 @@ impl Client {
     /// use ibapi::contracts::Contract;
     /// use ibapi::orders::{order_builder, Action, OrderNotification};
     ///
-    /// fn main() {
-    ///     let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let contract = Contract::stock("MSFT");
-    ///     let order = order_builder::market_order(Action::Buy, 100.0);
-    ///     let order_id = client.next_order_id();
+    /// let contract = Contract::stock("MSFT");
+    /// let order = order_builder::market_order(Action::Buy, 100.0);
+    /// let order_id = client.next_order_id();
     ///
-    ///     let notifications = client.place_order(order_id, &contract, &order).expect("request failed");
+    /// let notifications = client.place_order(order_id, &contract, &order).expect("request failed");
     ///
-    ///     for notification in notifications {
-    ///         match notification {
-    ///             OrderNotification::OrderStatus(order_status) => {
-    ///                 println!("order status: {order_status:?}")
-    ///             }
-    ///             OrderNotification::OpenOrder(open_order) => println!("open order: {open_order:?}"),
-    ///             OrderNotification::ExecutionData(execution) => println!("execution: {execution:?}"),
-    ///             OrderNotification::CommissionReport(report) => println!("commission report: {report:?}"),
-    ///             OrderNotification::Message(message) => println!("message: {message:?}"),
-    ///        }
-    ///     }
+    /// for notification in notifications {
+    ///     match notification {
+    ///         OrderNotification::OrderStatus(order_status) => {
+    ///             println!("order status: {order_status:?}")
+    ///         }
+    ///         OrderNotification::OpenOrder(open_order) => println!("open order: {open_order:?}"),
+    ///         OrderNotification::ExecutionData(execution) => println!("execution: {execution:?}"),
+    ///         OrderNotification::CommissionReport(report) => println!("commission report: {report:?}"),
+    ///         OrderNotification::Message(message) => println!("message: {message:?}"),
+    ///    }
     /// }
     /// ```
-    pub fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<impl Iterator<Item = OrderNotification>> {
+    pub fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<impl Iterator<Item = OrderNotification>, Error> {
         orders::place_order(self, order_id, contract, order)
     }
 
@@ -566,15 +542,13 @@ impl Client {
     /// use ibapi::contracts::Contract;
     /// use ibapi::market_data::{BarSize, WhatToShow};
     ///
-    /// fn main() {
-    ///     let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
-    ///     let contract = Contract::stock("TSLA");
-    ///     let bars = client.realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, false).expect("request failed");
+    /// let contract = Contract::stock("TSLA");
+    /// let bars = client.realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, false).expect("request failed");
     ///
-    ///     for (i, bar) in bars.enumerate().take(60) {
-    ///         println!("bar[{i}]: {bar:?}");
-    ///     }
+    /// for (i, bar) in bars.enumerate().take(60) {
+    ///     println!("bar[{i}]: {bar:?}");
     /// }
     /// ```
     pub fn realtime_bars<'a>(
@@ -583,7 +557,7 @@ impl Client {
         bar_size: &BarSize,
         what_to_show: &WhatToShow,
         use_rth: bool,
-    ) -> Result<impl Iterator<Item = RealTimeBar> + 'a> {
+    ) -> Result<impl Iterator<Item = RealTimeBar> + 'a, Error> {
         realtime::realtime_bars_with_options(self, contract, bar_size, what_to_show, use_rth, Vec::default())
     }
 
@@ -598,7 +572,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<impl Iterator<Item = market_data::Trade> + 'a> {
+    ) -> Result<impl Iterator<Item = market_data::Trade> + 'a, Error> {
         realtime::tick_by_tick_all_last(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -613,7 +587,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<impl Iterator<Item = market_data::BidAsk> + 'a> {
+    ) -> Result<impl Iterator<Item = market_data::BidAsk> + 'a, Error> {
         realtime::tick_by_tick_bid_ask(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -628,7 +602,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<impl Iterator<Item = market_data::Trade> + 'a> {
+    ) -> Result<impl Iterator<Item = market_data::Trade> + 'a, Error> {
         realtime::tick_by_tick_last(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -643,7 +617,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<impl Iterator<Item = market_data::MidPoint> + 'a> {
+    ) -> Result<impl Iterator<Item = market_data::MidPoint> + 'a, Error> {
         realtime::tick_by_tick_midpoint(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -662,45 +636,45 @@ impl Client {
         }
     }
 
-    pub(crate) fn send_message(&self, packet: RequestMessage) -> Result<()> {
+    pub(crate) fn send_message(&self, packet: RequestMessage) -> Result<(), Error> {
         self.message_bus.borrow_mut().write_message(&packet)
     }
 
-    pub(crate) fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator> {
+    pub(crate) fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator, Error> {
         debug!("send_message({:?}, {:?})", request_id, message);
         self.message_bus.borrow_mut().send_generic_message(request_id, &message)
     }
 
-    pub(crate) fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<ResponseIterator> {
+    pub(crate) fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<ResponseIterator, Error> {
         debug!("send_order({:?}, {:?})", order_id, message);
         self.message_bus.borrow_mut().send_order_message(order_id, &message)
     }
 
     /// Sends request for the next valid order id.
-    pub(crate) fn request_next_order_id(&self, message: RequestMessage) -> Result<GlobalResponseIterator> {
+    pub(crate) fn request_next_order_id(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
         self.message_bus.borrow_mut().request_next_order_id(&message)
     }
 
     /// Sends request for open orders.
-    pub(crate) fn request_order_data(&self, message: RequestMessage) -> Result<GlobalResponseIterator> {
+    pub(crate) fn request_order_data(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
         self.message_bus.borrow_mut().request_open_orders(&message)
     }
 
     /// Sends request for market rule.
-    pub(crate) fn request_market_rule(&self, message: RequestMessage) -> Result<GlobalResponseIterator> {
+    pub(crate) fn request_market_rule(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
         self.message_bus.borrow_mut().request_market_rule(&message)
     }
 
     /// Sends request for positions.
-    pub(crate) fn request_positions(&self, message: RequestMessage) -> Result<GlobalResponseIterator> {
+    pub(crate) fn request_positions(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
         self.message_bus.borrow_mut().request_positions(&message)
     }
 
-    pub(crate) fn check_server_version(&self, version: i32, message: &str) -> Result<()> {
+    pub(crate) fn check_server_version(&self, version: i32, message: &str) -> Result<(), Error> {
         if version <= self.server_version {
             Ok(())
         } else {
-            Err(anyhow!("server version {} required, got {}: {}", version, self.server_version, message))
+            Err(Error::ServerVersion(version, self.server_version, message.into()))
         }
     }
 }

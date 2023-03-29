@@ -1,12 +1,12 @@
-use anyhow::{self, Result};
 use time::OffsetDateTime;
 
 use crate::{
     client::ResponseMessage,
     market_data::{BidAsk, BidAskAttribute, MidPoint, RealTimeBar, Trade, TradeAttribute},
+    Error,
 };
 
-pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<RealTimeBar> {
+pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<RealTimeBar, Error> {
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
@@ -26,13 +26,13 @@ pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<RealT
     })
 }
 
-pub(crate) fn trade_tick(message: &mut ResponseMessage) -> Result<Trade> {
+pub(crate) fn trade_tick(message: &mut ResponseMessage) -> Result<Trade, Error> {
     message.skip(); // message type
     message.skip(); // message request id
 
     let tick_type = message.next_int()?;
     if !(tick_type == 1 || tick_type == 2) {
-        return Err(anyhow::anyhow!("Unexpected tick_type: {tick_type}"));
+        return Err(Error::Simple(format!("Unexpected tick_type: {tick_type}")));
     }
 
     let date = message.next_long()?; // long, convert to date
@@ -57,13 +57,13 @@ pub(crate) fn trade_tick(message: &mut ResponseMessage) -> Result<Trade> {
     })
 }
 
-pub(crate) fn bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk> {
+pub(crate) fn bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk, Error> {
     message.skip(); // message type
     message.skip(); // message request id
 
     let tick_type = message.next_int()?;
     if tick_type != 3 {
-        return Err(anyhow::anyhow!("Unexpected tick_type: {tick_type}"));
+        return Err(Error::Simple(format!("Unexpected tick_type: {tick_type}")));
     }
 
     let date = message.next_long()?; // long, convert to date
@@ -87,13 +87,13 @@ pub(crate) fn bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk> {
     })
 }
 
-pub(crate) fn mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint> {
+pub(crate) fn mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint, Error> {
     message.skip(); // message type
     message.skip(); // message request id
 
     let tick_type = message.next_int()?;
     if tick_type != 4 {
-        return Err(anyhow::anyhow!("Unexpected tick_type: {tick_type}"));
+        return Err(Error::Simple(format!("Unexpected tick_type: {tick_type}")));
     }
 
     let date = message.next_long()?; // long, convert to date

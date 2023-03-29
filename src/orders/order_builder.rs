@@ -704,6 +704,7 @@ pub fn market_f_hedge(parent_order_id: i32, action: Action) -> Order {
     order
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn pegged_to_benchmark(
     action: Action,
     quantity: f64,

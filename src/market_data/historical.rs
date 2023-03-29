@@ -1,13 +1,10 @@
-use std::fmt::Debug;
-
-use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
 
 use crate::client::{RequestMessage, ResponseMessage};
 use crate::contracts::Contract;
 use crate::domain::TickAttribBidAsk;
 use crate::server_versions;
-use crate::Client;
+use crate::{Client, Error};
 
 // https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EClient.cs
 // https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EDecoder.cs#L733
@@ -33,7 +30,7 @@ use crate::Client;
 ///         Ok(())
 ///     }
 /// ```
-pub fn head_timestamp(client: &mut Client, contract: &Contract, what_to_show: &str, use_rth: bool) -> Result<OffsetDateTime> {
+pub fn head_timestamp(client: &mut Client, contract: &Contract, what_to_show: &str, use_rth: bool) -> Result<OffsetDateTime, Error> {
     client.check_server_version(server_versions::REQ_HEAD_TIMESTAMP, "It does not support head time stamp requests.")?;
 
     let request_id = client.next_request_id();
@@ -44,12 +41,12 @@ pub fn head_timestamp(client: &mut Client, contract: &Contract, what_to_show: &s
     if let Some(mut response) = promise.next() {
         decode_head_timestamp(&mut response)
     } else {
-        Err(anyhow!("did not receive head timestamp message"))
+        Err(Error::Simple("did not receive head timestamp message".into()))
     }
 }
 
 /// Encodes the head timestamp request
-pub(crate) fn encode_head_timestamp(request_id: i32, contract: &Contract, what_to_show: &str, use_rth: bool) -> Result<RequestMessage> {
+pub(crate) fn encode_head_timestamp(request_id: i32, contract: &Contract, what_to_show: &str, use_rth: bool) -> Result<RequestMessage, Error> {
     let mut packet = RequestMessage::default();
 
     packet.push_field(&12);
@@ -95,7 +92,7 @@ pub(crate) fn encode_head_timestamp(request_id: i32, contract: &Contract, what_t
 //     source.AddParameter(value.IncludeExpired);
 // }
 
-fn decode_head_timestamp(packet: &mut ResponseMessage) -> Result<OffsetDateTime> {
+fn decode_head_timestamp(packet: &mut ResponseMessage) -> Result<OffsetDateTime, Error> {
     let _request_id = packet.next_int()?;
     let head_timestamp = packet.next_date_time()?;
 
@@ -103,12 +100,12 @@ fn decode_head_timestamp(packet: &mut ResponseMessage) -> Result<OffsetDateTime>
 }
 
 /// Returns data histogram of specified contract
-pub fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator> {
+pub fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator, Error> {
     // " S (seconds) - " D (days)
     // " W (weeks) - " M (months)
     // " Y (years)
     print!("{client:?} {contract:?} {use_rth:?} {period:?}");
-    Err(anyhow!("not implemented!"))
+    Err(Error::NotImplemented)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -121,18 +118,18 @@ pub fn historical_data(
     what_to_show: &str,
     use_rth: bool,
     keep_up_to_date: bool,
-) -> Result<BarIterator> {
+) -> Result<BarIterator, Error> {
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_barsize
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_what_to_show
     print!("{client:?} {contract:?} {end:?} {duration:?} {bar_size:?} {what_to_show:?} {use_rth:?} {keep_up_to_date:?}");
 
-    Err(anyhow!("not implemented!"))
+    Err(Error::NotImplemented)
 }
 
-pub fn historical_schedule(client: &Client, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator> {
+pub fn historical_schedule(client: &Client, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator, Error> {
     print!("{client:?} {contract:?} {use_rth:?} {period:?}");
-    Err(anyhow!("not implemented!"))
+    Err(Error::NotImplemented)
 }
 
 pub fn historical_ticks(
@@ -143,9 +140,9 @@ pub fn historical_ticks(
     number_of_ticks: i32,
     use_rth: i32,
     ignore_size: bool,
-) -> Result<HistoricalTickIterator> {
+) -> Result<HistoricalTickIterator, Error> {
     print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?} {ignore_size:?}");
-    Err(anyhow!("not implemented!"))
+    Err(Error::NotImplemented)
 }
 
 pub fn historical_ticks_bid_ask(
@@ -156,10 +153,10 @@ pub fn historical_ticks_bid_ask(
     number_of_ticks: i32,
     use_rth: i32,
     ignore_size: bool,
-) -> Result<HistoricalTickBidAskIterator> {
+) -> Result<HistoricalTickBidAskIterator, Error> {
     print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?} {ignore_size:?}");
 
-    Err(anyhow!("not implemented!"))
+    Err(Error::NotImplemented)
 }
 
 pub fn historical_ticks_last(
@@ -170,9 +167,9 @@ pub fn historical_ticks_last(
     number_of_ticks: i32,
     use_rth: i32,
     ignore_size: bool,
-) -> Result<HistoricalTickLastIterator> {
+) -> Result<HistoricalTickLastIterator, Error> {
     print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?} {ignore_size:?}");
-    Err(anyhow!("not implemented!"))
+    Err(Error::NotImplemented)
 }
 
 pub struct HistoricalTick {

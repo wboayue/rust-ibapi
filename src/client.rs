@@ -1,11 +1,10 @@
 use std::ops::Index;
 use std::str::FromStr;
 
-use anyhow::{anyhow, Result};
 use time::OffsetDateTime;
 
 use crate::messages::{order_id_index, request_id_index, IncomingMessages};
-use crate::ToField;
+use crate::{Error, ToField};
 
 pub(crate) mod transport;
 
@@ -92,11 +91,11 @@ impl ResponseMessage {
         }
     }
 
-    pub fn peek_int(&self, i: usize) -> Result<i32> {
+    pub fn peek_int(&self, i: usize) -> Result<i32, Error> {
         let field = &self.fields[i];
         match field.parse() {
             Ok(val) => Ok(val),
-            Err(err) => Err(anyhow!("error parsing field {} {}: {}", i, field, err)),
+            Err(err) => Err(Error::Parse(i, field.into(), err.to_string())),
         }
     }
 
@@ -104,17 +103,17 @@ impl ResponseMessage {
         self.fields[i].to_owned()
     }
 
-    pub fn next_int(&mut self) -> Result<i32> {
+    pub fn next_int(&mut self) -> Result<i32, Error> {
         let field = &self.fields[self.i];
         self.i += 1;
 
         match field.parse() {
             Ok(val) => Ok(val),
-            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
         }
     }
 
-    pub fn next_optional_int(&mut self) -> Result<Option<i32>> {
+    pub fn next_optional_int(&mut self) -> Result<Option<i32>, Error> {
         let field = &self.fields[self.i];
         self.i += 1;
 
@@ -124,28 +123,28 @@ impl ResponseMessage {
 
         match field.parse::<i32>() {
             Ok(val) => Ok(Some(val)),
-            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
         }
     }
 
-    pub fn next_bool(&mut self) -> Result<bool> {
+    pub fn next_bool(&mut self) -> Result<bool, Error> {
         let field = &self.fields[self.i];
         self.i += 1;
 
         Ok(field == "1")
     }
 
-    pub fn next_long(&mut self) -> Result<i64> {
+    pub fn next_long(&mut self) -> Result<i64, Error> {
         let field = &self.fields[self.i];
         self.i += 1;
 
         match field.parse() {
             Ok(val) => Ok(val),
-            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
         }
     }
 
-    pub fn next_optional_long(&mut self) -> Result<Option<i64>> {
+    pub fn next_optional_long(&mut self) -> Result<Option<i64>, Error> {
         let field = &self.fields[self.i];
         self.i += 1;
 
@@ -155,11 +154,11 @@ impl ResponseMessage {
 
         match field.parse::<i64>() {
             Ok(val) => Ok(Some(val)),
-            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
         }
     }
 
-    pub fn next_date_time(&mut self) -> Result<OffsetDateTime> {
+    pub fn next_date_time(&mut self) -> Result<OffsetDateTime, Error> {
         let field = &self.fields[self.i];
         self.i += 1;
 
@@ -167,17 +166,17 @@ impl ResponseMessage {
         let timestamp: i64 = field.parse()?;
         match OffsetDateTime::from_unix_timestamp(timestamp) {
             Ok(val) => Ok(val),
-            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
         }
     }
 
-    pub fn next_string(&mut self) -> Result<String> {
+    pub fn next_string(&mut self) -> Result<String, Error> {
         let field = &self.fields[self.i];
         self.i += 1;
         Ok(String::from(field))
     }
 
-    pub fn next_double(&mut self) -> Result<f64> {
+    pub fn next_double(&mut self) -> Result<f64, Error> {
         let field = &self.fields[self.i];
         self.i += 1;
 
@@ -187,11 +186,11 @@ impl ResponseMessage {
 
         match field.parse() {
             Ok(val) => Ok(val),
-            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
         }
     }
 
-    pub fn next_optional_double(&mut self) -> Result<Option<f64>> {
+    pub fn next_optional_double(&mut self) -> Result<Option<f64>, Error> {
         let field = &self.fields[self.i];
         self.i += 1;
 
@@ -205,7 +204,7 @@ impl ResponseMessage {
 
         match field.parse() {
             Ok(val) => Ok(Some(val)),
-            Err(err) => Err(anyhow!("error parsing field {} {}: {}", self.i, field, err)),
+            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
         }
     }
 

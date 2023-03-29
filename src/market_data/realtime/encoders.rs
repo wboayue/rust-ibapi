@@ -1,11 +1,9 @@
-use anyhow::Result;
-
 use super::{BarSize, WhatToShow};
 use crate::client::RequestMessage;
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::orders::TagValue;
-use crate::server_versions;
+use crate::{server_versions, Error};
 
 pub(crate) fn encode_request_realtime_bars(
     server_version: i32,
@@ -15,7 +13,7 @@ pub(crate) fn encode_request_realtime_bars(
     what_to_show: &WhatToShow,
     use_rth: bool,
     options: Vec<TagValue>,
-) -> Result<RequestMessage> {
+) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 8;
 
     let mut packet = RequestMessage::default();
@@ -54,7 +52,7 @@ pub(crate) fn encode_request_realtime_bars(
     Ok(packet)
 }
 
-pub(crate) fn cancel_realtime_bars(request_id: i32) -> Result<RequestMessage> {
+pub(crate) fn cancel_realtime_bars(request_id: i32) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::default();
@@ -73,7 +71,7 @@ pub(crate) fn tick_by_tick(
     tick_type: &str,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<RequestMessage> {
+) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::ReqTickByTickData);
@@ -100,7 +98,7 @@ pub(crate) fn tick_by_tick(
     Ok(message)
 }
 
-pub(crate) fn cancel_tick_by_tick(request_id: i32) -> Result<RequestMessage> {
+pub(crate) fn cancel_tick_by_tick(request_id: i32) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::CancelTickByTickData);

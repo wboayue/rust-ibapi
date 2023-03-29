@@ -2,14 +2,13 @@ use std::convert::From;
 use std::fmt::Debug;
 use std::string::ToString;
 
-use anyhow::{anyhow, Result};
 use log::{error, info};
 
 use crate::client::RequestMessage;
 use crate::encode_option_field;
 use crate::messages::IncomingMessages;
 use crate::Client;
-use crate::{server_versions, ToField};
+use crate::{server_versions, Error, ToField};
 
 mod decoders;
 mod encoders;
@@ -377,7 +376,7 @@ impl ToField for Vec<TagValue> {
 // # Arguments
 // * `client` - [Client] with an active connection to gateway.
 // * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
-pub(crate) fn contract_details(client: &Client, contract: &Contract) -> Result<Vec<ContractDetails>> {
+pub(crate) fn contract_details(client: &Client, contract: &Contract) -> Result<Vec<ContractDetails>, Error> {
     verify_contract(client, contract)?;
 
     let request_id = client.next_request_id();
@@ -399,7 +398,7 @@ pub(crate) fn contract_details(client: &Client, contract: &Contract) -> Result<V
             }
             IncomingMessages::Error => {
                 error!("error: {:?}", message);
-                return Err(anyhow!("contract_details {:?}", message));
+                return Err(Error::Simple(format!("contract_details {:?}", message)));
             }
             _ => {
                 error!("unexpected message: {:?}", message);
@@ -410,7 +409,7 @@ pub(crate) fn contract_details(client: &Client, contract: &Contract) -> Result<V
     Ok(contract_details)
 }
 
-fn verify_contract(client: &Client, contract: &Contract) -> Result<()> {
+fn verify_contract(client: &Client, contract: &Contract) -> Result<(), Error> {
     if !contract.security_id_type.is_empty() || !contract.security_id.is_empty() {
         client.check_server_version(
             server_versions::SEC_ID_TYPE,
@@ -454,7 +453,7 @@ pub struct ContractDescription {
 // # Arguments
 // * `client` - [Client] with an active connection to gateway.
 // * `pattern` - Either start of ticker symbol or (for larger strings) company name.
-pub(crate) fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<ContractDescription>> {
+pub(crate) fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<ContractDescription>, Error> {
     client.check_server_version(server_versions::REQ_MATCHING_SYMBOLS, "It does not support mathing symbols requests.")?;
 
     let request_id = client.next_request_id();
@@ -468,12 +467,13 @@ pub(crate) fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<Con
                 return decoders::contract_descriptions(client.server_version(), &mut message);
             }
             IncomingMessages::Error => {
+                // TODO custom error
                 error!("unexpected error: {:?}", message);
-                return Err(anyhow!("unexpected error: {:?}", message));
+                return Err(Error::Simple(format!("unexpected error: {:?}", message)));
             }
             _ => {
                 info!("unexpected message: {:?}", message);
-                return Err(anyhow!("unexpected message: {:?}", message));
+                return Err(Error::Simple(format!("unexpected message: {:?}", message)));
             }
         }
     }
@@ -497,7 +497,7 @@ pub struct PriceIncrement {
 ///
 /// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
 /// A list of market rule ids can be obtained by invoking [request_contract_details] on a particular contract. The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [ContractDetails].
-pub(crate) fn market_rule(client: &Client, market_rule_id: i32) -> Result<MarketRule> {
+pub(crate) fn market_rule(client: &Client, market_rule_id: i32) -> Result<MarketRule, Error> {
     client.check_server_version(server_versions::MARKET_RULES, "It does not support market rule requests.")?;
 
     let request = encoders::request_market_rule(market_rule_id)?;
@@ -506,6 +506,6 @@ pub(crate) fn market_rule(client: &Client, market_rule_id: i32) -> Result<Market
 
     match responses.next() {
         Some(mut message) => Ok(decoders::market_rule(&mut message)?),
-        None => Err(anyhow!("no market rule found")),
+        None => Err(Error::Simple(format!("no market rule found"))),
     }
 }

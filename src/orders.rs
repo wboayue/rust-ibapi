@@ -1,16 +1,15 @@
 use std::convert::From;
 use std::fmt::{self, Debug};
 
-use anyhow::{anyhow, Result};
 use log::{error, info};
 
 use crate::client::transport::{GlobalResponseIterator, ResponseIterator};
 use crate::client::{RequestMessage, ResponseMessage};
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
-use crate::server_versions;
 use crate::Client;
 use crate::{encode_option_field, ToField};
+use crate::{server_versions, Error};
 
 mod decoders;
 mod encoders;
@@ -932,8 +931,8 @@ pub struct ExecutionData {
 #[derive(Clone, Debug)]
 pub enum OrderNotification {
     OrderStatus(OrderStatus),
-    OpenOrder(OrderData),
-    ExecutionData(ExecutionData),
+    OpenOrder(Box<OrderData>),
+    ExecutionData(Box<ExecutionData>),
     CommissionReport(CommissionReport),
     Message(String),
 }
@@ -946,13 +945,13 @@ impl From<OrderStatus> for OrderNotification {
 
 impl From<OrderData> for OrderNotification {
     fn from(val: OrderData) -> Self {
-        OrderNotification::OpenOrder(val)
+        OrderNotification::OpenOrder(Box::new(val))
     }
 }
 
 impl From<ExecutionData> for OrderNotification {
     fn from(val: ExecutionData) -> Self {
-        OrderNotification::ExecutionData(val)
+        OrderNotification::ExecutionData(Box::new(val))
     }
 }
 
@@ -1010,7 +1009,12 @@ impl fmt::Display for Notice {
 // Submits an Order.
 // After the order is submitted correctly, events will be returned concerning the order's activity.
 // https://interactivebrokers.github.io/tws-api/order_submission.html
-pub(crate) fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<impl Iterator<Item = OrderNotification>> {
+pub(crate) fn place_order(
+    client: &Client,
+    order_id: i32,
+    contract: &Contract,
+    order: &Order,
+) -> Result<impl Iterator<Item = OrderNotification>, Error> {
     verify_order(client, order, order_id)?;
     verify_order_contract(client, contract, order_id)?;
 
@@ -1035,7 +1039,7 @@ impl Iterator for OrderNotificationIterator {
 
     /// Returns the next [OrderNotification]. Waits up to x seconds for next [OrderNotification].
     fn next(&mut self) -> Option<Self::Item> {
-        fn convert<T: Into<OrderNotification>>(result: Result<T>) -> Option<OrderNotification> {
+        fn convert<T: Into<OrderNotification>>(result: Result<T, Error>) -> Option<OrderNotification> {
             match result {
                 Ok(val) => Some(val.into()),
                 Err(err) => {
@@ -1080,7 +1084,7 @@ impl Iterator for OrderNotificationIterator {
 }
 
 // Verifies that Order is properly formed.
-fn verify_order(client: &Client, order: &Order, _order_id: i32) -> Result<()> {
+fn verify_order(client: &Client, order: &Order, _order_id: i32) -> Result<(), Error> {
     let is_bag_order: bool = false; // StringsAreEqual(Constants.BagSecType, contract.SecType)
 
     if order.scale_init_level_size.is_some() || order.scale_price_increment.is_some() {
@@ -1250,7 +1254,7 @@ fn verify_order(client: &Client, order: &Order, _order_id: i32) -> Result<()> {
 }
 
 // Verifies that Contract is properly formed.
-fn verify_order_contract(client: &Client, contract: &Contract, _order_id: i32) -> Result<()> {
+fn verify_order_contract(client: &Client, contract: &Contract, _order_id: i32) -> Result<(), Error> {
     if contract
         .combo_legs
         .iter()
@@ -1286,7 +1290,7 @@ fn verify_order_contract(client: &Client, contract: &Contract, _order_id: i32) -
 }
 
 // Cancels an open [Order].
-pub(crate) fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_time: &str) -> Result<CancelOrderResultIterator> {
+pub(crate) fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_time: &str) -> Result<CancelOrderResultIterator, Error> {
     if !manual_order_cancel_time.is_empty() {
         client.check_server_version(
             server_versions::MANUAL_ORDER_TIME,
@@ -1347,7 +1351,7 @@ impl Iterator for CancelOrderResultIterator {
 }
 
 // Cancels all open [Order]s.
-pub(crate) fn global_cancel(client: &Client) -> Result<()> {
+pub(crate) fn global_cancel(client: &Client) -> Result<(), Error> {
     client.check_server_version(server_versions::REQ_GLOBAL_CANCEL, "It does not support global cancel requests.")?;
 
     let message = encoders::encode_global_cancel()?;
@@ -1359,7 +1363,7 @@ pub(crate) fn global_cancel(client: &Client) -> Result<()> {
 }
 
 // Gets next valid order id
-pub(crate) fn next_valid_order_id(client: &Client) -> Result<i32> {
+pub(crate) fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
     let message = encoders::encode_next_valid_order_id()?;
 
     let mut messages = client.request_next_order_id(message)?;
@@ -1372,12 +1376,12 @@ pub(crate) fn next_valid_order_id(client: &Client) -> Result<i32> {
 
         Ok(next_order_id)
     } else {
-        Err(anyhow!("no response from server"))
+        Err(Error::Simple("no response from server".into()))
     }
 }
 
 // Requests completed [Order]s.
-pub(crate) fn completed_orders(client: &Client, api_only: bool) -> Result<OrderDataIterator> {
+pub(crate) fn completed_orders(client: &Client, api_only: bool) -> Result<OrderDataIterator, Error> {
     client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
 
     let message = encoders::encode_completed_orders(api_only)?;
@@ -1393,8 +1397,8 @@ pub(crate) fn completed_orders(client: &Client, api_only: bool) -> Result<OrderD
 /// Enumerates possible results from querying an [Order].
 #[derive(Debug)]
 pub enum OrderDataResult {
-    OrderData(OrderData),
-    OrderStatus(OrderStatus),
+    OrderData(Box<OrderData>),
+    OrderStatus(Box<OrderStatus>),
 }
 
 /// Supports iteration over [OrderDataResult].
@@ -1412,19 +1416,19 @@ impl Iterator for OrderDataIterator {
             if let Some(mut message) = self.messages.next() {
                 match message.message_type() {
                     IncomingMessages::CompletedOrder => match decoders::decode_completed_order(self.server_version, message) {
-                        Ok(val) => return Some(OrderDataResult::OrderData(val)),
+                        Ok(val) => return Some(OrderDataResult::OrderData(Box::new(val))),
                         Err(err) => {
                             error!("error decoding completed order: {err}");
                         }
                     },
                     IncomingMessages::OpenOrder => match decoders::decode_open_order(self.server_version, message) {
-                        Ok(val) => return Some(OrderDataResult::OrderData(val)),
+                        Ok(val) => return Some(OrderDataResult::OrderData(Box::new(val))),
                         Err(err) => {
                             error!("error decoding open order: {err}");
                         }
                     },
                     IncomingMessages::OrderStatus => match decoders::decode_order_status(self.server_version, &mut message) {
-                        Ok(val) => return Some(OrderDataResult::OrderStatus(val)),
+                        Ok(val) => return Some(OrderDataResult::OrderStatus(Box::new(val))),
                         Err(err) => {
                             error!("error decoding order status: {err}");
                         }
@@ -1433,7 +1437,7 @@ impl Iterator for OrderDataIterator {
                         return None;
                     }
                     message => {
-                        error!("order data iterator unexpected messsage: {message:?}");
+                        error!("order data iterator unexpected message: {message:?}");
                     }
                 }
             } else {
@@ -1449,7 +1453,7 @@ impl Iterator for OrderDataIterator {
 /// # Arguments
 /// * `client` - [Client] used to communicate with server.
 ///
-pub(crate) fn open_orders(client: &Client) -> Result<OrderDataIterator> {
+pub(crate) fn open_orders(client: &Client) -> Result<OrderDataIterator, Error> {
     let message = encoders::encode_open_orders()?;
 
     let messages = client.request_order_data(message)?;
@@ -1462,7 +1466,7 @@ pub(crate) fn open_orders(client: &Client) -> Result<OrderDataIterator> {
 
 // Requests all *current* open orders in associated accounts at the current moment.
 // Open orders are returned once; this function does not initiate a subscription.
-pub(crate) fn all_open_orders(client: &Client) -> Result<OrderDataIterator> {
+pub(crate) fn all_open_orders(client: &Client) -> Result<OrderDataIterator, Error> {
     let message = encoders::encode_all_open_orders()?;
 
     let messages = client.request_order_data(message)?;
@@ -1474,7 +1478,7 @@ pub(crate) fn all_open_orders(client: &Client) -> Result<OrderDataIterator> {
 }
 
 // Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
-pub(crate) fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<OrderDataIterator> {
+pub(crate) fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<OrderDataIterator, Error> {
     let message = encoders::encode_auto_open_orders(auto_bind)?;
 
     // TODO this should probably not timeout.
@@ -1514,7 +1518,7 @@ pub struct ExecutionFilter {
 //
 // # Arguments
 // * `filter` - filter criteria used to determine which execution reports are returned
-pub(crate) fn executions(client: &Client, filter: ExecutionFilter) -> Result<ExecutionDataIterator> {
+pub(crate) fn executions(client: &Client, filter: ExecutionFilter) -> Result<ExecutionDataIterator, Error> {
     let request_id = client.next_request_id();
     let message = encoders::encode_executions(client.server_version(), request_id, &filter)?;
 
@@ -1529,8 +1533,8 @@ pub(crate) fn executions(client: &Client, filter: ExecutionFilter) -> Result<Exe
 /// Enumerates possible results from querying an [Execution].
 #[derive(Debug)]
 pub enum ExecutionDataResult {
-    ExecutionData(ExecutionData),
-    CommissionReport(CommissionReport),
+    ExecutionData(Box<ExecutionData>),
+    CommissionReport(Box<CommissionReport>),
 }
 
 /// Supports iteration over [ExecutionDataResult].
@@ -1548,13 +1552,13 @@ impl Iterator for ExecutionDataIterator {
             if let Some(mut message) = self.messages.next() {
                 match message.message_type() {
                     IncomingMessages::ExecutionData => match decoders::decode_execution_data(self.server_version, &mut message) {
-                        Ok(val) => return Some(ExecutionDataResult::ExecutionData(val)),
+                        Ok(val) => return Some(ExecutionDataResult::ExecutionData(Box::new(val))),
                         Err(err) => {
                             error!("error decoding execution data: {err}");
                         }
                     },
                     IncomingMessages::CommissionsReport => match decoders::decode_commission_report(self.server_version, &mut message) {
-                        Ok(val) => return Some(ExecutionDataResult::CommissionReport(val)),
+                        Ok(val) => return Some(ExecutionDataResult::CommissionReport(Box::new(val))),
                         Err(err) => {
                             error!("error decoding commission report: {err}");
                         }

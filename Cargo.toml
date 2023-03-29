@@ -13,13 +13,13 @@ categories = ["finance", "api-bindings"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.66"
 byteorder = "1.4.3"
 crossbeam = "0.8.2"
 log = "0.4.17"
 time = {version = "0.3.17", features = ["formatting", "macros", "local-offset"]}
 
 [dev-dependencies]
-pretty_assertions = "1"
-env_logger = "0.9.3"
+anyhow = "1.0.66"
 clap = "4.1.8"
+env_logger = "0.9.3"
+pretty_assertions = "1"

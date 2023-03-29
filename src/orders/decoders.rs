@@ -1,3 +1,5 @@
+use crate::Error;
+
 use super::*;
 
 struct OrderDecoder {
@@ -27,14 +29,14 @@ impl OrderDecoder {
         }
     }
 
-    fn read_order_id(&mut self) -> Result<()> {
+    fn read_order_id(&mut self) -> Result<(), Error> {
         self.order_id = self.message.next_int()?;
         self.order.order_id = self.order_id;
 
         Ok(())
     }
 
-    fn read_contract_fields(&mut self) -> Result<()> {
+    fn read_contract_fields(&mut self) -> Result<(), Error> {
         let message = &mut self.message;
         let contract = &mut self.contract;
 
@@ -56,90 +58,90 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_action(&mut self) -> Result<()> {
+    fn read_action(&mut self) -> Result<(), Error> {
         let action = self.message.next_string()?;
         self.order.action = Action::from(&action);
 
         Ok(())
     }
 
-    fn read_total_quantity(&mut self) -> Result<()> {
+    fn read_total_quantity(&mut self) -> Result<(), Error> {
         self.order.total_quantity = self.message.next_double()?;
         Ok(())
     }
 
-    fn read_order_type(&mut self) -> Result<()> {
+    fn read_order_type(&mut self) -> Result<(), Error> {
         self.order.order_type = self.message.next_string()?;
         Ok(())
     }
 
-    fn read_limit_price(&mut self) -> Result<()> {
+    fn read_limit_price(&mut self) -> Result<(), Error> {
         self.order.limit_price = self.message.next_optional_double()?;
         Ok(())
     }
 
-    fn read_aux_price(&mut self) -> Result<()> {
+    fn read_aux_price(&mut self) -> Result<(), Error> {
         self.order.aux_price = self.message.next_optional_double()?;
         Ok(())
     }
 
-    fn read_tif(&mut self) -> Result<()> {
+    fn read_tif(&mut self) -> Result<(), Error> {
         self.order.tif = self.message.next_string()?;
         Ok(())
     }
 
-    fn read_oca_group(&mut self) -> Result<()> {
+    fn read_oca_group(&mut self) -> Result<(), Error> {
         self.order.oca_group = self.message.next_string()?;
         Ok(())
     }
 
-    fn read_account(&mut self) -> Result<()> {
+    fn read_account(&mut self) -> Result<(), Error> {
         self.order.account = self.message.next_string()?;
         Ok(())
     }
 
-    fn read_open_close(&mut self) -> Result<()> {
+    fn read_open_close(&mut self) -> Result<(), Error> {
         let open_close = self.message.next_string()?;
         self.order.open_close = OrderOpenClose::from(&open_close);
         Ok(())
     }
 
-    fn read_origin(&mut self) -> Result<()> {
+    fn read_origin(&mut self) -> Result<(), Error> {
         self.order.origin = self.message.next_int()?;
         Ok(())
     }
 
-    fn read_order_ref(&mut self) -> Result<()> {
+    fn read_order_ref(&mut self) -> Result<(), Error> {
         self.order.order_ref = self.message.next_string()?;
         Ok(())
     }
 
-    fn read_client_id(&mut self) -> Result<()> {
+    fn read_client_id(&mut self) -> Result<(), Error> {
         self.order.client_id = self.message.next_int()?;
         Ok(())
     }
 
-    fn read_perm_id(&mut self) -> Result<()> {
+    fn read_perm_id(&mut self) -> Result<(), Error> {
         self.order.perm_id = self.message.next_int()?;
         Ok(())
     }
 
-    fn read_outside_rth(&mut self) -> Result<()> {
+    fn read_outside_rth(&mut self) -> Result<(), Error> {
         self.order.outside_rth = self.message.next_bool()?;
         Ok(())
     }
 
-    fn read_hidden(&mut self) -> Result<()> {
+    fn read_hidden(&mut self) -> Result<(), Error> {
         self.order.hidden = self.message.next_bool()?;
         Ok(())
     }
 
-    fn read_discretionary_amt(&mut self) -> Result<()> {
+    fn read_discretionary_amt(&mut self) -> Result<(), Error> {
         self.order.discretionary_amt = self.message.next_double()?;
         Ok(())
     }
 
-    fn read_good_after_time(&mut self) -> Result<()> {
+    fn read_good_after_time(&mut self) -> Result<(), Error> {
         self.order.good_after_time = self.message.next_string()?;
         Ok(())
     }
@@ -149,7 +151,7 @@ impl OrderDecoder {
         self.message.skip();
     }
 
-    fn read_fa_params(&mut self) -> Result<()> {
+    fn read_fa_params(&mut self) -> Result<(), Error> {
         self.order.fa_group = self.message.next_string()?;
         self.order.fa_method = self.message.next_string()?;
         self.order.fa_percentage = self.message.next_string()?;
@@ -159,85 +161,85 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_model_code(&mut self) -> Result<()> {
+    fn read_model_code(&mut self) -> Result<(), Error> {
         if self.server_version >= server_versions::MODELS_SUPPORT {
             self.order.model_code = self.message.next_string()?;
         }
         Ok(())
     }
 
-    fn read_good_till_date(&mut self) -> Result<()> {
+    fn read_good_till_date(&mut self) -> Result<(), Error> {
         self.order.good_till_date = self.message.next_string()?;
         Ok(())
     }
 
-    fn read_rule_80_a(&mut self) -> Result<()> {
+    fn read_rule_80_a(&mut self) -> Result<(), Error> {
         let rule_80_a = self.message.next_string()?;
         self.order.rule_80_a = Rule80A::from(&rule_80_a);
         Ok(())
     }
 
-    fn read_percent_offset(&mut self) -> Result<()> {
+    fn read_percent_offset(&mut self) -> Result<(), Error> {
         self.order.percent_offset = self.message.next_optional_double()?;
         Ok(())
     }
 
-    fn read_settling_firm(&mut self) -> Result<()> {
+    fn read_settling_firm(&mut self) -> Result<(), Error> {
         self.order.settling_firm = self.message.next_string()?;
         Ok(())
     }
 
-    fn read_short_sale_params(&mut self) -> Result<()> {
+    fn read_short_sale_params(&mut self) -> Result<(), Error> {
         self.order.short_sale_slot = self.message.next_int()?;
         self.order.designated_location = self.message.next_string()?;
         self.order.exempt_code = self.message.next_int()?;
         Ok(())
     }
 
-    fn read_auction_strategy(&mut self) -> Result<()> {
+    fn read_auction_strategy(&mut self) -> Result<(), Error> {
         self.order.auction_strategy = self.message.next_optional_int()?;
         Ok(())
     }
 
-    fn read_box_order_params(&mut self) -> Result<()> {
+    fn read_box_order_params(&mut self) -> Result<(), Error> {
         self.order.starting_price = self.message.next_optional_double()?;
         self.order.stock_ref_price = self.message.next_optional_double()?;
         self.order.delta = self.message.next_optional_double()?;
         Ok(())
     }
 
-    fn read_peg_to_stock_or_vol_order_params(&mut self) -> Result<()> {
+    fn read_peg_to_stock_or_vol_order_params(&mut self) -> Result<(), Error> {
         self.order.stock_range_lower = self.message.next_optional_double()?;
         self.order.stock_range_upper = self.message.next_optional_double()?;
         Ok(())
     }
 
-    fn read_display_size(&mut self) -> Result<()> {
+    fn read_display_size(&mut self) -> Result<(), Error> {
         self.order.display_size = self.message.next_optional_int()?;
         Ok(())
     }
 
-    fn read_block_order(&mut self) -> Result<()> {
+    fn read_block_order(&mut self) -> Result<(), Error> {
         self.order.block_order = self.message.next_bool()?;
         Ok(())
     }
 
-    fn read_sweep_to_fill(&mut self) -> Result<()> {
+    fn read_sweep_to_fill(&mut self) -> Result<(), Error> {
         self.order.sweep_to_fill = self.message.next_bool()?;
         Ok(())
     }
 
-    fn read_all_or_none(&mut self) -> Result<()> {
+    fn read_all_or_none(&mut self) -> Result<(), Error> {
         self.order.all_or_none = self.message.next_bool()?;
         Ok(())
     }
 
-    fn read_min_qty(&mut self) -> Result<()> {
+    fn read_min_qty(&mut self) -> Result<(), Error> {
         self.order.min_qty = self.message.next_optional_int()?;
         Ok(())
     }
 
-    fn read_oca_type(&mut self) -> Result<()> {
+    fn read_oca_type(&mut self) -> Result<(), Error> {
         self.order.oca_type = self.message.next_int()?;
         Ok(())
     }
@@ -254,17 +256,17 @@ impl OrderDecoder {
         self.message.skip();
     }
 
-    fn read_parent_id(&mut self) -> Result<()> {
+    fn read_parent_id(&mut self) -> Result<(), Error> {
         self.order.parent_id = self.message.next_int()?;
         Ok(())
     }
 
-    fn read_trigger_method(&mut self) -> Result<()> {
+    fn read_trigger_method(&mut self) -> Result<(), Error> {
         self.order.trigger_method = self.message.next_int()?;
         Ok(())
     }
 
-    fn read_volatility_order_params(&mut self, read_open_order_attributes: bool) -> Result<()> {
+    fn read_volatility_order_params(&mut self, read_open_order_attributes: bool) -> Result<(), Error> {
         self.order.volatility = self.message.next_optional_double()?;
         self.order.volatility_type = self.message.next_optional_int()?;
         self.order.delta_neutral_order_type = self.message.next_string()?;
@@ -289,19 +291,19 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_trail_params(&mut self) -> Result<()> {
+    fn read_trail_params(&mut self) -> Result<(), Error> {
         self.order.trail_stop_price = self.message.next_optional_double()?;
         self.order.trailing_percent = self.message.next_optional_double()?;
         Ok(())
     }
 
-    fn read_basis_points(&mut self) -> Result<()> {
+    fn read_basis_points(&mut self) -> Result<(), Error> {
         self.order.basis_points = self.message.next_optional_double()?;
         self.order.basis_points_type = self.message.next_optional_int()?;
         Ok(())
     }
 
-    fn read_combo_legs(&mut self) -> Result<()> {
+    fn read_combo_legs(&mut self) -> Result<(), Error> {
         self.contract.combo_legs_description = self.message.next_string()?;
 
         let combo_legs_count = self.message.next_int()?;
@@ -337,7 +339,7 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_smart_combo_routing_params(&mut self) -> Result<()> {
+    fn read_smart_combo_routing_params(&mut self) -> Result<(), Error> {
         // smart combo routing params
         let smart_combo_routing_params_count = self.message.next_int()?;
         for _ in 0..smart_combo_routing_params_count {
@@ -350,7 +352,7 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_scale_order_params(&mut self) -> Result<()> {
+    fn read_scale_order_params(&mut self) -> Result<(), Error> {
         self.order.scale_init_level_size = self.message.next_optional_int()?;
         self.order.scale_subs_level_size = self.message.next_optional_int()?;
         self.order.scale_price_increment = self.message.next_optional_double()?;
@@ -370,7 +372,7 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_hedge_params(&mut self) -> Result<()> {
+    fn read_hedge_params(&mut self) -> Result<(), Error> {
         self.order.hedge_type = self.message.next_string()?;
         if !self.order.hedge_type.is_empty() {
             self.order.hedge_param = self.message.next_string()?;
@@ -378,23 +380,23 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_opt_out_smart_routing(&mut self) -> Result<()> {
+    fn read_opt_out_smart_routing(&mut self) -> Result<(), Error> {
         self.order.opt_out_smart_routing = self.message.next_bool()?;
         Ok(())
     }
 
-    fn read_clearing_params(&mut self) -> Result<()> {
+    fn read_clearing_params(&mut self) -> Result<(), Error> {
         self.order.clearing_account = self.message.next_string()?;
         self.order.clearing_intent = self.message.next_string()?;
         Ok(())
     }
 
-    fn read_not_held(&mut self) -> Result<()> {
+    fn read_not_held(&mut self) -> Result<(), Error> {
         self.order.not_held = self.message.next_bool()?;
         Ok(())
     }
 
-    fn read_delta_neutral(&mut self) -> Result<()> {
+    fn read_delta_neutral(&mut self) -> Result<(), Error> {
         let has_delta_neutral_contract = self.message.next_bool()?;
         if has_delta_neutral_contract {
             self.contract.delta_neutral_contract = Some(DeltaNeutralContract {
@@ -406,7 +408,7 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_algo_params(&mut self) -> Result<()> {
+    fn read_algo_params(&mut self) -> Result<(), Error> {
         self.order.algo_strategy = self.message.next_string()?;
         if !self.order.algo_strategy.is_empty() {
             let algo_params_count = self.message.next_int()?;
@@ -421,12 +423,12 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_solicited(&mut self) -> Result<()> {
+    fn read_solicited(&mut self) -> Result<(), Error> {
         self.order.solicited = self.message.next_bool()?;
         Ok(())
     }
 
-    fn read_what_if_info_and_commission(&mut self) -> Result<()> {
+    fn read_what_if_info_and_commission(&mut self) -> Result<(), Error> {
         self.order.what_if = self.message.next_bool()?;
         self.read_order_status()?;
 
@@ -451,13 +453,13 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_vol_randomize_flags(&mut self) -> Result<()> {
+    fn read_vol_randomize_flags(&mut self) -> Result<(), Error> {
         self.order.randomize_size = self.message.next_bool()?;
         self.order.randomize_price = self.message.next_bool()?;
         Ok(())
     }
 
-    fn read_peg_to_bench_params(&mut self) -> Result<()> {
+    fn read_peg_to_bench_params(&mut self) -> Result<(), Error> {
         if self.server_version >= server_versions::PEGGED_TO_BENCHMARK && self.order.order_type == "PEG BENCH" {
             self.order.reference_contract_id = self.message.next_int()?;
             self.order.is_pegged_change_amount_decrease = self.message.next_bool()?;
@@ -468,7 +470,7 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_conditions(&mut self) -> Result<()> {
+    fn read_conditions(&mut self) -> Result<(), Error> {
         if self.server_version >= server_versions::PEGGED_TO_BENCHMARK {
             let conditions_count = self.message.next_int()?;
             for _ in 0..conditions_count {
@@ -483,7 +485,7 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_adjusted_order_params(&mut self) -> Result<()> {
+    fn read_adjusted_order_params(&mut self) -> Result<(), Error> {
         if self.server_version >= server_versions::PEGGED_TO_BENCHMARK {
             self.order.adjusted_order_type = self.message.next_string()?;
             self.order.trigger_price = self.message.next_optional_double()?;
@@ -497,7 +499,7 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_soft_dollar_tier(&mut self) -> Result<()> {
+    fn read_soft_dollar_tier(&mut self) -> Result<(), Error> {
         if self.server_version >= server_versions::SOFT_DOLLAR_TIER {
             self.order.soft_dollar_tier = SoftDollarTier {
                 name: self.message.next_string()?,
@@ -508,63 +510,63 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_cash_qty(&mut self) -> Result<()> {
+    fn read_cash_qty(&mut self) -> Result<(), Error> {
         if self.server_version >= server_versions::CASH_QTY {
             self.order.cash_qty = self.message.next_optional_double()?;
         }
         Ok(())
     }
 
-    fn read_dont_use_auto_price_for_hedge(&mut self) -> Result<()> {
+    fn read_dont_use_auto_price_for_hedge(&mut self) -> Result<(), Error> {
         if self.server_version >= server_versions::AUTO_PRICE_FOR_HEDGE {
             self.order.dont_use_auto_price_for_hedge = self.message.next_bool()?;
         }
         Ok(())
     }
 
-    fn read_is_oms_container(&mut self) -> Result<()> {
+    fn read_is_oms_container(&mut self) -> Result<(), Error> {
         if self.server_version >= server_versions::ORDER_CONTAINER {
             self.order.is_oms_container = self.message.next_bool()?;
         }
         Ok(())
     }
 
-    fn read_discretionary_up_to_limit_price(&mut self) -> Result<()> {
+    fn read_discretionary_up_to_limit_price(&mut self) -> Result<(), Error> {
         if self.server_version >= server_versions::D_PEG_ORDERS {
             self.order.discretionary_up_to_limit_price = self.message.next_bool()?;
         }
         Ok(())
     }
 
-    fn read_use_price_mgmt_algo(&mut self) -> Result<()> {
+    fn read_use_price_mgmt_algo(&mut self) -> Result<(), Error> {
         if self.server_version >= server_versions::PRICE_MGMT_ALGO {
             self.order.use_price_mgmt_algo = self.message.next_bool()?;
         }
         Ok(())
     }
 
-    fn read_duration(&mut self) -> Result<()> {
+    fn read_duration(&mut self) -> Result<(), Error> {
         if self.server_version >= server_versions::DURATION {
             self.order.duration = self.message.next_optional_int()?;
         }
         Ok(())
     }
 
-    fn read_post_to_ats(&mut self) -> Result<()> {
+    fn read_post_to_ats(&mut self) -> Result<(), Error> {
         if self.server_version >= server_versions::POST_TO_ATS {
             self.order.post_to_ats = self.message.next_optional_int()?;
         }
         Ok(())
     }
 
-    fn read_auto_cancel_parent(&mut self) -> Result<()> {
+    fn read_auto_cancel_parent(&mut self) -> Result<(), Error> {
         if self.server_version >= server_versions::AUTO_CANCEL_PARENT {
             self.order.auto_cancel_parent = self.message.next_bool()?;
         }
         Ok(())
     }
 
-    fn read_peg_best_peg_mid_order_attributes(&mut self) -> Result<()> {
+    fn read_peg_best_peg_mid_order_attributes(&mut self) -> Result<(), Error> {
         if self.server_version >= server_versions::PEGBEST_PEGMID_OFFSETS {
             self.order.min_trade_qty = self.message.next_optional_int()?;
             self.order.min_compete_size = self.message.next_optional_int()?;
@@ -575,58 +577,58 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_order_status(&mut self) -> Result<()> {
+    fn read_order_status(&mut self) -> Result<(), Error> {
         self.order_state.status = self.message.next_string()?;
         Ok(())
     }
 
-    fn read_stop_price_and_limit_price_offset(&mut self) -> Result<()> {
+    fn read_stop_price_and_limit_price_offset(&mut self) -> Result<(), Error> {
         self.order.trail_stop_price = self.message.next_optional_double()?;
         self.order.limit_price_offset = self.message.next_optional_double()?;
         Ok(())
     }
 
-    fn read_auto_cancel_date(&mut self) -> Result<()> {
+    fn read_auto_cancel_date(&mut self) -> Result<(), Error> {
         self.order.auto_cancel_date = self.message.next_string()?;
         Ok(())
     }
 
-    fn read_filled_quantity(&mut self) -> Result<()> {
+    fn read_filled_quantity(&mut self) -> Result<(), Error> {
         self.order.filled_quantity = self.message.next_double()?;
         Ok(())
     }
 
-    fn read_ref_futures_contract_id(&mut self) -> Result<()> {
+    fn read_ref_futures_contract_id(&mut self) -> Result<(), Error> {
         self.order.ref_futures_con_id = self.message.next_optional_int()?;
         Ok(())
     }
 
-    fn read_shareholder(&mut self) -> Result<()> {
+    fn read_shareholder(&mut self) -> Result<(), Error> {
         self.order.shareholder = self.message.next_string()?;
         Ok(())
     }
 
-    fn read_imbalance_only(&mut self) -> Result<()> {
+    fn read_imbalance_only(&mut self) -> Result<(), Error> {
         self.order.imbalance_only = self.message.next_bool()?;
         Ok(())
     }
 
-    fn read_route_marketable_to_bbo(&mut self) -> Result<()> {
+    fn read_route_marketable_to_bbo(&mut self) -> Result<(), Error> {
         self.order.route_marketable_to_bbo = self.message.next_bool()?;
         Ok(())
     }
 
-    fn read_parent_perm_id(&mut self) -> Result<()> {
+    fn read_parent_perm_id(&mut self) -> Result<(), Error> {
         self.order.parent_perm_id = self.message.next_optional_long()?;
         Ok(())
     }
 
-    fn read_completed_time(&mut self) -> Result<()> {
+    fn read_completed_time(&mut self) -> Result<(), Error> {
         self.order_state.completed_time = self.message.next_string()?;
         Ok(())
     }
 
-    fn read_completed_status(&mut self) -> Result<()> {
+    fn read_completed_status(&mut self) -> Result<(), Error> {
         self.order_state.completed_status = self.message.next_string()?;
         Ok(())
     }
@@ -641,7 +643,7 @@ impl OrderDecoder {
     }
 }
 
-pub(crate) fn decode_open_order(server_version: i32, message: ResponseMessage) -> Result<OrderData> {
+pub(crate) fn decode_open_order(server_version: i32, message: ResponseMessage) -> Result<OrderData, Error> {
     let mut decoder = OrderDecoder::new(server_version, message);
 
     // read order id
@@ -722,25 +724,26 @@ pub(crate) fn decode_open_order(server_version: i32, message: ResponseMessage) -
     Ok(decoder.into_order_data())
 }
 
-pub(crate) fn decode_order_status(server_version: i32, message: &mut ResponseMessage) -> Result<OrderStatus> {
+pub(crate) fn decode_order_status(server_version: i32, message: &mut ResponseMessage) -> Result<OrderStatus, Error> {
     message.skip(); // message type
 
     if server_version < server_versions::MARKET_CAP_PRICE {
         message.skip(); // message version
     };
 
-    let mut order_status = OrderStatus::default();
-
-    order_status.order_id = message.next_int()?;
-    order_status.status = message.next_string()?;
-    order_status.filled = message.next_double()?;
-    order_status.remaining = message.next_double()?;
-    order_status.average_fill_price = message.next_double()?;
-    order_status.perm_id = message.next_int()?;
-    order_status.parent_id = message.next_int()?;
-    order_status.last_fill_price = message.next_double()?;
-    order_status.client_id = message.next_int()?;
-    order_status.why_held = message.next_string()?;
+    let mut order_status = OrderStatus {
+        order_id: message.next_int()?,
+        status: message.next_string()?,
+        filled: message.next_double()?,
+        remaining: message.next_double()?,
+        average_fill_price: message.next_double()?,
+        perm_id: message.next_int()?,
+        parent_id: message.next_int()?,
+        last_fill_price: message.next_double()?,
+        client_id: message.next_int()?,
+        why_held: message.next_string()?,
+        ..Default::default()
+    };
 
     if server_version >= server_versions::MARKET_CAP_PRICE {
         order_status.market_cap_price = message.next_double()?;
@@ -749,7 +752,7 @@ pub(crate) fn decode_order_status(server_version: i32, message: &mut ResponseMes
     Ok(order_status)
 }
 
-pub(crate) fn decode_execution_data(server_version: i32, message: &mut ResponseMessage) -> Result<ExecutionData> {
+pub(crate) fn decode_execution_data(server_version: i32, message: &mut ResponseMessage) -> Result<ExecutionData, Error> {
     message.skip(); // message type
 
     if server_version < server_versions::LAST_LIQUIDITY {
@@ -801,7 +804,7 @@ pub(crate) fn decode_execution_data(server_version: i32, message: &mut ResponseM
     Ok(execution_data)
 }
 
-pub(crate) fn decode_commission_report(_server_version: i32, message: &mut ResponseMessage) -> Result<CommissionReport> {
+pub(crate) fn decode_commission_report(_server_version: i32, message: &mut ResponseMessage) -> Result<CommissionReport, Error> {
     message.skip(); // message type
     message.skip(); // message version
 
@@ -815,7 +818,7 @@ pub(crate) fn decode_commission_report(_server_version: i32, message: &mut Respo
     })
 }
 
-pub(crate) fn decode_completed_order(server_version: i32, message: ResponseMessage) -> Result<OrderData> {
+pub(crate) fn decode_completed_order(server_version: i32, message: ResponseMessage) -> Result<OrderData, Error> {
     let mut decoder = OrderDecoder::new(server_version, message);
 
     // read contract fields

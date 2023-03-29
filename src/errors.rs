@@ -1,56 +1,52 @@
+use std::{num::ParseIntError, string::FromUtf8Error};
+
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Error {
-    // Errors from external libraries...
-    // Io(io::Error),
-    // Git(git2::Error),
-    // Errors raised by us...
-    Regular(ErrorKind),
+    // Errors from external libraries
+    Io(std::io::Error),
+    ParseInt(ParseIntError),
+    FromUtf8(FromUtf8Error),
+
+    // Errors from by IBAPI library
+    NotImplemented,
+    Parse(usize, String, String),
+    ServerVersion(i32, i32, String),
     Simple(String),
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum ErrorKind {
-    NotAuthorized,
-}
-
-impl ErrorKind {
-    fn as_str(&self) -> &str {
-        match *self {
-            // ErrorKind::NotFound => "not found",
-            ErrorKind::NotAuthorized => "not authorized",
-        }
-    }
-}
-
-impl std::error::Error for Error {
-    fn description(&self) -> &str {
-        match *self {
-            // MyErrorType::Git(ref err) => err.description(),
-            Error::Regular(ref err) => err.as_str(),
-            Error::Simple(ref err) => err,
-        }
-    }
-}
+impl std::error::Error for Error {}
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match *self {
-            // MyErrorType::Io(ref err) => err.fmt(f),
-            // MyErrorType::Git(ref err) => err.fmt(f),
-            Error::Regular(ref err) => write!(f, "A regular error occurred {:?}", err),
-            Error::Simple(ref err) => write!(f, "A custom error occurred {:?}", err),
+        match self {
+            Error::Io(ref err) => err.fmt(f),
+            Error::ParseInt(ref err) => err.fmt(f),
+            Error::FromUtf8(ref err) => err.fmt(f),
+
+            Error::NotImplemented => write!(f, "not implemented"),
+            Error::Parse(i, value, message) => write!(f, "parse error: {i} - {value} - {message}"),
+            Error::ServerVersion(wanted, have, message) => write!(f, "server version {wanted} required, got {have}: {message}"),
+
+            Error::Simple(ref err) => write!(f, "error occurred: {err}"),
         }
     }
 }
 
-impl From<anyhow::Error> for Error {
-    fn from(err: anyhow::Error) -> Error {
-        Error::Simple(err.to_string())
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Error {
+        Error::Io(err)
     }
 }
 
-// impl From<git2::Error> for MyErrorType {
-//     fn from(err: git2::Error) -> MyErrorType {
-//         MyErrorType::Git(err)
-//     }
-// }
+impl From<ParseIntError> for Error {
+    fn from(err: ParseIntError) -> Error {
+        Error::ParseInt(err)
+    }
+}
+
+impl From<FromUtf8Error> for Error {
+    fn from(err: FromUtf8Error) -> Error {
+        Error::FromUtf8(err)
+    }
+}

@@ -1,6 +1,8 @@
+use crate::Error;
+
 use super::*;
 
-pub(crate) fn encode_place_order(server_version: i32, order_id: i32, contract: &Contract, order: &Order) -> Result<RequestMessage> {
+pub(crate) fn encode_place_order(server_version: i32, order_id: i32, contract: &Contract, order: &Order) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::default();
     let message_version = message_version_for(server_version);
 
@@ -383,7 +385,7 @@ pub(crate) fn encode_place_order(server_version: i32, order_id: i32, contract: &
     Ok(message)
 }
 
-pub(crate) fn encode_cancel_order(server_version: i32, order_id: i32, manual_order_cancel_time: &str) -> Result<RequestMessage> {
+pub(crate) fn encode_cancel_order(server_version: i32, order_id: i32, manual_order_cancel_time: &str) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::default();
@@ -399,7 +401,7 @@ pub(crate) fn encode_cancel_order(server_version: i32, order_id: i32, manual_ord
     Ok(message)
 }
 
-pub(crate) fn encode_global_cancel() -> Result<RequestMessage> {
+pub(crate) fn encode_global_cancel() -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::default();
@@ -410,7 +412,7 @@ pub(crate) fn encode_global_cancel() -> Result<RequestMessage> {
     Ok(message)
 }
 
-pub(crate) fn encode_next_valid_order_id() -> Result<RequestMessage> {
+pub(crate) fn encode_next_valid_order_id() -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::default();
@@ -422,7 +424,7 @@ pub(crate) fn encode_next_valid_order_id() -> Result<RequestMessage> {
     Ok(message)
 }
 
-pub(crate) fn encode_completed_orders(api_only: bool) -> Result<RequestMessage> {
+pub(crate) fn encode_completed_orders(api_only: bool) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::ReqCompletedOrders);
@@ -431,7 +433,7 @@ pub(crate) fn encode_completed_orders(api_only: bool) -> Result<RequestMessage> 
     Ok(message)
 }
 
-pub(crate) fn encode_open_orders() -> Result<RequestMessage> {
+pub(crate) fn encode_open_orders() -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::default();
@@ -442,7 +444,7 @@ pub(crate) fn encode_open_orders() -> Result<RequestMessage> {
     Ok(message)
 }
 
-pub(crate) fn encode_all_open_orders() -> Result<RequestMessage> {
+pub(crate) fn encode_all_open_orders() -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::default();
@@ -453,7 +455,7 @@ pub(crate) fn encode_all_open_orders() -> Result<RequestMessage> {
     Ok(message)
 }
 
-pub(crate) fn encode_auto_open_orders(auto_bind: bool) -> Result<RequestMessage> {
+pub(crate) fn encode_auto_open_orders(auto_bind: bool) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::default();
@@ -465,7 +467,7 @@ pub(crate) fn encode_auto_open_orders(auto_bind: bool) -> Result<RequestMessage>
     Ok(message)
 }
 
-pub(crate) fn encode_executions(server_version: i32, request_id: i32, filter: &ExecutionFilter) -> Result<RequestMessage> {
+pub(crate) fn encode_executions(server_version: i32, request_id: i32, filter: &ExecutionFilter) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 3;
 
     let mut message = RequestMessage::default();
