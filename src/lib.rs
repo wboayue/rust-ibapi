@@ -58,7 +58,7 @@ use market_data::{BarSize, RealTimeBar, WhatToShow};
 
 use crate::accounts::Position;
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
-use crate::client::{RequestMessage};
+use crate::client::RequestMessage;
 use crate::market_data::realtime;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
@@ -674,11 +674,7 @@ impl Client {
         if version <= self.server_version {
             Ok(())
         } else {
-            Err(Error::ServerVersion(
-                version,
-                self.server_version,
-                message.into(),
-            ))
+            Err(Error::ServerVersion(version, self.server_version, message.into()))
         }
     }
 }
