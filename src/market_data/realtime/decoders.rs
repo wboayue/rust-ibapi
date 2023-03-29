@@ -1,8 +1,8 @@
 use time::OffsetDateTime;
 
 use crate::{
-    messages::ResponseMessage,
     market_data::{BidAsk, BidAskAttribute, MidPoint, RealTimeBar, Trade, TradeAttribute},
+    messages::ResponseMessage,
     Error,
 };
 

@@ -1,7 +1,7 @@
 use super::{BarSize, WhatToShow};
-use crate::messages::RequestMessage;
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
+use crate::messages::RequestMessage;
 use crate::orders::TagValue;
 use crate::{server_versions, Error};
 

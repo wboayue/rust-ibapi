@@ -1,6 +1,6 @@
 use super::Contract;
-use crate::messages::RequestMessage;
 use crate::messages::OutgoingMessages;
+use crate::messages::RequestMessage;
 use crate::{server_versions, Error};
 
 pub(crate) fn request_contract_data(server_version: i32, request_id: i32, contract: &Contract) -> Result<RequestMessage, Error> {

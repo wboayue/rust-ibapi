@@ -4,9 +4,9 @@ use std::fmt::{self, Debug};
 use log::{error, info};
 
 use crate::client::transport::{GlobalResponseIterator, ResponseIterator};
-use crate::messages::{RequestMessage, ResponseMessage};
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::{RequestMessage, ResponseMessage};
 use crate::Client;
 use crate::{encode_option_field, ToField};
 use crate::{server_versions, Error};

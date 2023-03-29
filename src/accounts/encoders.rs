@@ -1,5 +1,5 @@
-use crate::messages::RequestMessage;
 use crate::messages::OutgoingMessages;
+use crate::messages::RequestMessage;
 use crate::Error;
 
 pub(crate) fn request_positions() -> Result<RequestMessage, Error> {

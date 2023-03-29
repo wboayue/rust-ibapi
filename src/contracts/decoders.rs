@@ -1,6 +1,6 @@
 use log::info;
 
-use crate::{messages::ResponseMessage, contracts::SecurityType, orders::TagValue, server_versions, Error};
+use crate::{contracts::SecurityType, messages::ResponseMessage, orders::TagValue, server_versions, Error};
 
 use super::{Contract, ContractDescription, ContractDetails, MarketRule, PriceIncrement};
 

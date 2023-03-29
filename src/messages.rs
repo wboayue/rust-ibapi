@@ -5,6 +5,11 @@ use time::OffsetDateTime;
 
 use crate::{Error, ToField};
 
+const INFINITY_STR: &str = "Infinity";
+const UNSET_DOUBLE: &str = "1.7976931348623157E308";
+const UNSET_INTEGER: &str = "2147483647";
+const UNSET_LONG: &str = "9223372036854775807";
+
 #[derive(Debug, PartialEq)]
 pub enum IncomingMessages {
     NotValid = -1,
@@ -401,7 +406,7 @@ impl ResponseMessage {
         let field = &self.fields[self.i];
         self.i += 1;
 
-        if field.is_empty() || field == crate::UNSET_INTEGER {
+        if field.is_empty() || field == UNSET_INTEGER {
             return Ok(None);
         }
 
@@ -432,7 +437,7 @@ impl ResponseMessage {
         let field = &self.fields[self.i];
         self.i += 1;
 
-        if field.is_empty() || field == crate::UNSET_LONG {
+        if field.is_empty() || field == UNSET_LONG {
             return Ok(None);
         }
 
@@ -478,11 +483,11 @@ impl ResponseMessage {
         let field = &self.fields[self.i];
         self.i += 1;
 
-        if field.is_empty() || field == crate::UNSET_DOUBLE {
+        if field.is_empty() || field == UNSET_DOUBLE {
             return Ok(None);
         }
 
-        if field == crate::INFINITY_STR {
+        if field == INFINITY_STR {
             return Ok(Some(f64::INFINITY));
         }
 
