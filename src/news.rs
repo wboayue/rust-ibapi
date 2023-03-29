@@ -1,6 +1,4 @@
-use std::fmt::Debug;
-
-use crate::{domain::NewsProvider, errors::ErrorKind, Client, Error};
+use crate::{domain::NewsProvider, Client, Error};
 
 // https://interactivebrokers.github.io/tws-api/news.html
 
@@ -16,7 +14,7 @@ pub fn news_providers(client: &Client) -> Result<Vec<NewsProvider>, Error> {
     // packet = client.receive_packet(request_id)
     // ReceiveNewsProvidersResponse::decode(packet)
     print!("client: {client:?}");
-    Err(Error::Regular(ErrorKind::NotImplemented))
+    Err(Error::NotImplemented)
 }
 
 // :reqNewsArticle below.

@@ -4,7 +4,7 @@ use crate::client::{RequestMessage, ResponseMessage};
 use crate::contracts::Contract;
 use crate::domain::TickAttribBidAsk;
 use crate::server_versions;
-use crate::{errors::ErrorKind, Client, Error};
+use crate::{Client, Error};
 
 // https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EClient.cs
 // https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EDecoder.cs#L733
@@ -105,7 +105,7 @@ pub fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, perio
     // " W (weeks) - " M (months)
     // " Y (years)
     print!("{client:?} {contract:?} {use_rth:?} {period:?}");
-    Err(Error::Regular(ErrorKind::NotImplemented))
+    Err(Error::NotImplemented)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -124,12 +124,12 @@ pub fn historical_data(
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_what_to_show
     print!("{client:?} {contract:?} {end:?} {duration:?} {bar_size:?} {what_to_show:?} {use_rth:?} {keep_up_to_date:?}");
 
-    Err(Error::Regular(ErrorKind::NotImplemented))
+    Err(Error::NotImplemented)
 }
 
 pub fn historical_schedule(client: &Client, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator, Error> {
     print!("{client:?} {contract:?} {use_rth:?} {period:?}");
-    Err(Error::Regular(ErrorKind::NotImplemented))
+    Err(Error::NotImplemented)
 }
 
 pub fn historical_ticks(
@@ -142,7 +142,7 @@ pub fn historical_ticks(
     ignore_size: bool,
 ) -> Result<HistoricalTickIterator, Error> {
     print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?} {ignore_size:?}");
-    Err(Error::Regular(ErrorKind::NotImplemented))
+    Err(Error::NotImplemented)
 }
 
 pub fn historical_ticks_bid_ask(
@@ -156,7 +156,7 @@ pub fn historical_ticks_bid_ask(
 ) -> Result<HistoricalTickBidAskIterator, Error> {
     print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?} {ignore_size:?}");
 
-    Err(Error::Regular(ErrorKind::NotImplemented))
+    Err(Error::NotImplemented)
 }
 
 pub fn historical_ticks_last(
@@ -169,7 +169,7 @@ pub fn historical_ticks_last(
     ignore_size: bool,
 ) -> Result<HistoricalTickLastIterator, Error> {
     print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?} {ignore_size:?}");
-    Err(Error::Regular(ErrorKind::NotImplemented))
+    Err(Error::NotImplemented)
 }
 
 pub struct HistoricalTick {

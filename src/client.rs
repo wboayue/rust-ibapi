@@ -4,7 +4,7 @@ use std::str::FromStr;
 use time::OffsetDateTime;
 
 use crate::messages::{order_id_index, request_id_index, IncomingMessages};
-use crate::{errors::ErrorKind, Error, ToField};
+use crate::{Error, ToField};
 
 pub(crate) mod transport;
 
@@ -95,7 +95,7 @@ impl ResponseMessage {
         let field = &self.fields[i];
         match field.parse() {
             Ok(val) => Ok(val),
-            Err(err) => Err(Error::Regular(ErrorKind::Parse(i, field.into(), err.to_string()))),
+            Err(err) => Err(Error::Parse(i, field.into(), err.to_string())),
         }
     }
 
@@ -109,7 +109,7 @@ impl ResponseMessage {
 
         match field.parse() {
             Ok(val) => Ok(val),
-            Err(err) => Err(Error::Regular(ErrorKind::Parse(self.i, field.into(), err.to_string()))),
+            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
         }
     }
 
@@ -123,7 +123,7 @@ impl ResponseMessage {
 
         match field.parse::<i32>() {
             Ok(val) => Ok(Some(val)),
-            Err(err) => Err(Error::Regular(ErrorKind::Parse(self.i, field.into(), err.to_string()))),
+            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
         }
     }
 
@@ -140,7 +140,7 @@ impl ResponseMessage {
 
         match field.parse() {
             Ok(val) => Ok(val),
-            Err(err) => Err(Error::Regular(ErrorKind::Parse(self.i, field.into(), err.to_string()))),
+            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
         }
     }
 
@@ -154,7 +154,7 @@ impl ResponseMessage {
 
         match field.parse::<i64>() {
             Ok(val) => Ok(Some(val)),
-            Err(err) => Err(Error::Regular(ErrorKind::Parse(self.i, field.into(), err.to_string()))),
+            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
         }
     }
 
@@ -166,7 +166,7 @@ impl ResponseMessage {
         let timestamp: i64 = field.parse()?;
         match OffsetDateTime::from_unix_timestamp(timestamp) {
             Ok(val) => Ok(val),
-            Err(err) => Err(Error::Regular(ErrorKind::Parse(self.i, field.into(), err.to_string()))),
+            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
         }
     }
 
@@ -186,7 +186,7 @@ impl ResponseMessage {
 
         match field.parse() {
             Ok(val) => Ok(val),
-            Err(err) => Err(Error::Regular(ErrorKind::Parse(self.i, field.into(), err.to_string()))),
+            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
         }
     }
 
@@ -204,7 +204,7 @@ impl ResponseMessage {
 
         match field.parse() {
             Ok(val) => Ok(Some(val)),
-            Err(err) => Err(Error::Regular(ErrorKind::Parse(self.i, field.into(), err.to_string()))),
+            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
         }
     }
 
