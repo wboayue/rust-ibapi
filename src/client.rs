@@ -296,7 +296,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let mut client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
     /// let results = client.auto_open_orders(false).expect("request failed");
     /// for order_data in results {
@@ -340,7 +340,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let mut client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
     /// let results = client.completed_orders(false).expect("request failed");
     /// for order_data in results {
@@ -366,15 +366,15 @@ impl Client {
     /// use ibapi::Client;
     /// use ibapi::orders::ExecutionFilter;
     ///
-    /// let mut client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///     
     /// let filter = ExecutionFilter{
     ///    side: "BUY".to_owned(),
     ///    ..ExecutionFilter::default()
     /// };
     ///
-    /// let results = client.executions(filter).expect("request failed");
-    /// for execution_data in results {
+    /// let executions = client.executions(filter).expect("request failed");
+    /// for execution_data in executions {
     ///    println!("{execution_data:?}")
     /// }
     /// ```
@@ -404,7 +404,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let mut client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002").expect("connection failed");
     ///
     /// let next_valid_order_id = client.next_valid_order_id().expect("request failed");
     /// println!("next_valid_order_id: {next_valid_order_id}");
