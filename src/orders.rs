@@ -931,8 +931,8 @@ pub struct ExecutionData {
 #[derive(Clone, Debug)]
 pub enum OrderNotification {
     OrderStatus(OrderStatus),
-    OpenOrder(OrderData),
-    ExecutionData(ExecutionData),
+    OpenOrder(Box<OrderData>),
+    ExecutionData(Box<ExecutionData>),
     CommissionReport(CommissionReport),
     Message(String),
 }
@@ -945,13 +945,13 @@ impl From<OrderStatus> for OrderNotification {
 
 impl From<OrderData> for OrderNotification {
     fn from(val: OrderData) -> Self {
-        OrderNotification::OpenOrder(val)
+        OrderNotification::OpenOrder(Box::new(val))
     }
 }
 
 impl From<ExecutionData> for OrderNotification {
     fn from(val: ExecutionData) -> Self {
-        OrderNotification::ExecutionData(val)
+        OrderNotification::ExecutionData(Box::new(val))
     }
 }
 
@@ -1397,8 +1397,8 @@ pub(crate) fn completed_orders(client: &Client, api_only: bool) -> Result<OrderD
 /// Enumerates possible results from querying an [Order].
 #[derive(Debug)]
 pub enum OrderDataResult {
-    OrderData(OrderData),
-    OrderStatus(OrderStatus),
+    OrderData(Box<OrderData>),
+    OrderStatus(Box<OrderStatus>),
 }
 
 /// Supports iteration over [OrderDataResult].
@@ -1416,19 +1416,19 @@ impl Iterator for OrderDataIterator {
             if let Some(mut message) = self.messages.next() {
                 match message.message_type() {
                     IncomingMessages::CompletedOrder => match decoders::decode_completed_order(self.server_version, message) {
-                        Ok(val) => return Some(OrderDataResult::OrderData(val)),
+                        Ok(val) => return Some(OrderDataResult::OrderData(Box::new(val))),
                         Err(err) => {
                             error!("error decoding completed order: {err}");
                         }
                     },
                     IncomingMessages::OpenOrder => match decoders::decode_open_order(self.server_version, message) {
-                        Ok(val) => return Some(OrderDataResult::OrderData(val)),
+                        Ok(val) => return Some(OrderDataResult::OrderData(Box::new(val))),
                         Err(err) => {
                             error!("error decoding open order: {err}");
                         }
                     },
                     IncomingMessages::OrderStatus => match decoders::decode_order_status(self.server_version, &mut message) {
-                        Ok(val) => return Some(OrderDataResult::OrderStatus(val)),
+                        Ok(val) => return Some(OrderDataResult::OrderStatus(Box::new(val))),
                         Err(err) => {
                             error!("error decoding order status: {err}");
                         }
@@ -1533,8 +1533,8 @@ pub(crate) fn executions(client: &Client, filter: ExecutionFilter) -> Result<Exe
 /// Enumerates possible results from querying an [Execution].
 #[derive(Debug)]
 pub enum ExecutionDataResult {
-    ExecutionData(ExecutionData),
-    CommissionReport(CommissionReport),
+    ExecutionData(Box<ExecutionData>),
+    CommissionReport(Box<CommissionReport>),
 }
 
 /// Supports iteration over [ExecutionDataResult].
@@ -1552,13 +1552,13 @@ impl Iterator for ExecutionDataIterator {
             if let Some(mut message) = self.messages.next() {
                 match message.message_type() {
                     IncomingMessages::ExecutionData => match decoders::decode_execution_data(self.server_version, &mut message) {
-                        Ok(val) => return Some(ExecutionDataResult::ExecutionData(val)),
+                        Ok(val) => return Some(ExecutionDataResult::ExecutionData(Box::new(val))),
                         Err(err) => {
                             error!("error decoding execution data: {err}");
                         }
                     },
                     IncomingMessages::CommissionsReport => match decoders::decode_commission_report(self.server_version, &mut message) {
-                        Ok(val) => return Some(ExecutionDataResult::CommissionReport(val)),
+                        Ok(val) => return Some(ExecutionDataResult::CommissionReport(Box::new(val))),
                         Err(err) => {
                             error!("error decoding commission report: {err}");
                         }

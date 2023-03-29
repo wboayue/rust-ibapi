@@ -257,6 +257,7 @@ impl Client {
     // === Accounts ===
 
     /// Get current positions for all accessible accounts.
+    #[allow(clippy::needless_lifetimes)]
     pub fn positions<'a>(&'a self) -> core::result::Result<impl Iterator<Item = Position> + 'a, Error> {
         accounts::positions(self)
     }
@@ -347,7 +348,7 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::Client;
-    /// 
+    ///
     /// let mut client = Client::connect("localhost:4002").expect("connection failed");
     ///
     /// let results = client.auto_open_orders(false).expect("request failed");

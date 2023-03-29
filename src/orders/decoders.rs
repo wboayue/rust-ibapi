@@ -731,18 +731,19 @@ pub(crate) fn decode_order_status(server_version: i32, message: &mut ResponseMes
         message.skip(); // message version
     };
 
-    let mut order_status = OrderStatus::default();
-
-    order_status.order_id = message.next_int()?;
-    order_status.status = message.next_string()?;
-    order_status.filled = message.next_double()?;
-    order_status.remaining = message.next_double()?;
-    order_status.average_fill_price = message.next_double()?;
-    order_status.perm_id = message.next_int()?;
-    order_status.parent_id = message.next_int()?;
-    order_status.last_fill_price = message.next_double()?;
-    order_status.client_id = message.next_int()?;
-    order_status.why_held = message.next_string()?;
+    let mut order_status = OrderStatus {
+        order_id: message.next_int()?,
+        status: message.next_string()?,
+        filled: message.next_double()?,
+        remaining: message.next_double()?,
+        average_fill_price: message.next_double()?,
+        perm_id: message.next_int()?,
+        parent_id: message.next_int()?,
+        last_fill_price: message.next_double()?,
+        client_id: message.next_int()?,
+        why_held: message.next_string()?,
+        ..Default::default()
+    };
 
     if server_version >= server_versions::MARKET_CAP_PRICE {
         order_status.market_cap_price = message.next_double()?;
