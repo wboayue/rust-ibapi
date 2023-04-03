@@ -16,13 +16,13 @@ fn main() -> anyhow::Result<()> {
         .author("Wil Boayue <wil.boayue@gmail.com>")
         .about("Queries completed and open orders")
         .arg(arg!(<TYPE>).default_value("completed").value_parser(order_types))
-        .arg(arg!(--connection_string <CONNECTION_STRING>).default_value("odin:4002"))
+        .arg(arg!(--connection_string <CONNECTION_STRING>).default_value("localhost:4002"))
         .get_matches();
 
     let connection_string = matches.get_one::<String>("connection_string").unwrap();
     let order_type = matches.get_one::<String>("TYPE").unwrap();
 
-    let client = Client::connect(connection_string)?;
+    let client = Client::connect(connection_string, 100)?;
 
     match order_type.as_str() {
         "open" => {

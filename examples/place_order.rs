@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
 
     println!("connection_string: {connection_string}, stock_symbol: {stock_symbol}");
 
-    let client = Client::connect("odin:4002")?;
+    let client = Client::connect("localhost:4002", 100)?;
 
     info!("Connected {client:?}");
 

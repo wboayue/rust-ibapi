@@ -7,7 +7,7 @@ use ibapi::orders::{order_builder, Action};
 use ibapi::Client;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let client = Client::connect("localhost:4002")?;
+    let client = Client::connect("localhost:4002", 100)?;
 
     let symbol = "TSLA";
     let contract = Contract::stock(symbol);

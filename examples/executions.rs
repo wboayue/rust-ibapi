@@ -12,7 +12,7 @@ fn main() -> anyhow::Result<()> {
     // filter.exchange = exchange.to_owned();
     // filter.side = side.to_owned();
 
-    let client = Client::connect("localhost:4002")?;
+    let client = Client::connect("localhost:4002", 100)?;
 
     let executions = client.executions(filter)?;
     for execution in executions {

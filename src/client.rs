@@ -33,7 +33,7 @@ pub struct Client {
     pub(crate) server_time: String,
 
     managed_accounts: String,
-    client_id: String, // ID of client.
+    client_id: i32, // ID of client.
     pub(crate) message_bus: RefCell<Box<dyn MessageBus>>,
     next_request_id: AtomicI32, // Next available request_id.
     order_id: AtomicI32,        // Next available order_id. Starts with value returned on connection.
@@ -45,42 +45,33 @@ impl Client {
     /// Connects to server using the given connection string
     ///
     /// # Arguments
-    /// * `connection_string` - connection string in the following format [host]:[port]:[client_id].
-    ///                         client id is optional and defaults to 100.
+    /// * `address`   - address of server. e.g. localhost:4002
+    /// * `client_id` - id of client. e.g. 100
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
     ///
     /// println!("server_version: {}", client.server_version());
     /// println!("server_time: {}", client.server_time());
     /// println!("managed_accounts: {}", client.managed_accounts());
     /// println!("next_order_id: {}", client.next_order_id());
     /// ```
-    pub fn connect(connection_string: &str) -> Result<Client, Error> {
-        let parts: Vec<&str> = connection_string.split(':').collect();
-        let (connection_string, client_id): (String, String) = match parts.len() {
-            2 => (format!("{}:{}", parts[0], parts[1]), "100".into()),
-            3 => (format!("{}:{}", parts[0], parts[1]), parts[2].into()),
-            _ => (connection_string.into(), "100".into()),
-        };
-
-        debug!("connecting to server with {:?}", connection_string);
-
-        let message_bus = RefCell::new(Box::new(TcpMessageBus::connect(&connection_string)?));
-        Client::do_connect(&client_id, message_bus)
+    pub fn connect(address: &str, client_id: i32) -> Result<Client, Error> {
+        let message_bus = RefCell::new(Box::new(TcpMessageBus::connect(address)?));
+        Client::do_connect(client_id, message_bus)
     }
 
-    fn do_connect(client_id: &str, message_bus: RefCell<Box<dyn MessageBus>>) -> Result<Client, Error> {
+    fn do_connect(client_id: i32, message_bus: RefCell<Box<dyn MessageBus>>) -> Result<Client, Error> {
         let mut client = Client {
             server_version: 0,
             server_time: String::from(""),
             managed_accounts: String::from(""),
             message_bus,
-            client_id: client_id.into(),
+            client_id,
             next_request_id: AtomicI32::new(9000),
             order_id: AtomicI32::new(-1),
         };
@@ -224,7 +215,7 @@ impl Client {
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
     ///
-    /// let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("TSLA");
     /// let results = client.contract_details(&contract).expect("request failed");
@@ -254,7 +245,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
     ///
     /// let contracts = client.matching_symbols("IB").expect("request failed");
     /// for contract in contracts {
@@ -275,7 +266,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
     ///
     /// let results = client.all_open_orders().expect("request failed");
     /// for order_data in results {
@@ -318,7 +309,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
     ///
     /// let order_id = 15;
     /// let results = client.cancel_order(order_id, "").expect("request failed");
@@ -340,7 +331,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
     ///
     /// let results = client.completed_orders(false).expect("request failed");
     /// for order_data in results {
@@ -389,7 +380,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let mut client = Client::connect("localhost:4002").expect("connection failed");
+    /// let mut client = Client::connect("localhost:4002", 100).expect("connection failed");
     ///
     /// client.global_cancel().expect("request failed");
     /// ```
@@ -404,7 +395,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
     ///
     /// let next_valid_order_id = client.next_valid_order_id().expect("request failed");
     /// println!("next_valid_order_id: {next_valid_order_id}");
@@ -421,7 +412,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
     ///
     /// let results = client.open_orders().expect("request failed");
     /// for order_data in results {
@@ -449,7 +440,7 @@ impl Client {
     /// use ibapi::contracts::Contract;
     /// use ibapi::orders::{order_builder, Action, OrderNotification};
     ///
-    /// let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("MSFT");
     /// let order = order_builder::market_order(Action::Buy, 100.0);
@@ -489,7 +480,7 @@ impl Client {
     /// use ibapi::contracts::Contract;
     /// use ibapi::market_data::{BarSize, WhatToShow};
     ///
-    /// let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("TSLA");
     /// let bars = client.realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, false).expect("request failed");
@@ -577,7 +568,7 @@ impl Client {
             server_time: String::from(""),
             managed_accounts: String::from(""),
             message_bus,
-            client_id: "100".into(),
+            client_id: 100,
             next_request_id: AtomicI32::new(9000),
             order_id: AtomicI32::new(-1),
         }
