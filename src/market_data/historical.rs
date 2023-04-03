@@ -17,7 +17,7 @@ use crate::{Client, Error};
 ///     //use ibapi::market_data::historical;
 ///
 ///     fn main() -> Result<()> {
-///         let mut client = Client::connect("localhost:4002")?;
+///         let mut client = Client::connect("localhost:4002", 100)?;
 ///
 ///         let contract = Contract::stock("MSFT");
 ///         let what_to_show = "trades";

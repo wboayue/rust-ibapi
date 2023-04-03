@@ -287,7 +287,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
     ///
     /// let results = client.auto_open_orders(false).expect("request failed");
     /// for order_data in results {
@@ -357,7 +357,7 @@ impl Client {
     /// use ibapi::Client;
     /// use ibapi::orders::ExecutionFilter;
     ///
-    /// let client = Client::connect("localhost:4002").expect("connection failed");
+    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
     ///     
     /// let filter = ExecutionFilter{
     ///    side: "BUY".to_owned(),
