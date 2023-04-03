@@ -176,9 +176,10 @@ pub(crate) fn contract_descriptions(server_version: i32, message: &mut ResponseM
 pub(crate) fn market_rule(message: &mut ResponseMessage) -> Result<MarketRule, Error> {
     message.skip(); // message type
 
-    let mut market_rule = MarketRule::default();
-
-    market_rule.market_rule_id = message.next_int()?;
+    let mut market_rule = MarketRule {
+        market_rule_id: message.next_int()?,
+        ..Default::default()
+    };
 
     let price_increments_count = message.next_int()?;
     for _ in 0..price_increments_count {

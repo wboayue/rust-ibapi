@@ -26,7 +26,7 @@ pub(crate) fn positions<'a>(client: &'a Client) -> Result<impl Iterator<Item = P
     let messages = client.request_positions(message)?;
 
     Ok(PositionIterator {
-        client: &client,
+        client,
         server_version: client.server_version(),
         messages,
     })

@@ -9,9 +9,10 @@ pub(crate) fn position(message: &mut ResponseMessage) -> Result<Position, Error>
 
     let message_version = message.next_int()?; // message version
 
-    let mut position = Position::default();
-
-    position.account = message.next_string()?;
+    let mut position = Position {
+        account: message.next_string()?,
+        ..Default::default()
+    };
 
     position.contract.contract_id = message.next_int()?;
     position.contract.symbol = message.next_string()?;
