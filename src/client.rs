@@ -492,11 +492,11 @@ impl Client {
     pub fn realtime_bars<'a>(
         &'a self,
         contract: &Contract,
-        bar_size: &BarSize,
-        what_to_show: &WhatToShow,
+        bar_size: BarSize,
+        what_to_show: WhatToShow,
         use_rth: bool,
     ) -> Result<impl Iterator<Item = RealTimeBar> + 'a, Error> {
-        realtime::realtime_bars_with_options(self, contract, bar_size, what_to_show, use_rth, Vec::default())
+        realtime::realtime_bars_with_options(self, contract, &bar_size, &what_to_show, use_rth, Vec::default())
     }
 
     /// Requests tick by tick AllLast ticks.

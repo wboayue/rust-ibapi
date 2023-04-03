@@ -1,11 +1,11 @@
 //! The known server versions.
 
 //shouldn't these all be deprecated?
-//  public const int HISTORICAL_DATA = 24;
-//  public const int CURRENT_TIME = 33;
+//  pub const HISTORICAL_DATA: i32 = 24;
+//  pub const CURRENT_TIME: i32 = 33;
 pub const REAL_TIME_BARS: i32 = 34;
 pub const SCALE_ORDERS: i32 = 35;
-//  public const int SNAPSHOT_MKT_DATA = 35;
+//  pub const SNAPSHOT_MKT_DATA: i32 = 35;
 pub const SSHORT_COMBO_LEGS: i32 = 35;
 pub const WHAT_IF_ORDERS: i32 = 36;
 pub const CONTRACT_CONID: i32 = 37;

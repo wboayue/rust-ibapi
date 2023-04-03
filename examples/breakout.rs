@@ -10,24 +10,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     let client = Client::connect("localhost:4002", 100)?;
 
     let symbol = "TSLA";
-    let contract = Contract::stock(symbol);
+    let contract = Contract::stock(symbol); // defaults to USD and SMART exchange.
 
-    let bars = client.realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, false)?;
+    let bars = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)?;
 
-    let mut breakout = BreakoutChannel::new(30);
+    let mut channel = BreakoutChannel::new(30);
 
     for bar in bars {
-        // One bar will be delivered every tick.
-        // If code here executes longer than bar interval. will receive late bar.
+        channel.consume(&bar);
 
-        breakout.consume(&bar);
-
-        // Make sure we have enough data and no stop order is active.
-        if !breakout.ready() || has_position(&client, symbol) {
+        // Ensure enough bars and no open positions.
+        if !channel.ready() || has_position(&client, symbol) {
             continue;
         }
 
-        if bar.close > breakout.high() {
+        if bar.close > channel.high() {
             let order_id = client.next_order_id();
             let order = order_builder::market_order(Action::Buy, 100.0);
 
@@ -37,7 +34,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
 
-        if bar.close < breakout.low() {
+        if bar.close < channel.low() {
             let order_id = client.next_order_id();
             let order = order_builder::market_order(Action::SellShort, 100.0);
 

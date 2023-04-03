@@ -148,7 +148,7 @@ pub struct Contract {
 
 impl Contract {
     /// Creates stock contract from specified symbol
-    /// currency default to USD and SMART exchange.
+    /// currency defaults to USD and SMART exchange.
     pub fn stock(symbol: &str) -> Contract {
         Contract {
             symbol: symbol.to_string(),
