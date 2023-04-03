@@ -25,11 +25,7 @@ pub(crate) fn positions<'a>(client: &'a Client) -> Result<impl Iterator<Item = P
 
     let messages = client.request_positions(message)?;
 
-    Ok(PositionIterator {
-        client,
-        server_version: client.server_version(),
-        messages,
-    })
+    Ok(PositionIterator { client, messages })
 }
 
 pub(crate) fn cancel_positions(client: &Client) -> Result<(), Error> {
@@ -45,7 +41,6 @@ pub(crate) fn cancel_positions(client: &Client) -> Result<(), Error> {
 // Supports iteration over [Position].
 pub struct PositionIterator<'a> {
     client: &'a Client,
-    server_version: i32,
     messages: GlobalResponseIterator,
 }
 
