@@ -3,7 +3,7 @@ use std::error::Error;
 
 use ibapi::contracts::Contract;
 use ibapi::market_data::{BarSize, RealTimeBar, WhatToShow};
-use ibapi::orders::{order_builder, Action};
+use ibapi::orders::{order_builder, Action, OrderNotification};
 use ibapi::Client;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -17,30 +17,30 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut channel = BreakoutChannel::new(30);
 
     for bar in bars {
-        channel.consume(&bar);
+        channel.add_bar(&bar);
 
         // Ensure enough bars and no open positions.
         if !channel.ready() || has_position(&client, symbol) {
             continue;
         }
 
-        if bar.close > channel.high() {
-            let order_id = client.next_order_id();
-            let order = order_builder::market_order(Action::Buy, 100.0);
+        let action = if bar.close > channel.high() {
+            Action::Buy
+        } else if bar.close < channel.low() {
+            Action::Sell
+        } else {
+            continue;
+        };
 
-            let results = client.place_order(order_id, &contract, &order)?;
-            for status in results {
-                println!("order status: {status:?}")
-            }
-        }
+        let order_id = client.next_order_id();
+        let order = order_builder::market_order(action, 100.0);
 
-        if bar.close < channel.low() {
-            let order_id = client.next_order_id();
-            let order = order_builder::market_order(Action::SellShort, 100.0);
-
-            let results = client.place_order(order_id, &contract, &order)?;
-            for status in results {
-                println!("order status: {status:?}")
+        let notices = client.place_order(order_id, &contract, &order)?;
+        for notice in notices {
+            if let OrderNotification::ExecutionData(data) = notice {
+                println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
+            } else {
+                println!("{:?}", notice);
             }
         }
     }
@@ -73,7 +73,7 @@ impl BreakoutChannel {
         self.ticks.len() >= self.size
     }
 
-    fn consume(&mut self, bar: &RealTimeBar) {
+    fn add_bar(&mut self, bar: &RealTimeBar) {
         self.ticks.push_back((bar.high, bar.low));
 
         if self.ticks.len() > self.size {

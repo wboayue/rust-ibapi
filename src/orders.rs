@@ -583,7 +583,7 @@ impl Order {
 /// For general account types, a SELL order will be able to enter a short position automatically if the order quantity is larger than your current long position.
 /// SSHORT is only supported for institutional account configured with Long/Short account segments or clearing with a separate account.
 /// SLONG is available in specially-configured institutional accounts to indicate that long position not yet delivered is being sold.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Copy)]
 pub enum Action {
     #[default]
     Buy,
@@ -612,7 +612,7 @@ impl ToString for Action {
 }
 
 impl Action {
-    fn reverse(&self) -> Action {
+    pub fn reverse(self) -> Action {
         match self {
             Action::Buy => Action::Sell,
             Action::Sell => Action::Buy,
