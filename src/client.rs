@@ -483,7 +483,7 @@ impl Client {
     /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("TSLA");
-    /// let bars = client.realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, false).expect("request failed");
+    /// let bars = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("request failed");
     ///
     /// for (i, bar) in bars.enumerate().take(60) {
     ///     println!("bar[{i}]: {bar:?}");
