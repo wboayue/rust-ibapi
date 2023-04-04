@@ -583,7 +583,7 @@ impl Order {
 /// For general account types, a SELL order will be able to enter a short position automatically if the order quantity is larger than your current long position.
 /// SSHORT is only supported for institutional account configured with Long/Short account segments or clearing with a separate account.
 /// SLONG is available in specially-configured institutional accounts to indicate that long position not yet delivered is being sold.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Copy)]
 pub enum Action {
     #[default]
     Buy,
@@ -612,7 +612,7 @@ impl ToString for Action {
 }
 
 impl Action {
-    fn reverse(&self) -> Action {
+    pub fn reverse(self) -> Action {
         match self {
             Action::Buy => Action::Sell,
             Action::Sell => Action::Buy,
@@ -965,7 +965,7 @@ impl From<CommissionReport> for OrderNotification {
 #[derive(Clone, Debug, Default)]
 pub struct OrderStatus {
     /// The order's client id.
-    order_id: i32,
+    pub order_id: i32,
     /// The current status of the order. Possible values:
     ///     ApiPending - indicates order has not yet been sent to IB server, for instance if there is a delay in receiving the security definition. Uncommonly received.
     ///     PendingSubmit - indicates that you have transmitted the order, but have not yet received confirmation that it has been accepted by the order destination.
@@ -976,25 +976,25 @@ pub struct OrderStatus {
     ///     Cancelled - indicates that the balance of your order has been confirmed canceled by the IB system. This could occur unexpectedly when IB or the destination has rejected your order.
     ///     Filled - indicates that the order has been completely filled. Market orders executions will not always trigger a Filled status.
     ///     Inactive - indicates that the order was received by the system but is no longer active because it was rejected or canceled.    
-    status: String,
+    pub status: String,
     /// Number of filled positions.
-    filled: f64,
+    pub filled: f64,
     /// The remnant positions.
-    remaining: f64,
+    pub remaining: f64,
     /// Average filling price.
-    average_fill_price: f64,
+    pub average_fill_price: f64,
     /// The order's permId used by the TWS to identify orders.
-    perm_id: i32,
+    pub perm_id: i32,
     /// Parent's id. Used for bracket and auto trailing stop orders.
-    parent_id: i32,
+    pub parent_id: i32,
     /// Price at which the last positions were filled.
-    last_fill_price: f64,
+    pub last_fill_price: f64,
     /// API client which submitted the order.
-    client_id: i32,
+    pub client_id: i32,
     /// This field is used to identify an order held when TWS is trying to locate shares for a short sell. The value used to indicate this is 'locate'.
-    why_held: String,
+    pub why_held: String,
     /// If an order has been capped, this indicates the current capped price. Requires TWS 967+ and API v973.04+. Python API specifically requires API v973.06+.
-    market_cap_price: f64,
+    pub market_cap_price: f64,
 }
 
 #[derive(Debug)]

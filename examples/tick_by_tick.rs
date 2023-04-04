@@ -4,7 +4,6 @@ use std::time::Duration;
 use clap::{arg, Command};
 
 use ibapi::contracts::Contract;
-use ibapi::market_data::realtime;
 use ibapi::Client;
 
 fn main() -> anyhow::Result<()> {
@@ -14,7 +13,7 @@ fn main() -> anyhow::Result<()> {
         .version("1.0")
         .author("Wil Boayue <wil@wsbsolutions.com")
         .about("Streams tick by tick data")
-        .arg(arg!(--connection_string <VALUE>).default_value("odin:4002"))
+        .arg(arg!(--connection_string <VALUE>).default_value("localhost:4002"))
         .arg(arg!(--last <SYMBOL>))
         .arg(arg!(--all_last <SYMBOL>))
         .arg(arg!(--bid_ask <SYMBOL>))
@@ -24,7 +23,7 @@ fn main() -> anyhow::Result<()> {
     let connection_string = matches.get_one::<String>("connection_string").expect("connection_string is required");
     println!("connection_string: {connection_string}");
 
-    let mut client = Client::connect(connection_string)?;
+    let mut client = Client::connect(connection_string, 100)?;
 
     if let Some(symbol) = matches.get_one::<String>("last") {
         stream_last(&mut client, &symbol.to_uppercase())?;

@@ -19,7 +19,7 @@
 //!     use ibapi::Client;     
 //!     
 //!     fn main() -> anyhow::Result<()> {
-//!         let client = Client::connect("localhost:4002:100")?;
+//!         let client = Client::connect("localhost:4002", 100)?;
 //!         println!("Client: {:?}", client);
 //!         Ok(())
 //!     }

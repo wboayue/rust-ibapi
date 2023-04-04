@@ -2,7 +2,7 @@ use ibapi::contracts::Contract;
 use ibapi::Client;
 
 fn main() -> anyhow::Result<()> {
-    let client = Client::connect("localhost:4002")?;
+    let client = Client::connect("localhost:4002", 100)?;
 
     println!("server_version: {}", client.server_version());
     println!("server_time: {}", client.server_time());

@@ -9,7 +9,7 @@ pub(crate) fn encode_request_realtime_bars(
     server_version: i32,
     ticker_id: i32,
     contract: &Contract,
-    bar_size: &BarSize,
+    _bar_size: &BarSize,
     what_to_show: &WhatToShow,
     use_rth: bool,
     options: Vec<TagValue>,

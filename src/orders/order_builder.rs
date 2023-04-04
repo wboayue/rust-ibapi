@@ -394,7 +394,7 @@ pub fn bracket_order(
     //This will be our main or "parent" order
     let parent = Order {
         order_id: parent_order_id,
-        action: action.clone(),
+        action,
         order_type: "LMT".to_owned(),
         total_quantity: quantity,
         limit_price: Some(limit_price),

@@ -22,6 +22,14 @@ jobs:
         with:
           toolchain: nightly
 
+      # Cache cargo registry, index, and build directories
+      - name: Cache cargo
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo
+          key: cargo-${{ hashFiles('**/Cargo.lock') }}
+
       - name: Build
         run: cargo build --verbose
 

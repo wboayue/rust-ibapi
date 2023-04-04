@@ -17,6 +17,7 @@ pub struct RealTimeBar {
     pub count: i32,
 }
 
+#[derive(Clone, Debug, Copy)]
 pub enum BarSize {
     Sec,
     Sec5,
@@ -32,6 +33,7 @@ pub enum BarSize {
     Day,
 }
 
+#[derive(Clone, Debug, Copy)]
 pub enum WhatToShow {
     Trades,
     MidPoint,

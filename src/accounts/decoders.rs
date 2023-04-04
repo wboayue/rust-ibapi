@@ -9,9 +9,10 @@ pub(crate) fn position(message: &mut ResponseMessage) -> Result<Position, Error>
 
     let message_version = message.next_int()?; // message version
 
-    let mut position = Position::default();
-
-    position.account = message.next_string()?;
+    let mut position = Position {
+        account: message.next_string()?,
+        ..Default::default()
+    };
 
     position.contract.contract_id = message.next_int()?;
     position.contract.symbol = message.next_string()?;
@@ -38,19 +39,21 @@ pub(crate) fn position(message: &mut ResponseMessage) -> Result<Position, Error>
 }
 
 mod tests {
-    use super::*;
-
     #[test]
     fn decode_positions() {
-        let mut message = ResponseMessage::from("61\03\0DU1236109\076792991\0TSLA\0STK\0\00.0\0\0\0NASDAQ\0USD\0TSLA\0NMS\0500\0196.77\0");
+        let mut message = super::ResponseMessage::from("61\03\0DU1236109\076792991\0TSLA\0STK\0\00.0\0\0\0NASDAQ\0USD\0TSLA\0NMS\0500\0196.77\0");
 
-        let results = position(&mut message);
+        let results = super::position(&mut message);
 
         if let Ok(position) = results {
             assert_eq!(position.account, "DU1236109", "position.account");
             assert_eq!(position.contract.contract_id, 76792991, "position.contract.contract_id");
             assert_eq!(position.contract.symbol, "TSLA", "position.contract.symbol");
-            assert_eq!(position.contract.security_type, SecurityType::Stock, "position.contract.security_type");
+            assert_eq!(
+                position.contract.security_type,
+                super::SecurityType::Stock,
+                "position.contract.security_type"
+            );
             assert_eq!(
                 position.contract.last_trade_date_or_contract_month, "",
                 "position.contract.last_trade_date_or_contract_month"

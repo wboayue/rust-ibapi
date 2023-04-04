@@ -148,7 +148,7 @@ pub struct Contract {
 
 impl Contract {
     /// Creates stock contract from specified symbol
-    /// currency default to USD and SMART exchange.
+    /// currency defaults to USD and SMART exchange.
     pub fn stock(symbol: &str) -> Contract {
         Contract {
             symbol: symbol.to_string(),
@@ -397,8 +397,8 @@ pub(crate) fn contract_details(client: &Client, contract: &Contract) -> Result<V
                 break;
             }
             IncomingMessages::Error => {
-                error!("error: {:?}", message);
-                return Err(Error::Simple(format!("contract_details {:?}", message)));
+                error!("error: {message:?}");
+                return Err(Error::Simple(format!("contract_details {message:?}")));
             }
             _ => {
                 error!("unexpected message: {:?}", message);
@@ -469,11 +469,11 @@ pub(crate) fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<Con
             IncomingMessages::Error => {
                 // TODO custom error
                 error!("unexpected error: {:?}", message);
-                return Err(Error::Simple(format!("unexpected error: {:?}", message)));
+                return Err(Error::Simple(format!("unexpected error: {message:?}")));
             }
             _ => {
                 info!("unexpected message: {:?}", message);
-                return Err(Error::Simple(format!("unexpected message: {:?}", message)));
+                return Err(Error::Simple(format!("unexpected message: {message:?}")));
             }
         }
     }
@@ -506,6 +506,6 @@ pub(crate) fn market_rule(client: &Client, market_rule_id: i32) -> Result<Market
 
     match responses.next() {
         Some(mut message) => Ok(decoders::market_rule(&mut message)?),
-        None => Err(Error::Simple(format!("no market rule found"))),
+        None => Err(Error::Simple("no market rule found".into())),
     }
 }

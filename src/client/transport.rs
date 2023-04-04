@@ -419,10 +419,8 @@ fn process_orders(
                     if let Err(e) = orders.send(&order_id, message) {
                         error!("error routing message for order_id({order_id}): {e}");
                     }
-                } else {
-                    if let Err(e) = globals.open_orders_in.send(message) {
-                        error!("error sending IncomingMessages::OpenOrder: {e}");
-                    }
+                } else if let Err(e) = globals.open_orders_in.send(message) {
+                    error!("error sending IncomingMessages::OpenOrder: {e}");
                 }
             }
         }

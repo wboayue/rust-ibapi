@@ -174,10 +174,7 @@ impl<'a> RealTimeBarIterator<'a> {
     /// Cancels request to stream realtime bars
     fn cancel_realtime_bars(&mut self) {
         let message = encoders::cancel_realtime_bars(self.request_id).unwrap();
-
         self.client.send_message(message).unwrap();
-
-        ()
     }
 }
 

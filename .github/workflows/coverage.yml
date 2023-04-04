@@ -1,9 +1,6 @@
 name: coverage
 
 on:
-  pull_request:
-    branches:
-      - main
   workflow_run:
       workflows:
         - ci
@@ -24,6 +21,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly
+
+      # Cache cargo registry, index, and build directories
+      - name: Cache cargo
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo
+          key: cargo-${{ hashFiles('**/Cargo.lock') }}
+
       - name: install tarpaulin
         run: cargo install cargo-tarpaulin
       - name: coverage

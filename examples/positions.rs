@@ -1,7 +1,7 @@
 use ibapi::Client;
 
 fn main() {
-    let client = Client::connect("localhost:4002").expect("connection failed");
+    let client = Client::connect("localhost:4002", 100).expect("connection failed");
 
     let positions = client.positions().expect("request failed");
     for position in positions {
