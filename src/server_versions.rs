@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! The known server versions.
 
 //shouldn't these all be deprecated?

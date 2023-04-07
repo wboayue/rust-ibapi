@@ -1,8 +1,6 @@
-use std::io::Write;
 use std::ops::Index;
 use std::str::{self, FromStr};
 
-use byteorder::{BigEndian, WriteBytesExt};
 use time::OffsetDateTime;
 
 use crate::{Error, ToField};
@@ -209,6 +207,7 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Copy, Clone)]
 pub enum OutgoingMessages {
     RequestMarketData = 1,
@@ -329,17 +328,6 @@ impl RequestMessage {
         let mut data = self.fields.join("|");
         data.push('|');
         data
-    }
-
-    pub(crate) fn encode_raw(&self) -> String {
-        let data = self.fields.join("\0");
-
-        let data = data.as_bytes();
-        let mut header: Vec<u8> = Vec::with_capacity(data.len() + 4);
-        header.write_u32::<BigEndian>(data.len() as u32).unwrap();
-        header.write(&data).unwrap();
-
-        str::from_utf8(&header).unwrap().to_owned()
     }
 }
 

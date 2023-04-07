@@ -1,13 +1,13 @@
 use std::cell::RefCell;
 use std::fmt::Debug;
+use std::io::Write;
 use std::sync::atomic::{AtomicI32, Ordering};
-use std::time::Duration;
 
+use byteorder::{BigEndian, WriteBytesExt};
 use log::{debug, error, info};
-use time::macros::{datetime, format_description};
+use time::macros::format_description;
 use time::OffsetDateTime;
-use time_tz::TimeZone;
-use time_tz::{timezones, OffsetDateTimeExt, OffsetResult, PrimitiveDateTimeExt};
+use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt};
 
 use crate::accounts::Position;
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
@@ -92,18 +92,15 @@ impl Client {
 
     // sends server handshake
     fn handshake(&mut self) -> Result<(), Error> {
-        let v100prefix = "API\0";
+        let prefix = "API\0";
+        let version = format!("v{MIN_SERVER_VERSION}..{MAX_SERVER_VERSION}");
 
-        let version = &mut RequestMessage::new();
-        version.push_field(&format!("v{MIN_SERVER_VERSION}..{MAX_SERVER_VERSION}"));
+        let packet = prefix.to_owned() + &encode_packet(&version);
+        self.message_bus.borrow_mut().write(&packet)?;
 
-        let send = v100prefix.to_owned() + &version.encode_raw();
+        let ack = self.message_bus.borrow_mut().read_message();
 
-        self.message_bus.borrow_mut().write(&send)?;
-
-        let mut hello = self.message_bus.borrow_mut().read_message();
-
-        match hello {
+        match ack {
             Ok(mut response_message) => {
                 self.server_version = response_message.next_int()?;
 
@@ -651,20 +648,30 @@ impl Debug for Client {
     }
 }
 
-//     let example = "20230405 22:20:39 PST";
-pub(crate) fn parse_connection_time(connection_time: &str) -> OffsetDateTime {
-    let parts: Vec<&str> = connection_time.split(" ").collect();
-    //    NaiveDateTime::parse()
+// Parses following format: 20230405 22:20:39 PST
+fn parse_connection_time(connection_time: &str) -> OffsetDateTime {
+    let parts: Vec<&str> = connection_time.split(' ').collect();
 
-    let zone = timezones::find_by_name(parts[2]);
+    let zones = timezones::find_by_name(parts[2]);
 
-    let my_format = format_description!("[year][month][day] [hour]:[minute]:[second]");
-    let date = time::PrimitiveDateTime::parse(format!("{} {}", parts[0], parts[1]).as_str(), my_format).unwrap();
+    let format = format_description!("[year][month][day] [hour]:[minute]:[second]");
+    let date = time::PrimitiveDateTime::parse(format!("{} {}", parts[0], parts[1]).as_str(), format).unwrap();
 
-    match date.assume_timezone(zone[0]) {
+    match date.assume_timezone(zones[0]) {
         OffsetResult::Some(date) => date,
         _ => OffsetDateTime::now_utc(),
     }
+}
+
+fn encode_packet(message: &str) -> String {
+    let data = message.as_bytes();
+
+    let mut packet: Vec<u8> = Vec::with_capacity(data.len() + 4);
+
+    packet.write_u32::<BigEndian>(data.len() as u32).unwrap();
+    packet.write_all(data).unwrap();
+
+    std::str::from_utf8(&packet).unwrap().into()
 }
 
 #[cfg(test)]
