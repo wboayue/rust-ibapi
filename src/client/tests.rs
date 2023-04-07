@@ -1,13 +1,5 @@
 use time::macros::datetime;
-use time_tz::TimeZone;
-use time_tz::{timezones, OffsetDateTimeExt, OffsetResult, PrimitiveDateTimeExt};
-
-// #[test]
-// fn parse_connection_time() {
-//     let connection_time = "20230405 22:20:39 PST";
-//     let datetime = DateTime::parse_from_str(connection_time, "%Y%m%d %H:%M:%S %Z").unwrap();
-//     assert_eq!(datetime.to_string(), "");
-// }
+use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt};
 
 #[test]
 fn parse_connection_time() {
@@ -19,5 +11,3 @@ fn parse_connection_time() {
         assert_eq!(connection_time, other);
     }
 }
-
-//time-tz = "1.0.2"
