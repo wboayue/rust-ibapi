@@ -182,15 +182,17 @@ impl MessageBus for TcpMessageBus {
     }
 
     fn write_message(&mut self, message: &RequestMessage) -> Result<(), Error> {
-        let encoded = message.encode();
-        debug!("{encoded:?} ->");
+        let data = message.encode();
+        debug!("{data:?} ->");
 
-        let data = encoded.as_bytes();
-        let mut header = Vec::with_capacity(data.len());
-        header.write_u32::<BigEndian>(data.len() as u32)?;
+        let data = data.as_bytes();
 
-        self.writer.write_all(&header)?;
-        self.writer.write_all(data)?;
+        let mut packet = Vec::with_capacity(data.len() + 4);
+
+        packet.write_u32::<BigEndian>(data.len() as u32)?;
+        packet.write_all(data)?;
+
+        self.writer.write_all(&packet)?;
 
         self.recorder.record_request(message);
 
@@ -296,7 +298,6 @@ fn dispatch_message(
 
 fn read_packet(mut reader: &TcpStream) -> Result<ResponseMessage, Error> {
     let message_size = read_header(reader)?;
-    debug!("message size: {message_size}");
     let mut data = vec![0_u8; message_size];
 
     reader.read_exact(&mut data)?;

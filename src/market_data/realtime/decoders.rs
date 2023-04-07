@@ -1,21 +1,14 @@
-use time::OffsetDateTime;
-
-use crate::{
-    market_data::{BidAsk, BidAskAttribute, MidPoint, RealTimeBar, Trade, TradeAttribute},
-    messages::ResponseMessage,
-    Error,
-};
+use crate::market_data::{BidAsk, BidAskAttribute, MidPoint, RealTimeBar, Trade, TradeAttribute};
+use crate::messages::ResponseMessage;
+use crate::Error;
 
 pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<RealTimeBar, Error> {
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
 
-    let date = message.next_long()?; // long, convert to date
-    let date = OffsetDateTime::from_unix_timestamp(date).unwrap();
-
     Ok(RealTimeBar {
-        date,
+        date: message.next_date_time()?,
         open: message.next_double()?,
         high: message.next_double()?,
         low: message.next_double()?,
@@ -35,8 +28,7 @@ pub(crate) fn trade_tick(message: &mut ResponseMessage) -> Result<Trade, Error> 
         return Err(Error::Simple(format!("Unexpected tick_type: {tick_type}")));
     }
 
-    let date = message.next_long()?; // long, convert to date
-    let date = OffsetDateTime::from_unix_timestamp(date).unwrap();
+    let date = message.next_date_time()?;
     let price = message.next_double()?;
     let size = message.next_long()?;
     let mask = message.next_int()?;
@@ -66,8 +58,7 @@ pub(crate) fn bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk, Erro
         return Err(Error::Simple(format!("Unexpected tick_type: {tick_type}")));
     }
 
-    let date = message.next_long()?; // long, convert to date
-    let date = OffsetDateTime::from_unix_timestamp(date).unwrap();
+    let date = message.next_date_time()?;
     let bid_price = message.next_double()?;
     let ask_price = message.next_double()?;
     let bid_size = message.next_long()?;
@@ -96,16 +87,16 @@ pub(crate) fn mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint, 
         return Err(Error::Simple(format!("Unexpected tick_type: {tick_type}")));
     }
 
-    let date = message.next_long()?; // long, convert to date
-    let date = OffsetDateTime::from_unix_timestamp(date).unwrap();
-
-    let mid_point = message.next_double()?;
-
-    Ok(MidPoint { time: date, mid_point })
+    Ok(MidPoint {
+        time: message.next_date_time()?,
+        mid_point: message.next_double()?,
+    })
 }
 
 #[cfg(test)]
 mod tests {
+    use time::OffsetDateTime;
+
     use super::*;
 
     #[test]

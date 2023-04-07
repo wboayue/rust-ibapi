@@ -5,7 +5,7 @@ fn main() -> anyhow::Result<()> {
     let client = Client::connect("localhost:4002", 100)?;
 
     println!("server_version: {}", client.server_version());
-    println!("server_time: {}", client.server_time());
+    println!("server_time: {}", client.connection_time());
     println!("managed_accounts: {}", client.managed_accounts());
     println!("next_order_id: {}", client.next_order_id());
 

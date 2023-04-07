@@ -1,5 +1,5 @@
 use std::ops::Index;
-use std::str::FromStr;
+use std::str::{self, FromStr};
 
 use time::OffsetDateTime;
 
@@ -207,6 +207,7 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Copy, Clone)]
 pub enum OutgoingMessages {
     RequestMarketData = 1,
