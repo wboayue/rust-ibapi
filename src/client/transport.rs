@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::io::{prelude::*, Cursor};
 use std::iter::Iterator;
-use std::net::TcpStream;
+use std::net::{SocketAddrV4, TcpStream};
+use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -186,11 +187,11 @@ impl MessageBus for TcpMessageBus {
         debug!("{encoded:?} ->");
 
         let data = encoded.as_bytes();
-        let mut header = Vec::with_capacity(data.len());
+        let mut header = Vec::with_capacity(data.len() + 4);
         header.write_u32::<BigEndian>(data.len() as u32)?;
+        header.write(&data)?;
 
         self.writer.write_all(&header)?;
-        self.writer.write_all(data)?;
 
         self.recorder.record_request(message);
 
@@ -296,7 +297,6 @@ fn dispatch_message(
 
 fn read_packet(mut reader: &TcpStream) -> Result<ResponseMessage, Error> {
     let message_size = read_header(reader)?;
-    debug!("message size: {message_size}");
     let mut data = vec![0_u8; message_size];
 
     reader.read_exact(&mut data)?;

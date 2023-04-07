@@ -1,8 +1,13 @@
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::time::Duration;
 
 use log::{debug, error, info};
+use time::macros::{datetime, format_description};
+use time::OffsetDateTime;
+use time_tz::TimeZone;
+use time_tz::{timezones, OffsetDateTimeExt, OffsetResult, PrimitiveDateTimeExt};
 
 use crate::accounts::Position;
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
@@ -30,7 +35,7 @@ pub struct Client {
     pub(crate) server_version: i32,
     /// IB Server time
     //    pub server_time: OffsetDateTime,
-    pub(crate) server_time: String,
+    pub(crate) connection_time: OffsetDateTime,
 
     managed_accounts: String,
     client_id: i32, // ID of client.
@@ -56,7 +61,7 @@ impl Client {
     /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
     ///
     /// println!("server_version: {}", client.server_version());
-    /// println!("server_time: {}", client.server_time());
+    /// println!("connection_time: {}", client.connection_time());
     /// println!("managed_accounts: {}", client.managed_accounts());
     /// println!("next_order_id: {}", client.next_order_id());
     /// ```
@@ -68,7 +73,7 @@ impl Client {
     fn do_connect(client_id: i32, message_bus: RefCell<Box<dyn MessageBus>>) -> Result<Client, Error> {
         let mut client = Client {
             server_version: 0,
-            server_time: String::from(""),
+            connection_time: OffsetDateTime::now_utc(),
             managed_accounts: String::from(""),
             message_bus,
             client_id,
@@ -87,18 +92,31 @@ impl Client {
 
     // sends server handshake
     fn handshake(&mut self) -> Result<(), Error> {
-        self.message_bus.borrow_mut().write("API\x00")?;
+        let v100prefix = "API\0";
 
-        let prelude = &mut RequestMessage::new();
-        prelude.push_field(&format!("v{MIN_SERVER_VERSION}..{MAX_SERVER_VERSION}"));
+        let version = &mut RequestMessage::new();
+        version.push_field(&format!("v{MIN_SERVER_VERSION}..{MAX_SERVER_VERSION}"));
 
-        self.message_bus.borrow_mut().write_message(prelude)?;
+        let send = v100prefix.to_owned() + &version.encode_raw();
 
-        let mut status = self.message_bus.borrow_mut().read_message()?;
+        self.message_bus.borrow_mut().write(&send)?;
 
-        self.server_version = status.next_int()?;
-        self.server_time = status.next_string()?;
+        let mut hello = self.message_bus.borrow_mut().read_message();
 
+        match hello {
+            Ok(mut response_message) => {
+                self.server_version = response_message.next_int()?;
+
+                let time = response_message.next_string()?;
+                self.connection_time = parse_connection_time(time.as_str());
+            }
+            Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
+                return Err(Error::Simple(format!("The server may be rejecting connections from this host: {err}")));
+            }
+            Err(err) => {
+                return Err(err);
+            }
+        }
         Ok(())
     }
 
@@ -183,8 +201,8 @@ impl Client {
     }
 
     /// The time of the server when the client connected
-    pub fn server_time(&self) -> String {
-        self.server_time.to_owned()
+    pub fn connection_time(&self) -> &OffsetDateTime {
+        &self.connection_time
     }
 
     /// Returns the managed accounts.
@@ -565,7 +583,7 @@ impl Client {
     pub(crate) fn stubbed(message_bus: RefCell<Box<dyn MessageBus>>, server_version: i32) -> Client {
         Client {
             server_version: server_version,
-            server_time: String::from(""),
+            connection_time: OffsetDateTime::now_utc(),
             managed_accounts: String::from(""),
             message_bus,
             client_id: 100,
@@ -627,9 +645,25 @@ impl Debug for Client {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Client")
             .field("server_version", &self.server_version)
-            .field("server_time", &self.server_time)
+            .field("server_time", &self.connection_time)
             .field("client_id", &self.client_id)
             .finish()
+    }
+}
+
+//     let example = "20230405 22:20:39 PST";
+pub(crate) fn parse_connection_time(connection_time: &str) -> OffsetDateTime {
+    let parts: Vec<&str> = connection_time.split(" ").collect();
+    //    NaiveDateTime::parse()
+
+    let zone = timezones::find_by_name(parts[2]);
+
+    let my_format = format_description!("[year][month][day] [hour]:[minute]:[second]");
+    let date = time::PrimitiveDateTime::parse(format!("{} {}", parts[0], parts[1]).as_str(), my_format).unwrap();
+
+    match date.assume_timezone(zone[0]) {
+        OffsetResult::Some(date) => date,
+        _ => OffsetDateTime::now_utc(),
     }
 }
 
