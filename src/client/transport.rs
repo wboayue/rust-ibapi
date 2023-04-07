@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use std::io::{prelude::*, Cursor};
 use std::iter::Iterator;
-use std::net::{SocketAddrV4, TcpStream};
-use std::str::FromStr;
+use std::net::TcpStream;
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
