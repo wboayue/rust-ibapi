@@ -16,7 +16,7 @@ fn main() -> anyhow::Result<()> {
         .author("Wil Boayue <wil.boayue@gmail.com>")
         .about("Queries completed and open orders")
         .arg(arg!(<TYPE>).default_value("completed").value_parser(order_types))
-        .arg(arg!(--connection_string <CONNECTION_STRING>).default_value("localhost:4002"))
+        .arg(arg!(--connection_string <CONNECTION_STRING>).default_value("127.0.0.1:4002"))
         .get_matches();
 
     let connection_string = matches.get_one::<String>("connection_string").unwrap();

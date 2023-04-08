@@ -288,9 +288,9 @@ pub fn limit_order(action: Action, quantity: f64, limit_price: f64) -> Order {
     }
 }
 
-/// Forex orders can be placed in demonination of second currency in pair using cash_qty field
+/// Forex orders can be placed in denomination of second currency in pair using cash_qty field
 /// Requires TWS or IBG 963+
-/// https://www.interactivebrokers.com/en/index.php?f=23876#963-02
+/// <https://www.interactivebrokers.com/en/index.php?f=23876#963-02>
 pub fn limit_order_with_cash_qty(action: Action, limit_price: f64, cash_qty: f64) -> Order {
     Order {
         action,

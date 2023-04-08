@@ -10,7 +10,7 @@ fn main() -> anyhow::Result<()> {
         .author("Wil Boayue <wil.boayue@gmail.com>")
         .about("Cancels an open order")
         .arg(arg!(--order_id <ORDER_ID>).value_parser(clap::value_parser!(i32)).default_value("-1"))
-        .arg(arg!(--connection_string <CONNECTION_STRING>).default_value("localhost:4002"))
+        .arg(arg!(--connection_string <CONNECTION_STRING>).default_value("127.0.0.1:4002"))
         .arg(arg!(--manual_order_cancel_time <CANCEL_TIME>).default_value(""))
         .arg(arg!(--global).default_value("false"))
         .get_matches();

@@ -5,14 +5,14 @@ use ibapi::contracts::Contract;
 use ibapi::orders::{self, order_builder, OrderNotification};
 use ibapi::Client;
 
-fn main() -> anyhow::Result<()> {
+fn main() {
     env_logger::init();
 
     let matches = Command::new("place_order")
         .version("1.0")
         .author("Wil Boayue <wil.boayue@gmail.com>")
         .about("Submits order to broker")
-        .arg(arg!(--connection_string <VALUE>).default_value("odin:4002"))
+        .arg(arg!(--connection_string <VALUE>).default_value("127.0.0.1:4002"))
         .arg(arg!(--stock <SYMBOL>).required(true))
         .arg(arg!(--buy <QUANTITY>).value_parser(clap::value_parser!(i32)))
         .arg(arg!(--sell <QUANTITY>).value_parser(clap::value_parser!(i32)))
@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
 
     println!("connection_string: {connection_string}, stock_symbol: {stock_symbol}");
 
-    let client = Client::connect("localhost:4002", 100)?;
+    let client = Client::connect("localhost:4002", 100).expect("connection failed");
 
     info!("Connected {client:?}");
 
@@ -41,7 +41,7 @@ fn main() -> anyhow::Result<()> {
 
     println!("contract: {contract:?}, order: {order:?}");
 
-    let results = client.place_order(order_id, &contract, &order)?;
+    let results = client.place_order(order_id, &contract, &order).expect("could not place order");
 
     for status in results {
         match status {
@@ -50,12 +50,10 @@ fn main() -> anyhow::Result<()> {
             }
             OrderNotification::OpenOrder(open_order) => println!("open order: {open_order:?}"),
             OrderNotification::ExecutionData(execution) => println!("execution: {execution:?}"),
-            OrderNotification::CommissionReport(report) => println!("commision report: {report:?}"),
+            OrderNotification::CommissionReport(report) => println!("commission report: {report:?}"),
             OrderNotification::Message(message) => println!("notice: {message}"),
         }
     }
-
-    Ok(())
 }
 
 fn get_order(matches: &ArgMatches) -> Option<(String, i32)> {

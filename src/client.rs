@@ -50,7 +50,7 @@ impl Client {
     /// Connects to server using the given connection string
     ///
     /// # Arguments
-    /// * `address`   - address of server. e.g. localhost:4002
+    /// * `address`   - address of server. e.g. 127.0.0.1:4002
     /// * `client_id` - id of client. e.g. 100
     ///
     /// # Examples
@@ -58,7 +58,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// println!("server_version: {}", client.server_version());
     /// println!("connection_time: {}", client.connection_time());
@@ -230,7 +230,7 @@ impl Client {
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
     ///
-    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("TSLA");
     /// let results = client.contract_details(&contract).expect("request failed");
@@ -245,7 +245,8 @@ impl Client {
     /// Requests details about a given market rule
     ///
     /// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
-    /// A list of market rule ids can be obtained by invoking [request_contract_details] on a particular contract. The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [ContractDetails].
+    /// A list of market rule ids can be obtained by invoking [Self::contract_details()] for a particular contract.
+    /// The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [contracts::ContractDetails].
     pub fn market_rule(&self, market_rule_id: i32) -> Result<contracts::MarketRule, Error> {
         contracts::market_rule(self, market_rule_id)
     }
@@ -260,7 +261,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contracts = client.matching_symbols("IB").expect("request failed");
     /// for contract in contracts {
@@ -281,7 +282,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let results = client.all_open_orders().expect("request failed");
     /// for order_data in results {
@@ -302,7 +303,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let results = client.auto_open_orders(false).expect("request failed");
     /// for order_data in results {
@@ -324,7 +325,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let order_id = 15;
     /// let results = client.cancel_order(order_id, "").expect("request failed");
@@ -346,7 +347,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let results = client.completed_orders(false).expect("request failed");
     /// for order_data in results {
@@ -360,7 +361,7 @@ impl Client {
     /// Requests current day's (since midnight) executions matching the filter.
     ///
     /// Only the current day's executions can be retrieved.
-    /// Along with the [ExecutionData], the [CommissionReport] will also be returned.
+    /// Along with the [orders::ExecutionData], the [orders::CommissionReport] will also be returned.
     /// When requesting executions, a filter can be specified to receive only a subset of them
     ///
     /// # Arguments
@@ -372,7 +373,7 @@ impl Client {
     /// use ibapi::Client;
     /// use ibapi::orders::ExecutionFilter;
     ///
-    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///     
     /// let filter = ExecutionFilter{
     ///    side: "BUY".to_owned(),
@@ -395,7 +396,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let mut client = Client::connect("localhost:4002", 100).expect("connection failed");
+    /// let mut client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// client.global_cancel().expect("request failed");
     /// ```
@@ -410,7 +411,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let next_valid_order_id = client.next_valid_order_id().expect("request failed");
     /// println!("next_valid_order_id: {next_valid_order_id}");
@@ -427,7 +428,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let results = client.open_orders().expect("request failed");
     /// for order_data in results {
@@ -455,7 +456,7 @@ impl Client {
     /// use ibapi::contracts::Contract;
     /// use ibapi::orders::{order_builder, Action, OrderNotification};
     ///
-    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("MSFT");
     /// let order = order_builder::market_order(Action::Buy, 100.0);
@@ -495,7 +496,7 @@ impl Client {
     /// use ibapi::contracts::Contract;
     /// use ibapi::market_data::{BarSize, WhatToShow};
     ///
-    /// let client = Client::connect("localhost:4002", 100).expect("connection failed");
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("TSLA");
     /// let bars = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("request failed");

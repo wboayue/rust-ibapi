@@ -1,10 +1,8 @@
 use ibapi::Client;
 
-fn main() -> anyhow::Result<()> {
-    let client = Client::connect("localhost:4002", 100)?;
+fn main() {
+    let client = Client::connect("127.0.0.1:4002", 100).unwrap();
 
-    let order_id = client.next_valid_order_id()?;
+    let order_id = client.next_valid_order_id().unwrap();
     println!("Next valid order id: {order_id}");
-
-    Ok(())
 }
