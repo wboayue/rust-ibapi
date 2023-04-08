@@ -13,12 +13,11 @@ use crate::accounts::Position;
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::contracts::Contract;
 use crate::errors::Error;
-use crate::market_data::realtime;
-use crate::market_data::{BarSize, RealTimeBar, WhatToShow};
+use crate::market_data::realtime::{self, BarSize, RealTimeBar, WhatToShow};
 use crate::messages::RequestMessage;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
-use crate::{accounts, contracts, market_data, orders, server_versions};
+use crate::{accounts, contracts, orders, server_versions};
 
 pub(crate) mod transport;
 
@@ -526,7 +525,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<impl Iterator<Item = market_data::Trade> + 'a, Error> {
+    ) -> Result<impl Iterator<Item = realtime::Trade> + 'a, Error> {
         realtime::tick_by_tick_all_last(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -541,7 +540,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<impl Iterator<Item = market_data::BidAsk> + 'a, Error> {
+    ) -> Result<impl Iterator<Item = realtime::BidAsk> + 'a, Error> {
         realtime::tick_by_tick_bid_ask(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -556,7 +555,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<impl Iterator<Item = market_data::Trade> + 'a, Error> {
+    ) -> Result<impl Iterator<Item = realtime::Trade> + 'a, Error> {
         realtime::tick_by_tick_last(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -571,7 +570,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<impl Iterator<Item = market_data::MidPoint> + 'a, Error> {
+    ) -> Result<impl Iterator<Item = realtime::MidPoint> + 'a, Error> {
         realtime::tick_by_tick_midpoint(self, contract, number_of_ticks, ignore_size)
     }
 

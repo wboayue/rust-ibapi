@@ -9,11 +9,11 @@
 //! An implementation of the Interactive Brokers [TWS API](https://interactivebrokers.github.io/tws-api/introduction.html) for Rust.
 //! This implementation is not a direct port of the official TWS API.
 //! It provides a synchronous API that simplifies the development of trading strategies.
-//! 
+//!
 //! This is a work in progress and was tested using TWS 10.19. The primary reference for this implementation is the [C# source code](https://github.com/InteractiveBrokers/tws-api-public).
-//! 
+//!
 //! The following example gives a flavor of the API style. It is not a trading strategy recommendation and not a complete implementation.
-//! 
+//!
 //!```no_run
 //! use std::collections::VecDeque;
 //!

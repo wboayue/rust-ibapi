@@ -1,6 +1,7 @@
-use crate::market_data::{BidAsk, BidAskAttribute, MidPoint, RealTimeBar, Trade, TradeAttribute};
 use crate::messages::ResponseMessage;
 use crate::Error;
+
+use super::{BidAsk, BidAskAttribute, MidPoint, RealTimeBar, Trade, TradeAttribute};
 
 pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<RealTimeBar, Error> {
     message.skip(); // message type
