@@ -267,7 +267,7 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
 // Iterators
 
 /// RealTimeBarIterator supports iteration over [RealTimeBar] ticks.
-pub struct RealTimeBarIterator<'a> {
+pub(crate) struct RealTimeBarIterator<'a> {
     client: &'a Client,
     request_id: i32,
     responses: ResponseIterator,
@@ -324,7 +324,7 @@ impl<'a> Drop for RealTimeBarIterator<'a> {
 }
 
 /// TradeIterator supports iteration over [Trade] ticks.
-pub struct TradeIterator<'a> {
+pub(crate) struct TradeIterator<'a> {
     client: &'a Client,
     request_id: i32,
     responses: ResponseIterator,
@@ -358,7 +358,7 @@ impl<'a> Iterator for TradeIterator<'a> {
 }
 
 /// BidAskIterator supports iteration over [BidAsk] ticks.
-pub struct BidAskIterator<'a> {
+pub(crate) struct BidAskIterator<'a> {
     client: &'a Client,
     request_id: i32,
     responses: ResponseIterator,
@@ -400,7 +400,7 @@ impl<'a> Iterator for BidAskIterator<'a> {
 }
 
 /// MidPointIterator supports iteration over [MidPoint] ticks.
-pub struct MidPointIterator<'a> {
+pub(crate) struct MidPointIterator<'a> {
     client: &'a Client,
     request_id: i32,
     responses: ResponseIterator,
