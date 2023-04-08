@@ -6,10 +6,10 @@
 ## Introduction
 
 An implementation of the Interactive Brokers [TWS API](https://interactivebrokers.github.io/tws-api/introduction.html) for Rust.
-This implementation is not a direct port of the offical TWS API.
+This implementation is not a direct port of the official TWS API.
 It provides a synchronous API that simplifies the development of trading strategies.
 
-This is a work in progress and was tested using TWS 10.20. The primary reference for this implementation is the [C# source code](https://github.com/InteractiveBrokers/tws-api-public).
+This is a work in progress and was tested using TWS 10.19. The primary reference for this implementation is the [C# source code](https://github.com/InteractiveBrokers/tws-api-public).
 
 Open issues are tracked [here](https://github.com/wboayue/rust-ibapi/issues). 
 If you run into a problem or need a missing feature, check the [issues list](https://github.com/wboayue/rust-ibapi/issues) before reporting a new issue.
@@ -18,61 +18,96 @@ Contributions are welcome.
 
 ## Example
 
-The following example gives a flavor of the API style. It is not a trading strategy recommendation.
+The following example gives a flavor of the API style. It is not a trading strategy recommendation and not a complete implementation.
 
 ```rust
-use std::error::Error;
+use std::collections::VecDeque;
 
-use ibapi::client::Client;
-use ibapi::contracts::{Contract};
-use ibapi::market_data::{RealTimeBar, realtime, BarSize, WhatToShow};
-use ibapi::orders::{self, order_builder};
+use ibapi::contracts::Contract;
+use ibapi::market_data::realtime::{BarSize, Bar, WhatToShow};
+use ibapi::orders::{order_builder, Action, OrderNotification};
+use ibapi::Client;
 
-struct BreakoutPeriod {
-    high: f64,
-    low: f64,
-}
+fn main() {
+    let client = Client::connect("127.0.0.1:4002", 100).unwrap();
 
-impl BreakoutPeriod {
-    fn ready(&self) -> bool {
-        false
-    }
-    fn consume(&self, bar: &RealTimeBar) {
-    }
-}
+    let symbol = "TSLA";
+    let contract = Contract::stock(symbol); // defaults to USD and SMART exchange.
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let client = Client::connect("localhost:4002")?;
-    let contract = Contract::stock("TSLA");
+    let bars = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).unwrap();
 
-    let bars = realtime::realtime_bars(&client, &contract, &BarSize::Secs5, &WhatToShow::Trades, false)?;
-
-    let breakout = BreakoutPeriod{
-        high: 0.0,
-        low: 0.0,
-    };
+    let mut channel = BreakoutChannel::new(30);
 
     for bar in bars {
-        breakout.consume(&bar);
+        channel.add_bar(&bar);
 
-        if !breakout.ready() {
+        // Ensure enough bars and no open positions.
+        if !channel.ready() || has_position(&client, symbol) {
             continue;
         }
 
-        if bar.close > breakout.high {
-            let order_id = client.next_order_id();
-            let order = order_builder::market_order(orders::Action::Buy, 100.0);
-            let results = orders::place_order(&client, order_id, &contract, &order)?;
-        }
+        let action = if bar.close > channel.high() {
+            Action::Buy
+        } else if bar.close < channel.low() {
+            Action::Sell
+        } else {
+            continue;
+        };
 
-        if bar.close < breakout.low {
-            let order_id = client.next_order_id();
-            let order = order_builder::trailing_stop(orders::Action::Sell, 100.0, 0.3, bar.close);
-            let results = orders::place_order(&client, order_id, &contract, &order)?;
+        let order_id = client.next_order_id();
+        let order = order_builder::market_order(action, 100.0);
+
+        let notices = client.place_order(order_id, &contract, &order).unwrap();
+        for notice in notices {
+            if let OrderNotification::ExecutionData(data) = notice {
+                println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
+            } else {
+                println!("{:?}", notice);
+            }
+        }
+    }
+}
+
+fn has_position(client: &Client, symbol: &str) -> bool {
+    if let Ok(mut positions) = client.positions() {
+        positions.find(|p| p.contract.symbol == symbol).is_some()
+    } else {
+        false
+    }
+}
+
+struct BreakoutChannel {
+    ticks: VecDeque<(f64, f64)>,
+    size: usize,
+}
+
+impl BreakoutChannel {
+    fn new(size: usize) -> BreakoutChannel {
+        BreakoutChannel {
+            ticks: VecDeque::with_capacity(size + 1),
+            size,
         }
     }
 
-    Ok(())
+    fn ready(&self) -> bool {
+        self.ticks.len() >= self.size
+    }
+
+    fn add_bar(&mut self, bar: &Bar) {
+        self.ticks.push_back((bar.high, bar.low));
+
+        if self.ticks.len() > self.size {
+            self.ticks.pop_front();
+        }
+    }
+
+    fn high(&self) -> f64 {
+        self.ticks.iter().map(|x| x.0).max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap()
+    }
+
+    fn low(&self) -> f64 {
+        self.ticks.iter().map(|x| x.1).max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap()
+    }
 }
 ```
 

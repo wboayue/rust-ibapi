@@ -6,9 +6,7 @@ use clap::{arg, Command};
 use ibapi::contracts::Contract;
 use ibapi::Client;
 
-fn main() -> anyhow::Result<()> {
-    env_logger::init();
-
+fn main() {
     let matches = Command::new("tick_by_tick")
         .version("1.0")
         .author("Wil Boayue <wil@wsbsolutions.com")
@@ -23,27 +21,25 @@ fn main() -> anyhow::Result<()> {
     let connection_string = matches.get_one::<String>("connection_string").expect("connection_string is required");
     println!("connection_string: {connection_string}");
 
-    let mut client = Client::connect(connection_string, 100)?;
+    let mut client = Client::connect(connection_string, 100).expect("connection failed");
 
     if let Some(symbol) = matches.get_one::<String>("last") {
-        stream_last(&mut client, &symbol.to_uppercase())?;
+        stream_last(&mut client, &symbol.to_uppercase()).unwrap();
     }
 
     if let Some(symbol) = matches.get_one::<String>("all_last") {
-        stream_all_last(&mut client, &symbol.to_uppercase())?;
+        stream_all_last(&mut client, &symbol.to_uppercase()).unwrap();
     }
 
     if let Some(symbol) = matches.get_one::<String>("bid_ask") {
-        stream_bid_ask(&mut client, &symbol.to_uppercase())?;
+        stream_bid_ask(&mut client, &symbol.to_uppercase()).unwrap();
     }
 
     if let Some(symbol) = matches.get_one::<String>("mid_point") {
-        stream_mid_point(&mut client, &symbol.to_uppercase())?;
+        stream_mid_point(&mut client, &symbol.to_uppercase()).unwrap();
     }
 
     thread::sleep(Duration::from_secs(5));
-
-    Ok(())
 }
 
 fn stream_last(client: &mut Client, symbol: &str) -> anyhow::Result<()> {
