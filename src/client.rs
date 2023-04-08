@@ -13,7 +13,7 @@ use crate::accounts::Position;
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::contracts::Contract;
 use crate::errors::Error;
-use crate::market_data::realtime::{self, BarSize, RealTimeBar, WhatToShow};
+use crate::market_data::realtime::{self, Bar, BarSize, WhatToShow};
 use crate::messages::RequestMessage;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
@@ -493,7 +493,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
-    /// use ibapi::market_data::{BarSize, WhatToShow};
+    /// use ibapi::market_data::realtime::{BarSize, WhatToShow};
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -510,7 +510,7 @@ impl Client {
         bar_size: BarSize,
         what_to_show: WhatToShow,
         use_rth: bool,
-    ) -> Result<impl Iterator<Item = RealTimeBar> + 'a, Error> {
+    ) -> Result<impl Iterator<Item = Bar> + 'a, Error> {
         realtime::realtime_bars_with_options(self, contract, &bar_size, &what_to_show, use_rth, Vec::default())
     }
 

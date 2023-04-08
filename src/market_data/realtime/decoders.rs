@@ -1,14 +1,14 @@
 use crate::messages::ResponseMessage;
 use crate::Error;
 
-use super::{BidAsk, BidAskAttribute, MidPoint, RealTimeBar, Trade, TradeAttribute};
+use super::{Bar, BidAsk, BidAskAttribute, MidPoint, Trade, TradeAttribute};
 
-pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<RealTimeBar, Error> {
+pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, Error> {
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
 
-    Ok(RealTimeBar {
+    Ok(Bar {
         date: message.next_date_time()?,
         open: message.next_double()?,
         high: message.next_double()?,

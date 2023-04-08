@@ -18,7 +18,7 @@
 //! use std::collections::VecDeque;
 //!
 //! use ibapi::contracts::Contract;
-//! use ibapi::market_data::{BarSize, RealTimeBar, WhatToShow};
+//! use ibapi::market_data::realtime::{BarSize, Bar, WhatToShow};
 //! use ibapi::orders::{order_builder, Action, OrderNotification};
 //! use ibapi::Client;
 //!
@@ -85,7 +85,7 @@
 //!         self.ticks.len() >= self.size
 //!     }
 //!
-//!     fn add_bar(&mut self, bar: &RealTimeBar) {
+//!     fn add_bar(&mut self, bar: &Bar) {
 //!         self.ticks.push_back((bar.high, bar.low));
 //!
 //!         if self.ticks.len() > self.size {

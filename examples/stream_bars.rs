@@ -4,7 +4,7 @@ use std::time::Duration;
 use clap::{arg, ArgMatches, Command};
 
 use ibapi::contracts::Contract;
-use ibapi::market_data::{BarSize, WhatToShow};
+use ibapi::market_data::realtime::{BarSize, WhatToShow};
 use ibapi::Client;
 
 fn main() -> anyhow::Result<()> {

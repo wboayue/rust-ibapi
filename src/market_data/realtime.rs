@@ -63,7 +63,7 @@ pub struct MidPoint {
 }
 
 #[derive(Clone, Debug)]
-pub struct RealTimeBar {
+pub struct Bar {
     pub date: OffsetDateTime,
     pub open: f64,
     pub high: f64,
@@ -290,7 +290,7 @@ impl<'a> RealTimeBarIterator<'a> {
 }
 
 impl<'a> Iterator for RealTimeBarIterator<'a> {
-    type Item = RealTimeBar;
+    type Item = Bar;
 
     /// Advances the iterator and returns the next value.
     fn next(&mut self) -> Option<Self::Item> {
