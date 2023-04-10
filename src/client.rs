@@ -13,8 +13,8 @@ use crate::accounts::Position;
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::contracts::Contract;
 use crate::errors::Error;
-use crate::market_data::realtime::{self, Bar, BarSize, WhatToShow};
 use crate::market_data::historical;
+use crate::market_data::realtime::{self, Bar, BarSize, WhatToShow};
 use crate::messages::RequestMessage;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
@@ -500,10 +500,10 @@ impl Client {
     ///     print!("head_timestamp: {result:?}");
     /// ```
     pub fn head_timestamp(&self, contract: &Contract, what_to_show: historical::WhatToShow, use_rth: bool) -> Result<OffsetDateTime, Error> {
-        historical::head_timestamp(self, contract, what_to_show, use_rth, )
+        historical::head_timestamp(self, contract, what_to_show, use_rth)
     }
 
-    // === Realttime Market Data ===
+    // === Realtime Market Data ===
 
     /// Requests realtime bars.
     ///

@@ -2,7 +2,7 @@ use time::OffsetDateTime;
 
 use crate::ToField;
 
-pub(crate) mod historical;
+pub mod historical;
 pub mod realtime;
 
 #[derive(Clone, Debug, Copy)]
