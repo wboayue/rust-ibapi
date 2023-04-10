@@ -47,6 +47,21 @@ pub enum BarSize {
     Day,
 }
 
+impl ToString for BarSize {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Sec => "TRADES".into(),
+            _ => "SCHEDULE".into(),
+        }
+    }
+}
+
+impl ToField for BarSize {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
 #[derive(Debug)]
 struct HistogramData {
     pub price: f64,
@@ -110,6 +125,15 @@ impl ToString for WhatToShow {
 impl ToField for WhatToShow {
     fn to_field(&self) -> String {
         self.to_string()
+    }
+}
+
+impl ToField for Option<WhatToShow> {
+    fn to_field(&self) -> String {
+        match self {
+            Some(what_to_show) => what_to_show.to_string(),
+            None => "".into(),
+        }
     }
 }
 

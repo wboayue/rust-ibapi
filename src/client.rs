@@ -512,7 +512,7 @@ impl Client {
         what_to_show: Option<historical::WhatToShow>,
         use_rth: bool,
     ) -> Result<impl Iterator<Item = historical::Bar>, Error> {
-        historical::historical_data(&self, contract, start_date, end_date, bar_size, what_to_show, use_rth)
+        historical::historical_data(self, contract, start_date, end_date, bar_size, what_to_show, use_rth)
     }
 
     // === Realtime Market Data ===

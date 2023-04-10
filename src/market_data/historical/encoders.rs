@@ -2,7 +2,7 @@ use crate::messages::OutgoingMessages;
 
 use super::*;
 
-const HEAD_DATE_FORMAT: i32 = 2; // 1 for yyyyMMdd HH:mm:ss, 2 for system time format in seconds.
+const DATE_FORMAT: i32 = 2; // 1 for yyyyMMdd HH:mm:ss, 2 for system time format in seconds.
 
 // Encodes the head timestamp request
 pub(super) fn encode_head_timestamp(request_id: i32, contract: &Contract, what_to_show: WhatToShow, use_rth: bool) -> Result<RequestMessage, Error> {
@@ -13,12 +13,13 @@ pub(super) fn encode_head_timestamp(request_id: i32, contract: &Contract, what_t
     contract.push_fields(&mut packet);
     packet.push_field(&use_rth);
     packet.push_field(&what_to_show);
-    packet.push_field(&HEAD_DATE_FORMAT);
+    packet.push_field(&DATE_FORMAT);
 
     Ok(packet)
 }
 
 // Encodes the historical data request
+#[allow(clippy::too_many_arguments)]
 pub(super) fn encode_historical_data(
     server_version: i32,
     request_id: i32,
@@ -30,14 +31,62 @@ pub(super) fn encode_historical_data(
     use_rth: bool,
     keep_up_to_data: bool,
 ) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 6;
+
     let mut packet = RequestMessage::default();
 
-    packet.push_field(&OutgoingMessages::RequestHeadTimestamp);
+    packet.push_field(&OutgoingMessages::RequestHistoricalData);
+
+    if server_version < server_versions::SYNT_REALTIME_BARS {
+        packet.push_field(&VERSION);
+    }
+
     packet.push_field(&request_id);
-    contract.push_fields(&mut packet);
+
+    if server_version >= server_versions::TRADING_CLASS {
+        packet.push_field(&contract.contract_id);
+    }
+
+    packet.push_field(&contract.symbol);
+    packet.push_field(&contract.security_type);
+    packet.push_field(&contract.last_trade_date_or_contract_month);
+    packet.push_field(&contract.strike);
+    packet.push_field(&contract.right);
+    packet.push_field(&contract.multiplier);
+    packet.push_field(&contract.exchange);
+    packet.push_field(&contract.primary_exchange);
+    packet.push_field(&contract.currency);
+    packet.push_field(&contract.local_symbol);
+
+    if server_version >= server_versions::TRADING_CLASS {
+        packet.push_field(&contract.trading_class);
+    }
+
+    packet.push_field(&contract.include_expired);
+
+    packet.push_field(&"end date");
+    packet.push_field(&bar_size);
+
+    packet.push_field(&"duration string");
     packet.push_field(&use_rth);
-    // packet.push_field(&what_to_show);
-    packet.push_field(&HEAD_DATE_FORMAT);
+    packet.push_field(&what_to_show);
+
+    packet.push_field(&DATE_FORMAT);
+
+    if contract.is_bag() {
+        packet.push_field(&contract.combo_legs.len());
+
+        for combo_leg in &contract.combo_legs {
+            packet.push_field(&combo_leg.contract_id);
+            packet.push_field(&combo_leg.ratio);
+            packet.push_field(&combo_leg.action);
+            packet.push_field(&combo_leg.exchange);
+        }
+    }
+
+    if server_version >= server_versions::SYNT_REALTIME_BARS {
+        packet.push_field(&keep_up_to_data);
+    }
 
     Ok(packet)
 }
@@ -80,7 +129,7 @@ mod tests {
                 assert_eq!(message[14], contract.include_expired.to_field(), "message.include_expired");
                 assert_eq!(message[15], use_rth.to_field(), "message.use_rth");
                 assert_eq!(message[16], what_to_show.to_field(), "message.what_to_show");
-                assert_eq!(message[17], HEAD_DATE_FORMAT.to_field(), "message.date_format");
+                assert_eq!(message[17], DATE_FORMAT.to_field(), "message.date_format");
             }
             Err(err) => {
                 assert!(false, "error encoding head_timestamp request: {err}");
