@@ -1,7 +1,7 @@
 [![Build](https://github.com/wboayue/rust-ibapi/workflows/ci/badge.svg)](https://github.com/wboayue/rust-ibapi/actions/workflows/ci.yml)
 [![License:MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![crates.io](https://img.shields.io/crates/v/ibapi.svg)](https://crates.io/crates/ibapi)
-[![Documentation](https://img.shields.io/badge/Documentation-green.svg)](https://docs.rs/ibapi/0.1.1/ibapi)
+[![Documentation](https://img.shields.io/badge/Documentation-green.svg)](https://docs.rs/ibapi/latest/ibapi/)
 [![Coverage Status](https://coveralls.io/repos/github/wboayue/rust-ibapi/badge.svg?branch=main)](https://coveralls.io/github/wboayue/rust-ibapi?branch=main)
 
 ## Introduction
@@ -116,30 +116,30 @@ impl BreakoutChannel {
 
 ### Accounts
 
-* [positions](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.positions)
+* [positions](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.positions)
 
 ### Contracts
 
-* [contract_details](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.contract_details)
-* [market_rule](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.market_rule)
-* [matching_symbols](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.matching_symbols)
+* [contract_details](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.contract_details)
+* [market_rule](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.market_rule)
+* [matching_symbols](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.matching_symbols)
 
 ### Market Data
 
-* [realtime_bars](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.realtime_bars)
-* [tick_by_tick_all_last](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.tick_by_tick_all_last)
-* [tick_by_tick_bid_ask](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.tick_by_tick_bid_ask)
-* [tick_by_tick_last](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.tick_by_tick_last)
-* [tick_by_tick_midpoint](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.tick_by_tick_midpoint)
+* [realtime_bars](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.realtime_bars)
+* [tick_by_tick_all_last](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.tick_by_tick_all_last)
+* [tick_by_tick_bid_ask](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.tick_by_tick_bid_ask)
+* [tick_by_tick_last](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.tick_by_tick_last)
+* [tick_by_tick_midpoint](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.tick_by_tick_midpoint)
 
 ### Orders
 
-* [all_open_orders](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.all_open_orders)
-* [auto_open_orders](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.auto_open_orders)
-* [cancel_order](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.cancel_order)
-* [completed_orders](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.completed_orders)
-* [executions](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.executions)
-* [global_cancel](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.global_cancel)
-* [next_valid_order_id](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.next_valid_order_id)
-* [open_orders](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.open_orders)
-* [place_order](https://docs.rs/ibapi/0.1.0/ibapi/struct.Client.html#method.place_order)
+* [all_open_orders](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.all_open_orders)
+* [auto_open_orders](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.auto_open_orders)
+* [cancel_order](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.cancel_order)
+* [completed_orders](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.completed_orders)
+* [executions](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.executions)
+* [global_cancel](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.global_cancel)
+* [next_valid_order_id](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.next_valid_order_id)
+* [open_orders](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.open_orders)
+* [place_order](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.place_order)
