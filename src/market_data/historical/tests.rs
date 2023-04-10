@@ -16,7 +16,7 @@ fn test_head_timestamp() {
     // client.response_packets = VecDeque::from([ResponseMessage::from("10\x0000\x00cc")]);
 
     let contract = Contract::stock("MSFT");
-    let what_to_show = "trades";
+    let what_to_show = WhatToShow::Trades;
     let use_rth = true;
 
     let result = super::head_timestamp(&mut client, &contract, what_to_show, use_rth);

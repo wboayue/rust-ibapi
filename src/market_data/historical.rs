@@ -6,71 +6,30 @@ use crate::messages::{RequestMessage, ResponseMessage};
 use crate::server_versions;
 use crate::{Client, Error};
 
+pub use super::WhatToShow;
+
+mod decoders;
+mod encoders;
+#[cfg(test)]
+mod tests;
+
 // https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EClient.cs
 // https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EDecoder.cs#L733
 
-/// Returns the timestamp of earliest available historical data for a contract and data type.
-/// ```no_run
-///     use anyhow::Result;
-///     use ibapi::Client;
-///     use ibapi::contracts::{self, Contract};
-///     //use ibapi::market_data::historical;
-///
-///     fn main() -> Result<()> {
-///         let mut client = Client::connect("localhost:4002", 100)?;
-///
-///         let contract = Contract::stock("MSFT");
-///         let what_to_show = "trades";
-///         let use_rth = true;
-///
-///         //let result =
-///         //    historical::head_timestamp(&mut client, &contract, what_to_show, use_rth);
-///
-///         //print!("head_timestamp: {result:?}");
-///         Ok(())
-///     }
-/// ```
-pub fn head_timestamp(client: &mut Client, contract: &Contract, what_to_show: &str, use_rth: bool) -> Result<OffsetDateTime, Error> {
+// Returns the timestamp of earliest available historical data for a contract and data type.
+pub fn head_timestamp(client: &Client, contract: &Contract, what_to_show: WhatToShow, use_rth: bool) -> Result<OffsetDateTime, Error> {
     client.check_server_version(server_versions::REQ_HEAD_TIMESTAMP, "It does not support head time stamp requests.")?;
 
     let request_id = client.next_request_id();
-    let request = encode_head_timestamp(request_id, contract, what_to_show, use_rth)?;
+    let request = encoders::encode_head_timestamp(request_id, contract, what_to_show, use_rth)?;
 
-    let mut promise = client.send_request(request_id, request)?;
+    let mut messages = client.send_request(request_id, request)?;
 
-    if let Some(mut response) = promise.next() {
+    if let Some(mut response) = messages.next() {
         decode_head_timestamp(&mut response)
     } else {
         Err(Error::Simple("did not receive head timestamp message".into()))
     }
-}
-
-/// Encodes the head timestamp request
-pub(crate) fn encode_head_timestamp(request_id: i32, contract: &Contract, what_to_show: &str, use_rth: bool) -> Result<RequestMessage, Error> {
-    let mut packet = RequestMessage::default();
-
-    packet.push_field(&12);
-    packet.push_field(&request_id);
-    contract.push_fields(&mut packet);
-    packet.push_field(&use_rth);
-    packet.push_field(&what_to_show);
-    packet.push_field(&"format_date");
-
-    // source.AddParameter(value.ConId);
-    // source.AddParameter(value.Symbol);
-    // source.AddParameter(value.SecType);
-    // source.AddParameter(value.LastTradeDateOrContractMonth);
-    // source.AddParameter(value.Strike);
-    // source.AddParameter(value.Right);
-    // source.AddParameter(value.Multiplier);
-    // source.AddParameter(value.Exchange);
-    // source.AddParameter(value.PrimaryExch);
-    // source.AddParameter(value.Currency);
-    // source.AddParameter(value.LocalSymbol);
-    // source.AddParameter(value.TradingClass);
-    // source.AddParameter(value.IncludeExpired);
-
-    Ok(packet)
 }
 
 // https://github.com/InteractiveBrokers/tws-api/blob/313c453bfc1a1f8928b0d2fba044947f4c37e380/source/csharpclient/client/IBParamsList.cs#L56
@@ -236,6 +195,3 @@ pub struct BarIterator {}
 pub struct HistoricalSchedule {
     //    string startDateTime, string endDateTime, string timeZone, HistoricalSession[]
 }
-
-#[cfg(test)]
-mod tests;
