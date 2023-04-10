@@ -204,7 +204,7 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::ExecutionData
         | IncomingMessages::HeadTimestamp => Some(1),
         IncomingMessages::ContractDataEnd | IncomingMessages::RealTimeBars | IncomingMessages::Error | IncomingMessages::ExecutionDataEnd => Some(2),
-        _ => None,
+        _ => panic!("could not determine request id index for {kind:?}"),
     }
 }
 
