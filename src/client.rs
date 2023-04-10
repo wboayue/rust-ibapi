@@ -13,6 +13,7 @@ use crate::accounts::Position;
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::contracts::Contract;
 use crate::errors::Error;
+use crate::market_data::historical;
 use crate::market_data::realtime::{self, Bar, BarSize, WhatToShow};
 use crate::messages::RequestMessage;
 use crate::messages::{IncomingMessages, OutgoingMessages};
@@ -479,7 +480,29 @@ impl Client {
         orders::place_order(self, order_id, contract, order)
     }
 
-    // === Market Data ===
+    // === Historical Market Data ===
+
+    /// Returns the timestamp of earliest available historical data for a contract and data type.
+    /// ```no_run
+    ///     use ibapi::Client;
+    ///     use ibapi::contracts::Contract;
+    ///     use ibapi::market_data::historical::{self, WhatToShow};
+    ///
+    ///     let mut client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("MSFT");
+    ///     let what_to_show = WhatToShow::Trades;
+    ///     let use_rth = true;
+    ///
+    ///     let result = client.head_timestamp(&contract, what_to_show, use_rth).expect("head timestamp failed");
+    ///
+    ///     print!("head_timestamp: {result:?}");
+    /// ```
+    pub fn head_timestamp(&self, contract: &Contract, what_to_show: historical::WhatToShow, use_rth: bool) -> Result<OffsetDateTime, Error> {
+        historical::head_timestamp(self, contract, what_to_show, use_rth)
+    }
+
+    // === Realtime Market Data ===
 
     /// Requests realtime bars.
     ///

@@ -126,6 +126,7 @@ impl BreakoutChannel {
 
 ### Market Data
 
+* [head_timestamp](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.head_timestamp)
 * [realtime_bars](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.realtime_bars)
 * [tick_by_tick_all_last](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.tick_by_tick_all_last)
 * [tick_by_tick_bid_ask](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.tick_by_tick_bid_ask)
