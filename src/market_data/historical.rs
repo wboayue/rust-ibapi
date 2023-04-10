@@ -3,28 +3,55 @@ use time::OffsetDateTime;
 use crate::contracts::Contract;
 use crate::domain::TickAttribBidAsk;
 use crate::messages::{RequestMessage, ResponseMessage};
-use crate::server_versions;
+use crate::{server_versions, ToField};
 use crate::{Client, Error};
-
-pub use super::WhatToShow;
 
 mod decoders;
 mod encoders;
 #[cfg(test)]
 mod tests;
 
-struct Bar {
+/// Bar describes the historical data bar.
+pub struct Bar {
+    /// The bar's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     pub time: OffsetDateTime,
+    /// The bar's open price.
     pub open: f64,
+    /// The bar's high price.
     pub high: f64,
+    /// The bar's low price.
     pub low: f64,
+    /// The bar's close price.
     pub close: f64,
-    pub volume: f64,
+    /// The bar's traded volume if available (only available for TRADES)
+    pub volume: i64,
+    /// The bar's Weighted Average Price (only available for TRADES)
     pub wap: f64,
+    /// The number of trades during the bar's timespan (only available for TRADES)
     pub count: i32,
 }
 
-struct HistogramData {}
+#[derive(Clone, Debug, Copy)]
+pub enum BarSize {
+    Sec,
+    Sec5,
+    Sec15,
+    Sec30,
+    Min,
+    Min2,
+    Min3,
+    Min5,
+    Min15,
+    Min30,
+    Hour,
+    Day,
+}
+
+#[derive(Debug)]
+struct HistogramData {
+    pub price: f64,
+    pub count: i32,
+}
 
 struct HistoricalSchedule {
     //    string startDateTime, string endDateTime, string timeZone, HistoricalSession[]
@@ -51,11 +78,43 @@ struct HistoricalTickLast {
     pub size: i32,
 }
 
-// https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EClient.cs
-// https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/EDecoder.cs#L733
+#[derive(Clone, Debug, Copy, PartialEq)]
+pub enum WhatToShow {
+    Trades,
+    MidPoint,
+    Bid,
+    Ask,
+    BidAsk,
+    HistoriclVolatility,
+    OptionImpliedVolatility,
+    FeeRate,
+    Schedule,
+}
+
+impl ToString for WhatToShow {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Trades => "TRADES".to_string(),
+            Self::MidPoint => "MIDPOINT".to_string(),
+            Self::Bid => "BID".to_string(),
+            Self::Ask => "ASK".to_string(),
+            Self::BidAsk => "BID_ASK".to_string(),
+            Self::HistoriclVolatility => "HISTORICAL_VOLATILITY".to_string(),
+            Self::OptionImpliedVolatility => "OPTION_IMPLIED_VOLATILITY".to_string(),
+            Self::FeeRate => "FEE_RATE".to_string(),
+            Self::Schedule => "SCHEDULE".to_string(),
+        }
+    }
+}
+
+impl ToField for WhatToShow {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
 
 // Returns the timestamp of earliest available historical data for a contract and data type.
-pub fn head_timestamp(client: &Client, contract: &Contract, what_to_show: WhatToShow, use_rth: bool) -> Result<OffsetDateTime, Error> {
+pub(crate) fn head_timestamp(client: &Client, contract: &Contract, what_to_show: WhatToShow, use_rth: bool) -> Result<OffsetDateTime, Error> {
     client.check_server_version(server_versions::REQ_HEAD_TIMESTAMP, "It does not support head time stamp requests.")?;
 
     let request_id = client.next_request_id();
@@ -79,21 +138,48 @@ fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: &
     Err(Error::NotImplemented)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn historical_data(
+pub(crate) fn historical_data(
     client: &Client,
     contract: &Contract,
-    end: &OffsetDateTime,
-    duration: &str,
-    bar_size: &str,
-    what_to_show: &str,
+    start_date: &OffsetDateTime,
+    end_date: &OffsetDateTime,
+    bar_size: BarSize,
+    what_to_show: Option<WhatToShow>,
     use_rth: bool,
-    keep_up_to_date: bool,
 ) -> Result<BarIterator, Error> {
+    if !contract.trading_class.is_empty() || contract.contract_id > 0 {
+        client.check_server_version(
+            server_versions::TRADING_CLASS,
+            "It does not support contract_id nor trading class parameters when requesting historical data.",
+        )?;
+    }
+
+    if what_to_show == Some(WhatToShow::Schedule) {
+        client.check_server_version(
+            server_versions::HISTORICAL_SCHEDULE,
+            "It does not support requesting of historical schedule.",
+        )?;
+    }
+
+    let request_id = client.next_request_id();
+    let request = encoders::encode_historical_data(
+        client.server_version(),
+        request_id,
+        contract,
+        start_date,
+        end_date,
+        bar_size,
+        what_to_show,
+        use_rth,
+        false,
+    )?;
+
+    let mut messages = client.send_request(request_id, request)?;
+
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_barsize
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_what_to_show
-    print!("{client:?} {contract:?} {end:?} {duration:?} {bar_size:?} {what_to_show:?} {use_rth:?} {keep_up_to_date:?}");
+    print!("{client:?} {contract:?} {end_date:?} {start_date:?} {bar_size:?} {what_to_show:?} {use_rth:?}");
 
     Err(Error::NotImplemented)
 }
@@ -168,5 +254,15 @@ struct HistoricalTickLastIterator {}
 
 struct HistogramDataIterator {}
 
-struct BarIterator {}
+pub(crate) struct BarIterator {}
 // https://interactivebrokers.github.io/tws-api/classIBApi_1_1Bar.html
+
+impl Iterator for BarIterator {
+    // we will be counting with usize
+    type Item = Bar;
+
+    // next() is the only required method
+    fn next(&mut self) -> Option<Self::Item> {
+        None
+    }
+}

@@ -18,6 +18,30 @@ pub(super) fn encode_head_timestamp(request_id: i32, contract: &Contract, what_t
     Ok(packet)
 }
 
+// Encodes the historical data request
+pub(super) fn encode_historical_data(
+    server_version: i32,
+    request_id: i32,
+    contract: &Contract,
+    start_date: &OffsetDateTime,
+    end_date: &OffsetDateTime,
+    bar_size: BarSize,
+    what_to_show: Option<WhatToShow>,
+    use_rth: bool,
+    keep_up_to_data: bool,
+) -> Result<RequestMessage, Error> {
+    let mut packet = RequestMessage::default();
+
+    packet.push_field(&OutgoingMessages::RequestHeadTimestamp);
+    packet.push_field(&request_id);
+    contract.push_fields(&mut packet);
+    packet.push_field(&use_rth);
+    // packet.push_field(&what_to_show);
+    packet.push_field(&HEAD_DATE_FORMAT);
+
+    Ok(packet)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::messages::OutgoingMessages;
