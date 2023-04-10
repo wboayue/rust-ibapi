@@ -484,7 +484,6 @@ impl Client {
 
     /// Returns the timestamp of earliest available historical data for a contract and data type.
     /// ```no_run
-    ///     use anyhow::Result;
     ///     use ibapi::Client;
     ///     use ibapi::contracts::Contract;
     ///     use ibapi::market_data::historical::{self, WhatToShow};

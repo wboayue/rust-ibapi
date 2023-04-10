@@ -201,7 +201,8 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::TickByTick
         | IncomingMessages::SymbolSamples
         | IncomingMessages::OpenOrder
-        | IncomingMessages::ExecutionData => Some(1),
+        | IncomingMessages::ExecutionData
+        | IncomingMessages::HeadTimestamp => Some(1),
         IncomingMessages::ContractDataEnd | IncomingMessages::RealTimeBars | IncomingMessages::Error | IncomingMessages::ExecutionDataEnd => Some(2),
         _ => None,
     }

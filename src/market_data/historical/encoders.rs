@@ -5,7 +5,7 @@ use super::*;
 const HEAD_DATE_FORMAT: i32 = 2; // 1 for yyyyMMdd HH:mm:ss, 2 for system time format in seconds.
 
 // Encodes the head timestamp request
-pub(crate) fn encode_head_timestamp(request_id: i32, contract: &Contract, what_to_show: WhatToShow, use_rth: bool) -> Result<RequestMessage, Error> {
+pub(super) fn encode_head_timestamp(request_id: i32, contract: &Contract, what_to_show: WhatToShow, use_rth: bool) -> Result<RequestMessage, Error> {
     let mut packet = RequestMessage::default();
 
     packet.push_field(&OutgoingMessages::RequestHeadTimestamp);
