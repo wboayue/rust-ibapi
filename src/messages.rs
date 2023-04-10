@@ -309,10 +309,6 @@ impl RequestMessage {
         Self::default()
     }
 
-    pub fn from(_fields: &[Box<dyn ToField>]) -> RequestMessage {
-        RequestMessage::default()
-    }
-
     pub fn push_field<T: ToField>(&mut self, val: &T) -> &RequestMessage {
         let field = val.to_field();
         self.fields.push(field);
@@ -325,6 +321,7 @@ impl RequestMessage {
         data
     }
 
+    #[cfg(test)]
     pub(crate) fn encode_simple(&self) -> String {
         let mut data = self.fields.join("|");
         data.push('|');
