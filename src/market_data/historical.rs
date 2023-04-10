@@ -50,8 +50,18 @@ pub enum BarSize {
 impl ToString for BarSize {
     fn to_string(&self) -> String {
         match self {
-            Self::Sec => "TRADES".into(),
-            _ => "SCHEDULE".into(),
+            Self::Sec => "1 sec".into(),
+            Self::Sec5 => "5 secs".into(),
+            Self::Sec15 => "15 secs".into(),
+            Self::Sec30 => "30 secs".into(),
+            Self::Min => "1 min".into(),
+            Self::Min2 => "2 mins".into(),
+            Self::Min3 => "3 mins".into(),
+            Self::Min5 => "5 mins".into(),
+            Self::Min15 => "15 mins".into(),
+            Self::Min30 => "30 mins".into(),
+            Self::Day => "1 day".into(),
+            Self::Hour => "1 hour".into(),
         }
     }
 }

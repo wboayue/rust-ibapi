@@ -45,3 +45,32 @@ fn historical_data() {
     let result = 2 + 2;
     assert_eq!(result, 4);
 }
+
+#[test]
+fn bar_size() {
+    assert_eq!(BarSize::Sec.to_string(), "1 sec");
+    assert_eq!(BarSize::Sec5.to_string(), "5 secs");
+    assert_eq!(BarSize::Sec15.to_string(), "15 secs");
+    assert_eq!(BarSize::Sec30.to_string(), "30 secs");
+    assert_eq!(BarSize::Min.to_string(), "1 min");
+    assert_eq!(BarSize::Min2.to_string(), "2 mins");
+    assert_eq!(BarSize::Min3.to_string(), "3 mins");
+    assert_eq!(BarSize::Min5.to_string(), "5 mins");
+    assert_eq!(BarSize::Min15.to_string(), "15 mins");
+    assert_eq!(BarSize::Min30.to_string(), "30 mins");
+    assert_eq!(BarSize::Hour.to_string(), "1 hour");
+    assert_eq!(BarSize::Day.to_string(), "1 day");
+}
+
+#[test]
+fn what_to_show() {
+    assert_eq!(WhatToShow::Trades.to_string(), "TRADES");
+    assert_eq!(WhatToShow::MidPoint.to_string(), "MIDPOINT");
+    assert_eq!(WhatToShow::Bid.to_string(), "BID");
+    assert_eq!(WhatToShow::Ask.to_string(), "ASK");
+    assert_eq!(WhatToShow::BidAsk.to_string(), "BID_ASK");
+    assert_eq!(WhatToShow::HistoriclVolatility.to_string(), "HISTORICAL_VOLATILITY");
+    assert_eq!(WhatToShow::OptionImpliedVolatility.to_string(), "OPTION_IMPLIED_VOLATILITY");
+    assert_eq!(WhatToShow::FeeRate.to_string(), "FEE_RATE");
+    assert_eq!(WhatToShow::Schedule.to_string(), "SCHEDULE");
+}

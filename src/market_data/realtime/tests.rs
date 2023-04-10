@@ -87,3 +87,11 @@ fn realtime_bars() {
     assert_eq!(cancel_request[1], "1", "message.version");
     assert_eq!(cancel_request[2], "9000", "message.request_id");
 }
+
+#[test]
+fn what_to_show() {
+    assert_eq!(WhatToShow::Trades.to_string(), "TRADES");
+    assert_eq!(WhatToShow::MidPoint.to_string(), "MIDPOINT");
+    assert_eq!(WhatToShow::Bid.to_string(), "BID");
+    assert_eq!(WhatToShow::Ask.to_string(), "ASK");
+}
