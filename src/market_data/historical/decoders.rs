@@ -9,19 +9,31 @@ pub(super) fn decode_head_timestamp(message: &mut ResponseMessage) -> Result<Off
     Ok(head_timestamp)
 }
 
-pub(super) fn decode_bar(message: &mut ResponseMessage) -> Result<Bar, Error> {
-    message.skip(); // message type
-    message.skip(); // request_id
+pub(super) fn decode_historical_data(server_version: i32, message: &mut ResponseMessage) -> Result<HistoricalData, Error> {
+    message.skip();     // message type
 
-    Ok(Bar {
-        time: todo!(),
-        open: todo!(),
-        high: todo!(),
-        low: todo!(),
-        close: todo!(),
-        volume: todo!(),
-        wap: todo!(),
-        count: todo!(),
+    let mut message_version = i32::MAX;
+    if server_version < server_versions::SYNT_REALTIME_BARS {
+        message_version = message.next_int()?;
+    }
+
+    message.skip();     // request_id
+
+    let mut start_date = "".to_string();
+    let mut end_date = "".to_string();
+    if message_version > 2 {
+        start_date = message.next_string()?;    
+        end_date = message.next_string()?;    
+    }
+
+    let bars_count = message.next_int()?;
+    
+    let bars = Vec::new();
+
+    Ok(HistoricalData {
+        start_date,
+        end_date,
+        bars
     })
 }
 

@@ -13,7 +13,7 @@ use crate::accounts::Position;
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::contracts::Contract;
 use crate::errors::Error;
-use crate::market_data::historical::{self, Duration};
+use crate::market_data::historical::{self, Duration, HistoricalData};
 use crate::market_data::realtime::{self, Bar, BarSize, WhatToShow};
 use crate::messages::RequestMessage;
 use crate::messages::{IncomingMessages, OutgoingMessages};
@@ -503,27 +503,27 @@ impl Client {
     }
 
     /// Requests contract's historical data
-    pub fn historical_data<'a>(
-        &'a self,
+    pub fn historical_data(
+        &self,
         contract: &Contract,
         end_date: Option<OffsetDateTime>,
         duration: Duration,
         bar_size: historical::BarSize,
         what_to_show: Option<historical::WhatToShow>,
         use_rth: bool,
-    ) -> Result<impl Iterator<Item = historical::Bar> + 'a, Error> {
+    ) -> Result<historical::HistoricalData, Error> {
         historical::historical_data(self, contract, end_date, duration, bar_size, what_to_show, use_rth)
     }
 
     /// Requests contract's historical data end now for specified duration.
-    pub fn historical_data_ending_now<'a>(
-        &'a self,
+    pub fn historical_data_ending_now(
+        &self,
         contract: &Contract,
         duration: Duration,
         bar_size: historical::BarSize,
         what_to_show: Option<historical::WhatToShow>,
         use_rth: bool,
-    ) -> Result<impl Iterator<Item = historical::Bar> + 'a, Error> {
+    ) -> Result<historical::HistoricalData, Error> {
         historical::historical_data(self, contract, None, duration, bar_size, what_to_show, use_rth)
     }
 

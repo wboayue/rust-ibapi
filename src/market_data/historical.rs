@@ -119,7 +119,6 @@ impl ToField for Duration {
         self.to_string()
     }
 }
-
 pub trait ToDuration {
     fn seconds(&self) -> Duration;
     fn days(&self) -> Duration;
@@ -154,6 +153,13 @@ impl ToDuration for i32 {
 struct HistogramData {
     pub price: f64,
     pub count: i32,
+}
+
+#[derive(Clone, Debug)]
+pub struct HistoricalData {
+    pub start_date: String,
+    pub end_date: String,
+    pub bars: Vec<Bar>,
 }
 
 struct HistoricalSchedule {
@@ -251,15 +257,15 @@ fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: &
 }
 
 //     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
-pub(crate) fn historical_data<'a>(
-    client: &'a Client,
+pub(crate) fn historical_data(
+    client: & Client,
     contract: &Contract,
     end_date: Option<OffsetDateTime>,
     duration: Duration,
     bar_size: BarSize,
     what_to_show: Option<WhatToShow>,
     use_rth: bool,
-) -> Result<BarIterator<'a>, Error> {
+) -> Result<HistoricalData, Error> {
     if !contract.trading_class.is_empty() || contract.contract_id > 0 {
         client.check_server_version(
             server_versions::TRADING_CLASS,
@@ -288,13 +294,13 @@ pub(crate) fn historical_data<'a>(
         Vec::<crate::contracts::TagValue>::default(),
     )?;
 
-    let messages = client.send_request(request_id, request)?;
+    let mut messages = client.send_request(request_id, request)?;
 
-    Ok(BarIterator {
-        client,
-        request_id,
-        messages,
-    })
+    if let Some(mut message) = messages.next() {
+        decoders::decode_historical_data(client.server_version, &mut message)
+    } else {
+        Err(Error::Simple("did not receive historical data response".into()))
+    }
 }
 
 fn historical_schedule(client: &Client, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator, Error> {
@@ -366,27 +372,3 @@ struct HistoricalTickBidAskIterator {}
 struct HistoricalTickLastIterator {}
 
 struct HistogramDataIterator {}
-
-pub(crate) struct BarIterator<'a> {
-    client: &'a Client,
-    request_id: i32,
-    messages: ResponseIterator,
-}
-impl<'a> Iterator for BarIterator<'a> {
-    type Item = Bar;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.messages.next() {
-                Some(mut message) => match message.message_type() {
-                    IncomingMessages::HistoricalData => match decoders::decode_bar(&mut message) {
-                        Ok(bar) => return Some(bar),
-                        Err(e) => error!("unexpected message {message:?}: {e:?}"),
-                    },
-                    _ => error!("unexpected message {message:?}"),
-                },
-                None => return None,
-            }
-        }
-    }
-}

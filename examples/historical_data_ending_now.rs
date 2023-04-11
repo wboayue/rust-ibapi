@@ -20,10 +20,13 @@ fn main() {
 
     let contract = Contract::stock(stock_symbol);
 
-    let bars = client
+    let historical_data = client
         .historical_data_ending_now(&contract, 30.days(), BarSize::Day, Some(WhatToShow::Trades), true)
         .expect("historical data request failed");
-    for bar in bars {
-        println!("{bar:?}");
-    }
+    
+    println!("{historical_data:?}");
+
+    // for bar in bars {
+    //     println!("{bar:?}");
+    // }
 }
