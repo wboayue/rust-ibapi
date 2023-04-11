@@ -12,6 +12,7 @@ mod encoders;
 mod tests;
 
 /// Bar describes the historical data bar.
+#[derive(Clone, Debug)]
 pub struct Bar {
     /// The bar's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     pub time: OffsetDateTime,
@@ -69,6 +70,53 @@ impl ToString for BarSize {
 impl ToField for BarSize {
     fn to_field(&self) -> String {
         self.to_string()
+    }
+}
+
+#[derive(Clone, Debug, Copy)]
+pub struct Duration {}
+
+impl Duration {
+    pub const SECOND: Self = Self::seconds(1);
+    pub const DAY: Self = Self::days(1);
+    pub const WEEK: Self = Self::weeks(1);
+    pub const MONTH: Self = Self::months(1);
+    pub const YEAR: Self = Self::years(1);
+
+    pub const fn seconds(seconds: i32) -> Self {
+        Self {}
+    }
+
+    pub const fn days(days: i32) -> Self {
+        Self {}
+    }
+
+    pub const fn weeks(weeks: i32) -> Self {
+        Self {}
+    }
+
+    pub const fn months(months: i32) -> Self {
+        Self {}
+    }
+
+    pub const fn years(years: i32) -> Self {
+        Self {}
+    }
+}
+
+impl ToField for Duration {
+    fn to_field(&self) -> String {
+        "30 days".into()
+    }
+}
+
+pub trait DurationBuilder {
+    fn days(&self) -> Duration;
+}
+
+impl DurationBuilder for i32 {
+    fn days(&self) -> Duration {
+        Duration::days(*self)
     }
 }
 
@@ -175,8 +223,8 @@ fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: &
 pub(crate) fn historical_data(
     client: &Client,
     contract: &Contract,
-    start_date: &OffsetDateTime,
-    end_date: &OffsetDateTime,
+    end_date: Option<OffsetDateTime>,
+    duration: Duration,
     bar_size: BarSize,
     what_to_show: Option<WhatToShow>,
     use_rth: bool,
@@ -200,8 +248,8 @@ pub(crate) fn historical_data(
         client.server_version(),
         request_id,
         contract,
-        start_date,
         end_date,
+        duration,
         bar_size,
         what_to_show,
         use_rth,
@@ -213,7 +261,7 @@ pub(crate) fn historical_data(
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_barsize
     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_what_to_show
-    print!("{client:?} {contract:?} {end_date:?} {start_date:?} {bar_size:?} {what_to_show:?} {use_rth:?}");
+    print!("{client:?} {contract:?} {end_date:?} {end_date:?} {bar_size:?} {what_to_show:?} {use_rth:?}");
 
     Err(Error::NotImplemented)
 }

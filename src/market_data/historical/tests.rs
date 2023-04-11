@@ -74,3 +74,16 @@ fn what_to_show() {
     assert_eq!(WhatToShow::FeeRate.to_string(), "FEE_RATE");
     assert_eq!(WhatToShow::Schedule.to_string(), "SCHEDULE");
 }
+
+#[test]
+fn test_duration() {
+    assert_eq!(WhatToShow::Trades.to_string(), "TRADES");
+    assert_eq!(WhatToShow::MidPoint.to_string(), "MIDPOINT");
+    assert_eq!(WhatToShow::Bid.to_string(), "BID");
+    assert_eq!(WhatToShow::Ask.to_string(), "ASK");
+    assert_eq!(WhatToShow::BidAsk.to_string(), "BID_ASK");
+    assert_eq!(WhatToShow::HistoriclVolatility.to_string(), "HISTORICAL_VOLATILITY");
+    assert_eq!(WhatToShow::OptionImpliedVolatility.to_string(), "OPTION_IMPLIED_VOLATILITY");
+    assert_eq!(WhatToShow::FeeRate.to_string(), "FEE_RATE");
+    assert_eq!(WhatToShow::Schedule.to_string(), "SCHEDULE");
+}
