@@ -232,6 +232,7 @@ mod tests {
                 }
 
                 assert_eq!(message[i], keep_up_to_date.to_field(), "message.keep_up_to_date");
+                assert_eq!(message[i+1], "", "message.chart_options");
             }
             Err(err) => {
                 assert!(false, "error encoding historical data request: {err}");
