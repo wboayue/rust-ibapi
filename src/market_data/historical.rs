@@ -1,10 +1,11 @@
+use log::error;
 use time::OffsetDateTime;
 
 use crate::contracts::Contract;
 use crate::domain::TickAttribBidAsk;
-use crate::messages::{RequestMessage, ResponseMessage};
-use crate::{server_versions, ToField};
-use crate::{Client, Error};
+use crate::messages::{RequestMessage, ResponseMessage, IncomingMessages};
+use crate::{server_versions, ToField, Client, Error};
+use crate::client::transport::{ResponseIterator};
 
 mod decoders;
 mod encoders;
@@ -249,15 +250,16 @@ fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: &
     Err(Error::NotImplemented)
 }
 
-pub(crate) fn historical_data(
-    client: &Client,
+//     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
+pub(crate) fn historical_data<'a>(
+    client: &'a Client,
     contract: &Contract,
     end_date: Option<OffsetDateTime>,
     duration: Duration,
     bar_size: BarSize,
     what_to_show: Option<WhatToShow>,
     use_rth: bool,
-) -> Result<BarIterator, Error> {
+) -> Result<BarIterator<'a>, Error> {
     if !contract.trading_class.is_empty() || contract.contract_id > 0 {
         client.check_server_version(
             server_versions::TRADING_CLASS,
@@ -273,7 +275,7 @@ pub(crate) fn historical_data(
     }
 
     let request_id = client.next_request_id();
-    let request = encoders::encode_historical_data(
+    let request = encoders::encode_request_historical_data(
         client.server_version(),
         request_id,
         contract,
@@ -283,16 +285,16 @@ pub(crate) fn historical_data(
         what_to_show,
         use_rth,
         false,
+        Vec::<crate::contracts::TagValue>::default()
     )?;
 
-    let mut messages = client.send_request(request_id, request)?;
+    let messages = client.send_request(request_id, request)?;
 
-    // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
-    // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_barsize
-    // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_what_to_show
-    print!("{client:?} {contract:?} {end_date:?} {end_date:?} {bar_size:?} {what_to_show:?} {use_rth:?}");
-
-    Err(Error::NotImplemented)
+    Ok(BarIterator {
+        client,
+        request_id,
+        messages,
+    })
 }
 
 fn historical_schedule(client: &Client, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator, Error> {
@@ -365,15 +367,26 @@ struct HistoricalTickLastIterator {}
 
 struct HistogramDataIterator {}
 
-pub(crate) struct BarIterator {}
-// https://interactivebrokers.github.io/tws-api/classIBApi_1_1Bar.html
-
-impl Iterator for BarIterator {
-    // we will be counting with usize
+pub(crate) struct BarIterator<'a> {
+    client: &'a Client,
+    request_id: i32,
+    messages: ResponseIterator,
+}
+impl<'a> Iterator for BarIterator<'a> {
     type Item = Bar;
 
-    // next() is the only required method
     fn next(&mut self) -> Option<Self::Item> {
-        None
+        loop {
+            match self.messages.next() {
+                Some(mut message) => match message.message_type() {
+                    IncomingMessages::TickByTick => match decoders::decode_bar(&mut message) {
+                        Ok(tick) => return Some(tick),
+                        Err(e) => error!("unexpected message {message:?}: {e:?}"),
+                    },
+                    _ => error!("unexpected message {message:?}"),
+                },
+                None => return None,
+            }
+        }
     }
 }

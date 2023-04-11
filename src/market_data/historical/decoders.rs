@@ -9,6 +9,14 @@ pub(super) fn decode_head_timestamp(message: &mut ResponseMessage) -> Result<Off
     Ok(head_timestamp)
 }
 
+pub(super) fn decode_bar(message: &mut ResponseMessage) -> Result<Bar, Error> {
+    message.skip(); // message type
+    message.skip(); // request_id
+
+
+    Ok(Bar{ time: todo!(), open: todo!(), high: todo!(), low: todo!(), close: todo!(), volume: todo!(), wap: todo!(), count: todo!() })
+}
+
 #[cfg(test)]
 mod tests {
     use time::macros::{datetime, time};

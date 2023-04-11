@@ -35,7 +35,7 @@ pub(super) fn encode_head_timestamp(request_id: i32, contract: &Contract, what_t
 
 // Encodes the historical data request
 #[allow(clippy::too_many_arguments)]
-pub(super) fn encode_historical_data(
+pub(super) fn encode_request_historical_data(
     server_version: i32,
     request_id: i32,
     contract: &Contract,
@@ -45,65 +45,73 @@ pub(super) fn encode_historical_data(
     what_to_show: Option<WhatToShow>,
     use_rth: bool,
     keep_up_to_data: bool,
+    chart_options: Vec<crate::contracts::TagValue>,
 ) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 6;
 
-    let mut packet = RequestMessage::default();
+    let mut message = RequestMessage::default();
 
-    packet.push_field(&OutgoingMessages::RequestHistoricalData);
+    message.push_field(&OutgoingMessages::RequestHistoricalData);
 
     if server_version < server_versions::SYNT_REALTIME_BARS {
-        packet.push_field(&VERSION);
+        message.push_field(&VERSION);
     }
 
-    packet.push_field(&request_id);
+    message.push_field(&request_id);
 
     if server_version >= server_versions::TRADING_CLASS {
-        packet.push_field(&contract.contract_id);
+        message.push_field(&contract.contract_id);
     }
 
-    packet.push_field(&contract.symbol);
-    packet.push_field(&contract.security_type);
-    packet.push_field(&contract.last_trade_date_or_contract_month);
-    packet.push_field(&contract.strike);
-    packet.push_field(&contract.right);
-    packet.push_field(&contract.multiplier);
-    packet.push_field(&contract.exchange);
-    packet.push_field(&contract.primary_exchange);
-    packet.push_field(&contract.currency);
-    packet.push_field(&contract.local_symbol);
+    message.push_field(&contract.symbol);
+    message.push_field(&contract.security_type);
+    message.push_field(&contract.last_trade_date_or_contract_month);
+    message.push_field(&contract.strike);
+    message.push_field(&contract.right);
+    message.push_field(&contract.multiplier);
+    message.push_field(&contract.exchange);
+    message.push_field(&contract.primary_exchange);
+    message.push_field(&contract.currency);
+    message.push_field(&contract.local_symbol);
 
     if server_version >= server_versions::TRADING_CLASS {
-        packet.push_field(&contract.trading_class);
+        message.push_field(&contract.trading_class);
     }
 
-    packet.push_field(&contract.include_expired);
+    message.push_field(&contract.include_expired);
 
-    packet.push_field(&end_date);
-    packet.push_field(&bar_size);
+    message.push_field(&end_date);
+    message.push_field(&bar_size);
 
-    packet.push_field(&duration);
-    packet.push_field(&use_rth);
-    packet.push_field(&what_to_show);
+    message.push_field(&duration);
+    message.push_field(&use_rth);
+    message.push_field(&what_to_show);
 
-    packet.push_field(&DATE_FORMAT);
+    message.push_field(&DATE_FORMAT);
 
     if contract.is_bag() {
-        packet.push_field(&contract.combo_legs.len());
+        message.push_field(&contract.combo_legs.len());
 
         for combo_leg in &contract.combo_legs {
-            packet.push_field(&combo_leg.contract_id);
-            packet.push_field(&combo_leg.ratio);
-            packet.push_field(&combo_leg.action);
-            packet.push_field(&combo_leg.exchange);
+            message.push_field(&combo_leg.contract_id);
+            message.push_field(&combo_leg.ratio);
+            message.push_field(&combo_leg.action);
+            message.push_field(&combo_leg.exchange);
         }
     }
 
     if server_version >= server_versions::SYNT_REALTIME_BARS {
-        packet.push_field(&keep_up_to_data);
+        message.push_field(&keep_up_to_data);
     }
 
-    Ok(packet)
+    if server_version >= server_versions::LINKING {
+        // chart options
+        message.push_field(&chart_options);
+    }
+
+    println!("encoded: {:?}", message.encode());
+
+    Ok(message)
 }
 
 #[cfg(test)]
@@ -164,8 +172,9 @@ mod tests {
         let what_to_show: Option<WhatToShow> = None;
         let use_rth = false;
         let keep_up_to_date = true;
+        let chart_options = Vec::<crate::contracts::TagValue>::default();
 
-        let message = super::encode_historical_data(server_versions::SYNT_REALTIME_BARS, request_id, &contract, end_date, duration, bar_size, what_to_show, use_rth, keep_up_to_date);
+        let message = super::encode_request_historical_data(server_versions::SYNT_REALTIME_BARS, request_id, &contract, end_date, duration, bar_size, what_to_show, use_rth, keep_up_to_date, chart_options);
 
         match message {
             Ok(message) => {
