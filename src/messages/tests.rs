@@ -273,4 +273,3 @@ fn test_request_id_index() {
 fn test_request_id_index_invalid() {
     assert_eq!(request_id_index(IncomingMessages::NotValid), None);
 }
-

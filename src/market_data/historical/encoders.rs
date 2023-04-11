@@ -174,7 +174,18 @@ mod tests {
         let keep_up_to_date = true;
         let chart_options = Vec::<crate::contracts::TagValue>::default();
 
-        let message = super::encode_request_historical_data(server_versions::SYNT_REALTIME_BARS, request_id, &contract, end_date, duration, bar_size, what_to_show, use_rth, keep_up_to_date, chart_options);
+        let message = super::encode_request_historical_data(
+            server_versions::SYNT_REALTIME_BARS,
+            request_id,
+            &contract,
+            end_date,
+            duration,
+            bar_size,
+            what_to_show,
+            use_rth,
+            keep_up_to_date,
+            chart_options,
+        );
 
         match message {
             Ok(message) => {
@@ -205,13 +216,18 @@ mod tests {
 
                 let mut i: usize = 21;
                 if contract.is_bag() {
-                    assert_eq!(message[i], contract.combo_legs.len().to_field(), "message.combo_legs_count"); i += 1;
+                    assert_eq!(message[i], contract.combo_legs.len().to_field(), "message.combo_legs_count");
+                    i += 1;
 
                     for combo_leg in &contract.combo_legs {
-                        assert_eq!(message[i], combo_leg.contract_id.to_field(), "message.contract_id"); i += 1;
-                        assert_eq!(message[i], combo_leg.ratio.to_field(), "message.ratio"); i += 1;
-                        assert_eq!(message[i], combo_leg.action.to_field(), "message.action"); i += 1;
-                        assert_eq!(message[i], combo_leg.exchange.to_field(), "message.exchange"); i += 1;
+                        assert_eq!(message[i], combo_leg.contract_id.to_field(), "message.contract_id");
+                        i += 1;
+                        assert_eq!(message[i], combo_leg.ratio.to_field(), "message.ratio");
+                        i += 1;
+                        assert_eq!(message[i], combo_leg.action.to_field(), "message.action");
+                        i += 1;
+                        assert_eq!(message[i], combo_leg.exchange.to_field(), "message.exchange");
+                        i += 1;
                     }
                 }
 

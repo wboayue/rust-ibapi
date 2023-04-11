@@ -1,11 +1,11 @@
 use log::error;
 use time::OffsetDateTime;
 
+use crate::client::transport::ResponseIterator;
 use crate::contracts::Contract;
 use crate::domain::TickAttribBidAsk;
-use crate::messages::{RequestMessage, ResponseMessage, IncomingMessages};
-use crate::{server_versions, ToField, Client, Error};
-use crate::client::transport::{ResponseIterator};
+use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
+use crate::{server_versions, Client, Error, ToField};
 
 mod decoders;
 mod encoders;
@@ -285,7 +285,7 @@ pub(crate) fn historical_data<'a>(
         what_to_show,
         use_rth,
         false,
-        Vec::<crate::contracts::TagValue>::default()
+        Vec::<crate::contracts::TagValue>::default(),
     )?;
 
     let messages = client.send_request(request_id, request)?;
@@ -379,8 +379,8 @@ impl<'a> Iterator for BarIterator<'a> {
         loop {
             match self.messages.next() {
                 Some(mut message) => match message.message_type() {
-                    IncomingMessages::TickByTick => match decoders::decode_bar(&mut message) {
-                        Ok(tick) => return Some(tick),
+                    IncomingMessages::HistoricalData => match decoders::decode_bar(&mut message) {
+                        Ok(bar) => return Some(bar),
                         Err(e) => error!("unexpected message {message:?}: {e:?}"),
                     },
                     _ => error!("unexpected message {message:?}"),
