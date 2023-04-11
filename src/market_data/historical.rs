@@ -74,7 +74,10 @@ impl ToField for BarSize {
 }
 
 #[derive(Clone, Debug, Copy)]
-pub struct Duration {}
+pub struct Duration {
+    value: i32,
+    unit: char,
+}
 
 impl Duration {
     pub const SECOND: Self = Self::seconds(1);
@@ -84,39 +87,65 @@ impl Duration {
     pub const YEAR: Self = Self::years(1);
 
     pub const fn seconds(seconds: i32) -> Self {
-        Self {}
+        Self { value: seconds, unit: 'S' }
     }
 
     pub const fn days(days: i32) -> Self {
-        Self {}
+        Self { value: days, unit: 'D' }
     }
 
     pub const fn weeks(weeks: i32) -> Self {
-        Self {}
+        Self { value: weeks, unit: 'W' }
     }
 
     pub const fn months(months: i32) -> Self {
-        Self {}
+        Self { value: months, unit: 'M' }
     }
 
     pub const fn years(years: i32) -> Self {
-        Self {}
+        Self { value: years, unit: 'Y' }
+    }
+}
+
+impl ToString for Duration {
+    fn to_string(&self) -> String {
+        format!("{} {}", self.value, self.unit)
     }
 }
 
 impl ToField for Duration {
     fn to_field(&self) -> String {
-        "30 days".into()
+        self.to_string()
     }
 }
 
-pub trait DurationBuilder {
+pub trait ToDuration {
+    fn seconds(&self) -> Duration;
     fn days(&self) -> Duration;
+    fn weeks(&self) -> Duration;
+    fn months(&self) -> Duration;
+    fn years(&self) -> Duration;
 }
 
-impl DurationBuilder for i32 {
+impl ToDuration for i32 {
+    fn seconds(&self) -> Duration {
+        Duration::seconds(*self)
+    }
+
     fn days(&self) -> Duration {
         Duration::days(*self)
+    }
+
+    fn weeks(&self) -> Duration {
+        Duration::weeks(*self)
+    }
+
+    fn months(&self) -> Duration {
+        Duration::months(*self)
+    }
+
+    fn years(&self) -> Duration {
+        Duration::years(*self)
     }
 }
 
@@ -158,7 +187,7 @@ pub enum WhatToShow {
     Bid,
     Ask,
     BidAsk,
-    HistoriclVolatility,
+    HistoricalVolatility,
     OptionImpliedVolatility,
     FeeRate,
     Schedule,
@@ -172,7 +201,7 @@ impl ToString for WhatToShow {
             Self::Bid => "BID".to_string(),
             Self::Ask => "ASK".to_string(),
             Self::BidAsk => "BID_ASK".to_string(),
-            Self::HistoriclVolatility => "HISTORICAL_VOLATILITY".to_string(),
+            Self::HistoricalVolatility => "HISTORICAL_VOLATILITY".to_string(),
             Self::OptionImpliedVolatility => "OPTION_IMPLIED_VOLATILITY".to_string(),
             Self::FeeRate => "FEE_RATE".to_string(),
             Self::Schedule => "SCHEDULE".to_string(),

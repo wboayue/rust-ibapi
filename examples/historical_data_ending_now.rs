@@ -1,7 +1,7 @@
 use clap::{arg, Command};
 
 use ibapi::contracts::Contract;
-use ibapi::market_data::historical::{BarSize, Duration, DurationBuilder};
+use ibapi::market_data::historical::{BarSize, Duration, ToDuration};
 use ibapi::Client;
 
 fn main() {
@@ -21,7 +21,7 @@ fn main() {
     let contract = Contract::stock(stock_symbol);
 
     let bars = client
-        .historical_data(&contract, None, 30.days(), BarSize::Day, None, true)
+        .historical_data_ending_now(&contract, 30.days(), BarSize::Day, None, true)
         .expect("historical data request failed");
     for bar in bars {
         println!("{bar:?}");

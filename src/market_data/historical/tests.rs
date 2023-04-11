@@ -35,19 +35,19 @@ fn test_head_timestamp() {
 }
 
 #[test]
-fn histogram_data() {
+fn test_histogram_data() {
     let result = 2 + 2;
     assert_eq!(result, 4);
 }
 
 #[test]
-fn historical_data() {
+fn test_historical_data() {
     let result = 2 + 2;
     assert_eq!(result, 4);
 }
 
 #[test]
-fn bar_size() {
+fn test_bar_size() {
     assert_eq!(BarSize::Sec.to_string(), "1 sec");
     assert_eq!(BarSize::Sec5.to_string(), "5 secs");
     assert_eq!(BarSize::Sec15.to_string(), "15 secs");
@@ -63,13 +63,13 @@ fn bar_size() {
 }
 
 #[test]
-fn what_to_show() {
+fn test_what_to_show() {
     assert_eq!(WhatToShow::Trades.to_string(), "TRADES");
     assert_eq!(WhatToShow::MidPoint.to_string(), "MIDPOINT");
     assert_eq!(WhatToShow::Bid.to_string(), "BID");
     assert_eq!(WhatToShow::Ask.to_string(), "ASK");
     assert_eq!(WhatToShow::BidAsk.to_string(), "BID_ASK");
-    assert_eq!(WhatToShow::HistoriclVolatility.to_string(), "HISTORICAL_VOLATILITY");
+    assert_eq!(WhatToShow::HistoricalVolatility.to_string(), "HISTORICAL_VOLATILITY");
     assert_eq!(WhatToShow::OptionImpliedVolatility.to_string(), "OPTION_IMPLIED_VOLATILITY");
     assert_eq!(WhatToShow::FeeRate.to_string(), "FEE_RATE");
     assert_eq!(WhatToShow::Schedule.to_string(), "SCHEDULE");
@@ -77,13 +77,15 @@ fn what_to_show() {
 
 #[test]
 fn test_duration() {
-    assert_eq!(WhatToShow::Trades.to_string(), "TRADES");
-    assert_eq!(WhatToShow::MidPoint.to_string(), "MIDPOINT");
-    assert_eq!(WhatToShow::Bid.to_string(), "BID");
-    assert_eq!(WhatToShow::Ask.to_string(), "ASK");
-    assert_eq!(WhatToShow::BidAsk.to_string(), "BID_ASK");
-    assert_eq!(WhatToShow::HistoriclVolatility.to_string(), "HISTORICAL_VOLATILITY");
-    assert_eq!(WhatToShow::OptionImpliedVolatility.to_string(), "OPTION_IMPLIED_VOLATILITY");
-    assert_eq!(WhatToShow::FeeRate.to_string(), "FEE_RATE");
-    assert_eq!(WhatToShow::Schedule.to_string(), "SCHEDULE");
+    assert_eq!(Duration::SECOND.to_field(), "1 S");
+    assert_eq!(Duration::DAY.to_field(), "1 D");
+    assert_eq!(Duration::WEEK.to_field(), "1 W");
+    assert_eq!(Duration::MONTH.to_field(), "1 M");
+    assert_eq!(Duration::YEAR.to_field(), "1 Y");
+
+    assert_eq!(2.seconds().to_field(), "2 S");
+    assert_eq!(3.days().to_field(), "3 D");
+    assert_eq!(4.weeks().to_field(), "4 W");
+    assert_eq!(5.months().to_field(), "5 M");
+    assert_eq!(6.years().to_field(), "6 Y");
 }
