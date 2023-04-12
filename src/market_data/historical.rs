@@ -16,7 +16,8 @@ mod tests;
 #[derive(Clone, Debug)]
 pub struct Bar {
     /// The bar's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
-    pub time: OffsetDateTime,
+    // pub time: OffsetDateTime,
+    pub date: OffsetDateTime,
     /// The bar's open price.
     pub open: f64,
     /// The bar's high price.
@@ -26,7 +27,7 @@ pub struct Bar {
     /// The bar's close price.
     pub close: f64,
     /// The bar's traded volume if available (only available for TRADES)
-    pub volume: i64,
+    pub volume: f64,
     /// The bar's Weighted Average Price (only available for TRADES)
     pub wap: f64,
     /// The number of trades during the bar's timespan (only available for TRADES)
@@ -44,9 +45,16 @@ pub enum BarSize {
     Min3,
     Min5,
     Min15,
+    Min20,
     Min30,
     Hour,
+    Hour2,
+    Hour3,
+    Hour4,
+    Hour8,
     Day,
+    Week,
+    Month,
 }
 
 impl ToString for BarSize {
@@ -61,9 +69,16 @@ impl ToString for BarSize {
             Self::Min3 => "3 mins".into(),
             Self::Min5 => "5 mins".into(),
             Self::Min15 => "15 mins".into(),
+            Self::Min20 => "20 mins".into(),
             Self::Min30 => "30 mins".into(),
-            Self::Day => "1 day".into(),
             Self::Hour => "1 hour".into(),
+            Self::Hour2 => "2 hours".into(),
+            Self::Hour3 => "3 hours".into(),
+            Self::Hour4 => "4 hours".into(),
+            Self::Hour8 => "8 hours".into(),
+            Self::Day => "1 day".into(),
+            Self::Week => "1 week".into(),
+            Self::Month => "1 month".into(),
         }
     }
 }
@@ -157,8 +172,8 @@ struct HistogramData {
 
 #[derive(Clone, Debug)]
 pub struct HistoricalData {
-    pub start_date: String,
-    pub end_date: String,
+    pub start_date: OffsetDateTime,
+    pub end_date: OffsetDateTime,
     pub bars: Vec<Bar>,
 }
 
@@ -258,7 +273,7 @@ fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: &
 
 //     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
 pub(crate) fn historical_data(
-    client: & Client,
+    client: &Client,
     contract: &Contract,
     end_date: Option<OffsetDateTime>,
     duration: Duration,
@@ -297,7 +312,7 @@ pub(crate) fn historical_data(
     let mut messages = client.send_request(request_id, request)?;
 
     if let Some(mut message) = messages.next() {
-        decoders::decode_historical_data(client.server_version, &mut message)
+        decoders::decode_historical_data(client.server_version, client.time_zone, &mut message)
     } else {
         Err(Error::Simple("did not receive historical data response".into()))
     }

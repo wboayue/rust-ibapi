@@ -7,13 +7,13 @@ use byteorder::{BigEndian, WriteBytesExt};
 use log::{debug, error, info};
 use time::macros::format_description;
 use time::OffsetDateTime;
-use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt};
+use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
 use crate::accounts::Position;
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::contracts::Contract;
 use crate::errors::Error;
-use crate::market_data::historical::{self, Duration, HistoricalData};
+use crate::market_data::historical;
 use crate::market_data::realtime::{self, Bar, BarSize, WhatToShow};
 use crate::messages::RequestMessage;
 use crate::messages::{IncomingMessages, OutgoingMessages};
@@ -36,6 +36,7 @@ pub struct Client {
     /// IB Server time
     //    pub server_time: OffsetDateTime,
     pub(crate) connection_time: OffsetDateTime,
+    pub(crate) time_zone: &'static Tz,
 
     managed_accounts: String,
     client_id: i32, // ID of client.
@@ -74,6 +75,7 @@ impl Client {
         let mut client = Client {
             server_version: 0,
             connection_time: OffsetDateTime::now_utc(),
+            time_zone: time_tz::timezones::db::UTC,
             managed_accounts: String::from(""),
             message_bus,
             client_id,
@@ -105,7 +107,7 @@ impl Client {
                 self.server_version = response_message.next_int()?;
 
                 let time = response_message.next_string()?;
-                self.connection_time = parse_connection_time(time.as_str());
+                (self.connection_time, self.time_zone) = parse_connection_time(time.as_str());
             }
             Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
                 return Err(Error::Simple(format!("The server may be rejecting connections from this host: {err}")));
@@ -507,7 +509,7 @@ impl Client {
         &self,
         contract: &Contract,
         end_date: Option<OffsetDateTime>,
-        duration: Duration,
+        duration: historical::Duration,
         bar_size: historical::BarSize,
         what_to_show: Option<historical::WhatToShow>,
         use_rth: bool,
@@ -519,7 +521,7 @@ impl Client {
     pub fn historical_data_ending_now(
         &self,
         contract: &Contract,
-        duration: Duration,
+        duration: historical::Duration,
         bar_size: historical::BarSize,
         what_to_show: historical::WhatToShow,
         use_rth: bool,
@@ -527,12 +529,16 @@ impl Client {
         historical::historical_data(self, contract, None, duration, bar_size, Some(what_to_show), use_rth)
     }
 
-    pub fn historical_schedules_ending_now(
-        &self,
-        contract: &Contract,
-        duration: Duration,
-    ) -> Result<historical::HistoricalData, Error> {
-        historical::historical_data(self, contract, None, duration, historical::BarSize::Day,Some(historical::WhatToShow::Schedule), true)
+    pub fn historical_schedules_ending_now(&self, contract: &Contract, duration: historical::Duration) -> Result<historical::HistoricalData, Error> {
+        historical::historical_data(
+            self,
+            contract,
+            None,
+            duration,
+            historical::BarSize::Day,
+            Some(historical::WhatToShow::Schedule),
+            true,
+        )
     }
 
     // === Realtime Market Data ===
@@ -637,6 +643,7 @@ impl Client {
         Client {
             server_version: server_version,
             connection_time: OffsetDateTime::now_utc(),
+            time_zone: time_tz::timezones::db::UTC,
             managed_accounts: String::from(""),
             message_bus,
             client_id: 100,
@@ -705,17 +712,17 @@ impl Debug for Client {
 }
 
 // Parses following format: 20230405 22:20:39 PST
-fn parse_connection_time(connection_time: &str) -> OffsetDateTime {
+fn parse_connection_time(connection_time: &str) -> (OffsetDateTime, &'static Tz) {
     let parts: Vec<&str> = connection_time.split(' ').collect();
 
     let zones = timezones::find_by_name(parts[2]);
 
     let format = format_description!("[year][month][day] [hour]:[minute]:[second]");
     let date = time::PrimitiveDateTime::parse(format!("{} {}", parts[0], parts[1]).as_str(), format).unwrap();
-
-    match date.assume_timezone(zones[0]) {
-        OffsetResult::Some(date) => date,
-        _ => OffsetDateTime::now_utc(),
+    let timezone = zones[0];
+    match date.assume_timezone(timezone) {
+        OffsetResult::Some(date) => (date, timezone),
+        _ => (OffsetDateTime::now_utc(), time_tz::timezones::db::UTC),
     }
 }
 

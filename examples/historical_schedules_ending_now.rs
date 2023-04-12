@@ -23,7 +23,7 @@ fn main() {
     let historical_data = client
         .historical_schedules_ending_now(&contract, 30.days())
         .expect("historical schedule request failed");
-    
+
     println!("{historical_data:?}");
 
     // for bar in bars {

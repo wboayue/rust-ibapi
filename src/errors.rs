@@ -7,6 +7,7 @@ pub enum Error {
     Io(std::io::Error),
     ParseInt(ParseIntError),
     FromUtf8(FromUtf8Error),
+    ParseTime(time::error::Parse),
 
     // Errors from by IBAPI library
     NotImplemented,
@@ -23,6 +24,7 @@ impl std::fmt::Display for Error {
             Error::Io(ref err) => err.fmt(f),
             Error::ParseInt(ref err) => err.fmt(f),
             Error::FromUtf8(ref err) => err.fmt(f),
+            Error::ParseTime(ref err) => err.fmt(f),
 
             Error::NotImplemented => write!(f, "not implemented"),
             Error::Parse(i, value, message) => write!(f, "parse error: {i} - {value} - {message}"),
@@ -48,5 +50,11 @@ impl From<ParseIntError> for Error {
 impl From<FromUtf8Error> for Error {
     fn from(err: FromUtf8Error) -> Error {
         Error::FromUtf8(err)
+    }
+}
+
+impl From<time::error::Parse> for Error {
+    fn from(err: time::error::Parse) -> Error {
+        Error::ParseTime(err)
     }
 }

@@ -105,8 +105,7 @@ pub(super) fn encode_request_historical_data(
     }
 
     if server_version >= server_versions::LINKING {
-        // chart options
-        message.push_field(&chart_options);
+        message.push_field(&chart_options); // chart options
     }
 
     println!("encoded: {:?}", message.encode());
@@ -232,7 +231,7 @@ mod tests {
                 }
 
                 assert_eq!(message[i], keep_up_to_date.to_field(), "message.keep_up_to_date");
-                assert_eq!(message[i+1], "", "message.chart_options");
+                assert_eq!(message[i + 1], "", "message.chart_options");
             }
             Err(err) => {
                 assert!(false, "error encoding historical data request: {err}");
