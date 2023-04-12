@@ -1,4 +1,10 @@
-use crate::{domain::NewsProvider, Client, Error};
+use crate::{Client, Error};
+
+#[derive(Clone, Debug)]
+pub struct NewsProvider {
+    pub code: String,
+    pub name: String,
+}
 
 // https://interactivebrokers.github.io/tws-api/news.html
 

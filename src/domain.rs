@@ -12,31 +12,9 @@ pub struct SmartComponent {
     pub exchange_letter: String,
 }
 
-pub struct TickAttrib {
-    pub can_auto_execute: bool,
-    pub past_limit: bool,
-    pub pre_open: bool,
-}
-
-pub struct TickAttribBidAsk {
-    pub bid_past_low: bool,
-    pub ask_past_high: bool,
-}
-
-pub struct TickAttribLast {
-    pub past_limit: bool,
-    pub unreported: bool,
-}
-
 pub struct FamilyCode {
     pub account_id: String,
     pub family_code_str: String,
-}
-
-#[derive(Clone, Debug)]
-pub struct NewsProvider {
-    pub code: String,
-    pub name: String,
 }
 
 pub enum ComboParam {

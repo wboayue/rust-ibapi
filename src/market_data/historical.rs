@@ -1,10 +1,7 @@
-use log::error;
 use time::{Date, OffsetDateTime};
 
-use crate::client::transport::ResponseIterator;
 use crate::contracts::Contract;
-use crate::domain::TickAttribBidAsk;
-use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{RequestMessage, ResponseMessage};
 use crate::{server_versions, Client, Error, ToField};
 
 mod decoders;
@@ -212,6 +209,22 @@ struct HistoricalTickLast {
     pub price: f64,
     pub size: i32,
 }
+
+// pub struct TickAttrib {
+//     pub can_auto_execute: bool,
+//     pub past_limit: bool,
+//     pub pre_open: bool,
+// }
+
+pub struct TickAttribBidAsk {
+    pub bid_past_low: bool,
+    pub ask_past_high: bool,
+}
+
+// pub struct TickAttribLast {
+//     pub past_limit: bool,
+//     pub unreported: bool,
+// }
 
 #[derive(Clone, Debug, Copy, PartialEq)]
 pub enum WhatToShow {
