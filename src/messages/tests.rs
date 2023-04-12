@@ -261,6 +261,8 @@ fn test_request_id_index() {
     assert_eq!(request_id_index(IncomingMessages::OpenOrder), Some(1));
     assert_eq!(request_id_index(IncomingMessages::ExecutionData), Some(1));
     assert_eq!(request_id_index(IncomingMessages::HeadTimestamp), Some(1));
+    assert_eq!(request_id_index(IncomingMessages::HistoricalData), Some(1));
+    assert_eq!(request_id_index(IncomingMessages::HistoricalSchedule), Some(1));
 
     assert_eq!(request_id_index(IncomingMessages::ContractDataEnd), Some(2));
     assert_eq!(request_id_index(IncomingMessages::RealTimeBars), Some(2));

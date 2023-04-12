@@ -203,7 +203,8 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::OpenOrder
         | IncomingMessages::ExecutionData
         | IncomingMessages::HeadTimestamp
-        | IncomingMessages::HistoricalData => Some(1),
+        | IncomingMessages::HistoricalData
+        | IncomingMessages::HistoricalSchedule => Some(1),
         IncomingMessages::ContractDataEnd | IncomingMessages::RealTimeBars | IncomingMessages::Error | IncomingMessages::ExecutionDataEnd => Some(2),
         _ => panic!("could not determine request id index for {kind:?}"),
     }

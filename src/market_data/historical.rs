@@ -1,5 +1,5 @@
 use log::error;
-use time::OffsetDateTime;
+use time::{Date, OffsetDateTime};
 
 use crate::client::transport::ResponseIterator;
 use crate::contracts::Contract;
@@ -177,8 +177,19 @@ pub struct HistoricalData {
     pub bars: Vec<Bar>,
 }
 
-struct HistoricalSchedule {
-    //    string startDateTime, string endDateTime, string timeZone, HistoricalSession[]
+#[derive(Debug)]
+pub struct HistoricalSchedule {
+    pub start_time: OffsetDateTime,
+    pub end_time: OffsetDateTime,
+    pub time_zone: String,
+    pub sessions: Vec<HistoricalSession>,
+}
+
+#[derive(Debug)]
+pub struct HistoricalSession {
+    pub date: Date,
+    pub start_time: OffsetDateTime,
+    pub end_time: OffsetDateTime,
 }
 
 struct HistoricalTick {
@@ -318,9 +329,45 @@ pub(crate) fn historical_data(
     }
 }
 
-fn historical_schedule(client: &Client, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator, Error> {
-    print!("{client:?} {contract:?} {use_rth:?} {period:?}");
-    Err(Error::NotImplemented)
+pub(crate) fn historical_schedule(
+    client: &Client,
+    contract: &Contract,
+    end_date: Option<OffsetDateTime>,
+    duration: Duration,
+) -> Result<HistoricalSchedule, Error> {
+    if !contract.trading_class.is_empty() || contract.contract_id > 0 {
+        client.check_server_version(
+            server_versions::TRADING_CLASS,
+            "It does not support contract_id nor trading class parameters when requesting historical data.",
+        )?;
+    }
+
+    client.check_server_version(
+        server_versions::HISTORICAL_SCHEDULE,
+        "It does not support requesting of historical schedule.",
+    )?;
+
+    let request_id = client.next_request_id();
+    let request = encoders::encode_request_historical_data(
+        client.server_version(),
+        request_id,
+        contract,
+        end_date,
+        duration,
+        BarSize::Day,
+        Some(WhatToShow::Schedule),
+        true,
+        false,
+        Vec::<crate::contracts::TagValue>::default(),
+    )?;
+
+    let mut messages = client.send_request(request_id, request)?;
+
+    if let Some(mut message) = messages.next() {
+        decoders::decode_historical_schedule(client.server_version, client.time_zone, &mut message)
+    } else {
+        Err(Error::Simple("did not receive historical schedule response".into()))
+    }
 }
 
 fn historical_ticks(
