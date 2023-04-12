@@ -21,8 +21,8 @@ fn main() {
     let contract = Contract::stock(stock_symbol);
 
     let historical_data = client
-        .historical_data_ending_now(&contract, 1.days(), BarSize::Min30, WhatToShow::Trades, true)
-        // .historical_data_ending_now(&contract, 15.days(), BarSize::Day, WhatToShow::Trades, true)
+        // .historical_data_ending_now(&contract, 1.days(), BarSize::Min30, WhatToShow::Trades, true)
+        .historical_data_ending_now(&contract, 15.days(), BarSize::Day, WhatToShow::Trades, true)
         .expect("historical data request failed");
 
     println!("start_date: {}, end_date: {}", historical_data.start_date, historical_data.end_date);

@@ -79,7 +79,7 @@ fn parse_bar_date(text: &str, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
         let bar_date = Date::parse(text, date_format)?;
         let bar_date = bar_date.with_time(time!(00:00));
 
-        Ok(bar_date.assume_timezone_utc(time_zone))
+        Ok(bar_date.assume_timezone_utc(time_tz::timezones::db::UTC))
     } else {
         let timestamp: i64 = text.parse()?;
         let date_utc = OffsetDateTime::from_unix_timestamp(timestamp).unwrap();
