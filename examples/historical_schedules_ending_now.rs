@@ -21,8 +21,8 @@ fn main() {
     let contract = Contract::stock(stock_symbol);
 
     let historical_data = client
-        .historical_data_ending_now(&contract, 30.days(), BarSize::Day, WhatToShow::Schedule, true)
-        .expect("historical data request failed");
+        .historical_schedules_ending_now(&contract, 30.days())
+        .expect("historical schedule request failed");
     
     println!("{historical_data:?}");
 

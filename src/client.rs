@@ -521,10 +521,18 @@ impl Client {
         contract: &Contract,
         duration: Duration,
         bar_size: historical::BarSize,
-        what_to_show: Option<historical::WhatToShow>,
+        what_to_show: historical::WhatToShow,
         use_rth: bool,
     ) -> Result<historical::HistoricalData, Error> {
-        historical::historical_data(self, contract, None, duration, bar_size, what_to_show, use_rth)
+        historical::historical_data(self, contract, None, duration, bar_size, Some(what_to_show), use_rth)
+    }
+
+    pub fn historical_schedules_ending_now(
+        &self,
+        contract: &Contract,
+        duration: Duration,
+    ) -> Result<historical::HistoricalData, Error> {
+        historical::historical_data(self, contract, None, duration, historical::BarSize::Day,Some(historical::WhatToShow::Schedule), true)
     }
 
     // === Realtime Market Data ===
