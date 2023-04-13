@@ -1,7 +1,7 @@
 use time::{Date, OffsetDateTime};
 
 use crate::contracts::Contract;
-use crate::messages::{RequestMessage, ResponseMessage, IncomingMessages};
+use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Client, Error, ToField};
 
 mod decoders;
@@ -337,15 +337,9 @@ pub(crate) fn historical_data(
 
     if let Some(mut message) = messages.next() {
         match message.message_type() {
-            IncomingMessages::HistoricalData => {
-                decoders::decode_historical_data(client.server_version, client.time_zone, &mut message)
-            },
-            IncomingMessages::Error => {
-                Err(Error::Simple(message.peek_string(4)))
-            },
-            _ => {
-                Err(Error::Simple(format!("unexpected message: {:?}", message.message_type())))
-            }
+            IncomingMessages::HistoricalData => decoders::decode_historical_data(client.server_version, client.time_zone, &mut message),
+            IncomingMessages::Error => Err(Error::Simple(message.peek_string(4))),
+            _ => Err(Error::Simple(format!("unexpected message: {:?}", message.message_type()))),
         }
     } else {
         Err(Error::Simple("did not receive historical data response".into()))
@@ -388,15 +382,9 @@ pub(crate) fn historical_schedule(
 
     if let Some(mut message) = messages.next() {
         match message.message_type() {
-            IncomingMessages::HistoricalSchedule => {
-                decoders::decode_historical_schedule(&mut message)
-            },
-            IncomingMessages::Error => {
-                Err(Error::Simple(message.peek_string(4)))
-            },
-            _ => {
-                Err(Error::Simple(format!("unexpected message: {:?}", message.message_type())))
-            }
+            IncomingMessages::HistoricalSchedule => decoders::decode_historical_schedule(&mut message),
+            IncomingMessages::Error => Err(Error::Simple(message.peek_string(4))),
+            _ => Err(Error::Simple(format!("unexpected message: {:?}", message.message_type()))),
         }
     } else {
         Err(Error::Simple("did not receive historical schedule response".into()))

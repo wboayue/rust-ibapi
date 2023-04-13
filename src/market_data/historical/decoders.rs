@@ -107,7 +107,7 @@ pub(super) fn decode_historical_schedule(message: &mut ResponseMessage) -> Resul
 
 fn parse_time_zone(name: &str) -> &Tz {
     let zones = timezones::find_by_name(name);
-    if zones.len() < 1 {
+    if zones.is_empty() {
         panic!("timezone not found for: {}", name)
     }
     zones[0]
