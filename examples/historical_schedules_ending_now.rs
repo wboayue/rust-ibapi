@@ -20,13 +20,13 @@ fn main() {
 
     let contract = Contract::stock(stock_symbol);
 
-    let historical_data = client
+    let schedule = client
         .historical_schedules_ending_now(&contract, 30.days())
         .expect("historical schedule request failed");
 
-    println!("{historical_data:?}");
+    println!("start: {}, end: {}, time_zone: {}", schedule.start_date_time, schedule.end_date_time, schedule.time_zone);
 
-    // for bar in bars {
-    //     println!("{bar:?}");
-    // }
+    for session in &schedule.sessions {
+        println!("{session:?}");
+    }
 }

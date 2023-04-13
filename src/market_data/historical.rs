@@ -176,17 +176,17 @@ pub struct HistoricalData {
 
 #[derive(Debug)]
 pub struct HistoricalSchedule {
-    pub start_time: OffsetDateTime,
-    pub end_time: OffsetDateTime,
+    pub start_date_time: OffsetDateTime,
+    pub end_date_time: OffsetDateTime,
     pub time_zone: String,
     pub sessions: Vec<HistoricalSession>,
 }
 
 #[derive(Debug)]
 pub struct HistoricalSession {
-    pub date: Date,
-    pub start_time: OffsetDateTime,
-    pub end_time: OffsetDateTime,
+    pub reference_date: Date,
+    pub start_date_time: OffsetDateTime,
+    pub end_date_time: OffsetDateTime,
 }
 
 struct HistoricalTick {
@@ -377,7 +377,7 @@ pub(crate) fn historical_schedule(
     let mut messages = client.send_request(request_id, request)?;
 
     if let Some(mut message) = messages.next() {
-        decoders::decode_historical_schedule(client.server_version, client.time_zone, &mut message)
+        decoders::decode_historical_schedule(&mut message)
     } else {
         Err(Error::Simple("did not receive historical schedule response".into()))
     }
