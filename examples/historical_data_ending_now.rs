@@ -25,7 +25,7 @@ fn main() {
         // .historical_data_ending_now(&contract, 15.days(), BarSize::Day, WhatToShow::Trades, true)
         .expect("historical data request failed");
 
-    println!("start_date: {}, end_date: {}", historical_data.start_date, historical_data.end_date);
+    println!("start_date: {}, end_date: {}", historical_data.start, historical_data.end);
 
     for bar in &historical_data.bars {
         println!("{bar:?}");

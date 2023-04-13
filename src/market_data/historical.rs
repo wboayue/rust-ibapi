@@ -169,24 +169,24 @@ struct HistogramData {
 
 #[derive(Clone, Debug)]
 pub struct HistoricalData {
-    pub start_date: OffsetDateTime,
-    pub end_date: OffsetDateTime,
+    pub start: OffsetDateTime,
+    pub end: OffsetDateTime,
     pub bars: Vec<Bar>,
 }
 
 #[derive(Debug)]
 pub struct HistoricalSchedule {
-    pub start_date_time: OffsetDateTime,
-    pub end_date_time: OffsetDateTime,
+    pub start: OffsetDateTime,
+    pub end: OffsetDateTime,
     pub time_zone: String,
     pub sessions: Vec<HistoricalSession>,
 }
 
 #[derive(Debug)]
 pub struct HistoricalSession {
-    pub reference_date: Date,
-    pub start_date_time: OffsetDateTime,
-    pub end_date_time: OffsetDateTime,
+    pub reference: Date,
+    pub start: OffsetDateTime,
+    pub end: OffsetDateTime,
 }
 
 struct HistoricalTick {

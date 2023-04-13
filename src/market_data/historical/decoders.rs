@@ -1,6 +1,6 @@
 use time::macros::{format_description, time};
 use time::{Date, PrimitiveDateTime};
-use time_tz::{OffsetDateTimeExt, PrimitiveDateTimeExt, Tz, timezones};
+use time_tz::{timezones, OffsetDateTimeExt, PrimitiveDateTimeExt, Tz};
 
 use super::*;
 
@@ -25,13 +25,13 @@ pub(super) fn decode_historical_data(server_version: i32, time_zone: &Tz, messag
 
     let slice_format = format_description!("[year][month][day]  [hour]:[minute]:[second]");
 
-    let mut start_date = OffsetDateTime::now_utc();
-    let mut end_date = OffsetDateTime::now_utc();
+    let mut start = OffsetDateTime::now_utc();
+    let mut end = OffsetDateTime::now_utc();
     if message_version > 2 {
-        start_date = PrimitiveDateTime::parse(&message.next_string()?, slice_format)?
+        start = PrimitiveDateTime::parse(&message.next_string()?, slice_format)?
             .assume_timezone(time_zone)
             .unwrap();
-        end_date = PrimitiveDateTime::parse(&message.next_string()?, slice_format)?
+        end = PrimitiveDateTime::parse(&message.next_string()?, slice_format)?
             .assume_timezone(time_zone)
             .unwrap();
     }
@@ -70,15 +70,15 @@ pub(super) fn decode_historical_data(server_version: i32, time_zone: &Tz, messag
         })
     }
 
-    Ok(HistoricalData { start_date, end_date, bars })
+    Ok(HistoricalData { start, end, bars })
 }
 
 pub(super) fn decode_historical_schedule(message: &mut ResponseMessage) -> Result<HistoricalSchedule, Error> {
     message.skip(); // message type
     message.skip(); // request_id
 
-    let start_date_time = message.next_string()?;
-    let end_date_time = message.next_string()?;
+    let start = message.next_string()?;
+    let end = message.next_string()?;
     let time_zone_name = message.next_string()?;
 
     let time_zone = parse_time_zone(&time_zone_name);
@@ -86,20 +86,20 @@ pub(super) fn decode_historical_schedule(message: &mut ResponseMessage) -> Resul
     let sessions_count = message.next_int()?;
     let mut sessions = Vec::<HistoricalSession>::with_capacity(sessions_count as usize);
     for _ in 0..sessions_count {
-        let session_start_date_time = message.next_string()?;
-        let session_end_date_time = message.next_string()?;
-        let session_reference_date = message.next_string()?;
-    
+        let session_start = message.next_string()?;
+        let session_end = message.next_string()?;
+        let session_reference = message.next_string()?;
+
         sessions.push(HistoricalSession {
-            start_date_time: parse_schedule_date_time(&session_start_date_time, time_zone)?,
-            end_date_time: parse_schedule_date_time(&session_end_date_time, time_zone)?,
-            reference_date: parse_schedule_date(&session_reference_date)?,
+            start: parse_schedule_date_time(&session_start, time_zone)?,
+            end: parse_schedule_date_time(&session_end, time_zone)?,
+            reference: parse_schedule_date(&session_reference)?,
         })
     }
 
     Ok(HistoricalSchedule {
-        start_date_time: parse_schedule_date_time(&start_date_time, time_zone)?,
-        end_date_time: parse_schedule_date_time(&end_date_time, time_zone)?,
+        start: parse_schedule_date_time(&start, time_zone)?,
+        end: parse_schedule_date_time(&end, time_zone)?,
         time_zone: time_zone_name,
         sessions,
     })
