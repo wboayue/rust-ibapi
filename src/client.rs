@@ -504,20 +504,81 @@ impl Client {
         historical::head_timestamp(self, contract, what_to_show, use_rth)
     }
 
-    /// Requests contract's historical data
+    /// Requests interval of historical data ending at specified time for [Contract].
+    ///
+    /// # Arguments
+    /// * `contract`     - [Contract] to retrieve [historical::HistoricalData] for.
+    /// * `interval_end` - end date of interval to retrieve [historical::HistoricalData] for.
+    /// * `duration`     - duration of interval to retrieve [historical::HistoricalData] for.
+    /// * `bar_size`     - [historical::BarSize] to return.
+    /// * `what_to_show` - requested bar type: [historical::WhatToShow].
+    /// * `use_rth`      - use regular trading hours.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    ///
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    /// use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("TSLA");
+    ///
+    /// let historical_data = client
+    ///     .historical_data(&contract, datetime!(2023-04-15 0:00 UTC), 7.days(), BarSize::Day, WhatToShow::Trades, true)
+    ///     .expect("historical data request failed");
+    ///
+    /// println!("start_date: {}, end_date: {}", historical_data.start, historical_data.end);
+    ///
+    /// for bar in &historical_data.bars {
+    ///     println!("{bar:?}");
+    /// }
+    /// ```
     pub fn historical_data(
         &self,
         contract: &Contract,
-        end_date: Option<OffsetDateTime>,
+        interval_end: OffsetDateTime,
         duration: historical::Duration,
         bar_size: historical::BarSize,
-        what_to_show: Option<historical::WhatToShow>,
+        what_to_show: historical::WhatToShow,
         use_rth: bool,
     ) -> Result<historical::HistoricalData, Error> {
-        historical::historical_data(self, contract, end_date, duration, bar_size, what_to_show, use_rth)
+        historical::historical_data(self, contract, Some(interval_end), duration, bar_size, Some(what_to_show), use_rth)
     }
 
-    /// Requests contract's historical data end now for specified duration.
+    /// Requests interval of historical data end now for [Contract].
+    ///
+    /// # Arguments
+    /// * `contract`     - [Contract] to retrieve [historical::HistoricalData] for.
+    /// * `duration`     - duration of interval to retrieve [historical::HistoricalData] for.
+    /// * `bar_size`     - [historical::BarSize] to return.
+    /// * `what_to_show` - requested bar type: [historical::WhatToShow].
+    /// * `use_rth`      - use regular trading hours.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    /// use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("TSLA");
+    ///
+    /// let historical_data = client
+    ///     .historical_data_ending_now(&contract, 7.days(), BarSize::Day, WhatToShow::Trades, true)
+    ///     .expect("historical data request failed");
+    ///
+    /// println!("start_date: {}, end_date: {}", historical_data.start, historical_data.end);
+    ///
+    /// for bar in &historical_data.bars {
+    ///     println!("{bar:?}");
+    /// }
+    /// ```
     pub fn historical_data_ending_now(
         &self,
         contract: &Contract,
@@ -533,9 +594,9 @@ impl Client {
     /// ending at specified date.
     ///
     /// # Arguments
-    /// * `contract` - [Contract] to retrieve [historical::HistoricalSchedule] for.
-    /// * `end_date` - end date of interval to retrieve [historical::HistoricalSchedule] for.
-    /// * `duration` - duration of interval to retrieve [historical::HistoricalSchedule] for.
+    /// * `contract`     - [Contract] to retrieve [historical::HistoricalSchedule] for.
+    /// * `interval_end` - end date of interval to retrieve [historical::HistoricalSchedule] for.
+    /// * `duration`     - duration of interval to retrieve [historical::HistoricalSchedule] for.
     ///
     /// # Examples
     ///
