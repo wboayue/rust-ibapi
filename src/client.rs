@@ -636,7 +636,7 @@ impl Client {
         what_to_show: WhatToShow,
         use_rth: bool,
     ) -> Result<impl Iterator<Item = Bar> + 'a, Error> {
-        realtime::realtime_bars_with_options(self, contract, &bar_size, &what_to_show, use_rth, Vec::default())
+        realtime::realtime_bars(self, contract, &bar_size, &what_to_show, use_rth, Vec::default())
     }
 
     /// Requests tick by tick AllLast ticks.

@@ -23,7 +23,7 @@ fn realtime_bars() {
     let what_to_show = WhatToShow::Trades;
     let use_rth = true;
 
-    let bars = super::realtime_bars(&mut client, &contract, &bar_size, &what_to_show, use_rth);
+    let bars = super::realtime_bars(&mut client, &contract, &bar_size, &what_to_show, use_rth, Vec::new());
     assert!(bars.is_ok(), "failed to request realtime bars: {}", bars.err().unwrap());
 
     // Verify Responses

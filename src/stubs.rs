@@ -54,17 +54,13 @@ impl MessageBus for MessageBusStub {
         mock_global_request(self, message)
     }
 
-    fn write(&mut self, packet: &str) -> Result<(), Error> {
+    fn write(&mut self, _packet: &str) -> Result<(), Error> {
         Ok(())
     }
 
-    fn process_messages(&mut self, server_version: i32) -> Result<(), Error> {
+    fn process_messages(&mut self, _server_version: i32) -> Result<(), Error> {
         Ok(())
     }
-}
-
-fn encode_message(message: &RequestMessage) -> String {
-    message.encode().replace('\0', "|")
 }
 
 fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {

@@ -132,17 +132,6 @@ pub(crate) fn realtime_bars<'a>(
     bar_size: &BarSize,
     what_to_show: &WhatToShow,
     use_rth: bool,
-) -> Result<RealTimeBarIterator<'a>, Error> {
-    realtime_bars_with_options(client, contract, bar_size, what_to_show, use_rth, Vec::default())
-}
-
-// Requests realtime bars.
-pub(crate) fn realtime_bars_with_options<'a>(
-    client: &'a Client,
-    contract: &Contract,
-    bar_size: &BarSize,
-    what_to_show: &WhatToShow,
-    use_rth: bool,
     options: Vec<TagValue>,
 ) -> Result<RealTimeBarIterator<'a>, Error> {
     client.check_server_version(server_versions::REAL_TIME_BARS, "It does not support real time bars.")?;
