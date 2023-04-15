@@ -16,14 +16,14 @@ fn realtime_bars() {
         response_messages: vec!["50|3|9001|1678323335|4028.75|4029.00|4028.25|4028.50|2|4026.75|1|".to_owned()],
     }));
 
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let contract = contract_samples::future_with_local_symbol();
     let bar_size = BarSize::Sec5;
     let what_to_show = WhatToShow::Trades;
     let use_rth = true;
 
-    let bars = super::realtime_bars(&mut client, &contract, &bar_size, &what_to_show, use_rth, Vec::new());
+    let bars = client.realtime_bars(&contract, bar_size, what_to_show, use_rth);
     assert!(bars.is_ok(), "failed to request realtime bars: {}", bars.err().unwrap());
 
     // Verify Responses

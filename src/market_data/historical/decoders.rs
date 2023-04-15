@@ -141,12 +141,13 @@ fn parse_bar_date(text: &str, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
 
 #[cfg(test)]
 mod tests {
-    use time::macros::{datetime, time};
+    use time::macros::{date, datetime};
+    use time_tz;
 
     use super::*;
 
     #[test]
-    fn decode_head_timestamp() {
+    fn test_decode_head_timestamp() {
         let mut message = ResponseMessage::from("88\09000\01560346200\0");
 
         let results = super::decode_head_timestamp(&mut message);
@@ -155,6 +156,57 @@ mod tests {
             assert_eq!(head_timestamp, datetime!(2019-06-12 13:30).assume_utc(), "head_timestamp");
         } else if let Err(err) = results {
             assert!(false, "error decoding trade tick: {err}");
+        }
+    }
+
+    // #[test]
+    fn test_decode_historical_schedule() {
+        let mut message = ResponseMessage::from("88\09000\01560346200\0");
+
+        let results = decode_historical_schedule(&mut message);
+
+        if let Ok(schedule) = results {
+            assert_eq!(schedule.start, datetime!(2019-06-12 13:30 UTC), "schedule.start");
+            assert_eq!(schedule.end, datetime!(2019-06-12 13:30 UTC), "schedule.end");
+            assert_eq!(schedule.time_zone, "ES", "schedule.time_zone");
+
+            assert_eq!(schedule.sessions.len(), 1, "schedule.sessions.len()");
+            assert_eq!(schedule.sessions[0].reference, date!(2019 - 06 - 12), "schedule.sessions[0].reference");
+            assert_eq!(schedule.sessions[0].start, datetime!(2019-06-12 13:30 UTC), "schedule.sessions[0].start");
+            assert_eq!(schedule.sessions[0].end, datetime!(2019-06-12 13:30 UTC), "schedule.sessions[0].end");
+        } else if let Err(err) = results {
+            assert!(false, "error decoding historical schedule {err}");
+        }
+    }
+
+    // #[test]
+    fn test_decode_historical_data() {
+        let mut message = ResponseMessage::from("88\09000\01560346200\0");
+
+        let server_version = server_versions::ACCOUNT_SUMMARY;
+        let time_zone: &Tz = time_tz::timezones::db::america::NEW_YORK;
+
+        let results = decode_historical_data(server_version, time_zone, &mut message);
+
+        if let Ok(historical_data) = results {
+            assert_eq!(historical_data.start, datetime!(2019-06-12 13:30 UTC), "historical_data.start");
+            assert_eq!(historical_data.end, datetime!(2019-06-12 13:30 UTC), "historical_data.end");
+
+            assert_eq!(historical_data.bars.len(), 1, "historical_data.bars.len()");
+            assert_eq!(
+                historical_data.bars[0].date,
+                datetime!(2019-06-12 13:30).assume_timezone(time_zone).unwrap(),
+                "historical_data.bars[0].date"
+            );
+            assert_eq!(historical_data.bars[0].open, 10.0, "historical_data.bars[0].open");
+            assert_eq!(historical_data.bars[0].high, 10.3, "historical_data.bars[0].high");
+            assert_eq!(historical_data.bars[0].low, 12.0, "historical_data.bars[0].low");
+            assert_eq!(historical_data.bars[0].close, 23.0, "historical_data.bars[0].close");
+            assert_eq!(historical_data.bars[0].volume, 23.0, "historical_data.bars[0].volume");
+            assert_eq!(historical_data.bars[0].wap, 23.0, "historical_data.bars[0].wap");
+            assert_eq!(historical_data.bars[0].count, 23, "historical_data.bars[0].count");
+        } else if let Err(err) = results {
+            assert!(false, "error decoding historical data {err}");
         }
     }
 }

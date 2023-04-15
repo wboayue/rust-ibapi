@@ -20,7 +20,7 @@ fn place_order() {
         ]
     }));
 
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let contract = Contract {
         symbol: "TSLA".to_owned(),
@@ -33,7 +33,7 @@ fn place_order() {
     let order_id = 13;
     let order = order_builder::market_order(super::Action::Buy, 100.0);
 
-    let result = super::place_order(&mut client, order_id, &contract, &order);
+    let result = client.place_order(order_id, &contract, &order);
 
     let request_messages = client.message_bus.borrow().request_messages();
 
@@ -304,10 +304,10 @@ fn cancel_order() {
         ],
     }));
 
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let order_id = 41;
-    let results = super::cancel_order(&mut client, order_id, "");
+    let results = client.cancel_order(order_id, "");
 
     let request_messages = client.message_bus.borrow().request_messages();
 
@@ -533,9 +533,9 @@ fn all_open_orders() {
         response_messages: vec!["9|1|43||".to_owned()],
     }));
 
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
-    let results = super::all_open_orders(&mut client);
+    let results = client.all_open_orders();
 
     let request_messages = client.message_bus.borrow().request_messages();
 
@@ -551,10 +551,10 @@ fn auto_open_orders() {
         response_messages: vec!["9|1|43||".to_owned()],
     }));
 
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let api_only = true;
-    let results = super::auto_open_orders(&mut client, api_only);
+    let results = client.auto_open_orders(api_only);
 
     let request_messages = client.message_bus.borrow().request_messages();
 
@@ -570,7 +570,7 @@ fn executions() {
         response_messages: vec!["9|1|43||".to_owned()],
     }));
 
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let filter = ExecutionFilter {
         client_id: Some(100),
@@ -581,7 +581,7 @@ fn executions() {
         exchange: "ISLAND".to_owned(),
         side: "BUY".to_owned(),
     };
-    let results = super::executions(&mut client, filter);
+    let results = client.executions(filter);
 
     let request_messages = client.message_bus.borrow().request_messages();
 
@@ -601,13 +601,13 @@ fn encode_limit_order() {
         response_messages: vec![],
     }));
 
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let order_id = 12;
     let contract = contract_samples::future_with_local_symbol();
     let order = order_builder::limit_order(super::Action::Buy, 10.0, 500.00);
 
-    let results = super::place_order(&mut client, order_id, &contract, &order);
+    let results = client.place_order(order_id, &contract, &order);
 
     let request_messages = client.message_bus.borrow().request_messages();
 
@@ -626,13 +626,13 @@ fn encode_combo_market_order() {
         response_messages: vec![],
     }));
 
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let order_id = 12; // get next order id
     let contract = contract_samples::smart_future_combo_contract();
     let order = order_builder::combo_market_order(Action::Sell, 150.0, true);
 
-    let results = super::place_order(&mut client, order_id, &contract, &order);
+    let results = client.place_order(order_id, &contract, &order);
 
     let request_messages = client.message_bus.borrow().request_messages();
 
