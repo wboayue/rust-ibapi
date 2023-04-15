@@ -25,7 +25,7 @@ fn main() {
         .historical_schedules(&contract, datetime!(2023-04-15 0:00 UTC), 30.days())
         .expect("historical schedule request failed");
 
-    println!("start: {:?}, end: {:?}", historical_data.start_time, historical_data.end_time);
+    println!("start: {:?}, end: {:?}", historical_data.start, historical_data.end);
 
     for session in &historical_data.sessions {
         println!("{session:?}");

@@ -1,7 +1,7 @@
 use time::{Date, OffsetDateTime};
 
 use crate::contracts::Contract;
-use crate::messages::{RequestMessage, ResponseMessage};
+use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Client, Error, ToField};
 
 mod decoders;
@@ -169,24 +169,24 @@ struct HistogramData {
 
 #[derive(Clone, Debug)]
 pub struct HistoricalData {
-    pub start_date: OffsetDateTime,
-    pub end_date: OffsetDateTime,
+    pub start: OffsetDateTime,
+    pub end: OffsetDateTime,
     pub bars: Vec<Bar>,
 }
 
 #[derive(Debug)]
 pub struct HistoricalSchedule {
-    pub start_time: OffsetDateTime,
-    pub end_time: OffsetDateTime,
+    pub start: OffsetDateTime,
+    pub end: OffsetDateTime,
     pub time_zone: String,
     pub sessions: Vec<HistoricalSession>,
 }
 
 #[derive(Debug)]
 pub struct HistoricalSession {
-    pub date: Date,
-    pub start_time: OffsetDateTime,
-    pub end_time: OffsetDateTime,
+    pub reference: Date,
+    pub start: OffsetDateTime,
+    pub end: OffsetDateTime,
 }
 
 struct HistoricalTick {
@@ -336,7 +336,11 @@ pub(crate) fn historical_data(
     let mut messages = client.send_request(request_id, request)?;
 
     if let Some(mut message) = messages.next() {
-        decoders::decode_historical_data(client.server_version, client.time_zone, &mut message)
+        match message.message_type() {
+            IncomingMessages::HistoricalData => decoders::decode_historical_data(client.server_version, client.time_zone, &mut message),
+            IncomingMessages::Error => Err(Error::Simple(message.peek_string(4))),
+            _ => Err(Error::Simple(format!("unexpected message: {:?}", message.message_type()))),
+        }
     } else {
         Err(Error::Simple("did not receive historical data response".into()))
     }
@@ -377,7 +381,11 @@ pub(crate) fn historical_schedule(
     let mut messages = client.send_request(request_id, request)?;
 
     if let Some(mut message) = messages.next() {
-        decoders::decode_historical_schedule(client.server_version, client.time_zone, &mut message)
+        match message.message_type() {
+            IncomingMessages::HistoricalSchedule => decoders::decode_historical_schedule(&mut message),
+            IncomingMessages::Error => Err(Error::Simple(message.peek_string(4))),
+            _ => Err(Error::Simple(format!("unexpected message: {:?}", message.message_type()))),
+        }
     } else {
         Err(Error::Simple("did not receive historical schedule response".into()))
     }

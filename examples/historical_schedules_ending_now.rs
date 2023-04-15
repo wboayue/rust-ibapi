@@ -7,8 +7,8 @@ use ibapi::Client;
 fn main() {
     env_logger::init();
 
-    let matches = Command::new("historical_data")
-        .about("Get last 30 days of daily data for given stock")
+    let matches = Command::new("historical_schedules_ending_now")
+        .about("Gets last 7 days of schedules for given stock")
         .arg(arg!(<STOCK_SYMBOL>).required(true))
         .arg(arg!(--connection_string <VALUE>).default_value("127.0.0.1:4002"))
         .get_matches();
@@ -20,13 +20,13 @@ fn main() {
 
     let contract = Contract::stock(stock_symbol);
 
-    let historical_data = client
-        .historical_schedules_ending_now(&contract, 30.days())
+    let schedule = client
+        .historical_schedules_ending_now(&contract, 7.days())
         .expect("historical schedule request failed");
 
-    println!("start: {:?}, end: {:?}", historical_data.start_time, historical_data.end_time);
+    println!("start: {}, end: {}, time_zone: {}", schedule.start, schedule.end, schedule.time_zone);
 
-    for session in &historical_data.sessions {
+    for session in &schedule.sessions {
         println!("{session:?}");
     }
 }

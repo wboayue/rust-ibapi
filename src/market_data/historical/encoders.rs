@@ -108,8 +108,6 @@ pub(super) fn encode_request_historical_data(
         message.push_field(&chart_options); // chart options
     }
 
-    println!("encoded: {:?}", message.encode());
-
     Ok(message)
 }
 

@@ -529,7 +529,7 @@ impl Client {
         historical::historical_data(self, contract, None, duration, bar_size, Some(what_to_show), use_rth)
     }
 
-    /// Requests [historical::HistoricalSchedule]s for an interval of given duration
+    /// Requests [historical::HistoricalSchedule] for an interval of given duration
     /// ending at specified date.
     ///
     /// # Arguments
@@ -554,7 +554,7 @@ impl Client {
     ///     .historical_schedules(&contract, datetime!(2023-04-15 0:00 UTC), 30.days())
     ///     .expect("historical schedule request failed");
     ///
-    /// println!("start: {:?}, end: {:?}", historical_data.start_time, historical_data.end_time);
+    /// println!("start: {:?}, end: {:?}", historical_data.start, historical_data.end);
     ///
     /// for session in &historical_data.sessions {
     ///     println!("{session:?}");
@@ -563,10 +563,10 @@ impl Client {
     pub fn historical_schedules(
         &self,
         contract: &Contract,
-        end_date: OffsetDateTime,
+        interval_end: OffsetDateTime,
         duration: historical::Duration,
     ) -> Result<historical::HistoricalSchedule, Error> {
-        historical::historical_schedule(self, contract, Some(end_date), duration)
+        historical::historical_schedule(self, contract, Some(interval_end), duration)
     }
 
     /// Requests [historical::HistoricalSchedule] for interval ending at current time.
@@ -590,7 +590,7 @@ impl Client {
     ///     .historical_schedules_ending_now(&contract, 30.days())
     ///     .expect("historical schedule request failed");
     ///
-    /// println!("start: {:?}, end: {:?}", historical_data.start_time, historical_data.end_time);
+    /// println!("start: {:?}, end: {:?}", historical_data.start, historical_data.end);
     ///
     /// for session in &historical_data.sessions {
     ///     println!("{session:?}");

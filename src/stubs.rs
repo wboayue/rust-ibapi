@@ -31,77 +31,27 @@ impl MessageBus for MessageBusStub {
     }
 
     fn send_generic_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
-        self.request_messages.borrow_mut().push(message.clone());
-
-        let (sender, receiver) = channel::unbounded();
-        let (s1, r1) = channel::unbounded();
-
-        for message in &self.response_messages {
-            sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
-        }
-
-        Ok(ResponseIterator::new(receiver, s1, None, None, Duration::from_secs(5)))
+        mock_request(self, request_id, message)
     }
 
     fn send_order_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
-        self.request_messages.borrow_mut().push(message.clone());
-
-        let (sender, receiver) = channel::unbounded();
-        let (s1, r1) = channel::unbounded();
-
-        for message in &self.response_messages {
-            sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
-        }
-
-        Ok(ResponseIterator::new(receiver, s1, None, None, Duration::from_secs(5)))
+        mock_request(self, request_id, message)
     }
 
     fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        self.request_messages.borrow_mut().push(message.clone());
-
-        let (sender, receiver) = channel::unbounded();
-
-        for message in &self.response_messages {
-            sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
-        }
-
-        Ok(GlobalResponseIterator::new(Arc::new(receiver)))
+        mock_global_request(self, message)
     }
 
     fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        self.request_messages.borrow_mut().push(message.clone());
-
-        let (sender, receiver) = channel::unbounded();
-
-        for message in &self.response_messages {
-            sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
-        }
-
-        Ok(GlobalResponseIterator::new(Arc::new(receiver)))
+        mock_global_request(self, message)
     }
 
     fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        self.request_messages.borrow_mut().push(message.clone());
-
-        let (sender, receiver) = channel::unbounded();
-
-        for message in &self.response_messages {
-            sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
-        }
-
-        Ok(GlobalResponseIterator::new(Arc::new(receiver)))
+        mock_global_request(self, message)
     }
 
     fn request_positions(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        self.request_messages.borrow_mut().push(message.clone());
-
-        let (sender, receiver) = channel::unbounded();
-
-        for message in &self.response_messages {
-            sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
-        }
-
-        Ok(GlobalResponseIterator::new(Arc::new(receiver)))
+        mock_global_request(self, message)
     }
 
     fn write(&mut self, packet: &str) -> Result<(), Error> {
@@ -115,4 +65,29 @@ impl MessageBus for MessageBusStub {
 
 fn encode_message(message: &RequestMessage) -> String {
     message.encode().replace('\0', "|")
+}
+
+fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
+    stub.request_messages.borrow_mut().push(message.clone());
+
+    let (sender, receiver) = channel::unbounded();
+    let (s1, _r1) = channel::unbounded();
+
+    for message in &stub.response_messages {
+        sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
+    }
+
+    Ok(ResponseIterator::new(receiver, s1, None, None, Duration::from_secs(5)))
+}
+
+fn mock_global_request(stub: &mut MessageBusStub, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    stub.request_messages.borrow_mut().push(message.clone());
+
+    let (sender, receiver) = channel::unbounded();
+
+    for message in &stub.response_messages {
+        sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
+    }
+
+    Ok(GlobalResponseIterator::new(Arc::new(receiver)))
 }
