@@ -1,4 +1,5 @@
 use clap::{arg, Command};
+use time::macros::datetime;
 
 use ibapi::contracts::Contract;
 use ibapi::market_data::historical::ToDuration;
@@ -21,7 +22,7 @@ fn main() {
     let contract = Contract::stock(stock_symbol);
 
     let historical_data = client
-        .historical_schedules_ending_now(&contract, 30.days())
+        .historical_schedules(&contract, datetime!(2023-04-15 0:00 UTC), 30.days())
         .expect("historical schedule request failed");
 
     println!("start: {:?}, end: {:?}", historical_data.start_time, historical_data.end_time);

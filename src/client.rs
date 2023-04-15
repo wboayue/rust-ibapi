@@ -529,6 +529,73 @@ impl Client {
         historical::historical_data(self, contract, None, duration, bar_size, Some(what_to_show), use_rth)
     }
 
+    /// Requests [historical::HistoricalSchedule]s for an interval of given duration
+    /// ending at specified date.
+    ///
+    /// # Arguments
+    /// * `contract` - [Contract] to retrieve [historical::HistoricalSchedule] for.
+    /// * `end_date` - end date of interval to retrieve [historical::HistoricalSchedule] for.
+    /// * `duration` - duration of interval to retrieve [historical::HistoricalSchedule] for.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    //
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    /// use ibapi::market_data::historical::ToDuration;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("GM");
+    ///
+    /// let historical_data = client
+    ///     .historical_schedules(&contract, datetime!(2023-04-15 0:00 UTC), 30.days())
+    ///     .expect("historical schedule request failed");
+    ///
+    /// println!("start: {:?}, end: {:?}", historical_data.start_time, historical_data.end_time);
+    ///
+    /// for session in &historical_data.sessions {
+    ///     println!("{session:?}");
+    /// }
+    /// ```
+    pub fn historical_schedules(
+        &self,
+        contract: &Contract,
+        end_date: OffsetDateTime,
+        duration: historical::Duration,
+    ) -> Result<historical::HistoricalSchedule, Error> {
+        historical::historical_schedule(self, contract, Some(end_date), duration)
+    }
+
+    /// Requests [historical::HistoricalSchedule] for interval ending at current time.
+    ///
+    /// # Arguments
+    /// * `contract` - [Contract] to retrieve [historical::HistoricalSchedule] for.
+    /// * `duration` - [historical::Duration] for interval to retrieve [historical::HistoricalSchedule] for.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    /// use ibapi::market_data::historical::ToDuration;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("GM");
+    ///
+    /// let historical_data = client
+    ///     .historical_schedules_ending_now(&contract, 30.days())
+    ///     .expect("historical schedule request failed");
+    ///
+    /// println!("start: {:?}, end: {:?}", historical_data.start_time, historical_data.end_time);
+    ///
+    /// for session in &historical_data.sessions {
+    ///     println!("{session:?}");
+    /// }
+    /// ```
     pub fn historical_schedules_ending_now(
         &self,
         contract: &Contract,
