@@ -124,7 +124,7 @@ fn test_message_encodes_outgoing_message() {
     message.push_field(&OutgoingMessages::RequestMarketData);
     message.push_field(&OutgoingMessages::CancelMarketData);
     message.push_field(&OutgoingMessages::PlaceOrder);
-    message.push_field(&OutgoingMessages::ReqUserInfo);
+    message.push_field(&OutgoingMessages::RequestUserInfo);
 
     assert_eq!(4, message.fields.len());
     assert_eq!("1\02\03\0104\0", message.encode());

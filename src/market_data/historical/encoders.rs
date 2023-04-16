@@ -20,7 +20,7 @@ impl ToField for Option<OffsetDateTime> {
 }
 
 // Encodes the head timestamp request
-pub(super) fn encode_head_timestamp(request_id: i32, contract: &Contract, what_to_show: WhatToShow, use_rth: bool) -> Result<RequestMessage, Error> {
+pub(super) fn encode_request_head_timestamp(request_id: i32, contract: &Contract, what_to_show: WhatToShow, use_rth: bool) -> Result<RequestMessage, Error> {
     let mut packet = RequestMessage::default();
 
     packet.push_field(&OutgoingMessages::RequestHeadTimestamp);
@@ -111,6 +111,31 @@ pub(super) fn encode_request_historical_data(
     Ok(message)
 }
 
+// Encodes message to request historical ticks
+pub(super) fn encode_request_historical_ticks(
+    request_id: i32,
+    contract: &Contract,
+    start: Option<OffsetDateTime>,
+    end: Option<OffsetDateTime>,
+    number_of_ticks: i32,
+    what_to_show: WhatToShow,
+    ignore_size: bool,
+) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::default();
+
+    message.push_field(&OutgoingMessages::RequestHistoricalTicks);
+    message.push_field(&request_id);
+    contract.push_fields(&mut message);
+    message.push_field(&start);
+    message.push_field(&end);
+    message.push_field(&number_of_ticks);
+    message.push_field(&what_to_show);
+    message.push_field(&ignore_size);
+    message.push_field(&"");        // misc options
+    
+    Ok(message)
+}
+
 #[cfg(test)]
 mod tests {
     use time::macros::datetime;
@@ -127,7 +152,7 @@ mod tests {
         let what_to_show = WhatToShow::Trades;
         let use_rth = false;
 
-        let results = super::encode_head_timestamp(request_id, &contract, what_to_show, use_rth);
+        let results = super::encode_request_head_timestamp(request_id, &contract, what_to_show, use_rth);
 
         match results {
             Ok(message) => {

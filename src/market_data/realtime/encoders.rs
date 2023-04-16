@@ -74,7 +74,7 @@ pub(crate) fn tick_by_tick(
 ) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::default();
 
-    message.push_field(&OutgoingMessages::ReqTickByTickData);
+    message.push_field(&OutgoingMessages::RequestTickByTickData);
     message.push_field(&request_id);
     message.push_field(&contract.contract_id);
     message.push_field(&contract.symbol);
@@ -161,7 +161,7 @@ mod tests {
 
         match results {
             Ok(message) => {
-                assert_eq!(message[0], OutgoingMessages::ReqTickByTickData.to_field(), "message.type");
+                assert_eq!(message[0], OutgoingMessages::RequestTickByTickData.to_field(), "message.type");
                 assert_eq!(message[1], request_id.to_field(), "message.request_id");
                 assert_eq!(message[2], contract.contract_id.to_field(), "message.contract_id");
                 assert_eq!(message[3], contract.symbol, "message.symbol");

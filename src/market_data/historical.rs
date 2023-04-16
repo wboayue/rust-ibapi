@@ -290,7 +290,7 @@ pub(crate) fn head_timestamp(client: &Client, contract: &Contract, what_to_show:
     client.check_server_version(server_versions::REQ_HEAD_TIMESTAMP, "It does not support head time stamp requests.")?;
 
     let request_id = client.next_request_id();
-    let request = encoders::encode_head_timestamp(request_id, contract, what_to_show, use_rth)?;
+    let request = encoders::encode_request_head_timestamp(request_id, contract, what_to_show, use_rth)?;
 
     let mut messages = client.send_request(request_id, request)?;
 
@@ -422,12 +422,19 @@ pub(crate) fn historical_ticks_bid_ask(
 pub(crate) fn historical_ticks_mid_point(
     client: &Client,
     contract: &Contract,
-    start_date: Option<OffsetDateTime>,
-    end_date: Option<OffsetDateTime>,
+    start: Option<OffsetDateTime>,
+    end: Option<OffsetDateTime>,
     number_of_ticks: i32,
     use_rth: bool,
 ) -> Result<TickMidPointIterator, Error> {
-    print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?}");
+    client.check_server_version(
+        server_versions::HISTORICAL_TICKS,
+        "It does not support historical ticks request.",
+    )?;
+
+    let request_id = client.next_request_id();
+    encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, use_rth);
+
     Err(Error::NotImplemented)
 }
 
