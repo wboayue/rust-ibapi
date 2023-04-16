@@ -1,12 +1,18 @@
+use time::{format_description::FormatItem, macros::format_description};
+use time_tz::OffsetDateTimeExt;
+
 use crate::messages::OutgoingMessages;
 
 use super::*;
 
 const DATE_FORMAT: i32 = 2; // 1 for yyyyMMdd HH:mm:ss, 2 for system time format in seconds.
+const END_DATE_FORMAT: &[FormatItem] = format_description!("[year][month][day] [hour]:[minute]:[second]");
 
 impl ToField for OffsetDateTime {
     fn to_field(&self) -> String {
-        "30 days".into()
+        let adjusted = self.to_timezone(time_tz::timezones::db::UTC);
+        let formatted = adjusted.format(END_DATE_FORMAT).unwrap();
+        format!("{formatted} UTC")
     }
 }
 
@@ -139,6 +145,7 @@ pub(super) fn encode_request_historical_ticks(
 #[cfg(test)]
 mod tests {
     use time::macros::datetime;
+    use time_tz::{self, PrimitiveDateTimeExt};
 
     use crate::messages::OutgoingMessages;
     use crate::ToField;
@@ -260,5 +267,18 @@ mod tests {
                 assert!(false, "error encoding historical data request: {err}");
             }
         }
+    }
+
+    #[test]
+    fn test_encode_interval() {
+        let ny = time_tz::timezones::db::america::NEW_YORK;
+
+        let empty_end: Option<OffsetDateTime> = None;
+        let valid_end_utc: Option<OffsetDateTime> = Some(datetime!(2023-04-15 10:00 UTC));
+        let valid_end_ny: Option<OffsetDateTime> = Some(datetime!(2023-04-15 10:00).assume_timezone(ny).unwrap());
+
+        assert_eq!(empty_end.to_field(), "", "encode empty end");
+        assert_eq!(valid_end_utc.to_field(), "20230415 10:00:00 UTC", "encode end utc");
+        assert_eq!(valid_end_ny.to_field(), "20230415 14:00:00 UTC", "encode end from America/NewYork");
     }
 }
