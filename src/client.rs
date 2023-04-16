@@ -626,7 +626,7 @@ impl Client {
         contract: &Contract,
         interval_end: OffsetDateTime,
         duration: historical::Duration,
-    ) -> Result<historical::HistoricalSchedule, Error> {
+    ) -> Result<historical::Schedule, Error> {
         historical::historical_schedule(self, contract, Some(interval_end), duration)
     }
 
@@ -661,36 +661,38 @@ impl Client {
         &self,
         contract: &Contract,
         duration: historical::Duration,
-    ) -> Result<historical::HistoricalSchedule, Error> {
+    ) -> Result<historical::Schedule, Error> {
         historical::historical_schedule(self, contract, None, duration)
     }
 
-    // Requests historical Time&Sales data for an instrument.
-
-    // Parameters
-    // reqId	id of the request
-    // contract	Contract object that is subject of query
-    // startDateTime,i.e.	"20170701 12:01:00". Uses TWS timezone specified at login.
-    // endDateTime,i.e.	"20170701 13:01:00". In TWS timezone. Exactly one of start time and end time has to be defined.
-    // numberOfTicks	Number of distinct data points. Max currently 1000 per request.
-    // whatToShow	(Bid_Ask, Midpoint, Trades) Type of data requested.
-    // useRth	Data from regular trading hours (1), or all available hours (0)
-    // ignoreSize	A filter only used when the source price is Bid_Ask
-    // miscOptions	should be defined as null, reserved for internal use
-    fn historical_ticks_bid_ask(
+    /// Requests historical Time & Sales data for an instrument.
+    ///
+    /// Parameters
+    /// reqId	id of the request
+    /// contract	Contract object that is subject of query
+    /// startDateTime,i.e.	"20170701 12:01:00". Uses TWS timezone specified at login.
+    /// endDateTime,i.e.	"20170701 13:01:00". In TWS timezone. Exactly one of start time and end time has to be defined.
+    /// numberOfTicks	Number of distinct data points. Max currently 1000 per request.
+    /// whatToShow	(Bid_Ask, Midpoint, Trades) Type of data requested.
+    /// useRth	Data from regular trading hours (1), or all available hours (0)
+    /// ignoreSize	A filter only used when the source price is Bid_Ask
+    /// miscOptions	should be defined as null, reserved for internal use
+    pub fn historical_ticks_bid_ask(
         contract: &Contract,
         start: Option<OffsetDateTime>,
         end: Option<OffsetDateTime>,
         number_of_ticks: i32,
         use_rth: bool,
         ignore_size: bool,
-    ) {
+    ) -> Result<impl Iterator<Item = historical::TickBidAsk>, Error> {
     }
 
-    fn historical_ticks_mid_point(start: Option<OffsetDateTime>, end: Option<OffsetDateTime>, number_of_ticks: i32, use_rth: bool) {}
+    pub fn historical_ticks_mid_point(start: Option<OffsetDateTime>, end: Option<OffsetDateTime>, number_of_ticks: i32, use_rth: bool) -> Result<impl Iterator<Item = historical::TickMidpoint>, Error> {
+        Err(Error::NotImplemented)
+    }
 
-    fn historical_ticks_trades(start: Option<OffsetDateTime>, end: Option<OffsetDateTime>, number_of_ticks: i32, use_rth: bool) {
-        
+    fn historical_ticks_trades(start: Option<OffsetDateTime>, end: Option<OffsetDateTime>, number_of_ticks: i32, use_rth: bool) -> Result<impl Iterator<Item = historical::TickLast>, Error>  {
+        Err(Error::NotImplemented)        
     }
 
     // === Realtime Market Data ===

@@ -175,56 +175,71 @@ pub struct HistoricalData {
 }
 
 #[derive(Debug)]
-pub struct HistoricalSchedule {
+pub struct Schedule {
     pub start: OffsetDateTime,
     pub end: OffsetDateTime,
     pub time_zone: String,
-    pub sessions: Vec<HistoricalSession>,
+    pub sessions: Vec<Session>,
 }
 
 #[derive(Debug)]
-pub struct HistoricalSession {
+pub struct Session {
     pub reference: Date,
     pub start: OffsetDateTime,
     pub end: OffsetDateTime,
 }
 
-struct HistoricalTick {
-    pub time: i32,
+/// The historical tick's description. Used when requesting historical tick data with whatToShow = MIDPOINT
+pub struct TickMidpoint {
+    /// timestamp of the historical tick.
+    pub timestamp: OffsetDateTime,
+    /// historical tick price.
     pub price: f64,
+    /// historical tick size
     pub size: i32,
 }
 
-struct HistoricalTickBidAsk {
-    pub time: i32,
+/// The historical tick's description. Used when requesting historical tick data with whatToShow = BID_ASK.
+pub struct TickBidAsk {
+    /// Timestamp of the historical tick.
+    pub timestamp: OffsetDateTime,
+    /// Tick attributes of historical bid/ask tick.
     pub tick_attrib_bid_ask: TickAttribBidAsk,
+    /// Bid price of the historical tick.
     pub price_bid: f64,
+    /// Ask price of the historical tick.
     pub price_ask: f64,
+    /// Bid size of the historical tick
     pub size_bid: i32,
+    /// ask size of the historical tick
     pub size_ask: i32,
 }
-
-struct HistoricalTickLast {
-    pub time: i32,
-    pub price: f64,
-    pub size: i32,
-}
-
-// pub struct TickAttrib {
-//     pub can_auto_execute: bool,
-//     pub past_limit: bool,
-//     pub pre_open: bool,
-// }
 
 pub struct TickAttribBidAsk {
     pub bid_past_low: bool,
     pub ask_past_high: bool,
 }
 
-// pub struct TickAttribLast {
-//     pub past_limit: bool,
-//     pub unreported: bool,
-// }
+/// The historical last tick's description. Used when requesting historical tick data with whatToShow = TRADES.
+pub struct TickLast {
+    /// Timestamp of the historical tick.
+    pub timestamp: OffsetDateTime,
+    /// Tick attributes of historical bid/ask tick.
+    pub tick_attrib_last: TickAttribLast,
+    /// Last price of the historical tick.
+    pub price: f64,
+    /// Last size of the historical tick.
+    pub size: i32,
+    /// Source exchange of the historical tick.
+    pub exchange: String,
+    /// Conditions of the historical tick. Refer to Trade Conditions page for more details: <https://www.interactivebrokers.com/en/index.php?f=7235>.
+    pub special_conditions: String,
+}
+
+pub struct TickAttribLast {
+    pub past_limit: bool,
+    pub unreported: bool,
+}
 
 #[derive(Clone, Debug, Copy, PartialEq)]
 pub enum WhatToShow {
@@ -351,7 +366,7 @@ pub(crate) fn historical_schedule(
     contract: &Contract,
     end_date: Option<OffsetDateTime>,
     duration: Duration,
-) -> Result<HistoricalSchedule, Error> {
+) -> Result<Schedule, Error> {
     if !contract.trading_class.is_empty() || contract.contract_id > 0 {
         client.check_server_version(
             server_versions::TRADING_CLASS,
@@ -442,10 +457,10 @@ impl HistoricalTickIterator {
 
 impl Iterator for HistoricalTickIterator {
     // we will be counting with usize
-    type Item = HistoricalTick;
+    type Item = TickMidpoint;
 
     // next() is the only required method
-    fn next(&mut self) -> Option<HistoricalTick> {
+    fn next(&mut self) -> Option<TickMidpoint> {
         None
     }
 }
