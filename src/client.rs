@@ -657,11 +657,7 @@ impl Client {
     ///     println!("{session:?}");
     /// }
     /// ```
-    pub fn historical_schedules_ending_now(
-        &self,
-        contract: &Contract,
-        duration: historical::Duration,
-    ) -> Result<historical::Schedule, Error> {
+    pub fn historical_schedules_ending_now(&self, contract: &Contract, duration: historical::Duration) -> Result<historical::Schedule, Error> {
         historical::historical_schedule(self, contract, None, duration)
     }
 
@@ -689,11 +685,25 @@ impl Client {
         historical::historical_ticks_bid_ask(self, contract, start, end, number_of_ticks, use_rth, ignore_size)
     }
 
-    pub fn historical_ticks_mid_point(&self, contract: &Contract, start: Option<OffsetDateTime>, end: Option<OffsetDateTime>, number_of_ticks: i32, use_rth: bool) -> Result<impl Iterator<Item = historical::TickMidpoint>, Error> {
+    pub fn historical_ticks_mid_point(
+        &self,
+        contract: &Contract,
+        start: Option<OffsetDateTime>,
+        end: Option<OffsetDateTime>,
+        number_of_ticks: i32,
+        use_rth: bool,
+    ) -> Result<impl Iterator<Item = historical::TickMidpoint>, Error> {
         historical::historical_ticks_mid_point(self, contract, start, end, number_of_ticks, use_rth)
     }
 
-    pub fn historical_ticks_trade(&self, contract: &Contract, start: Option<OffsetDateTime>, end: Option<OffsetDateTime>, number_of_ticks: i32, use_rth: bool) -> Result<impl Iterator<Item = historical::TickLast>, Error>  {
+    pub fn historical_ticks_trade(
+        &self,
+        contract: &Contract,
+        start: Option<OffsetDateTime>,
+        end: Option<OffsetDateTime>,
+        number_of_ticks: i32,
+        use_rth: bool,
+    ) -> Result<impl Iterator<Item = historical::TickLast>, Error> {
         historical::historical_ticks_trade(self, contract, start, end, number_of_ticks, use_rth)
     }
 

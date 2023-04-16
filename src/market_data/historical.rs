@@ -419,7 +419,6 @@ pub(crate) fn historical_ticks_bid_ask(
     Err(Error::NotImplemented)
 }
 
-
 pub(crate) fn historical_ticks_mid_point(
     client: &Client,
     contract: &Contract,
