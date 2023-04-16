@@ -181,32 +181,32 @@ mod tests {
         }
     }
 
-    // #[test]
+    #[test]
     fn test_decode_historical_data() {
-        let mut message = ResponseMessage::from("88\09000\01560346200\0");
+        let mut message = ResponseMessage::from("17\09000\020230413  16:31:22\020230415  16:31:22\02\020230413\0182.9400\0186.5000\0180.9400\0185.9000\0948837.22\0184.869\0324891\020230414\0183.8800\0186.2800\0182.0100\0185.0000\0810998.27\0183.9865\0277547\0");
 
-        let server_version = server_versions::ACCOUNT_SUMMARY;
+        let server_version = server_versions::HISTORICAL_SCHEDULE;
         let time_zone: &Tz = time_tz::timezones::db::america::NEW_YORK;
 
         let results = decode_historical_data(server_version, time_zone, &mut message);
 
         if let Ok(historical_data) = results {
-            assert_eq!(historical_data.start, datetime!(2019-06-12 13:30 UTC), "historical_data.start");
-            assert_eq!(historical_data.end, datetime!(2019-06-12 13:30 UTC), "historical_data.end");
+            assert_eq!(historical_data.start, datetime!(2023-04-13 16:31:22).assume_timezone(time_zone).unwrap(), "historical_data.start");
+            assert_eq!(historical_data.end, datetime!(2023-04-15 16:31:22).assume_timezone(time_zone).unwrap(), "historical_data.end");
 
-            assert_eq!(historical_data.bars.len(), 1, "historical_data.bars.len()");
+            assert_eq!(historical_data.bars.len(), 2, "historical_data.bars.len()");
             assert_eq!(
                 historical_data.bars[0].date,
-                datetime!(2019-06-12 13:30).assume_timezone(time_zone).unwrap(),
+                datetime!(2023-04-13 0:00:00 UTC),
                 "historical_data.bars[0].date"
             );
-            assert_eq!(historical_data.bars[0].open, 10.0, "historical_data.bars[0].open");
-            assert_eq!(historical_data.bars[0].high, 10.3, "historical_data.bars[0].high");
-            assert_eq!(historical_data.bars[0].low, 12.0, "historical_data.bars[0].low");
-            assert_eq!(historical_data.bars[0].close, 23.0, "historical_data.bars[0].close");
-            assert_eq!(historical_data.bars[0].volume, 23.0, "historical_data.bars[0].volume");
-            assert_eq!(historical_data.bars[0].wap, 23.0, "historical_data.bars[0].wap");
-            assert_eq!(historical_data.bars[0].count, 23, "historical_data.bars[0].count");
+            assert_eq!(historical_data.bars[0].open, 182.94, "historical_data.bars[0].open");
+            assert_eq!(historical_data.bars[0].high, 186.50, "historical_data.bars[0].high");
+            assert_eq!(historical_data.bars[0].low, 180.94, "historical_data.bars[0].low");
+            assert_eq!(historical_data.bars[0].close, 185.90, "historical_data.bars[0].close");
+            assert_eq!(historical_data.bars[0].volume, 948837.22, "historical_data.bars[0].volume");
+            assert_eq!(historical_data.bars[0].wap, 184.869, "historical_data.bars[0].wap");
+            assert_eq!(historical_data.bars[0].count, 324891, "historical_data.bars[0].count");
         } else if let Err(err) = results {
             assert!(false, "error decoding historical data {err}");
         }
