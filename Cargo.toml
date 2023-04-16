@@ -1,6 +1,6 @@
 [package]
 name = "ibapi"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 authors = ["Wil Boayue <wil@wsbsolutions.com>"]
 description = "A synchronous implementation of the Interactive Brokers TWS API."
