@@ -427,13 +427,10 @@ pub(crate) fn historical_ticks_mid_point(
     number_of_ticks: i32,
     use_rth: bool,
 ) -> Result<TickMidPointIterator, Error> {
-    client.check_server_version(
-        server_versions::HISTORICAL_TICKS,
-        "It does not support historical ticks request.",
-    )?;
+    client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
 
     let request_id = client.next_request_id();
-    encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, use_rth);
+    encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::MidPoint, use_rth, false);
 
     Err(Error::NotImplemented)
 }
