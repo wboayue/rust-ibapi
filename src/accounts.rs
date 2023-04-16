@@ -18,7 +18,7 @@ pub struct Position {
 
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.
-pub(crate) fn positions<'a>(client: &'a Client) -> Result<impl Iterator<Item = Position> + 'a, Error> {
+pub(crate) fn positions(client: &Client) -> Result<impl Iterator<Item = Position> + '_, Error> {
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position requests.")?;
 
     let message = encoders::request_positions()?;

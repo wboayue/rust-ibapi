@@ -16,14 +16,14 @@ fn realtime_bars() {
         response_messages: vec!["50|3|9001|1678323335|4028.75|4029.00|4028.25|4028.50|2|4026.75|1|".to_owned()],
     }));
 
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let contract = contract_samples::future_with_local_symbol();
     let bar_size = BarSize::Sec5;
     let what_to_show = WhatToShow::Trades;
     let use_rth = true;
 
-    let bars = super::realtime_bars(&mut client, &contract, &bar_size, &what_to_show, use_rth);
+    let bars = client.realtime_bars(&contract, bar_size, what_to_show, use_rth);
     assert!(bars.is_ok(), "failed to request realtime bars: {}", bars.err().unwrap());
 
     // Verify Responses
@@ -86,4 +86,12 @@ fn realtime_bars() {
     assert_eq!(cancel_request[0], OutgoingMessages::CancelRealTimeBars.to_field(), "message.message_type");
     assert_eq!(cancel_request[1], "1", "message.version");
     assert_eq!(cancel_request[2], "9000", "message.request_id");
+}
+
+#[test]
+fn what_to_show() {
+    assert_eq!(WhatToShow::Trades.to_string(), "TRADES");
+    assert_eq!(WhatToShow::MidPoint.to_string(), "MIDPOINT");
+    assert_eq!(WhatToShow::Bid.to_string(), "BID");
+    assert_eq!(WhatToShow::Ask.to_string(), "ASK");
 }

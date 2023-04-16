@@ -19,15 +19,15 @@ fn request_stock_contract_details() {
 
     let contract = Contract::stock("TSLA");
 
-    let results = super::contract_details(&mut client, &contract);
+    let results = client.contract_details(&contract);
 
     let request_messages = client.message_bus.borrow().request_messages();
 
     assert_eq!(request_messages[0].encode_simple(), "9|8|9000|0|TSLA|STK||0|||SMART||USD|||0|||");
 
-    assert!(results.is_ok(), "failed to encode request: {:?}", results.unwrap_err());
+    assert!(results.is_ok(), "failed to encode request: {:?}", results.err());
 
-    let contracts = results.unwrap();
+    let contracts: Vec<ContractDetails> = results.unwrap().collect();
     assert_eq!(2, contracts.len());
 
     assert_eq!(contracts[0].contract.exchange, "SMART");

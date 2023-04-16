@@ -98,23 +98,35 @@ pub struct TradeAttribute {
     pub unreported: bool,
 }
 
-pub use super::WhatToShow;
+#[derive(Clone, Debug, Copy)]
+pub enum WhatToShow {
+    Trades,
+    MidPoint,
+    Bid,
+    Ask,
+}
+
+impl ToString for WhatToShow {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Trades => "TRADES".to_string(),
+            Self::MidPoint => "MIDPOINT".to_string(),
+            Self::Bid => "BID".to_string(),
+            Self::Ask => "ASK".to_string(),
+        }
+    }
+}
+
+impl ToField for WhatToShow {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
 
 // === Implementation ===
 
 // Requests realtime bars.
 pub(crate) fn realtime_bars<'a>(
-    client: &'a Client,
-    contract: &Contract,
-    bar_size: &BarSize,
-    what_to_show: &WhatToShow,
-    use_rth: bool,
-) -> Result<RealTimeBarIterator<'a>, Error> {
-    realtime_bars_with_options(client, contract, bar_size, what_to_show, use_rth, Vec::default())
-}
-
-// Requests realtime bars.
-pub(crate) fn realtime_bars_with_options<'a>(
     client: &'a Client,
     contract: &Contract,
     bar_size: &BarSize,

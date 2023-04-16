@@ -7,7 +7,7 @@ use byteorder::{BigEndian, WriteBytesExt};
 use log::{debug, error, info};
 use time::macros::format_description;
 use time::OffsetDateTime;
-use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt};
+use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
 use crate::accounts::Position;
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
@@ -36,6 +36,7 @@ pub struct Client {
     /// IB Server time
     //    pub server_time: OffsetDateTime,
     pub(crate) connection_time: OffsetDateTime,
+    pub(crate) time_zone: &'static Tz,
 
     managed_accounts: String,
     client_id: i32, // ID of client.
@@ -74,6 +75,7 @@ impl Client {
         let mut client = Client {
             server_version: 0,
             connection_time: OffsetDateTime::now_utc(),
+            time_zone: time_tz::timezones::db::UTC,
             managed_accounts: String::from(""),
             message_bus,
             client_id,
@@ -105,7 +107,7 @@ impl Client {
                 self.server_version = response_message.next_int()?;
 
                 let time = response_message.next_string()?;
-                self.connection_time = parse_connection_time(time.as_str());
+                (self.connection_time, self.time_zone) = parse_connection_time(time.as_str());
             }
             Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
                 return Err(Error::Simple(format!("The server may be rejecting connections from this host: {err}")));
@@ -484,22 +486,183 @@ impl Client {
 
     /// Returns the timestamp of earliest available historical data for a contract and data type.
     /// ```no_run
-    ///     use ibapi::Client;
-    ///     use ibapi::contracts::Contract;
-    ///     use ibapi::market_data::historical::{self, WhatToShow};
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::historical::{self, WhatToShow};
     ///
-    ///     let mut client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let mut client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    ///     let contract = Contract::stock("MSFT");
-    ///     let what_to_show = WhatToShow::Trades;
-    ///     let use_rth = true;
+    /// let contract = Contract::stock("MSFT");
+    /// let what_to_show = WhatToShow::Trades;
+    /// let use_rth = true;
     ///
-    ///     let result = client.head_timestamp(&contract, what_to_show, use_rth).expect("head timestamp failed");
+    /// let result = client.head_timestamp(&contract, what_to_show, use_rth).expect("head timestamp failed");
     ///
-    ///     print!("head_timestamp: {result:?}");
+    /// print!("head_timestamp: {result:?}");
     /// ```
     pub fn head_timestamp(&self, contract: &Contract, what_to_show: historical::WhatToShow, use_rth: bool) -> Result<OffsetDateTime, Error> {
         historical::head_timestamp(self, contract, what_to_show, use_rth)
+    }
+
+    /// Requests interval of historical data ending at specified time for [Contract].
+    ///
+    /// # Arguments
+    /// * `contract`     - [Contract] to retrieve [historical::HistoricalData] for.
+    /// * `interval_end` - end date of interval to retrieve [historical::HistoricalData] for.
+    /// * `duration`     - duration of interval to retrieve [historical::HistoricalData] for.
+    /// * `bar_size`     - [historical::BarSize] to return.
+    /// * `what_to_show` - requested bar type: [historical::WhatToShow].
+    /// * `use_rth`      - use regular trading hours.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    ///
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    /// use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("TSLA");
+    ///
+    /// let historical_data = client
+    ///     .historical_data(&contract, datetime!(2023-04-15 0:00 UTC), 7.days(), BarSize::Day, WhatToShow::Trades, true)
+    ///     .expect("historical data request failed");
+    ///
+    /// println!("start_date: {}, end_date: {}", historical_data.start, historical_data.end);
+    ///
+    /// for bar in &historical_data.bars {
+    ///     println!("{bar:?}");
+    /// }
+    /// ```
+    pub fn historical_data(
+        &self,
+        contract: &Contract,
+        interval_end: OffsetDateTime,
+        duration: historical::Duration,
+        bar_size: historical::BarSize,
+        what_to_show: historical::WhatToShow,
+        use_rth: bool,
+    ) -> Result<historical::HistoricalData, Error> {
+        historical::historical_data(self, contract, Some(interval_end), duration, bar_size, Some(what_to_show), use_rth)
+    }
+
+    /// Requests interval of historical data end now for [Contract].
+    ///
+    /// # Arguments
+    /// * `contract`     - [Contract] to retrieve [historical::HistoricalData] for.
+    /// * `duration`     - duration of interval to retrieve [historical::HistoricalData] for.
+    /// * `bar_size`     - [historical::BarSize] to return.
+    /// * `what_to_show` - requested bar type: [historical::WhatToShow].
+    /// * `use_rth`      - use regular trading hours.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    /// use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("TSLA");
+    ///
+    /// let historical_data = client
+    ///     .historical_data_ending_now(&contract, 7.days(), BarSize::Day, WhatToShow::Trades, true)
+    ///     .expect("historical data request failed");
+    ///
+    /// println!("start_date: {}, end_date: {}", historical_data.start, historical_data.end);
+    ///
+    /// for bar in &historical_data.bars {
+    ///     println!("{bar:?}");
+    /// }
+    /// ```
+    pub fn historical_data_ending_now(
+        &self,
+        contract: &Contract,
+        duration: historical::Duration,
+        bar_size: historical::BarSize,
+        what_to_show: historical::WhatToShow,
+        use_rth: bool,
+    ) -> Result<historical::HistoricalData, Error> {
+        historical::historical_data(self, contract, None, duration, bar_size, Some(what_to_show), use_rth)
+    }
+
+    /// Requests [historical::HistoricalSchedule] for an interval of given duration
+    /// ending at specified date.
+    ///
+    /// # Arguments
+    /// * `contract`     - [Contract] to retrieve [historical::HistoricalSchedule] for.
+    /// * `interval_end` - end date of interval to retrieve [historical::HistoricalSchedule] for.
+    /// * `duration`     - duration of interval to retrieve [historical::HistoricalSchedule] for.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    //
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    /// use ibapi::market_data::historical::ToDuration;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("GM");
+    ///
+    /// let historical_data = client
+    ///     .historical_schedules(&contract, datetime!(2023-04-15 0:00 UTC), 30.days())
+    ///     .expect("historical schedule request failed");
+    ///
+    /// println!("start: {:?}, end: {:?}", historical_data.start, historical_data.end);
+    ///
+    /// for session in &historical_data.sessions {
+    ///     println!("{session:?}");
+    /// }
+    /// ```
+    pub fn historical_schedules(
+        &self,
+        contract: &Contract,
+        interval_end: OffsetDateTime,
+        duration: historical::Duration,
+    ) -> Result<historical::HistoricalSchedule, Error> {
+        historical::historical_schedule(self, contract, Some(interval_end), duration)
+    }
+
+    /// Requests [historical::HistoricalSchedule] for interval ending at current time.
+    ///
+    /// # Arguments
+    /// * `contract` - [Contract] to retrieve [historical::HistoricalSchedule] for.
+    /// * `duration` - [historical::Duration] for interval to retrieve [historical::HistoricalSchedule] for.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    /// use ibapi::market_data::historical::ToDuration;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("GM");
+    ///
+    /// let historical_data = client
+    ///     .historical_schedules_ending_now(&contract, 30.days())
+    ///     .expect("historical schedule request failed");
+    ///
+    /// println!("start: {:?}, end: {:?}", historical_data.start, historical_data.end);
+    ///
+    /// for session in &historical_data.sessions {
+    ///     println!("{session:?}");
+    /// }
+    /// ```
+    pub fn historical_schedules_ending_now(
+        &self,
+        contract: &Contract,
+        duration: historical::Duration,
+    ) -> Result<historical::HistoricalSchedule, Error> {
+        historical::historical_schedule(self, contract, None, duration)
     }
 
     // === Realtime Market Data ===
@@ -534,7 +697,7 @@ impl Client {
         what_to_show: WhatToShow,
         use_rth: bool,
     ) -> Result<impl Iterator<Item = Bar> + 'a, Error> {
-        realtime::realtime_bars_with_options(self, contract, &bar_size, &what_to_show, use_rth, Vec::default())
+        realtime::realtime_bars(self, contract, &bar_size, &what_to_show, use_rth, Vec::default())
     }
 
     /// Requests tick by tick AllLast ticks.
@@ -604,6 +767,7 @@ impl Client {
         Client {
             server_version: server_version,
             connection_time: OffsetDateTime::now_utc(),
+            time_zone: time_tz::timezones::db::UTC,
             managed_accounts: String::from(""),
             message_bus,
             client_id: 100,
@@ -672,17 +836,17 @@ impl Debug for Client {
 }
 
 // Parses following format: 20230405 22:20:39 PST
-fn parse_connection_time(connection_time: &str) -> OffsetDateTime {
+fn parse_connection_time(connection_time: &str) -> (OffsetDateTime, &'static Tz) {
     let parts: Vec<&str> = connection_time.split(' ').collect();
 
     let zones = timezones::find_by_name(parts[2]);
 
     let format = format_description!("[year][month][day] [hour]:[minute]:[second]");
     let date = time::PrimitiveDateTime::parse(format!("{} {}", parts[0], parts[1]).as_str(), format).unwrap();
-
-    match date.assume_timezone(zones[0]) {
-        OffsetResult::Some(date) => date,
-        _ => OffsetDateTime::now_utc(),
+    let timezone = zones[0];
+    match date.assume_timezone(timezone) {
+        OffsetResult::Some(date) => (date, timezone),
+        _ => (OffsetDateTime::now_utc(), time_tz::timezones::db::UTC),
     }
 }
 

@@ -1,7 +1,7 @@
 use clap::{arg, Command};
 
 use ibapi::contracts::Contract;
-use ibapi::market_data::historical::{self, WhatToShow};
+use ibapi::market_data::historical::WhatToShow;
 use ibapi::Client;
 
 fn main() {

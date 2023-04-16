@@ -124,9 +124,16 @@ impl BreakoutChannel {
 * [market_rule](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.market_rule)
 * [matching_symbols](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.matching_symbols)
 
-### Market Data
+### Historical Market Data
 
 * [head_timestamp](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.head_timestamp)
+* [historical_data](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.historical_data)
+* [historical_data_ending_now](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.historical_data_ending_now)
+* [historical_schedules](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.historical_schedules)
+* [historical_schedules_ending_now](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.historical_schedules_ending_now)
+
+### Realtime Market Data
+
 * [realtime_bars](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.realtime_bars)
 * [tick_by_tick_all_last](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.tick_by_tick_all_last)
 * [tick_by_tick_bid_ask](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.tick_by_tick_bid_ask)
