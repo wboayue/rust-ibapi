@@ -1,5 +1,9 @@
+use std::collections::VecDeque;
+
+use log::error;
 use time::{Date, OffsetDateTime};
 
+use crate::client::transport::ResponseIterator;
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Client, Error, ToField};
@@ -430,9 +434,14 @@ pub(crate) fn historical_ticks_mid_point(
     client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
 
     let request_id = client.next_request_id();
-    encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::MidPoint, use_rth, false);
+    let message = encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::MidPoint, use_rth, false)?;
 
-    Err(Error::NotImplemented)
+    let mut messages = client.send_request(request_id, message)?;
+
+    Ok(TickMidPointIterator {
+        messages,
+        buffer: VecDeque::new(),
+    })
 }
 
 pub(crate) fn historical_ticks_trade(
@@ -447,22 +456,39 @@ pub(crate) fn historical_ticks_trade(
     Err(Error::NotImplemented)
 }
 
-#[derive(Default)]
-pub(crate) struct TickMidPointIterator {}
-
-impl TickMidPointIterator {
-    pub fn new() -> TickMidPointIterator {
-        TickMidPointIterator {}
-    }
+pub(crate) struct TickMidPointIterator {
+    messages: ResponseIterator,
+    buffer: VecDeque<TickMidpoint>,
 }
 
 impl Iterator for TickMidPointIterator {
-    // we will be counting with usize
     type Item = TickMidpoint;
 
-    // next() is the only required method
     fn next(&mut self) -> Option<TickMidpoint> {
-        None
+        if !self.buffer.is_empty() {
+            return self.buffer.pop_front();
+        }
+
+        loop {
+            match self.messages.next() {
+                Some(mut message) => match message.message_type() {
+                    IncomingMessages::HistoricalSchedule => {
+                        let ticks = decoders::decode_historical_ticks_mid_point(&mut message).unwrap();
+                        self.buffer.append(&mut ticks.into());
+
+                        if !self.buffer.is_empty() {
+                            return self.buffer.pop_front();
+                        }
+                    }
+                    IncomingMessages::Error => {
+                        error!("error reading ticks: {:?}", message.peek_string(4));
+                        return None;
+                    }
+                    _ => error!("unexpected message: {:?}", message),
+                },
+                None => return None,
+            }
+        }
     }
 }
 

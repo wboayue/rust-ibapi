@@ -105,6 +105,33 @@ pub(super) fn decode_historical_schedule(message: &mut ResponseMessage) -> Resul
     })
 }
 
+pub(super) fn decode_historical_ticks_mid_point(message: &mut ResponseMessage) -> Result<Vec<TickMidpoint>, Error> {
+    message.skip(); // message type
+    message.skip(); // request_id
+
+    let start = message.next_string()?;
+    let end = message.next_string()?;
+    let time_zone_name = message.next_string()?;
+
+    let time_zone = parse_time_zone(&time_zone_name);
+
+    let sessions_count = message.next_int()?;
+    let mut sessions = Vec::<Session>::with_capacity(sessions_count as usize);
+    for _ in 0..sessions_count {
+        let session_start = message.next_string()?;
+        let session_end = message.next_string()?;
+        let session_reference = message.next_string()?;
+
+        sessions.push(Session {
+            start: parse_schedule_date_time(&session_start, time_zone)?,
+            end: parse_schedule_date_time(&session_end, time_zone)?,
+            reference: parse_schedule_date(&session_reference)?,
+        })
+    }
+
+    Ok(Vec::new())
+}
+
 fn parse_time_zone(name: &str) -> &Tz {
     let zones = timezones::find_by_name(name);
     if zones.is_empty() {
