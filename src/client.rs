@@ -665,6 +665,20 @@ impl Client {
         historical::historical_schedule(self, contract, None, duration)
     }
 
+    fn historical_ticks_bid_ask(
+        contract: &Contract,
+        start: Option<OffsetDateTime>,
+        end: Option<OffsetDateTime>,
+        number_of_ticks: i32,
+        use_rth: bool,
+        ignore_size: bool,
+    ) {
+    }
+
+    fn historical_ticks_mid_point(start: Option<OffsetDateTime>, end: Option<OffsetDateTime>, number_of_ticks: i32, use_rth: bool) {}
+
+    fn historical_ticks_trades(start: Option<OffsetDateTime>, end: Option<OffsetDateTime>, number_of_ticks: i32, use_rth: bool) {}
+
     // === Realtime Market Data ===
 
     /// Requests realtime bars.
