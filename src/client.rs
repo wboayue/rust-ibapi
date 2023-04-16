@@ -678,6 +678,7 @@ impl Client {
     /// ignoreSize	A filter only used when the source price is Bid_Ask
     /// miscOptions	should be defined as null, reserved for internal use
     pub fn historical_ticks_bid_ask(
+        &self,
         contract: &Contract,
         start: Option<OffsetDateTime>,
         end: Option<OffsetDateTime>,
@@ -685,14 +686,15 @@ impl Client {
         use_rth: bool,
         ignore_size: bool,
     ) -> Result<impl Iterator<Item = historical::TickBidAsk>, Error> {
+        historical::historical_ticks_bid_ask(self, contract, start, end, number_of_ticks, use_rth, ignore_size)
     }
 
-    pub fn historical_ticks_mid_point(start: Option<OffsetDateTime>, end: Option<OffsetDateTime>, number_of_ticks: i32, use_rth: bool) -> Result<impl Iterator<Item = historical::TickMidpoint>, Error> {
-        Err(Error::NotImplemented)
+    pub fn historical_ticks_mid_point(&self, contract: &Contract, start: Option<OffsetDateTime>, end: Option<OffsetDateTime>, number_of_ticks: i32, use_rth: bool) -> Result<impl Iterator<Item = historical::TickMidpoint>, Error> {
+        historical::historical_ticks_mid_point(self, contract, start, end, number_of_ticks, use_rth)
     }
 
-    fn historical_ticks_trades(start: Option<OffsetDateTime>, end: Option<OffsetDateTime>, number_of_ticks: i32, use_rth: bool) -> Result<impl Iterator<Item = historical::TickLast>, Error>  {
-        Err(Error::NotImplemented)        
+    pub fn historical_ticks_trade(&self, contract: &Contract, start: Option<OffsetDateTime>, end: Option<OffsetDateTime>, number_of_ticks: i32, use_rth: bool) -> Result<impl Iterator<Item = historical::TickLast>, Error>  {
+        historical::historical_ticks_trade(self, contract, start, end, number_of_ticks, use_rth)
     }
 
     // === Realtime Market Data ===

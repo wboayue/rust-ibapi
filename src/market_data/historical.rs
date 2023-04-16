@@ -406,56 +406,54 @@ pub(crate) fn historical_schedule(
     }
 }
 
-fn historical_ticks(
+pub(crate) fn historical_ticks_bid_ask(
     client: &Client,
     contract: &Contract,
-    start_date: Option<OffsetDateTime>,
-    end_date: Option<OffsetDateTime>,
+    start: Option<OffsetDateTime>,
+    end: Option<OffsetDateTime>,
     number_of_ticks: i32,
-    use_rth: i32,
+    use_rth: bool,
     ignore_size: bool,
-) -> Result<HistoricalTickIterator, Error> {
-    print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?} {ignore_size:?}");
+) -> Result<TickBidAskIterator, Error> {
+    print!("{client:?} {contract:?} {start:?} {end:?} {number_of_ticks:?} {use_rth:?} {ignore_size:?}");
     Err(Error::NotImplemented)
 }
 
-fn historical_ticks_bid_ask(
+
+pub(crate) fn historical_ticks_mid_point(
     client: &Client,
     contract: &Contract,
     start_date: Option<OffsetDateTime>,
     end_date: Option<OffsetDateTime>,
     number_of_ticks: i32,
-    use_rth: i32,
-    ignore_size: bool,
-) -> Result<HistoricalTickBidAskIterator, Error> {
-    print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?} {ignore_size:?}");
-
+    use_rth: bool,
+) -> Result<TickMidPointIterator, Error> {
+    print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?}");
     Err(Error::NotImplemented)
 }
 
-fn historical_ticks_last(
+pub(crate) fn historical_ticks_trade(
     client: &Client,
     contract: &Contract,
     start_date: Option<OffsetDateTime>,
     end_date: Option<OffsetDateTime>,
     number_of_ticks: i32,
-    use_rth: i32,
-    ignore_size: bool,
-) -> Result<HistoricalTickLastIterator, Error> {
-    print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?} {ignore_size:?}");
+    use_rth: bool,
+) -> Result<TickLastIterator, Error> {
+    print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?}");
     Err(Error::NotImplemented)
 }
 
 #[derive(Default)]
-struct HistoricalTickIterator {}
+pub(crate) struct TickMidPointIterator {}
 
-impl HistoricalTickIterator {
-    pub fn new() -> HistoricalTickIterator {
-        HistoricalTickIterator {}
+impl TickMidPointIterator {
+    pub fn new() -> TickMidPointIterator {
+        TickMidPointIterator {}
     }
 }
 
-impl Iterator for HistoricalTickIterator {
+impl Iterator for TickMidPointIterator {
     // we will be counting with usize
     type Item = TickMidpoint;
 
@@ -465,8 +463,24 @@ impl Iterator for HistoricalTickIterator {
     }
 }
 
-struct HistoricalTickBidAskIterator {}
+pub(crate) struct TickBidAskIterator {}
 
-struct HistoricalTickLastIterator {}
+impl Iterator for TickBidAskIterator {
+    type Item = TickBidAsk;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        todo!()
+    }
+}
+
+pub(crate) struct TickLastIterator {}
+
+impl Iterator for TickLastIterator {
+    type Item = TickLast;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        todo!()
+    }
+}
 
 struct HistogramDataIterator {}
