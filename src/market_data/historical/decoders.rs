@@ -163,19 +163,36 @@ mod tests {
     fn test_decode_historical_schedule() {
         let time_zone: &Tz = time_tz::timezones::db::america::NEW_YORK;
 
-        let mut message = ResponseMessage::from("106\09000\020230414-09:30:00\020230414-16:00:00\0US/Eastern\01\020230414-09:30:00\020230414-16:00:00\020230414\0");
+        let mut message =
+            ResponseMessage::from("106\09000\020230414-09:30:00\020230414-16:00:00\0US/Eastern\01\020230414-09:30:00\020230414-16:00:00\020230414\0");
 
         let results = decode_historical_schedule(&mut message);
 
         if let Ok(schedule) = results {
-            assert_eq!(schedule.start, datetime!(2023-04-14 9:30:00).assume_timezone(time_zone).unwrap(), "schedule.start");
-            assert_eq!(schedule.end, datetime!(2023-04-14 16:00:00).assume_timezone(time_zone).unwrap(), "schedule.end");
+            assert_eq!(
+                schedule.start,
+                datetime!(2023-04-14 9:30:00).assume_timezone(time_zone).unwrap(),
+                "schedule.start"
+            );
+            assert_eq!(
+                schedule.end,
+                datetime!(2023-04-14 16:00:00).assume_timezone(time_zone).unwrap(),
+                "schedule.end"
+            );
             assert_eq!(schedule.time_zone, "US/Eastern", "schedule.time_zone");
 
             assert_eq!(schedule.sessions.len(), 1, "schedule.sessions.len()");
-            assert_eq!(schedule.sessions[0].reference, date!(2023-04-14), "schedule.sessions[0].reference");
-            assert_eq!(schedule.sessions[0].start, datetime!(2023-04-14 9:30:00).assume_timezone(time_zone).unwrap(), "schedule.sessions[0].start");
-            assert_eq!(schedule.sessions[0].end, datetime!(2023-04-14 16:00:00.0).assume_timezone(time_zone).unwrap(), "schedule.sessions[0].end");
+            assert_eq!(schedule.sessions[0].reference, date!(2023 - 04 - 14), "schedule.sessions[0].reference");
+            assert_eq!(
+                schedule.sessions[0].start,
+                datetime!(2023-04-14 9:30:00).assume_timezone(time_zone).unwrap(),
+                "schedule.sessions[0].start"
+            );
+            assert_eq!(
+                schedule.sessions[0].end,
+                datetime!(2023-04-14 16:00:00.0).assume_timezone(time_zone).unwrap(),
+                "schedule.sessions[0].end"
+            );
         } else if let Err(err) = results {
             assert!(false, "error decoding historical schedule {err}");
         }
@@ -191,8 +208,16 @@ mod tests {
         let results = decode_historical_data(server_version, time_zone, &mut message);
 
         if let Ok(historical_data) = results {
-            assert_eq!(historical_data.start, datetime!(2023-04-13 16:31:22).assume_timezone(time_zone).unwrap(), "historical_data.start");
-            assert_eq!(historical_data.end, datetime!(2023-04-15 16:31:22).assume_timezone(time_zone).unwrap(), "historical_data.end");
+            assert_eq!(
+                historical_data.start,
+                datetime!(2023-04-13 16:31:22).assume_timezone(time_zone).unwrap(),
+                "historical_data.start"
+            );
+            assert_eq!(
+                historical_data.end,
+                datetime!(2023-04-15 16:31:22).assume_timezone(time_zone).unwrap(),
+                "historical_data.end"
+            );
 
             assert_eq!(historical_data.bars.len(), 2, "historical_data.bars.len()");
             assert_eq!(
