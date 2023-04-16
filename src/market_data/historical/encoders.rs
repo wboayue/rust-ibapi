@@ -1,4 +1,4 @@
-use time::{macros::{format_description}, format_description::FormatItem};
+use time::{format_description::FormatItem, macros::format_description};
 use time_tz::OffsetDateTimeExt;
 
 use crate::messages::OutgoingMessages;
@@ -6,12 +6,12 @@ use crate::messages::OutgoingMessages;
 use super::*;
 
 const DATE_FORMAT: i32 = 2; // 1 for yyyyMMdd HH:mm:ss, 2 for system time format in seconds.
-const END_FORMAT:&[FormatItem] = format_description!("[year][month][day] [hour]:[minute]:[second]");
+const END_DATE_FORMAT: &[FormatItem] = format_description!("[year][month][day] [hour]:[minute]:[second]");
 
 impl ToField for OffsetDateTime {
     fn to_field(&self) -> String {
         let adjusted = self.to_timezone(time_tz::timezones::db::UTC);
-        let formatted = adjusted.format(END_FORMAT).unwrap();
+        let formatted = adjusted.format(END_DATE_FORMAT).unwrap();
         format!("{formatted} UTC")
     }
 }
