@@ -194,6 +194,7 @@ pub struct Session {
 }
 
 /// The historical tick's description. Used when requesting historical tick data with whatToShow = MIDPOINT
+#[derive(Debug)]
 pub struct TickMidpoint {
     /// timestamp of the historical tick.
     pub timestamp: OffsetDateTime,
@@ -472,7 +473,7 @@ impl Iterator for TickMidPointIterator {
         loop {
             match self.messages.next() {
                 Some(mut message) => match message.message_type() {
-                    IncomingMessages::HistoricalSchedule => {
+                    IncomingMessages::HistoricalTick => {
                         let ticks = decoders::decode_historical_ticks_mid_point(&mut message).unwrap();
                         self.buffer.append(&mut ticks.into());
 

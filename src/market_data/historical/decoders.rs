@@ -1,3 +1,5 @@
+use core::num;
+
 use time::macros::{format_description, time};
 use time::{Date, PrimitiveDateTime};
 use time_tz::{timezones, OffsetDateTimeExt, PrimitiveDateTimeExt, Tz};
@@ -109,27 +111,21 @@ pub(super) fn decode_historical_ticks_mid_point(message: &mut ResponseMessage) -
     message.skip(); // message type
     message.skip(); // request_id
 
-    let start = message.next_string()?;
-    let end = message.next_string()?;
-    let time_zone_name = message.next_string()?;
+    let number_of_ticks = message.next_int()?;
+    let mut ticks = Vec::with_capacity(number_of_ticks as usize);
+    println!("message: #{message:?}");
+    for _ in 0..number_of_ticks {
+        let timestamp = message.next_date_time()?;
+        message.skip();     // for consistency
+        let price = message.next_double()?;
+        let size = message.next_int()?;
 
-    let time_zone = parse_time_zone(&time_zone_name);
-
-    let sessions_count = message.next_int()?;
-    let mut sessions = Vec::<Session>::with_capacity(sessions_count as usize);
-    for _ in 0..sessions_count {
-        let session_start = message.next_string()?;
-        let session_end = message.next_string()?;
-        let session_reference = message.next_string()?;
-
-        sessions.push(Session {
-            start: parse_schedule_date_time(&session_start, time_zone)?,
-            end: parse_schedule_date_time(&session_end, time_zone)?,
-            reference: parse_schedule_date(&session_reference)?,
-        })
+        ticks.push(TickMidpoint { timestamp, price, size });
     }
 
-    Ok(Vec::new())
+    // bool done = ReadBoolFromInt();
+
+    Ok(ticks)
 }
 
 fn parse_time_zone(name: &str) -> &Tz {
