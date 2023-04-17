@@ -211,7 +211,7 @@ pub struct TickBidAsk {
     /// Timestamp of the historical tick.
     pub timestamp: OffsetDateTime,
     /// Tick attributes of historical bid/ask tick.
-    pub tick_attrib_bid_ask: TickAttribBidAsk,
+    pub tick_attribute_bid_ask: TickAttributeBidAsk,
     /// Bid price of the historical tick.
     pub price_bid: f64,
     /// Ask price of the historical tick.
@@ -223,7 +223,7 @@ pub struct TickBidAsk {
 }
 
 #[derive(Debug)]
-pub struct TickAttribBidAsk {
+pub struct TickAttributeBidAsk {
     pub bid_past_low: bool,
     pub ask_past_high: bool,
 }
@@ -234,7 +234,7 @@ pub struct TickLast {
     /// Timestamp of the historical tick.
     pub timestamp: OffsetDateTime,
     /// Tick attributes of historical bid/ask tick.
-    pub tick_attrib_last: TickAttribLast,
+    pub tick_attribute_last: TickAttributeLast,
     /// Last price of the historical tick.
     pub price: f64,
     /// Last size of the historical tick.
@@ -246,7 +246,7 @@ pub struct TickLast {
 }
 
 #[derive(Debug)]
-pub struct TickAttribLast {
+pub struct TickAttributeLast {
     pub past_limit: bool,
     pub unreported: bool,
 }
@@ -427,7 +427,16 @@ pub(crate) fn historical_ticks_bid_ask(
     client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
 
     let request_id = client.next_request_id();
-    let message = encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::BidAsk, use_rth, ignore_size)?;
+    let message = encoders::encode_request_historical_ticks(
+        request_id,
+        contract,
+        start,
+        end,
+        number_of_ticks,
+        WhatToShow::BidAsk,
+        use_rth,
+        ignore_size,
+    )?;
 
     let messages = client.send_request(request_id, message)?;
 
@@ -477,7 +486,7 @@ pub(crate) trait TickDecoder<T> {
 
 impl TickDecoder<TickBidAsk> for TickBidAsk {
     fn decode(mut message: &mut ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
-        Ok((Vec::new(), true))
+        decoders::decode_historical_ticks_bid_ask(&mut message)
     }
     fn message_type() -> IncomingMessages {
         IncomingMessages::HistoricalTickBidAsk
@@ -486,7 +495,7 @@ impl TickDecoder<TickBidAsk> for TickBidAsk {
 
 impl TickDecoder<TickLast> for TickLast {
     fn decode(mut message: &mut ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
-        Ok((Vec::new(), true))
+        decoders::decode_historical_ticks_last(&mut message)
     }
     fn message_type() -> IncomingMessages {
         IncomingMessages::HistoricalTickLast

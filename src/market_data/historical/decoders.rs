@@ -107,6 +107,42 @@ pub(super) fn decode_historical_schedule(message: &mut ResponseMessage) -> Resul
     })
 }
 
+pub(super) fn decode_historical_ticks_bid_ask(message: &mut ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
+    message.skip(); // message type
+    message.skip(); // request_id
+
+    let number_of_ticks = message.next_int()?;
+    let mut ticks = Vec::with_capacity(number_of_ticks as usize);
+
+    for _ in 0..number_of_ticks {
+        let timestamp = message.next_date_time()?;
+
+        let mask = message.next_int()?;
+        let tick_attribute_bid_ask = TickAttributeBidAsk {
+            ask_past_high: (mask & 0x01) == 0x01,
+            bid_past_low: (mask & 0x02) == 0x02,
+        };
+
+        let price_bid = message.next_double()?;
+        let price_ask = message.next_double()?;
+        let size_bid = message.next_int()?;
+        let size_ask = message.next_int()?;
+
+        ticks.push(TickBidAsk {
+            timestamp,
+            tick_attribute_bid_ask,
+            price_bid,
+            price_ask,
+            size_bid,
+            size_ask,
+        });
+    }
+
+    let done = message.next_bool()?;
+
+    Ok((ticks, done))
+}
+
 pub(super) fn decode_historical_ticks_mid_point(message: &mut ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
     message.skip(); // message type
     message.skip(); // request_id
@@ -121,6 +157,42 @@ pub(super) fn decode_historical_ticks_mid_point(message: &mut ResponseMessage) -
         let size = message.next_int()?;
 
         ticks.push(TickMidpoint { timestamp, price, size });
+    }
+
+    let done = message.next_bool()?;
+
+    Ok((ticks, done))
+}
+
+pub(super) fn decode_historical_ticks_last(message: &mut ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
+    message.skip(); // message type
+    message.skip(); // request_id
+
+    let number_of_ticks = message.next_int()?;
+    let mut ticks = Vec::with_capacity(number_of_ticks as usize);
+
+    for _ in 0..number_of_ticks {
+        let timestamp = message.next_date_time()?;
+
+        let mask = message.next_int()?;
+        let tick_attribute_last = TickAttributeLast {
+            past_limit: (mask & 0x01) == 0x01,
+            unreported: (mask & 0x02) == 0x02,
+        };
+
+        let price = message.next_double()?;
+        let size = message.next_int()?;
+        let exchange = message.next_string()?;
+        let special_conditions = message.next_string()?;
+
+        ticks.push(TickLast {
+            timestamp,
+            tick_attribute_last,
+            price,
+            size,
+            exchange,
+            special_conditions,
+        });
     }
 
     let done = message.next_bool()?;
