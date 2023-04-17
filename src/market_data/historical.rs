@@ -222,7 +222,7 @@ pub struct TickBidAsk {
     pub size_ask: i32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct TickAttributeBidAsk {
     pub bid_past_low: bool,
     pub ask_past_high: bool,
@@ -245,7 +245,7 @@ pub struct TickLast {
     pub special_conditions: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct TickAttributeLast {
     pub past_limit: bool,
     pub unreported: bool,
