@@ -1,10 +1,8 @@
 use clap::{arg, Command};
-use time::macros::{datetime, format_description};
+use time::macros::{format_description};
 use time::{OffsetDateTime, PrimitiveDateTime, UtcOffset};
-use time_tz;
 
 use ibapi::contracts::Contract;
-use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
 use ibapi::Client;
 
 fn main() {

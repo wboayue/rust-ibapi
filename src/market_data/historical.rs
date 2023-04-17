@@ -424,7 +424,14 @@ pub(crate) fn historical_ticks_bid_ask(
     use_rth: bool,
     ignore_size: bool,
 ) -> Result<TickIterator<TickBidAsk>, Error> {
-    Err(Error::NotImplemented)
+    client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
+
+    let request_id = client.next_request_id();
+    let message = encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::BidAsk, use_rth, ignore_size)?;
+
+    let messages = client.send_request(request_id, message)?;
+
+    Ok(TickIterator::new(messages))
 }
 
 pub(crate) fn historical_ticks_mid_point(
@@ -448,13 +455,19 @@ pub(crate) fn historical_ticks_mid_point(
 pub(crate) fn historical_ticks_trade(
     client: &Client,
     contract: &Contract,
-    start_date: Option<OffsetDateTime>,
-    end_date: Option<OffsetDateTime>,
+    start: Option<OffsetDateTime>,
+    end: Option<OffsetDateTime>,
     number_of_ticks: i32,
     use_rth: bool,
 ) -> Result<TickIterator<TickLast>, Error> {
-    print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?}");
-    Err(Error::NotImplemented)
+    client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
+
+    let request_id = client.next_request_id();
+    let message = encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::Trades, use_rth, false)?;
+
+    let messages = client.send_request(request_id, message)?;
+
+    Ok(TickIterator::new(messages))
 }
 
 pub(crate) trait TickDecoder<T> {
