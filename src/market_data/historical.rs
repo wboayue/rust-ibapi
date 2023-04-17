@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::fmt::Debug;
 
 use log::error;
 use time::{Date, OffsetDateTime};
@@ -205,6 +206,7 @@ pub struct TickMidpoint {
 }
 
 /// The historical tick's description. Used when requesting historical tick data with whatToShow = BID_ASK.
+#[derive(Debug)]
 pub struct TickBidAsk {
     /// Timestamp of the historical tick.
     pub timestamp: OffsetDateTime,
@@ -220,12 +222,14 @@ pub struct TickBidAsk {
     pub size_ask: i32,
 }
 
+#[derive(Debug)]
 pub struct TickAttribBidAsk {
     pub bid_past_low: bool,
     pub ask_past_high: bool,
 }
 
 /// The historical last tick's description. Used when requesting historical tick data with whatToShow = TRADES.
+#[derive(Debug)]
 pub struct TickLast {
     /// Timestamp of the historical tick.
     pub timestamp: OffsetDateTime,
@@ -241,6 +245,7 @@ pub struct TickLast {
     pub special_conditions: String,
 }
 
+#[derive(Debug)]
 pub struct TickAttribLast {
     pub past_limit: bool,
     pub unreported: bool,
@@ -311,7 +316,6 @@ fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: &
     // " S (seconds) - " D (days)
     // " W (weeks) - " M (months)
     // " Y (years)
-    print!("{client:?} {contract:?} {use_rth:?} {period:?}");
     Err(Error::NotImplemented)
 }
 
@@ -419,8 +423,7 @@ pub(crate) fn historical_ticks_bid_ask(
     number_of_ticks: i32,
     use_rth: bool,
     ignore_size: bool,
-) -> Result<TickBidAskIterator, Error> {
-    print!("{client:?} {contract:?} {start:?} {end:?} {number_of_ticks:?} {use_rth:?} {ignore_size:?}");
+) -> Result<TickIterator<TickBidAsk>, Error> {
     Err(Error::NotImplemented)
 }
 
@@ -431,18 +434,15 @@ pub(crate) fn historical_ticks_mid_point(
     end: Option<OffsetDateTime>,
     number_of_ticks: i32,
     use_rth: bool,
-) -> Result<TickMidPointIterator, Error> {
+) -> Result<TickIterator<TickMidpoint>, Error> {
     client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
 
     let request_id = client.next_request_id();
     let message = encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::MidPoint, use_rth, false)?;
 
-    let mut messages = client.send_request(request_id, message)?;
+    let messages = client.send_request(request_id, message)?;
 
-    Ok(TickMidPointIterator {
-        messages,
-        buffer: VecDeque::new(),
-    })
+    Ok(TickIterator::new(messages))
 }
 
 pub(crate) fn historical_ticks_trade(
@@ -452,64 +452,97 @@ pub(crate) fn historical_ticks_trade(
     end_date: Option<OffsetDateTime>,
     number_of_ticks: i32,
     use_rth: bool,
-) -> Result<TickLastIterator, Error> {
+) -> Result<TickIterator<TickLast>, Error> {
     print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?}");
     Err(Error::NotImplemented)
 }
 
-pub(crate) struct TickMidPointIterator {
-    messages: ResponseIterator,
-    buffer: VecDeque<TickMidpoint>,
+pub(crate) trait TickDecoder<T> {
+    fn decode(message: &mut ResponseMessage) -> Result<(Vec<T>, bool), Error>;
+    fn message_type() -> IncomingMessages;
 }
 
-impl Iterator for TickMidPointIterator {
-    type Item = TickMidpoint;
+impl TickDecoder<TickBidAsk> for TickBidAsk {
+    fn decode(mut message: &mut ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
+        Ok((Vec::new(), true))
+    }
+    fn message_type() -> IncomingMessages {
+        IncomingMessages::HistoricalTickBidAsk
+    }
+}
 
-    fn next(&mut self) -> Option<TickMidpoint> {
+impl TickDecoder<TickLast> for TickLast {
+    fn decode(mut message: &mut ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
+        Ok((Vec::new(), true))
+    }
+    fn message_type() -> IncomingMessages {
+        IncomingMessages::HistoricalTickLast
+    }
+}
+
+impl TickDecoder<TickMidpoint> for TickMidpoint {
+    fn decode(mut message: &mut ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
+        decoders::decode_historical_ticks_mid_point(&mut message)
+    }
+    fn message_type() -> IncomingMessages {
+        IncomingMessages::HistoricalTick
+    }
+}
+
+pub(crate) struct TickIterator<T: TickDecoder<T>> {
+    done: bool,
+    messages: ResponseIterator,
+    buffer: VecDeque<T>,
+}
+
+impl<T: TickDecoder<T>> TickIterator<T> {
+    fn new(messages: ResponseIterator) -> Self {
+        Self {
+            done: false,
+            messages,
+            buffer: VecDeque::new(),
+        }
+    }
+}
+
+impl<T: TickDecoder<T> + Debug> Iterator for TickIterator<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
         if !self.buffer.is_empty() {
             return self.buffer.pop_front();
         }
 
+        if self.done {
+            return None;
+        }
+
         loop {
             match self.messages.next() {
-                Some(mut message) => match message.message_type() {
-                    IncomingMessages::HistoricalTick => {
-                        let ticks = decoders::decode_historical_ticks_mid_point(&mut message).unwrap();
+                Some(mut message) => {
+                    if message.message_type() == Self::Item::message_type() {
+                        let (ticks, done) = Self::Item::decode(&mut message).unwrap();
+
                         self.buffer.append(&mut ticks.into());
+                        self.done = done;
+
+                        if self.buffer.is_empty() && self.done {
+                            return None;
+                        }
 
                         if !self.buffer.is_empty() {
                             return self.buffer.pop_front();
                         }
-                    }
-                    IncomingMessages::Error => {
+                    } else if message.message_type() == IncomingMessages::Error {
                         error!("error reading ticks: {:?}", message.peek_string(4));
                         return None;
+                    } else {
+                        error!("unexpected message: {:?}", message)
                     }
-                    _ => error!("unexpected message: {:?}", message),
-                },
+                }
                 None => return None,
             }
         }
-    }
-}
-
-pub(crate) struct TickBidAskIterator {}
-
-impl Iterator for TickBidAskIterator {
-    type Item = TickBidAsk;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        todo!()
-    }
-}
-
-pub(crate) struct TickLastIterator {}
-
-impl Iterator for TickLastIterator {
-    type Item = TickLast;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        todo!()
     }
 }
 

@@ -107,25 +107,25 @@ pub(super) fn decode_historical_schedule(message: &mut ResponseMessage) -> Resul
     })
 }
 
-pub(super) fn decode_historical_ticks_mid_point(message: &mut ResponseMessage) -> Result<Vec<TickMidpoint>, Error> {
+pub(super) fn decode_historical_ticks_mid_point(message: &mut ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
     message.skip(); // message type
     message.skip(); // request_id
 
     let number_of_ticks = message.next_int()?;
     let mut ticks = Vec::with_capacity(number_of_ticks as usize);
-    println!("message: #{message:?}");
+
     for _ in 0..number_of_ticks {
         let timestamp = message.next_date_time()?;
-        message.skip();     // for consistency
+        message.skip(); // for consistency
         let price = message.next_double()?;
         let size = message.next_int()?;
 
         ticks.push(TickMidpoint { timestamp, price, size });
     }
 
-    // bool done = ReadBoolFromInt();
+    let done = message.next_bool()?;
 
-    Ok(ticks)
+    Ok((ticks, done))
 }
 
 fn parse_time_zone(name: &str) -> &Tz {
@@ -258,5 +258,24 @@ mod tests {
         } else if let Err(err) = results {
             assert!(false, "error decoding historical data {err}");
         }
+    }
+
+    #[test]
+    fn test_decode_historical_tick_midpoint() {
+        let sample_message = "96\09000\024\01681133398\00\091.36\00\01681133400\00\091.355\00\01681133400\00\091.35\00\01681133400\00\091.345\00\01681133400\00\091.35\00\01681133400\00\091.355\00\01681133400\00\091.35\00\01681133400\00\091.34\00\01681133400\00\091.345\00\01681133400\00\091.34\00\01681133400\00\091.345\00\01681133400\00\091.34\00\01681133400\00\091.335\00\01681133400\00\091.33\00\01681133400\00\091.325\00\01681133400\00\091.32\00\01681133400\00\091.325\00\01681133400\00\091.32\00\01681133400\00\091.315\00\01681133400\00\091.32\00\01681133400\00\091.325\00\01681133400\00\091.32\00\01681133400\00\091.315\00\01681133400\00\091.31\00\01\0";
+        let mut message = ResponseMessage::from(sample_message);
+
+        let (ticks, done) = decode_historical_ticks_mid_point(&mut message).unwrap();
+
+        assert_eq!(ticks.len(), 24, "ticks.len()");
+        assert_eq!(done, true, "done");
+
+        assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:29:58 UTC), "ticks[0].timestamp");
+        assert_eq!(ticks[0].price, 91.36, "ticks[0].price");
+        assert_eq!(ticks[0].size, 0, "ticks[0].size");
+
+        assert_eq!(ticks[23].timestamp, datetime!(2023-04-10 13:30:00 UTC), "ticks[0].timestamp");
+        assert_eq!(ticks[23].price, 91.31, "ticks[0].price");
+        assert_eq!(ticks[23].size, 0, "ticks[0].size");
     }
 }

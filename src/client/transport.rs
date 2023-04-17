@@ -183,7 +183,7 @@ impl MessageBus for TcpMessageBus {
 
     fn write_message(&mut self, message: &RequestMessage) -> Result<(), Error> {
         let data = message.encode();
-        debug!("{data:?} ->");
+        debug!("-> {data:?}");
 
         let data = data.as_bytes();
 
@@ -302,8 +302,10 @@ fn read_packet(mut reader: &TcpStream) -> Result<ResponseMessage, Error> {
 
     reader.read_exact(&mut data)?;
 
-    let packet = ResponseMessage::from(&String::from_utf8(data)?);
-    debug!("raw string: {:?}", packet);
+    let raw_string = String::from_utf8(data)?;
+    debug!("<- {:?}", raw_string);
+
+    let packet = ResponseMessage::from(&raw_string);
 
     Ok(packet)
 }
