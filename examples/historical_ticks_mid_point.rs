@@ -1,6 +1,7 @@
 use clap::{arg, Command};
+use time::format_description::FormatItem;
 use time::macros::format_description;
-use time::{OffsetDateTime, PrimitiveDateTime, UtcOffset};
+use time::{OffsetDateTime, PrimitiveDateTime};
 
 use ibapi::contracts::Contract;
 use ibapi::Client;
@@ -25,17 +26,9 @@ fn main() {
     let stock_symbol = matches.get_one::<String>("STOCK_SYMBOL").expect("stock symbol is required");
     let number_of_ticks = 10;
 
-    let local_offset = UtcOffset::local_offset_at(OffsetDateTime::now_utc()).unwrap();
-
-    let interval_format = format_description!("[year][month][day]T[hour]:[minute]:[second]");
-    let interval_start = PrimitiveDateTime::parse(interval_raw, interval_format)
-        .unwrap()
-        .assume_offset(local_offset);
-
-    println!("start: #{interval_start}");
-
     let client = Client::connect(&connection_string, 100).expect("connection failed");
 
+    let interval_start = parse_interval(interval_raw);
     let contract = Contract::stock(stock_symbol);
 
     let ticks = client
@@ -45,4 +38,12 @@ fn main() {
     for tick in ticks {
         println!("{tick:?}");
     }
+}
+
+const INTERVAL_FORMAT: &[FormatItem] = format_description!("[year][month][day]T[hour]:[minute]:[second]Z");
+
+fn parse_interval(text: &str) -> OffsetDateTime {
+    PrimitiveDateTime::parse(text, INTERVAL_FORMAT)
+        .expect("expected date in format 20230415T12:00:00Z")
+        .assume_utc()
 }
