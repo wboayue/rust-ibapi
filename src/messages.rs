@@ -455,6 +455,10 @@ impl ResponseMessage {
         let field = &self.fields[self.i];
         self.i += 1;
 
+        if field.is_empty() {
+            return Err(Error::Simple("expected timestamp and found empty string".into()));
+        }
+
         // from_unix_timestamp
         let timestamp: i64 = field.parse()?;
         match OffsetDateTime::from_unix_timestamp(timestamp) {

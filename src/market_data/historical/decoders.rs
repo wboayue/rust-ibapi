@@ -1,5 +1,3 @@
-use core::num;
-
 use time::macros::{format_description, time};
 use time::{Date, PrimitiveDateTime};
 use time_tz::{timezones, OffsetDateTimeExt, PrimitiveDateTimeExt, Tz};

@@ -485,8 +485,8 @@ pub(crate) trait TickDecoder<T> {
 }
 
 impl TickDecoder<TickBidAsk> for TickBidAsk {
-    fn decode(mut message: &mut ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
-        decoders::decode_historical_ticks_bid_ask(&mut message)
+    fn decode(message: &mut ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
+        decoders::decode_historical_ticks_bid_ask(message)
     }
     fn message_type() -> IncomingMessages {
         IncomingMessages::HistoricalTickBidAsk
@@ -494,8 +494,8 @@ impl TickDecoder<TickBidAsk> for TickBidAsk {
 }
 
 impl TickDecoder<TickLast> for TickLast {
-    fn decode(mut message: &mut ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
-        decoders::decode_historical_ticks_last(&mut message)
+    fn decode(message: &mut ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
+        decoders::decode_historical_ticks_last(message)
     }
     fn message_type() -> IncomingMessages {
         IncomingMessages::HistoricalTickLast
@@ -503,8 +503,8 @@ impl TickDecoder<TickLast> for TickLast {
 }
 
 impl TickDecoder<TickMidpoint> for TickMidpoint {
-    fn decode(mut message: &mut ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
-        decoders::decode_historical_ticks_mid_point(&mut message)
+    fn decode(message: &mut ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
+        decoders::decode_historical_ticks_mid_point(message)
     }
     fn message_type() -> IncomingMessages {
         IncomingMessages::HistoricalTick
