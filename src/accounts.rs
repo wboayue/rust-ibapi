@@ -10,9 +10,13 @@ mod encoders;
 
 #[derive(Debug, Default)]
 pub struct Position {
+    /// Account holding position
     pub account: String,
+    /// Contract
     pub contract: Contract,
+    /// Size of position
     pub position: f64,
+    /// Average cost of position
     pub average_cost: f64,
 }
 
@@ -39,7 +43,7 @@ pub(crate) fn cancel_positions(client: &Client) -> Result<(), Error> {
 }
 
 // Supports iteration over [Position].
-pub struct PositionIterator<'a> {
+pub(crate) struct PositionIterator<'a> {
     client: &'a Client,
     messages: GlobalResponseIterator,
 }
