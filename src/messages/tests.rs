@@ -209,7 +209,7 @@ fn test_incoming_message_from_i32() {
     assert_eq!(IncomingMessages::from(75), IncomingMessages::SecurityDefinitionOptionParameter);
     assert_eq!(IncomingMessages::from(76), IncomingMessages::SecurityDefinitionOptionParameterEnd);
     assert_eq!(IncomingMessages::from(77), IncomingMessages::SoftDollarTier);
-    assert_eq!(IncomingMessages::from(78), IncomingMessages::FamilyCodes);
+    assert_eq!(IncomingMessages::from(78), IncomingMessages::FamilyCode);
     assert_eq!(IncomingMessages::from(79), IncomingMessages::SymbolSamples);
     assert_eq!(IncomingMessages::from(80), IncomingMessages::MktDepthExchanges);
     assert_eq!(IncomingMessages::from(81), IncomingMessages::TickReqParams);
@@ -239,6 +239,7 @@ fn test_incoming_message_from_i32() {
     assert_eq!(IncomingMessages::from(105), IncomingMessages::WshEventData);
     assert_eq!(IncomingMessages::from(106), IncomingMessages::HistoricalSchedule);
     assert_eq!(IncomingMessages::from(107), IncomingMessages::UserInfo);
+    assert_eq!(IncomingMessages::from(108), IncomingMessages::FamilyCodeEnd);
     assert_eq!(IncomingMessages::from(108), IncomingMessages::NotValid);
 }
 

@@ -28,6 +28,7 @@ pub(crate) trait MessageBus {
     fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
     fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
     fn request_positions(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
+    fn request_family_codes(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
 
     fn write(&mut self, packet: &str) -> Result<(), Error>;
 
@@ -66,6 +67,8 @@ struct GlobalChannels {
     recv_market_rule: Arc<Receiver<ResponseMessage>>,
     send_positions: Arc<Sender<ResponseMessage>>,
     recv_positions: Arc<Receiver<ResponseMessage>>,
+    send_family_codes: Arc<Sender<ResponseMessage>>,
+    recv_family_codes: Arc<Receiver<ResponseMessage>>,
 }
 
 impl GlobalChannels {
@@ -74,6 +77,7 @@ impl GlobalChannels {
         let (open_orders_in, open_orders_out) = channel::unbounded();
         let (send_market_rule, recv_market_rule) = channel::unbounded();
         let (send_positions, recv_positions) = channel::unbounded();
+        let (send_family_codes, recv_family_codes) = channel::unbounded();
 
         GlobalChannels {
             order_ids_in: Arc::new(order_ids_in),
@@ -84,6 +88,8 @@ impl GlobalChannels {
             recv_market_rule: Arc::new(recv_market_rule),
             send_positions: Arc::new(send_positions),
             recv_positions: Arc::new(recv_positions),
+            send_family_codes: Arc::new(send_family_codes),
+            recv_family_codes: Arc::new(recv_family_codes),
         }
     }
 }
@@ -179,6 +185,12 @@ impl MessageBus for TcpMessageBus {
     fn request_positions(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
         self.write_message(message)?;
         Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.recv_positions)))
+    }
+
+    fn request_family_codes(&mut self, message: &RequestMessage) ->
+        Result<GlobalResponseIterator, Error> {
+        self.write_message(message)?;
+        Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.recv_family_codes)))
     }
 
     fn write_message(&mut self, message: &RequestMessage) -> Result<(), Error> {
@@ -282,6 +294,9 @@ fn dispatch_message(
         }
         IncomingMessages::Position | IncomingMessages::PositionEnd => {
             globals.send_positions.send(message).unwrap();
+        }
+        IncomingMessages::FamilyCode | IncomingMessages::FamilyCodeEnd => {
+            globals.send_family_codes.send(message).unwrap();
         }
         IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
         IncomingMessages::OrderStatus

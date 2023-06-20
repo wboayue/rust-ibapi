@@ -2,7 +2,7 @@ use crate::contracts::SecurityType;
 use crate::messages::ResponseMessage;
 use crate::Error;
 
-use super::Position;
+use super::{Position, FamilyCode};
 
 pub(crate) fn position(message: &mut ResponseMessage) -> Result<Position, Error> {
     message.skip(); // message type
@@ -38,6 +38,17 @@ pub(crate) fn position(message: &mut ResponseMessage) -> Result<Position, Error>
     Ok(position)
 }
 
+pub(crate) fn family_code(message: &mut ResponseMessage) -> Result<FamilyCode, Error> {
+    message.skip(); // message type
+
+    let family_code = FamilyCode {
+        account_id: message.next_string()?,
+        family_code: message.next_string()?,
+    };
+   
+    Ok(family_code)
+}
+
 mod tests {
     #[test]
     fn decode_positions() {
@@ -71,4 +82,19 @@ mod tests {
             assert!(false, "error decoding position: {err}");
         }
     }
+
+    #[test]
+    fn decode_family_codes() {
+        let mut message = super::ResponseMessage::from("0DU1236109\0F445566");
+
+        let results = super::family_code(&mut message);
+
+        if let Ok(family_code) = results {
+            assert_eq!(family_code.account_id, "DU1236109", "family_code.account_id");
+            assert_eq!(family_code.family_code, "F445566", "family_code.family_code");
+        } else if let Err(err) = results {
+            assert!(false, "error decoding family_code: {err}");
+        }
+    }
 }
+
