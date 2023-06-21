@@ -19,6 +19,10 @@ pub(crate) fn cancel_positions() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::CancelPositions, 1)
 }
 
+pub(crate) fn request_positions_multi() -> Result<RequestMessage, Error> {
+    encode_simple(OutgoingMessages::RequestPositionsMulti, 1)
+}
+
 pub(crate) fn request_family_codes() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::RequestFamilyCodes, 1)
 }

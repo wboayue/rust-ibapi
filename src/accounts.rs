@@ -2,7 +2,7 @@ use log::error;
 
 use crate::client::transport::GlobalResponseIterator;
 use crate::contracts::Contract;
-use crate::messages::IncomingMessages;
+use crate::messages::{IncomingMessages, self};
 use crate::{server_versions, Client, Error};
 
 mod decoders;
@@ -28,6 +28,23 @@ pub struct FamilyCode {
     pub family_code: String,
 }
 
+#[derive(Debug, Default)]
+pub struct PositionMulti {
+    /// Request ID
+    pub req_id: i32,
+    /// Account holding position
+    pub account: String,
+    /// Contract
+    pub contract: Contract,
+    /// Code of model's positions
+    pub model_code: String,
+    /// Size of position
+    pub position: f64,
+    /// Average cost of position
+    pub average_cost: f64,
+}
+
+
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.
 pub(crate) fn positions(client: &Client) -> Result<impl Iterator<Item = Position> + '_, Error> {
@@ -50,6 +67,17 @@ pub(crate) fn cancel_positions(client: &Client) -> Result<(), Error> {
     Ok(())
 }
 
+pub(crate) fn positions_multi(client: &Client) -> Result<impl Iterator<Item = Position> + '_, Error> {
+    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position requests.")?;
+
+    let message = encoders::request_positions_multi()?;
+
+    let messages = client.request_positions_multi(message)?;
+
+    Ok(PositionMultiIterator { client, messages })
+
+}
+
 /// Determine whether an account exists under an account family and find the account family code.
 pub(crate) fn family_codes(client: &Client) -> Result<impl Iterator<Item = FamilyCode> + '_, Error> {
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support fammily code requests.")?;
@@ -57,11 +85,11 @@ pub(crate) fn family_codes(client: &Client) -> Result<impl Iterator<Item = Famil
     let message = encoders::request_family_codes()?;
 
     let messages = client.request_family_codes(message)?;
-
    
     Ok(FamilyCodeIterator { client, messages})
 }
 // Supports iteration over [Position].
+
 pub(crate) struct PositionIterator<'a> {
     client: &'a Client,
     messages: GlobalResponseIterator,
@@ -84,6 +112,41 @@ impl<'a> Iterator for PositionIterator<'a> {
                     IncomingMessages::PositionEnd => {
                         if let Err(e) = cancel_positions(self.client) {
                             error!("error cancelling positions: {e}")
+                        }
+                        return None;
+                    }
+                    message => {
+                        error!("order data iterator unexpected message: {message:?}");
+                    }
+                }
+            } else {
+                return None;
+            }
+        }
+    }
+}
+pub(crate) struct PositionMultiIterator<'a> {
+    client: &'a Client,
+    messages: GlobalResponseIterator,
+}
+
+impl<'a> Iterator for PositionMultiIterator<'a> {
+    type Item = PositionMulti;
+
+    // Returns the next [Position]. Waits up to x seconds for next [OrderDataResult].
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(mut message) = self.messages.next() {
+                match message.message_type() {
+                    IncomingMessages::PositionMulti => match decoders::position(&mut message) {
+                        Ok(val) => return Some(val),
+                        Err(err) => {
+                            error!("error decoding execution data: {err}");
+                        }
+                    },
+                    IncomingMessages::PositionMultiEnd => {
+                        if let Err(e) = cancel_positions_multi(self.client) {
+                            error!("error cancelling positions multi: {e}")
                         }
                         return None;
                     }
