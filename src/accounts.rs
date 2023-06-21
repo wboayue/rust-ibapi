@@ -66,9 +66,10 @@ pub(crate) fn cancel_positions(client: &Client) -> Result<(), Error> {
 
     Ok(())
 }
-
-pub(crate) fn positions_multi(client: &Client) -> Result<impl Iterator<Item = Position> + '_, Error> {
-    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position requests.")?;
+/// Subscribes to position updates for all accounts and models.
+/// All positions sent initially, and then only updates as positions change.
+pub(crate) fn positions_multi(client: &Client) -> Result<impl Iterator<Item = PositionMulti> + '_, Error> {
+    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position multi requests.")?;
 
     let message = encoders::request_positions_multi()?;
 
@@ -76,6 +77,16 @@ pub(crate) fn positions_multi(client: &Client) -> Result<impl Iterator<Item = Po
 
     Ok(PositionMultiIterator { client, messages })
 
+}
+
+pub(crate) fn cancel_positions_multi(client: &Client) -> Result<(), Error> {
+    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position multi cancellation.")?;
+
+    let message = encoders::cancel_positions_multi()?;
+
+    client.request_positions_multi(message)?;
+
+    Ok(())
 }
 
 /// Determine whether an account exists under an account family and find the account family code.
@@ -138,7 +149,7 @@ impl<'a> Iterator for PositionMultiIterator<'a> {
         loop {
             if let Some(mut message) = self.messages.next() {
                 match message.message_type() {
-                    IncomingMessages::PositionMulti => match decoders::position(&mut message) {
+                    IncomingMessages::PositionMulti => match decoders::position_multi(&mut message) {
                         Ok(val) => return Some(val),
                         Err(err) => {
                             error!("error decoding execution data: {err}");
@@ -160,7 +171,6 @@ impl<'a> Iterator for PositionMultiIterator<'a> {
         }
     }
 }
-
 
 // Iteration over [FamilyCode].
 pub(crate) struct FamilyCodeIterator<'a> {

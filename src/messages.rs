@@ -96,6 +96,7 @@ pub enum IncomingMessages {
     HistoricalSchedule = 106,
     UserInfo = 107,
     FamilyCodeEnd = 108,
+    
 }
 
 impl From<i32> for IncomingMessages {

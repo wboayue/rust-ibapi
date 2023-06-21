@@ -1,8 +1,10 @@
-use crate::contracts::SecurityType;
+use std::default;
+
+use crate::{contracts::SecurityType, messages};
 use crate::messages::ResponseMessage;
 use crate::Error;
 
-use super::{Position, FamilyCode};
+use super::{Position, FamilyCode, PositionMulti};
 
 pub(crate) fn position(message: &mut ResponseMessage) -> Result<Position, Error> {
     message.skip(); // message type
@@ -36,6 +38,39 @@ pub(crate) fn position(message: &mut ResponseMessage) -> Result<Position, Error>
     }
 
     Ok(position)
+}
+
+pub(crate) fn position_multi(message: &mut ResponseMessage) -> Result<PositionMulti, Error> {
+    message.skip();
+
+    let message_version = message.next_int()?;
+    
+    let mut position_multi = PositionMulti {
+        account: message.next_string()?, 
+        ..Default::default()
+    };
+    position_multi.contract.contract_id = message.next_int()?;
+    position_multi.contract.symbol = message.next_string()?;
+    position_multi.contract.security_type = SecurityType::from(&message.next_string()?);
+    position_multi.contract.last_trade_date_or_contract_month = message.next_string()?;
+    position_multi.contract.strike = message.next_double()?;
+    position_multi.contract.right = message.next_string()?;
+    position_multi.contract.multiplier = message.next_string()?;
+    position_multi.contract.exchange = message.next_string()?;
+    position_multi.contract.currency = message.next_string()?;
+    position_multi.contract.local_symbol = message.next_string()?;
+
+    if message_version >= 2 {
+        position_multi.contract.trading_class = message.next_string()?;
+    }
+
+    position_multi.position = message.next_double()?;
+
+    if message_version >= 3 {
+        position_multi.average_cost = message.next_double()?;
+    }
+
+    Ok(position_multi)
 }
 
 pub(crate) fn family_code(message: &mut ResponseMessage) -> Result<FamilyCode, Error> {
