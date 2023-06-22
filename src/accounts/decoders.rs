@@ -119,6 +119,39 @@ mod tests {
     }
 
     #[test]
+    fn decode_positions_multi() {
+        let mut message = super::ResponseMessage::from("61\03\0DU1236109\076792991\0TSLA\0STK\0\00.0\0\0\0NASDAQ\0USD\0TSLA\0NMS\0500\0196.77\0");
+
+        let results = super::position_multi(&mut message);
+
+        if let Ok(position_multi) = results {
+            assert_eq!(position_multi.account, "DU1236109", "position.account");
+            assert_eq!(position_multi.contract.contract_id, 76792991, "position.contract.contract_id");
+            assert_eq!(position_multi.contract.symbol, "TSLA", "position.contract.symbol");
+            assert_eq!(
+                position_multi.contract.security_type,
+                super::SecurityType::Stock,
+                "position.contract.security_type"
+            );
+            assert_eq!(
+                position_multi.contract.last_trade_date_or_contract_month, "",
+                "position.contract.last_trade_date_or_contract_month"
+            );
+            assert_eq!(position_multi.contract.strike, 0.0, "position_multi.contract.strike");
+            assert_eq!(position_multi.contract.right, "", "position_multi.contract.right");
+            assert_eq!(position_multi.contract.multiplier, "", "position_multi.contract.multiplier");
+            assert_eq!(position_multi.contract.exchange, "NASDAQ", "position_multi.contract.exchange");
+            assert_eq!(position_multi.contract.currency, "USD", "position_multi.contract.currency");
+            assert_eq!(position_multi.contract.local_symbol, "TSLA", "position_multi.contract.local_symbol");
+            assert_eq!(position_multi.contract.trading_class, "NMS", "position_multi.contract.trading_class");
+            assert_eq!(position_multi.position, 500.0, "position_multi.position");
+            assert_eq!(position_multi.average_cost, 196.77, "position_multi.average_cost");
+        } else if let Err(err) = results {
+            assert!(false, "error decoding position mulit: {err}");
+        }
+    }
+
+    #[test]
     fn decode_family_codes() {
         let mut message = super::ResponseMessage::from("0DU1236109\0F445566");
 
