@@ -18,7 +18,7 @@ fn encode_simple(message_type: OutgoingMessages, version: i32) -> Result<Request
 pub(crate) fn cancel_positions() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::CancelPositions, 1)
 }
-/// To request position updates from a specific model
+
 pub(crate) fn request_positions_multi() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::RequestPositionsMulti, 1)
 }

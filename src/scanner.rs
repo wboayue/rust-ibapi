@@ -29,7 +29,7 @@ pub struct ScannerSubscription {
     // The request's location (STK.US, STK.US.MAJOR, etc).
     pub location_code: String,
     // Same as TWS Market Scanner's "parameters" field, for example: TOP_PERC_GAIN.
-    pub scan_code: String,
+    pub scan_code: ScanCode,
     // Filters out Contracts which price is below this value.
     pub above_price: f64,
     // Filters out contracts which price is above this value.

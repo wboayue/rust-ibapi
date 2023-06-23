@@ -10,37 +10,37 @@ mod encoders;
 
 #[derive(Debug, Default)]
 pub struct Position {
-    /// Account holding position
+    // Account holding position
     pub account: String,
-    /// Contract
+    // Contract
     pub contract: Contract,
-    /// Size of position
+    // Size of position
     pub position: f64,
-    /// Average cost of position
+    // Average cost of position
     pub average_cost: f64,
 }
 
 #[derive(Debug, Default)]
 pub struct FamilyCode {
-    /// Acount ID
+    // Acount ID
     pub account_id: String,
-    /// Family code
+    // Family code
     pub family_code: String,
 }
 
 #[derive(Debug, Default)]
 pub struct PositionMulti {
-    /// Request ID
+    // Request ID
     pub req_id: i32,
-    /// Account holding position
+    // Account holding position
     pub account: String,
-    /// Contract
+    // Contract
     pub contract: Contract,
-    /// Code of model's positions
+    // Code of model's positions
     pub model_code: String,
-    /// Size of position
+    // Size of position
     pub position: f64,
-    /// Average cost of position
+    // Average cost of position
     pub average_cost: f64,
 }
 
@@ -66,8 +66,9 @@ pub(crate) fn cancel_positions(client: &Client) -> Result<(), Error> {
 
     Ok(())
 }
-/// Subscribes to position updates for all accounts and models.
-/// All positions sent initially, and then only updates as positions change.
+
+//  Subscribes to position updates for all accounts and models.
+// All positions sent initially, and then only updates as positions change.
 pub(crate) fn positions_multi(client: &Client) -> Result<impl Iterator<Item = PositionMulti> + '_, Error> {
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position multi requests.")?;
 
@@ -89,7 +90,7 @@ pub(crate) fn cancel_positions_multi(client: &Client) -> Result<(), Error> {
     Ok(())
 }
 
-/// Determine whether an account exists under an account family and find the account family code.
+// Determine whether an account exists under an account family and find the account family code.
 pub(crate) fn family_codes(client: &Client) -> Result<impl Iterator<Item = FamilyCode> + '_, Error> {
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support fammily code requests.")?;
 
