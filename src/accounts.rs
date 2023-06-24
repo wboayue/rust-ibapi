@@ -22,9 +22,9 @@ pub struct Position {
 
 #[derive(Debug, Default)]
 pub struct FamilyCode {
-    /// Acount ID
+    // Acount ID
     pub account_id: String,
-    /// Family code
+    // Family code
     pub family_code: String,
 }
 
@@ -50,9 +50,9 @@ pub(crate) fn cancel_positions(client: &Client) -> Result<(), Error> {
     Ok(())
 }
 
-/// Determine whether an account exists under an account family and find the account family code.
-pub(crate) fn family_codes(client: &Client) -> Result<impl Iterator<Item = FamilyCode> + '_, Error> {
-    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support fammily code requests.")?;
+// Determine whether an account exists under an account family and find the account family code.
+pub(crate) fn family_codes(client: &Client) -> Result<impl Iterator<Item = Vec<FamilyCode>> + '_, Error> {
+    client.check_server_version(server_versions::REQ_FAMILY_CODES, "It does not support fammily code requests.")?;
 
     let message = encoders::request_family_codes()?;
 
@@ -106,19 +106,19 @@ pub(crate) struct FamilyCodeIterator<'a> {
 }
 
 impl<'a> Iterator for FamilyCodeIterator<'a> {
-    type Item = FamilyCode;
+    type Item = Vec<FamilyCode>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(mut message) = self.messages.next() {
                 match message.message_type() {
-                    IncomingMessages::FamilyCode => match decoders::family_code(&mut message) {
+                    IncomingMessages::FamilyCodes => match decoders::family_code(&mut message) {
                         Ok(val) => return Some(val),
                         Err(err) => {
                             error!("error decoding execution data: {err}");
                         }
                     },
-                    IncomingMessages::FamilyCodeEnd => {
+                    IncomingMessages::PositionEnd => {
                         if let Err(e) = cancel_positions(self.client) {
                             error!("error cancelling positions: {e}")
                         }

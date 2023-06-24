@@ -65,7 +65,7 @@ pub enum IncomingMessages {
     SecurityDefinitionOptionParameter = 75,
     SecurityDefinitionOptionParameterEnd = 76,
     SoftDollarTier = 77,
-    FamilyCode = 78,
+    FamilyCodes = 78,
     SymbolSamples = 79,
     MktDepthExchanges = 80,
     TickReqParams = 81,
@@ -95,8 +95,7 @@ pub enum IncomingMessages {
     WshEventData = 105,
     HistoricalSchedule = 106,
     UserInfo = 107,
-    FamilyCodeEnd = 108,
-}
+    }
 
 impl From<i32> for IncomingMessages {
     fn from(value: i32) -> IncomingMessages {
@@ -153,7 +152,7 @@ impl From<i32> for IncomingMessages {
             75 => IncomingMessages::SecurityDefinitionOptionParameter,
             76 => IncomingMessages::SecurityDefinitionOptionParameterEnd,
             77 => IncomingMessages::SoftDollarTier,
-            78 => IncomingMessages::FamilyCode,
+            78 => IncomingMessages::FamilyCodes,
             79 => IncomingMessages::SymbolSamples,
             80 => IncomingMessages::MktDepthExchanges,
             81 => IncomingMessages::TickReqParams,
@@ -183,7 +182,6 @@ impl From<i32> for IncomingMessages {
             105 => IncomingMessages::WshEventData,
             106 => IncomingMessages::HistoricalSchedule,
             107 => IncomingMessages::UserInfo,
-            108 => IncomingMessages::FamilyCodeEnd,
             _ => IncomingMessages::NotValid,
         }
     }

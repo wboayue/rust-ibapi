@@ -295,9 +295,7 @@ fn dispatch_message(
         IncomingMessages::Position | IncomingMessages::PositionEnd => {
             globals.send_positions.send(message).unwrap();
         }
-        IncomingMessages::FamilyCode | IncomingMessages::FamilyCodeEnd => {
-            globals.send_family_codes.send(message).unwrap();
-        }
+        
         IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
         IncomingMessages::OrderStatus
         | IncomingMessages::OpenOrder

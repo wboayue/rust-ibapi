@@ -38,15 +38,28 @@ pub(crate) fn position(message: &mut ResponseMessage) -> Result<Position, Error>
     Ok(position)
 }
 
-pub(crate) fn family_code(message: &mut ResponseMessage) -> Result<FamilyCode, Error> {
+pub(crate) fn family_code(message: &mut ResponseMessage) -> Result<Vec<FamilyCode>, Error> {
     message.skip(); // message type
 
-    let family_code = FamilyCode {
-        account_id: message.next_string()?,
-        family_code: message.next_string()?,
-    };
+    let _request_id = message.next_int()?;
+    let family_codes_count = message.next_int()?;
+
+    if family_codes_count < 1 {
+        return Ok(Vec::default());
+    }
+
+    let family_codes: Vec<FamilyCode> = Vec::with_capacity(family_codes_count as usize);
+
+    for _ in 0.. family_codes_count {
+        let family_code = FamilyCode {
+            account_id: message.next_string()?,
+            family_code: message.next_string()?,
+            ..Default::default()
+        };
+        
+      }
    
-    Ok(family_code)
+    Ok(family_codes)
 }
 
 mod tests {
@@ -89,9 +102,9 @@ mod tests {
 
         let results = super::family_code(&mut message);
 
-        if let Ok(family_code) = results {
-            assert_eq!(family_code.account_id, "DU1236109", "family_code.account_id");
-            assert_eq!(family_code.family_code, "F445566", "family_code.family_code");
+        if let Ok(family_codes) = results {
+            assert_eq!(family_codes.account_id, "DU1236109", "family_code.account_id");
+            assert_eq!(family_codes.family_code, "F445566", "family_code.family_code");
         } else if let Err(err) = results {
             assert!(false, "error decoding family_code: {err}");
         }

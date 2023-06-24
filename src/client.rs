@@ -246,7 +246,7 @@ impl Client {
 
      /// Get current [FamilyCode]s for all accessible accounts.
      #[allow(clippy::needless_lifetimes)]
-     pub fn family_codes<'a>(&'a self) -> core::result::Result<impl Iterator<Item = FamilyCode> + 'a, Error> {
+     pub fn family_codes<'a>(&'a self) -> core::result::Result<impl Iterator<Item = Vec<FamilyCode>> + 'a, Error> {
          accounts::family_codes(self)
      }
 
