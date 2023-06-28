@@ -52,7 +52,7 @@ pub(crate) fn cancel_positions(client: &Client) -> Result<(), Error> {
 
 // Determine whether an account exists under an account family and find the account family code.
 pub(crate) fn family_codes(client: &Client) -> Result<impl Iterator<Item = Vec<FamilyCode>> + '_, Error> {
-    client.check_server_version(server_versions::REQ_FAMILY_CODES, "It does not support fammily code requests.")?;
+    client.check_server_version(server_versions::REQ_FAMILY_CODES, "It does not support fammily codes requests.")?;
 
     let message = encoders::request_family_codes()?;
 
