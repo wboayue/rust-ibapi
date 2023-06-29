@@ -66,3 +66,4 @@ pub struct ScannerSubscription {
     pub stock_type_filter: String,
 
 }
+

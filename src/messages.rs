@@ -95,7 +95,7 @@ pub enum IncomingMessages {
     WshEventData = 105,
     HistoricalSchedule = 106,
     UserInfo = 107,
-    FamilyCodeEnd = 108,
+    
     
 }
 
@@ -184,7 +184,6 @@ impl From<i32> for IncomingMessages {
             105 => IncomingMessages::WshEventData,
             106 => IncomingMessages::HistoricalSchedule,
             107 => IncomingMessages::UserInfo,
-            108 => IncomingMessages::FamilyCodeEnd,
             _ => IncomingMessages::NotValid,
         }
     }

@@ -239,7 +239,6 @@ fn test_incoming_message_from_i32() {
     assert_eq!(IncomingMessages::from(105), IncomingMessages::WshEventData);
     assert_eq!(IncomingMessages::from(106), IncomingMessages::HistoricalSchedule);
     assert_eq!(IncomingMessages::from(107), IncomingMessages::UserInfo);
-    assert_eq!(IncomingMessages::from(108), IncomingMessages::FamilyCodeEnd);
     assert_eq!(IncomingMessages::from(108), IncomingMessages::NotValid);
 }
 

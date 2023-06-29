@@ -67,35 +67,7 @@ mod tests {
         }
     }
 
-    #[test]
-    fn request_positions_multi() {
-        let results = super::request_positions();
-
-        match results {
-            Ok(message) => {
-                assert_eq!(message[0], OutgoingMessages::RequestPositionsMulti.to_field(), "message.type");
-                assert_eq!(message[1], "1", "message.version");
-            }
-            Err(err) => {
-                assert!(false, "error encoding request positions multi: {err}");
-            }
-        }
-    }
-
-    #[test]
-    fn cancel_positions_multi() {
-        let results = super::cancel_positions();
-
-        match results {
-            Ok(message) => {
-                assert_eq!(message[0], OutgoingMessages::CancelPositionsMulti.to_field(), "message.type");
-                assert_eq!(message[1], "1", "message.version");
-            }
-            Err(err) => {
-                assert!(false, "error encoding cancel positions multi: {err}");
-            }
-        }
-    }
+   
 
 
     #[test]

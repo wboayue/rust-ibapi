@@ -67,28 +67,9 @@ pub(crate) fn cancel_positions(client: &Client) -> Result<(), Error> {
     Ok(())
 }
 
-//  Subscribes to position updates for all accounts and models.
-// All positions sent initially, and then only updates as positions change.
-pub(crate) fn positions_multi(client: &Client) -> Result<impl Iterator<Item = PositionMulti> + '_, Error> {
-    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position multi requests.")?;
 
-    let message = encoders::request_positions_multi()?;
 
-    let messages = client.request_positions_multi(message)?;
 
-    Ok(PositionMultiIterator { client, messages })
-
-}
-
-pub(crate) fn cancel_positions_multi(client: &Client) -> Result<(), Error> {
-    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position multi cancellation.")?;
-
-    let message = encoders::cancel_positions_multi()?;
-
-    client.request_positions_multi(message)?;
-
-    Ok(())
-}
 
 // Determine whether an account exists under an account family and find the account family code.
 pub(crate) fn family_codes(client: &Client) -> Result<impl Iterator<Item = FamilyCode> + '_, Error> {
@@ -137,41 +118,7 @@ impl<'a> Iterator for PositionIterator<'a> {
         }
     }
 }
-pub(crate) struct PositionMultiIterator<'a> {
-    client: &'a Client,
-    messages: GlobalResponseIterator,
-}
 
-impl<'a> Iterator for PositionMultiIterator<'a> {
-    type Item = PositionMulti;
-
-    // Returns the next [Position]. Waits up to x seconds for next [OrderDataResult].
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(mut message) = self.messages.next() {
-                match message.message_type() {
-                    IncomingMessages::PositionMulti => match decoders::position_multi(&mut message) {
-                        Ok(val) => return Some(val),
-                        Err(err) => {
-                            error!("error decoding execution data: {err}");
-                        }
-                    },
-                    IncomingMessages::PositionMultiEnd => {
-                        if let Err(e) = cancel_positions_multi(self.client) {
-                            error!("error cancelling positions multi: {e}")
-                        }
-                        return None;
-                    }
-                    message => {
-                        error!("order data iterator unexpected message: {message:?}");
-                    }
-                }
-            } else {
-                return None;
-            }
-        }
-    }
-}
 
 // Iteration over [FamilyCode].
 pub(crate) struct FamilyCodeIterator<'a> {
@@ -192,12 +139,7 @@ impl<'a> Iterator for FamilyCodeIterator<'a> {
                             error!("error decoding execution data: {err}");
                         }
                     },
-                    IncomingMessages::FamilyCodeEnd => {
-                        if let Err(e) = cancel_positions(self.client) {
-                            error!("error cancelling positions: {e}")
-                        }
-                        return None;
-                    }
+                    
                     message => {
                         error!("order data iterator unexpected message: {message:?}");
                     }

@@ -217,11 +217,7 @@ impl Client {
         accounts::positions(self)
     }
 
-    /// Get current [PositionMulti]s for all accessible accounts.
-    #[allow(clippy::needless_lifetimes)]
-    pub fn positions_multi<'a>(&'a self) -> core::result::Result<impl Iterator<Item = PositionMulti> + 'a, Error> {
-        accounts::positions_multi(self)
-    }
+    
 
     // === Contracts ===
 
