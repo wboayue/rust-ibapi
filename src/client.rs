@@ -211,8 +211,9 @@ impl Client {
 
     // === Accounts ===
 
-    /// Get current positions for all accessible accounts.
-    pub fn positions(&self) -> core::result::Result<impl Iterator<Item = Position> + '_, Error> {
+    /// Get current [Position]s for all accessible accounts.
+    #[allow(clippy::needless_lifetimes)]
+    pub fn positions<'a>(&'a self) -> core::result::Result<impl Iterator<Item = Position> + 'a, Error> {
         accounts::positions(self)
     }
 

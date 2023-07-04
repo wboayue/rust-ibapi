@@ -103,7 +103,9 @@
 //! }
 //!```
 
-mod accounts;
+/// Describes items present in an account.
+pub mod accounts;
+
 /// TSW API Client.
 ///
 /// The Client establishes the connection to TWS or the Gateway.

@@ -1,5 +1,3 @@
-use log::info;
-
 use crate::{contracts::SecurityType, messages::ResponseMessage, orders::TagValue, server_versions, Error};
 
 use super::{Contract, ContractDescription, ContractDetails, MarketRule, PriceIncrement};
@@ -16,11 +14,6 @@ pub(crate) fn contract_details(server_version: i32, message: &mut ResponseMessag
     if message_version >= 3 {
         request_id = message.next_int()?;
     }
-
-    info!(
-        "request_id: {}, server_version: {}, message_version: {}",
-        request_id, server_version, message_version
-    );
 
     let mut contract = ContractDetails::default();
 
