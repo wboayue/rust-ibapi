@@ -2,9 +2,9 @@ use std::cell::RefCell;
 
 use time::macros::datetime;
 
+use crate::market_data::historical::ToDuration;
 use crate::messages::OutgoingMessages;
 use crate::stubs::MessageBusStub;
-use crate::market_data::historical::{ToDuration};
 
 use super::*;
 

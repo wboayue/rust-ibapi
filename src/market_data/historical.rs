@@ -312,7 +312,7 @@ pub(crate) fn head_timestamp(client: &Client, contract: &Contract, what_to_show:
 }
 
 /// Returns data histogram of specified contract
-fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator, Error> {
+fn _histogram_data(_client: &Client, _contract: &Contract, _use_rth: bool, _period: &str) -> Result<HistogramDataIterator, Error> {
     // " S (seconds) - " D (days)
     // " W (weeks) - " M (months)
     // " Y (years)

@@ -661,18 +661,15 @@ impl Client {
         historical::historical_schedule(self, contract, None, duration)
     }
 
-    /// Requests historical Time & Sales data for an instrument.
+    /// Requests historical time & sales data (Bid/Ask) for an instrument.
     ///
-    /// Parameters
-    /// reqId	id of the request
-    /// contract	Contract object that is subject of query
-    /// startDateTime,i.e.	"20170701 12:01:00". Uses TWS timezone specified at login.
-    /// endDateTime,i.e.	"20170701 13:01:00". In TWS timezone. Exactly one of start time and end time has to be defined.
-    /// numberOfTicks	Number of distinct data points. Max currently 1000 per request.
-    /// whatToShow	(Bid_Ask, Midpoint, Trades) Type of data requested.
-    /// useRth	Data from regular trading hours (1), or all available hours (0)
-    /// ignoreSize	A filter only used when the source price is Bid_Ask
-    /// miscOptions	should be defined as null, reserved for internal use
+    /// # Arguments
+    /// * `contract` - [Contract] object that is subject of query
+    /// * `start`    - Start time. Either start time or end time is specified.
+    /// * `end`      - End time. Either start time or end time is specified.
+    /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
+    /// * `use_rth`         - Data from regular trading hours (true), or all available hours (false)
+    /// * `ignore_size`     - A filter only used when the source price is Bid_Ask
     pub fn historical_ticks_bid_ask(
         &self,
         contract: &Contract,
@@ -685,6 +682,15 @@ impl Client {
         historical::historical_ticks_bid_ask(self, contract, start, end, number_of_ticks, use_rth, ignore_size)
     }
 
+    /// Requests historical time & sales data (Midpoint) for an instrument.
+    ///
+    /// # Arguments
+    /// * `contract` - [Contract] object that is subject of query
+    /// * `start`    - Start time. Either start time or end time is specified.
+    /// * `end`      - End time. Either start time or end time is specified.
+    /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
+    /// * `use_rth`         - Data from regular trading hours (true), or all available hours (false)
+    /// * `ignore_size`     - A filter only used when the source price is Bid_Ask
     pub fn historical_ticks_mid_point(
         &self,
         contract: &Contract,
@@ -696,6 +702,15 @@ impl Client {
         historical::historical_ticks_mid_point(self, contract, start, end, number_of_ticks, use_rth)
     }
 
+    /// Requests historical time & sales data (Trades) for an instrument.
+    ///
+    /// # Arguments
+    /// * `contract` - [Contract] object that is subject of query
+    /// * `start`    - Start time. Either start time or end time is specified.
+    /// * `end`      - End time. Either start time or end time is specified.
+    /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
+    /// * `use_rth`         - Data from regular trading hours (true), or all available hours (false)
+    /// * `ignore_size`     - A filter only used when the source price is Bid_Ask
     pub fn historical_ticks_trade(
         &self,
         contract: &Contract,
