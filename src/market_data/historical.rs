@@ -319,7 +319,7 @@ fn _histogram_data(_client: &Client, _contract: &Contract, _use_rth: bool, _peri
     Err(Error::NotImplemented)
 }
 
-//     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
+// https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
 pub(crate) fn historical_data(
     client: &Client,
     contract: &Contract,

@@ -630,11 +630,11 @@ impl Client {
         historical::historical_schedule(self, contract, Some(interval_end), duration)
     }
 
-    /// Requests [historical::HistoricalSchedule] for interval ending at current time.
+    /// Requests [historical::Schedule] for interval ending at current time.
     ///
     /// # Arguments
-    /// * `contract` - [Contract] to retrieve [historical::HistoricalSchedule] for.
-    /// * `duration` - [historical::Duration] for interval to retrieve [historical::HistoricalSchedule] for.
+    /// * `contract` - [Contract] to retrieve [historical::Schedule] for.
+    /// * `duration` - [historical::Duration] for interval to retrieve [historical::Schedule] for.
     ///
     /// # Examples
     ///
