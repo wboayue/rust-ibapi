@@ -245,7 +245,7 @@ impl Client {
     }
 
     /// Get current [FamilyCode]s for all accessible accounts.
-    pub fn family_codes(&self) -> core::result::Result<Vec<FamilyCode>, Error> {
+    pub fn family_codes(&self) -> Result<Vec<FamilyCode>, Error> {
         accounts::family_codes(self)
     }
 
