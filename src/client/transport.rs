@@ -187,8 +187,7 @@ impl MessageBus for TcpMessageBus {
         Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.recv_positions)))
     }
 
-    fn request_family_codes(&mut self, message: &RequestMessage) ->
-        Result<GlobalResponseIterator, Error> {
+    fn request_family_codes(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
         self.write_message(message)?;
         Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.recv_family_codes)))
     }
@@ -295,7 +294,7 @@ fn dispatch_message(
         IncomingMessages::Position | IncomingMessages::PositionEnd => {
             globals.send_positions.send(message).unwrap();
         }
-        
+
         IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
         IncomingMessages::OrderStatus
         | IncomingMessages::OpenOrder

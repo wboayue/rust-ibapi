@@ -2,7 +2,7 @@ use crate::contracts::SecurityType;
 use crate::messages::ResponseMessage;
 use crate::Error;
 
-use super::{Position, FamilyCode};
+use super::{FamilyCode, Position};
 
 pub(crate) fn position(message: &mut ResponseMessage) -> Result<Position, Error> {
     message.skip(); // message type
@@ -50,21 +50,19 @@ pub(crate) fn family_code(message: &mut ResponseMessage) -> Result<Vec<FamilyCod
 
     let mut family_codes: Vec<FamilyCode> = Vec::with_capacity(family_codes_count as usize);
 
-    for _ in 0.. family_codes_count {
+    for _ in 0..family_codes_count {
         let family_code = FamilyCode {
             account_id: message.next_string()?,
             family_code: message.next_string()?,
             ..Default::default()
-            
         };
         family_codes.push(family_code);
-      }
-   
+    }
+
     Ok(family_codes)
 }
 
 mod tests {
-    
 
     #[test]
     fn decode_positions() {
@@ -114,4 +112,3 @@ mod tests {
         }
     }
 }
-

@@ -58,8 +58,7 @@ pub(crate) fn family_codes(client: &Client) -> Result<impl Iterator<Item = Vec<F
 
     let messages = client.request_family_codes(message)?;
 
-   
-    Ok(FamilyCodeIterator { client, messages})
+    Ok(FamilyCodeIterator { client, messages })
 }
 // Supports iteration over [Position].
 pub(crate) struct PositionIterator<'a> {
@@ -97,7 +96,6 @@ impl<'a> Iterator for PositionIterator<'a> {
         }
     }
 }
-
 
 // Iteration over [FamilyCode].
 pub(crate) struct FamilyCodeIterator<'a> {

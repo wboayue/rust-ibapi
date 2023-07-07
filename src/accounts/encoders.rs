@@ -65,9 +65,8 @@ mod tests {
 
         match results {
             Ok(message) => {
-                assert_eq!(message[0], OutgoingMessages::RequestFamilyCodes.to_field(),
-            "message.type");
-            assert_eq!(message[1], "1", "message.version");
+                assert_eq!(message[0], OutgoingMessages::RequestFamilyCodes.to_field(), "message.type");
+                assert_eq!(message[1], "1", "message.version");
             }
             Err(err) => {
                 assert!(false, "error encoding request family codes: {err}");

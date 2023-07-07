@@ -95,7 +95,7 @@ pub enum IncomingMessages {
     WshEventData = 105,
     HistoricalSchedule = 106,
     UserInfo = 107,
-    }
+}
 
 impl From<i32> for IncomingMessages {
     fn from(value: i32) -> IncomingMessages {

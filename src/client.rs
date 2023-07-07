@@ -9,7 +9,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::accounts::{Position, FamilyCode};
+use crate::accounts::{FamilyCode, Position};
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::contracts::Contract;
 use crate::errors::Error;
@@ -244,11 +244,11 @@ impl Client {
         Ok(contracts::contract_details(self, contract)?.into_iter())
     }
 
-     /// Get current [FamilyCode]s for all accessible accounts.
-     #[allow(clippy::needless_lifetimes)]
-     pub fn family_codes<'a>(&'a self) -> core::result::Result<impl Iterator<Item = Vec<FamilyCode>> + 'a, Error> {
-         accounts::family_codes(self)
-     }
+    /// Get current [FamilyCode]s for all accessible accounts.
+    #[allow(clippy::needless_lifetimes)]
+    pub fn family_codes<'a>(&'a self) -> core::result::Result<impl Iterator<Item = Vec<FamilyCode>> + 'a, Error> {
+        accounts::family_codes(self)
+    }
 
     /// Requests details about a given market rule
     ///
@@ -816,8 +816,8 @@ impl Client {
         self.message_bus.borrow_mut().request_positions(&message)
     }
 
-      /// Sends request for family codes.
-      pub(crate) fn request_family_codes(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    /// Sends request for family codes.
+    pub(crate) fn request_family_codes(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
         self.message_bus.borrow_mut().request_family_codes(&message)
     }
 
