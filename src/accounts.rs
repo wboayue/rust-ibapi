@@ -20,6 +20,14 @@ pub struct Position {
     pub average_cost: f64,
 }
 
+#[derive(Debug, Default)]
+pub struct FamilyCode {
+    /// Account ID
+    pub account_id: String,
+    /// Family code
+    pub family_code: String,
+}
+
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.
 pub(crate) fn positions(client: &Client) -> Result<impl Iterator<Item = Position> + '_, Error> {
@@ -42,6 +50,20 @@ pub(crate) fn cancel_positions(client: &Client) -> Result<(), Error> {
     Ok(())
 }
 
+// Determine whether an account exists under an account family and find the account family code.
+pub(crate) fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
+    client.check_server_version(server_versions::REQ_FAMILY_CODES, "It does not support family codes requests.")?;
+
+    let message = encoders::request_family_codes()?;
+
+    let mut messages = client.request_family_codes(message)?;
+
+    if let Some(mut message) = messages.next() {
+        decoders::decode_family_codes(&mut message)
+    } else {
+        Ok(Vec::default())
+    }
+}
 // Supports iteration over [Position].
 pub(crate) struct PositionIterator<'a> {
     client: &'a Client,
@@ -56,7 +78,7 @@ impl<'a> Iterator for PositionIterator<'a> {
         loop {
             if let Some(mut message) = self.messages.next() {
                 match message.message_type() {
-                    IncomingMessages::Position => match decoders::position(&mut message) {
+                    IncomingMessages::Position => match decoders::decode_position(&mut message) {
                         Ok(val) => return Some(val),
                         Err(err) => {
                             error!("error decoding execution data: {err}");

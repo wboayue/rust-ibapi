@@ -54,6 +54,10 @@ impl MessageBus for MessageBusStub {
         mock_global_request(self, message)
     }
 
+    fn request_family_codes(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
+        mock_global_request(self, message)
+    }
+
     fn write(&mut self, _packet: &str) -> Result<(), Error> {
         Ok(())
     }

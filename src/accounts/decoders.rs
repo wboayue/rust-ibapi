@@ -2,9 +2,9 @@ use crate::contracts::SecurityType;
 use crate::messages::ResponseMessage;
 use crate::Error;
 
-use super::Position;
+use super::{FamilyCode, Position};
 
-pub(crate) fn position(message: &mut ResponseMessage) -> Result<Position, Error> {
+pub(crate) fn decode_position(message: &mut ResponseMessage) -> Result<Position, Error> {
     message.skip(); // message type
 
     let message_version = message.next_int()?; // message version
@@ -38,12 +38,36 @@ pub(crate) fn position(message: &mut ResponseMessage) -> Result<Position, Error>
     Ok(position)
 }
 
+pub(crate) fn decode_family_codes(message: &mut ResponseMessage) -> Result<Vec<FamilyCode>, Error> {
+    message.skip(); // message type
+
+    let family_codes_count = message.next_int()?;
+
+    if family_codes_count < 1 {
+        return Ok(Vec::default());
+    }
+
+    let mut family_codes: Vec<FamilyCode> = Vec::with_capacity(family_codes_count as usize);
+
+    for _ in 0..family_codes_count {
+        let family_code = FamilyCode {
+            account_id: message.next_string()?,
+            family_code: message.next_string()?,
+            ..Default::default()
+        };
+        family_codes.push(family_code);
+    }
+
+    Ok(family_codes)
+}
+
 mod tests {
+
     #[test]
     fn decode_positions() {
         let mut message = super::ResponseMessage::from("61\03\0DU1236109\076792991\0TSLA\0STK\0\00.0\0\0\0NASDAQ\0USD\0TSLA\0NMS\0500\0196.77\0");
 
-        let results = super::position(&mut message);
+        let results = super::decode_position(&mut message);
 
         if let Ok(position) = results {
             assert_eq!(position.account, "DU1236109", "position.account");
@@ -69,6 +93,20 @@ mod tests {
             assert_eq!(position.average_cost, 196.77, "position.average_cost");
         } else if let Err(err) = results {
             assert!(false, "error decoding position: {err}");
+        }
+    }
+
+    #[test]
+    fn decode_family_codes() {
+        let mut message = super::ResponseMessage::from("78\01\0*\0\0");
+
+        let results = super::decode_family_codes(&mut message);
+
+        if let Ok(family_codes) = results {
+            assert_eq!(family_codes[0].account_id, "*", "family_codes.account_id");
+            assert_eq!(family_codes[0].family_code, "", "family_codes.family_code");
+        } else if let Err(err) = results {
+            panic!("Error decoding family_codes: {}", err);
         }
     }
 }

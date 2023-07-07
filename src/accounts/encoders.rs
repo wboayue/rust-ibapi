@@ -19,6 +19,10 @@ pub(crate) fn cancel_positions() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::CancelPositions, 1)
 }
 
+pub(crate) fn request_family_codes() -> Result<RequestMessage, Error> {
+    encode_simple(OutgoingMessages::RequestFamilyCodes, 1)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::ToField;
@@ -51,6 +55,21 @@ mod tests {
             }
             Err(err) => {
                 assert!(false, "error encoding cancel positions: {err}");
+            }
+        }
+    }
+
+    #[test]
+    fn request_family_codes() {
+        let results = super::request_family_codes();
+
+        match results {
+            Ok(message) => {
+                assert_eq!(message[0], OutgoingMessages::RequestFamilyCodes.to_field(), "message.type");
+                assert_eq!(message[1], "1", "message.version");
+            }
+            Err(err) => {
+                assert!(false, "error encoding request family codes: {err}");
             }
         }
     }
