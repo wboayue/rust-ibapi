@@ -626,15 +626,15 @@ impl Client {
         contract: &Contract,
         interval_end: OffsetDateTime,
         duration: historical::Duration,
-    ) -> Result<historical::HistoricalSchedule, Error> {
+    ) -> Result<historical::Schedule, Error> {
         historical::historical_schedule(self, contract, Some(interval_end), duration)
     }
 
-    /// Requests [historical::HistoricalSchedule] for interval ending at current time.
+    /// Requests [historical::Schedule] for interval ending at current time.
     ///
     /// # Arguments
-    /// * `contract` - [Contract] to retrieve [historical::HistoricalSchedule] for.
-    /// * `duration` - [historical::Duration] for interval to retrieve [historical::HistoricalSchedule] for.
+    /// * `contract` - [Contract] to retrieve [historical::Schedule] for.
+    /// * `duration` - [historical::Duration] for interval to retrieve [historical::Schedule] for.
     ///
     /// # Examples
     ///
@@ -657,12 +657,130 @@ impl Client {
     ///     println!("{session:?}");
     /// }
     /// ```
-    pub fn historical_schedules_ending_now(
+    pub fn historical_schedules_ending_now(&self, contract: &Contract, duration: historical::Duration) -> Result<historical::Schedule, Error> {
+        historical::historical_schedule(self, contract, None, duration)
+    }
+
+    /// Requests historical time & sales data (Bid/Ask) for an instrument.
+    ///
+    /// # Arguments
+    /// * `contract` - [Contract] object that is subject of query
+    /// * `start`    - Start time. Either start time or end time is specified.
+    /// * `end`      - End time. Either start time or end time is specified.
+    /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
+    /// * `use_rth`         - Data from regular trading hours (true), or all available hours (false)
+    /// * `ignore_size`     - A filter only used when the source price is Bid_Ask
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    ///
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("TSLA");
+    ///
+    /// let ticks = client
+    ///     .historical_ticks_bid_ask(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, true, false)
+    ///     .expect("historical ticks request failed");
+    ///
+    /// for tick in ticks {
+    ///     println!("{tick:?}");
+    /// }
+    /// ```
+    pub fn historical_ticks_bid_ask(
         &self,
         contract: &Contract,
-        duration: historical::Duration,
-    ) -> Result<historical::HistoricalSchedule, Error> {
-        historical::historical_schedule(self, contract, None, duration)
+        start: Option<OffsetDateTime>,
+        end: Option<OffsetDateTime>,
+        number_of_ticks: i32,
+        use_rth: bool,
+        ignore_size: bool,
+    ) -> Result<impl Iterator<Item = historical::TickBidAsk>, Error> {
+        historical::historical_ticks_bid_ask(self, contract, start, end, number_of_ticks, use_rth, ignore_size)
+    }
+
+    /// Requests historical time & sales data (Midpoint) for an instrument.
+    ///
+    /// # Arguments
+    /// * `contract` - [Contract] object that is subject of query
+    /// * `start`    - Start time. Either start time or end time is specified.
+    /// * `end`      - End time. Either start time or end time is specified.
+    /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
+    /// * `use_rth`         - Data from regular trading hours (true), or all available hours (false)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    ///
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("TSLA");
+    ///
+    /// let ticks = client
+    ///     .historical_ticks_mid_point(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, true)
+    ///     .expect("historical ticks request failed");
+    ///
+    /// for tick in ticks {
+    ///     println!("{tick:?}");
+    /// }
+    /// ```
+    pub fn historical_ticks_mid_point(
+        &self,
+        contract: &Contract,
+        start: Option<OffsetDateTime>,
+        end: Option<OffsetDateTime>,
+        number_of_ticks: i32,
+        use_rth: bool,
+    ) -> Result<impl Iterator<Item = historical::TickMidpoint>, Error> {
+        historical::historical_ticks_mid_point(self, contract, start, end, number_of_ticks, use_rth)
+    }
+
+    /// Requests historical time & sales data (Trades) for an instrument.
+    ///
+    /// # Arguments
+    /// * `contract` - [Contract] object that is subject of query
+    /// * `start`    - Start time. Either start time or end time is specified.
+    /// * `end`      - End time. Either start time or end time is specified.
+    /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
+    /// * `use_rth`         - Data from regular trading hours (true), or all available hours (false)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    ///
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("TSLA");
+    ///
+    /// let ticks = client
+    ///     .historical_ticks_trade(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, true)
+    ///     .expect("historical ticks request failed");
+    ///
+    /// for tick in ticks {
+    ///     println!("{tick:?}");
+    /// }
+    /// ```
+    pub fn historical_ticks_trade(
+        &self,
+        contract: &Contract,
+        start: Option<OffsetDateTime>,
+        end: Option<OffsetDateTime>,
+        number_of_ticks: i32,
+        use_rth: bool,
+    ) -> Result<impl Iterator<Item = historical::TickLast>, Error> {
+        historical::historical_ticks_trade(self, contract, start, end, number_of_ticks, use_rth)
     }
 
     // === Realtime Market Data ===

@@ -204,7 +204,10 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::ExecutionData
         | IncomingMessages::HeadTimestamp
         | IncomingMessages::HistoricalData
-        | IncomingMessages::HistoricalSchedule => Some(1),
+        | IncomingMessages::HistoricalSchedule
+        | IncomingMessages::HistoricalTick
+        | IncomingMessages::HistoricalTickBidAsk
+        | IncomingMessages::HistoricalTickLast => Some(1),
         IncomingMessages::ContractDataEnd | IncomingMessages::RealTimeBars | IncomingMessages::Error | IncomingMessages::ExecutionDataEnd => Some(2),
         _ => panic!("could not determine request id index for {kind:?}"),
     }
@@ -280,19 +283,19 @@ pub enum OutgoingMessages {
     CancelHistogramData = 89,
     CancelHeadTimestamp = 90,
     RequestMarketRule = 91,
-    ReqPnL = 92,
+    RequestPnL = 92,
     CancelPnL = 93,
-    ReqPnLSingle = 94,
+    RequestPnLSingle = 94,
     CancelPnLSingle = 95,
-    ReqHistoricalTicks = 96,
-    ReqTickByTickData = 97,
+    RequestHistoricalTicks = 96,
+    RequestTickByTickData = 97,
     CancelTickByTickData = 98,
-    ReqCompletedOrders = 99,
-    ReqWshMetaData = 100,
+    RequestCompletedOrders = 99,
+    RequestWshMetaData = 100,
     CancelWshMetaData = 101,
-    ReqWshEventData = 102,
+    RequestWshEventData = 102,
     CancelWshEventData = 103,
-    ReqUserInfo = 104,
+    RequestUserInfo = 104,
 }
 
 impl ToField for OutgoingMessages {
@@ -451,6 +454,10 @@ impl ResponseMessage {
     pub fn next_date_time(&mut self) -> Result<OffsetDateTime, Error> {
         let field = &self.fields[self.i];
         self.i += 1;
+
+        if field.is_empty() {
+            return Err(Error::Simple("expected timestamp and found empty string".into()));
+        }
 
         // from_unix_timestamp
         let timestamp: i64 = field.parse()?;

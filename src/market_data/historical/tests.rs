@@ -1,5 +1,9 @@
 use std::cell::RefCell;
 
+use time::macros::datetime;
+
+use crate::market_data::historical::ToDuration;
+use crate::messages::OutgoingMessages;
 use crate::stubs::MessageBusStub;
 
 use super::*;
@@ -8,30 +12,54 @@ use super::*;
 fn test_head_timestamp() {
     let message_bus = RefCell::new(Box::new(MessageBusStub {
         request_messages: RefCell::new(vec![]),
-        response_messages: vec!["9|1|43||".to_owned()],
+        response_messages: vec!["9|9000|1678323335|".to_owned()],
     }));
 
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-
-    // client.response_packets = VecDeque::from([ResponseMessage::from("10\x0000\x00cc")]);
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let contract = Contract::stock("MSFT");
     let what_to_show = WhatToShow::Trades;
     let use_rth = true;
 
-    let result = super::head_timestamp(&mut client, &contract, what_to_show, use_rth);
+    let head_timestamp = client
+        .head_timestamp(&contract, what_to_show, use_rth)
+        .expect("head timestamp request failed");
 
-    // match result {
-    //     Err(error) => assert_eq!(error.to_string(), ""),
-    //     Ok(head_timestamp) => assert_eq!(head_timestamp, OffsetDateTime::now_utc()),
-    // };
+    assert_eq!(head_timestamp, OffsetDateTime::from_unix_timestamp(1678323335).unwrap(), "bar.date");
 
-    // assert_eq!(client.request_packets.len(), 1);
+    let request_messages = client.message_bus.borrow().request_messages();
 
-    // let packet = &client.request_packets[0];
-
-    // assert_eq!(packet[0], "hh");
-    // assert_eq!(packet[1], "hh");
+    let head_timestamp_request = &request_messages[0];
+    assert_eq!(
+        head_timestamp_request[0],
+        OutgoingMessages::RequestHeadTimestamp.to_field(),
+        "message.message_type"
+    );
+    assert_eq!(head_timestamp_request[1], "9000", "message.request_id");
+    assert_eq!(head_timestamp_request[2], contract.contract_id.to_field(), "message.contract_id");
+    assert_eq!(head_timestamp_request[3], contract.symbol.to_field(), "message.symbol");
+    assert_eq!(head_timestamp_request[4], contract.security_type.to_field(), "message.security_type");
+    assert_eq!(
+        head_timestamp_request[5],
+        contract.last_trade_date_or_contract_month.to_field(),
+        "message.last_trade_date_or_contract_month"
+    );
+    assert_eq!(head_timestamp_request[6], contract.strike.to_field(), "message.strike");
+    assert_eq!(head_timestamp_request[7], contract.right.to_field(), "message.right");
+    assert_eq!(head_timestamp_request[8], contract.multiplier.to_field(), "message.multiplier");
+    assert_eq!(head_timestamp_request[9], contract.exchange.to_field(), "message.exchange");
+    assert_eq!(
+        head_timestamp_request[10],
+        contract.primary_exchange.to_field(),
+        "message.primary_exchange"
+    );
+    assert_eq!(head_timestamp_request[11], contract.currency.to_field(), "message.currency");
+    assert_eq!(head_timestamp_request[12], contract.local_symbol.to_field(), "message.local_symbol");
+    assert_eq!(head_timestamp_request[13], contract.trading_class.to_field(), "message.trading_class");
+    assert_eq!(head_timestamp_request[14], contract.include_expired.to_field(), "message.include_expired");
+    assert_eq!(head_timestamp_request[15], use_rth.to_field(), "message.use_rth");
+    assert_eq!(head_timestamp_request[16], what_to_show.to_field(), "message.what_to_show");
+    assert_eq!(head_timestamp_request[17], "2", "message.date_format");
 }
 
 #[test]
@@ -42,8 +70,81 @@ fn test_histogram_data() {
 
 #[test]
 fn test_historical_data() {
-    let result = 2 + 2;
-    assert_eq!(result, 4);
+    let message_bus = RefCell::new(Box::new(MessageBusStub {
+        request_messages: RefCell::new(vec![]),
+        response_messages: vec![
+            "17\09000\020230413  16:31:22\020230415  16:31:22\02\020230413\0182.9400\0186.5000\0180.9400\0185.9000\0948837.22\0184.869\0324891\020230414\0183.8800\0186.2800\0182.0100\0185.0000\0810998.27\0183.9865\0277547\0".to_owned()
+        ],
+    }));
+
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+
+    let contract = Contract::stock("MSFT");
+    let interval_end = datetime!(2023-04-15 16:31:22 UTC);
+    let duration = 2.days();
+    let bar_size = BarSize::Hour;
+    let what_to_show = WhatToShow::Trades;
+    let use_rth = true;
+
+    let historical_data = client
+        .historical_data(&contract, interval_end, duration, bar_size, what_to_show, use_rth)
+        .expect("historical data request failed");
+
+    // Assert Response
+
+    assert_eq!(historical_data.start, datetime!(2023-04-13 16:31:22 UTC), "historical_data.start");
+    assert_eq!(historical_data.end, datetime!(2023-04-15 16:31:22 UTC), "historical_data.end");
+    assert_eq!(historical_data.bars.len(), 2, "historical_data.bars.len()");
+
+    assert_eq!(historical_data.bars[0].date, datetime!(2023-04-13 00:00:00 UTC), "bar.date");
+    assert_eq!(historical_data.bars[0].open, 182.94, "bar.open");
+    assert_eq!(historical_data.bars[0].high, 186.50, "bar.high");
+    assert_eq!(historical_data.bars[0].low, 180.94, "bar.low");
+    assert_eq!(historical_data.bars[0].close, 185.90, "bar.close");
+    assert_eq!(historical_data.bars[0].volume, 948837.22, "bar.volume");
+    assert_eq!(historical_data.bars[0].wap, 184.869, "bar.wap");
+    assert_eq!(historical_data.bars[0].count, 324891, "bar.count");
+
+    // Assert Request
+
+    let request_messages = client.message_bus.borrow().request_messages();
+
+    let head_timestamp_request = &request_messages[0];
+    assert_eq!(
+        head_timestamp_request[0],
+        OutgoingMessages::RequestHistoricalData.to_field(),
+        "message.message_type"
+    );
+    assert_eq!(head_timestamp_request[1], "9000", "message.request_id");
+    assert_eq!(head_timestamp_request[2], contract.contract_id.to_field(), "message.contract_id");
+    assert_eq!(head_timestamp_request[3], contract.symbol.to_field(), "message.symbol");
+    assert_eq!(head_timestamp_request[4], contract.security_type.to_field(), "message.security_type");
+    assert_eq!(
+        head_timestamp_request[5],
+        contract.last_trade_date_or_contract_month.to_field(),
+        "message.last_trade_date_or_contract_month"
+    );
+    assert_eq!(head_timestamp_request[6], contract.strike.to_field(), "message.strike");
+    assert_eq!(head_timestamp_request[7], contract.right.to_field(), "message.right");
+    assert_eq!(head_timestamp_request[8], contract.multiplier.to_field(), "message.multiplier");
+    assert_eq!(head_timestamp_request[9], contract.exchange.to_field(), "message.exchange");
+    assert_eq!(
+        head_timestamp_request[10],
+        contract.primary_exchange.to_field(),
+        "message.primary_exchange"
+    );
+    assert_eq!(head_timestamp_request[11], contract.currency.to_field(), "message.currency");
+    assert_eq!(head_timestamp_request[12], contract.local_symbol.to_field(), "message.local_symbol");
+    assert_eq!(head_timestamp_request[13], contract.trading_class.to_field(), "message.trading_class");
+    assert_eq!(head_timestamp_request[14], contract.include_expired.to_field(), "message.include_expired");
+    assert_eq!(head_timestamp_request[15], interval_end.to_field(), "message.interval_end");
+    assert_eq!(head_timestamp_request[16], bar_size.to_field(), "message.bar_size");
+    assert_eq!(head_timestamp_request[17], duration.to_field(), "message.duration");
+    assert_eq!(head_timestamp_request[18], use_rth.to_field(), "message.use_rth");
+    assert_eq!(head_timestamp_request[19], what_to_show.to_field(), "message.what_to_show");
+    assert_eq!(head_timestamp_request[20], "2", "message.date_format");
+    assert_eq!(head_timestamp_request[21], "0", "message.keep_up_to_data");
+    assert_eq!(head_timestamp_request[22], "", "message.chart_options");
 }
 
 #[test]

@@ -10,9 +10,9 @@ pub(crate) fn contract_details(server_version: i32, message: &mut ResponseMessag
         message_version = message.next_int()?;
     }
 
-    let mut request_id = -1;
     if message_version >= 3 {
-        request_id = message.next_int()?;
+        // request id
+        message.skip();
     }
 
     let mut contract = ContractDetails::default();

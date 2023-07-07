@@ -1,5 +1,10 @@
+use std::collections::VecDeque;
+use std::fmt::Debug;
+
+use log::error;
 use time::{Date, OffsetDateTime};
 
+use crate::client::transport::ResponseIterator;
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Client, Error, ToField};
@@ -175,56 +180,76 @@ pub struct HistoricalData {
 }
 
 #[derive(Debug)]
-pub struct HistoricalSchedule {
+pub struct Schedule {
     pub start: OffsetDateTime,
     pub end: OffsetDateTime,
     pub time_zone: String,
-    pub sessions: Vec<HistoricalSession>,
+    pub sessions: Vec<Session>,
 }
 
 #[derive(Debug)]
-pub struct HistoricalSession {
+pub struct Session {
     pub reference: Date,
     pub start: OffsetDateTime,
     pub end: OffsetDateTime,
 }
 
-struct HistoricalTick {
-    pub time: i32,
+/// The historical tick's description. Used when requesting historical tick data with whatToShow = MIDPOINT
+#[derive(Debug)]
+pub struct TickMidpoint {
+    /// timestamp of the historical tick.
+    pub timestamp: OffsetDateTime,
+    /// historical tick price.
     pub price: f64,
+    /// historical tick size
     pub size: i32,
 }
 
-struct HistoricalTickBidAsk {
-    pub time: i32,
-    pub tick_attrib_bid_ask: TickAttribBidAsk,
+/// The historical tick's description. Used when requesting historical tick data with whatToShow = BID_ASK.
+#[derive(Debug)]
+pub struct TickBidAsk {
+    /// Timestamp of the historical tick.
+    pub timestamp: OffsetDateTime,
+    /// Tick attributes of historical bid/ask tick.
+    pub tick_attribute_bid_ask: TickAttributeBidAsk,
+    /// Bid price of the historical tick.
     pub price_bid: f64,
+    /// Ask price of the historical tick.
     pub price_ask: f64,
+    /// Bid size of the historical tick
     pub size_bid: i32,
+    /// ask size of the historical tick
     pub size_ask: i32,
 }
 
-struct HistoricalTickLast {
-    pub time: i32,
-    pub price: f64,
-    pub size: i32,
-}
-
-// pub struct TickAttrib {
-//     pub can_auto_execute: bool,
-//     pub past_limit: bool,
-//     pub pre_open: bool,
-// }
-
-pub struct TickAttribBidAsk {
+#[derive(Debug, PartialEq)]
+pub struct TickAttributeBidAsk {
     pub bid_past_low: bool,
     pub ask_past_high: bool,
 }
 
-// pub struct TickAttribLast {
-//     pub past_limit: bool,
-//     pub unreported: bool,
-// }
+/// The historical last tick's description. Used when requesting historical tick data with whatToShow = TRADES.
+#[derive(Debug)]
+pub struct TickLast {
+    /// Timestamp of the historical tick.
+    pub timestamp: OffsetDateTime,
+    /// Tick attributes of historical bid/ask tick.
+    pub tick_attribute_last: TickAttributeLast,
+    /// Last price of the historical tick.
+    pub price: f64,
+    /// Last size of the historical tick.
+    pub size: i32,
+    /// Source exchange of the historical tick.
+    pub exchange: String,
+    /// Conditions of the historical tick. Refer to Trade Conditions page for more details: <https://www.interactivebrokers.com/en/index.php?f=7235>.
+    pub special_conditions: String,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct TickAttributeLast {
+    pub past_limit: bool,
+    pub unreported: bool,
+}
 
 #[derive(Clone, Debug, Copy, PartialEq)]
 pub enum WhatToShow {
@@ -275,7 +300,7 @@ pub(crate) fn head_timestamp(client: &Client, contract: &Contract, what_to_show:
     client.check_server_version(server_versions::REQ_HEAD_TIMESTAMP, "It does not support head time stamp requests.")?;
 
     let request_id = client.next_request_id();
-    let request = encoders::encode_head_timestamp(request_id, contract, what_to_show, use_rth)?;
+    let request = encoders::encode_request_head_timestamp(request_id, contract, what_to_show, use_rth)?;
 
     let mut messages = client.send_request(request_id, request)?;
 
@@ -287,15 +312,14 @@ pub(crate) fn head_timestamp(client: &Client, contract: &Contract, what_to_show:
 }
 
 /// Returns data histogram of specified contract
-fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: &str) -> Result<HistogramDataIterator, Error> {
+fn _histogram_data(_client: &Client, _contract: &Contract, _use_rth: bool, _period: &str) -> Result<HistogramDataIterator, Error> {
     // " S (seconds) - " D (days)
     // " W (weeks) - " M (months)
     // " Y (years)
-    print!("{client:?} {contract:?} {use_rth:?} {period:?}");
     Err(Error::NotImplemented)
 }
 
-//     // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
+// https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
 pub(crate) fn historical_data(
     client: &Client,
     contract: &Contract,
@@ -351,7 +375,7 @@ pub(crate) fn historical_schedule(
     contract: &Contract,
     end_date: Option<OffsetDateTime>,
     duration: Duration,
-) -> Result<HistoricalSchedule, Error> {
+) -> Result<Schedule, Error> {
     if !contract.trading_class.is_empty() || contract.contract_id > 0 {
         client.check_server_version(
             server_versions::TRADING_CLASS,
@@ -391,67 +415,157 @@ pub(crate) fn historical_schedule(
     }
 }
 
-fn historical_ticks(
+pub(crate) fn historical_ticks_bid_ask(
     client: &Client,
     contract: &Contract,
-    start_date: Option<OffsetDateTime>,
-    end_date: Option<OffsetDateTime>,
+    start: Option<OffsetDateTime>,
+    end: Option<OffsetDateTime>,
     number_of_ticks: i32,
-    use_rth: i32,
+    use_rth: bool,
     ignore_size: bool,
-) -> Result<HistoricalTickIterator, Error> {
-    print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?} {ignore_size:?}");
-    Err(Error::NotImplemented)
+) -> Result<TickIterator<TickBidAsk>, Error> {
+    client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
+
+    let request_id = client.next_request_id();
+    let message = encoders::encode_request_historical_ticks(
+        request_id,
+        contract,
+        start,
+        end,
+        number_of_ticks,
+        WhatToShow::BidAsk,
+        use_rth,
+        ignore_size,
+    )?;
+
+    let messages = client.send_request(request_id, message)?;
+
+    Ok(TickIterator::new(messages))
 }
 
-fn historical_ticks_bid_ask(
+pub(crate) fn historical_ticks_mid_point(
     client: &Client,
     contract: &Contract,
-    start_date: Option<OffsetDateTime>,
-    end_date: Option<OffsetDateTime>,
+    start: Option<OffsetDateTime>,
+    end: Option<OffsetDateTime>,
     number_of_ticks: i32,
-    use_rth: i32,
-    ignore_size: bool,
-) -> Result<HistoricalTickBidAskIterator, Error> {
-    print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?} {ignore_size:?}");
+    use_rth: bool,
+) -> Result<TickIterator<TickMidpoint>, Error> {
+    client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
 
-    Err(Error::NotImplemented)
+    let request_id = client.next_request_id();
+    let message = encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::MidPoint, use_rth, false)?;
+
+    let messages = client.send_request(request_id, message)?;
+
+    Ok(TickIterator::new(messages))
 }
 
-fn historical_ticks_last(
+pub(crate) fn historical_ticks_trade(
     client: &Client,
     contract: &Contract,
-    start_date: Option<OffsetDateTime>,
-    end_date: Option<OffsetDateTime>,
+    start: Option<OffsetDateTime>,
+    end: Option<OffsetDateTime>,
     number_of_ticks: i32,
-    use_rth: i32,
-    ignore_size: bool,
-) -> Result<HistoricalTickLastIterator, Error> {
-    print!("{client:?} {contract:?} {start_date:?} {end_date:?} {number_of_ticks:?} {use_rth:?} {ignore_size:?}");
-    Err(Error::NotImplemented)
+    use_rth: bool,
+) -> Result<TickIterator<TickLast>, Error> {
+    client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
+
+    let request_id = client.next_request_id();
+    let message = encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::Trades, use_rth, false)?;
+
+    let messages = client.send_request(request_id, message)?;
+
+    Ok(TickIterator::new(messages))
 }
 
-#[derive(Default)]
-struct HistoricalTickIterator {}
+pub(crate) trait TickDecoder<T> {
+    fn decode(message: &mut ResponseMessage) -> Result<(Vec<T>, bool), Error>;
+    fn message_type() -> IncomingMessages;
+}
 
-impl HistoricalTickIterator {
-    pub fn new() -> HistoricalTickIterator {
-        HistoricalTickIterator {}
+impl TickDecoder<TickBidAsk> for TickBidAsk {
+    fn decode(message: &mut ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
+        decoders::decode_historical_ticks_bid_ask(message)
+    }
+    fn message_type() -> IncomingMessages {
+        IncomingMessages::HistoricalTickBidAsk
     }
 }
 
-impl Iterator for HistoricalTickIterator {
-    // we will be counting with usize
-    type Item = HistoricalTick;
-
-    // next() is the only required method
-    fn next(&mut self) -> Option<HistoricalTick> {
-        None
+impl TickDecoder<TickLast> for TickLast {
+    fn decode(message: &mut ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
+        decoders::decode_historical_ticks_last(message)
+    }
+    fn message_type() -> IncomingMessages {
+        IncomingMessages::HistoricalTickLast
     }
 }
 
-struct HistoricalTickBidAskIterator {}
+impl TickDecoder<TickMidpoint> for TickMidpoint {
+    fn decode(message: &mut ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
+        decoders::decode_historical_ticks_mid_point(message)
+    }
+    fn message_type() -> IncomingMessages {
+        IncomingMessages::HistoricalTick
+    }
+}
 
-struct HistoricalTickLastIterator {}
+pub(crate) struct TickIterator<T: TickDecoder<T>> {
+    done: bool,
+    messages: ResponseIterator,
+    buffer: VecDeque<T>,
+}
+
+impl<T: TickDecoder<T>> TickIterator<T> {
+    fn new(messages: ResponseIterator) -> Self {
+        Self {
+            done: false,
+            messages,
+            buffer: VecDeque::new(),
+        }
+    }
+}
+
+impl<T: TickDecoder<T> + Debug> Iterator for TickIterator<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.buffer.is_empty() {
+            return self.buffer.pop_front();
+        }
+
+        if self.done {
+            return None;
+        }
+
+        loop {
+            match self.messages.next() {
+                Some(mut message) => {
+                    if message.message_type() == Self::Item::message_type() {
+                        let (ticks, done) = Self::Item::decode(&mut message).unwrap();
+
+                        self.buffer.append(&mut ticks.into());
+                        self.done = done;
+
+                        if self.buffer.is_empty() && self.done {
+                            return None;
+                        }
+
+                        if !self.buffer.is_empty() {
+                            return self.buffer.pop_front();
+                        }
+                    } else if message.message_type() == IncomingMessages::Error {
+                        error!("error reading ticks: {:?}", message.peek_string(4));
+                        return None;
+                    } else {
+                        error!("unexpected message: {:?}", message)
+                    }
+                }
+                None => return None,
+            }
+        }
+    }
+}
 
 struct HistogramDataIterator {}

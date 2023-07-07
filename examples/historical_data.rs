@@ -2,7 +2,7 @@ use clap::{arg, Command};
 use time::macros::datetime;
 
 use ibapi::contracts::Contract;
-use ibapi::market_data::historical::ToDuration;
+use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
 use ibapi::Client;
 
 fn main() {
@@ -21,13 +21,20 @@ fn main() {
 
     let contract = Contract::stock(stock_symbol);
 
-    let schedule = client
-        .historical_schedules(&contract, datetime!(2023-04-15 0:00 UTC), 7.days())
-        .expect("historical schedule request failed");
+    let historical_data = client
+        .historical_data(
+            &contract,
+            datetime!(2023-04-11 20:00 UTC),
+            1.days(),
+            BarSize::Hour,
+            WhatToShow::Trades,
+            true,
+        )
+        .expect("historical data request failed");
 
-    println!("start: {:?}, end: {:?}", schedule.start, schedule.end);
+    println!("start: {:?}, end: {:?}", historical_data.start, historical_data.end);
 
-    for session in &schedule.sessions {
-        println!("{session:?}");
+    for bar in &historical_data.bars {
+        println!("{bar:?}");
     }
 }

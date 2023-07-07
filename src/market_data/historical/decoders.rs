@@ -73,7 +73,7 @@ pub(super) fn decode_historical_data(server_version: i32, time_zone: &Tz, messag
     Ok(HistoricalData { start, end, bars })
 }
 
-pub(super) fn decode_historical_schedule(message: &mut ResponseMessage) -> Result<HistoricalSchedule, Error> {
+pub(super) fn decode_historical_schedule(message: &mut ResponseMessage) -> Result<Schedule, Error> {
     message.skip(); // message type
     message.skip(); // request_id
 
@@ -84,25 +84,118 @@ pub(super) fn decode_historical_schedule(message: &mut ResponseMessage) -> Resul
     let time_zone = parse_time_zone(&time_zone_name);
 
     let sessions_count = message.next_int()?;
-    let mut sessions = Vec::<HistoricalSession>::with_capacity(sessions_count as usize);
+    let mut sessions = Vec::<Session>::with_capacity(sessions_count as usize);
     for _ in 0..sessions_count {
         let session_start = message.next_string()?;
         let session_end = message.next_string()?;
         let session_reference = message.next_string()?;
 
-        sessions.push(HistoricalSession {
+        sessions.push(Session {
             start: parse_schedule_date_time(&session_start, time_zone)?,
             end: parse_schedule_date_time(&session_end, time_zone)?,
             reference: parse_schedule_date(&session_reference)?,
         })
     }
 
-    Ok(HistoricalSchedule {
+    Ok(Schedule {
         start: parse_schedule_date_time(&start, time_zone)?,
         end: parse_schedule_date_time(&end, time_zone)?,
         time_zone: time_zone_name,
         sessions,
     })
+}
+
+pub(super) fn decode_historical_ticks_bid_ask(message: &mut ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
+    message.skip(); // message type
+    message.skip(); // request_id
+
+    let number_of_ticks = message.next_int()?;
+    let mut ticks = Vec::with_capacity(number_of_ticks as usize);
+
+    for _ in 0..number_of_ticks {
+        let timestamp = message.next_date_time()?;
+
+        let mask = message.next_int()?;
+        let tick_attribute_bid_ask = TickAttributeBidAsk {
+            ask_past_high: (mask & 0x01) == 0x01,
+            bid_past_low: (mask & 0x02) == 0x02,
+        };
+
+        let price_bid = message.next_double()?;
+        let price_ask = message.next_double()?;
+        let size_bid = message.next_int()?;
+        let size_ask = message.next_int()?;
+
+        ticks.push(TickBidAsk {
+            timestamp,
+            tick_attribute_bid_ask,
+            price_bid,
+            price_ask,
+            size_bid,
+            size_ask,
+        });
+    }
+
+    let done = message.next_bool()?;
+
+    Ok((ticks, done))
+}
+
+pub(super) fn decode_historical_ticks_mid_point(message: &mut ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
+    message.skip(); // message type
+    message.skip(); // request_id
+
+    let number_of_ticks = message.next_int()?;
+    let mut ticks = Vec::with_capacity(number_of_ticks as usize);
+
+    for _ in 0..number_of_ticks {
+        let timestamp = message.next_date_time()?;
+        message.skip(); // for consistency
+        let price = message.next_double()?;
+        let size = message.next_int()?;
+
+        ticks.push(TickMidpoint { timestamp, price, size });
+    }
+
+    let done = message.next_bool()?;
+
+    Ok((ticks, done))
+}
+
+pub(super) fn decode_historical_ticks_last(message: &mut ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
+    message.skip(); // message type
+    message.skip(); // request_id
+
+    let number_of_ticks = message.next_int()?;
+    let mut ticks = Vec::with_capacity(number_of_ticks as usize);
+
+    for _ in 0..number_of_ticks {
+        let timestamp = message.next_date_time()?;
+
+        let mask = message.next_int()?;
+        let tick_attribute_last = TickAttributeLast {
+            past_limit: (mask & 0x01) == 0x01,
+            unreported: (mask & 0x02) == 0x02,
+        };
+
+        let price = message.next_double()?;
+        let size = message.next_int()?;
+        let exchange = message.next_string()?;
+        let special_conditions = message.next_string()?;
+
+        ticks.push(TickLast {
+            timestamp,
+            tick_attribute_last,
+            price,
+            size,
+            exchange,
+            special_conditions,
+        });
+    }
+
+    let done = message.next_bool()?;
+
+    Ok((ticks, done))
 }
 
 fn parse_time_zone(name: &str) -> &Tz {
@@ -235,5 +328,102 @@ mod tests {
         } else if let Err(err) = results {
             assert!(false, "error decoding historical data {err}");
         }
+    }
+
+    #[test]
+    fn test_decode_historical_tick_bid_ask() {
+        let sample_message = "97\09000\04\01681133399\00\011.63\011.83\02800\0100\01681133400\00\011.63\011.83\02800\0200\01681133400\00\011.63\011.72\02800\0100\01681133400\00\011.63\011.83\02800\0200\01\0";
+        let mut message = ResponseMessage::from(sample_message);
+
+        let (ticks, done) = decode_historical_ticks_bid_ask(&mut message).unwrap();
+
+        assert_eq!(ticks.len(), 4, "ticks.len()");
+        assert_eq!(done, true, "done");
+
+        assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:29:59 UTC), "ticks[0].timestamp");
+        assert_eq!(
+            ticks[0].tick_attribute_bid_ask,
+            TickAttributeBidAsk {
+                bid_past_low: false,
+                ask_past_high: false
+            },
+            "ticks[0].tick_attribute_bid_ask"
+        );
+        assert_eq!(ticks[0].price_bid, 11.63, "ticks[0].price_bid");
+        assert_eq!(ticks[0].price_ask, 11.83, "ticks[0].price_ask");
+        assert_eq!(ticks[0].size_bid, 2800, "ticks[0].size_bid");
+        assert_eq!(ticks[0].size_ask, 100, "ticks[0].size_ask");
+
+        assert_eq!(ticks[3].timestamp, datetime!(2023-04-10 13:30:00 UTC), "ticks[0].timestamp");
+        assert_eq!(
+            ticks[3].tick_attribute_bid_ask,
+            TickAttributeBidAsk {
+                bid_past_low: false,
+                ask_past_high: false
+            },
+            "ticks[0].tick_attribute_bid_ask"
+        );
+        assert_eq!(ticks[3].price_bid, 11.63, "ticks[0].price_bid");
+        assert_eq!(ticks[3].price_ask, 11.83, "ticks[0].price_ask");
+        assert_eq!(ticks[3].size_bid, 2800, "ticks[0].size_bid");
+        assert_eq!(ticks[3].size_ask, 200, "ticks[0].size_ask");
+    }
+
+    #[test]
+    fn test_decode_historical_tick_last() {
+        let sample_message = "98\09000\07\01681133400\00\011.63\024547\0ISLAND\0 O X\01681133400\02\011.73\01\0DRCTEDGE\0   I\01681133401\00\011.63\0179\0FINRA\0\01681133401\02\011.73\01\0FINRA\0   I\01681133402\02\011.63\01\0FINRA\0 4 I\01681133402\02\011.73\01\0FINRA\0   I\01681133402\02\011.73\01\0FINRA\0   I\01\0";
+        let mut message = ResponseMessage::from(sample_message);
+
+        let (ticks, done) = decode_historical_ticks_last(&mut message).unwrap();
+
+        assert_eq!(ticks.len(), 7, "ticks.len()");
+        assert_eq!(done, true, "done");
+
+        assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:30:0 UTC), "ticks[0].timestamp");
+        assert_eq!(
+            ticks[0].tick_attribute_last,
+            TickAttributeLast {
+                past_limit: false,
+                unreported: false
+            },
+            "ticks[0].tick_attribute_last"
+        );
+        assert_eq!(ticks[0].price, 11.63, "ticks[0].price");
+        assert_eq!(ticks[0].size, 24547, "ticks[0].size");
+        assert_eq!(ticks[0].exchange, "ISLAND", "ticks[0].exchange");
+        assert_eq!(ticks[0].special_conditions, " O X", "ticks[0].special_conditions");
+
+        assert_eq!(ticks[6].timestamp, datetime!(2023-04-10 13:30:02 UTC), "ticks[6].timestamp");
+        assert_eq!(
+            ticks[6].tick_attribute_last,
+            TickAttributeLast {
+                past_limit: false,
+                unreported: true
+            },
+            "ticks[6].tick_attribute_last"
+        );
+        assert_eq!(ticks[6].price, 11.73, "ticks[6].price");
+        assert_eq!(ticks[6].size, 1, "ticks[6].size");
+        assert_eq!(ticks[6].exchange, "FINRA", "ticks[6].exchange");
+        assert_eq!(ticks[6].special_conditions, "   I", "ticks[6].special_conditions");
+    }
+
+    #[test]
+    fn test_decode_historical_tick_midpoint() {
+        let sample_message = "96\09000\024\01681133398\00\091.36\00\01681133400\00\091.355\00\01681133400\00\091.35\00\01681133400\00\091.345\00\01681133400\00\091.35\00\01681133400\00\091.355\00\01681133400\00\091.35\00\01681133400\00\091.34\00\01681133400\00\091.345\00\01681133400\00\091.34\00\01681133400\00\091.345\00\01681133400\00\091.34\00\01681133400\00\091.335\00\01681133400\00\091.33\00\01681133400\00\091.325\00\01681133400\00\091.32\00\01681133400\00\091.325\00\01681133400\00\091.32\00\01681133400\00\091.315\00\01681133400\00\091.32\00\01681133400\00\091.325\00\01681133400\00\091.32\00\01681133400\00\091.315\00\01681133400\00\091.31\00\01\0";
+        let mut message = ResponseMessage::from(sample_message);
+
+        let (ticks, done) = decode_historical_ticks_mid_point(&mut message).unwrap();
+
+        assert_eq!(ticks.len(), 24, "ticks.len()");
+        assert_eq!(done, true, "done");
+
+        assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:29:58 UTC), "ticks[0].timestamp");
+        assert_eq!(ticks[0].price, 91.36, "ticks[0].price");
+        assert_eq!(ticks[0].size, 0, "ticks[0].size");
+
+        assert_eq!(ticks[23].timestamp, datetime!(2023-04-10 13:30:00 UTC), "ticks[0].timestamp");
+        assert_eq!(ticks[23].price, 91.31, "ticks[0].price");
+        assert_eq!(ticks[23].size, 0, "ticks[0].size");
     }
 }
