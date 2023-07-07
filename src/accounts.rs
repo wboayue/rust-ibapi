@@ -22,9 +22,9 @@ pub struct Position {
 
 #[derive(Debug, Default)]
 pub struct FamilyCode {
-    // Acount ID
+    /// Account ID
     pub account_id: String,
-    // Family code
+    /// Family code
     pub family_code: String,
 }
 
@@ -57,9 +57,8 @@ pub(crate) fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
     let message = encoders::request_family_codes()?;
 
     let mut messages = client.request_family_codes(message)?;
-    let message = messages.next();
 
-    if let Some(mut message) = message {
+    if let Some(mut message) = messages.next() {
         decoders::decode_family_codes(&mut message)
     } else {
         Ok(Vec::default())
