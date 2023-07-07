@@ -6,6 +6,6 @@ fn main() {
     let family_codes = client.family_codes().expect("request failed");
 
     for family_code in family_codes {
-        println!("{:4} {:4}", family_code[0].account_id, family_code[0].family_code)
+        println!("account_id: {:4}, family_code: {:4}", family_code.account_id, family_code.family_code)
     }
 }
