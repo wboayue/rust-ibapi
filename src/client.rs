@@ -35,8 +35,8 @@ pub struct Client {
     pub(crate) server_version: i32,
     /// IB Server time
     //    pub server_time: OffsetDateTime,
-    pub(crate) connection_time: OffsetDateTime,
-    pub(crate) time_zone: &'static Tz,
+    pub(crate) connection_time: Option<OffsetDateTime>,
+    pub(crate) time_zone: Option<&'static Tz>,
 
     managed_accounts: String,
     client_id: i32, // ID of client.
@@ -62,7 +62,7 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// println!("server_version: {}", client.server_version());
-    /// println!("connection_time: {}", client.connection_time());
+    /// println!("connection_time: {:?}", client.connection_time());
     /// println!("managed_accounts: {}", client.managed_accounts());
     /// println!("next_order_id: {}", client.next_order_id());
     /// ```
@@ -74,8 +74,8 @@ impl Client {
     fn do_connect(client_id: i32, message_bus: RefCell<Box<dyn MessageBus>>) -> Result<Client, Error> {
         let mut client = Client {
             server_version: 0,
-            connection_time: OffsetDateTime::now_utc(),
-            time_zone: time_tz::timezones::db::UTC,
+            connection_time: None,
+            time_zone: None,
             managed_accounts: String::from(""),
             message_bus,
             client_id,
@@ -200,8 +200,8 @@ impl Client {
     }
 
     /// The time of the server when the client connected
-    pub fn connection_time(&self) -> &OffsetDateTime {
-        &self.connection_time
+    pub fn connection_time(&self) -> Option<OffsetDateTime> {
+        self.connection_time.clone()
     }
 
     /// Returns the managed accounts.
@@ -889,8 +889,8 @@ impl Client {
     pub(crate) fn stubbed(message_bus: RefCell<Box<dyn MessageBus>>, server_version: i32) -> Client {
         Client {
             server_version: server_version,
-            connection_time: OffsetDateTime::now_utc(),
-            time_zone: time_tz::timezones::db::UTC,
+            connection_time: None,
+            time_zone: None,
             managed_accounts: String::from(""),
             message_bus,
             client_id: 100,
@@ -964,17 +964,29 @@ impl Debug for Client {
 }
 
 // Parses following format: 20230405 22:20:39 PST
-fn parse_connection_time(connection_time: &str) -> (OffsetDateTime, &'static Tz) {
+fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, Option<&'static Tz>) {
     let parts: Vec<&str> = connection_time.split(' ').collect();
 
     let zones = timezones::find_by_name(parts[2]);
 
     let format = format_description!("[year][month][day] [hour]:[minute]:[second]");
-    let date = time::PrimitiveDateTime::parse(format!("{} {}", parts[0], parts[1]).as_str(), format).unwrap();
-    let timezone = zones[0];
-    match date.assume_timezone(timezone) {
-        OffsetResult::Some(date) => (date, timezone),
-        _ => (OffsetDateTime::now_utc(), time_tz::timezones::db::UTC),
+    let date_str = format!("{} {}", parts[0], parts[1]);
+    let date = time::PrimitiveDateTime::parse(date_str.as_str(), format);
+    match date {
+        Ok(connected_at) => {
+            let timezone = zones[0];
+            match connected_at.assume_timezone(timezone) {
+                OffsetResult::Some(date) => (Some(date), Some(timezone)),
+                _ => {
+                    error!("error setting timezone");
+                    (None, None)
+                }
+            }
+        }
+        Err(err) => {
+            error!("could not parse connection time from {date_str}: {err}");
+            return (None, None);
+        }
     }
 }
 

@@ -10,6 +10,6 @@ fn test_parse_connection_time() {
 
     let la = timezones::db::america::LOS_ANGELES;
     if let OffsetResult::Some(other) = datetime!(2023-04-05 22:20:39).assume_timezone(la) {
-        assert_eq!(connection_time, other);
+        assert_eq!(connection_time, Some(other));
     }
 }
