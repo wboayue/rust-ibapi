@@ -159,13 +159,7 @@ impl MessageBus for TcpMessageBus {
         self.add_request(request_id, sender)?;
         self.write_message(packet)?;
 
-        Ok(ResponseIterator::new(
-            receiver,
-            self.signals_send.clone(),
-            Some(request_id),
-            None,
-            None,
-        ))
+        Ok(ResponseIterator::new(receiver, self.signals_send.clone(), Some(request_id), None, None))
     }
 
     fn send_order_message(&mut self, order_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
@@ -541,7 +535,7 @@ pub(crate) struct ResponseIterator {
     signals: Sender<Signal>,             // for client to signal termination
     request_id: Option<i32>,             // initiating request_id
     order_id: Option<i32>,               // initiating order_id
-    timeout: Option<Duration>,                   // How long to wait for next message
+    timeout: Option<Duration>,           // How long to wait for next message
 }
 
 impl ResponseIterator {
@@ -583,8 +577,8 @@ impl Iterator for ResponseIterator {
                 Err(err) => {
                     info!("timeout receiving message: {err}");
                     None
-                },
-            }    
+                }
+            }
         } else {
             match self.messages.recv() {
                 Ok(message) => Some(message),

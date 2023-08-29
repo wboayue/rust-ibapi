@@ -43,11 +43,11 @@ fn main() {
 }
 
 fn stream_last(client: &mut Client, symbol: &str) -> anyhow::Result<()> {
-    let contract = contract_es();
+    let contract = contract_gc();
     let ticks = client.tick_by_tick_last(&contract, 0, false)?;
 
-    for (i, tick) in ticks.enumerate().take(60) {
-        println!("tick: {i:?} {tick:?}");
+    for (i, tick) in ticks.enumerate() {
+        println!("{}: {i:?} {tick:?}", contract.symbol);
     }
 
     Ok(())
@@ -55,15 +55,17 @@ fn stream_last(client: &mut Client, symbol: &str) -> anyhow::Result<()> {
 
 fn contract_es() -> Contract {
     let mut contract = Contract::futures("ES");
-    contract.exchange = "CME".to_owned();
-    contract.contract_id = 495512569;
+    contract.local_symbol = "ESU3".to_string();
+    contract.trading_class = "ES".into();
+    contract.exchange = "CME".into();
     contract
 }
 
 fn contract_gc() -> Contract {
     let mut contract = Contract::futures("GC");
     contract.exchange = "COMEX".to_owned();
-    contract.contract_id = 605552438;
+    contract.local_symbol = "GCZ3".to_string();
+    contract.trading_class = "GC".into();
     contract
 }
 
@@ -89,7 +91,7 @@ fn stream_bid_ask(client: &mut Client, symbol: &str) -> anyhow::Result<()> {
     let contract = contract_es();
     let ticks = client.tick_by_tick_bid_ask(&contract, 0, false)?;
 
-    for (i, tick) in ticks.enumerate().take(60) {
+    for (i, tick) in ticks.enumerate() {
         println!("tick: {i:?} {tick:?}");
     }
 
