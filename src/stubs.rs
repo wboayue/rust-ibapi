@@ -34,6 +34,10 @@ impl MessageBus for MessageBusStub {
         mock_request(self, request_id, message)
     }
 
+    fn send_durable_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
+        mock_request(self, request_id, message)
+    }
+
     fn send_order_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
         mock_request(self, request_id, message)
     }
@@ -77,7 +81,7 @@ fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMe
         sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
     }
 
-    Ok(ResponseIterator::new(receiver, s1, None, None, Duration::from_secs(5)))
+    Ok(ResponseIterator::new(receiver, s1, None, None, Some(Duration::from_secs(5))))
 }
 
 fn mock_global_request(stub: &mut MessageBusStub, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {

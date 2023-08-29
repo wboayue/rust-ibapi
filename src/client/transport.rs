@@ -23,6 +23,7 @@ pub(crate) trait MessageBus {
     fn write_message(&mut self, packet: &RequestMessage) -> Result<(), Error>;
 
     fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator, Error>;
+    fn send_durable_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator, Error>;
     fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator, Error>;
     fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
     fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
@@ -148,8 +149,17 @@ impl MessageBus for TcpMessageBus {
             self.signals_send.clone(),
             Some(request_id),
             None,
-            Duration::from_secs(10),
+            Some(Duration::from_secs(10)),
         ))
+    }
+
+    fn send_durable_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator, Error> {
+        let (sender, receiver) = channel::unbounded();
+
+        self.add_request(request_id, sender)?;
+        self.write_message(packet)?;
+
+        Ok(ResponseIterator::new(receiver, self.signals_send.clone(), Some(request_id), None, None))
     }
 
     fn send_order_message(&mut self, order_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
@@ -163,7 +173,7 @@ impl MessageBus for TcpMessageBus {
             self.signals_send.clone(),
             None,
             Some(order_id),
-            Duration::from_secs(10),
+            Some(Duration::from_secs(10)),
         ))
     }
 
@@ -525,7 +535,7 @@ pub(crate) struct ResponseIterator {
     signals: Sender<Signal>,             // for client to signal termination
     request_id: Option<i32>,             // initiating request_id
     order_id: Option<i32>,               // initiating order_id
-    timeout: Duration,                   // How long to wait for next message
+    timeout: Option<Duration>,           // How long to wait for next message
 }
 
 impl ResponseIterator {
@@ -534,7 +544,7 @@ impl ResponseIterator {
         signals: Sender<Signal>,
         request_id: Option<i32>,
         order_id: Option<i32>,
-        timeout: Duration,
+        timeout: Option<Duration>,
     ) -> Self {
         ResponseIterator {
             messages,
@@ -561,12 +571,22 @@ impl Drop for ResponseIterator {
 impl Iterator for ResponseIterator {
     type Item = ResponseMessage;
     fn next(&mut self) -> Option<Self::Item> {
-        match self.messages.recv_timeout(self.timeout) {
-            Err(err) => {
-                info!("timeout receiving packet: {err}");
-                None
+        if let Some(timeout) = self.timeout {
+            match self.messages.recv_timeout(timeout) {
+                Ok(message) => Some(message),
+                Err(err) => {
+                    info!("timeout receiving message: {err}");
+                    None
+                }
             }
-            Ok(message) => Some(message),
+        } else {
+            match self.messages.recv() {
+                Ok(message) => Some(message),
+                Err(err) => {
+                    error!("error receiving message: {err}");
+                    None
+                }
+            }
         }
     }
 }

@@ -146,7 +146,7 @@ pub(crate) fn realtime_bars<'a>(
     let request_id = client.next_request_id();
     let packet = encoders::encode_request_realtime_bars(client.server_version(), request_id, contract, bar_size, what_to_show, use_rth, options)?;
 
-    let responses = client.send_request(request_id, packet)?;
+    let responses = client.send_durable_request(request_id, packet)?;
 
     Ok(RealTimeBarIterator::new(client, request_id, responses))
 }
@@ -164,7 +164,7 @@ pub(crate) fn tick_by_tick_all_last<'a>(
     let request_id = client.next_request_id();
 
     let message = encoders::tick_by_tick(server_version, request_id, contract, "AllLast", number_of_ticks, ignore_size)?;
-    let responses = client.send_request(request_id, message)?;
+    let responses = client.send_durable_request(request_id, message)?;
 
     Ok(TradeIterator {
         client,
@@ -200,7 +200,7 @@ pub(crate) fn tick_by_tick_last<'a>(
     let request_id = client.next_request_id();
 
     let message = encoders::tick_by_tick(server_version, request_id, contract, "Last", number_of_ticks, ignore_size)?;
-    let responses = client.send_request(request_id, message)?;
+    let responses = client.send_durable_request(request_id, message)?;
 
     Ok(TradeIterator {
         client,
@@ -222,7 +222,7 @@ pub(crate) fn tick_by_tick_bid_ask<'a>(
     let request_id = client.next_request_id();
 
     let message = encoders::tick_by_tick(server_version, request_id, contract, "BidAsk", number_of_ticks, ignore_size)?;
-    let responses = client.send_request(request_id, message)?;
+    let responses = client.send_durable_request(request_id, message)?;
 
     Ok(BidAskIterator {
         client,
@@ -244,7 +244,7 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
     let request_id = client.next_request_id();
 
     let message = encoders::tick_by_tick(server_version, request_id, contract, "MidPoint", number_of_ticks, ignore_size)?;
-    let responses = client.send_request(request_id, message)?;
+    let responses = client.send_durable_request(request_id, message)?;
 
     Ok(MidPointIterator {
         client,
