@@ -908,6 +908,11 @@ impl Client {
         self.message_bus.borrow_mut().send_generic_message(request_id, &message)
     }
 
+    pub(crate) fn send_durable_request(&self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator, Error> {
+        debug!("send_message({:?}, {:?})", request_id, message);
+        self.message_bus.borrow_mut().send_generic_message(request_id, &message)
+    }
+
     pub(crate) fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<ResponseIterator, Error> {
         debug!("send_order({:?}, {:?})", order_id, message);
         self.message_bus.borrow_mut().send_order_message(order_id, &message)
