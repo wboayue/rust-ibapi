@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::fmt::Debug;
 
-use log::error;
+use log::{error, warn};
 use time::{Date, OffsetDateTime};
 use time_tz::Tz;
 
@@ -364,6 +364,7 @@ pub(crate) fn historical_data(
         let time_zone = if let Some(tz) = client.time_zone {
             tz
         } else {
+            warn!("server timezone unknown. assuming UTC, but that may be incorrect!");
             time_tz::timezones::db::UTC
         };
         match message.message_type() {
