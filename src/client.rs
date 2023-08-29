@@ -968,24 +968,27 @@ fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, Opti
     let parts: Vec<&str> = connection_time.split(' ').collect();
 
     let zones = timezones::find_by_name(parts[2]);
+    if zones.is_empty() {
+        error!("time zone not found for {}", parts[2]);
+        return (None, None);
+    }
+
+    let timezone = zones[0];
 
     let format = format_description!("[year][month][day] [hour]:[minute]:[second]");
     let date_str = format!("{} {}", parts[0], parts[1]);
     let date = time::PrimitiveDateTime::parse(date_str.as_str(), format);
     match date {
-        Ok(connected_at) => {
-            let timezone = zones[0];
-            match connected_at.assume_timezone(timezone) {
-                OffsetResult::Some(date) => (Some(date), Some(timezone)),
-                _ => {
-                    error!("error setting timezone");
-                    (None, None)
-                }
+        Ok(connected_at) => match connected_at.assume_timezone(timezone) {
+            OffsetResult::Some(date) => (Some(date), Some(timezone)),
+            _ => {
+                error!("error setting timezone");
+                (None, Some(timezone))
             }
-        }
+        },
         Err(err) => {
             error!("could not parse connection time from {date_str}: {err}");
-            return (None, None);
+            return (None, Some(timezone));
         }
     }
 }
