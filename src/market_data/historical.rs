@@ -1,8 +1,9 @@
 use std::collections::VecDeque;
 use std::fmt::Debug;
 
-use log::error;
+use log::{error, warn};
 use time::{Date, OffsetDateTime};
+use time_tz::Tz;
 
 use crate::client::transport::ResponseIterator;
 use crate::contracts::Contract;
@@ -360,8 +361,14 @@ pub(crate) fn historical_data(
     let mut messages = client.send_request(request_id, request)?;
 
     if let Some(mut message) = messages.next() {
+        let time_zone = if let Some(tz) = client.time_zone {
+            tz
+        } else {
+            warn!("server timezone unknown. assuming UTC, but that may be incorrect!");
+            time_tz::timezones::db::UTC
+        };
         match message.message_type() {
-            IncomingMessages::HistoricalData => decoders::decode_historical_data(client.server_version, client.time_zone, &mut message),
+            IncomingMessages::HistoricalData => decoders::decode_historical_data(client.server_version, time_zone, &mut message),
             IncomingMessages::Error => Err(Error::Simple(message.peek_string(4))),
             _ => Err(Error::Simple(format!("unexpected message: {:?}", message.message_type()))),
         }
