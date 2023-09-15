@@ -271,7 +271,6 @@ fn test_request_id_index() {
 }
 
 #[test]
-#[should_panic]
 fn test_request_id_index_invalid() {
     assert_eq!(request_id_index(IncomingMessages::NotValid), None);
 }

@@ -388,6 +388,8 @@ fn process_response(requests: &Arc<SenderHash<i32, ResponseMessage>>, orders: &A
         requests.send(&request_id, message).unwrap();
     } else if orders.contains(&request_id) {
         orders.send(&request_id, message).unwrap();
+    } else {
+        info!("no recipient found for: {:?}", message)
     }
 }
 
