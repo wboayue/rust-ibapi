@@ -213,7 +213,7 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         _ => {
             error!("could not determine request id index for {kind:?}");
             None
-        },
+        }
     }
 }
 

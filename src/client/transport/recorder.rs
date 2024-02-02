@@ -1,3 +1,11 @@
+//! The MessageRecorder is used to log interactions between the client and
+//! the TWS server.
+//! The record is enabled by setting the environment variable IBAPI_RECORDING_DIR
+//! IBAPI_RECORDING_DIR is set to the path to store logs
+//! e.g.  set to /tmp/logs
+//! /tmp/logs/0001-request.msg
+//! /tmp/logs/0002-response.msg
+
 use std::env;
 use std::fs;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -7,12 +15,13 @@ use time::OffsetDateTime;
 
 use super::{RequestMessage, ResponseMessage};
 
+/// Sequence number for request and response messages
 static RECORDING_SEQ: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Clone, Debug)]
 pub(crate) struct MessageRecorder {
-    enabled: bool,
-    recording_dir: String,
+    enabled: bool,         // true to enable recording
+    recording_dir: String, // directory in which to store recordings.
 }
 
 impl MessageRecorder {
