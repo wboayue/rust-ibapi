@@ -864,11 +864,10 @@ pub enum Liquidity {
 impl From<i32> for Liquidity {
     fn from(val: i32) -> Self {
         match val {
-            0 => Liquidity::None,
             1 => Liquidity::AddedLiquidity,
             2 => Liquidity::RemovedLiquidity,
             3 => Liquidity::LiquidityRoutedOut,
-            _ => panic!("unsupported Liquidity({val})"),
+            _ => Liquidity::None,
         }
     }
 }
