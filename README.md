@@ -15,7 +15,7 @@ This is a work in progress and was tested using TWS 10.19. The primary reference
 Open issues are tracked [here](https://github.com/wboayue/rust-ibapi/issues). 
 If you run into a problem or need a missing feature, check the [issues list](https://github.com/wboayue/rust-ibapi/issues) before reporting a new issue.
 
-Contributions are welcome.
+Contributions are welcome. If you're interested in contributing, have a look at [contributors/README.md](https://github.com/wboayue/rust-ibapi/tree/main/contributors#readme) for a description of the architecture.
 
 ## Example
 
