@@ -1,6 +1,8 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::Duration;
+use std::sync::Mutex;
+use std::borrow::BorrowMut;
 
 use crossbeam::channel;
 
@@ -9,7 +11,7 @@ use crate::messages::{RequestMessage, ResponseMessage};
 use crate::Error;
 
 pub(crate) struct MessageBusStub {
-    pub request_messages: RefCell<Vec<RequestMessage>>,
+    pub request_messages: Mutex<Vec<RequestMessage>>,
     pub response_messages: Vec<String>,
     // pub next_request_id: i32,
     // pub server_version: i32,
@@ -18,7 +20,7 @@ pub(crate) struct MessageBusStub {
 
 impl MessageBus for MessageBusStub {
     fn request_messages(&self) -> Vec<RequestMessage> {
-        self.request_messages.borrow().clone()
+        self.request_messages.lock().unwrap().clone()
     }
 
     fn read_message(&mut self) -> Result<ResponseMessage, Error> {
@@ -26,7 +28,7 @@ impl MessageBus for MessageBusStub {
     }
 
     fn write_message(&mut self, message: &RequestMessage) -> Result<(), Error> {
-        self.request_messages.borrow_mut().push(message.clone());
+        self.request_messages.lock().unwrap().push(message.clone());
         Ok(())
     }
 
@@ -72,7 +74,7 @@ impl MessageBus for MessageBusStub {
 }
 
 fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
-    stub.request_messages.borrow_mut().push(message.clone());
+    stub.request_messages.lock().unwrap().push(message.clone());
 
     let (sender, receiver) = channel::unbounded();
     let (s1, _r1) = channel::unbounded();
@@ -85,7 +87,7 @@ fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMe
 }
 
 fn mock_global_request(stub: &mut MessageBusStub, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
-    stub.request_messages.borrow_mut().push(message.clone());
+    stub.request_messages.lock().unwrap().push(message.clone());
 
     let (sender, receiver) = channel::unbounded();
 
