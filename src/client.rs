@@ -147,7 +147,7 @@ impl Client {
     }
 
     // Fetches next order id and managed accounts.
-    fn receive_account_info(&mut self) -> Result<(), Error> {
+    pub fn receive_account_info(&mut self) -> Result<(), Error> {
         let mut saw_next_order_id: bool = false;
         let mut saw_managed_accounts: bool = false;
 
