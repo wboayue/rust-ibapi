@@ -48,6 +48,7 @@ pub enum SecurityType {
     News,
     /// Mutual fund
     MutualFund,
+    Crypto
 }
 
 impl ToField for SecurityType {
@@ -77,6 +78,7 @@ impl ToString for SecurityType {
             SecurityType::Commodity => "CMDTY".to_string(),
             SecurityType::News => "NEWS".to_string(),
             SecurityType::MutualFund => "FUND".to_string(),
+            SecurityType::Crypto => "CRYPTO".to_string(),
         }
     }
 }
