@@ -194,8 +194,8 @@ impl Client {
     }
 
     /// Returns and increments the order ID.
-    pub fn next_order_id(&self) -> i32 {
-        self.recieve_account_inf0();
+    pub fn next_order_id(&mut self) -> i32 {
+        self.receive_account_info();
         self.order_id.fetch_add(1, Ordering::Relaxed)
     }
 
