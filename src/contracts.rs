@@ -49,7 +49,7 @@ pub enum SecurityType {
     /// Mutual fund
     MutualFund,
     /// Crypto currency
-    CryptoCurrency
+    Crypto
 }
 
 impl ToField for SecurityType {
@@ -79,7 +79,7 @@ impl ToString for SecurityType {
             SecurityType::Commodity => "CMDTY".to_string(),
             SecurityType::News => "NEWS".to_string(),
             SecurityType::MutualFund => "FUND".to_string(),
-            SecurityType::CryptoCurrency => "CRYPTO".to_string(),
+            SecurityType::Crypto => "CRYPTO".to_string(),
         }
     }
 }
@@ -99,7 +99,7 @@ impl SecurityType {
             "CMDTY" => SecurityType::Commodity,
             "NEWS" => SecurityType::News,
             "FUND" => SecurityType::MutualFund,
-            "CRYPTO" => SecurityType::CryptoCurrency,
+            "CRYPTO" => SecurityType::Crypto,
             unsupported => todo!("Unimplemented security type: {unsupported}"),
         }
     }
