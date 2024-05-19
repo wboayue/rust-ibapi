@@ -99,7 +99,8 @@ impl SecurityType {
             "CMDTY" => SecurityType::Commodity,
             "NEWS" => SecurityType::News,
             "FUND" => SecurityType::MutualFund,
-            &_ => todo!(),
+            "CRYPTO" => SecurityType::CryptoCurrency,
+            unsupported => todo!("Unimplemented security type: {unsupported}"),
         }
     }
 }
