@@ -993,7 +993,7 @@ fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, Opti
         },
         Err(err) => {
             error!("could not parse connection time from {date_str}: {err}");
-            return (None, Some(timezone));
+            (None, Some(timezone))
         }
     }
 }
