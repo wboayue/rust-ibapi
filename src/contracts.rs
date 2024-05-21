@@ -49,7 +49,7 @@ pub enum SecurityType {
     /// Mutual fund
     MutualFund,
     /// Crypto currency
-    Crypto
+    Crypto,
 }
 
 impl ToField for SecurityType {
