@@ -600,14 +600,16 @@ impl ToField for Action {
     }
 }
 
-impl ToString for Action {
-    fn to_string(&self) -> String {
-        match self {
-            Action::Buy => String::from("BUY"),
-            Action::Sell => String::from("SELL"),
-            Action::SellShort => String::from("SSHORT"),
-            Action::SellLong => String::from("SLONG"),
-        }
+impl std::fmt::Display for Action {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let text = match self {
+            Action::Buy => "BUY",
+            Action::Sell => "SELL",
+            Action::SellShort => "SSHORT",
+            Action::SellLong => "SLONG",
+        };
+
+        write!(f, "{text}")
     }
 }
 
@@ -657,19 +659,21 @@ impl ToField for Option<Rule80A> {
     }
 }
 
-impl ToString for Rule80A {
-    fn to_string(&self) -> String {
-        match self {
-            Rule80A::Individual => String::from('I'),
-            Rule80A::Agency => String::from('A'),
-            Rule80A::AgentOtherMember => String::from('W'),
-            Rule80A::IndividualPTIA => String::from('J'),
-            Rule80A::AgencyPTIA => String::from('U'),
-            Rule80A::AgentOtherMemberPTIA => String::from('M'),
-            Rule80A::IndividualPT => String::from('K'),
-            Rule80A::AgencyPT => String::from('Y'),
-            Rule80A::AgentOtherMemberPT => String::from('N'),
-        }
+impl std::fmt::Display for Rule80A {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let text = match self {
+            Rule80A::Individual => "I",
+            Rule80A::Agency => "A",
+            Rule80A::AgentOtherMember => "W",
+            Rule80A::IndividualPTIA => "J",
+            Rule80A::AgencyPTIA => "U",
+            Rule80A::AgentOtherMemberPTIA => "M",
+            Rule80A::IndividualPT => "K",
+            Rule80A::AgencyPT => "Y",
+            Rule80A::AgentOtherMemberPT => "N",
+        };
+
+        write!(f, "{text}")
     }
 }
 
@@ -816,12 +820,14 @@ impl ToField for Option<OrderOpenClose> {
     }
 }
 
-impl ToString for OrderOpenClose {
-    fn to_string(&self) -> String {
-        match self {
-            OrderOpenClose::Open => String::from("O"),
-            OrderOpenClose::Close => String::from("C"),
-        }
+impl std::fmt::Display for OrderOpenClose {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let text = match self {
+            OrderOpenClose::Open => "O",
+            OrderOpenClose::Close => "C",
+        };
+
+        write!(f, "{text}")
     }
 }
 

@@ -786,7 +786,7 @@ pub fn attach_adjustable_to_trail(
 
     order.parent_id = parent.order_id;
     order.trigger_price = Some(trigger_price); // When trigger price is penetrated
-    order.adjusted_order_type = "TRAIL".to_owned(); // The parent order will be turned into a TRAIL order
+    "TRAIL".clone_into(&mut order.adjusted_order_type); // The parent order will be turned into a TRAIL order
     order.adjusted_stop_price = Some(adjusted_stop_price); // With a stop price of ...
     order.adjustable_trailing_unit = trail_unit; // trailing by and amount (0) or a percent (100) ...
     order.adjusted_trailing_amount = Some(adjusted_trail_amount); // of ...
@@ -915,7 +915,7 @@ pub fn limit_ibkrats(action: Action, quantity: f64, limit_price: f64) -> Order {
 
 pub fn limit_order_with_manual_order_time(action: Action, quantity: f64, limit_price: f64, manual_order_time: &str) -> Order {
     let mut order = limit_order(action, quantity, limit_price);
-    order.manual_order_time = manual_order_time.to_owned();
+    manual_order_time.clone_into(&mut order.manual_order_time);
 
     order
 }
