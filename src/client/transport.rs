@@ -574,8 +574,7 @@ impl Iterator for ResponseIterator {
     type Item = ResponseMessage;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(timeout) = self.timeout {
-            // match self.messages.recv_timeout(timeout) {
-            match self.messages.recv_timeout(Duration::from_secs(50)) {
+            match self.messages.recv_timeout(timeout) {
                 Ok(message) => Some(message),
                 Err(err) => {
                     info!("timeout receiving message: {err}");
