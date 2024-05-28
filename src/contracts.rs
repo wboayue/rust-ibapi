@@ -103,7 +103,7 @@ impl SecurityType {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Contract describes an instrument's definition
 pub struct Contract {
     /// The unique IB contract identifier.
@@ -193,7 +193,7 @@ impl Contract {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 // ComboLeg represents a leg within combo orders.
 pub struct ComboLeg {
     /// The Contract's IB's unique id.
@@ -215,7 +215,7 @@ pub struct ComboLeg {
     pub exempt_code: i32,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 /// OpenClose specifies whether an order is an open or closing order.
 pub enum ComboLegOpenClose {
     /// 0 - Same as the parent security. This is the only option for retail customers.
