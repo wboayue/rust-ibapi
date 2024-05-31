@@ -48,6 +48,7 @@ pub enum SecurityType {
     News,
     /// Mutual fund
     MutualFund,
+    /// Crypto currency
     Crypto
 }
 
@@ -99,7 +100,7 @@ impl SecurityType {
             "NEWS" => SecurityType::News,
             "FUND" => SecurityType::MutualFund,
             "CRYPTO" => SecurityType::Crypto,
-            &_ => todo!(),
+            unsupported => todo!("Unimplemented security type: {unsupported}"),
         }
     }
 }
@@ -168,6 +169,17 @@ impl Contract {
             symbol: symbol.to_string(),
             security_type: SecurityType::Future,
             currency: "USD".to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// Creates Crypto contract from specified symbol
+    pub fn crypto(symbol: &str) -> Contract {
+        Contract {
+            symbol: symbol.to_string(),
+            security_type: SecurityType::Crypto,
+            currency: "USD".to_string(),
+            exchange: "PAXOS".to_string(),
             ..Default::default()
         }
     }
