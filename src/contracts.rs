@@ -98,6 +98,7 @@ impl SecurityType {
             "CMDTY" => SecurityType::Commodity,
             "NEWS" => SecurityType::News,
             "FUND" => SecurityType::MutualFund,
+            "CRYPTO" => SecurityType::Crypto,
             &_ => todo!(),
         }
     }
