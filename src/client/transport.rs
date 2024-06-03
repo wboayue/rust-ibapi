@@ -173,7 +173,7 @@ impl MessageBus for TcpMessageBus {
             self.signals_send.clone(),
             None,
             Some(order_id),
-            Some(Duration::from_secs(10)),
+            Some(Duration::from_secs(30)),
         ))
     }
 
