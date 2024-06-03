@@ -573,15 +573,15 @@ impl Drop for ResponseIterator {
 impl Iterator for ResponseIterator {
     type Item = ResponseMessage;
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(timeout) = self.timeout {
-            match self.messages.recv_timeout(timeout) {
-                Ok(message) => Some(message),
-                Err(err) => {
-                    info!("timeout receiving message: {err}");
-                    None
-                }
-            }
-        } else {
+        // if let Some(timeout) = self.timeout {
+        //     match self.messages.recv_timeout(timeout) {
+        //         Ok(message) => Some(message),
+        //         Err(err) => {
+        //             info!("timeout receiving message: {err}");
+        //             None
+        //         }
+        //     }
+        // } else {
             match self.messages.recv() {
                 Ok(message) => Some(message),
                 Err(err) => {
@@ -589,7 +589,7 @@ impl Iterator for ResponseIterator {
                     None
                 }
             }
-        }
+        // }
     }
 }
 
