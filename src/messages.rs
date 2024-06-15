@@ -520,6 +520,7 @@ impl ResponseMessage {
         self.i += 1;
     }
 
+    #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.i = 0;
     }

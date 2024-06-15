@@ -3,7 +3,6 @@ use std::fmt::Debug;
 
 use log::{error, warn};
 use time::{Date, OffsetDateTime};
-use time_tz::Tz;
 
 use crate::client::transport::ResponseIterator;
 use crate::contracts::Contract;
@@ -168,7 +167,7 @@ impl ToDuration for i32 {
 }
 
 #[derive(Debug)]
-struct HistogramData {
+struct _HistogramData {
     pub price: f64,
     pub count: i32,
 }

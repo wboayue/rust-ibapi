@@ -1,8 +1,6 @@
-use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::Duration;
 use std::sync::Mutex;
-use std::borrow::BorrowMut;
 
 use crossbeam::channel;
 

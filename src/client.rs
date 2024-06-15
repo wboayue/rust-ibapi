@@ -1,10 +1,7 @@
-use std::cell::RefCell;
 use std::fmt::Debug;
 use std::io::Write;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::borrow::BorrowMut;
-
 use byteorder::{BigEndian, WriteBytesExt};
 use log::{debug, error, info};
 use time::macros::format_description;
