@@ -10,6 +10,7 @@ use crate::messages::{RequestMessage, ResponseMessage};
 use crate::Client;
 use crate::{encode_option_field, ToField};
 use crate::{server_versions, Error};
+use serde::Deserialize;
 
 mod decoders;
 mod encoders;
@@ -583,7 +584,7 @@ impl Order {
 /// For general account types, a SELL order will be able to enter a short position automatically if the order quantity is larger than your current long position.
 /// SSHORT is only supported for institutional account configured with Long/Short account segments or clearing with a separate account.
 /// SLONG is available in specially-configured institutional accounts to indicate that long position not yet delivered is being sold.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Copy)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Copy, Deserialize)]
 pub enum Action {
     #[default]
     Buy,

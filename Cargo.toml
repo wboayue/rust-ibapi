@@ -21,6 +21,7 @@ exclude = [
 byteorder = "1.4.3"
 crossbeam = "0.8.2"
 log = "0.4.17"
+serde = { version = "1.0.203", features = ["derive"] }
 time = {version = "0.3.17", features = ["formatting", "macros", "local-offset", "parsing"]}
 time-tz = "1.0.2"
 
