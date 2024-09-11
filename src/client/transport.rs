@@ -1,8 +1,11 @@
 use std::collections::HashMap;
 use std::io::{prelude::*, Cursor};
+use std::io::{self, Read};
+use std::net::Shutdown;
+
 use std::iter::Iterator;
 use std::net::TcpStream;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -42,8 +45,8 @@ pub(crate) trait MessageBus: Send + Sync {
 
 #[derive(Debug)]
 pub struct TcpMessageBus {
-    reader: Arc<TcpStream>,
-    writer: Box<TcpStream>,
+    reader: Arc<Mutex<TcpStream>>,
+    writer: Arc<Mutex<TcpStream>>,
     handles: Vec<JoinHandle<i32>>,
     requests: Arc<SenderHash<i32, ResponseMessage>>,
     orders: Arc<SenderHash<i32, ResponseMessage>>,
@@ -100,8 +103,8 @@ impl TcpMessageBus {
     pub fn connect(connection_string: &str) -> Result<TcpMessageBus, Error> {
         let stream = TcpStream::connect(connection_string)?;
 
-        let reader = Arc::new(stream.try_clone()?);
-        let writer = Box::new(stream);
+        let reader = Arc::new(Mutex::new(stream.try_clone()?));
+        let writer = Arc::new(Mutex::new(stream));
         let requests = Arc::new(SenderHash::new());
         let orders = Arc::new(SenderHash::new());
 
@@ -135,7 +138,7 @@ const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 impl MessageBus for TcpMessageBus {
     fn read_message(&mut self) -> Result<ResponseMessage, Error> {
-        read_packet(&self.reader)
+        read_packet(&mut self.reader.lock().unwrap())
     }
 
     fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator, Error> {
@@ -213,7 +216,7 @@ impl MessageBus for TcpMessageBus {
         packet.write_u32::<BigEndian>(data.len() as u32)?;
         packet.write_all(data)?;
 
-        self.writer.write_all(&packet)?;
+        self.writer.lock().unwrap().write_all(&packet)?;
 
         self.recorder.record_request(message);
 
@@ -222,7 +225,7 @@ impl MessageBus for TcpMessageBus {
 
     fn write(&mut self, data: &str) -> Result<(), Error> {
         debug!("{data:?} ->");
-        self.writer.write_all(data.as_bytes())?;
+        self.writer.lock().unwrap().write_all(data.as_bytes())?;
         Ok(())
     }
 
@@ -235,7 +238,7 @@ impl MessageBus for TcpMessageBus {
         let executions = SenderHash::<String, ResponseMessage>::new();
 
         let handle = thread::spawn(move || loop {
-            match read_packet(&reader) {
+            match read_packet(&mut reader.lock().unwrap()) {
                 Ok(message) => {
                     recorder.record_response(&message);
                     dispatch_message(message, server_version, &requests, &orders, &globals, &executions);
@@ -321,18 +324,48 @@ fn dispatch_message(
     };
 }
 
-fn read_packet(mut reader: &TcpStream) -> Result<ResponseMessage, Error> {
-    let message_size = read_header(reader)?;
-    let mut data = vec![0_u8; message_size];
+fn read_packet(reader: &mut TcpStream) -> Result<ResponseMessage, Error> {
+    loop {
+        match read_header(reader) {
+            Ok(message_size) => {
+                let mut data = vec![0_u8; message_size];
+                match reader.read_exact(&mut data) {
+                    Ok(_) => {
+                        let raw_string = String::from_utf8(data)?;
+                        debug!("<- {:?}", raw_string);
+                        let packet = ResponseMessage::from(&raw_string);
+                        return Ok(packet);
+                    }
+                    Err(ref e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                        error!("Unexpected EOF encountered, attempting to reconnect...");
+                        // Reconnect and retry reading
+                        reconnect(reader)?;
+                        continue; // Retry after successful reconnect
+                    }
+                    Err(e) => return Err(e.into()),
+                }
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
+}
 
-    reader.read_exact(&mut data)?;
+fn reconnect(stream: &mut TcpStream) -> Result<(), Error> {
+    // Attempt to gracefully shut down the stream
+    if let Err(e) = stream.shutdown(Shutdown::Both) {
+        error!("Failed to shut down the stream gracefully: {:?}", e);
+    }
 
-    let raw_string = String::from_utf8(data)?;
-    debug!("<- {:?}", raw_string);
+    // Reconnect with the same connection parameters
+    info!("Reconnecting to the server...");
+    *stream = TcpStream::connect("127.0.0.1:4002")?; // Adjust IP and port as needed
 
-    let packet = ResponseMessage::from(&raw_string);
+    // Set read and write timeouts if necessary
+    stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(10)))?;
 
-    Ok(packet)
+    info!("Reconnected successfully.");
+    Ok(())
 }
 
 fn read_header(mut reader: &TcpStream) -> Result<usize, Error> {
