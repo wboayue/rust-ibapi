@@ -1,4 +1,5 @@
-use std::cell::RefCell;
+use std::sync::RwLock;
+use std::sync::{Arc, Mutex};
 
 use time::OffsetDateTime;
 
@@ -11,8 +12,8 @@ use super::*;
 
 #[test]
 fn realtime_bars() {
-    let message_bus = RefCell::new(Box::new(MessageBusStub {
-        request_messages: RefCell::new(vec![]),
+    let message_bus = Arc::new(Mutex::new(MessageBusStub {
+        request_messages: RwLock::new(vec![]),
         response_messages: vec!["50|3|9001|1678323335|4028.75|4029.00|4028.25|4028.50|2|4026.75|1|".to_owned()],
     }));
 
@@ -46,7 +47,7 @@ fn realtime_bars() {
     // Should trigger cancel realtime bars
     drop(bars);
 
-    let request_messages = client.message_bus.borrow().request_messages();
+    let request_messages = client.message_bus.lock().expect("MessageBus is poisoned").request_messages();
 
     // Verify Requests
     let realtime_bars_request = &request_messages[0];
