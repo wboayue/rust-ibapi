@@ -1,7 +1,7 @@
-use std::cell::RefCell;
 use std::fmt::Debug;
 use std::io::Write;
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::{Arc, Mutex};
 
 use byteorder::{BigEndian, WriteBytesExt};
 use log::{debug, error, info};
@@ -40,7 +40,7 @@ pub struct Client {
 
     managed_accounts: String,
     client_id: i32, // ID of client.
-    pub(crate) message_bus: RefCell<Box<dyn MessageBus>>,
+    pub(crate) message_bus: Arc<Mutex<dyn MessageBus>>,
     next_request_id: AtomicI32, // Next available request_id.
     order_id: AtomicI32,        // Next available order_id. Starts with value returned on connection.
 }
@@ -67,11 +67,11 @@ impl Client {
     /// println!("next_order_id: {}", client.next_order_id());
     /// ```
     pub fn connect(address: &str, client_id: i32) -> Result<Client, Error> {
-        let message_bus = RefCell::new(Box::new(TcpMessageBus::connect(address)?));
+        let message_bus = Arc::new(Mutex::new(TcpMessageBus::connect(address)?));
         Client::do_connect(client_id, message_bus)
     }
 
-    fn do_connect(client_id: i32, message_bus: RefCell<Box<dyn MessageBus>>) -> Result<Client, Error> {
+    fn do_connect(client_id: i32, message_bus: Arc<Mutex<dyn MessageBus>>) -> Result<Client, Error> {
         let mut client = Client {
             server_version: 0,
             connection_time: None,
@@ -87,7 +87,11 @@ impl Client {
         client.start_api()?;
         client.receive_account_info()?;
 
-        client.message_bus.borrow_mut().process_messages(client.server_version)?;
+        client
+            .message_bus
+            .lock()
+            .expect("MessageBus is poisoned")
+            .process_messages(client.server_version)?;
 
         Ok(client)
     }
@@ -98,9 +102,9 @@ impl Client {
         let version = format!("v{MIN_SERVER_VERSION}..{MAX_SERVER_VERSION}");
 
         let packet = prefix.to_owned() + &encode_packet(&version);
-        self.message_bus.borrow_mut().write(&packet)?;
+        self.message_bus.lock().expect("MessageBus is poisoned").write(&packet)?;
 
-        let ack = self.message_bus.borrow_mut().read_message();
+        let ack = self.message_bus.lock().expect("MessageBus is poisoned").read_message();
 
         match ack {
             Ok(mut response_message) => {
@@ -133,7 +137,7 @@ impl Client {
             prelude.push_field(&"");
         }
 
-        self.message_bus.borrow_mut().write_message(prelude)?;
+        self.message_bus.lock().expect("MessageBus is poisoned").write_message(prelude)?;
 
         Ok(())
     }
@@ -146,7 +150,7 @@ impl Client {
         let mut attempts = 0;
         const MAX_ATTEMPTS: i32 = 100;
         loop {
-            let mut message = self.message_bus.borrow_mut().read_message()?;
+            let mut message = self.message_bus.lock().expect("MessageBus is poisoned").read_message()?;
 
             match message.message_type() {
                 IncomingMessages::NextValidId => {
@@ -886,7 +890,7 @@ impl Client {
     // == Internal Use ==
 
     #[cfg(test)]
-    pub(crate) fn stubbed(message_bus: RefCell<Box<dyn MessageBus>>, server_version: i32) -> Client {
+    pub(crate) fn stubbed(message_bus: Arc<Mutex<dyn MessageBus>>, server_version: i32) -> Client {
         Client {
             server_version: server_version,
             connection_time: None,
@@ -900,47 +904,56 @@ impl Client {
     }
 
     pub(crate) fn send_message(&self, packet: RequestMessage) -> Result<(), Error> {
-        self.message_bus.borrow_mut().write_message(&packet)
+        self.message_bus.lock().expect("MessageBus is poisoned").write_message(&packet)
     }
 
     pub(crate) fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator, Error> {
         debug!("send_message({:?}, {:?})", request_id, message);
-        self.message_bus.borrow_mut().send_generic_message(request_id, &message)
+        self.message_bus
+            .lock()
+            .expect("MessageBus is poisoned")
+            .send_generic_message(request_id, &message)
     }
 
     pub(crate) fn send_durable_request(&self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator, Error> {
         debug!("send_durable_request({:?}, {:?})", request_id, message);
-        self.message_bus.borrow_mut().send_durable_message(request_id, &message)
+        self.message_bus
+            .lock()
+            .expect("MessageBus is poisoned")
+            .send_durable_message(request_id, &message)
     }
 
     pub(crate) fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<ResponseIterator, Error> {
         debug!("send_order({:?}, {:?})", order_id, message);
-        self.message_bus.borrow_mut().send_order_message(order_id, &message)
+        self.message_bus
+            .lock()
+            .expect("MessageBus is poisoned")
+            .send_order_message(order_id, &message)
     }
 
     /// Sends request for the next valid order id.
     pub(crate) fn request_next_order_id(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        self.message_bus.borrow_mut().request_next_order_id(&message)
+        self.message_bus.lock().expect("MessageBus is poisoned").request_next_order_id(&message)
     }
 
     /// Sends request for open orders.
     pub(crate) fn request_order_data(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        self.message_bus.borrow_mut().request_open_orders(&message)
+        self.message_bus.lock().expect("MessageBus is poisoned").request_open_orders(&message)
     }
 
     /// Sends request for market rule.
     pub(crate) fn request_market_rule(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        self.message_bus.borrow_mut().request_market_rule(&message)
+        self.message_bus.lock().expect("MessageBus is poisoned").request_market_rule(&message)
     }
 
     /// Sends request for positions.
     pub(crate) fn request_positions(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        self.message_bus.borrow_mut().request_positions(&message)
+        self.message_bus.lock().expect("MessageBus is poisoned").request_positions(&message)
     }
 
     /// Sends request for family codes.
     pub(crate) fn request_family_codes(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        self.message_bus.borrow_mut().request_family_codes(&message)
+        self.message_bus.lock().expect("MessageBus is poisoned").request_family_codes(&message)
     }
 
     pub(crate) fn check_server_version(&self, version: i32, message: &str) -> Result<(), Error> {

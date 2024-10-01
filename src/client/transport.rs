@@ -5,6 +5,7 @@ use std::net::TcpStream;
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
+use std::sync::Mutex;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use crossbeam::channel::{self, Receiver, Sender};
@@ -17,7 +18,7 @@ use recorder::MessageRecorder;
 
 mod recorder;
 
-pub(crate) trait MessageBus {
+pub(crate) trait MessageBus: Send + Sync {
     fn read_message(&mut self) -> Result<ResponseMessage, Error>;
 
     fn write_message(&mut self, packet: &RequestMessage) -> Result<(), Error>;
@@ -43,7 +44,7 @@ pub(crate) trait MessageBus {
 #[derive(Debug)]
 pub struct TcpMessageBus {
     reader: Arc<TcpStream>,
-    writer: Box<TcpStream>,
+    writer: Arc<Mutex<TcpStream>>,
     handles: Vec<JoinHandle<i32>>,
     requests: Arc<SenderHash<i32, ResponseMessage>>,
     orders: Arc<SenderHash<i32, ResponseMessage>>,
@@ -101,7 +102,7 @@ impl TcpMessageBus {
         let stream = TcpStream::connect(connection_string)?;
 
         let reader = Arc::new(stream.try_clone()?);
-        let writer = Box::new(stream);
+        let writer = Arc::new(Mutex::new(stream));
         let requests = Arc::new(SenderHash::new());
         let orders = Arc::new(SenderHash::new());
 
@@ -213,7 +214,7 @@ impl MessageBus for TcpMessageBus {
         packet.write_u32::<BigEndian>(data.len() as u32)?;
         packet.write_all(data)?;
 
-        self.writer.write_all(&packet)?;
+        self.writer.lock().expect("MessageBus writer is poisoned").write_all(&packet)?;
 
         self.recorder.record_request(message);
 
@@ -222,7 +223,7 @@ impl MessageBus for TcpMessageBus {
 
     fn write(&mut self, data: &str) -> Result<(), Error> {
         debug!("{data:?} ->");
-        self.writer.write_all(data.as_bytes())?;
+        self.writer.lock().expect("MessageBus writer is poisoned").write_all(data.as_bytes())?;
         Ok(())
     }
 
