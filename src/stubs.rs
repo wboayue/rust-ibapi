@@ -25,7 +25,10 @@ impl MessageBus for MessageBusStub {
     }
 
     fn write_message(&mut self, message: &RequestMessage) -> Result<(), Error> {
-        self.request_messages.write().expect("MessageBus.request_messages is poisoned").push(message.clone());
+        self.request_messages
+            .write()
+            .expect("MessageBus.request_messages is poisoned")
+            .push(message.clone());
         Ok(())
     }
 
@@ -71,7 +74,10 @@ impl MessageBus for MessageBusStub {
 }
 
 fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
-    stub.request_messages.write().expect("MessageBus.request_messages is poisoned").push(message.clone());
+    stub.request_messages
+        .write()
+        .expect("MessageBus.request_messages is poisoned")
+        .push(message.clone());
 
     let (sender, receiver) = channel::unbounded();
     let (s1, _r1) = channel::unbounded();
@@ -84,7 +90,10 @@ fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMe
 }
 
 fn mock_global_request(stub: &mut MessageBusStub, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
-    stub.request_messages.write().expect("MessageBus.request_messages is poisoned").push(message.clone());
+    stub.request_messages
+        .write()
+        .expect("MessageBus.request_messages is poisoned")
+        .push(message.clone());
 
     let (sender, receiver) = channel::unbounded();
 
