@@ -42,7 +42,7 @@ fn main() {
     thread::sleep(Duration::from_secs(5));
 }
 
-fn stream_last(client: &mut Client, symbol: &str) -> anyhow::Result<()> {
+fn stream_last(client: &mut Client, _symbol: &str) -> anyhow::Result<()> {
     let contract = contract_gc();
     let ticks = client.tick_by_tick_last(&contract, 0, false)?;
 
@@ -87,7 +87,7 @@ fn stream_all_last(client: &Client, symbol: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn stream_bid_ask(client: &mut Client, symbol: &str) -> anyhow::Result<()> {
+fn stream_bid_ask(client: &mut Client, _symbol: &str) -> anyhow::Result<()> {
     let contract = contract_es();
     let ticks = client.tick_by_tick_bid_ask(&contract, 0, false)?;
 
@@ -98,7 +98,7 @@ fn stream_bid_ask(client: &mut Client, symbol: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn stream_mid_point(client: &mut Client, symbol: &str) -> anyhow::Result<()> {
+fn stream_mid_point(client: &mut Client, _symbol: &str) -> anyhow::Result<()> {
     let contract = contract_es();
     let ticks = client.tick_by_tick_midpoint(&contract, 0, false)?;
 
