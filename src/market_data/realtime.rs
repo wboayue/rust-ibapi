@@ -106,13 +106,13 @@ pub enum WhatToShow {
     Ask,
 }
 
-impl ToString for WhatToShow {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for WhatToShow {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::Trades => "TRADES".to_string(),
-            Self::MidPoint => "MIDPOINT".to_string(),
-            Self::Bid => "BID".to_string(),
-            Self::Ask => "ASK".to_string(),
+            Self::Trades => write!(f, "TRADES"),
+            Self::MidPoint => write!(f, "MIDPOINT"),
+            Self::Bid => write!(f, "BID"),
+            Self::Ask => write!(f, "ASK"),
         }
     }
 }

@@ -81,7 +81,6 @@ pub(crate) fn request_market_rule(market_rule_id: i32) -> Result<RequestMessage,
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     fn request_market_rule() {

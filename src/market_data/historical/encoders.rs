@@ -123,6 +123,7 @@ pub(super) fn encode_request_historical_data(
 }
 
 // Encodes message to request historical ticks
+#[allow(clippy::too_many_arguments)]
 pub(super) fn encode_request_historical_ticks(
     request_id: i32,
     contract: &Contract,

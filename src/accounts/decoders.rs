@@ -53,7 +53,6 @@ pub(crate) fn decode_family_codes(message: &mut ResponseMessage) -> Result<Vec<F
         let family_code = FamilyCode {
             account_id: message.next_string()?,
             family_code: message.next_string()?,
-            ..Default::default()
         };
         family_codes.push(family_code);
     }

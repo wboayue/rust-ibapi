@@ -1,9 +1,8 @@
 use std::collections::VecDeque;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use log::{error, warn};
 use time::{Date, OffsetDateTime};
-use time_tz::Tz;
 
 use crate::client::transport::ResponseIterator;
 use crate::contracts::Contract;
@@ -60,28 +59,28 @@ pub enum BarSize {
     Month,
 }
 
-impl ToString for BarSize {
-    fn to_string(&self) -> String {
+impl Display for BarSize {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::Sec => "1 sec".into(),
-            Self::Sec5 => "5 secs".into(),
-            Self::Sec15 => "15 secs".into(),
-            Self::Sec30 => "30 secs".into(),
-            Self::Min => "1 min".into(),
-            Self::Min2 => "2 mins".into(),
-            Self::Min3 => "3 mins".into(),
-            Self::Min5 => "5 mins".into(),
-            Self::Min15 => "15 mins".into(),
-            Self::Min20 => "20 mins".into(),
-            Self::Min30 => "30 mins".into(),
-            Self::Hour => "1 hour".into(),
-            Self::Hour2 => "2 hours".into(),
-            Self::Hour3 => "3 hours".into(),
-            Self::Hour4 => "4 hours".into(),
-            Self::Hour8 => "8 hours".into(),
-            Self::Day => "1 day".into(),
-            Self::Week => "1 week".into(),
-            Self::Month => "1 month".into(),
+            Self::Sec => write!(f, "1 sec"),
+            Self::Sec5 => write!(f, "5 secs"),
+            Self::Sec15 => write!(f, "15 secs"),
+            Self::Sec30 => write!(f, "30 secs"),
+            Self::Min => write!(f, "1 min"),
+            Self::Min2 => write!(f, "2 mins"),
+            Self::Min3 => write!(f, "3 mins"),
+            Self::Min5 => write!(f, "5 mins"),
+            Self::Min15 => write!(f, "15 mins"),
+            Self::Min20 => write!(f, "20 mins"),
+            Self::Min30 => write!(f, "30 mins"),
+            Self::Hour => write!(f, "1 hour"),
+            Self::Hour2 => write!(f, "2 hours"),
+            Self::Hour3 => write!(f, "3 hours"),
+            Self::Hour4 => write!(f, "4 hours"),
+            Self::Hour8 => write!(f, "8 hours"),
+            Self::Day => write!(f, "1 day"),
+            Self::Week => write!(f, "1 week"),
+            Self::Month => write!(f, "1 month"),
         }
     }
 }
@@ -126,9 +125,9 @@ impl Duration {
     }
 }
 
-impl ToString for Duration {
-    fn to_string(&self) -> String {
-        format!("{} {}", self.value, self.unit)
+impl Display for Duration {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{} {}", self.value, self.unit)
     }
 }
 
@@ -265,18 +264,18 @@ pub enum WhatToShow {
     Schedule,
 }
 
-impl ToString for WhatToShow {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for WhatToShow {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::Trades => "TRADES".to_string(),
-            Self::MidPoint => "MIDPOINT".to_string(),
-            Self::Bid => "BID".to_string(),
-            Self::Ask => "ASK".to_string(),
-            Self::BidAsk => "BID_ASK".to_string(),
-            Self::HistoricalVolatility => "HISTORICAL_VOLATILITY".to_string(),
-            Self::OptionImpliedVolatility => "OPTION_IMPLIED_VOLATILITY".to_string(),
-            Self::FeeRate => "FEE_RATE".to_string(),
-            Self::Schedule => "SCHEDULE".to_string(),
+            Self::Trades => write!(f, "TRADES"),
+            Self::MidPoint => write!(f, "MIDPOINT"),
+            Self::Bid => write!(f, "BID"),
+            Self::Ask => write!(f, "ASK"),
+            Self::BidAsk => write!(f, "BID_ASK"),
+            Self::HistoricalVolatility => write!(f, "HISTORICAL_VOLATILITY"),
+            Self::OptionImpliedVolatility => write!(f, "OPTION_IMPLIED_VOLATILITY"),
+            Self::FeeRate => write!(f, "FEE_RATE"),
+            Self::Schedule => write!(f, "SCHEDULE"),
         }
     }
 }

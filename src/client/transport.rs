@@ -2,10 +2,10 @@ use std::collections::HashMap;
 use std::io::{prelude::*, Cursor};
 use std::iter::Iterator;
 use std::net::TcpStream;
+use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-use std::sync::Mutex;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use crossbeam::channel::{self, Receiver, Sender};

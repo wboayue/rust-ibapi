@@ -205,7 +205,7 @@ impl Client {
 
     /// The time of the server when the client connected
     pub fn connection_time(&self) -> Option<OffsetDateTime> {
-        self.connection_time.clone()
+        self.connection_time
     }
 
     /// Returns the managed accounts.
