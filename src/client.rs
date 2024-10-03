@@ -221,9 +221,22 @@ impl Client {
         accounts::positions(self)
     }
 
-    /// Creates subscription for real time daily PnL and unrealized PnL updates
-    /// * @param account account for which to receive PnL updates
-    /// * @param modelCode specify to request PnL updates for a specific model
+    /// Creates subscription for real time daily PnL and unrealized PnL updates.
+    ///
+    /// # Arguments
+    /// * `account`    - account for which to receive PnL updates
+    /// * `model_code` - specify to request PnL updates for a specific model
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let responses = client.pnl(account, None)?
+    /// for response in response {
+    /// }
+    /// ```
     pub fn pnl<'a>(&'a self, account: &str, model_code: Option<&str>) -> Result<impl Iterator<Item = PnL> + 'a, Error> {
         accounts::pnl(self, account, model_code)
     }

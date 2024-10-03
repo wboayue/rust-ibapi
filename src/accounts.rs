@@ -89,23 +89,18 @@ pub(crate) fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
     }
 }
 
-/**
- * @brief Creates subscription for real time daily PnL and unrealized PnL updates
- * @param account account for which to receive PnL updates
- * @param modelCode specify to request PnL updates for a specific model
- */
-
-// https://github.com/InteractiveBrokers/tws-api/blob/2724a8eaa67600ce2d876b010667a8f6a22fe298/source/csharpclient/client/EDecoder.cs#L674
-// https://github.com/InteractiveBrokers/tws-api/blob/2724a8eaa67600ce2d876b010667a8f6a22fe298/source/csharpclient/client/EClient.cs#L2744
-// Creates subscription for real time daily PnL and unrealized PnL updates.
-// Parameters
-// account	account for which to receive PnL updates
-// modelCode	specify to request PnL updates for a specific model
+// Creates subscription for real time daily PnL and unrealized PnL updates
+//
+// # Arguments
+// * `client`     - client
+// * `account`    - account for which to receive PnL updates
+// * `model_code` - specify to request PnL updates for a specific model
 pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str>) -> Result<impl Iterator<Item = PnL> + 'a, Error> {
     client.check_server_version(server_versions::PNL, "It does not support PnL requests.")?;
 
     let request_id = client.next_request_id();
     let request = encoders::encode_request_pnl(request_id, account, model_code)?;
+    
     let responses = client.send_durable_request(request_id, request)?;
 
     Ok(PnlIterator { client, responses })
@@ -116,6 +111,9 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
 // modelCode	model in which position exists
 // conId	contract ID (conId) of contract to receive daily PnL updates for. Note: does not return message if invalid conId is entered
 // https://github.com/InteractiveBrokers/tws-api/blob/2724a8eaa67600ce2d876b010667a8f6a22fe298/source/csharpclient/client/EClient.cs#L2794
+// https://github.com/InteractiveBrokers/tws-api/blob/2724a8eaa67600ce2d876b010667a8f6a22fe298/source/csharpclient/client/EDecoder.cs#L674
+// https://github.com/InteractiveBrokers/tws-api/blob/2724a8eaa67600ce2d876b010667a8f6a22fe298/source/csharpclient/client/EClient.cs#L2744
+
 pub(crate) fn pnl_single<'a>(
     client: &'a Client,
     account: &str,
