@@ -23,54 +23,44 @@ pub(crate) fn request_family_codes() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::RequestFamilyCodes, 1)
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::ToField;
+pub(crate) fn encode_request_pnl(request_id: i32, account: &str, model_code: Option<&str>) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
 
-    use super::*;
+    message.push_field(&OutgoingMessages::RequestPnL);
+    message.push_field(&request_id);
+    message.push_field(&account);
 
-    #[test]
-    fn request_positions() {
-        let results = super::request_positions();
-
-        match results {
-            Ok(message) => {
-                assert_eq!(message[0], OutgoingMessages::RequestPositions.to_field(), "message.type");
-                assert_eq!(message[1], "1", "message.version");
-            }
-            Err(err) => {
-                assert!(false, "error encoding request positions: {err}");
-            }
-        }
+    if let Some(model_code) = model_code {
+        message.push_field(&model_code);
+    } else {
+        message.push_field(&"");
     }
 
-    #[test]
-    fn cancel_positions() {
-        let results = super::cancel_positions();
-
-        match results {
-            Ok(message) => {
-                assert_eq!(message[0], OutgoingMessages::CancelPositions.to_field(), "message.type");
-                assert_eq!(message[1], "1", "message.version");
-            }
-            Err(err) => {
-                assert!(false, "error encoding cancel positions: {err}");
-            }
-        }
-    }
-
-    #[test]
-    fn request_family_codes() {
-        let results = super::request_family_codes();
-
-        match results {
-            Ok(message) => {
-                assert_eq!(message[0], OutgoingMessages::RequestFamilyCodes.to_field(), "message.type");
-                assert_eq!(message[1], "1", "message.version");
-            }
-            Err(err) => {
-                assert!(false, "error encoding request family codes: {err}");
-            }
-        }
-    }
+    Ok(message)
 }
+
+pub(crate) fn encode_request_pnl_single(
+    request_id: i32,
+    account: &str,
+    contract_id: &str,
+    model_code: Option<&str>,
+) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+
+    message.push_field(&OutgoingMessages::RequestPnLSingle);
+    message.push_field(&request_id);
+    message.push_field(&account);
+
+    if let Some(model_code) = model_code {
+        message.push_field(&model_code);
+    } else {
+        message.push_field(&"");
+    }
+
+    message.push_field(&contract_id);
+
+    Ok(message)
+}
+
+#[cfg(test)]
+mod tests;

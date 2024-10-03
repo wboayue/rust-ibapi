@@ -9,7 +9,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::accounts::{FamilyCode, Position};
+use crate::accounts::{FamilyCode, PnL, Position};
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::contracts::Contract;
 use crate::errors::Error;
@@ -219,6 +219,13 @@ impl Client {
     #[allow(clippy::needless_lifetimes)]
     pub fn positions<'a>(&'a self) -> core::result::Result<impl Iterator<Item = Position> + 'a, Error> {
         accounts::positions(self)
+    }
+
+    /// Creates subscription for real time daily PnL and unrealized PnL updates
+    /// * @param account account for which to receive PnL updates
+    /// * @param modelCode specify to request PnL updates for a specific model
+    pub fn pnl<'a>(&'a self, account: &str, model_code: Option<&str>) -> Result<impl Iterator<Item = PnL> + 'a, Error> {
+        accounts::pnl(self, account, model_code)
     }
 
     // === Contracts ===
@@ -907,6 +914,7 @@ impl Client {
         self.message_bus.lock().expect("MessageBus is poisoned").write_message(&packet)
     }
 
+    // wait timeout
     pub(crate) fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator, Error> {
         debug!("send_message({:?}, {:?})", request_id, message);
         self.message_bus
@@ -915,6 +923,7 @@ impl Client {
             .send_generic_message(request_id, &message)
     }
 
+    // wait indefinitely. until cancelled.
     pub(crate) fn send_durable_request(&self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator, Error> {
         debug!("send_durable_request({:?}, {:?})", request_id, message);
         self.message_bus
