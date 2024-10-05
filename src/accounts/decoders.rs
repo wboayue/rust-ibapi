@@ -1,6 +1,8 @@
-use crate::contracts::SecurityType;
+use core::f64;
+
 use crate::messages::ResponseMessage;
-use crate::Error;
+use crate::{contracts::SecurityType, Client};
+use crate::{server_versions, Error};
 
 use super::{FamilyCode, PnL, PnLSingle, Position};
 
@@ -60,12 +62,52 @@ pub(crate) fn decode_family_codes(message: &mut ResponseMessage) -> Result<Vec<F
     Ok(family_codes)
 }
 
-pub(crate) fn decode_pnl(message: &mut ResponseMessage) -> Result<PnL, Error> {
-    Ok(PnL::default())
+pub(crate) fn decode_pnl(client: &Client, message: &mut ResponseMessage) -> Result<PnL, Error> {
+    message.skip(); // request id
+
+    let daily_pnl = message.next_double()?;
+    let unrealized_pnl = if client.server_version() >= server_versions::UNREALIZED_PNL {
+        Some(message.next_double()?)
+    } else {
+        None
+    };
+    let realized_pnl = if client.server_version() >= server_versions::REALIZED_PNL {
+        Some(message.next_double()?)
+    } else {
+        None
+    };
+
+    Ok(PnL {
+        daily_pnl,
+        unrealized_pnl,
+        realized_pnl,
+    })
 }
 
-pub(crate) fn decode_pnl_single(message: &mut ResponseMessage) -> Result<PnLSingle, Error> {
-    Ok(PnLSingle::default())
+pub(crate) fn decode_pnl_single(client: &Client, message: &mut ResponseMessage) -> Result<PnLSingle, Error> {
+    message.skip(); // request id
+
+    let position = message.next_double()?;
+    let daily_pnl = message.next_double()?;
+    let unrealized_pnl = if client.server_version() >= server_versions::UNREALIZED_PNL {
+        Some(message.next_double()?)
+    } else {
+        None
+    };
+    let realized_pnl = if client.server_version() >= server_versions::REALIZED_PNL {
+        Some(message.next_double()?)
+    } else {
+        None
+    };
+    let value = message.next_double()?;
+
+    Ok(PnLSingle {
+        position,
+        daily_pnl,
+        unrealized_pnl,
+        realized_pnl,
+        value,
+    })
 }
 
 #[cfg(test)]

@@ -9,7 +9,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::accounts::{FamilyCode, PnL, Position};
+use crate::accounts::{FamilyCode, PnL, PnLSingle, Position};
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::contracts::Contract;
 use crate::errors::Error;
@@ -233,12 +233,45 @@ impl Client {
     /// use ibapi::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    /// let responses = client.pnl(account, None)?
-    /// for response in response {
+    /// let account = "account id";
+    /// let responses = client.pnl(account, None).expect("error requesting pnl");
+    /// for pnl in responses {
+    ///     println!("{pnl:?}")
     /// }
     /// ```
     pub fn pnl<'a>(&'a self, account: &str, model_code: Option<&str>) -> Result<impl Iterator<Item = PnL> + 'a, Error> {
         accounts::pnl(self, account, model_code)
+    }
+
+    /// Requests real time updates for daily PnL of individual positions.
+    ///
+    /// # Arguments
+    /// * `account`     - Account in which position exists
+    /// * `contract_id` - Contract ID of contract to receive daily PnL updates for. Note: does not return response if invalid conId is entered.
+    /// * `model_code`  - Model in which position exists
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let account = "<account id>";
+    /// let contract_id = "<contract id>";
+    ///
+    /// let responses = client.pnl_single(account, contract_id, None).expect("error requesting pnl");
+    /// for pnl in responses {
+    ///     println!("{pnl:?}")
+    /// }
+    /// ```
+    pub fn pnl_single<'a>(
+        &'a self,
+        account: &str,
+        contract_id: &str,
+        model_code: Option<&str>,
+    ) -> Result<impl Iterator<Item = PnLSingle> + 'a, Error> {
+        accounts::pnl_single(self, account, contract_id, model_code)
     }
 
     // === Contracts ===

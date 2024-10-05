@@ -13,9 +13,9 @@ pub struct PnL {
     /// DailyPnL for the position
     pub daily_pnl: f64,
     /// UnrealizedPnL total unrealized PnL for the position (since inception) updating in real time.
-    pub unrealized_pnl: f64,
+    pub unrealized_pnl: Option<f64>,
     /// Realized PnL for the position
-    pub realized_pnl: f64,
+    pub realized_pnl: Option<f64>,
 }
 
 #[derive(Debug, Default)]
@@ -25,9 +25,9 @@ pub struct PnLSingle {
     /// DailyPnL for the position
     pub daily_pnl: f64,
     /// UnrealizedPnL total unrealized PnL for the position (since inception) updating in real time.
-    pub unrealized_pnl: f64,
+    pub unrealized_pnl: Option<f64>,
     /// Realized PnL for the position
-    pub realized_pnl: f64,
+    pub realized_pnl: Option<f64>,
     /// Current market value of the position
     pub value: f64,
 }
@@ -99,21 +99,20 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
     client.check_server_version(server_versions::PNL, "It does not support PnL requests.")?;
 
     let request_id = client.next_request_id();
+
     let request = encoders::encode_request_pnl(request_id, account, model_code)?;
-    
     let responses = client.send_durable_request(request_id, request)?;
 
     Ok(PnlIterator { client, responses })
 }
 
-/// Requests real time updates for daily PnL of individual positions.
-// account in which position exists
-// modelCode	model in which position exists
-// conId	contract ID (conId) of contract to receive daily PnL updates for. Note: does not return message if invalid conId is entered
-// https://github.com/InteractiveBrokers/tws-api/blob/2724a8eaa67600ce2d876b010667a8f6a22fe298/source/csharpclient/client/EClient.cs#L2794
-// https://github.com/InteractiveBrokers/tws-api/blob/2724a8eaa67600ce2d876b010667a8f6a22fe298/source/csharpclient/client/EDecoder.cs#L674
-// https://github.com/InteractiveBrokers/tws-api/blob/2724a8eaa67600ce2d876b010667a8f6a22fe298/source/csharpclient/client/EClient.cs#L2744
-
+// Requests real time updates for daily PnL of individual positions.
+///
+// # Arguments
+// * `client` - Client
+// * `account` - Account in which position exists
+// * `contract_id` - Contract ID of contract to receive daily PnL updates for. Note: does not return message if invalid conId is entered
+// * `model_code` - Model in which position exists
 pub(crate) fn pnl_single<'a>(
     client: &'a Client,
     account: &str,
@@ -123,11 +122,11 @@ pub(crate) fn pnl_single<'a>(
     client.check_server_version(server_versions::PNL, "It does not support PnL requests.")?;
 
     let request_id = client.next_request_id();
-    let message = encoders::encode_request_pnl_single(request_id, account, contract_id, model_code)?;
 
-    let messages = client.send_durable_request(request_id, message)?;
+    let request = encoders::encode_request_pnl_single(request_id, account, contract_id, model_code)?;
+    let responses = client.send_durable_request(request_id, request)?;
 
-    Ok(PnlSingleIterator { client, messages })
+    Ok(PnlSingleIterator { client, responses })
 }
 
 // Supports iteration over [Position].
@@ -181,7 +180,7 @@ impl<'a> Iterator for PnlIterator<'a> {
         loop {
             if let Some(mut message) = self.responses.next() {
                 match message.message_type() {
-                    IncomingMessages::PnL => match decoders::decode_pnl(&mut message) {
+                    IncomingMessages::PnL => match decoders::decode_pnl(&self.client, &mut message) {
                         Ok(val) => return Some(val),
                         Err(err) => {
                             error!("error decoding execution data: {err}");
@@ -201,7 +200,7 @@ impl<'a> Iterator for PnlIterator<'a> {
 // Supports iteration over [Pnl].
 pub(crate) struct PnlSingleIterator<'a> {
     client: &'a Client,
-    messages: ResponseIterator,
+    responses: ResponseIterator,
 }
 
 impl<'a> Iterator for PnlSingleIterator<'a> {
@@ -210,9 +209,9 @@ impl<'a> Iterator for PnlSingleIterator<'a> {
     // Returns the next [Position]. Waits up to x seconds for next [OrderDataResult].
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(mut message) = self.messages.next() {
+            if let Some(mut message) = self.responses.next() {
                 match message.message_type() {
-                    IncomingMessages::PnL => match decoders::decode_pnl_single(&mut message) {
+                    IncomingMessages::PnL => match decoders::decode_pnl_single(&self.client, &mut message) {
                         Ok(val) => return Some(val),
                         Err(err) => {
                             error!("error decoding execution data: {err}");
