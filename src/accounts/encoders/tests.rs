@@ -3,48 +3,27 @@ use crate::ToField;
 use super::*;
 
 #[test]
-fn request_positions() {
-    let results = super::request_positions();
+fn test_request_positions() {
+    let message = super::request_positions().expect("error encoding request");
 
-    match results {
-        Ok(message) => {
-            assert_eq!(message[0], OutgoingMessages::RequestPositions.to_field(), "message.type");
-            assert_eq!(message[1], "1", "message.version");
-        }
-        Err(err) => {
-            assert!(false, "error encoding request positions: {err}");
-        }
-    }
+    assert_eq!(message[0], OutgoingMessages::RequestPositions.to_field(), "message.type");
+    assert_eq!(message[1], "1", "message.version");
 }
 
 #[test]
-fn cancel_positions() {
-    let results = super::cancel_positions();
+fn test_cancel_positions() {
+    let message = super::cancel_positions().expect("error encoding request");
 
-    match results {
-        Ok(message) => {
-            assert_eq!(message[0], OutgoingMessages::CancelPositions.to_field(), "message.type");
-            assert_eq!(message[1], "1", "message.version");
-        }
-        Err(err) => {
-            assert!(false, "error encoding cancel positions: {err}");
-        }
-    }
+    assert_eq!(message[0], OutgoingMessages::CancelPositions.to_field(), "message.type");
+    assert_eq!(message[1], "1", "message.version");
 }
 
 #[test]
-fn request_family_codes() {
-    let results = super::request_family_codes();
+fn test_request_family_codes() {
+    let message = super::request_family_codes().expect("error encoding request");
 
-    match results {
-        Ok(message) => {
-            assert_eq!(message[0], OutgoingMessages::RequestFamilyCodes.to_field(), "message.type");
-            assert_eq!(message[1], "1", "message.version");
-        }
-        Err(err) => {
-            assert!(false, "error encoding request family codes: {err}");
-        }
-    }
+    assert_eq!(message[0], OutgoingMessages::RequestFamilyCodes.to_field(), "message.type");
+    assert_eq!(message[1], "1", "message.version");
 }
 
 #[test]
