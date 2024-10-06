@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::io::Write;
+use std::marker::PhantomData;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -9,14 +10,14 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::accounts::{FamilyCode, PnL, PnLSingle, Position, Subscription};
+use crate::accounts::{FamilyCode, PnL, PnLSingle, Position};
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
 use crate::market_data::realtime::{self, Bar, BarSize, WhatToShow};
-use crate::messages::RequestMessage;
 use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::{RequestMessage, ResponseMessage};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
 use crate::{accounts, contracts, orders, server_versions};
 
@@ -1028,6 +1029,67 @@ impl Debug for Client {
             .field("server_time", &self.connection_time)
             .field("client_id", &self.client_id)
             .finish()
+    }
+}
+
+/// Supports the handling of responses from TWS.
+pub struct Subscription<'a, T> {
+    pub(crate) client: &'a Client,
+    pub(crate) responses: ResponseIterator,
+    pub(crate) phantom: PhantomData<T>,
+}
+
+impl<'a, T: Subscribable<T>> Subscription<'a, T> {
+    pub fn try_next(&mut self) -> Option<T> {
+        if let Some(mut message) = self.responses.try_next() {
+            if message.message_type() == T::INCOMING_MESSAGE_ID {
+                match T::decode(self.client.server_version(), &mut message) {
+                    Ok(val) => return Some(val),
+                    Err(err) => {
+                        error!("error decoding execution data: {err}");
+                        return None;
+                    }
+                }
+            }
+            return None;
+        } else {
+            None
+        }
+    }
+
+    pub fn cancel(&mut self) {}
+}
+
+pub(crate) trait Subscribable<T> {
+    const INCOMING_MESSAGE_ID: IncomingMessages;
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
+}
+
+impl<'a, T: Subscribable<T>> Iterator for Subscription<'a, T> {
+    type Item = T;
+
+    // Returns the next [Position]. Waits up to x seconds for next [OrderDataResult].
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(mut message) = self.responses.next() {
+                if message.message_type() == T::INCOMING_MESSAGE_ID {
+                    match T::decode(self.client.server_version(), &mut message) {
+                        Ok(val) => return Some(val),
+                        Err(err) => {
+                            error!("error decoding execution data: {err}");
+                        }
+                    }
+                } else if message.message_type() == IncomingMessages::Error {
+                    let error_message = message.peek_string(4);
+                    error!("{error_message}");
+                    return None;
+                } else {
+                    error!("subscription iterator unexpected message: {message:?}");
+                }
+            } else {
+                return None;
+            }
+        }
     }
 }
 

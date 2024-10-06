@@ -1,8 +1,20 @@
+//! # Account Management
+//!
+//! This module provides functionality for managing positions and profit and loss (PnL)
+//! information in a trading system. It includes structures and implementations for:
+//!
+//! - Position tracking
+//! - Daily, unrealized, and realized PnL calculations
+//! - Family code management
+//! - Real-time PnL updates for individual positions
+//!
+
 use std::marker::PhantomData;
 
 use log::error;
 
-use crate::client::transport::{GlobalResponseIterator, ResponseIterator};
+use crate::client::transport::GlobalResponseIterator;
+use crate::client::{Subscribable, Subscription};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::{server_versions, Client, Error};
@@ -10,6 +22,7 @@ use crate::{server_versions, Client, Error};
 mod decoders;
 mod encoders;
 
+// Realtime PnL update for account.
 #[derive(Debug, Default)]
 pub struct PnL {
     /// DailyPnL for the position
@@ -28,6 +41,7 @@ impl Subscribable<PnL> for PnL {
     }
 }
 
+// Realtime PnL update for a position in account.
 #[derive(Debug, Default)]
 pub struct PnLSingle {
     // Current size of the position
@@ -129,7 +143,7 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
 }
 
 // Requests real time updates for daily PnL of individual positions.
-///
+//
 // # Arguments
 // * `client` - Client
 // * `account` - Account in which position exists
@@ -184,67 +198,6 @@ impl<'a> Iterator for PositionIterator<'a> {
                     message => {
                         error!("order data iterator unexpected message: {message:?}");
                     }
-                }
-            } else {
-                return None;
-            }
-        }
-    }
-}
-
-// Supports iteration over [Pnl].
-pub struct Subscription<'a, T> {
-    client: &'a Client,
-    responses: ResponseIterator,
-    phantom: PhantomData<T>,
-}
-
-impl<'a, T: Subscribable<T>> Subscription<'a, T> {
-    pub fn try_next(&mut self) -> Option<T> {
-        if let Some(mut message) = self.responses.try_next() {
-            if message.message_type() == T::INCOMING_MESSAGE_ID {
-                match T::decode(self.client.server_version(), &mut message) {
-                    Ok(val) => return Some(val),
-                    Err(err) => {
-                        error!("error decoding execution data: {err}");
-                        return None;
-                    }
-                }
-            }
-            return None;
-        } else {
-            None
-        }
-    }
-
-    pub fn cancel(&mut self) {}
-}
-
-trait Subscribable<T> {
-    const INCOMING_MESSAGE_ID: IncomingMessages;
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
-}
-
-impl<'a, T: Subscribable<T>> Iterator for Subscription<'a, T> {
-    type Item = T;
-
-    // Returns the next [Position]. Waits up to x seconds for next [OrderDataResult].
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(mut message) = self.responses.next() {
-                if message.message_type() == T::INCOMING_MESSAGE_ID {
-                    match T::decode(self.client.server_version(), &mut message) {
-                        Ok(val) => return Some(val),
-                        Err(err) => {
-                            error!("error decoding execution data: {err}");
-                        }
-                    }
-                } else if message.message_type() == IncomingMessages::Error {
-                    let error_message = message.peek_string(4);
-                    error!("{error_message}");
-                    return None;
-                } else {
-                    error!("subscription iterator unexpected message: {message:?}");
                 }
             } else {
                 return None;

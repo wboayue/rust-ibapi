@@ -25,6 +25,8 @@ fn main() {
     // Consume items blocking for next
     while let Some(pnl) = subscription.next() {
         println!("PnL: {:?}", pnl);
+
+        // After processing items subscription could be cancelled.
         subscription.cancel();
     }
 }
