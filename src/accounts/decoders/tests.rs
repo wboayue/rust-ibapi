@@ -42,6 +42,7 @@ fn test_decode_family_codes() {
 #[test]
 fn test_decode_pnl() {
     let mut message = super::ResponseMessage::from("94\09000\00.1\00.2\00.3\0");
+    
     let pnl = super::decode_pnl(server_versions::REALIZED_PNL, &mut message).expect("error decoding pnl");
 
     assert_eq!(pnl.daily_pnl, 0.10, "pnl.daily_pnl");
@@ -49,6 +50,7 @@ fn test_decode_pnl() {
     assert_eq!(pnl.realized_pnl, Some(0.30), "pnl.realized_pnl");
 
     let mut message = super::ResponseMessage::from("94\09000\00.1\00.2\00.3\0");
+
     let pnl = super::decode_pnl(server_versions::UNREALIZED_PNL, &mut message).expect("error decoding pnl");
 
     assert_eq!(pnl.daily_pnl, 0.10, "pnl.daily_pnl");
@@ -56,6 +58,7 @@ fn test_decode_pnl() {
     assert_eq!(pnl.realized_pnl, None, "pnl.realized_pnl");
 
     let mut message = super::ResponseMessage::from("94\09000\00.1\00.2\00.3\0");
+
     let pnl = super::decode_pnl(server_versions::PNL, &mut message).expect("error decoding pnl");
 
     assert_eq!(pnl.daily_pnl, 0.10, "pnl.daily_pnl");
@@ -66,6 +69,7 @@ fn test_decode_pnl() {
 #[test]
 fn test_decode_pnl_single() {
     let mut message = super::ResponseMessage::from("94\09000\00.1\00.2\00.3\0");
+
     let pnl = super::decode_pnl_single(server_versions::REALIZED_PNL, &mut message).expect("error decoding pnl");
 
     assert_eq!(pnl.daily_pnl, 0.10, "pnl.daily_pnl");
@@ -73,6 +77,7 @@ fn test_decode_pnl_single() {
     assert_eq!(pnl.realized_pnl, Some(0.30), "pnl.realized_pnl");
 
     let mut message = super::ResponseMessage::from("94\09000\00.1\00.2\00.3\0");
+
     let pnl = super::decode_pnl_single(server_versions::UNREALIZED_PNL, &mut message).expect("error decoding pnl");
 
     assert_eq!(pnl.daily_pnl, 0.10, "pnl.daily_pnl");
@@ -80,6 +85,7 @@ fn test_decode_pnl_single() {
     assert_eq!(pnl.realized_pnl, None, "pnl.realized_pnl");
 
     let mut message = super::ResponseMessage::from("94\09000\00.1\00.2\00.3\0");
+
     let pnl = super::decode_pnl_single(server_versions::PNL, &mut message).expect("error decoding pnl");
 
     assert_eq!(pnl.daily_pnl, 0.10, "pnl.daily_pnl");
