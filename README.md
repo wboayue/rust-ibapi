@@ -15,8 +15,6 @@ This is a work in progress and was tested using TWS 10.19. The primary reference
 Open issues are tracked [here](https://github.com/wboayue/rust-ibapi/issues). 
 If you run into a problem or need a missing feature, check the [issues list](https://github.com/wboayue/rust-ibapi/issues) before reporting a new issue.
 
-Contributions are welcome.
-
 ## Example
 
 The following example gives a flavor of the API style. It is not a trading strategy recommendation and not a complete implementation.
@@ -30,12 +28,12 @@ use ibapi::orders::{order_builder, Action, OrderNotification};
 use ibapi::Client;
 
 fn main() {
-    let client = Client::connect("127.0.0.1:4002", 100).unwrap();
+    let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed!");
 
     let symbol = "TSLA";
     let contract = Contract::stock(symbol); // defaults to USD and SMART exchange.
 
-    let bars = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).unwrap();
+    let bars = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
 
     let mut channel = BreakoutChannel::new(30);
 
@@ -58,7 +56,7 @@ fn main() {
         let order_id = client.next_order_id();
         let order = order_builder::market_order(action, 100.0);
 
-        let notices = client.place_order(order_id, &contract, &order).unwrap();
+        let notices = client.place_order(order_id, &contract, &order).expect("place order request failed!");
         for notice in notices {
             if let OrderNotification::ExecutionData(data) = notice {
                 println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
@@ -154,3 +152,7 @@ impl BreakoutChannel {
 * [next_valid_order_id](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.next_valid_order_id)
 * [open_orders](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.open_orders)
 * [place_order](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.place_order)
+
+## Contributions
+
+Contributions are welcomed. If you are interested in contributing to the project, review the [contributor documentation](https://github.com/wboayue/rust-ibapi/tree/main/CONTRIBUTING.md).
