@@ -7,16 +7,8 @@
 - [Core Components](#core-components)
 - [Request and Response Handling](#request-and-response-handling)
 - [Extending the API](#extending-the-api)
-- [Commit Message Guidelines](#commit-message-guidelines)
-- [Pull Request Process](#pull-request-process)
-- [Documentation](#documentation)
-- [Reporting Bugs](#reporting-bugs)
-- [Feature Requests](#feature-requests)
 - [Troubleshooting](#troubleshooting)
-- [Community](#community)
 - [Creating and Publishing Releases](#creating-and-publishing-releases)
-- [License](#license)
-- [Acknowledgements](#acknowledgements)
 
 ## Overview
 
@@ -90,45 +82,43 @@ The API uses a combination of request IDs and channels to manage the flow of mes
 1. For requests with a request or order ID:
 
 * The Client generates a unique ID for the request.
-* The MessageBus creates a dedicated channel for responses based on the request ID
-* Responses related to this request are sent through this channel
+* The MessageBus creates a dedicated channel for responses based on the request ID.
+* Responses related to this request are sent through these channels.
 
 2. For requests without a request or order ID (TWS API limitation):
 
-* The MessageBus uses predefined shared channels based on request type.
+* The MessageBus creates a shared channel for responses of that request type.
 * Responses related to these requests are routed through these shared channels.
+* **Note**: Since these responses are not tied to specific request IDs, distinguishing between responses from concurrent requests of the same type requires careful handling.
 
-**Note**: Since these responses are not tied to specific request IDs, distinguishing between responses from concurrent requests of the same type requires careful handling.
-
-The recommended application design is a separate Client instance per thread.
+The recommended application design is a separate Client instance per thread to avoid message routing issues.
 
 ## Extending the API
 
-1. The API exposed to the user is defined on the Client struct. The API implementation is delegated to modules grouped by accounts, contracts, market data, orders and news. Define the news API on the Client struct. Include a docstring describing the API that includes and example of the API usage. [for example](https://github.com/liuzix/rust-ibapi/blob/cc6287ba73e705324908adbd37dbd32a565dd1c1/src/client.rs#L226).
+1. The API exposed to the user is defined on the [Client struct](https://github.com/wboayue/rust-ibapi/blob/main/src/client.rs#L33). The API implementation is delegated to modules grouped by accounts, contracts, market data, orders and news. Define the new API on the Client struct. Include a docstring describing the API that includes and example of the API usage. [for example](https://github.com/liuzix/rust-ibapi/blob/main/src/client.rs#L226).
 
-2. Make sure the appropriate [incoming message](https://github.com/wboayue/rust-ibapi/blob/01a521d008a8269720d2a5a823958823ff37cbe2/src/messages.rs#L15) and [outgoing message](https://github.com/wboayue/rust-ibapi/blob/01a521d008a8269720d2a5a823958823ff37cbe2/src/messages.rs#L222) identifiers are defined. Message identifiers for [incoming messags](https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/IncomingMessage.cs) and [outgoing messages](https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/OutgoingMessages.cs) can be found in the interactive brokers codebase.
+2. Make sure the appropriate [incoming message](https://github.com/wboayue/rust-ibapi/blob/main/src/messages.rs#L15) and [outgoing message](https://github.com/wboayue/rust-ibapi/blob/main/src/messages.rs#L222) identifiers are defined. Message identifiers for [incoming messages](https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/IncomingMessage.cs) and [outgoing messages](https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/OutgoingMessages.cs) can be found in the interactive brokers codebase.
 
-3. When processing messages received from TWS/IB Gateway the request id is extracted. This is not the same for all messages. A [map of message type to request id](https://github.com/wboayue/rust-ibapi/blob/289abc31432d768c78db2dfe5ef3cf66b174d91f/src/messages.rs#L199) is maintained an will need to be updated.
+3. When processing messages received from TWS, the request id needs to be determined. This is not the same for all messages. A [map of message type to request id position](https://github.com/wboayue/rust-ibapi/blob/main/src/messages.rs#L199) is maintained and may need to be updated.
 
-4. Add an implementation for the API in the appropriate group.
-accounts, contracts, market data, orders and news. The implementation
-will provide an encoder to covert the request to the TWS format format. Send the message using the MessageBus. Message with a request id are sent using [send_generic_message](https://github.com/wboayue/rust-ibapi/blob/289abc31432d768c78db2dfe5ef3cf66b174d91f/src/client/transport.rs#L26). Messages without a request id are sent using message type methods. e.g. [request_next_order_id](https://github.com/wboayue/rust-ibapi/blob/289abc31432d768c78db2dfe5ef3cf66b174d91f/src/client/transport.rs#L29) 
+4. Add an implementation for the API in the appropriate group:
+accounts, contracts, market data, orders or news. The implementation
+will provide an encoder to convert the request to the TWS format. Send the message using the MessageBus. Messages with a request id are sent using [send_generic_message](https://github.com/wboayue/rust-ibapi/blob/main/src/client/transport.rs#L26). Messages without a request id are sent using message type methods. e.g. [request_next_order_id](https://github.com/wboayue/rust-ibapi/blob/main/src/client/transport.rs#L29) 
 
-5. Implement a decode using the response. Response returns a channel that can you used to read the results as they become available. Implement a decoder. For a single item the API can just return the result. Collection of items decoder returns a subscription used to iterate over results.
+5. Implement a decoder for the response for the MessageBus. Responses contain a channel that can you used to read the results as they become available. For APIs that return a single result they may simply decode and return the result. For a collection of results return a Subscription that can be used to iterate over results.
 
-6. Add test cases for the new functionality. Run coverage. Your addition should improve of maintain the [current coverage](https://coveralls.io/github/wboayue/rust-ibapi?branch=main). 
+6. Add test cases for the new functionality. Run coverage. Your addition should improve or maintain the [current coverage](https://coveralls.io/github/wboayue/rust-ibapi?branch=main). 
 
 7. Add an example showing the API usage to the [examples folder](https://github.com/wboayue/rust-ibapi/tree/main/examples).
 
+## Troubleshooting
 
-### Troubleshooting
+The following environment variables are useful for troubleshooting:
 
-The following environment variables are useful for troubleshooting.
+* RUST_LOG - Changes the log level. Possible values are debug, info, warn, error. 
+* IBAPI_RECORDING_DIR - If this is set, the library logs messages between the library and TWS to the specified directory.
 
-* RUST_LOG - changes the log level
-* IBAPI_RECORDING_DIR - If this is set the library logs messages between the library and TWS to the specified directory.
-
-For example, the followings set the log level to `debug` and instructs the library to log messages between it and TWS to `/tmp/tws-messages`
+For example, the following sets the log level to `debug` and instructs the library to log messages between it and TWS to `/tmp/tws-messages`:
 
 ```bash
 RUST_LOG=debug IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --bin find_contract_details
@@ -143,13 +133,13 @@ cargo build --all-targets
 cargo test
 ```
 
-2. Update version number in [Cargo.toml](https://github.com/wboayue/rust-ibapi/blob/76033d170f2b87d55ed2cd96fef17bf124161d5f/Cargo.toml#L3) using [semantic versioning](https://semver.org/). Commit and push.
+2. Update version number in [Cargo.toml](https://github.com/wboayue/rust-ibapi/blob/main/Cargo.toml#L3) using [semantic versioning](https://semver.org/). Commit and push.
 
 3. Create tag with new version number and push.
 
 ```bash
-git tag v0.4.0
-git push origin v0.4.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 4. [Create release](https://github.com/wboayue/rust-ibapi/releases/new) pointing to new tag.  Describe changes in release.
