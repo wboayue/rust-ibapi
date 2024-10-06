@@ -1,8 +1,10 @@
+use std::marker::PhantomData;
+
 use log::error;
 
 use crate::client::transport::{GlobalResponseIterator, ResponseIterator};
 use crate::contracts::Contract;
-use crate::messages::IncomingMessages;
+use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::{server_versions, Client, Error};
 
 mod decoders;
@@ -18,6 +20,15 @@ pub struct PnL {
     pub realized_pnl: Option<f64>,
 }
 
+impl Subscribable<PnL> for  PnL {
+    const INCOMING_MESSAGE_ID: IncomingMessages = IncomingMessages::PnL;
+
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+        decoders::decode_pnl(server_version, message)
+    }
+
+}
+
 #[derive(Debug, Default)]
 pub struct PnLSingle {
     // Current size of the position
@@ -30,6 +41,14 @@ pub struct PnLSingle {
     pub realized_pnl: Option<f64>,
     /// Current market value of the position
     pub value: f64,
+}
+
+impl Subscribable<PnLSingle> for  PnLSingle {
+    const INCOMING_MESSAGE_ID: IncomingMessages = IncomingMessages::PnLSingle;
+
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+        decoders::decode_pnl_single(server_version, message)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -95,7 +114,7 @@ pub(crate) fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
 // * `client`     - client
 // * `account`    - account for which to receive PnL updates
 // * `model_code` - specify to request PnL updates for a specific model
-pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str>) -> Result<impl Iterator<Item = PnL> + 'a, Error> {
+pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str>) -> Result<Subscription<'a, PnL>, Error> {
     client.check_server_version(server_versions::PNL, "It does not support PnL requests.")?;
 
     let request_id = client.next_request_id();
@@ -103,7 +122,7 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
     let request = encoders::encode_request_pnl(request_id, account, model_code)?;
     let responses = client.send_durable_request(request_id, request)?;
 
-    Ok(PnlIterator { client, responses })
+    Ok(Subscription { client, responses, phantom: PhantomData })
 }
 
 // Requests real time updates for daily PnL of individual positions.
@@ -116,9 +135,9 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
 pub(crate) fn pnl_single<'a>(
     client: &'a Client,
     account: &str,
-    contract_id: &str,
+    contract_id: i32,
     model_code: Option<&str>,
-) -> Result<impl Iterator<Item = PnLSingle> + 'a, Error> {
+) -> Result<Subscription<'a, PnLSingle>, Error> {
     client.check_server_version(server_versions::PNL, "It does not support PnL requests.")?;
 
     let request_id = client.next_request_id();
@@ -126,7 +145,7 @@ pub(crate) fn pnl_single<'a>(
     let request = encoders::encode_request_pnl_single(request_id, account, contract_id, model_code)?;
     let responses = client.send_durable_request(request_id, request)?;
 
-    Ok(PnlSingleIterator { client, responses })
+    Ok(Subscription { client, responses, phantom: PhantomData })
 }
 
 // Supports iteration over [Position].
@@ -167,59 +186,59 @@ impl<'a> Iterator for PositionIterator<'a> {
 }
 
 // Supports iteration over [Pnl].
-pub(crate) struct PnlIterator<'a> {
+pub struct Subscription<'a, T> {
     client: &'a Client,
     responses: ResponseIterator,
+    phantom: PhantomData<T>,
 }
 
-impl<'a> Iterator for PnlIterator<'a> {
-    type Item = PnL;
-
-    // Returns the next [Position]. Waits up to x seconds for next [OrderDataResult].
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(mut message) = self.responses.next() {
-                match message.message_type() {
-                    IncomingMessages::PnL => match decoders::decode_pnl(&self.client, &mut message) {
-                        Ok(val) => return Some(val),
-                        Err(err) => {
-                            error!("error decoding execution data: {err}");
-                        }
-                    },
-                    message => {
-                        error!("order data iterator unexpected message: {message:?}");
+impl<'a, T: Subscribable<T>> Subscription<'a, T> {
+    pub fn try_next(&mut self) -> Option<T> {
+        if let Some(mut message) = self.responses.try_next() {
+            if message.message_type() == T::INCOMING_MESSAGE_ID {
+                match T::decode(self.client.server_version(), &mut message) {
+                    Ok(val) => return Some(val),
+                    Err(err) => {
+                        error!("error decoding execution data: {err}");
+                        return None;
                     }
                 }
-            } else {
-                return None;
-            }
+            } 
+            return None
+        } else {
+            None
         }
+    }
+
+    pub fn cancel(&mut self) {
     }
 }
 
-// Supports iteration over [Pnl].
-pub(crate) struct PnlSingleIterator<'a> {
-    client: &'a Client,
-    responses: ResponseIterator,
+trait Subscribable<T> {
+    const INCOMING_MESSAGE_ID: IncomingMessages;
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
 }
 
-impl<'a> Iterator for PnlSingleIterator<'a> {
-    type Item = PnLSingle;
+impl<'a, T: Subscribable<T>> Iterator for Subscription<'a, T> {
+    type Item = T;
 
     // Returns the next [Position]. Waits up to x seconds for next [OrderDataResult].
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(mut message) = self.responses.next() {
-                match message.message_type() {
-                    IncomingMessages::PnL => match decoders::decode_pnl_single(&self.client, &mut message) {
+                if message.message_type() == T::INCOMING_MESSAGE_ID {
+                    match T::decode(self.client.server_version(), &mut message) {
                         Ok(val) => return Some(val),
                         Err(err) => {
                             error!("error decoding execution data: {err}");
                         }
-                    },
-                    message => {
-                        error!("order data iterator unexpected message: {message:?}");
                     }
+                } else if message.message_type() == IncomingMessages::Error {
+                    let error_message = message.peek_string(4);
+                    error!("{error_message}");
+                    return None
+                } else {
+                    error!("subscription iterator unexpected message: {message:?}");
                 }
             } else {
                 return None;

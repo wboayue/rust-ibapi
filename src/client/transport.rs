@@ -557,6 +557,26 @@ impl ResponseIterator {
             timeout,
         }
     }
+
+    pub(crate) fn try_next(&mut self) -> Option<ResponseMessage> {
+        match self.messages.try_recv() {
+            Ok(message) => Some(message),
+            Err(err) => {
+                debug!("try_next: {err}");
+                None
+            }
+        }
+    }
+
+    pub(crate) fn next_timeout(&mut self, timeout: Duration) -> Option<ResponseMessage> {
+        match self.messages.recv_timeout(timeout) {
+            Ok(message) => Some(message),
+            Err(err) => {
+                info!("timeout receiving message: {err}");
+                None
+            }
+        }
+    }
 }
 
 impl Drop for ResponseIterator {

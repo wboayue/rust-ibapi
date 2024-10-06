@@ -62,16 +62,17 @@ pub(crate) fn decode_family_codes(message: &mut ResponseMessage) -> Result<Vec<F
     Ok(family_codes)
 }
 
-pub(crate) fn decode_pnl(client: &Client, message: &mut ResponseMessage) -> Result<PnL, Error> {
+pub(crate) fn decode_pnl(server_version: i32, message: &mut ResponseMessage) -> Result<PnL, Error> {
+    message.skip(); // message type
     message.skip(); // request id
 
     let daily_pnl = message.next_double()?;
-    let unrealized_pnl = if client.server_version() >= server_versions::UNREALIZED_PNL {
+    let unrealized_pnl = if server_version >= server_versions::UNREALIZED_PNL {
         Some(message.next_double()?)
     } else {
         None
     };
-    let realized_pnl = if client.server_version() >= server_versions::REALIZED_PNL {
+    let realized_pnl = if server_version >= server_versions::REALIZED_PNL {
         Some(message.next_double()?)
     } else {
         None
@@ -84,17 +85,17 @@ pub(crate) fn decode_pnl(client: &Client, message: &mut ResponseMessage) -> Resu
     })
 }
 
-pub(crate) fn decode_pnl_single(client: &Client, message: &mut ResponseMessage) -> Result<PnLSingle, Error> {
+pub(crate) fn decode_pnl_single(server_version: i32, message: &mut ResponseMessage) -> Result<PnLSingle, Error> {
     message.skip(); // request id
 
     let position = message.next_double()?;
     let daily_pnl = message.next_double()?;
-    let unrealized_pnl = if client.server_version() >= server_versions::UNREALIZED_PNL {
+    let unrealized_pnl = if server_version >= server_versions::UNREALIZED_PNL {
         Some(message.next_double()?)
     } else {
         None
     };
-    let realized_pnl = if client.server_version() >= server_versions::REALIZED_PNL {
+    let realized_pnl = if server_version >= server_versions::REALIZED_PNL {
         Some(message.next_double()?)
     } else {
         None

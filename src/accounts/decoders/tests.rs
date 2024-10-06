@@ -1,11 +1,13 @@
+use crate::server_versions;
+
 #[test]
 fn decode_positions() {
-    let mut message = super::ResponseMessage::from("61\03\0DU1236109\076792991\0TSLA\0STK\0\00.0\0\0\0NASDAQ\0USD\0TSLA\0NMS\0500\0196.77\0");
+    let mut message = super::ResponseMessage::from("61\03\0DU1234567\076792991\0TSLA\0STK\0\00.0\0\0\0NASDAQ\0USD\0TSLA\0NMS\0500\0196.77\0");
 
     let results = super::decode_position(&mut message);
 
     if let Ok(position) = results {
-        assert_eq!(position.account, "DU1236109", "position.account");
+        assert_eq!(position.account, "DU1234567", "position.account");
         assert_eq!(position.contract.contract_id, 76792991, "position.contract.contract_id");
         assert_eq!(position.contract.symbol, "TSLA", "position.contract.symbol");
         assert_eq!(
@@ -43,4 +45,28 @@ fn decode_family_codes() {
     } else if let Err(err) = results {
         panic!("Error decoding family_codes: {}", err);
     }
+}
+
+#[test]
+fn decode_pnl() {
+    let mut message = super::ResponseMessage::from("94\09000\00.1\00.2\00.3\0");
+    let pnl = super::decode_pnl(server_versions::REALIZED_PNL, &mut message).expect("error decoding pnl");
+
+    assert_eq!(pnl.daily_pnl, 0.10, "pnl.daily_pnl");
+    assert_eq!(pnl.unrealized_pnl, Some(0.20), "pnl.unrealized_pnl");
+    assert_eq!(pnl.realized_pnl, Some(0.30), "pnl.realized_pnl");
+
+    let mut message = super::ResponseMessage::from("94\09000\00.1\00.2\00.3\0");
+    let pnl = super::decode_pnl(server_versions::UNREALIZED_PNL, &mut message).expect("error decoding pnl");
+
+    assert_eq!(pnl.daily_pnl, 0.10, "pnl.daily_pnl");
+    assert_eq!(pnl.unrealized_pnl, Some(0.20), "pnl.unrealized_pnl");
+    assert_eq!(pnl.realized_pnl, None, "pnl.realized_pnl");
+
+    let mut message = super::ResponseMessage::from("94\09000\00.1\00.2\00.3\0");
+    let pnl = super::decode_pnl(server_versions::PNL, &mut message).expect("error decoding pnl");
+
+    assert_eq!(pnl.daily_pnl, 0.10, "pnl.daily_pnl");
+    assert_eq!(pnl.unrealized_pnl, None, "pnl.unrealized_pnl");
+    assert_eq!(pnl.realized_pnl, None, "pnl.realized_pnl");
 }
