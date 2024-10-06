@@ -155,4 +155,4 @@ impl BreakoutChannel {
 
 ## Contributions
 
-Contributors are welcomed. If you are interested in contributing to the project, review the [contributor documentation](https://github.com/wboayue/rust-ibapi/tree/main/contributors).
+Contributions are welcomed. If you are interested in contributing to the project, review the [contributor documentation](https://github.com/wboayue/rust-ibapi/tree/main/CONTRIBUTING.md).
