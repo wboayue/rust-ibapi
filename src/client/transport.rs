@@ -247,7 +247,6 @@ impl MessageBus for TcpMessageBus {
                 }
             };
 
-            // FIXME - does read block?
             // thread::sleep(Duration::from_secs(1));
         });
 
