@@ -68,7 +68,7 @@ fn test_encode_request_pnl_single() {
     let model_code: Option<&str> = None;
     let contract_id = 1001;
 
-    let request = super::encode_request_pnl_single(request_id, &account, contract_id,  model_code).expect("encode request pnl failed");
+    let request = super::encode_request_pnl_single(request_id, &account, contract_id, model_code).expect("encode request pnl failed");
 
     assert_eq!(request[0], OutgoingMessages::RequestPnLSingle.to_field(), "message.type");
     assert_eq!(request[1], request_id.to_field(), "message.request_id");

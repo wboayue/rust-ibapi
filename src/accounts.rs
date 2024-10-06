@@ -20,13 +20,12 @@ pub struct PnL {
     pub realized_pnl: Option<f64>,
 }
 
-impl Subscribable<PnL> for  PnL {
+impl Subscribable<PnL> for PnL {
     const INCOMING_MESSAGE_ID: IncomingMessages = IncomingMessages::PnL;
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_pnl(server_version, message)
     }
-
 }
 
 #[derive(Debug, Default)]
@@ -43,7 +42,7 @@ pub struct PnLSingle {
     pub value: f64,
 }
 
-impl Subscribable<PnLSingle> for  PnLSingle {
+impl Subscribable<PnLSingle> for PnLSingle {
     const INCOMING_MESSAGE_ID: IncomingMessages = IncomingMessages::PnLSingle;
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -122,7 +121,11 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
     let request = encoders::encode_request_pnl(request_id, account, model_code)?;
     let responses = client.send_durable_request(request_id, request)?;
 
-    Ok(Subscription { client, responses, phantom: PhantomData })
+    Ok(Subscription {
+        client,
+        responses,
+        phantom: PhantomData,
+    })
 }
 
 // Requests real time updates for daily PnL of individual positions.
@@ -145,7 +148,11 @@ pub(crate) fn pnl_single<'a>(
     let request = encoders::encode_request_pnl_single(request_id, account, contract_id, model_code)?;
     let responses = client.send_durable_request(request_id, request)?;
 
-    Ok(Subscription { client, responses, phantom: PhantomData })
+    Ok(Subscription {
+        client,
+        responses,
+        phantom: PhantomData,
+    })
 }
 
 // Supports iteration over [Position].
@@ -203,15 +210,14 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                         return None;
                     }
                 }
-            } 
-            return None
+            }
+            return None;
         } else {
             None
         }
     }
 
-    pub fn cancel(&mut self) {
-    }
+    pub fn cancel(&mut self) {}
 }
 
 trait Subscribable<T> {
@@ -236,7 +242,7 @@ impl<'a, T: Subscribable<T>> Iterator for Subscription<'a, T> {
                 } else if message.message_type() == IncomingMessages::Error {
                     let error_message = message.peek_string(4);
                     error!("{error_message}");
-                    return None
+                    return None;
                 } else {
                     error!("subscription iterator unexpected message: {message:?}");
                 }

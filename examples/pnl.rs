@@ -12,7 +12,7 @@ fn main() {
 
     let gateway_url = matches.get_one::<String>("connection_url").expect("connection_string is required");
     let account = matches.get_one::<String>("account").expect("account is required");
-    
+
     let client = Client::connect(&gateway_url, 919).expect("connection failed");
 
     let mut subscription = client.pnl(&account, None).expect("pnl request failed");

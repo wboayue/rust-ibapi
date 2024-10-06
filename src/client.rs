@@ -9,7 +9,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::accounts::{FamilyCode, PnL, PnLSingle, Subscription, Position};
+use crate::accounts::{FamilyCode, PnL, PnLSingle, Position, Subscription};
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::contracts::Contract;
 use crate::errors::Error;
@@ -265,12 +265,7 @@ impl Client {
     ///     println!("{pnl:?}")
     /// }
     /// ```
-    pub fn pnl_single<'a>(
-        &'a self,
-        account: &str,
-        contract_id: i32,
-        model_code: Option<&str>,
-    ) -> Result<Subscription<'a, PnLSingle>, Error> {
+    pub fn pnl_single<'a>(&'a self, account: &str, contract_id: i32, model_code: Option<&str>) -> Result<Subscription<'a, PnLSingle>, Error> {
         accounts::pnl_single(self, account, contract_id, model_code)
     }
 

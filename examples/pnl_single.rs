@@ -16,10 +16,10 @@ fn main() {
     let account = matches.get_one::<String>("account").expect("account is required");
     let contract_id = matches.get_one::<String>("contract_id").expect("contract_id is required");
     let contract_id = contract_id.parse::<i32>().expect("invalid number");
-    
+
     let client = Client::connect(&gateway_url, 919).expect("connection failed");
 
-    let mut subscription = client.pnl_single(&account,contract_id,  None).expect("pnl single request failed");
+    let mut subscription = client.pnl_single(&account, contract_id, None).expect("pnl single request failed");
 
     // Get next item non-blocking
     if let Some(pnl) = subscription.try_next() {

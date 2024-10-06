@@ -39,12 +39,7 @@ pub(crate) fn encode_request_pnl(request_id: i32, account: &str, model_code: Opt
     Ok(message)
 }
 
-pub(crate) fn encode_request_pnl_single(
-    request_id: i32,
-    account: &str,
-    contract_id: i32,
-    model_code: Option<&str>,
-) -> Result<RequestMessage, Error> {
+pub(crate) fn encode_request_pnl_single(request_id: i32, account: &str, contract_id: i32, model_code: Option<&str>) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 
     message.push_field(&OutgoingMessages::RequestPnLSingle);
@@ -58,8 +53,8 @@ pub(crate) fn encode_request_pnl_single(
     }
 
     // https://github.com/InteractiveBrokers/tws-api/blob/2724a8eaa67600ce2d876b010667a8f6a22fe298/source/csharpclient/client/EClient.cs#L2794
-// https://github.com/InteractiveBrokers/tws-api/blob/2724a8eaa67600ce2d876b010667a8f6a22fe298/source/csharpclient/client/EDecoder.cs#L674
-// https://github.com/InteractiveBrokers/tws-api/blob/2724a8eaa67600ce2d876b010667a8f6a22fe298/source/csharpclient/client/EClient.cs#L2744
+    // https://github.com/InteractiveBrokers/tws-api/blob/2724a8eaa67600ce2d876b010667a8f6a22fe298/source/csharpclient/client/EDecoder.cs#L674
+    // https://github.com/InteractiveBrokers/tws-api/blob/2724a8eaa67600ce2d876b010667a8f6a22fe298/source/csharpclient/client/EClient.cs#L2744
 
     message.push_field(&contract_id);
 
