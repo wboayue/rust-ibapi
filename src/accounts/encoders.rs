@@ -52,10 +52,6 @@ pub(crate) fn encode_request_pnl_single(request_id: i32, account: &str, contract
         message.push_field(&"");
     }
 
-    // https://github.com/InteractiveBrokers/tws-api/blob/2724a8eaa67600ce2d876b010667a8f6a22fe298/source/csharpclient/client/EClient.cs#L2794
-    // https://github.com/InteractiveBrokers/tws-api/blob/2724a8eaa67600ce2d876b010667a8f6a22fe298/source/csharpclient/client/EDecoder.cs#L674
-    // https://github.com/InteractiveBrokers/tws-api/blob/2724a8eaa67600ce2d876b010667a8f6a22fe298/source/csharpclient/client/EClient.cs#L2744
-
     message.push_field(&contract_id);
 
     Ok(message)
