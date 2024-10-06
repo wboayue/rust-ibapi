@@ -39,19 +39,3 @@ git push origin tag v0.4.0
 ```bash
 cargo publish
 ```
-
-## Add new API
-
-Verify message exists. Or add.
-* https://github.com/wboayue/rust-ibapi/blob/01a521d008a8269720d2a5a823958823ff37cbe2/src/messages.rs#L15
-
-* https://github.com/wboayue/rust-ibapi/blob/01a521d008a8269720d2a5a823958823ff37cbe2/src/messages.rs#L222
-
-
-Define model
-
-account, contracts, market data
-
-Add encoder/decoder
-
-Add example in examples
