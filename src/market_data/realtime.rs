@@ -1,11 +1,11 @@
 use log::error;
 use time::OffsetDateTime;
 
-use crate::transport::ResponseIterator;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::orders::TagValue;
 use crate::server_versions;
+use crate::transport::BusSubscription;
 use crate::ToField;
 use crate::{Client, Error};
 
@@ -259,11 +259,11 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
 pub(crate) struct RealTimeBarIterator<'a> {
     client: &'a Client,
     request_id: i32,
-    responses: ResponseIterator,
+    responses: BusSubscription,
 }
 
 impl<'a> RealTimeBarIterator<'a> {
-    fn new(client: &'a Client, request_id: i32, responses: ResponseIterator) -> RealTimeBarIterator<'a> {
+    fn new(client: &'a Client, request_id: i32, responses: BusSubscription) -> RealTimeBarIterator<'a> {
         RealTimeBarIterator {
             client,
             request_id,
@@ -316,7 +316,7 @@ impl<'a> Drop for RealTimeBarIterator<'a> {
 pub(crate) struct TradeIterator<'a> {
     client: &'a Client,
     request_id: i32,
-    responses: ResponseIterator,
+    responses: BusSubscription,
 }
 
 impl<'a> Drop for TradeIterator<'a> {
@@ -350,7 +350,7 @@ impl<'a> Iterator for TradeIterator<'a> {
 pub(crate) struct BidAskIterator<'a> {
     client: &'a Client,
     request_id: i32,
-    responses: ResponseIterator,
+    responses: BusSubscription,
 }
 
 /// Cancels the tick by tick request
@@ -392,7 +392,7 @@ impl<'a> Iterator for BidAskIterator<'a> {
 pub(crate) struct MidPointIterator<'a> {
     client: &'a Client,
     request_id: i32,
-    responses: ResponseIterator,
+    responses: BusSubscription,
 }
 
 impl<'a> Drop for MidPointIterator<'a> {

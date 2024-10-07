@@ -4,9 +4,9 @@ use std::fmt::{Debug, Display};
 use log::{error, warn};
 use time::{Date, OffsetDateTime};
 
-use crate::transport::ResponseIterator;
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
+use crate::transport::BusSubscription;
 use crate::{server_versions, Client, Error, ToField};
 
 mod decoders;
@@ -519,12 +519,12 @@ impl TickDecoder<TickMidpoint> for TickMidpoint {
 
 pub(crate) struct TickIterator<T: TickDecoder<T>> {
     done: bool,
-    messages: ResponseIterator,
+    messages: BusSubscription,
     buffer: VecDeque<T>,
 }
 
 impl<T: TickDecoder<T>> TickIterator<T> {
-    fn new(messages: ResponseIterator) -> Self {
+    fn new(messages: BusSubscription) -> Self {
         Self {
             done: false,
             messages,

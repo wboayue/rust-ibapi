@@ -3,10 +3,10 @@ use std::fmt::{self, Debug};
 
 use log::{error, info};
 
-use crate::transport::{GlobalResponseIterator, ResponseIterator};
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
+use crate::transport::{BusSubscription, GlobalResponseIterator};
 use crate::Client;
 use crate::{encode_option_field, ToField};
 use crate::{server_versions, Error};
@@ -1036,7 +1036,7 @@ pub(crate) fn place_order(
 // Supports iteration over OrderNotification
 pub(crate) struct OrderNotificationIterator {
     server_version: i32,
-    messages: ResponseIterator,
+    messages: BusSubscription,
 }
 
 impl Iterator for OrderNotificationIterator {
@@ -1323,7 +1323,7 @@ pub enum CancelOrderResult {
 // Supports iteration over [CancelOrderResult]
 pub(crate) struct CancelOrderResultIterator {
     server_version: i32,
-    messages: ResponseIterator,
+    messages: BusSubscription,
 }
 
 impl Iterator for CancelOrderResultIterator {
@@ -1545,7 +1545,7 @@ pub enum ExecutionDataResult {
 /// Supports iteration over [ExecutionDataResult].
 pub(crate) struct ExecutionDataIterator {
     server_version: i32,
-    messages: ResponseIterator,
+    messages: BusSubscription,
 }
 
 impl Iterator for ExecutionDataIterator {

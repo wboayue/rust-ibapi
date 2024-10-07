@@ -11,7 +11,6 @@ use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
 use crate::accounts::{FamilyCode, PnL, PnLSingle, Position};
-use crate::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
@@ -19,6 +18,7 @@ use crate::market_data::realtime::{self, Bar, BarSize, WhatToShow};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
+use crate::transport::{BusSubscription, GlobalResponseIterator, MessageBus, TcpMessageBus};
 use crate::{accounts, contracts, orders, server_versions};
 
 // Client
@@ -955,7 +955,7 @@ impl Client {
     }
 
     // wait timeout
-    pub(crate) fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator, Error> {
+    pub(crate) fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<BusSubscription, Error> {
         debug!("send_message({:?}, {:?})", request_id, message);
         self.message_bus
             .lock()
@@ -964,7 +964,7 @@ impl Client {
     }
 
     // wait indefinitely. until cancelled.
-    pub(crate) fn send_durable_request(&self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator, Error> {
+    pub(crate) fn send_durable_request(&self, request_id: i32, message: RequestMessage) -> Result<BusSubscription, Error> {
         debug!("send_durable_request({:?}, {:?})", request_id, message);
         self.message_bus
             .lock()
@@ -972,7 +972,7 @@ impl Client {
             .send_durable_message(request_id, &message)
     }
 
-    pub(crate) fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<ResponseIterator, Error> {
+    pub(crate) fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<BusSubscription, Error> {
         debug!("send_order({:?}, {:?})", order_id, message);
         self.message_bus
             .lock()
@@ -1033,7 +1033,7 @@ impl Debug for Client {
 /// Supports the handling of responses from TWS.
 pub struct Subscription<'a, T> {
     pub(crate) client: &'a Client,
-    pub(crate) responses: ResponseIterator,
+    pub(crate) responses: BusSubscription,
     pub(crate) phantom: PhantomData<T>,
 }
 

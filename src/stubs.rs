@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use crossbeam::channel;
 
-use crate::transport::{GlobalResponseIterator, MessageBus, ResponseIterator};
 use crate::messages::{RequestMessage, ResponseMessage};
+use crate::transport::{BusSubscription, GlobalResponseIterator, MessageBus};
 use crate::Error;
 
 pub(crate) struct MessageBusStub {
@@ -32,15 +32,15 @@ impl MessageBus for MessageBusStub {
         Ok(())
     }
 
-    fn send_generic_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
+    fn send_generic_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<BusSubscription, Error> {
         mock_request(self, request_id, message)
     }
 
-    fn send_durable_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
+    fn send_durable_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<BusSubscription, Error> {
         mock_request(self, request_id, message)
     }
 
-    fn send_order_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
+    fn send_order_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<BusSubscription, Error> {
         mock_request(self, request_id, message)
     }
 
@@ -73,7 +73,7 @@ impl MessageBus for MessageBusStub {
     }
 }
 
-fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
+fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMessage) -> Result<BusSubscription, Error> {
     stub.request_messages
         .write()
         .expect("MessageBus.request_messages is poisoned")
@@ -86,7 +86,7 @@ fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMe
         sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
     }
 
-    Ok(ResponseIterator::new(receiver, s1, None, None, Some(Duration::from_secs(5))))
+    Ok(BusSubscription::new(receiver, s1, None, None, Some(Duration::from_secs(5))))
 }
 
 fn mock_global_request(stub: &mut MessageBusStub, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {

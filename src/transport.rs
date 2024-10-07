@@ -23,9 +23,9 @@ pub(crate) trait MessageBus: Send + Sync {
 
     fn write_message(&mut self, packet: &RequestMessage) -> Result<(), Error>;
 
-    fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator, Error>;
-    fn send_durable_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator, Error>;
-    fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator, Error>;
+    fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
+    fn send_durable_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
+    fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
     fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
     fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
     fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
@@ -139,43 +139,49 @@ impl MessageBus for TcpMessageBus {
         read_packet(&self.reader)
     }
 
-    fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator, Error> {
+    fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error> {
         let (sender, receiver) = channel::unbounded();
 
         self.add_request(request_id, sender)?;
         self.write_message(packet)?;
 
-        Ok(ResponseIterator::new(
-            receiver,
-            self.signals_send.clone(),
-            Some(request_id),
-            None,
-            Some(Duration::from_secs(10)),
-        ))
+        let subscription = SubscriptionBuilder::new()
+            .receiver(receiver)
+            .signaler(self.signals_send.clone())
+            .request_id(request_id)
+            .build();
+
+        Ok(subscription)
     }
 
-    fn send_durable_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<ResponseIterator, Error> {
+    fn send_durable_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error> {
         let (sender, receiver) = channel::unbounded();
 
         self.add_request(request_id, sender)?;
         self.write_message(packet)?;
 
-        Ok(ResponseIterator::new(receiver, self.signals_send.clone(), Some(request_id), None, None))
+        let subscription = SubscriptionBuilder::new()
+            .receiver(receiver)
+            .signaler(self.signals_send.clone())
+            .request_id(request_id)
+            .build();
+
+        Ok(subscription)
     }
 
-    fn send_order_message(&mut self, order_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
+    fn send_order_message(&mut self, order_id: i32, message: &RequestMessage) -> Result<BusSubscription, Error> {
         let (sender, receiver) = channel::unbounded();
 
         self.add_order(order_id, sender)?;
         self.write_message(message)?;
 
-        Ok(ResponseIterator::new(
-            receiver,
-            self.signals_send.clone(),
-            None,
-            Some(order_id),
-            Some(Duration::from_secs(10)),
-        ))
+        let subscription = SubscriptionBuilder::new()
+            .receiver(receiver)
+            .signaler(self.signals_send.clone())
+            .order_id(order_id)
+            .build();
+
+        Ok(subscription)
     }
 
     fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
@@ -246,8 +252,6 @@ impl MessageBus for TcpMessageBus {
                     continue;
                 }
             };
-
-            // thread::sleep(Duration::from_secs(1));
         });
 
         self.handles.push(handle);
@@ -531,8 +535,9 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
     }
 }
 
+// Enables routing of response messages from TWS to Client
 #[derive(Debug)]
-pub(crate) struct ResponseIterator {
+pub(crate) struct BusSubscription {
     messages: Receiver<ResponseMessage>, // for client to receive incoming messages
     signals: Sender<Signal>,             // for client to signal termination
     request_id: Option<i32>,             // initiating request_id
@@ -540,7 +545,7 @@ pub(crate) struct ResponseIterator {
     timeout: Option<Duration>,           // How long to wait for next message
 }
 
-impl ResponseIterator {
+impl BusSubscription {
     pub(crate) fn new(
         messages: Receiver<ResponseMessage>,
         signals: Sender<Signal>,
@@ -548,7 +553,7 @@ impl ResponseIterator {
         order_id: Option<i32>,
         timeout: Option<Duration>,
     ) -> Self {
-        ResponseIterator {
+        BusSubscription {
             messages,
             signals,
             request_id,
@@ -578,7 +583,7 @@ impl ResponseIterator {
     }
 }
 
-impl Drop for ResponseIterator {
+impl Drop for BusSubscription {
     fn drop(&mut self) {
         if let Some(request_id) = self.request_id {
             self.signals.send(Signal::Request(request_id)).unwrap();
@@ -590,7 +595,7 @@ impl Drop for ResponseIterator {
     }
 }
 
-impl Iterator for ResponseIterator {
+impl Iterator for BusSubscription {
     type Item = ResponseMessage;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(timeout) = self.timeout {
@@ -610,6 +615,58 @@ impl Iterator for ResponseIterator {
                 }
             }
         }
+    }
+}
+
+struct SubscriptionBuilder {
+    receiver: Option<Receiver<ResponseMessage>>,
+    signaler: Option<Sender<Signal>>,
+    order_id: Option<i32>,
+    request_id: Option<i32>,
+}
+
+impl SubscriptionBuilder {
+    fn new() -> Self {
+        Self {
+            receiver: None,
+            signaler: None,
+            order_id: None,
+            request_id: None,
+        }
+    }
+
+    fn receiver(mut self, receiver: Receiver<ResponseMessage>) -> Self {
+        self.receiver = Some(receiver);
+        self
+    }
+
+    fn signaler(mut self, signaler: Sender<Signal>) -> Self {
+        self.signaler = Some(signaler);
+        self
+    }
+
+    fn order_id(mut self, order_id: i32) -> Self {
+        self.order_id = Some(order_id);
+        self
+    }
+
+    fn request_id(mut self, request_id: i32) -> Self {
+        self.request_id = Some(request_id);
+        self
+    }
+
+    fn build(self) -> BusSubscription {
+        if let (Some(receiver), Some(signaler)) = (self.receiver, self.signaler) {
+            return BusSubscription {
+                messages: receiver,
+                signals: signaler,
+                request_id: self.request_id,
+                order_id: self.order_id,
+                timeout: None,
+            };
+        }
+
+        panic!("bad configuration");
     }
 }
 
