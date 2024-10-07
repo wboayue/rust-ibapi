@@ -16,7 +16,7 @@ use log::error;
 use crate::client::{Subscribable, Subscription};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, ResponseMessage};
-use crate::transport::GlobalResponseIterator;
+use crate::transport::BusSubscription;
 use crate::{server_versions, Client, Error};
 
 mod decoders;
@@ -172,7 +172,7 @@ pub(crate) fn pnl_single<'a>(
 // Supports iteration over [Position].
 pub(crate) struct PositionIterator<'a> {
     client: &'a Client,
-    messages: GlobalResponseIterator,
+    messages: BusSubscription,
 }
 
 impl<'a> Iterator for PositionIterator<'a> {

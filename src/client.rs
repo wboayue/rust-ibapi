@@ -18,7 +18,7 @@ use crate::market_data::realtime::{self, Bar, BarSize, WhatToShow};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
-use crate::transport::{BusSubscription, GlobalResponseIterator, MessageBus, TcpMessageBus};
+use crate::transport::{BusSubscription, MessageBus, TcpMessageBus};
 use crate::{accounts, contracts, orders, server_versions};
 
 // Client
@@ -981,27 +981,27 @@ impl Client {
     }
 
     /// Sends request for the next valid order id.
-    pub(crate) fn request_next_order_id(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    pub(crate) fn request_next_order_id(&self, message: RequestMessage) -> Result<BusSubscription, Error> {
         self.message_bus.lock().expect("MessageBus is poisoned").request_next_order_id(&message)
     }
 
     /// Sends request for open orders.
-    pub(crate) fn request_order_data(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    pub(crate) fn request_order_data(&self, message: RequestMessage) -> Result<BusSubscription, Error> {
         self.message_bus.lock().expect("MessageBus is poisoned").request_open_orders(&message)
     }
 
     /// Sends request for market rule.
-    pub(crate) fn request_market_rule(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    pub(crate) fn request_market_rule(&self, message: RequestMessage) -> Result<BusSubscription, Error> {
         self.message_bus.lock().expect("MessageBus is poisoned").request_market_rule(&message)
     }
 
     /// Sends request for positions.
-    pub(crate) fn request_positions(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    pub(crate) fn request_positions(&self, message: RequestMessage) -> Result<BusSubscription, Error> {
         self.message_bus.lock().expect("MessageBus is poisoned").request_positions(&message)
     }
 
     /// Sends request for family codes.
-    pub(crate) fn request_family_codes(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    pub(crate) fn request_family_codes(&self, message: RequestMessage) -> Result<BusSubscription, Error> {
         self.message_bus.lock().expect("MessageBus is poisoned").request_family_codes(&message)
     }
 

@@ -6,7 +6,7 @@ use log::{error, info};
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
-use crate::transport::{BusSubscription, GlobalResponseIterator};
+use crate::transport::BusSubscription;
 use crate::Client;
 use crate::{encode_option_field, ToField};
 use crate::{server_versions, Error};
@@ -1409,7 +1409,7 @@ pub enum OrderDataResult {
 /// Supports iteration over [OrderDataResult].
 pub(crate) struct OrderDataIterator {
     server_version: i32,
-    messages: GlobalResponseIterator,
+    messages: BusSubscription,
 }
 
 impl Iterator for OrderDataIterator {

@@ -1,10 +1,9 @@
 use std::sync::{Arc, RwLock};
-use std::time::Duration;
 
 use crossbeam::channel;
 
 use crate::messages::{RequestMessage, ResponseMessage};
-use crate::transport::{BusSubscription, GlobalResponseIterator, MessageBus};
+use crate::transport::{BusSubscription, MessageBus, SubscriptionBuilder};
 use crate::Error;
 
 pub(crate) struct MessageBusStub {
@@ -44,23 +43,23 @@ impl MessageBus for MessageBusStub {
         mock_request(self, request_id, message)
     }
 
-    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
         mock_global_request(self, message)
     }
 
-    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
         mock_global_request(self, message)
     }
 
-    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
         mock_global_request(self, message)
     }
 
-    fn request_positions(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    fn request_positions(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
         mock_global_request(self, message)
     }
 
-    fn request_family_codes(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    fn request_family_codes(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
         mock_global_request(self, message)
     }
 
@@ -86,10 +85,12 @@ fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMe
         sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
     }
 
-    Ok(BusSubscription::new(receiver, s1, None, None, Some(Duration::from_secs(5))))
+    let subscription = SubscriptionBuilder::new().shared_receiver(Arc::new(receiver)).signaler(s1).build();
+
+    Ok(subscription)
 }
 
-fn mock_global_request(stub: &mut MessageBusStub, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
+fn mock_global_request(stub: &mut MessageBusStub, message: &RequestMessage) -> Result<BusSubscription, Error> {
     stub.request_messages
         .write()
         .expect("MessageBus.request_messages is poisoned")
@@ -101,5 +102,7 @@ fn mock_global_request(stub: &mut MessageBusStub, message: &RequestMessage) -> R
         sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
     }
 
-    Ok(GlobalResponseIterator::new(Arc::new(receiver)))
+    let subscription = SubscriptionBuilder::new().shared_receiver(Arc::new(receiver)).build();
+
+    Ok(subscription)
 }

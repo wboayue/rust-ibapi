@@ -26,11 +26,11 @@ pub(crate) trait MessageBus: Send + Sync {
     fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
     fn send_durable_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
     fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
-    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
-    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
-    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
-    fn request_positions(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
-    fn request_family_codes(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error>;
+    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error>;
+    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error>;
+    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error>;
+    fn request_positions(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error>;
+    fn request_family_codes(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error>;
 
     fn write(&mut self, packet: &str) -> Result<(), Error>;
 
@@ -184,29 +184,54 @@ impl MessageBus for TcpMessageBus {
         Ok(subscription)
     }
 
-    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
         self.write_message(message)?;
-        Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.order_ids_out)))
+
+        let subscription = SubscriptionBuilder::new()
+            .shared_receiver(Arc::clone(&self.globals.order_ids_out))
+            .build();
+
+        Ok(subscription)
     }
 
-    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
         self.write_message(message)?;
-        Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.open_orders_out)))
+
+        let subscription = SubscriptionBuilder::new()
+            .shared_receiver(Arc::clone(&self.globals.open_orders_out))
+            .build();
+
+        Ok(subscription)
     }
 
-    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
         self.write_message(message)?;
-        Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.recv_market_rule)))
+
+        let subscription = SubscriptionBuilder::new()
+            .shared_receiver(Arc::clone(&self.globals.recv_market_rule))
+            .build();
+
+        Ok(subscription)
     }
 
-    fn request_positions(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    fn request_positions(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
         self.write_message(message)?;
-        Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.recv_positions)))
+
+        let subscription = SubscriptionBuilder::new()
+            .shared_receiver(Arc::clone(&self.globals.recv_positions))
+            .build();
+
+        Ok(subscription)
     }
 
-    fn request_family_codes(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    fn request_family_codes(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
         self.write_message(message)?;
-        Ok(GlobalResponseIterator::new(Arc::clone(&self.globals.recv_family_codes)))
+
+        let subscription = SubscriptionBuilder::new()
+            .shared_receiver(Arc::clone(&self.globals.recv_family_codes))
+            .build();
+
+        Ok(subscription)
     }
 
     fn write_message(&mut self, message: &RequestMessage) -> Result<(), Error> {
@@ -538,11 +563,12 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
 // Enables routing of response messages from TWS to Client
 #[derive(Debug)]
 pub(crate) struct BusSubscription {
-    messages: Receiver<ResponseMessage>, // for client to receive incoming messages
-    signals: Sender<Signal>,             // for client to signal termination
-    request_id: Option<i32>,             // initiating request_id
-    order_id: Option<i32>,               // initiating order_id
-    timeout: Option<Duration>,           // How long to wait for next message
+    receiver: Option<Receiver<ResponseMessage>>, // for client to receive incoming messages
+    shared_receiver: Option<Arc<Receiver<ResponseMessage>>>,
+    signaler: Option<Sender<Signal>>, // for client to signal termination
+    request_id: Option<i32>,          // initiating request_id
+    order_id: Option<i32>,            // initiating order_id
+    timeout: Option<Duration>,        // How long to wait for next message
 }
 
 impl BusSubscription {
@@ -554,8 +580,9 @@ impl BusSubscription {
         timeout: Option<Duration>,
     ) -> Self {
         BusSubscription {
-            messages,
-            signals,
+            receiver: Some(messages),
+            shared_receiver: None,
+            signaler: Some(signals),
             request_id,
             order_id,
             timeout,
@@ -563,43 +590,30 @@ impl BusSubscription {
     }
 
     pub(crate) fn try_next(&mut self) -> Option<ResponseMessage> {
-        match self.messages.try_recv() {
-            Ok(message) => Some(message),
-            Err(err) => {
-                debug!("try_next: {err}");
-                None
+        if let Some(receiver) = &self.receiver {
+            match receiver.try_recv() {
+                Ok(message) => Some(message),
+                Err(err) => {
+                    debug!("try_next: {err}");
+                    None
+                }
             }
+        } else if let Some(receiver) = &self.shared_receiver {
+            match receiver.try_recv() {
+                Ok(message) => Some(message),
+                Err(err) => {
+                    debug!("try_next: {err}");
+                    None
+                }
+            }
+        } else {
+            None
         }
     }
 
     pub(crate) fn next_timeout(&mut self, timeout: Duration) -> Option<ResponseMessage> {
-        match self.messages.recv_timeout(timeout) {
-            Ok(message) => Some(message),
-            Err(err) => {
-                info!("timeout receiving message: {err}");
-                None
-            }
-        }
-    }
-}
-
-impl Drop for BusSubscription {
-    fn drop(&mut self) {
-        if let Some(request_id) = self.request_id {
-            self.signals.send(Signal::Request(request_id)).unwrap();
-        }
-
-        if let Some(order_id) = self.order_id {
-            self.signals.send(Signal::Order(order_id)).unwrap();
-        }
-    }
-}
-
-impl Iterator for BusSubscription {
-    type Item = ResponseMessage;
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(timeout) = self.timeout {
-            match self.messages.recv_timeout(timeout) {
+        if let Some(receiver) = &self.receiver {
+            match receiver.recv_timeout(timeout) {
                 Ok(message) => Some(message),
                 Err(err) => {
                     info!("timeout receiving message: {err}");
@@ -607,59 +621,115 @@ impl Iterator for BusSubscription {
                 }
             }
         } else {
-            match self.messages.recv() {
+            None
+        }
+    }
+}
+
+impl Drop for BusSubscription {
+    fn drop(&mut self) {
+        if let (Some(request_id), Some(signaler)) = (self.request_id, &self.signaler) {
+            signaler.send(Signal::Request(request_id)).unwrap();
+        }
+
+        if let (Some(order_id), Some(signaler)) = (self.order_id, &self.signaler) {
+            signaler.send(Signal::Order(order_id)).unwrap();
+        }
+    }
+}
+
+impl Iterator for BusSubscription {
+    type Item = ResponseMessage;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let (Some(timeout), Some(receiver)) = (self.timeout, &self.receiver) {
+            match receiver.recv_timeout(timeout) {
+                Ok(message) => Some(message),
+                Err(err) => {
+                    info!("timeout receiving message: {err}");
+                    None
+                }
+            }
+        } else if let Some(receiver) = &self.receiver {
+            match receiver.recv() {
                 Ok(message) => Some(message),
                 Err(err) => {
                     error!("error receiving message: {err}");
                     None
                 }
             }
+        } else if let Some(receiver) = &self.shared_receiver {
+            match receiver.recv() {
+                Ok(message) => Some(message),
+                Err(err) => {
+                    error!("error receiving message: {err}");
+                    None
+                }
+            }
+        } else {
+            None
         }
     }
 }
 
-struct SubscriptionBuilder {
+pub(crate) struct SubscriptionBuilder {
     receiver: Option<Receiver<ResponseMessage>>,
+    shared_receiver: Option<Arc<Receiver<ResponseMessage>>>,
     signaler: Option<Sender<Signal>>,
     order_id: Option<i32>,
     request_id: Option<i32>,
 }
 
 impl SubscriptionBuilder {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             receiver: None,
+            shared_receiver: None,
             signaler: None,
             order_id: None,
             request_id: None,
         }
     }
 
-    fn receiver(mut self, receiver: Receiver<ResponseMessage>) -> Self {
+    pub(crate) fn receiver(mut self, receiver: Receiver<ResponseMessage>) -> Self {
         self.receiver = Some(receiver);
         self
     }
 
-    fn signaler(mut self, signaler: Sender<Signal>) -> Self {
+    pub(crate) fn shared_receiver(mut self, shared_receiver: Arc<Receiver<ResponseMessage>>) -> Self {
+        self.shared_receiver = Some(shared_receiver);
+        self
+    }
+
+    pub(crate) fn signaler(mut self, signaler: Sender<Signal>) -> Self {
         self.signaler = Some(signaler);
         self
     }
 
-    fn order_id(mut self, order_id: i32) -> Self {
+    pub(crate) fn order_id(mut self, order_id: i32) -> Self {
         self.order_id = Some(order_id);
         self
     }
 
-    fn request_id(mut self, request_id: i32) -> Self {
+    pub(crate) fn request_id(mut self, request_id: i32) -> Self {
         self.request_id = Some(request_id);
         self
     }
 
-    fn build(self) -> BusSubscription {
+    pub(crate) fn build(self) -> BusSubscription {
         if let (Some(receiver), Some(signaler)) = (self.receiver, self.signaler) {
             return BusSubscription {
-                messages: receiver,
-                signals: signaler,
+                receiver: Some(receiver),
+                shared_receiver: None,
+                signaler: Some(signaler),
+                request_id: self.request_id,
+                order_id: self.order_id,
+                timeout: None,
+            };
+        } else if let Some(receiver) = self.shared_receiver {
+            return BusSubscription {
+                receiver: None,
+                shared_receiver: Some(receiver),
+                signaler: None,
                 request_id: self.request_id,
                 order_id: self.order_id,
                 timeout: None,
@@ -667,30 +737,6 @@ impl SubscriptionBuilder {
         }
 
         panic!("bad configuration");
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct GlobalResponseIterator {
-    messages: Arc<Receiver<ResponseMessage>>,
-}
-
-impl GlobalResponseIterator {
-    pub fn new(messages: Arc<Receiver<ResponseMessage>>) -> Self {
-        Self { messages }
-    }
-}
-
-impl Iterator for GlobalResponseIterator {
-    type Item = ResponseMessage;
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.messages.recv_timeout(Duration::from_secs(5)) {
-            Err(err) => {
-                info!("timeout receiving packet: {err}");
-                None
-            }
-            Ok(message) => Some(message),
-        }
     }
 }
 
