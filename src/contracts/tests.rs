@@ -22,7 +22,7 @@ fn request_stock_contract_details() {
 
     let results = client.contract_details(&contract);
 
-    let request_messages = client.message_bus.lock().expect("MessageBus is poisoned").request_messages();
+    let request_messages = client.message_bus.lock().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode_simple(), "9|8|9000|0|TSLA|STK||0|||SMART||USD|||0|||");
 

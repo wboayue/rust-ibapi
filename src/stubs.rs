@@ -16,7 +16,7 @@ pub(crate) struct MessageBusStub {
 
 impl MessageBus for MessageBusStub {
     fn request_messages(&self) -> Vec<RequestMessage> {
-        self.request_messages.read().expect("MessageBus.request_messages is poisoned").clone()
+        self.request_messages.read().unwrap().clone()
     }
 
     fn read_message(&mut self) -> Result<ResponseMessage, Error> {
@@ -26,7 +26,7 @@ impl MessageBus for MessageBusStub {
     fn write_message(&mut self, message: &RequestMessage) -> Result<(), Error> {
         self.request_messages
             .write()
-            .expect("MessageBus.request_messages is poisoned")
+            .unwrap()
             .push(message.clone());
         Ok(())
     }
@@ -75,7 +75,7 @@ impl MessageBus for MessageBusStub {
 fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMessage) -> Result<BusSubscription, Error> {
     stub.request_messages
         .write()
-        .expect("MessageBus.request_messages is poisoned")
+        .unwrap()
         .push(message.clone());
 
     let (sender, receiver) = channel::unbounded();
@@ -93,7 +93,7 @@ fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMe
 fn mock_global_request(stub: &mut MessageBusStub, message: &RequestMessage) -> Result<BusSubscription, Error> {
     stub.request_messages
         .write()
-        .expect("MessageBus.request_messages is poisoned")
+        .unwrap()
         .push(message.clone());
 
     let (sender, receiver) = channel::unbounded();

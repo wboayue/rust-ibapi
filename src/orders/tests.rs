@@ -36,7 +36,7 @@ fn place_order() {
 
     let result = client.place_order(order_id, &contract, &order);
 
-    let request_messages = client.message_bus.lock().expect("MessageBus is poisoned").request_messages();
+    let request_messages = client.message_bus.lock().unwrap().request_messages();
 
     assert_eq!(
         request_messages[0].encode().replace('\0', "|"),
@@ -310,7 +310,7 @@ fn cancel_order() {
     let order_id = 41;
     let results = client.cancel_order(order_id, "");
 
-    let request_messages = client.message_bus.lock().expect("MessageBus is poisoned").request_messages();
+    let request_messages = client.message_bus.lock().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode(), "4\01\041\0");
 
@@ -348,7 +348,7 @@ fn global_cancel() {
 
     let results = super::global_cancel(&mut client);
 
-    let request_messages = client.message_bus.lock().expect("MessageBus is poisoned").request_messages();
+    let request_messages = client.message_bus.lock().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode(), "58\01\0");
     assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
@@ -365,7 +365,7 @@ fn next_valid_order_id() {
 
     let results = super::next_valid_order_id(&mut client);
 
-    let request_messages = client.message_bus.lock().expect("MessageBus is poisoned").request_messages();
+    let request_messages = client.message_bus.lock().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode(), "8\01\00\0");
 
@@ -388,7 +388,7 @@ fn completed_orders() {
     let api_only = true;
     let results = super::completed_orders(&mut client, api_only);
 
-    let request_messages = client.message_bus.lock().expect("MessageBus is poisoned").request_messages();
+    let request_messages = client.message_bus.lock().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode(), "99\01\0");
 
@@ -520,7 +520,7 @@ fn open_orders() {
 
     let results = super::open_orders(&mut client);
 
-    let request_messages = client.message_bus.lock().expect("MessageBus is poisoned").request_messages();
+    let request_messages = client.message_bus.lock().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode_simple(), "5|1|");
 
@@ -538,7 +538,7 @@ fn all_open_orders() {
 
     let results = client.all_open_orders();
 
-    let request_messages = client.message_bus.lock().expect("MessageBus is poisoned").request_messages();
+    let request_messages = client.message_bus.lock().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode_simple(), "16|1|");
 
@@ -557,7 +557,7 @@ fn auto_open_orders() {
     let api_only = true;
     let results = client.auto_open_orders(api_only);
 
-    let request_messages = client.message_bus.lock().expect("MessageBus is poisoned").request_messages();
+    let request_messages = client.message_bus.lock().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode_simple(), "15|1|1|");
 
@@ -584,7 +584,7 @@ fn executions() {
     };
     let results = client.executions(filter);
 
-    let request_messages = client.message_bus.lock().expect("MessageBus is poisoned").request_messages();
+    let request_messages = client.message_bus.lock().unwrap().request_messages();
 
     assert_eq!(
         request_messages[0].encode_simple(),
@@ -610,7 +610,7 @@ fn encode_limit_order() {
 
     let results = client.place_order(order_id, &contract, &order);
 
-    let request_messages = client.message_bus.lock().expect("MessageBus is poisoned").request_messages();
+    let request_messages = client.message_bus.lock().unwrap().request_messages();
 
     assert_eq!(
         request_messages[0].encode_simple(),
@@ -635,7 +635,7 @@ fn encode_combo_market_order() {
 
     let results = client.place_order(order_id, &contract, &order);
 
-    let request_messages = client.message_bus.lock().expect("MessageBus is poisoned").request_messages();
+    let request_messages = client.message_bus.lock().unwrap().request_messages();
 
     assert_eq!(
         request_messages[0].encode_simple(),

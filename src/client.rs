@@ -88,8 +88,7 @@ impl Client {
 
         client
             .message_bus
-            .lock()
-            .expect("MessageBus is poisoned")
+            .lock()?
             .process_messages(client.server_version)?;
 
         Ok(client)
@@ -101,9 +100,9 @@ impl Client {
         let version = format!("v{MIN_SERVER_VERSION}..{MAX_SERVER_VERSION}");
 
         let packet = prefix.to_owned() + &encode_packet(&version);
-        self.message_bus.lock().expect("MessageBus is poisoned").write(&packet)?;
+        self.message_bus.lock()?.write(&packet)?;
 
-        let ack = self.message_bus.lock().expect("MessageBus is poisoned").read_message();
+        let ack = self.message_bus.lock()?.read_message();
 
         match ack {
             Ok(mut response_message) => {
@@ -136,7 +135,7 @@ impl Client {
             prelude.push_field(&"");
         }
 
-        self.message_bus.lock().expect("MessageBus is poisoned").write_message(prelude)?;
+        self.message_bus.lock()?.write_message(prelude)?;
 
         Ok(())
     }
@@ -149,7 +148,7 @@ impl Client {
         let mut attempts = 0;
         const MAX_ATTEMPTS: i32 = 100;
         loop {
-            let mut message = self.message_bus.lock().expect("MessageBus is poisoned").read_message()?;
+            let mut message = self.message_bus.lock()?.read_message()?;
 
             match message.message_type() {
                 IncomingMessages::NextValidId => {

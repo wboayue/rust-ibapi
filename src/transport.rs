@@ -302,7 +302,7 @@ impl MessageBus for TcpMessageBus {
         packet.write_u32::<BigEndian>(data.len() as u32)?;
         packet.write_all(data)?;
 
-        self.writer.lock().expect("MessageBus writer is poisoned").write_all(&packet)?;
+        self.writer.lock()?.write_all(&packet)?;
 
         self.recorder.record_request(message);
 
@@ -311,7 +311,7 @@ impl MessageBus for TcpMessageBus {
 
     fn write(&mut self, data: &str) -> Result<(), Error> {
         debug!("{data:?} ->");
-        self.writer.lock().expect("MessageBus writer is poisoned").write_all(data.as_bytes())?;
+        self.writer.lock()?.write_all(data.as_bytes())?;
         Ok(())
     }
 

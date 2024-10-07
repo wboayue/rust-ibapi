@@ -47,7 +47,7 @@ fn realtime_bars() {
     // Should trigger cancel realtime bars
     drop(bars);
 
-    let request_messages = client.message_bus.lock().expect("MessageBus is poisoned").request_messages();
+    let request_messages = client.message_bus.lock().unwrap().request_messages();
 
     // Verify Requests
     let realtime_bars_request = &request_messages[0];
