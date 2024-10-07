@@ -1,3 +1,7 @@
+//! This module implements a message bus for handling communications with TWS.
+//! It provides functionality for routing requests from the Client to TWS,
+//! and responses from TWS back to the Client.
+
 use std::collections::HashMap;
 use std::io::{prelude::*, Cursor};
 use std::iter::Iterator;
@@ -11,7 +15,7 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use crossbeam::channel::{self, Receiver, Sender};
 use log::{debug, error, info};
 
-use crate::messages::IncomingMessages;
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::{server_versions, Error};
 use recorder::MessageRecorder;
@@ -26,6 +30,11 @@ pub(crate) trait MessageBus: Send + Sync {
     fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
     fn send_durable_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
     fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
+
+    fn send_shared_message(&mut self, message_id: OutgoingMessages, packet: &RequestMessage) -> Result<BusSubscription, Error> {
+        Ok(BusSubscription::new(todo!(), todo!(), todo!(), todo!(), todo!()))
+    }
+
     fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error>;
     fn request_open_orders(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error>;
     fn request_market_rule(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error>;
@@ -36,8 +45,44 @@ pub(crate) trait MessageBus: Send + Sync {
 
     fn process_messages(&mut self, server_version: i32) -> Result<(), Error>;
 
+    // Exists for testing when request are stubbed
     fn request_messages(&self) -> Vec<RequestMessage> {
         vec![]
+    }
+}
+
+#[derive(Debug)]
+struct SharedChannels {
+    senders: HashMap<IncomingMessages, Arc<Sender<ResponseMessage>>>,
+    receivers: HashMap<OutgoingMessages, Arc<Receiver<ResponseMessage>>>,
+}
+
+impl SharedChannels {
+    pub fn new() -> Self {
+        let mut instance = Self {
+            senders: HashMap::new(),
+            receivers: HashMap::new(),
+        };
+
+        instance.register(OutgoingMessages::RequestIds, &[IncomingMessages::NextValidId]);
+
+        instance
+    }
+
+    fn register(&mut self, out: OutgoingMessages, inbound: &[IncomingMessages]) {
+        let (sender, receiver) = channel::unbounded::<ResponseMessage>();
+        self.receivers.insert(out, Arc::new(receiver));
+
+        let sender = &Arc::new(sender);
+
+        for a in inbound {
+            self.senders.insert(*a, Arc::clone(sender));
+        }
+    }
+
+    pub fn get_receiver(&self, message_id: OutgoingMessages) -> Arc<Receiver<ResponseMessage>> {
+        let receiver = self.receivers.get(&message_id).expect("unsupport type");
+        Arc::clone(receiver)
     }
 }
 
@@ -50,6 +95,7 @@ pub struct TcpMessageBus {
     orders: Arc<SenderHash<i32, ResponseMessage>>,
     recorder: MessageRecorder,
     globals: Arc<GlobalChannels>,
+    shared_channels: Arc<SharedChannels>,
     signals_send: Sender<Signal>,
     signals_recv: Receiver<Signal>,
 }
@@ -116,6 +162,7 @@ impl TcpMessageBus {
             orders,
             recorder: MessageRecorder::new(),
             globals: Arc::new(GlobalChannels::new()),
+            shared_channels: Arc::new(SharedChannels::new()),
             signals_send,
             signals_recv,
         })
@@ -180,6 +227,16 @@ impl MessageBus for TcpMessageBus {
             .signaler(self.signals_send.clone())
             .order_id(order_id)
             .build();
+
+        Ok(subscription)
+    }
+
+    fn send_shared_message(&mut self, message_id: OutgoingMessages, message: &RequestMessage) -> Result<BusSubscription, Error> {
+        self.write_message(message)?;
+
+        let shared_receiver = self.shared_channels.get_receiver(message_id);
+
+        let subscription = SubscriptionBuilder::new().shared_receiver(shared_receiver).build();
 
         Ok(subscription)
     }

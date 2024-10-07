@@ -951,58 +951,49 @@ impl Client {
     }
 
     pub(crate) fn send_message(&self, packet: RequestMessage) -> Result<(), Error> {
-        self.message_bus.lock().expect("MessageBus is poisoned").write_message(&packet)
+        self.message_bus.lock()?.write_message(&packet)
     }
 
     // wait timeout
     pub(crate) fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<BusSubscription, Error> {
         debug!("send_message({:?}, {:?})", request_id, message);
-        self.message_bus
-            .lock()
-            .expect("MessageBus is poisoned")
-            .send_generic_message(request_id, &message)
+        self.message_bus.lock()?.send_generic_message(request_id, &message)
     }
 
     // wait indefinitely. until cancelled.
     pub(crate) fn send_durable_request(&self, request_id: i32, message: RequestMessage) -> Result<BusSubscription, Error> {
         debug!("send_durable_request({:?}, {:?})", request_id, message);
-        self.message_bus
-            .lock()
-            .expect("MessageBus is poisoned")
-            .send_durable_message(request_id, &message)
+        self.message_bus.lock()?.send_durable_message(request_id, &message)
     }
 
     pub(crate) fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<BusSubscription, Error> {
         debug!("send_order({:?}, {:?})", order_id, message);
-        self.message_bus
-            .lock()
-            .expect("MessageBus is poisoned")
-            .send_order_message(order_id, &message)
+        self.message_bus.lock()?.send_order_message(order_id, &message)
     }
 
     /// Sends request for the next valid order id.
     pub(crate) fn request_next_order_id(&self, message: RequestMessage) -> Result<BusSubscription, Error> {
-        self.message_bus.lock().expect("MessageBus is poisoned").request_next_order_id(&message)
+        self.message_bus.lock()?.request_next_order_id(&message)
     }
 
     /// Sends request for open orders.
     pub(crate) fn request_order_data(&self, message: RequestMessage) -> Result<BusSubscription, Error> {
-        self.message_bus.lock().expect("MessageBus is poisoned").request_open_orders(&message)
+        self.message_bus.lock()?.request_open_orders(&message)
     }
 
     /// Sends request for market rule.
     pub(crate) fn request_market_rule(&self, message: RequestMessage) -> Result<BusSubscription, Error> {
-        self.message_bus.lock().expect("MessageBus is poisoned").request_market_rule(&message)
+        self.message_bus.lock()?.request_market_rule(&message)
     }
 
     /// Sends request for positions.
     pub(crate) fn request_positions(&self, message: RequestMessage) -> Result<BusSubscription, Error> {
-        self.message_bus.lock().expect("MessageBus is poisoned").request_positions(&message)
+        self.message_bus.lock()?.request_positions(&message)
     }
 
     /// Sends request for family codes.
     pub(crate) fn request_family_codes(&self, message: RequestMessage) -> Result<BusSubscription, Error> {
-        self.message_bus.lock().expect("MessageBus is poisoned").request_family_codes(&message)
+        self.message_bus.lock()?.request_family_codes(&message)
     }
 
     pub(crate) fn check_server_version(&self, version: i32, message: &str) -> Result<(), Error> {
