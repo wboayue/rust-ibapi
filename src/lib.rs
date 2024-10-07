@@ -112,6 +112,8 @@ pub mod accounts;
 /// It manages the routing of messages between TWS and the application.
 pub mod client;
 
+pub mod transport;
+
 /// A [Contract](crate::contracts::Contract) object represents trading instruments such as a stocks, futures or options.
 ///
 /// Every time a new request that requires a contract (i.e. market data, order placing, etc.) is sent to the API, the system will try to match the provided contract object with a single candidate. If there is more than one contract matching the same description, the API will return an error notifying you there is an ambiguity. In these cases the API needs further information to narrow down the list of contracts matching the provided description to a single element.

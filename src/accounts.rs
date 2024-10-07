@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 
 use log::error;
 
-use crate::client::transport::GlobalResponseIterator;
+use crate::transport::GlobalResponseIterator;
 use crate::client::{Subscribable, Subscription};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, ResponseMessage};

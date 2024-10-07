@@ -3,7 +3,7 @@ use std::fmt::{self, Debug};
 
 use log::{error, info};
 
-use crate::client::transport::{GlobalResponseIterator, ResponseIterator};
+use crate::transport::{GlobalResponseIterator, ResponseIterator};
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};

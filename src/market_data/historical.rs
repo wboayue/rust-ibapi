@@ -4,7 +4,7 @@ use std::fmt::{Debug, Display};
 use log::{error, warn};
 use time::{Date, OffsetDateTime};
 
-use crate::client::transport::ResponseIterator;
+use crate::transport::ResponseIterator;
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Client, Error, ToField};

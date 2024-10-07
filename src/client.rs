@@ -11,7 +11,7 @@ use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
 use crate::accounts::{FamilyCode, PnL, PnLSingle, Position};
-use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
+use crate::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
@@ -20,8 +20,6 @@ use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
 use crate::{accounts, contracts, orders, server_versions};
-
-pub(crate) mod transport;
 
 // Client
 

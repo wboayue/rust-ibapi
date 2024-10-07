@@ -1,7 +1,7 @@
 use log::error;
 use time::OffsetDateTime;
 
-use crate::client::transport::ResponseIterator;
+use crate::transport::ResponseIterator;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::orders::TagValue;
