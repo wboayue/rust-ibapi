@@ -112,7 +112,7 @@ pub mod accounts;
 /// It manages the routing of messages between TWS and the application.
 pub mod client;
 
-pub mod transport;
+pub(crate) mod transport;
 
 /// A [Contract](crate::contracts::Contract) object represents trading instruments such as a stocks, futures or options.
 ///
