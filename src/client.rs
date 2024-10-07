@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::io::Write;
+use std::marker::PhantomData;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -9,14 +10,14 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::accounts::{FamilyCode, Position};
+use crate::accounts::{FamilyCode, PnL, PnLSingle, Position};
 use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
 use crate::market_data::realtime::{self, Bar, BarSize, WhatToShow};
-use crate::messages::RequestMessage;
 use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::{RequestMessage, ResponseMessage};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
 use crate::{accounts, contracts, orders, server_versions};
 
@@ -219,6 +220,54 @@ impl Client {
     #[allow(clippy::needless_lifetimes)]
     pub fn positions<'a>(&'a self) -> core::result::Result<impl Iterator<Item = Position> + 'a, Error> {
         accounts::positions(self)
+    }
+
+    /// Creates subscription for real time daily PnL and unrealized PnL updates.
+    ///
+    /// # Arguments
+    /// * `account`    - account for which to receive PnL updates
+    /// * `model_code` - specify to request PnL updates for a specific model
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let account = "account id";
+    /// let responses = client.pnl(account, None).expect("error requesting pnl");
+    /// for pnl in responses {
+    ///     println!("{pnl:?}")
+    /// }
+    /// ```
+    pub fn pnl<'a>(&'a self, account: &str, model_code: Option<&str>) -> Result<Subscription<'a, PnL>, Error> {
+        accounts::pnl(self, account, model_code)
+    }
+
+    /// Requests real time updates for daily PnL of individual positions.
+    ///
+    /// # Arguments
+    /// * `account`     - Account in which position exists
+    /// * `contract_id` - Contract ID of contract to receive daily PnL updates for. Note: does not return response if invalid conId is entered.
+    /// * `model_code`  - Model in which position exists
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let account = "<account id>";
+    /// let contract_id = 1001;
+    ///
+    /// let responses = client.pnl_single(account, contract_id, None).expect("error requesting pnl");
+    /// for pnl in responses {
+    ///     println!("{pnl:?}")
+    /// }
+    /// ```
+    pub fn pnl_single<'a>(&'a self, account: &str, contract_id: i32, model_code: Option<&str>) -> Result<Subscription<'a, PnLSingle>, Error> {
+        accounts::pnl_single(self, account, contract_id, model_code)
     }
 
     // === Contracts ===
@@ -907,6 +956,7 @@ impl Client {
         self.message_bus.lock().expect("MessageBus is poisoned").write_message(&packet)
     }
 
+    // wait timeout
     pub(crate) fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator, Error> {
         debug!("send_message({:?}, {:?})", request_id, message);
         self.message_bus
@@ -915,6 +965,7 @@ impl Client {
             .send_generic_message(request_id, &message)
     }
 
+    // wait indefinitely. until cancelled.
     pub(crate) fn send_durable_request(&self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator, Error> {
         debug!("send_durable_request({:?}, {:?})", request_id, message);
         self.message_bus
@@ -978,6 +1029,67 @@ impl Debug for Client {
             .field("server_time", &self.connection_time)
             .field("client_id", &self.client_id)
             .finish()
+    }
+}
+
+/// Supports the handling of responses from TWS.
+pub struct Subscription<'a, T> {
+    pub(crate) client: &'a Client,
+    pub(crate) responses: ResponseIterator,
+    pub(crate) phantom: PhantomData<T>,
+}
+
+impl<'a, T: Subscribable<T>> Subscription<'a, T> {
+    pub fn try_next(&mut self) -> Option<T> {
+        if let Some(mut message) = self.responses.try_next() {
+            if message.message_type() == T::INCOMING_MESSAGE_ID {
+                match T::decode(self.client.server_version(), &mut message) {
+                    Ok(val) => return Some(val),
+                    Err(err) => {
+                        error!("error decoding execution data: {err}");
+                        return None;
+                    }
+                }
+            }
+            return None;
+        } else {
+            None
+        }
+    }
+
+    pub fn cancel(&mut self) {}
+}
+
+pub(crate) trait Subscribable<T> {
+    const INCOMING_MESSAGE_ID: IncomingMessages;
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
+}
+
+impl<'a, T: Subscribable<T>> Iterator for Subscription<'a, T> {
+    type Item = T;
+
+    // Returns the next [Position]. Waits up to x seconds for next [OrderDataResult].
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(mut message) = self.responses.next() {
+                if message.message_type() == T::INCOMING_MESSAGE_ID {
+                    match T::decode(self.client.server_version(), &mut message) {
+                        Ok(val) => return Some(val),
+                        Err(err) => {
+                            error!("error decoding execution data: {err}");
+                        }
+                    }
+                } else if message.message_type() == IncomingMessages::Error {
+                    let error_message = message.peek_string(4);
+                    error!("{error_message}");
+                    return None;
+                } else {
+                    error!("subscription iterator unexpected message: {message:?}");
+                }
+            } else {
+                return None;
+            }
+        }
     }
 }
 
