@@ -171,6 +171,8 @@ impl TcpMessageBus {
         })
     }
 
+    // Dispatcher thread reads messages from TWS and dispatches them to 
+    // appropriate channel.
     fn start_dispatcher_thread(&mut self, server_version: i32) -> JoinHandle<i32> {
         let reader = Arc::clone(&self.reader);
         let requests = Arc::clone(&self.requests);
@@ -193,6 +195,8 @@ impl TcpMessageBus {
         })    
     }
 
+    // The cleanup thread receives signals as subscribers are dropped and
+    // releases the sender channels
     fn start_cleanup_thread(&mut self) -> JoinHandle<i32> {
         let requests = Arc::clone(&self.requests);
         let orders = Arc::clone(&self.orders);
