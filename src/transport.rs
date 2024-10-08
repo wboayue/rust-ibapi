@@ -31,11 +31,8 @@ pub(crate) trait MessageBus: Send + Sync {
     fn send_durable_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
     fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
 
-    fn send_shared_message(&mut self, message_id: OutgoingMessages, packet: &RequestMessage) -> Result<BusSubscription, Error> {
-        Ok(BusSubscription::new(todo!(), todo!(), todo!(), todo!(), todo!()))
-    }
+    fn send_shared_message(&mut self, message_id: OutgoingMessages, packet: &RequestMessage) -> Result<BusSubscription, Error>;
 
-    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error>;
     fn request_open_orders(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error>;
     fn request_market_rule(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error>;
     fn request_positions(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error>;
@@ -70,6 +67,20 @@ impl SharedChannels {
 
         // Register request/response pairs.
         instance.register(OutgoingMessages::RequestIds, &[IncomingMessages::NextValidId]);
+        instance.register(OutgoingMessages::RequestFamilyCodes, &[IncomingMessages::FamilyCodes]);
+        instance.register(OutgoingMessages::RequestMarketRule, &[IncomingMessages::MarketRule]);
+        instance.register(
+            OutgoingMessages::RequestPositions,
+            &[IncomingMessages::Position, IncomingMessages::PositionEnd],
+        );
+        instance.register(
+            OutgoingMessages::RequestPositionsMulti,
+            &[IncomingMessages::PositionMulti, IncomingMessages::PositionMultiEnd],
+        );
+        instance.register(
+            OutgoingMessages::RequestOpenOrders,
+            &[IncomingMessages::OpenOrder, IncomingMessages::OpenOrderEnd],
+        );
 
         instance
     }
@@ -88,15 +99,20 @@ impl SharedChannels {
     }
 
     pub fn get_receiver(&self, message_id: OutgoingMessages) -> Arc<Receiver<ResponseMessage>> {
-        let receiver = self.receivers.get(&message_id).expect("unsupport type");
+        let receiver = self
+            .receivers
+            .get(&message_id)
+            .expect(&format!("unsupported request message {:?}", message_id));
         Arc::clone(receiver)
     }
 
-    pub fn get_sender(&self, message_id: OutgoingMessages) -> Arc<Receiver<ResponseMessage>> {
-        let receiver = self.receivers.get(&message_id).expect("unsupport type");
-        Arc::clone(receiver)
+    pub fn get_sender(&self, message_id: IncomingMessages) -> Arc<Sender<ResponseMessage>> {
+        let sender = self
+            .senders
+            .get(&message_id)
+            .expect(&format!("unsupported response message {:?}", message_id));
+        Arc::clone(sender)
     }
-
 }
 
 #[derive(Debug)]
@@ -250,16 +266,6 @@ impl MessageBus for TcpMessageBus {
         let shared_receiver = self.shared_channels.get_receiver(message_id);
 
         let subscription = SubscriptionBuilder::new().shared_receiver(shared_receiver).build();
-
-        Ok(subscription)
-    }
-
-    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
-        self.write_message(message)?;
-
-        let subscription = SubscriptionBuilder::new()
-            .shared_receiver(Arc::clone(&self.globals.order_ids_out))
-            .build();
 
         Ok(subscription)
     }

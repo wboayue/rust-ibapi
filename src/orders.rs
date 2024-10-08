@@ -1371,7 +1371,7 @@ pub(crate) fn global_cancel(client: &Client) -> Result<(), Error> {
 pub(crate) fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
     let message = encoders::encode_next_valid_order_id()?;
 
-    let mut messages = client.request_next_order_id(message)?;
+    let mut messages = client.send_shared_message(OutgoingMessages::RequestIds, message)?;
 
     if let Some(message) = messages.next() {
         let order_id_index = 2;

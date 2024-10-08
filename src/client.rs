@@ -86,10 +86,7 @@ impl Client {
         client.start_api()?;
         client.receive_account_info()?;
 
-        client
-            .message_bus
-            .lock()?
-            .process_messages(client.server_version)?;
+        client.message_bus.lock()?.process_messages(client.server_version)?;
 
         Ok(client)
     }
@@ -971,8 +968,8 @@ impl Client {
     }
 
     /// Sends request for the next valid order id.
-    pub(crate) fn request_next_order_id(&self, message: RequestMessage) -> Result<BusSubscription, Error> {
-        self.message_bus.lock()?.request_next_order_id(&message)
+    pub(crate) fn send_shared_message(&self, message_id: OutgoingMessages, message: RequestMessage) -> Result<BusSubscription, Error> {
+        self.message_bus.lock()?.send_shared_message(message_id, &message)
     }
 
     /// Sends request for open orders.
