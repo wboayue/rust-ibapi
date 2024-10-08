@@ -133,7 +133,7 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
     let request_id = client.next_request_id();
 
     let request = encoders::encode_request_pnl(request_id, account, model_code)?;
-    let responses = client.send_durable_request(request_id, request)?;
+    let responses = client.send_request(request_id, request)?;
 
     Ok(Subscription {
         client,
@@ -160,7 +160,7 @@ pub(crate) fn pnl_single<'a>(
     let request_id = client.next_request_id();
 
     let request = encoders::encode_request_pnl_single(request_id, account, contract_id, model_code)?;
-    let responses = client.send_durable_request(request_id, request)?;
+    let responses = client.send_request(request_id, request)?;
 
     Ok(Subscription {
         client,

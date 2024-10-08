@@ -23,21 +23,28 @@ use recorder::MessageRecorder;
 mod recorder;
 
 pub(crate) trait MessageBus: Send + Sync {
+    // Reads the next available message from TWS
     fn read_message(&mut self) -> Result<ResponseMessage, Error>;
 
+    // Sends a formatted packet TWS
     fn write_message(&mut self, packet: &RequestMessage) -> Result<(), Error>;
 
-    fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
-    fn send_durable_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
-    fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
-
-    fn send_shared_request(&mut self, message_id: OutgoingMessages, packet: &RequestMessage) -> Result<BusSubscription, Error>;
-
+    // Sends raw data to TWS
     fn write(&mut self, packet: &str) -> Result<(), Error>;
 
+    // Sends formatted message to TWS and creates a reply channel by request id.
+    fn send_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
+
+    // Sends formatted order specific message to TWS and creates a reply channel by order id.
+    fn send_order_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
+
+    // Sends formatted message to TWS and creates a reply channel by message type.
+    fn send_shared_request(&mut self, message_id: OutgoingMessages, packet: &RequestMessage) -> Result<BusSubscription, Error>;
+
+    // Starts a dedicated thread to process responses from TWS.
     fn process_messages(&mut self, server_version: i32) -> Result<(), Error>;
 
-    // Exists for testing when request are stubbed
+    // Testing interface. Tracks requests sent when Bus is stubbed.
     fn request_messages(&self) -> Vec<RequestMessage> {
         vec![]
     }
@@ -54,6 +61,7 @@ struct SharedChannels {
 }
 
 impl SharedChannels {
+    // Creates new instance and registers request/reply pairs.
     pub fn new() -> Self {
         let mut instance = Self {
             senders: HashMap::new(),
@@ -93,6 +101,7 @@ impl SharedChannels {
         }
     }
 
+    // Get receiver for specified message type. Panics if receiver not found.
     pub fn get_receiver(&self, message_type: OutgoingMessages) -> Arc<Receiver<ResponseMessage>> {
         let receiver = self
             .receivers
@@ -102,6 +111,7 @@ impl SharedChannels {
         Arc::clone(receiver)
     }
 
+    // Get sender for specified message type. Panics if sender not found.
     pub fn get_sender(&self, message_type: IncomingMessages) -> Arc<Sender<ResponseMessage>> {
         let sender = self
             .senders
@@ -116,6 +126,13 @@ impl SharedChannels {
     }
 }
 
+// Signals are used to notify the backend when a subscriber is dropped.
+// This facilitates the cleanup of the SenderHashes.
+pub enum Signal {
+    Request(i32),
+    Order(i32),
+}
+
 #[derive(Debug)]
 pub struct TcpMessageBus {
     reader: Arc<TcpStream>,
@@ -127,11 +144,6 @@ pub struct TcpMessageBus {
     shared_channels: Arc<SharedChannels>,
     signals_send: Sender<Signal>,
     signals_recv: Receiver<Signal>,
-}
-
-pub enum Signal {
-    Request(i32),
-    Order(i32),
 }
 
 impl TcpMessageBus {
@@ -159,14 +171,47 @@ impl TcpMessageBus {
         })
     }
 
-    fn add_request(&mut self, request_id: i32, sender: Sender<ResponseMessage>) -> Result<(), Error> {
-        self.requests.insert(request_id, sender);
-        Ok(())
+    fn start_dispatcher_thread(&mut self, server_version: i32) -> JoinHandle<i32> {
+        let reader = Arc::clone(&self.reader);
+        let requests = Arc::clone(&self.requests);
+        let recorder = self.recorder.clone();
+        let orders = Arc::clone(&self.orders);
+        let shared_channels = Arc::clone(&self.shared_channels);
+        let executions = SenderHash::<String, ResponseMessage>::new();
+
+        thread::spawn(move || loop {
+            match read_packet(&reader) {
+                Ok(message) => {
+                    recorder.record_response(&message);
+                    dispatch_message(message, server_version, &requests, &orders, &shared_channels, &executions);
+                }
+                Err(err) => {
+                    error!("error reading packet: {:?}", err);
+                    continue;
+                }
+            };
+        })    
     }
 
-    fn add_order(&mut self, order_id: i32, sender: Sender<ResponseMessage>) -> Result<(), Error> {
-        self.orders.insert(order_id, sender);
-        Ok(())
+    fn start_cleanup_thread(&mut self) -> JoinHandle<i32> {
+        let requests = Arc::clone(&self.requests);
+        let orders = Arc::clone(&self.orders);
+        let signal_recv = self.signals_recv.clone();
+
+        thread::spawn(move || loop {
+            for signal in &signal_recv {
+                match signal {
+                    Signal::Request(request_id) => {
+                        requests.remove(&request_id);
+                        debug!("released request_id {}, requests.len()={}", request_id, requests.len());
+                    }
+                    Signal::Order(order_id) => {
+                        orders.remove(&order_id);
+                        debug!("released order_id {}, orders.len()={}", order_id, requests.len());
+                    }
+                }
+            }
+        })
     }
 }
 
@@ -177,10 +222,11 @@ impl MessageBus for TcpMessageBus {
         read_packet(&self.reader)
     }
 
-    fn send_generic_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error> {
+    fn send_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error> {
         let (sender, receiver) = channel::unbounded();
 
-        self.add_request(request_id, sender)?;
+        self.requests.insert(request_id, sender);
+
         self.write_message(packet)?;
 
         let subscription = SubscriptionBuilder::new()
@@ -192,25 +238,11 @@ impl MessageBus for TcpMessageBus {
         Ok(subscription)
     }
 
-    fn send_durable_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error> {
+    fn send_order_request(&mut self, order_id: i32, message: &RequestMessage) -> Result<BusSubscription, Error> {
         let (sender, receiver) = channel::unbounded();
 
-        self.add_request(request_id, sender)?;
-        self.write_message(packet)?;
+        self.orders.insert(order_id, sender);
 
-        let subscription = SubscriptionBuilder::new()
-            .receiver(receiver)
-            .signaler(self.signals_send.clone())
-            .request_id(request_id)
-            .build();
-
-        Ok(subscription)
-    }
-
-    fn send_order_message(&mut self, order_id: i32, message: &RequestMessage) -> Result<BusSubscription, Error> {
-        let (sender, receiver) = channel::unbounded();
-
-        self.add_order(order_id, sender)?;
         self.write_message(message)?;
 
         let subscription = SubscriptionBuilder::new()
@@ -257,47 +289,10 @@ impl MessageBus for TcpMessageBus {
     }
 
     fn process_messages(&mut self, server_version: i32) -> Result<(), Error> {
-        let reader = Arc::clone(&self.reader);
-        let requests = Arc::clone(&self.requests);
-        let recorder = self.recorder.clone();
-        let orders = Arc::clone(&self.orders);
-        let shared_channels = Arc::clone(&self.shared_channels);
-        let executions = SenderHash::<String, ResponseMessage>::new();
-
-        let handle = thread::spawn(move || loop {
-            match read_packet(&reader) {
-                Ok(message) => {
-                    recorder.record_response(&message);
-                    dispatch_message(message, server_version, &requests, &orders, &shared_channels, &executions);
-                }
-                Err(err) => {
-                    error!("error reading packet: {:?}", err);
-                    continue;
-                }
-            };
-        });
-
+        let handle = self.start_dispatcher_thread(server_version);
         self.handles.push(handle);
 
-        let requests = Arc::clone(&self.requests);
-        let orders = Arc::clone(&self.orders);
-        let signal_recv = self.signals_recv.clone();
-
-        let handle = thread::spawn(move || loop {
-            for signal in &signal_recv {
-                match signal {
-                    Signal::Request(request_id) => {
-                        requests.remove(&request_id);
-                        debug!("released request_id {}, requests.len()={}", request_id, requests.len());
-                    }
-                    Signal::Order(order_id) => {
-                        orders.remove(&order_id);
-                        debug!("released order_id {}, orders.len()={}", order_id, requests.len());
-                    }
-                }
-            }
-        });
-
+        let handle = self.start_cleanup_thread();
         self.handles.push(handle);
 
         Ok(())

@@ -28,15 +28,11 @@ impl MessageBus for MessageBusStub {
         Ok(())
     }
 
-    fn send_generic_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<BusSubscription, Error> {
+    fn send_request(&mut self, request_id: i32, message: &RequestMessage) -> Result<BusSubscription, Error> {
         mock_request(self, request_id, message)
     }
 
-    fn send_durable_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<BusSubscription, Error> {
-        mock_request(self, request_id, message)
-    }
-
-    fn send_order_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<BusSubscription, Error> {
+    fn send_order_request(&mut self, request_id: i32, message: &RequestMessage) -> Result<BusSubscription, Error> {
         mock_request(self, request_id, message)
     }
 
