@@ -1371,7 +1371,7 @@ pub(crate) fn global_cancel(client: &Client) -> Result<(), Error> {
 pub(crate) fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
     let message = encoders::encode_next_valid_order_id()?;
 
-    let mut messages = client.send_shared_message(OutgoingMessages::RequestIds, message)?;
+    let mut messages = client.send_shared_request(OutgoingMessages::RequestIds, message)?;
 
     if let Some(message) = messages.next() {
         let order_id_index = 2;
@@ -1391,7 +1391,7 @@ pub(crate) fn completed_orders(client: &Client, api_only: bool) -> Result<OrderD
 
     let message = encoders::encode_completed_orders(api_only)?;
 
-    let messages = client.request_order_data(message)?;
+    let messages = client.send_shared_request(OutgoingMessages::RequestCompletedOrders, message)?;
 
     Ok(OrderDataIterator {
         server_version: client.server_version(),
@@ -1461,7 +1461,7 @@ impl Iterator for OrderDataIterator {
 pub(crate) fn open_orders(client: &Client) -> Result<OrderDataIterator, Error> {
     let message = encoders::encode_open_orders()?;
 
-    let messages = client.request_order_data(message)?;
+    let messages = client.send_shared_request(OutgoingMessages::RequestOpenOrders, message)?;
 
     Ok(OrderDataIterator {
         server_version: client.server_version(),
@@ -1474,7 +1474,7 @@ pub(crate) fn open_orders(client: &Client) -> Result<OrderDataIterator, Error> {
 pub(crate) fn all_open_orders(client: &Client) -> Result<OrderDataIterator, Error> {
     let message = encoders::encode_all_open_orders()?;
 
-    let messages = client.request_order_data(message)?;
+    let messages = client.send_shared_request(OutgoingMessages::RequestAllOpenOrders, message)?;
 
     Ok(OrderDataIterator {
         server_version: client.server_version(),
@@ -1487,7 +1487,7 @@ pub(crate) fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Order
     let message = encoders::encode_auto_open_orders(auto_bind)?;
 
     // TODO this should probably not timeout.
-    let messages = client.request_order_data(message)?;
+    let messages = client.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, message)?;
 
     Ok(OrderDataIterator {
         server_version: client.server_version(),

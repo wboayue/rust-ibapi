@@ -6,6 +6,7 @@ use log::{error, info};
 
 use crate::encode_option_field;
 use crate::messages::IncomingMessages;
+use crate::messages::OutgoingMessages;
 use crate::messages::RequestMessage;
 use crate::Client;
 use crate::{server_versions, Error, ToField};
@@ -517,7 +518,7 @@ pub(crate) fn market_rule(client: &Client, market_rule_id: i32) -> Result<Market
 
     let request = encoders::request_market_rule(market_rule_id)?;
 
-    let mut responses = client.request_market_rule(request)?;
+    let mut responses = client.send_shared_request(OutgoingMessages::RequestMarketRule, request)?;
 
     match responses.next() {
         Some(mut message) => Ok(decoders::market_rule(&mut message)?),

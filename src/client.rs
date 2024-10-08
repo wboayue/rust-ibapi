@@ -968,28 +968,8 @@ impl Client {
     }
 
     /// Sends request for the next valid order id.
-    pub(crate) fn send_shared_message(&self, message_id: OutgoingMessages, message: RequestMessage) -> Result<BusSubscription, Error> {
-        self.message_bus.lock()?.send_shared_message(message_id, &message)
-    }
-
-    /// Sends request for open orders.
-    pub(crate) fn request_order_data(&self, message: RequestMessage) -> Result<BusSubscription, Error> {
-        self.message_bus.lock()?.request_open_orders(&message)
-    }
-
-    /// Sends request for market rule.
-    pub(crate) fn request_market_rule(&self, message: RequestMessage) -> Result<BusSubscription, Error> {
-        self.message_bus.lock()?.request_market_rule(&message)
-    }
-
-    /// Sends request for positions.
-    pub(crate) fn request_positions(&self, message: RequestMessage) -> Result<BusSubscription, Error> {
-        self.message_bus.lock()?.request_positions(&message)
-    }
-
-    /// Sends request for family codes.
-    pub(crate) fn request_family_codes(&self, message: RequestMessage) -> Result<BusSubscription, Error> {
-        self.message_bus.lock()?.request_family_codes(&message)
+    pub(crate) fn send_shared_request(&self, message_id: OutgoingMessages, message: RequestMessage) -> Result<BusSubscription, Error> {
+        self.message_bus.lock()?.send_shared_request(message_id, &message)
     }
 
     pub(crate) fn check_server_version(&self, version: i32, message: &str) -> Result<(), Error> {
@@ -1003,7 +983,7 @@ impl Client {
 
 impl Drop for Client {
     fn drop(&mut self) {
-        info!("dropping basic client")
+        debug!("dropping basic client")
     }
 }
 
@@ -1036,7 +1016,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                     }
                 }
             }
-            return None;
+            None
         } else {
             None
         }

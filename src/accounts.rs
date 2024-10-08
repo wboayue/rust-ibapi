@@ -15,7 +15,7 @@ use log::error;
 
 use crate::client::{Subscribable, Subscription};
 use crate::contracts::Contract;
-use crate::messages::{IncomingMessages, ResponseMessage};
+use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::transport::BusSubscription;
 use crate::{server_versions, Client, Error};
 
@@ -91,7 +91,7 @@ pub(crate) fn positions(client: &Client) -> Result<impl Iterator<Item = Position
 
     let message = encoders::request_positions()?;
 
-    let messages = client.request_positions(message)?;
+    let messages = client.send_shared_request(OutgoingMessages::RequestPositions, message)?;
 
     Ok(PositionIterator { client, messages })
 }
@@ -101,7 +101,7 @@ pub(crate) fn cancel_positions(client: &Client) -> Result<(), Error> {
 
     let message = encoders::cancel_positions()?;
 
-    client.request_positions(message)?;
+    client.send_shared_request(OutgoingMessages::CancelPositions, message)?;
 
     Ok(())
 }
@@ -112,7 +112,7 @@ pub(crate) fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
 
     let message = encoders::request_family_codes()?;
 
-    let mut messages = client.request_family_codes(message)?;
+    let mut messages = client.send_shared_request(OutgoingMessages::RequestFamilyCodes, message)?;
 
     if let Some(mut message) = messages.next() {
         decoders::decode_family_codes(&mut message)

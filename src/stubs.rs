@@ -40,23 +40,7 @@ impl MessageBus for MessageBusStub {
         mock_request(self, request_id, message)
     }
 
-    fn send_shared_message(&mut self, _message_id: OutgoingMessages, message: &RequestMessage) -> Result<BusSubscription, Error> {
-        mock_global_request(self, message)
-    }
-
-    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
-        mock_global_request(self, message)
-    }
-
-    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
-        mock_global_request(self, message)
-    }
-
-    fn request_positions(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
-        mock_global_request(self, message)
-    }
-
-    fn request_family_codes(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
+    fn send_shared_request(&mut self, _message_id: OutgoingMessages, message: &RequestMessage) -> Result<BusSubscription, Error> {
         mock_global_request(self, message)
     }
 

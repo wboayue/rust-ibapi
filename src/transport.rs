@@ -31,12 +31,7 @@ pub(crate) trait MessageBus: Send + Sync {
     fn send_durable_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
     fn send_order_message(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
 
-    fn send_shared_message(&mut self, message_id: OutgoingMessages, packet: &RequestMessage) -> Result<BusSubscription, Error>;
-
-    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error>;
-    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error>;
-    fn request_positions(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error>;
-    fn request_family_codes(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error>;
+    fn send_shared_request(&mut self, message_id: OutgoingMessages, packet: &RequestMessage) -> Result<BusSubscription, Error>;
 
     fn write(&mut self, packet: &str) -> Result<(), Error>;
 
@@ -98,20 +93,26 @@ impl SharedChannels {
         }
     }
 
-    pub fn get_receiver(&self, message_id: OutgoingMessages) -> Arc<Receiver<ResponseMessage>> {
+    pub fn get_receiver(&self, message_type: OutgoingMessages) -> Arc<Receiver<ResponseMessage>> {
         let receiver = self
             .receivers
-            .get(&message_id)
-            .expect(&format!("unsupported request message {:?}", message_id));
+            .get(&message_type)
+            .expect(&format!("unsupported request message {:?}", message_type));
+
         Arc::clone(receiver)
     }
 
-    pub fn get_sender(&self, message_id: IncomingMessages) -> Arc<Sender<ResponseMessage>> {
+    pub fn get_sender(&self, message_type: IncomingMessages) -> Arc<Sender<ResponseMessage>> {
         let sender = self
             .senders
-            .get(&message_id)
-            .expect(&format!("unsupported response message {:?}", message_id));
+            .get(&message_type)
+            .expect(&format!("unsupported response message {:?}", message_type));
+
         Arc::clone(sender)
+    }
+
+    fn contains_sender(&self, message_type: IncomingMessages) -> bool {
+        self.senders.contains_key(&message_type)
     }
 }
 
@@ -123,7 +124,6 @@ pub struct TcpMessageBus {
     requests: Arc<SenderHash<i32, ResponseMessage>>,
     orders: Arc<SenderHash<i32, ResponseMessage>>,
     recorder: MessageRecorder,
-    globals: Arc<GlobalChannels>,
     shared_channels: Arc<SharedChannels>,
     signals_send: Sender<Signal>,
     signals_recv: Receiver<Signal>,
@@ -132,43 +132,6 @@ pub struct TcpMessageBus {
 pub enum Signal {
     Request(i32),
     Order(i32),
-}
-
-#[derive(Debug)]
-struct GlobalChannels {
-    order_ids_in: Arc<Sender<ResponseMessage>>,
-    order_ids_out: Arc<Receiver<ResponseMessage>>,
-    open_orders_in: Arc<Sender<ResponseMessage>>,
-    open_orders_out: Arc<Receiver<ResponseMessage>>,
-    send_market_rule: Arc<Sender<ResponseMessage>>,
-    recv_market_rule: Arc<Receiver<ResponseMessage>>,
-    send_positions: Arc<Sender<ResponseMessage>>,
-    recv_positions: Arc<Receiver<ResponseMessage>>,
-    send_family_codes: Arc<Sender<ResponseMessage>>,
-    recv_family_codes: Arc<Receiver<ResponseMessage>>,
-}
-
-impl GlobalChannels {
-    pub fn new() -> Self {
-        let (order_ids_in, order_ids_out) = channel::unbounded();
-        let (open_orders_in, open_orders_out) = channel::unbounded();
-        let (send_market_rule, recv_market_rule) = channel::unbounded();
-        let (send_positions, recv_positions) = channel::unbounded();
-        let (send_family_codes, recv_family_codes) = channel::unbounded();
-
-        GlobalChannels {
-            order_ids_in: Arc::new(order_ids_in),
-            order_ids_out: Arc::new(order_ids_out),
-            open_orders_in: Arc::new(open_orders_in),
-            open_orders_out: Arc::new(open_orders_out),
-            send_market_rule: Arc::new(send_market_rule),
-            recv_market_rule: Arc::new(recv_market_rule),
-            send_positions: Arc::new(send_positions),
-            recv_positions: Arc::new(recv_positions),
-            send_family_codes: Arc::new(send_family_codes),
-            recv_family_codes: Arc::new(recv_family_codes),
-        }
-    }
 }
 
 impl TcpMessageBus {
@@ -190,7 +153,6 @@ impl TcpMessageBus {
             requests,
             orders,
             recorder: MessageRecorder::new(),
-            globals: Arc::new(GlobalChannels::new()),
             shared_channels: Arc::new(SharedChannels::new()),
             signals_send,
             signals_recv,
@@ -260,52 +222,12 @@ impl MessageBus for TcpMessageBus {
         Ok(subscription)
     }
 
-    fn send_shared_message(&mut self, message_id: OutgoingMessages, message: &RequestMessage) -> Result<BusSubscription, Error> {
+    fn send_shared_request(&mut self, message_id: OutgoingMessages, message: &RequestMessage) -> Result<BusSubscription, Error> {
         self.write_message(message)?;
 
         let shared_receiver = self.shared_channels.get_receiver(message_id);
 
         let subscription = SubscriptionBuilder::new().shared_receiver(shared_receiver).build();
-
-        Ok(subscription)
-    }
-
-    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
-        self.write_message(message)?;
-
-        let subscription = SubscriptionBuilder::new()
-            .shared_receiver(Arc::clone(&self.globals.open_orders_out))
-            .build();
-
-        Ok(subscription)
-    }
-
-    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
-        self.write_message(message)?;
-
-        let subscription = SubscriptionBuilder::new()
-            .shared_receiver(Arc::clone(&self.globals.recv_market_rule))
-            .build();
-
-        Ok(subscription)
-    }
-
-    fn request_positions(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
-        self.write_message(message)?;
-
-        let subscription = SubscriptionBuilder::new()
-            .shared_receiver(Arc::clone(&self.globals.recv_positions))
-            .build();
-
-        Ok(subscription)
-    }
-
-    fn request_family_codes(&mut self, message: &RequestMessage) -> Result<BusSubscription, Error> {
-        self.write_message(message)?;
-
-        let subscription = SubscriptionBuilder::new()
-            .shared_receiver(Arc::clone(&self.globals.recv_family_codes))
-            .build();
 
         Ok(subscription)
     }
@@ -339,14 +261,14 @@ impl MessageBus for TcpMessageBus {
         let requests = Arc::clone(&self.requests);
         let recorder = self.recorder.clone();
         let orders = Arc::clone(&self.orders);
-        let globals = Arc::clone(&self.globals);
+        let shared_channels = Arc::clone(&self.shared_channels);
         let executions = SenderHash::<String, ResponseMessage>::new();
 
         let handle = thread::spawn(move || loop {
             match read_packet(&reader) {
                 Ok(message) => {
                     recorder.record_response(&message);
-                    dispatch_message(message, server_version, &requests, &orders, &globals, &executions);
+                    dispatch_message(message, server_version, &requests, &orders, &shared_channels, &executions);
                 }
                 Err(err) => {
                     error!("error reading packet: {:?}", err);
@@ -387,7 +309,7 @@ fn dispatch_message(
     server_version: i32,
     requests: &Arc<SenderHash<i32, ResponseMessage>>,
     orders: &Arc<SenderHash<i32, ResponseMessage>>,
-    globals: &Arc<GlobalChannels>,
+    shared_channels: &Arc<SharedChannels>,
     executions: &SenderHash<String, ResponseMessage>,
 ) {
     match message.message_type() {
@@ -397,22 +319,9 @@ fn dispatch_message(
             if request_id == UNSPECIFIED_REQUEST_ID {
                 error_event(server_version, message).unwrap();
             } else {
-                process_response(requests, orders, message);
+                process_response(requests, orders, shared_channels, message);
             }
         }
-        IncomingMessages::NextValidId => {
-            globals.order_ids_in.send(message).unwrap();
-        }
-        IncomingMessages::MarketRule => {
-            globals.send_market_rule.send(message).unwrap();
-        }
-        IncomingMessages::Position | IncomingMessages::PositionEnd => {
-            globals.send_positions.send(message).unwrap();
-        }
-        IncomingMessages::FamilyCodes => {
-            globals.send_family_codes.send(message).unwrap();
-        }
-
         IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
         IncomingMessages::OrderStatus
         | IncomingMessages::OpenOrder
@@ -421,8 +330,8 @@ fn dispatch_message(
         | IncomingMessages::CompletedOrdersEnd
         | IncomingMessages::ExecutionData
         | IncomingMessages::ExecutionDataEnd
-        | IncomingMessages::CommissionsReport => process_orders(message, requests, orders, executions, globals),
-        _ => process_response(requests, orders, message),
+        | IncomingMessages::CommissionsReport => process_orders(message, requests, orders, executions, shared_channels),
+        _ => process_response(requests, orders, shared_channels, message),
     };
 }
 
@@ -487,12 +396,19 @@ fn process_managed_accounts(_server_version: i32, mut packet: ResponseMessage) {
     info!("managed accounts: {}", managed_accounts)
 }
 
-fn process_response(requests: &Arc<SenderHash<i32, ResponseMessage>>, orders: &Arc<SenderHash<i32, ResponseMessage>>, message: ResponseMessage) {
+fn process_response(
+    requests: &Arc<SenderHash<i32, ResponseMessage>>,
+    orders: &Arc<SenderHash<i32, ResponseMessage>>,
+    shared_channels: &Arc<SharedChannels>,
+    message: ResponseMessage,
+) {
     let request_id = message.request_id().unwrap_or(-1); // pass in request id?
     if requests.contains(&request_id) {
         requests.send(&request_id, message).unwrap();
     } else if orders.contains(&request_id) {
         orders.send(&request_id, message).unwrap();
+    } else if shared_channels.contains_sender(message.message_type()) {
+        shared_channels.get_sender(message.message_type()).send(message).unwrap()
     } else {
         info!("no recipient found for: {:?}", message)
     }
@@ -503,7 +419,7 @@ fn process_orders(
     requests: &Arc<SenderHash<i32, ResponseMessage>>,
     orders: &Arc<SenderHash<i32, ResponseMessage>>,
     executions: &SenderHash<String, ResponseMessage>,
-    globals: &Arc<GlobalChannels>,
+    shared_channels: &Arc<SharedChannels>,
 ) {
     match message.message_type() {
         IncomingMessages::ExecutionData => {
@@ -554,23 +470,23 @@ fn process_orders(
                     if let Err(e) = orders.send(&order_id, message) {
                         error!("error routing message for order_id({order_id}): {e}");
                     }
-                } else if let Err(e) = globals.open_orders_in.send(message) {
+                } else if let Err(e) = shared_channels.get_sender(IncomingMessages::OpenOrder).send(message) {
                     error!("error sending IncomingMessages::OpenOrder: {e}");
                 }
             }
         }
         IncomingMessages::CompletedOrder => {
-            if let Err(e) = globals.open_orders_in.send(message) {
+            if let Err(e) = shared_channels.get_sender(message.message_type()).send(message) {
                 error!("error sending IncomingMessages::CompletedOrder: {e}");
             }
         }
         IncomingMessages::OpenOrderEnd => {
-            if let Err(e) = globals.open_orders_in.send(message) {
+            if let Err(e) = shared_channels.get_sender(message.message_type()).send(message) {
                 error!("error sending IncomingMessages::OpenOrderEnd: {e}");
             }
         }
         IncomingMessages::CompletedOrdersEnd => {
-            if let Err(e) = globals.open_orders_in.send(message) {
+            if let Err(e) = shared_channels.get_sender(message.message_type()).send(message) {
                 error!("error sending IncomingMessages::CompletedOrdersEnd: {e}");
             }
         }
