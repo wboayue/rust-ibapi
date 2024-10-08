@@ -11,12 +11,11 @@
 
 use std::marker::PhantomData;
 
-use log::error;
+use log::warn;
 
 use crate::client::{Subscribable, Subscription};
 use crate::contracts::Contract;
-use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
-use crate::transport::BusSubscription;
+use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Client, Error};
 
 mod decoders;
@@ -34,7 +33,7 @@ pub struct PnL {
 }
 
 impl Subscribable<PnL> for PnL {
-    const INCOMING_MESSAGE_ID: IncomingMessages = IncomingMessages::PnL;
+    const INCOMING_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PnL];
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_pnl(server_version, message)
@@ -57,14 +56,14 @@ pub struct PnLSingle {
 }
 
 impl Subscribable<PnLSingle> for PnLSingle {
-    const INCOMING_MESSAGE_ID: IncomingMessages = IncomingMessages::PnLSingle;
+    const INCOMING_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PnLSingle];
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_pnl_single(server_version, message)
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Position {
     /// Account holding position
     pub account: String,
@@ -74,6 +73,40 @@ pub struct Position {
     pub position: f64,
     /// Average cost of position
     pub average_cost: f64,
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Clone, Debug)]
+pub enum PositionUpdate {
+    Position(Position),
+    PositionEnd,
+}
+
+impl From<Position> for PositionUpdate {
+    fn from(val: Position) -> Self {
+        PositionUpdate::Position(val)
+    }
+}
+
+impl Subscribable<PositionUpdate> for PositionUpdate {
+    const INCOMING_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
+
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+        match message.message_type() {
+            IncomingMessages::Position => Ok(PositionUpdate::Position(decoders::decode_position(message)?)),
+            IncomingMessages::PositionEnd => Ok(PositionUpdate::PositionEnd),
+            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+        }
+    }
+
+    fn cancel_message(_server_version: i32) -> Option<RequestMessage> {
+        if let Ok(message) = encoders::cancel_positions() {
+            Some(message)
+        } else {
+            warn!("error decoding");
+            None
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -86,24 +119,18 @@ pub struct FamilyCode {
 
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.
-pub(crate) fn positions(client: &Client) -> Result<impl Iterator<Item = Position> + '_, Error> {
+pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position requests.")?;
 
     let message = encoders::request_positions()?;
 
-    let messages = client.send_shared_request(OutgoingMessages::RequestPositions, message)?;
+    let responses = client.send_shared_request(OutgoingMessages::RequestPositions, message)?;
 
-    Ok(PositionIterator { client, messages })
-}
-
-pub(crate) fn cancel_positions(client: &Client) -> Result<(), Error> {
-    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position cancellation.")?;
-
-    let message = encoders::cancel_positions()?;
-
-    client.send_shared_request(OutgoingMessages::CancelPositions, message)?;
-
-    Ok(())
+    Ok(Subscription {
+        client,
+        responses,
+        phantom: PhantomData,
+    })
 }
 
 // Determine whether an account exists under an account family and find the account family code.
@@ -167,43 +194,6 @@ pub(crate) fn pnl_single<'a>(
         responses,
         phantom: PhantomData,
     })
-}
-
-// Supports iteration over [Position].
-pub(crate) struct PositionIterator<'a> {
-    client: &'a Client,
-    messages: BusSubscription,
-}
-
-impl<'a> Iterator for PositionIterator<'a> {
-    type Item = Position;
-
-    // Returns the next [Position]. Waits up to x seconds for next [OrderDataResult].
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(mut message) = self.messages.next() {
-                match message.message_type() {
-                    IncomingMessages::Position => match decoders::decode_position(&mut message) {
-                        Ok(val) => return Some(val),
-                        Err(err) => {
-                            error!("error decoding execution data: {err}");
-                        }
-                    },
-                    IncomingMessages::PositionEnd => {
-                        if let Err(e) = cancel_positions(self.client) {
-                            error!("error cancelling positions: {e}")
-                        }
-                        return None;
-                    }
-                    message => {
-                        error!("order data iterator unexpected message: {message:?}");
-                    }
-                }
-            } else {
-                return None;
-            }
-        }
-    }
 }
 
 #[cfg(test)]

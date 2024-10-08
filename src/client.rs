@@ -10,7 +10,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::accounts::{FamilyCode, PnL, PnLSingle, Position};
+use crate::accounts::{FamilyCode, PnL, PnLSingle, Position, PositionUpdate};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
@@ -211,8 +211,7 @@ impl Client {
     // === Accounts ===
 
     /// Get current [Position]s for all accessible accounts.
-    #[allow(clippy::needless_lifetimes)]
-    pub fn positions<'a>(&'a self) -> core::result::Result<impl Iterator<Item = Position> + 'a, Error> {
+    pub fn positions(&self) -> core::result::Result<Subscription<PositionUpdate>, Error> {
         accounts::positions(self)
     }
 
@@ -234,7 +233,7 @@ impl Client {
     ///     println!("{pnl:?}")
     /// }
     /// ```
-    pub fn pnl<'a>(&'a self, account: &str, model_code: Option<&str>) -> Result<Subscription<'a, PnL>, Error> {
+    pub fn pnl(&self, account: &str, model_code: Option<&str>) -> Result<Subscription<PnL>, Error> {
         accounts::pnl(self, account, model_code)
     }
 
@@ -428,7 +427,7 @@ impl Client {
     /// use ibapi::orders::ExecutionFilter;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///     
+    ///
     /// let filter = ExecutionFilter{
     ///    side: "BUY".to_owned(),
     ///    ..ExecutionFilter::default()
@@ -1000,7 +999,7 @@ pub struct Subscription<'a, T> {
 impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     pub fn try_next(&mut self) -> Option<T> {
         if let Some(mut message) = self.responses.try_next() {
-            if message.message_type() == T::INCOMING_MESSAGE_ID {
+            if T::INCOMING_MESSAGE_IDS.contains(&message.message_type()) {
                 match T::decode(self.client.server_version(), &mut message) {
                     Ok(val) => return Some(val),
                     Err(err) => {
@@ -1015,12 +1014,20 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
         }
     }
 
-    pub fn cancel(&mut self) {}
+    pub fn cancel(&mut self) -> Result<(), Error> {
+        if let Some(message) = T::cancel_message(self.client.server_version()) {
+            self.client.send_message(message)?;
+        }
+        Ok(())
+    }
 }
 
 pub(crate) trait Subscribable<T> {
-    const INCOMING_MESSAGE_ID: IncomingMessages;
+    const INCOMING_MESSAGE_IDS: &[IncomingMessages];
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
+    fn cancel_message(_server_version: i32) -> Option<RequestMessage> {
+        None
+    }
 }
 
 impl<'a, T: Subscribable<T>> Iterator for Subscription<'a, T> {
@@ -1030,7 +1037,7 @@ impl<'a, T: Subscribable<T>> Iterator for Subscription<'a, T> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(mut message) = self.responses.next() {
-                if message.message_type() == T::INCOMING_MESSAGE_ID {
+                if T::INCOMING_MESSAGE_IDS.contains(&message.message_type()) {
                     match T::decode(self.client.server_version(), &mut message) {
                         Ok(val) => return Some(val),
                         Err(err) => {

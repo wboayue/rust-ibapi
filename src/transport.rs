@@ -106,7 +106,7 @@ impl SharedChannels {
         let receiver = self
             .receivers
             .get(&message_type)
-            .expect(&format!("unsupported request message {:?}", message_type));
+            .unwrap_or_else(|| panic!("unsupported request message {message_type:?}"));
 
         Arc::clone(receiver)
     }
@@ -116,7 +116,7 @@ impl SharedChannels {
         let sender = self
             .senders
             .get(&message_type)
-            .expect(&format!("unsupported response message {:?}", message_type));
+            .unwrap_or_else(|| panic!("unsupported response message {message_type:?}"));
 
         Arc::clone(sender)
     }
@@ -171,7 +171,7 @@ impl TcpMessageBus {
         })
     }
 
-    // Dispatcher thread reads messages from TWS and dispatches them to 
+    // Dispatcher thread reads messages from TWS and dispatches them to
     // appropriate channel.
     fn start_dispatcher_thread(&mut self, server_version: i32) -> JoinHandle<i32> {
         let reader = Arc::clone(&self.reader);
@@ -192,7 +192,7 @@ impl TcpMessageBus {
                     continue;
                 }
             };
-        })    
+        })
     }
 
     // The cleanup thread receives signals as subscribers are dropped and

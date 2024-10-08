@@ -19,7 +19,7 @@ fn main() {
         channel.add_bar(&bar);
 
         // Ensure enough bars and no open positions.
-        if !channel.ready() || has_position(&client, symbol) {
+        if !channel.ready() {
             continue;
         }
 
@@ -42,14 +42,6 @@ fn main() {
                 println!("{:?}", notice);
             }
         }
-    }
-}
-
-fn has_position(client: &Client, symbol: &str) -> bool {
-    if let Ok(mut positions) = client.positions() {
-        positions.find(|p| p.contract.symbol == symbol).is_some()
-    } else {
-        false
     }
 }
 
