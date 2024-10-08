@@ -10,7 +10,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::accounts::{FamilyCode, PnL, PnLSingle, Position, PositionUpdate};
+use crate::accounts::{FamilyCode, PnL, PnLSingle, PositionUpdate};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
