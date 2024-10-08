@@ -65,22 +65,22 @@ impl ToField for Option<SecurityType> {
     }
 }
 
-impl ToString for SecurityType {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for SecurityType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SecurityType::Stock => "STK".to_string(),
-            SecurityType::Option => "OPT".to_string(),
-            SecurityType::Future => "FUT".to_string(),
-            SecurityType::Index => "IND".to_string(),
-            SecurityType::FuturesOption => "FOP".to_string(),
-            SecurityType::ForexPair => "CASH".to_string(),
-            SecurityType::Spread => "BAG".to_string(),
-            SecurityType::Warrant => "WAR".to_string(),
-            SecurityType::Bond => "BOND".to_string(),
-            SecurityType::Commodity => "CMDTY".to_string(),
-            SecurityType::News => "NEWS".to_string(),
-            SecurityType::MutualFund => "FUND".to_string(),
-            SecurityType::Crypto => "CRYPTO".to_string(),
+            SecurityType::Stock => write!(f, "STK"),
+            SecurityType::Option => write!(f, "OPT"),
+            SecurityType::Future => write!(f, "FUT"),
+            SecurityType::Index => write!(f, "IND"),
+            SecurityType::FuturesOption => write!(f, "FOP"),
+            SecurityType::ForexPair => write!(f, "CASH"),
+            SecurityType::Spread => write!(f, "BAG"),
+            SecurityType::Warrant => write!(f, "WAR"),
+            SecurityType::Bond => write!(f, "BOND"),
+            SecurityType::Commodity => write!(f, "CMDTY"),
+            SecurityType::News => write!(f, "NEWS"),
+            SecurityType::MutualFund => write!(f, "FUND"),
+            SecurityType::Crypto => write!(f, "CRYPTO"),
         }
     }
 }
