@@ -51,9 +51,13 @@ pub(crate) trait MessageBus: Send + Sync {
     }
 }
 
+// For requests without an identifier, shared channels are created
+// to route request/response pairs based on message type.
 #[derive(Debug)]
 struct SharedChannels {
+    // Maps an inbound reply to channel used to send responses.
     senders: HashMap<IncomingMessages, Arc<Sender<ResponseMessage>>>,
+    // Maps an outbound request to channel used to receive responses.
     receivers: HashMap<OutgoingMessages, Arc<Receiver<ResponseMessage>>>,
 }
 
@@ -64,19 +68,22 @@ impl SharedChannels {
             receivers: HashMap::new(),
         };
 
+        // Register request/response pairs.
         instance.register(OutgoingMessages::RequestIds, &[IncomingMessages::NextValidId]);
 
         instance
     }
 
-    fn register(&mut self, out: OutgoingMessages, inbound: &[IncomingMessages]) {
+    // Maps an outgoing message to incoming message(s)
+    fn register(&mut self, outbound: OutgoingMessages, inbounds: &[IncomingMessages]) {
         let (sender, receiver) = channel::unbounded::<ResponseMessage>();
-        self.receivers.insert(out, Arc::new(receiver));
+
+        self.receivers.insert(outbound, Arc::new(receiver));
 
         let sender = &Arc::new(sender);
 
-        for a in inbound {
-            self.senders.insert(*a, Arc::clone(sender));
+        for inbound in inbounds {
+            self.senders.insert(*inbound, Arc::clone(sender));
         }
     }
 
@@ -84,6 +91,12 @@ impl SharedChannels {
         let receiver = self.receivers.get(&message_id).expect("unsupport type");
         Arc::clone(receiver)
     }
+
+    pub fn get_sender(&self, message_id: OutgoingMessages) -> Arc<Receiver<ResponseMessage>> {
+        let receiver = self.receivers.get(&message_id).expect("unsupport type");
+        Arc::clone(receiver)
+    }
+
 }
 
 #[derive(Debug)]
