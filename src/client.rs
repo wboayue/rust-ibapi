@@ -210,7 +210,7 @@ impl Client {
 
     // === Accounts ===
 
-    /// Get current [Position]s for all accessible accounts.
+    /// Get current [Position](accounts::Position)s for all accessible accounts.
     pub fn positions(&self) -> core::result::Result<Subscription<PositionUpdate>, Error> {
         accounts::positions(self)
     }
@@ -641,13 +641,13 @@ impl Client {
         historical::historical_data(self, contract, None, duration, bar_size, Some(what_to_show), use_rth)
     }
 
-    /// Requests [historical::HistoricalSchedule] for an interval of given duration
+    /// Requests [Schedule](historical::Schedule) for an interval of given duration
     /// ending at specified date.
     ///
     /// # Arguments
-    /// * `contract`     - [Contract] to retrieve [historical::HistoricalSchedule] for.
-    /// * `interval_end` - end date of interval to retrieve [historical::HistoricalSchedule] for.
-    /// * `duration`     - duration of interval to retrieve [historical::HistoricalSchedule] for.
+    /// * `contract`     - [Contract] to retrieve [Schedule](historical::Schedule) for.
+    /// * `interval_end` - end date of interval to retrieve [Schedule](historical::Schedule) for.
+    /// * `duration`     - duration of interval to retrieve [Schedule](historical::Schedule) for.
     ///
     /// # Examples
     ///
