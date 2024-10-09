@@ -23,8 +23,14 @@ The following examples demonstrate how to use the key features of the API.
 The following is an example of connecting to TWS.
 
 ```rust
-// Connect to the TWS API
-let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed!");
+use ibapi::Client;
+
+fn main() {
+    let connection_url = "127.0.0.1:4002";
+
+    let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
+    println!("Successfully connected to TWS at {connection_url}");
+}
 ```
 
 Note that the connection is made using `127.0.0.1` instead of `localhost`. On some systems, `localhost` resolves to a 64-bit IP address, which may be blocked by TWS. TWS only allows specifying 32-bit IP addresses in the list of allowed IP addresses.
@@ -38,9 +44,9 @@ The following example demonstrates how to create a stock contract for TSLA using
 let contract = Contract::stock("TSLA");
 ```
 
-The stock, futures, and crypto methods provide shortcuts for defining contracts with reasonable defaults that can be modified after creation.
+The [stock](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.stock), [futures](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.futures), and [crypto](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.crypto) builders provide shortcuts for defining contracts with reasonable defaults that can be modified after creation.
 
-Alternatively, contracts can be fully specified as follows:
+Alternatively, contracts that require customized configurations can be fully specified as follows:
 
 ```rust
 // Create a fully specified contract for TSLA stock
@@ -53,17 +59,39 @@ Contract {
 }
 ```
 
+Explore the [Contract documentation](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html) for a detailed list of contract attributes.
+
 ### Requesting Historical Market Data
 
-The following is an example of requesting realtime data from TWS.
+The following is an example of requesting historical data from TWS.
 
 ```rust
-// make this runnable code
-// Request real-time bars data for TSLA with 5-second intervals
-let subscription = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
+use ibapi::contracts::Contract;
+use ibapi::Client;
+use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
 
-for bar in subscription {
-    // Process each bar here (e.g., print or use in calculations)
+fn main() {
+    let connection_url = "127.0.0.1:4002";
+    let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
+
+    let contract = Contract::stock("NVDA");
+
+    let subscription = client
+        .historical_data(
+            &contract,
+            datetime!(2023-04-11 20:00 UTC),
+            1.days(),
+            BarSize::Hour,
+            WhatToShow::Trades,
+            true,
+        )
+        .expect("historical data request failed");
+
+    println!("start: {:?}, end: {:?}", subscription.start, subscription.end);
+
+    for bar in &subscription.bars {
+        println!("{bar:?}");
+    }
 }
 ```
 
@@ -98,6 +126,8 @@ while let Some(bar) = subscription.next() {
 Using this form you could easily stream multiple contracts
 
 ```rust
+// make this runnable code
+
 let subscription_nvda = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
 let subscription_aapl = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
 
@@ -111,6 +141,8 @@ Subscriptions also support non-blocking processing with the try_next and next_ti
 ### Placing Orders
 
 ```rust
+// make this runnable code
+
 // Creates a market order to purchase 100 shares
 let order_id = client.next_order_id();
 let order = order_builder::market_order(Action::Buy, 100.0);

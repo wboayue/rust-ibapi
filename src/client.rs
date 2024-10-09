@@ -997,7 +997,6 @@ pub struct Subscription<'a, T> {
 }
 
 impl<'a, T: Subscribable<T>> Subscription<'a, T> {
-
     /// To request the next bar in a non-blocking manner.
     ///
     /// ```
