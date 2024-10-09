@@ -6,12 +6,12 @@
 
 ## Introduction
 
-A Rust implementation of the Interactive Brokers [Trader Workstation (TWS) API](https://interactivebrokers.github.io/tws-api/introduction.html).
+A Rust implementation of the Interactive Brokers [Trader Workstation (TWS) API](https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/).
 This implementation is a simplified version of the official TWS API, intended to make trading strategy development easier.
 
 This project is a work in progress and has been tested with TWS version 10.19. The primary reference for this implementation is the [C# source code](https://github.com/InteractiveBrokers/tws-api-public).
 
-Open issues are tracked [here](https://github.com/wboayue/rust-ibapi/issues). 
+Open issues are tracked [here](https://github.com/wboayue/rust-ibapi/issues).
 If you encounter a problem or need a missing feature, please check the [issues list](https://github.com/wboayue/rust-ibapi/issues) before reporting it.
 
 ## Examples
