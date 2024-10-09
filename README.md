@@ -6,18 +6,30 @@
 
 ## Introduction
 
-An implementation of the Interactive Brokers [TWS API](https://interactivebrokers.github.io/tws-api/introduction.html) for Rust.
-This implementation is not a direct port of the official TWS API.
-It provides a synchronous API that simplifies the development of trading strategies.
+A Rust implementation of the Interactive Brokers [Trader Workstation (TWS) API](https://interactivebrokers.github.io/tws-api/introduction.html).
+This implementation is a simplified version of the official TWS API, designed to streamline the development of trading strategies.
 
-This is a work in progress and was tested using TWS 10.19. The primary reference for this implementation is the [C# source code](https://github.com/InteractiveBrokers/tws-api-public).
+This project is a work in progress and has been tested with TWS version 10.19. The primary reference for this implementation is the [C# source code](https://github.com/InteractiveBrokers/tws-api-public).
 
 Open issues are tracked [here](https://github.com/wboayue/rust-ibapi/issues). 
 If you run into a problem or need a missing feature, check the [issues list](https://github.com/wboayue/rust-ibapi/issues) before reporting a new issue.
 
-## Example
+## Examples
 
-The following example gives a flavor of the API style. It is not a trading strategy recommendation and not a complete implementation.
+The following examples provide and overview of the API
+
+### Connecting to TWS
+
+The following is an example of connecting to TWS.
+
+```rust
+// Connect to the TWS API
+let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed!");
+```
+
+Note that the connection is made using `127.0.0.1` instead of `localhost`. On some systems, `localhost` resolves to a 64-bit IP address, which may be blocked by TWS. TWS only allows specifying 32-bit IP addresses in the list of allowed IP addresses.
+
+### Requesting Market Data
 
 ```rust
 use std::collections::VecDeque;
@@ -112,47 +124,10 @@ impl BreakoutChannel {
 
 ## Available APIs
 
-### Accounts
-
-* [positions](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.positions)
-
-### Contracts
-
-* [contract_details](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.contract_details)
-* [market_rule](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.market_rule)
-* [matching_symbols](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.matching_symbols)
-
-### Historical Market Data
-
-* [head_timestamp](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.head_timestamp)
-* [historical_data](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.historical_data)
-* [historical_data_ending_now](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.historical_data_ending_now)
-* [historical_schedules](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.historical_schedules)
-* [historical_schedules_ending_now](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.historical_schedules_ending_now)
-* [historical_ticks_bid_ask](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.historical_ticks_bid_ask)
-* [historical_ticks_mid_point](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.historical_ticks_mid_point)
-* [historical_ticks_trade](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.historical_ticks_trade)
-
-### Realtime Market Data
-
-* [realtime_bars](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.realtime_bars)
-* [tick_by_tick_all_last](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.tick_by_tick_all_last)
-* [tick_by_tick_bid_ask](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.tick_by_tick_bid_ask)
-* [tick_by_tick_last](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.tick_by_tick_last)
-* [tick_by_tick_midpoint](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.tick_by_tick_midpoint)
-
-### Orders
-
-* [all_open_orders](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.all_open_orders)
-* [auto_open_orders](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.auto_open_orders)
-* [cancel_order](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.cancel_order)
-* [completed_orders](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.completed_orders)
-* [executions](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.executions)
-* [global_cancel](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.global_cancel)
-* [next_valid_order_id](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.next_valid_order_id)
-* [open_orders](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.open_orders)
-* [place_order](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.place_order)
+The [Client documentation](https://docs.rs/ibapi/latest/ibapi/struct.Client.html) provides comprehensive details on all currently available APIs, including trading, account management, and market data features, along with examples to help you get started.
 
 ## Contributions
 
-Contributions are welcomed. If you are interested in contributing to the project, review the [contributor documentation](https://github.com/wboayue/rust-ibapi/tree/main/CONTRIBUTING.md).
+Contributions are welcomed! Feel free to propose new ideas, share bug fixes, or enhance the documentation. If you're interested in contributing to the project, start by reviewing the [contributor documentation](https://github.com/wboayue/rust-ibapi/tree/main/CONTRIBUTING.md).
+
+For questions or discussions about contributions, feel free to open an issue or reach out via our [GitHub discussions page](https://github.com/wboayue/rust-ibapi/discussions).
