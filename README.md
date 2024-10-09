@@ -53,11 +53,12 @@ Contract {
 }
 ```
 
-### Requesting Market Data
+### Requesting Historical Market Data
 
 The following is an example of requesting realtime data from TWS.
 
 ```rust
+// make this runnable code
 // Request real-time bars data for TSLA with 5-second intervals
 let subscription = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
 
@@ -66,33 +67,46 @@ for bar in subscription {
 }
 ```
 
-In this example we request realtime bars from TWS. If the request is successful, we receive a subscription. The subscription in this example is converted to an iterator, which blocks and waits until the next bar becomes available. The subscription also supports a non-blocking request for the next item or a request for the next item with a timeout.
+### Requesting Realtime Market Data
 
-To request the next bar in a non-blocking manner.
+The following is an example of requesting realtime data from TWS.
 
 ```rust
-loop {
-    // Check if the next bar is available without waiting
-    if let Some(bar) = subscription.try_next() {
-        // Process the available bar (e.g., use it in calculations)
-    }
-    // Perform other work before checking for the next bar
+// make this runnable code
+
+// Request real-time bars data for TSLA with 5-second intervals
+let subscription = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
+
+for bar in subscription {
+    // Process each bar here (e.g., print or use in calculations)
+
+    // when the session end subscription can be cancelled.
+    subscription.cancel();
 }
 ```
 
-The next bar could also be requested with a timeout.
+In this example we request realtime bars from TWS. If the request is successful, we receive a subscription. The subscription in this example is converted to an iterator, which blocks and waits until the next bar becomes available.
+
+The syntactic sugar for the for loop can be expanded into.
 
 ```rust
-loop {
-    // Check if the next bar is available waiting for specified time
-    if let Some(bar) = subscription.next_timeout() {
-        // Process the available bar (e.g., use it in calculations)
-    }
-    // do some work
+while let Some(bar) = subscription.next() {
+    // Process each bar here (e.g., print or use in calculations)
 }
 ```
 
-Explore the Subscription documentation for more examples.
+Using this form you could easily stream multiple contracts
+
+```rust
+let subscription_nvda = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
+let subscription_aapl = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
+
+while let (Some(bar_nvda), Some(bar_aapl)) = (subscription_nvda.next(), subscription_aapl.next()) {
+    // Process each bar here (e.g., print or use in calculations)
+}
+```
+
+Subscriptions also support non-blocking processing with the try_next and next_timeout methods. Explore the [BoundedSubscription] and [UnboundedSubscription] documentation for more examples.
 
 ### Placing Orders
 

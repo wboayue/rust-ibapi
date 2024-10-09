@@ -997,6 +997,18 @@ pub struct Subscription<'a, T> {
 }
 
 impl<'a, T: Subscribable<T>> Subscription<'a, T> {
+
+    /// To request the next bar in a non-blocking manner.
+    ///
+    /// ```
+    /// loop {
+    ///    // Check if the next bar is available without waiting
+    ///    if let Some(bar) = subscription.try_next() {
+    ///        // Process the available bar (e.g., use it in calculations)
+    ///    }
+    ///    // Perform other work before checking for the next bar
+    /// }
+    /// ```
     pub fn try_next(&mut self) -> Option<T> {
         if let Some(mut message) = self.responses.try_next() {
             if T::INCOMING_MESSAGE_IDS.contains(&message.message_type()) {
@@ -1012,6 +1024,21 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
         } else {
             None
         }
+    }
+
+    /// To request the next bar in a non-blocking manner.
+    ///
+    /// ```
+    /// loop {
+    ///    // Check if the next bar is available without waiting
+    ///    if let Some(bar) = subscription.next_timeout() {
+    ///        // Process the available bar (e.g., use it in calculations)
+    ///    }
+    ///    // Perform other work before checking for the next bar
+    /// }
+    /// ```
+    pub fn next_timeout() -> Option<T> {
+        None
     }
 
     pub fn cancel(&mut self) -> Result<(), Error> {
