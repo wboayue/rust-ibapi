@@ -10,8 +10,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::accounts::{FamilyCode, PnL, PnLSingle, Position};
-use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator, TcpMessageBus};
+use crate::accounts::{FamilyCode, PnL, PnLSingle, PositionUpdate};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
@@ -19,9 +18,8 @@ use crate::market_data::realtime::{self, Bar, BarSize, WhatToShow};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
+use crate::transport::{BusSubscription, MessageBus, TcpMessageBus};
 use crate::{accounts, contracts, orders, server_versions};
-
-pub(crate) mod transport;
 
 // Client
 
@@ -88,11 +86,7 @@ impl Client {
         client.start_api()?;
         client.receive_account_info()?;
 
-        client
-            .message_bus
-            .lock()
-            .expect("MessageBus is poisoned")
-            .process_messages(client.server_version)?;
+        client.message_bus.lock()?.process_messages(client.server_version)?;
 
         Ok(client)
     }
@@ -103,9 +97,9 @@ impl Client {
         let version = format!("v{MIN_SERVER_VERSION}..{MAX_SERVER_VERSION}");
 
         let packet = prefix.to_owned() + &encode_packet(&version);
-        self.message_bus.lock().expect("MessageBus is poisoned").write(&packet)?;
+        self.message_bus.lock()?.write(&packet)?;
 
-        let ack = self.message_bus.lock().expect("MessageBus is poisoned").read_message();
+        let ack = self.message_bus.lock()?.read_message();
 
         match ack {
             Ok(mut response_message) => {
@@ -138,7 +132,7 @@ impl Client {
             prelude.push_field(&"");
         }
 
-        self.message_bus.lock().expect("MessageBus is poisoned").write_message(prelude)?;
+        self.message_bus.lock()?.write_message(prelude)?;
 
         Ok(())
     }
@@ -151,7 +145,7 @@ impl Client {
         let mut attempts = 0;
         const MAX_ATTEMPTS: i32 = 100;
         loop {
-            let mut message = self.message_bus.lock().expect("MessageBus is poisoned").read_message()?;
+            let mut message = self.message_bus.lock()?.read_message()?;
 
             match message.message_type() {
                 IncomingMessages::NextValidId => {
@@ -216,9 +210,8 @@ impl Client {
 
     // === Accounts ===
 
-    /// Get current [Position]s for all accessible accounts.
-    #[allow(clippy::needless_lifetimes)]
-    pub fn positions<'a>(&'a self) -> core::result::Result<impl Iterator<Item = Position> + 'a, Error> {
+    /// Get current [Position](accounts::Position)s for all accessible accounts.
+    pub fn positions(&self) -> core::result::Result<Subscription<PositionUpdate>, Error> {
         accounts::positions(self)
     }
 
@@ -240,7 +233,7 @@ impl Client {
     ///     println!("{pnl:?}")
     /// }
     /// ```
-    pub fn pnl<'a>(&'a self, account: &str, model_code: Option<&str>) -> Result<Subscription<'a, PnL>, Error> {
+    pub fn pnl(&self, account: &str, model_code: Option<&str>) -> Result<Subscription<PnL>, Error> {
         accounts::pnl(self, account, model_code)
     }
 
@@ -434,7 +427,7 @@ impl Client {
     /// use ibapi::orders::ExecutionFilter;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///     
+    ///
     /// let filter = ExecutionFilter{
     ///    side: "BUY".to_owned(),
     ///    ..ExecutionFilter::default()
@@ -648,13 +641,13 @@ impl Client {
         historical::historical_data(self, contract, None, duration, bar_size, Some(what_to_show), use_rth)
     }
 
-    /// Requests [historical::HistoricalSchedule] for an interval of given duration
+    /// Requests [Schedule](historical::Schedule) for an interval of given duration
     /// ending at specified date.
     ///
     /// # Arguments
-    /// * `contract`     - [Contract] to retrieve [historical::HistoricalSchedule] for.
-    /// * `interval_end` - end date of interval to retrieve [historical::HistoricalSchedule] for.
-    /// * `duration`     - duration of interval to retrieve [historical::HistoricalSchedule] for.
+    /// * `contract`     - [Contract] to retrieve [Schedule](historical::Schedule) for.
+    /// * `interval_end` - end date of interval to retrieve [Schedule](historical::Schedule) for.
+    /// * `duration`     - duration of interval to retrieve [Schedule](historical::Schedule) for.
     ///
     /// # Examples
     ///
@@ -953,58 +946,22 @@ impl Client {
     }
 
     pub(crate) fn send_message(&self, packet: RequestMessage) -> Result<(), Error> {
-        self.message_bus.lock().expect("MessageBus is poisoned").write_message(&packet)
+        self.message_bus.lock()?.write_message(&packet)
     }
 
-    // wait timeout
-    pub(crate) fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator, Error> {
+    pub(crate) fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<BusSubscription, Error> {
         debug!("send_message({:?}, {:?})", request_id, message);
-        self.message_bus
-            .lock()
-            .expect("MessageBus is poisoned")
-            .send_generic_message(request_id, &message)
+        self.message_bus.lock()?.send_request(request_id, &message)
     }
 
-    // wait indefinitely. until cancelled.
-    pub(crate) fn send_durable_request(&self, request_id: i32, message: RequestMessage) -> Result<ResponseIterator, Error> {
-        debug!("send_durable_request({:?}, {:?})", request_id, message);
-        self.message_bus
-            .lock()
-            .expect("MessageBus is poisoned")
-            .send_durable_message(request_id, &message)
-    }
-
-    pub(crate) fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<ResponseIterator, Error> {
+    pub(crate) fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<BusSubscription, Error> {
         debug!("send_order({:?}, {:?})", order_id, message);
-        self.message_bus
-            .lock()
-            .expect("MessageBus is poisoned")
-            .send_order_message(order_id, &message)
+        self.message_bus.lock()?.send_order_request(order_id, &message)
     }
 
     /// Sends request for the next valid order id.
-    pub(crate) fn request_next_order_id(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        self.message_bus.lock().expect("MessageBus is poisoned").request_next_order_id(&message)
-    }
-
-    /// Sends request for open orders.
-    pub(crate) fn request_order_data(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        self.message_bus.lock().expect("MessageBus is poisoned").request_open_orders(&message)
-    }
-
-    /// Sends request for market rule.
-    pub(crate) fn request_market_rule(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        self.message_bus.lock().expect("MessageBus is poisoned").request_market_rule(&message)
-    }
-
-    /// Sends request for positions.
-    pub(crate) fn request_positions(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        self.message_bus.lock().expect("MessageBus is poisoned").request_positions(&message)
-    }
-
-    /// Sends request for family codes.
-    pub(crate) fn request_family_codes(&self, message: RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        self.message_bus.lock().expect("MessageBus is poisoned").request_family_codes(&message)
+    pub(crate) fn send_shared_request(&self, message_id: OutgoingMessages, message: RequestMessage) -> Result<BusSubscription, Error> {
+        self.message_bus.lock()?.send_shared_request(message_id, &message)
     }
 
     pub(crate) fn check_server_version(&self, version: i32, message: &str) -> Result<(), Error> {
@@ -1018,7 +975,7 @@ impl Client {
 
 impl Drop for Client {
     fn drop(&mut self) {
-        info!("dropping basic client")
+        debug!("dropping basic client")
     }
 }
 
@@ -1035,14 +992,25 @@ impl Debug for Client {
 /// Supports the handling of responses from TWS.
 pub struct Subscription<'a, T> {
     pub(crate) client: &'a Client,
-    pub(crate) responses: ResponseIterator,
+    pub(crate) responses: BusSubscription,
     pub(crate) phantom: PhantomData<T>,
 }
 
 impl<'a, T: Subscribable<T>> Subscription<'a, T> {
+    /// To request the next bar in a non-blocking manner.
+    ///
+    /// ```
+    /// loop {
+    ///    // Check if the next bar is available without waiting
+    ///    if let Some(bar) = subscription.try_next() {
+    ///        // Process the available bar (e.g., use it in calculations)
+    ///    }
+    ///    // Perform other work before checking for the next bar
+    /// }
+    /// ```
     pub fn try_next(&mut self) -> Option<T> {
         if let Some(mut message) = self.responses.try_next() {
-            if message.message_type() == T::INCOMING_MESSAGE_ID {
+            if T::INCOMING_MESSAGE_IDS.contains(&message.message_type()) {
                 match T::decode(self.client.server_version(), &mut message) {
                     Ok(val) => return Some(val),
                     Err(err) => {
@@ -1051,18 +1019,41 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                     }
                 }
             }
-            return None;
+            None
         } else {
             None
         }
     }
 
-    pub fn cancel(&mut self) {}
+    /// To request the next bar in a non-blocking manner.
+    ///
+    /// ```
+    /// loop {
+    ///    // Check if the next bar is available without waiting
+    ///    if let Some(bar) = subscription.next_timeout() {
+    ///        // Process the available bar (e.g., use it in calculations)
+    ///    }
+    ///    // Perform other work before checking for the next bar
+    /// }
+    /// ```
+    pub fn next_timeout() -> Option<T> {
+        None
+    }
+
+    pub fn cancel(&mut self) -> Result<(), Error> {
+        if let Some(message) = T::cancel_message(self.client.server_version()) {
+            self.client.send_message(message)?;
+        }
+        Ok(())
+    }
 }
 
 pub(crate) trait Subscribable<T> {
-    const INCOMING_MESSAGE_ID: IncomingMessages;
+    const INCOMING_MESSAGE_IDS: &[IncomingMessages];
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
+    fn cancel_message(_server_version: i32) -> Option<RequestMessage> {
+        None
+    }
 }
 
 impl<'a, T: Subscribable<T>> Iterator for Subscription<'a, T> {
@@ -1072,7 +1063,7 @@ impl<'a, T: Subscribable<T>> Iterator for Subscription<'a, T> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(mut message) = self.responses.next() {
-                if message.message_type() == T::INCOMING_MESSAGE_ID {
+                if T::INCOMING_MESSAGE_IDS.contains(&message.message_type()) {
                     match T::decode(self.client.server_version(), &mut message) {
                         Ok(val) => return Some(val),
                         Err(err) => {

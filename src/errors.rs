@@ -8,6 +8,7 @@ pub enum Error {
     ParseInt(ParseIntError),
     FromUtf8(FromUtf8Error),
     ParseTime(time::error::Parse),
+    Poison(String),
 
     // Errors from by IBAPI library
     NotImplemented,
@@ -25,6 +26,7 @@ impl std::fmt::Display for Error {
             Error::ParseInt(ref err) => err.fmt(f),
             Error::FromUtf8(ref err) => err.fmt(f),
             Error::ParseTime(ref err) => err.fmt(f),
+            Error::Poison(ref err) => write!(f, "{}", err),
 
             Error::NotImplemented => write!(f, "not implemented"),
             Error::Parse(i, value, message) => write!(f, "parse error: {i} - {value} - {message}"),
@@ -56,5 +58,11 @@ impl From<FromUtf8Error> for Error {
 impl From<time::error::Parse> for Error {
     fn from(err: time::error::Parse) -> Error {
         Error::ParseTime(err)
+    }
+}
+
+impl<T> From<std::sync::PoisonError<T>> for Error {
+    fn from(err: std::sync::PoisonError<T>) -> Error {
+        Error::Poison(format!("Mutex poison error: {}", err))
     }
 }

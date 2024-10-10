@@ -1,6 +1,5 @@
 use clap::{arg, Command};
 use ibapi::Client;
-use time::format_description::parse;
 
 fn main() {
     env_logger::init();

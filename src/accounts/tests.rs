@@ -16,7 +16,7 @@ fn test_pnl() {
 
     let _ = client.pnl(account, model_code).expect("request pnl failed");
 
-    let request_messages = client.message_bus.lock().expect("MessageBus is poisoned").request_messages();
+    let request_messages = client.message_bus.lock().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode_simple(), "92|9000|DU1234567|TARGET2024|");
 }
@@ -36,7 +36,7 @@ fn test_pnl_single() {
 
     let _ = client.pnl_single(account, contract_id, model_code).expect("request pnl failed");
 
-    let request_messages = client.message_bus.lock().expect("MessageBus is poisoned").request_messages();
+    let request_messages = client.message_bus.lock().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode_simple(), "94|9000|DU1234567|TARGET2024|1001|");
 }

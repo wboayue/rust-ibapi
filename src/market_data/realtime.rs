@@ -1,11 +1,11 @@
 use log::error;
 use time::OffsetDateTime;
 
-use crate::client::transport::ResponseIterator;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::orders::TagValue;
 use crate::server_versions;
+use crate::transport::BusSubscription;
 use crate::ToField;
 use crate::{Client, Error};
 
@@ -146,7 +146,7 @@ pub(crate) fn realtime_bars<'a>(
     let request_id = client.next_request_id();
     let packet = encoders::encode_request_realtime_bars(client.server_version(), request_id, contract, bar_size, what_to_show, use_rth, options)?;
 
-    let responses = client.send_durable_request(request_id, packet)?;
+    let responses = client.send_request(request_id, packet)?;
 
     Ok(RealTimeBarIterator::new(client, request_id, responses))
 }
@@ -164,7 +164,7 @@ pub(crate) fn tick_by_tick_all_last<'a>(
     let request_id = client.next_request_id();
 
     let message = encoders::tick_by_tick(server_version, request_id, contract, "AllLast", number_of_ticks, ignore_size)?;
-    let responses = client.send_durable_request(request_id, message)?;
+    let responses = client.send_request(request_id, message)?;
 
     Ok(TradeIterator {
         client,
@@ -200,7 +200,7 @@ pub(crate) fn tick_by_tick_last<'a>(
     let request_id = client.next_request_id();
 
     let message = encoders::tick_by_tick(server_version, request_id, contract, "Last", number_of_ticks, ignore_size)?;
-    let responses = client.send_durable_request(request_id, message)?;
+    let responses = client.send_request(request_id, message)?;
 
     Ok(TradeIterator {
         client,
@@ -222,7 +222,7 @@ pub(crate) fn tick_by_tick_bid_ask<'a>(
     let request_id = client.next_request_id();
 
     let message = encoders::tick_by_tick(server_version, request_id, contract, "BidAsk", number_of_ticks, ignore_size)?;
-    let responses = client.send_durable_request(request_id, message)?;
+    let responses = client.send_request(request_id, message)?;
 
     Ok(BidAskIterator {
         client,
@@ -244,7 +244,7 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
     let request_id = client.next_request_id();
 
     let message = encoders::tick_by_tick(server_version, request_id, contract, "MidPoint", number_of_ticks, ignore_size)?;
-    let responses = client.send_durable_request(request_id, message)?;
+    let responses = client.send_request(request_id, message)?;
 
     Ok(MidPointIterator {
         client,
@@ -259,11 +259,11 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
 pub(crate) struct RealTimeBarIterator<'a> {
     client: &'a Client,
     request_id: i32,
-    responses: ResponseIterator,
+    responses: BusSubscription,
 }
 
 impl<'a> RealTimeBarIterator<'a> {
-    fn new(client: &'a Client, request_id: i32, responses: ResponseIterator) -> RealTimeBarIterator<'a> {
+    fn new(client: &'a Client, request_id: i32, responses: BusSubscription) -> RealTimeBarIterator<'a> {
         RealTimeBarIterator {
             client,
             request_id,
@@ -316,7 +316,7 @@ impl<'a> Drop for RealTimeBarIterator<'a> {
 pub(crate) struct TradeIterator<'a> {
     client: &'a Client,
     request_id: i32,
-    responses: ResponseIterator,
+    responses: BusSubscription,
 }
 
 impl<'a> Drop for TradeIterator<'a> {
@@ -350,7 +350,7 @@ impl<'a> Iterator for TradeIterator<'a> {
 pub(crate) struct BidAskIterator<'a> {
     client: &'a Client,
     request_id: i32,
-    responses: ResponseIterator,
+    responses: BusSubscription,
 }
 
 /// Cancels the tick by tick request
@@ -392,7 +392,7 @@ impl<'a> Iterator for BidAskIterator<'a> {
 pub(crate) struct MidPointIterator<'a> {
     client: &'a Client,
     request_id: i32,
-    responses: ResponseIterator,
+    responses: BusSubscription,
 }
 
 impl<'a> Drop for MidPointIterator<'a> {

@@ -35,7 +35,7 @@
 //!     channel.add_bar(&bar);
 //!
 //!     // Ensure enough bars and no open positions.
-//!     if !channel.ready() || has_position(&client, symbol) {
+//!     if !channel.ready() {
 //!         continue;
 //!     }
 //!
@@ -57,14 +57,6 @@
 //!         } else {
 //!             println!("{:?}", notice);
 //!         }
-//!     }
-//! }
-//!
-//! fn has_position(client: &Client, symbol: &str) -> bool {
-//!     if let Ok(mut positions) = client.positions() {
-//!         positions.find(|p| p.contract.symbol == symbol).is_some()
-//!     } else {
-//!         false
 //!     }
 //! }
 //!
@@ -111,6 +103,8 @@ pub mod accounts;
 /// The Client establishes the connection to TWS or the Gateway.
 /// It manages the routing of messages between TWS and the application.
 pub mod client;
+
+pub(crate) mod transport;
 
 /// A [Contract](crate::contracts::Contract) object represents trading instruments such as a stocks, futures or options.
 ///

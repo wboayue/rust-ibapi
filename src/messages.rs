@@ -11,7 +11,7 @@ const UNSET_DOUBLE: &str = "1.7976931348623157E308";
 const UNSET_INTEGER: &str = "2147483647";
 const UNSET_LONG: &str = "9223372036854775807";
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub enum IncomingMessages {
     NotValid = -1,
     TickPrice = 1,
@@ -220,7 +220,7 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
 pub enum OutgoingMessages {
     RequestMarketData = 1,
     CancelMarketData = 2,
