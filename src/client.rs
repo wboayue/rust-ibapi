@@ -992,6 +992,7 @@ impl Debug for Client {
 /// Supports the handling of responses from TWS.
 pub struct Subscription<'a, T> {
     pub(crate) client: &'a Client,
+    pub(crate) request_id: Option<i32>,
     pub(crate) responses: BusSubscription,
     pub(crate) phantom: PhantomData<T>,
 }
@@ -1000,13 +1001,13 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// To request the next bar in a non-blocking manner.
     ///
     /// ```
-    /// loop {
+    /// //loop {
     ///    // Check if the next bar is available without waiting
-    ///    if let Some(bar) = subscription.try_next() {
+    ///    //if let Some(bar) = subscription.try_next() {
     ///        // Process the available bar (e.g., use it in calculations)
-    ///    }
+    ///    //}
     ///    // Perform other work before checking for the next bar
-    /// }
+    /// //}
     /// ```
     pub fn try_next(&mut self) -> Option<T> {
         if let Some(mut message) = self.responses.try_next() {
@@ -1028,20 +1029,20 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// To request the next bar in a non-blocking manner.
     ///
     /// ```
-    /// loop {
+    /// //loop {
     ///    // Check if the next bar is available without waiting
-    ///    if let Some(bar) = subscription.next_timeout() {
+    ///   // if let Some(bar) = subscription.next_timeout() {
     ///        // Process the available bar (e.g., use it in calculations)
-    ///    }
+    ///   // }
     ///    // Perform other work before checking for the next bar
-    /// }
+    /// //}
     /// ```
     pub fn next_timeout() -> Option<T> {
         None
     }
 
     pub fn cancel(&mut self) -> Result<(), Error> {
-        if let Some(message) = T::cancel_message(self.client.server_version()) {
+        if let Some(message) = T::cancel_message(self.client.server_version(), self.request_id) {
             self.client.send_message(message)?;
         }
         Ok(())
@@ -1050,8 +1051,10 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
 
 pub(crate) trait Subscribable<T> {
     const INCOMING_MESSAGE_IDS: &[IncomingMessages];
+    const CANCEL_MESSAGE_ID: Option<IncomingMessages> = None;
+
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
-    fn cancel_message(_server_version: i32) -> Option<RequestMessage> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>) -> Option<RequestMessage> {
         None
     }
 }

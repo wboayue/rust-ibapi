@@ -99,7 +99,7 @@ impl Subscribable<PositionUpdate> for PositionUpdate {
         }
     }
 
-    fn cancel_message(_server_version: i32) -> Option<RequestMessage> {
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>) -> Option<RequestMessage> {
         if let Ok(message) = encoders::cancel_positions() {
             Some(message)
         } else {
@@ -128,6 +128,7 @@ pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionUpdate>,
 
     Ok(Subscription {
         client,
+        request_id: None,
         responses,
         phantom: PhantomData,
     })
@@ -164,6 +165,7 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
 
     Ok(Subscription {
         client,
+        request_id: None,
         responses,
         phantom: PhantomData,
     })
@@ -191,6 +193,7 @@ pub(crate) fn pnl_single<'a>(
 
     Ok(Subscription {
         client,
+        request_id: None,
         responses,
         phantom: PhantomData,
     })
