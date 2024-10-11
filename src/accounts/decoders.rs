@@ -1,7 +1,5 @@
-use core::f64;
-
+use crate::contracts::SecurityType;
 use crate::messages::ResponseMessage;
-use crate::{contracts::SecurityType, Client};
 use crate::{server_versions, Error};
 
 use super::{FamilyCode, PnL, PnLSingle, Position};

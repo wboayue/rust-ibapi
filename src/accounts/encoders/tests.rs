@@ -4,7 +4,7 @@ use super::*;
 
 #[test]
 fn test_request_positions() {
-    let message = super::request_positions().expect("error encoding request");
+    let message = super::encode_request_positions().expect("error encoding request");
 
     assert_eq!(message[0], OutgoingMessages::RequestPositions.to_field(), "message.type");
     assert_eq!(message[1], "1", "message.version");
@@ -12,7 +12,7 @@ fn test_request_positions() {
 
 #[test]
 fn test_cancel_positions() {
-    let message = super::cancel_positions().expect("error encoding request");
+    let message = super::encode_cancel_positions().expect("error encoding request");
 
     assert_eq!(message[0], OutgoingMessages::CancelPositions.to_field(), "message.type");
     assert_eq!(message[1], "1", "message.version");
@@ -20,7 +20,7 @@ fn test_cancel_positions() {
 
 #[test]
 fn test_request_family_codes() {
-    let message = super::request_family_codes().expect("error encoding request");
+    let message = super::encode_request_family_codes().expect("error encoding request");
 
     assert_eq!(message[0], OutgoingMessages::RequestFamilyCodes.to_field(), "message.type");
     assert_eq!(message[1], "1", "message.version");

@@ -1,10 +1,9 @@
 use std::sync::{Arc, RwLock};
-use std::time::Duration;
 
 use crossbeam::channel;
 
-use crate::client::transport::{GlobalResponseIterator, MessageBus, ResponseIterator};
-use crate::messages::{RequestMessage, ResponseMessage};
+use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::transport::{InternalSubscription, MessageBus, SubscriptionBuilder};
 use crate::Error;
 
 pub(crate) struct MessageBusStub {
@@ -17,7 +16,7 @@ pub(crate) struct MessageBusStub {
 
 impl MessageBus for MessageBusStub {
     fn request_messages(&self) -> Vec<RequestMessage> {
-        self.request_messages.read().expect("MessageBus.request_messages is poisoned").clone()
+        self.request_messages.read().unwrap().clone()
     }
 
     fn read_message(&mut self) -> Result<ResponseMessage, Error> {
@@ -25,42 +24,19 @@ impl MessageBus for MessageBusStub {
     }
 
     fn write_message(&mut self, message: &RequestMessage) -> Result<(), Error> {
-        self.request_messages
-            .write()
-            .expect("MessageBus.request_messages is poisoned")
-            .push(message.clone());
+        self.request_messages.write().unwrap().push(message.clone());
         Ok(())
     }
 
-    fn send_generic_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
+    fn send_request(&mut self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         mock_request(self, request_id, message)
     }
 
-    fn send_durable_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
+    fn send_order_request(&mut self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         mock_request(self, request_id, message)
     }
 
-    fn send_order_message(&mut self, request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
-        mock_request(self, request_id, message)
-    }
-
-    fn request_next_order_id(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        mock_global_request(self, message)
-    }
-
-    fn request_open_orders(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        mock_global_request(self, message)
-    }
-
-    fn request_market_rule(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        mock_global_request(self, message)
-    }
-
-    fn request_positions(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
-        mock_global_request(self, message)
-    }
-
-    fn request_family_codes(&mut self, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
+    fn send_shared_request(&mut self, _message_id: OutgoingMessages, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         mock_global_request(self, message)
     }
 
@@ -73,11 +49,8 @@ impl MessageBus for MessageBusStub {
     }
 }
 
-fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMessage) -> Result<ResponseIterator, Error> {
-    stub.request_messages
-        .write()
-        .expect("MessageBus.request_messages is poisoned")
-        .push(message.clone());
+fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
+    stub.request_messages.write().unwrap().push(message.clone());
 
     let (sender, receiver) = channel::unbounded();
     let (s1, _r1) = channel::unbounded();
@@ -86,14 +59,13 @@ fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMe
         sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
     }
 
-    Ok(ResponseIterator::new(receiver, s1, None, None, Some(Duration::from_secs(5))))
+    let subscription = SubscriptionBuilder::new().shared_receiver(Arc::new(receiver)).signaler(s1).build();
+
+    Ok(subscription)
 }
 
-fn mock_global_request(stub: &mut MessageBusStub, message: &RequestMessage) -> Result<GlobalResponseIterator, Error> {
-    stub.request_messages
-        .write()
-        .expect("MessageBus.request_messages is poisoned")
-        .push(message.clone());
+fn mock_global_request(stub: &mut MessageBusStub, message: &RequestMessage) -> Result<InternalSubscription, Error> {
+    stub.request_messages.write().unwrap().push(message.clone());
 
     let (sender, receiver) = channel::unbounded();
 
@@ -101,5 +73,7 @@ fn mock_global_request(stub: &mut MessageBusStub, message: &RequestMessage) -> R
         sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
     }
 
-    Ok(GlobalResponseIterator::new(Arc::new(receiver)))
+    let subscription = SubscriptionBuilder::new().shared_receiver(Arc::new(receiver)).build();
+
+    Ok(subscription)
 }

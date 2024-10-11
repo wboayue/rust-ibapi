@@ -20,7 +20,7 @@ pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, 
     })
 }
 
-pub(crate) fn trade_tick(message: &mut ResponseMessage) -> Result<Trade, Error> {
+pub(crate) fn decode_trade_tick(message: &mut ResponseMessage) -> Result<Trade, Error> {
     message.skip(); // message type
     message.skip(); // message request id
 
@@ -104,7 +104,7 @@ mod tests {
     fn decode_trade() {
         let mut message = ResponseMessage::from("99\09000\01\01678740829\03895.25\07\02\0\0\0");
 
-        let results = trade_tick(&mut message);
+        let results = decode_trade_tick(&mut message);
 
         if let Ok(trade) = results {
             assert_eq!(trade.tick_type, "1", "trade.tick_type");

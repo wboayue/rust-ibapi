@@ -6,6 +6,7 @@ use log::{error, info};
 
 use crate::encode_option_field;
 use crate::messages::IncomingMessages;
+use crate::messages::OutgoingMessages;
 use crate::messages::RequestMessage;
 use crate::Client;
 use crate::{server_versions, Error, ToField};
@@ -64,22 +65,22 @@ impl ToField for Option<SecurityType> {
     }
 }
 
-impl ToString for SecurityType {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for SecurityType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SecurityType::Stock => "STK".to_string(),
-            SecurityType::Option => "OPT".to_string(),
-            SecurityType::Future => "FUT".to_string(),
-            SecurityType::Index => "IND".to_string(),
-            SecurityType::FuturesOption => "FOP".to_string(),
-            SecurityType::ForexPair => "CASH".to_string(),
-            SecurityType::Spread => "BAG".to_string(),
-            SecurityType::Warrant => "WAR".to_string(),
-            SecurityType::Bond => "BOND".to_string(),
-            SecurityType::Commodity => "CMDTY".to_string(),
-            SecurityType::News => "NEWS".to_string(),
-            SecurityType::MutualFund => "FUND".to_string(),
-            SecurityType::Crypto => "CRYPTO".to_string(),
+            SecurityType::Stock => write!(f, "STK"),
+            SecurityType::Option => write!(f, "OPT"),
+            SecurityType::Future => write!(f, "FUT"),
+            SecurityType::Index => write!(f, "IND"),
+            SecurityType::FuturesOption => write!(f, "FOP"),
+            SecurityType::ForexPair => write!(f, "CASH"),
+            SecurityType::Spread => write!(f, "BAG"),
+            SecurityType::Warrant => write!(f, "WAR"),
+            SecurityType::Bond => write!(f, "BOND"),
+            SecurityType::Commodity => write!(f, "CMDTY"),
+            SecurityType::News => write!(f, "NEWS"),
+            SecurityType::MutualFund => write!(f, "FUND"),
+            SecurityType::Crypto => write!(f, "CRYPTO"),
         }
     }
 }
@@ -517,7 +518,7 @@ pub(crate) fn market_rule(client: &Client, market_rule_id: i32) -> Result<Market
 
     let request = encoders::request_market_rule(market_rule_id)?;
 
-    let mut responses = client.request_market_rule(request)?;
+    let mut responses = client.send_shared_request(OutgoingMessages::RequestMarketRule, request)?;
 
     match responses.next() {
         Some(mut message) => Ok(decoders::market_rule(&mut message)?),
