@@ -2,15 +2,15 @@ use crate::messages::OutgoingMessages;
 use crate::messages::RequestMessage;
 use crate::Error;
 
-pub(crate) fn request_positions() -> Result<RequestMessage, Error> {
+pub(crate) fn encode_request_positions() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::RequestPositions, 1)
 }
 
-pub(crate) fn cancel_positions() -> Result<RequestMessage, Error> {
+pub(crate) fn encode_cancel_positions() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::CancelPositions, 1)
 }
 
-pub(crate) fn request_family_codes() -> Result<RequestMessage, Error> {
+pub(crate) fn encode_request_family_codes() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::RequestFamilyCodes, 1)
 }
 

@@ -114,7 +114,7 @@ impl Subscribable<PositionResponse> for PositionResponse {
     }
 
     fn cancel_message(_server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
-        Ok(encoders::cancel_positions()?)
+        Ok(encoders::encode_cancel_positions()?)
     }
 }
 
@@ -131,7 +131,7 @@ pub struct FamilyCode {
 pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionResponse>, Error> {
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position requests.")?;
 
-    let message = encoders::request_positions()?;
+    let message = encoders::encode_request_positions()?;
 
     let responses = client.send_shared_request(OutgoingMessages::RequestPositions, message)?;
 
@@ -147,7 +147,7 @@ pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionResponse
 pub(crate) fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
     client.check_server_version(server_versions::REQ_FAMILY_CODES, "It does not support family codes requests.")?;
 
-    let message = encoders::request_family_codes()?;
+    let message = encoders::encode_request_family_codes()?;
 
     let mut messages = client.send_shared_request(OutgoingMessages::RequestFamilyCodes, message)?;
 
