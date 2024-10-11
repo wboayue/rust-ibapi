@@ -10,7 +10,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::accounts::{FamilyCode, PnL, PnLSingle, PositionUpdate};
+use crate::accounts::{FamilyCode, PnL, PnLSingle, PositionResponse};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
@@ -211,7 +211,7 @@ impl Client {
     // === Accounts ===
 
     /// Get current [Position](accounts::Position)s for all accessible accounts.
-    pub fn positions(&self) -> core::result::Result<Subscription<PositionUpdate>, Error> {
+    pub fn positions(&self) -> core::result::Result<Subscription<PositionResponse>, Error> {
         accounts::positions(self)
     }
 
@@ -1041,8 +1041,9 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
         None
     }
 
+    /// Cancel the subscription
     pub fn cancel(&mut self) -> Result<(), Error> {
-        if let Some(message) = T::cancel_message(self.client.server_version(), self.request_id) {
+        if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
             self.client.send_message(message)?;
         }
         Ok(())
@@ -1054,8 +1055,8 @@ pub(crate) trait Subscribable<T> {
     const CANCEL_MESSAGE_ID: Option<IncomingMessages> = None;
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
-    fn cancel_message(_server_version: i32, request_id: Option<i32>) -> Option<RequestMessage> {
-        None
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
+        Err(Error::Simple("not implemented".into()))
     }
 }
 
