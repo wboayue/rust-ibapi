@@ -20,5 +20,9 @@ fn main() {
     while let (Some(bar_nvda), Some(bar_aapl)) = (subscription_nvda.next(), subscription_aapl.next()) {
         // Process each bar here (e.g., print or use in calculations)
         println!("NVDA {}, AAPL {}", bar_nvda.close, bar_aapl.close);
+
+        // when your algorithm is done, cancel subscription
+        subscription_aapl.cancel().expect("cancel failed");
+        subscription_nvda.cancel().expect("cancel failed");    
     }
 }

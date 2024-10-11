@@ -11,8 +11,7 @@ This implementation is a simplified version of the official TWS API, intended to
 
 This project is a work in progress and has been tested with TWS version 10.19. The primary reference for this implementation is the [C# source code](https://github.com/InteractiveBrokers/tws-api-public).
 
-Open issues are tracked [here](https://github.com/wboayue/rust-ibapi/issues).
-If you encounter a problem or need a missing feature, please check the [issues list](https://github.com/wboayue/rust-ibapi/issues) before reporting it.
+If you encounter a problem or require a missing feature, please check the [issues list](https://github.com/wboayue/rust-ibapi/issues) before reporting it.
 
 ## Examples
 
@@ -33,7 +32,7 @@ fn main() {
 }
 ```
 
-Note that the connection is made using `127.0.0.1` instead of `localhost`. On some systems, `localhost` resolves to a 64-bit IP address, which may be blocked by TWS. TWS only allows specifying 32-bit IP addresses in the list of allowed IP addresses.
+Note that the connection is made using `127.0.0.1` instead of `localhost`. On some systems, `localhost` resolves to a IPv6 address, which may be blocked by TWS. TWS only allows specifying IPv4 addresses in the list of allowed IP addresses.
 
 ### Creating Contracts
 
@@ -112,28 +111,23 @@ fn main() {
 
     // Request real-time bars data for AAPL with 5-second intervals
     let contract = Contract::stock("AAPL");
-    let subscription = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
+    let mut subscription = client
+        .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+        .expect("realtime bars request failed!");
 
-    for bar in subscription {
+    while let Some(bar) = subscription.next() {
         // Process each bar here (e.g., print or use in calculations)
+        println!("bar: {bar:?}");
 
-        // when the session ends subscription can be cancelled.
-       // subscription.cancel();
+        // when your algorithm is done, cancel subscription
+        subscription.cancel().expect("cancel failed");
     }
 }
 ```
 
-In this example we request realtime bars from TWS. If the request is successful, we receive a subscription. The subscription in this example is converted to an iterator, which blocks and waits until the next bar becomes available.
+In this example the request for realtime bars returns a Subscription that can be used to process the bars. Advancing with `next()` blocks until the next bar becomes available. The Subscription also supports non-blocking retrieval of the next item. Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/struct.Subscription.html) for more details.
 
-The syntactic sugar for the for loop can be expanded into.
-
-```rust
-while let Some(bar) = subscription.next() {
-    // Process each bar here (e.g., print or use in calculations)
-}
-```
-
-Using this form you could easily stream multiple contracts
+Subscriptions also easily support iterating over bars from multiple contracts.
 
 ```rust
 use ibapi::contracts::Contract;
@@ -148,17 +142,23 @@ fn main() {
     let contract_aapl = Contract::stock("AAPL");
     let contract_nvda = Contract::stock("NVDA");
 
-    let mut subscription_aapl = client.realtime_bars(&contract_aapl, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
-    let mut subscription_nvda = client.realtime_bars(&contract_nvda, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
+    let mut subscription_aapl = client
+        .realtime_bars(&contract_aapl, BarSize::Sec5, WhatToShow::Trades, false)
+        .expect("realtime bars request failed!");
+    let mut subscription_nvda = client
+        .realtime_bars(&contract_nvda, BarSize::Sec5, WhatToShow::Trades, false)
+        .expect("realtime bars request failed!");
 
     while let (Some(bar_nvda), Some(bar_aapl)) = (subscription_nvda.next(), subscription_aapl.next()) {
         // Process each bar here (e.g., print or use in calculations)
         println!("NVDA {}, AAPL {}", bar_nvda.close, bar_aapl.close);
+
+        // when your algorithm is done, cancel subscription
+        subscription_aapl.cancel().expect("cancel failed");
+        subscription_nvda.cancel().expect("cancel failed");    
     }
 }
 ```
-
-Subscriptions also support non-blocking processing with the try_next and next_timeout methods. Explore the [BoundedSubscription] and [UnboundedSubscription] documentation for more examples.
 
 ### Placing Orders
 
