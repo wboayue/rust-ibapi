@@ -125,9 +125,9 @@ fn main() {
 }
 ```
 
-In this example the request for realtime bars returns a Subscription that can be used to process the bars. Advancing with `next()` blocks until the next bar becomes available. The Subscription also supports non-blocking retrieval of the next item. Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/struct.Subscription.html) for more details.
+In this example, the request for realtime bars returns a Subscription that can be used to process the bars. Advancing with `next()` blocks until the next bar becomes available. The Subscription also supports non-blocking retrieval of the next item. Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/struct.Subscription.html) for more details.
 
-Subscriptions also easily support iterating over bars from multiple contracts.
+Subscriptions also support easy iteration over bars from multiple contracts.
 
 ```rust
 use ibapi::contracts::Contract;
@@ -163,19 +163,28 @@ fn main() {
 ### Placing Orders
 
 ```rust
-// make this runnable code
+use ibapi::contracts::Contract;
+use ibapi::orders::{order_builder, Action, OrderNotification};
+use ibapi::Client;
 
-// Creates a market order to purchase 100 shares
-let order_id = client.next_order_id();
-let order = order_builder::market_order(Action::Buy, 100.0);
+pub fn main() {
+    let connection_url = "127.0.0.1:4002";
+    let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 
-let subscription = client.place_order(order_id, &contract, &order).expect("place order request failed!");
+    let contract = Contract::stock("AAPL");
 
-for notice in subscription {
-    if let OrderNotification::ExecutionData(data) = notice {
-        println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
-    } else {
-        println!("{:?}", notice);
+    // Creates a market order to purchase 100 shares
+    let order_id = client.next_order_id();
+    let order = order_builder::market_order(Action::Buy, 100.0);
+
+    let subscription = client.place_order(order_id, &contract, &order).expect("place order request failed!");
+
+    for notice in subscription {
+        if let OrderNotification::ExecutionData(data) = notice {
+            println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
+        } else {
+            println!("{:?}", notice);
+        }
     }
 }
 ```
@@ -186,6 +195,6 @@ The [Client documentation](https://docs.rs/ibapi/latest/ibapi/struct.Client.html
 
 ## Contributions
 
-We welcome contributions of all kinds! Feel free to propose new ideas, share bug fixes, or enhance the documentation. If you'd like to contribute, please start by reviewing our [contributor documentation](https://github.com/wboayue/rust-ibapi/tree/main/CONTRIBUTING.md).
+We welcome contributions of all kinds. Feel free to propose new ideas, share bug fixes, or enhance the documentation. If you'd like to contribute, please start by reviewing our [contributor documentation](https://github.com/wboayue/rust-ibapi/tree/main/CONTRIBUTING.md).
 
 For questions or discussions about contributions, feel free to open an issue or reach out via our [GitHub discussions page](https://github.com/wboayue/rust-ibapi/discussions).

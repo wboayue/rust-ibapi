@@ -23,6 +23,6 @@ fn main() {
 
         // when your algorithm is done, cancel subscription
         subscription_aapl.cancel().expect("cancel failed");
-        subscription_nvda.cancel().expect("cancel failed");    
+        subscription_nvda.cancel().expect("cancel failed");
     }
 }
