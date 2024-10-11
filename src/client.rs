@@ -18,7 +18,7 @@ use crate::market_data::realtime::{self, Bar, BarSize, MidPoint, WhatToShow};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
-use crate::transport::{BusSubscription, MessageBus, TcpMessageBus};
+use crate::transport::{InternalSubscription, MessageBus, TcpMessageBus};
 use crate::{accounts, contracts, orders, server_versions};
 
 // Client
@@ -949,18 +949,18 @@ impl Client {
         self.message_bus.lock()?.write_message(&packet)
     }
 
-    pub(crate) fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<BusSubscription, Error> {
+    pub(crate) fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<InternalSubscription, Error> {
         debug!("send_message({:?}, {:?})", request_id, message);
         self.message_bus.lock()?.send_request(request_id, &message)
     }
 
-    pub(crate) fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<BusSubscription, Error> {
+    pub(crate) fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<InternalSubscription, Error> {
         debug!("send_order({:?}, {:?})", order_id, message);
         self.message_bus.lock()?.send_order_request(order_id, &message)
     }
 
     /// Sends request for the next valid order id.
-    pub(crate) fn send_shared_request(&self, message_id: OutgoingMessages, message: RequestMessage) -> Result<BusSubscription, Error> {
+    pub(crate) fn send_shared_request(&self, message_id: OutgoingMessages, message: RequestMessage) -> Result<InternalSubscription, Error> {
         self.message_bus.lock()?.send_shared_request(message_id, &message)
     }
 
@@ -993,7 +993,7 @@ impl Debug for Client {
 pub struct Subscription<'a, T: Subscribable<T>> {
     pub(crate) client: &'a Client,
     pub(crate) request_id: Option<i32>,
-    pub(crate) responses: BusSubscription,
+    pub(crate) responses: InternalSubscription,
     pub(crate) phantom: PhantomData<T>,
 }
 

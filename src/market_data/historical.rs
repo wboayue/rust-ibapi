@@ -6,7 +6,7 @@ use time::{Date, OffsetDateTime};
 
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
-use crate::transport::BusSubscription;
+use crate::transport::InternalSubscription;
 use crate::{server_versions, Client, Error, ToField};
 
 mod decoders;
@@ -519,12 +519,12 @@ impl TickDecoder<TickMidpoint> for TickMidpoint {
 
 pub(crate) struct TickIterator<T: TickDecoder<T>> {
     done: bool,
-    messages: BusSubscription,
+    messages: InternalSubscription,
     buffer: VecDeque<T>,
 }
 
 impl<T: TickDecoder<T>> TickIterator<T> {
-    fn new(messages: BusSubscription) -> Self {
+    fn new(messages: InternalSubscription) -> Self {
         Self {
             done: false,
             messages,

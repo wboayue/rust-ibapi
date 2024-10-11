@@ -33,13 +33,13 @@ pub(crate) trait MessageBus: Send + Sync {
     fn write(&mut self, packet: &str) -> Result<(), Error>;
 
     // Sends formatted message to TWS and creates a reply channel by request id.
-    fn send_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
+    fn send_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
 
     // Sends formatted order specific message to TWS and creates a reply channel by order id.
-    fn send_order_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error>;
+    fn send_order_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
 
     // Sends formatted message to TWS and creates a reply channel by message type.
-    fn send_shared_request(&mut self, message_id: OutgoingMessages, packet: &RequestMessage) -> Result<BusSubscription, Error>;
+    fn send_shared_request(&mut self, message_id: OutgoingMessages, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
 
     // Starts a dedicated thread to process responses from TWS.
     fn process_messages(&mut self, server_version: i32) -> Result<(), Error>;
@@ -226,7 +226,7 @@ impl MessageBus for TcpMessageBus {
         read_packet(&self.reader)
     }
 
-    fn send_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<BusSubscription, Error> {
+    fn send_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error> {
         let (sender, receiver) = channel::unbounded();
 
         self.requests.insert(request_id, sender);
@@ -242,7 +242,7 @@ impl MessageBus for TcpMessageBus {
         Ok(subscription)
     }
 
-    fn send_order_request(&mut self, order_id: i32, message: &RequestMessage) -> Result<BusSubscription, Error> {
+    fn send_order_request(&mut self, order_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         let (sender, receiver) = channel::unbounded();
 
         self.orders.insert(order_id, sender);
@@ -258,7 +258,7 @@ impl MessageBus for TcpMessageBus {
         Ok(subscription)
     }
 
-    fn send_shared_request(&mut self, message_id: OutgoingMessages, message: &RequestMessage) -> Result<BusSubscription, Error> {
+    fn send_shared_request(&mut self, message_id: OutgoingMessages, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         self.write_message(message)?;
 
         let shared_receiver = self.shared_channels.get_receiver(message_id);
@@ -553,7 +553,7 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
 
 // Enables routing of response messages from TWS to Client
 #[derive(Debug)]
-pub(crate) struct BusSubscription {
+pub(crate) struct InternalSubscription {
     receiver: Option<Receiver<ResponseMessage>>, // for client to receive incoming messages
     shared_receiver: Option<Arc<Receiver<ResponseMessage>>>,
     signaler: Option<Sender<Signal>>, // for client to signal termination
@@ -562,7 +562,7 @@ pub(crate) struct BusSubscription {
     timeout: Option<Duration>,        // How long to wait for next message
 }
 
-impl BusSubscription {
+impl InternalSubscription {
     pub(crate) fn new(
         messages: Receiver<ResponseMessage>,
         signals: Sender<Signal>,
@@ -570,7 +570,7 @@ impl BusSubscription {
         order_id: Option<i32>,
         timeout: Option<Duration>,
     ) -> Self {
-        BusSubscription {
+        InternalSubscription {
             receiver: Some(messages),
             shared_receiver: None,
             signaler: Some(signals),
@@ -617,7 +617,7 @@ impl BusSubscription {
     }
 }
 
-impl Drop for BusSubscription {
+impl Drop for InternalSubscription {
     fn drop(&mut self) {
         if let (Some(request_id), Some(signaler)) = (self.request_id, &self.signaler) {
             signaler.send(Signal::Request(request_id)).unwrap();
@@ -629,7 +629,7 @@ impl Drop for BusSubscription {
     }
 }
 
-impl Iterator for BusSubscription {
+impl Iterator for InternalSubscription {
     type Item = ResponseMessage;
     fn next(&mut self) -> Option<Self::Item> {
         if let (Some(timeout), Some(receiver)) = (self.timeout, &self.receiver) {
@@ -706,9 +706,9 @@ impl SubscriptionBuilder {
         self
     }
 
-    pub(crate) fn build(self) -> BusSubscription {
+    pub(crate) fn build(self) -> InternalSubscription {
         if let (Some(receiver), Some(signaler)) = (self.receiver, self.signaler) {
-            return BusSubscription {
+            return InternalSubscription {
                 receiver: Some(receiver),
                 shared_receiver: None,
                 signaler: Some(signaler),
@@ -717,7 +717,7 @@ impl SubscriptionBuilder {
                 timeout: None,
             };
         } else if let Some(receiver) = self.shared_receiver {
-            return BusSubscription {
+            return InternalSubscription {
                 receiver: None,
                 shared_receiver: Some(receiver),
                 signaler: None,

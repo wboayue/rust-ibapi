@@ -8,7 +8,7 @@ use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::orders::TagValue;
 use crate::server_versions;
-use crate::transport::BusSubscription;
+use crate::transport::InternalSubscription;
 use crate::ToField;
 use crate::{Client, Error};
 
@@ -316,7 +316,7 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
 pub(crate) struct TradeIterator<'a> {
     client: &'a Client,
     request_id: i32,
-    responses: BusSubscription,
+    responses: InternalSubscription,
 }
 
 impl<'a> Drop for TradeIterator<'a> {
@@ -350,7 +350,7 @@ impl<'a> Iterator for TradeIterator<'a> {
 pub(crate) struct BidAskIterator<'a> {
     client: &'a Client,
     request_id: i32,
-    responses: BusSubscription,
+    responses: InternalSubscription,
 }
 
 /// Cancels the tick by tick request

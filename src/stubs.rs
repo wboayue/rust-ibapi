@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use crossbeam::channel;
 
 use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
-use crate::transport::{BusSubscription, MessageBus, SubscriptionBuilder};
+use crate::transport::{InternalSubscription, MessageBus, SubscriptionBuilder};
 use crate::Error;
 
 pub(crate) struct MessageBusStub {
@@ -28,15 +28,15 @@ impl MessageBus for MessageBusStub {
         Ok(())
     }
 
-    fn send_request(&mut self, request_id: i32, message: &RequestMessage) -> Result<BusSubscription, Error> {
+    fn send_request(&mut self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         mock_request(self, request_id, message)
     }
 
-    fn send_order_request(&mut self, request_id: i32, message: &RequestMessage) -> Result<BusSubscription, Error> {
+    fn send_order_request(&mut self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         mock_request(self, request_id, message)
     }
 
-    fn send_shared_request(&mut self, _message_id: OutgoingMessages, message: &RequestMessage) -> Result<BusSubscription, Error> {
+    fn send_shared_request(&mut self, _message_id: OutgoingMessages, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         mock_global_request(self, message)
     }
 
@@ -49,7 +49,7 @@ impl MessageBus for MessageBusStub {
     }
 }
 
-fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMessage) -> Result<BusSubscription, Error> {
+fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
     stub.request_messages.write().unwrap().push(message.clone());
 
     let (sender, receiver) = channel::unbounded();
@@ -64,7 +64,7 @@ fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMe
     Ok(subscription)
 }
 
-fn mock_global_request(stub: &mut MessageBusStub, message: &RequestMessage) -> Result<BusSubscription, Error> {
+fn mock_global_request(stub: &mut MessageBusStub, message: &RequestMessage) -> Result<InternalSubscription, Error> {
     stub.request_messages.write().unwrap().push(message.clone());
 
     let (sender, receiver) = channel::unbounded();
