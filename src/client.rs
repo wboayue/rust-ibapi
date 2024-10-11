@@ -14,7 +14,7 @@ use crate::accounts::{FamilyCode, PnL, PnLSingle, PositionResponse};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
-use crate::market_data::realtime::{self, Bar, BarSize, WhatToShow};
+use crate::market_data::realtime::{self, Bar, BarSize, MidPoint, WhatToShow};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
@@ -865,7 +865,7 @@ impl Client {
         bar_size: BarSize,
         what_to_show: WhatToShow,
         use_rth: bool,
-    ) -> Result<impl Iterator<Item = Bar> + 'a, Error> {
+    ) -> Result<Subscription<'a, Bar>, Error> {
         realtime::realtime_bars(self, contract, &bar_size, &what_to_show, use_rth, Vec::default())
     }
 
@@ -925,7 +925,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<impl Iterator<Item = realtime::MidPoint> + 'a, Error> {
+    ) -> Result<Subscription<'a, MidPoint>, Error> {
         realtime::tick_by_tick_midpoint(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -990,7 +990,7 @@ impl Debug for Client {
 }
 
 /// Supports the handling of responses from TWS.
-pub struct Subscription<'a, T> {
+pub struct Subscription<'a, T: Subscribable<T>> {
     pub(crate) client: &'a Client,
     pub(crate) request_id: Option<i32>,
     pub(crate) responses: BusSubscription,
@@ -1050,6 +1050,14 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     }
 }
 
+impl<'a, T: Subscribable<T>> Drop for Subscription<'a, T> {
+    fn drop(&mut self) {
+        if let Err(err) = self.cancel() {
+            error!("error cancelling subscription: {err}");
+        }
+    }
+}
+
 pub(crate) trait Subscribable<T> {
     const INCOMING_MESSAGE_IDS: &[IncomingMessages];
     const CANCEL_MESSAGE_ID: Option<IncomingMessages> = None;
@@ -1087,6 +1095,8 @@ impl<'a, T: Subscribable<T>> Iterator for Subscription<'a, T> {
         }
     }
 }
+
+pub trait SharesChannel {}
 
 // Parses following format: 20230405 22:20:39 PST
 fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, Option<&'static Tz>) {

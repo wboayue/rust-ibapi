@@ -52,7 +52,7 @@ pub(crate) fn encode_request_realtime_bars(
     Ok(packet)
 }
 
-pub(crate) fn cancel_realtime_bars(request_id: i32) -> Result<RequestMessage, Error> {
+pub(crate) fn encode_cancel_realtime_bars(request_id: i32) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::default();
@@ -134,7 +134,7 @@ mod tests {
     fn cancel_realtime_bars() {
         let request_id = 9000;
 
-        let results = super::cancel_realtime_bars(request_id);
+        let results = super::encode_cancel_realtime_bars(request_id);
 
         match results {
             Ok(message) => {

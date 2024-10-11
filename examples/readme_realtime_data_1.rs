@@ -8,12 +8,15 @@ fn main() {
 
     // Request real-time bars data for AAPL with 5-second intervals
     let contract = Contract::stock("AAPL");
-    let subscription = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
+    let mut subscription = client
+        .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+        .expect("realtime bars request failed!");
 
-    for bar in subscription {
+    while let Some(bar) = subscription.next() {
         // Process each bar here (e.g., print or use in calculations)
+        println!("bar: {bar:?}");
 
-        // when the session end subscription can be cancelled.
-       // subscription.cancel();
+        // when your algorithm is done, cancel subscription
+        subscription.cancel().expect("cancel failed");
     }
 }

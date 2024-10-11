@@ -11,7 +11,7 @@
 
 use std::marker::PhantomData;
 
-use crate::client::{Subscribable, Subscription};
+use crate::client::{SharesChannel, Subscribable, Subscription};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Client, Error};
@@ -142,6 +142,8 @@ pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionResponse
         phantom: PhantomData,
     })
 }
+
+impl SharesChannel for Subscription<'_, PositionResponse> {}
 
 // Determine whether an account exists under an account family and find the account family code.
 pub(crate) fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
