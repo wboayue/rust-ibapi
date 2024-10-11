@@ -11,8 +11,6 @@
 
 use std::marker::PhantomData;
 
-use log::warn;
-
 use crate::client::{Subscribable, Subscription};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
@@ -38,6 +36,14 @@ impl Subscribable<PnL> for PnL {
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_pnl(server_version, message)
     }
+
+    fn cancel_message(_server_version: i32, request_id: Option<i32>) -> Result<RequestMessage, Error> {
+        if let Some(request_id) = request_id {
+            encoders::encode_cancel_pnl(request_id)
+        } else {
+            Err(Error::Simple("Request id request to encode cancel pnl single".into()))
+        }
+    }
 }
 
 // Realtime PnL update for a position in account.
@@ -61,6 +67,14 @@ impl Subscribable<PnLSingle> for PnLSingle {
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_pnl_single(server_version, message)
     }
+
+    fn cancel_message(_server_version: i32, request_id: Option<i32>) -> Result<RequestMessage, Error> {
+        if let Some(request_id) = request_id {
+            encoders::encode_cancel_pnl_single(request_id)
+        } else {
+            Err(Error::Simple("Request id request to encode cancel pnl single".into()))
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -77,35 +91,30 @@ pub struct Position {
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
-pub enum PositionUpdate {
+pub enum PositionResponse {
     Position(Position),
     PositionEnd,
 }
 
-impl From<Position> for PositionUpdate {
+impl From<Position> for PositionResponse {
     fn from(val: Position) -> Self {
-        PositionUpdate::Position(val)
+        PositionResponse::Position(val)
     }
 }
 
-impl Subscribable<PositionUpdate> for PositionUpdate {
+impl Subscribable<PositionResponse> for PositionResponse {
     const INCOMING_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
 
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::Position => Ok(PositionUpdate::Position(decoders::decode_position(message)?)),
-            IncomingMessages::PositionEnd => Ok(PositionUpdate::PositionEnd),
+            IncomingMessages::Position => Ok(PositionResponse::Position(decoders::decode_position(message)?)),
+            IncomingMessages::PositionEnd => Ok(PositionResponse::PositionEnd),
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
     }
 
-    fn cancel_message(_server_version: i32) -> Option<RequestMessage> {
-        if let Ok(message) = encoders::cancel_positions() {
-            Some(message)
-        } else {
-            warn!("error decoding");
-            None
-        }
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
+        Ok(encoders::encode_cancel_positions()?)
     }
 }
 
@@ -119,15 +128,16 @@ pub struct FamilyCode {
 
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.
-pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
+pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionResponse>, Error> {
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position requests.")?;
 
-    let message = encoders::request_positions()?;
+    let message = encoders::encode_request_positions()?;
 
     let responses = client.send_shared_request(OutgoingMessages::RequestPositions, message)?;
 
     Ok(Subscription {
         client,
+        request_id: None,
         responses,
         phantom: PhantomData,
     })
@@ -137,7 +147,7 @@ pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionUpdate>,
 pub(crate) fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
     client.check_server_version(server_versions::REQ_FAMILY_CODES, "It does not support family codes requests.")?;
 
-    let message = encoders::request_family_codes()?;
+    let message = encoders::encode_request_family_codes()?;
 
     let mut messages = client.send_shared_request(OutgoingMessages::RequestFamilyCodes, message)?;
 
@@ -164,6 +174,7 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
 
     Ok(Subscription {
         client,
+        request_id: None,
         responses,
         phantom: PhantomData,
     })
@@ -191,6 +202,7 @@ pub(crate) fn pnl_single<'a>(
 
     Ok(Subscription {
         client,
+        request_id: None,
         responses,
         phantom: PhantomData,
     })
