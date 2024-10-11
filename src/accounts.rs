@@ -91,24 +91,44 @@ pub struct Position {
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
-pub enum PositionResponse {
+pub enum PositionUpdate {
     Position(Position),
     PositionEnd,
 }
 
-impl From<Position> for PositionResponse {
+impl From<Position> for PositionUpdate {
     fn from(val: Position) -> Self {
-        PositionResponse::Position(val)
+        PositionUpdate::Position(val)
     }
 }
 
-impl Subscribable<PositionResponse> for PositionResponse {
+impl Subscribable<PositionUpdate> for PositionUpdate {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
 
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::Position => Ok(PositionResponse::Position(decoders::decode_position(message)?)),
-            IncomingMessages::PositionEnd => Ok(PositionResponse::PositionEnd),
+            IncomingMessages::Position => Ok(PositionUpdate::Position(decoders::decode_position(message)?)),
+            IncomingMessages::PositionEnd => Ok(PositionUpdate::PositionEnd),
+            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+        }
+    }
+
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
+        Ok(encoders::encode_cancel_positions()?)
+    }
+}
+
+
+#[derive(Debug)]
+pub struct PositionMulti {}
+
+impl Subscribable<PositionMulti> for PositionMulti {
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
+
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+        match message.message_type() {
+            // IncomingMessages::Position => Ok(PositionUpdate::Position(decoders::decode_position(message)?)),
+            // IncomingMessages::PositionEnd => Ok(PositionUpdate::PositionEnd),
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
     }
@@ -128,7 +148,7 @@ pub struct FamilyCode {
 
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.
-pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionResponse>, Error> {
+pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position requests.")?;
 
     let message = encoders::encode_request_positions()?;
@@ -143,7 +163,17 @@ pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionResponse
     })
 }
 
-impl SharesChannel for Subscription<'_, PositionResponse> {}
+impl SharesChannel for Subscription<'_, PositionUpdate> {}
+
+pub(crate) fn positions_multi<'a>(
+    client: &'a Client,
+    account: Option<&str>,
+    model_code: Option<&str>,
+) -> Result<Subscription<'a, PositionMulti>, Error> {
+    Err(Error::Simple("TODO".into()))
+}
+
+impl SharesChannel for Subscription<'_, PositionMulti> {}
 
 // Determine whether an account exists under an account family and find the account family code.
 pub(crate) fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
