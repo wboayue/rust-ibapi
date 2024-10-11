@@ -66,17 +66,19 @@ Explore the [Contract documentation](https://docs.rs/ibapi/latest/ibapi/contract
 The following is an example of requesting historical data from TWS.
 
 ```rust
+use time::macros::datetime;
+
 use ibapi::contracts::Contract;
-use ibapi::Client;
 use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
+use ibapi::Client;
 
 fn main() {
     let connection_url = "127.0.0.1:4002";
     let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 
-    let contract = Contract::stock("NVDA");
+    let contract = Contract::stock("AAPL");
 
-    let subscription = client
+    let historical_data = client
         .historical_data(
             &contract,
             datetime!(2023-04-11 20:00 UTC),
@@ -87,9 +89,9 @@ fn main() {
         )
         .expect("historical data request failed");
 
-    println!("start: {:?}, end: {:?}", subscription.start, subscription.end);
+    println!("start: {:?}, end: {:?}", historical_data.start, historical_data.end);
 
-    for bar in &subscription.bars {
+    for bar in &historical_data.bars {
         println!("{bar:?}");
     }
 }
@@ -100,16 +102,24 @@ fn main() {
 The following is an example of requesting realtime data from TWS.
 
 ```rust
-// make this runnable code
+use ibapi::contracts::Contract;
+use ibapi::market_data::realtime::{BarSize, WhatToShow};
+use ibapi::Client;
 
-// Request real-time bars data for TSLA with 5-second intervals
-let subscription = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
+fn main() {
+    let connection_url = "127.0.0.1:4002";
+    let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 
-for bar in subscription {
-    // Process each bar here (e.g., print or use in calculations)
+    // Request real-time bars data for AAPL with 5-second intervals
+    let contract = Contract::stock("AAPL");
+    let subscription = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
 
-    // when the session end subscription can be cancelled.
-    subscription.cancel();
+    for bar in subscription {
+        // Process each bar here (e.g., print or use in calculations)
+
+        // when the session ends subscription can be cancelled.
+       // subscription.cancel();
+    }
 }
 ```
 
@@ -126,13 +136,25 @@ while let Some(bar) = subscription.next() {
 Using this form you could easily stream multiple contracts
 
 ```rust
-// make this runnable code
+use ibapi::contracts::Contract;
+use ibapi::market_data::realtime::{BarSize, WhatToShow};
+use ibapi::Client;
 
-let subscription_nvda = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
-let subscription_aapl = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
+fn main() {
+    let connection_url = "127.0.0.1:4002";
+    let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 
-while let (Some(bar_nvda), Some(bar_aapl)) = (subscription_nvda.next(), subscription_aapl.next()) {
-    // Process each bar here (e.g., print or use in calculations)
+    // Request real-time bars data for AAPL with 5-second intervals
+    let contract_aapl = Contract::stock("AAPL");
+    let contract_nvda = Contract::stock("NVDA");
+
+    let mut subscription_aapl = client.realtime_bars(&contract_aapl, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
+    let mut subscription_nvda = client.realtime_bars(&contract_nvda, BarSize::Sec5, WhatToShow::Trades, false).expect("realtime bars request failed!");
+
+    while let (Some(bar_nvda), Some(bar_aapl)) = (subscription_nvda.next(), subscription_aapl.next()) {
+        // Process each bar here (e.g., print or use in calculations)
+        println!("NVDA {}, AAPL {}", bar_nvda.close, bar_aapl.close);
+    }
 }
 ```
 
