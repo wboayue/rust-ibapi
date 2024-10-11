@@ -3,6 +3,7 @@ use std::io::Write;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use byteorder::{BigEndian, WriteBytesExt};
 use log::{debug, error, info};
@@ -1011,7 +1012,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// ```
     pub fn try_next(&mut self) -> Option<T> {
         if let Some(mut message) = self.responses.try_next() {
-            if T::INCOMING_MESSAGE_IDS.contains(&message.message_type()) {
+            if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
                 match T::decode(self.client.server_version(), &mut message) {
                     Ok(val) => return Some(val),
                     Err(err) => {
@@ -1037,8 +1038,21 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     ///    // Perform other work before checking for the next bar
     /// //}
     /// ```
-    pub fn next_timeout() -> Option<T> {
-        None
+    pub fn next_timeout(&mut self, timeout: Duration) -> Option<T> {
+        if let Some(mut message) = self.responses.next_timeout(timeout) {
+            if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
+                match T::decode(self.client.server_version(), &mut message) {
+                    Ok(val) => return Some(val),
+                    Err(err) => {
+                        error!("error decoding execution data: {err}");
+                        return None;
+                    }
+                }
+            }
+            None
+        } else {
+            None
+        }
     }
 
     /// Cancel the subscription
@@ -1059,7 +1073,7 @@ impl<'a, T: Subscribable<T>> Drop for Subscription<'a, T> {
 }
 
 pub(crate) trait Subscribable<T> {
-    const INCOMING_MESSAGE_IDS: &[IncomingMessages];
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages];
     const CANCEL_MESSAGE_ID: Option<IncomingMessages> = None;
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
@@ -1075,7 +1089,7 @@ impl<'a, T: Subscribable<T>> Iterator for Subscription<'a, T> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(mut message) = self.responses.next() {
-                if T::INCOMING_MESSAGE_IDS.contains(&message.message_type()) {
+                if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
                     match T::decode(self.client.server_version(), &mut message) {
                         Ok(val) => return Some(val),
                         Err(err) => {

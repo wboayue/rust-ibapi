@@ -31,7 +31,7 @@ pub struct PnL {
 }
 
 impl Subscribable<PnL> for PnL {
-    const INCOMING_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PnL];
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PnL];
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_pnl(server_version, message)
@@ -62,7 +62,7 @@ pub struct PnLSingle {
 }
 
 impl Subscribable<PnLSingle> for PnLSingle {
-    const INCOMING_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PnLSingle];
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PnLSingle];
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_pnl_single(server_version, message)
@@ -103,7 +103,7 @@ impl From<Position> for PositionResponse {
 }
 
 impl Subscribable<PositionResponse> for PositionResponse {
-    const INCOMING_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
 
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {

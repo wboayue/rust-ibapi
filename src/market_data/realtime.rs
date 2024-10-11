@@ -66,7 +66,7 @@ pub struct MidPoint {
 }
 
 impl Subscribable<MidPoint> for MidPoint {
-    const INCOMING_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::mid_point_tick(message)
@@ -94,7 +94,7 @@ pub struct Bar {
 }
 
 impl Subscribable<Bar> for Bar {
-    const INCOMING_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::RealTimeBars];
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::RealTimeBars];
 
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_realtime_bar(message)
@@ -128,7 +128,7 @@ pub struct Trade {
 }
 
 impl Subscribable<Trade> for Trade {
-    const INCOMING_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_trade_tick(message)
