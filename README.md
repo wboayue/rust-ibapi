@@ -11,7 +11,7 @@ This implementation is a simplified version of the official TWS API, intended to
 
 This project is a work in progress and has been tested with TWS version 10.19. The primary reference for this implementation is the [C# source code](https://github.com/InteractiveBrokers/tws-api-public).
 
-If you encounter a problem or require a missing feature, please check the [issues list](https://github.com/wboayue/rust-ibapi/issues) before reporting it.
+If you encounter a problem or require a missing feature, please check the [issues list](https://github.com/wboayue/rust-ibapi/issues) before reporting a new one.
 
 ## Examples
 
