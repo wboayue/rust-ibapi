@@ -10,6 +10,32 @@ pub(crate) fn encode_cancel_positions() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::CancelPositions, 1)
 }
 
+pub(crate) fn encode_request_positions_multi(request_id: i32, account: Option<&str>, model_code: Option<&str>) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+
+    const VERSION: i32 = 1;
+
+    message.push_field(&OutgoingMessages::RequestPositionsMulti);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    message.push_field(&account);
+    message.push_field(&model_code);
+
+    Ok(message)
+}
+
+pub(crate) fn encode_cancel_positions_multi(request_id: i32) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+
+    const VERSION: i32 = 1;
+
+    message.push_field(&OutgoingMessages::CancelPositionsMulti);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+
+    Ok(message)
+}
+
 pub(crate) fn encode_request_family_codes() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::RequestFamilyCodes, 1)
 }
@@ -20,12 +46,7 @@ pub(crate) fn encode_request_pnl(request_id: i32, account: &str, model_code: Opt
     message.push_field(&OutgoingMessages::RequestPnL);
     message.push_field(&request_id);
     message.push_field(&account);
-
-    if let Some(model_code) = model_code {
-        message.push_field(&model_code);
-    } else {
-        message.push_field(&"");
-    }
+    message.push_field(&model_code);
 
     Ok(message)
 }

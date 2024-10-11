@@ -11,7 +11,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::accounts::{FamilyCode, PnL, PnLSingle, PositionMulti, PositionUpdate};
+use crate::accounts::{FamilyCode, PnL, PnLSingle, PositionMulti, PositionUpdate, PositionUpdateMulti};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
@@ -233,7 +233,7 @@ impl Client {
         accounts::positions(self)
     }
 
-    /// Subscribes to [PositionMulti](accounts::PositionMulti) updates for account and/or model.
+    /// Subscribes to [PositionUpdateMulti](accounts::PositionUpdateMulti) updates for account and/or model.
     /// Initially all positions are returned, and then updates are returned for any position changes in real time.
     ///
     /// # Arguments
@@ -253,7 +253,7 @@ impl Client {
     ///     println!("{position:?}")
     /// }
     /// ```
-    pub fn positions_multi(&self, account: Option<&str>, model_code: Option<&str>) -> Result<Subscription<PositionMulti>, Error> {
+    pub fn positions_multi(&self, account: Option<&str>, model_code: Option<&str>) -> Result<Subscription<PositionUpdateMulti>, Error> {
         accounts::positions_multi(self, account, model_code)
     }
 

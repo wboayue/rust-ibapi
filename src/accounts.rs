@@ -38,11 +38,8 @@ impl Subscribable<PnL> for PnL {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>) -> Result<RequestMessage, Error> {
-        if let Some(request_id) = request_id {
-            encoders::encode_cancel_pnl(request_id)
-        } else {
-            Err(Error::Simple("Request id request to encode cancel pnl single".into()))
-        }
+        let request_id = request_id.expect("Request ID required to encode cancel pnl");
+        encoders::encode_cancel_pnl(request_id)
     }
 }
 
@@ -69,11 +66,8 @@ impl Subscribable<PnLSingle> for PnLSingle {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>) -> Result<RequestMessage, Error> {
-        if let Some(request_id) = request_id {
-            encoders::encode_cancel_pnl_single(request_id)
-        } else {
-            Err(Error::Simple("Request id request to encode cancel pnl single".into()))
-        }
+        let request_id = request_id.expect("Request ID required to encode cancel pnl single");
+        encoders::encode_cancel_pnl_single(request_id)
     }
 }
 
@@ -118,23 +112,48 @@ impl Subscribable<PositionUpdate> for PositionUpdate {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
+#[derive(Clone, Debug)]
+pub enum PositionUpdateMulti {
+    Position(PositionMulti),
+    PositionEnd,
+}
 
-#[derive(Debug)]
-pub struct PositionMulti {}
+impl From<PositionMulti> for PositionUpdateMulti {
+    fn from(val: PositionMulti) -> Self {
+        PositionUpdateMulti::Position(val)
+    }
+}
 
-impl Subscribable<PositionMulti> for PositionMulti {
-    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
+/// Portfolio's open positions.
+#[derive(Debug, Clone, Default)]
+pub struct PositionMulti {
+    /// The account holding the position.
+    account: String,
+    /// The model code holding the position.
+    model_code: String,
+    /// The position's Contract
+    contract: Contract,
+    /// The number of positions held.
+    position: f64,
+    /// The average cost of the position.
+    average_cost: f64,
+}
+
+impl Subscribable<PositionUpdateMulti> for PositionUpdateMulti {
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PositionMulti, IncomingMessages::PositionMultiEnd];
 
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            // IncomingMessages::Position => Ok(PositionUpdate::Position(decoders::decode_position(message)?)),
-            // IncomingMessages::PositionEnd => Ok(PositionUpdate::PositionEnd),
+            IncomingMessages::PositionMulti => Ok(PositionUpdateMulti::Position(decoders::decode_position_multi(message)?)),
+            IncomingMessages::PositionMultiEnd => Ok(PositionUpdateMulti::PositionEnd),
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
     }
 
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
-        Ok(encoders::encode_cancel_positions()?)
+    fn cancel_message(_server_version: i32, request_id: Option<i32>) -> Result<RequestMessage, Error> {
+        let request_id = request_id.expect("Request ID required to encode cancel positions multi");
+        Ok(encoders::encode_cancel_positions_multi(request_id)?)
     }
 }
 
@@ -151,9 +170,8 @@ pub struct FamilyCode {
 pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position requests.")?;
 
-    let message = encoders::encode_request_positions()?;
-
-    let responses = client.send_shared_request(OutgoingMessages::RequestPositions, message)?;
+    let request = encoders::encode_request_positions()?;
+    let responses = client.send_shared_request(OutgoingMessages::RequestPositions, request)?;
 
     Ok(Subscription {
         client,
@@ -169,11 +187,21 @@ pub(crate) fn positions_multi<'a>(
     client: &'a Client,
     account: Option<&str>,
     model_code: Option<&str>,
-) -> Result<Subscription<'a, PositionMulti>, Error> {
-    Err(Error::Simple("TODO".into()))
-}
+) -> Result<Subscription<'a, PositionUpdateMulti>, Error> {
+    client.check_server_version(server_versions::MODELS_SUPPORT, "It does not support positions multi requests.")?;
 
-impl SharesChannel for Subscription<'_, PositionMulti> {}
+    let request_id = client.next_request_id();
+
+    let request = encoders::encode_request_positions_multi(request_id, account, model_code)?;
+    let responses = client.send_request(request_id, request)?;
+
+    Ok(Subscription {
+        client,
+        request_id: Some(request_id),
+        responses,
+        phantom: PhantomData,
+    })
+}
 
 // Determine whether an account exists under an account family and find the account family code.
 pub(crate) fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
@@ -206,7 +234,7 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
 
     Ok(Subscription {
         client,
-        request_id: None,
+        request_id: Some(request_id),
         responses,
         phantom: PhantomData,
     })
@@ -234,7 +262,7 @@ pub(crate) fn pnl_single<'a>(
 
     Ok(Subscription {
         client,
-        request_id: None,
+        request_id: Some(request_id),
         responses,
         phantom: PhantomData,
     })
