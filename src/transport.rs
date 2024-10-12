@@ -580,58 +580,7 @@ impl InternalSubscription {
         }
     }
 
-    pub(crate) fn try_next(&mut self) -> Option<ResponseMessage> {
-        if let Some(receiver) = &self.receiver {
-            match receiver.try_recv() {
-                Ok(message) => Some(message),
-                Err(err) => {
-                    debug!("try_next: {err}");
-                    None
-                }
-            }
-        } else if let Some(receiver) = &self.shared_receiver {
-            match receiver.try_recv() {
-                Ok(message) => Some(message),
-                Err(err) => {
-                    debug!("try_next: {err}");
-                    None
-                }
-            }
-        } else {
-            None
-        }
-    }
-
-    pub(crate) fn next_timeout(&mut self, timeout: Duration) -> Option<ResponseMessage> {
-        if let Some(receiver) = &self.receiver {
-            match receiver.recv_timeout(timeout) {
-                Ok(message) => Some(message),
-                Err(err) => {
-                    info!("timeout receiving message: {err}");
-                    None
-                }
-            }
-        } else {
-            None
-        }
-    }
-}
-
-impl Drop for InternalSubscription {
-    fn drop(&mut self) {
-        if let (Some(request_id), Some(signaler)) = (self.request_id, &self.signaler) {
-            signaler.send(Signal::Request(request_id)).unwrap();
-        }
-
-        if let (Some(order_id), Some(signaler)) = (self.order_id, &self.signaler) {
-            signaler.send(Signal::Order(order_id)).unwrap();
-        }
-    }
-}
-
-impl Iterator for InternalSubscription {
-    type Item = ResponseMessage;
-    fn next(&mut self) -> Option<Self::Item> {
+    pub(crate) fn next(&self) -> Option<ResponseMessage> {
         if let (Some(timeout), Some(receiver)) = (self.timeout, &self.receiver) {
             match receiver.recv_timeout(timeout) {
                 Ok(message) => Some(message),
@@ -660,7 +609,99 @@ impl Iterator for InternalSubscription {
             None
         }
     }
+
+    pub(crate) fn try_next(&self) -> Option<ResponseMessage> {
+        if let Some(receiver) = &self.receiver {
+            match receiver.try_recv() {
+                Ok(message) => Some(message),
+                Err(err) => {
+                    debug!("try_next: {err}");
+                    None
+                }
+            }
+        } else if let Some(receiver) = &self.shared_receiver {
+            match receiver.try_recv() {
+                Ok(message) => Some(message),
+                Err(err) => {
+                    debug!("try_next: {err}");
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn next_timeout(&self, timeout: Duration) -> Option<ResponseMessage> {
+        if let Some(receiver) = &self.receiver {
+            match receiver.recv_timeout(timeout) {
+                Ok(message) => Some(message),
+                Err(err) => {
+                    info!("timeout receiving message: {err}");
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    }
 }
+
+impl Drop for InternalSubscription {
+    fn drop(&mut self) {
+        if let (Some(request_id), Some(signaler)) = (self.request_id, &self.signaler) {
+            signaler.send(Signal::Request(request_id)).unwrap();
+        }
+
+        if let (Some(order_id), Some(signaler)) = (self.order_id, &self.signaler) {
+            signaler.send(Signal::Order(order_id)).unwrap();
+        }
+    }
+}
+
+struct InternalSubscriptionIterator<'a> {
+    subscription: &'a InternalSubscription
+}
+
+// impl Iterator for InternalSubscription {
+//     type Item = ResponseMessage;
+//     fn next(&self) -> Option<Self::Item> {
+//         self.subsc
+//     }
+// }
+
+// impl Iterator for InternalSubscription {
+//     type Item = ResponseMessage;
+//     fn next(&self) -> Option<Self::Item> {
+//         if let (Some(timeout), Some(receiver)) = (self.timeout, &self.receiver) {
+//             match receiver.recv_timeout(timeout) {
+//                 Ok(message) => Some(message),
+//                 Err(err) => {
+//                     info!("timeout receiving message: {err}");
+//                     None
+//                 }
+//             }
+//         } else if let Some(receiver) = &self.receiver {
+//             match receiver.recv() {
+//                 Ok(message) => Some(message),
+//                 Err(err) => {
+//                     error!("error receiving message: {err}");
+//                     None
+//                 }
+//             }
+//         } else if let Some(receiver) = &self.shared_receiver {
+//             match receiver.recv() {
+//                 Ok(message) => Some(message),
+//                 Err(err) => {
+//                     error!("error receiving message: {err}");
+//                     None
+//                 }
+//             }
+//         } else {
+//             None
+//         }
+//     }
+// }
 
 pub(crate) struct SubscriptionBuilder {
     receiver: Option<Receiver<ResponseMessage>>,

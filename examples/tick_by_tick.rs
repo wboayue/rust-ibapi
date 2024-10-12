@@ -102,7 +102,7 @@ fn stream_mid_point(client: &mut Client, _symbol: &str) -> anyhow::Result<()> {
     let contract = contract_es();
     let ticks = client.tick_by_tick_midpoint(&contract, 0, false)?;
 
-    for (i, tick) in ticks.enumerate().take(60) {
+    for (i, tick) in ticks.iter().enumerate().take(60) {
         println!("tick: {i:?} {tick:?}");
     }
 

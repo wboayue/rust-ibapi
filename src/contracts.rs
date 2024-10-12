@@ -403,7 +403,7 @@ pub(crate) fn contract_details(client: &Client, contract: &Contract) -> Result<V
     let mut contract_details: Vec<ContractDetails> = Vec::default();
 
     // TODO create iterator
-    for mut message in responses {
+    while let Some(mut message) = responses.next() {
         match message.message_type() {
             IncomingMessages::ContractData => {
                 let decoded = decoders::contract_details(client.server_version(), &mut message)?;
