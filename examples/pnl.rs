@@ -15,7 +15,7 @@ fn main() {
 
     let client = Client::connect(&gateway_url, 919).expect("connection failed");
 
-    let mut subscription = client.pnl(&account, None).expect("pnl request failed");
+    let subscription = client.pnl(&account, None).expect("pnl request failed");
 
     // Get next item non-blocking
     if let Some(pnl) = subscription.try_next() {

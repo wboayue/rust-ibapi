@@ -554,14 +554,15 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
 // Enables routing of response messages from TWS to Client
 #[derive(Debug)]
 pub(crate) struct InternalSubscription {
-    receiver: Option<Receiver<ResponseMessage>>, // for client to receive incoming messages
-    shared_receiver: Option<Arc<Receiver<ResponseMessage>>>,
-    signaler: Option<Sender<Signal>>, // for client to signal termination
-    request_id: Option<i32>,          // initiating request_id
-    order_id: Option<i32>,            // initiating order_id
+    receiver: Option<Receiver<ResponseMessage>>, // requests with request ids receive responses via this channel
+    shared_receiver: Option<Arc<Receiver<ResponseMessage>>>, // this channel is for responses that share channel based on message type
+    signaler: Option<Sender<Signal>>,            // for client to signal termination
+    request_id: Option<i32>,                     // initiating request_id
+    order_id: Option<i32>,                       // initiating order_id
 }
 
 impl InternalSubscription {
+    // Blocks until next message become available.
     pub(crate) fn next(&self) -> Option<ResponseMessage> {
         if let Some(receiver) = &self.receiver {
             Self::receive(receiver)
@@ -572,37 +573,23 @@ impl InternalSubscription {
         }
     }
 
+    // Returns message if available or immediately returns None.
     pub(crate) fn try_next(&self) -> Option<ResponseMessage> {
         if let Some(receiver) = &self.receiver {
-            match receiver.try_recv() {
-                Ok(message) => Some(message),
-                Err(err) => {
-                    debug!("try_next: {err}");
-                    None
-                }
-            }
+            Self::try_receive(receiver)
         } else if let Some(receiver) = &self.shared_receiver {
-            match receiver.try_recv() {
-                Ok(message) => Some(message),
-                Err(err) => {
-                    debug!("try_next: {err}");
-                    None
-                }
-            }
+            Self::try_receive(receiver)
         } else {
             None
         }
     }
 
+    // Waits for next message until specified timeout.
     pub(crate) fn next_timeout(&self, timeout: Duration) -> Option<ResponseMessage> {
         if let Some(receiver) = &self.receiver {
-            match receiver.recv_timeout(timeout) {
-                Ok(message) => Some(message),
-                Err(err) => {
-                    info!("timeout receiving message: {err}");
-                    None
-                }
-            }
+            Self::timeout_receive(receiver, timeout)
+        } else if let Some(receiver) = &self.shared_receiver {
+            Self::timeout_receive(receiver, timeout)
         } else {
             None
         }
@@ -610,6 +597,26 @@ impl InternalSubscription {
 
     fn receive(receiver: &Receiver<ResponseMessage>) -> Option<ResponseMessage> {
         match receiver.recv() {
+            Ok(message) => Some(message),
+            Err(err) => {
+                error!("error receiving message: {err}");
+                None
+            }
+        }
+    }
+
+    fn try_receive(receiver: &Receiver<ResponseMessage>) -> Option<ResponseMessage> {
+        match receiver.try_recv() {
+            Ok(message) => Some(message),
+            Err(err) => {
+                error!("error receiving message: {err}");
+                None
+            }
+        }
+    }
+
+    fn timeout_receive(receiver: &Receiver<ResponseMessage>, timeout: Duration) -> Option<ResponseMessage> {
+        match receiver.recv_timeout(timeout) {
             Ok(message) => Some(message),
             Err(err) => {
                 error!("error receiving message: {err}");
