@@ -1041,7 +1041,6 @@ pub struct Subscription<'a, T: Subscribable<T>> {
 }
 
 impl<'a, T: Subscribable<T>> Subscription<'a, T> {
-
     // Returns the next [Position]. Waits up to x seconds for next [OrderDataResult].
     pub fn next(&self) -> Option<T> {
         loop {
@@ -1133,7 +1132,6 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     pub fn iter(&self) -> SubscriptionIter<T> {
         SubscriptionIter { subscription: self }
     }
-
 }
 
 impl<'a, T: Subscribable<T>> Drop for Subscription<'a, T> {
@@ -1163,8 +1161,8 @@ pub(crate) trait Subscribable<T> {
 
 // }
 
-pub struct SubscriptionIter<'a, T: Subscribable<T>>{
-    subscription: &'a Subscription<'a, T>
+pub struct SubscriptionIter<'a, T: Subscribable<T>> {
+    subscription: &'a Subscription<'a, T>,
 }
 
 //impl<T: Subscribable<T>> FusedIterator for SubscriptionIter<'_, T> {}
@@ -1186,12 +1184,12 @@ impl<'a, T: Subscribable<T>> Iterator for SubscriptionIter<'a, T> {
 //     }
 // }
 
-struct SubscriptionTryIter<'a, T: Subscribable<T>>{
-    subscription: &'a Subscription<'a, T>
+struct SubscriptionTryIter<'a, T: Subscribable<T>> {
+    subscription: &'a Subscription<'a, T>,
 }
 
-struct SubscriptionTimeoutIter<'a, T: Subscribable<T>>{
-    subscription: &'a Subscription<'a, T>
+struct SubscriptionTimeoutIter<'a, T: Subscribable<T>> {
+    subscription: &'a Subscription<'a, T>,
 }
 
 pub trait SharesChannel {}

@@ -4,7 +4,6 @@
 
 use std::collections::HashMap;
 use std::io::{prelude::*, Cursor};
-use std::iter::Iterator;
 use std::net::TcpStream;
 use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
@@ -45,6 +44,7 @@ pub(crate) trait MessageBus: Send + Sync {
     fn process_messages(&mut self, server_version: i32) -> Result<(), Error>;
 
     // Testing interface. Tracks requests sent when Bus is stubbed.
+    #[allow(unused)]
     fn request_messages(&self) -> Vec<RequestMessage> {
         vec![]
     }
@@ -559,52 +559,14 @@ pub(crate) struct InternalSubscription {
     signaler: Option<Sender<Signal>>, // for client to signal termination
     request_id: Option<i32>,          // initiating request_id
     order_id: Option<i32>,            // initiating order_id
-    timeout: Option<Duration>,        // How long to wait for next message
 }
 
 impl InternalSubscription {
-    pub(crate) fn new(
-        messages: Receiver<ResponseMessage>,
-        signals: Sender<Signal>,
-        request_id: Option<i32>,
-        order_id: Option<i32>,
-        timeout: Option<Duration>,
-    ) -> Self {
-        InternalSubscription {
-            receiver: Some(messages),
-            shared_receiver: None,
-            signaler: Some(signals),
-            request_id,
-            order_id,
-            timeout,
-        }
-    }
-
     pub(crate) fn next(&self) -> Option<ResponseMessage> {
-        if let (Some(timeout), Some(receiver)) = (self.timeout, &self.receiver) {
-            match receiver.recv_timeout(timeout) {
-                Ok(message) => Some(message),
-                Err(err) => {
-                    info!("timeout receiving message: {err}");
-                    None
-                }
-            }
-        } else if let Some(receiver) = &self.receiver {
-            match receiver.recv() {
-                Ok(message) => Some(message),
-                Err(err) => {
-                    error!("error receiving message: {err}");
-                    None
-                }
-            }
+        if let Some(receiver) = &self.receiver {
+            Self::receive(receiver)
         } else if let Some(receiver) = &self.shared_receiver {
-            match receiver.recv() {
-                Ok(message) => Some(message),
-                Err(err) => {
-                    error!("error receiving message: {err}");
-                    None
-                }
-            }
+            Self::receive(receiver)
         } else {
             None
         }
@@ -645,6 +607,16 @@ impl InternalSubscription {
             None
         }
     }
+
+    fn receive(receiver: &Receiver<ResponseMessage>) -> Option<ResponseMessage> {
+        match receiver.recv() {
+            Ok(message) => Some(message),
+            Err(err) => {
+                error!("error receiving message: {err}");
+                None
+            }
+        }
+    }
 }
 
 impl Drop for InternalSubscription {
@@ -658,50 +630,6 @@ impl Drop for InternalSubscription {
         }
     }
 }
-
-struct InternalSubscriptionIterator<'a> {
-    subscription: &'a InternalSubscription
-}
-
-// impl Iterator for InternalSubscription {
-//     type Item = ResponseMessage;
-//     fn next(&self) -> Option<Self::Item> {
-//         self.subsc
-//     }
-// }
-
-// impl Iterator for InternalSubscription {
-//     type Item = ResponseMessage;
-//     fn next(&self) -> Option<Self::Item> {
-//         if let (Some(timeout), Some(receiver)) = (self.timeout, &self.receiver) {
-//             match receiver.recv_timeout(timeout) {
-//                 Ok(message) => Some(message),
-//                 Err(err) => {
-//                     info!("timeout receiving message: {err}");
-//                     None
-//                 }
-//             }
-//         } else if let Some(receiver) = &self.receiver {
-//             match receiver.recv() {
-//                 Ok(message) => Some(message),
-//                 Err(err) => {
-//                     error!("error receiving message: {err}");
-//                     None
-//                 }
-//             }
-//         } else if let Some(receiver) = &self.shared_receiver {
-//             match receiver.recv() {
-//                 Ok(message) => Some(message),
-//                 Err(err) => {
-//                     error!("error receiving message: {err}");
-//                     None
-//                 }
-//             }
-//         } else {
-//             None
-//         }
-//     }
-// }
 
 pub(crate) struct SubscriptionBuilder {
     receiver: Option<Receiver<ResponseMessage>>,
@@ -755,7 +683,6 @@ impl SubscriptionBuilder {
                 signaler: Some(signaler),
                 request_id: self.request_id,
                 order_id: self.order_id,
-                timeout: None,
             };
         } else if let Some(receiver) = self.shared_receiver {
             return InternalSubscription {
@@ -764,7 +691,6 @@ impl SubscriptionBuilder {
                 signaler: None,
                 request_id: self.request_id,
                 order_id: self.order_id,
-                timeout: None,
             };
         }
 
