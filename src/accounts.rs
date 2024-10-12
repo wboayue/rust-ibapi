@@ -26,7 +26,7 @@ pub struct AccountSummary {
     pub account: String,
     /// The account’s attribute.
     pub tag: String,
-    /// The account’s attribute’s value.    
+    /// The account’s attribute’s value.
     pub value: String,
     /// The currency in which the value is expressed.
     pub currency: String,
@@ -35,9 +35,59 @@ pub struct AccountSummary {
 pub struct AccountSummaryTags {}
 
 impl AccountSummaryTags {
-    pub const ALL: &[&str] = &["A"];
+    pub const ACCOUNT_TYPE: &str = "AccountType";
+    pub const NET_LIQUIDATION: &str = "NetLiquidation";
+    pub const TOTAL_CASH_VALUE: &str = "TotalCashValue";
+    pub const SETTLED_CASH: &str = "SettledCash";
+    pub const ACCRUED_CASH: &str = "AccruedCash";
+    pub const BUYING_POWER: &str = "BuyingPower";
+    pub const EQUITY_WITH_LOAN_VALUE: &str = "EquityWithLoanValue";
+    pub const PREVIOUS_DAY_EQUITY_WITH_LOAN_VALUE: &str = "PreviousDayEquityWithLoanValue";
+    pub const GROSS_POSITION_VALUE: &str = "GrossPositionValue";
+    pub const REQ_T_EQUITY: &str = "ReqTEquity";
+    pub const REQ_T_MARGIN: &str = "ReqTMargin";
+    pub const SMA: &str = "SMA";
+    pub const INIT_MARGIN_REQ: &str = "InitMarginReq";
+    pub const MAINT_MARGIN_REQ: &str = "MaintMarginReq";
+    pub const AVAILABLE_FUNDS: &str = "AvailableFunds";
+    pub const EXCESS_LIQUIDITY: &str = "ExcessLiquidity";
+    pub const CUSHION: &str = "Cushion";
+    pub const FULL_INIT_MARGIN_REQ: &str = "FullInitMarginReq";
+    // public const string FullMaintMarginReq = "FullMaintMarginReq";
+    // public const string FullAvailableFunds = "FullAvailableFunds";
+    // public const string FullExcessLiquidity = "FullExcessLiquidity";
+    // public const string LookAheadNextChange = "LookAheadNextChange";
+    // public const string LookAheadInitMarginReq = "LookAheadInitMarginReq";
+    // public const string LookAheadMaintMarginReq = "LookAheadMaintMarginReq";
+    // public const string LookAheadAvailableFunds = "LookAheadAvailableFunds";
+    // public const string LookAheadExcessLiquidity = "LookAheadExcessLiquidity";
+    // public const string HighestSeverity = "HighestSeverity";
+    // public const string DayTradesRemaining = "DayTradesRemaining";
+    // public const string Leverage = "Leverage";
+
+    pub const ALL: &[&str] = &[
+        Self::ACCOUNT_TYPE,
+        Self::NET_LIQUIDATION,
+        Self::TOTAL_CASH_VALUE,
+        Self::SETTLED_CASH,
+        Self::ACCRUED_CASH,
+        Self::BUYING_POWER,
+        Self::EQUITY_WITH_LOAN_VALUE,
+        Self::PREVIOUS_DAY_EQUITY_WITH_LOAN_VALUE,
+        Self::GROSS_POSITION_VALUE,
+        Self::REQ_T_EQUITY,
+        Self::REQ_T_MARGIN,
+        Self::SMA,
+        Self::INIT_MARGIN_REQ,
+        Self::MAINT_MARGIN_REQ,
+        Self::AVAILABLE_FUNDS,
+        Self::EXCESS_LIQUIDITY,
+        Self::CUSHION,
+        Self::FULL_INIT_MARGIN_REQ,
+    ];
 }
 
+#[derive(Debug)]
 pub enum AccountUpdate {
     Summary(AccountSummary),
     End,
@@ -52,10 +102,10 @@ impl From<AccountSummary> for AccountUpdate {
 impl Subscribable<AccountUpdate> for AccountUpdate {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
 
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::Position => Ok(AccountUpdate::End),
-            IncomingMessages::PositionEnd => Ok(AccountUpdate::End),
+            IncomingMessages::AccountSummary => Ok(AccountUpdate::Summary(decoders::decode_account_summary(server_version, message)?)),
+            IncomingMessages::AccountSummaryEnd => Ok(AccountUpdate::End),
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
     }
@@ -313,7 +363,7 @@ pub(crate) fn pnl_single<'a>(
     })
 }
 
-pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Result<Subscription<'a, PnLSingle>, Error> {
+pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountUpdate>, Error> {
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support account summary requests.")?;
 
     let request_id = client.next_request_id();

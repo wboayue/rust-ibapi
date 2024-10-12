@@ -122,14 +122,17 @@ pub mod orders;
 
 mod server_versions;
 
-#[cfg(test)]
-pub(crate) mod stubs;
-
 #[doc(inline)]
 pub use errors::Error;
 
 #[doc(inline)]
 pub use client::Client;
+
+#[cfg(test)]
+pub(crate) mod stubs;
+
+#[cfg(test)]
+pub(crate) mod testdata;
 
 // ToField
 
