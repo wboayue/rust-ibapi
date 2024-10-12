@@ -13,6 +13,9 @@ use std::time::Duration;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use crossbeam::channel::{self, Receiver, Sender};
 use log::{debug, error, info};
+use time::macros::format_description;
+use time::OffsetDateTime;
+use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
@@ -20,6 +23,9 @@ use crate::{server_versions, Error};
 use recorder::MessageRecorder;
 
 mod recorder;
+
+const MIN_SERVER_VERSION: i32 = 100;
+const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
 
 pub(crate) trait MessageBus: Send + Sync {
     // Reads the next available message from TWS
@@ -42,6 +48,10 @@ pub(crate) trait MessageBus: Send + Sync {
 
     // Starts a dedicated thread to process responses from TWS.
     fn process_messages(&mut self, server_version: i32) -> Result<(), Error>;
+
+    fn shutdown(&self) {
+
+    }
 
     // Testing interface. Tracks requests sent messages when Bus is stubbed.
     #[cfg(test)]
@@ -703,6 +713,223 @@ impl SubscriptionBuilder {
             panic!("bad configuration");
         }
     }
+}
+
+
+#[derive(Default)]
+pub (crate) struct AccountInfo {
+    next_order_id: i32,
+    managed_accounts: String,
+}
+
+pub (crate) struct Connection {
+    pub (crate) client_id: i32,
+    pub (crate) connection_url: String,
+    stream: TcpStream,
+    pub (crate) server_version: i32,
+    pub (crate) connection_time: Option<OffsetDateTime>,
+    pub (crate) time_zone: Option<&'static Tz>,
+    pub (crate) account_info: AccountInfo
+}
+
+impl Connection {
+    pub fn connect(client_id: i32, connection_url: &str) -> Result<Self, Error> {
+        let stream = TcpStream::connect(connection_url)?;
+
+        let mut connection = Self{
+            client_id,
+            connection_url: connection_url.into(),
+            stream,
+            server_version: -1,
+            connection_time: None,
+            time_zone: None,
+            account_info: AccountInfo::default(),
+        };
+
+        connection.establish_connection()?;
+
+        Ok(connection)
+    }
+
+    pub fn reconnect(&mut self) -> Result<(), Error> {
+        // retry connection here with backoff
+        self.stream = TcpStream::connect(&self.connection_url)?;
+
+        self.establish_connection()?;
+
+        Ok(())
+    }
+
+    fn establish_connection(&mut self) -> Result<(), Error> {
+        self.handshake()?;
+        self.start_api()?;
+        self.receive_account_info()?;
+        Ok(())
+    }
+
+    fn write(&mut self, data: &str) -> Result<(), Error> {
+        self.stream.write_all(data.as_bytes())?;
+        Ok(())
+    }
+
+    fn write_message(&mut self, message: &RequestMessage) -> Result<(), Error> {
+        let data = message.encode();
+        debug!("-> {data:?}");
+
+        let data = data.as_bytes();
+
+        let mut packet = Vec::with_capacity(data.len() + 4);
+
+        packet.write_u32::<BigEndian>(data.len() as u32)?;
+        packet.write_all(data)?;
+
+        self.stream.write_all(&packet)?;
+
+        Ok(())
+    }
+
+    fn read_message(&mut self) -> Result<ResponseMessage, Error> {
+        let message_size = read_header(&self.stream)?;
+        let mut data = vec![0_u8; message_size];
+
+        self.stream.read_exact(&mut data)?;
+
+        let raw_string = String::from_utf8(data)?;
+        debug!("<- {:?}", raw_string);
+
+        let packet = ResponseMessage::from(&raw_string);
+
+        Ok(packet)
+    }
+
+    // sends server handshake
+    fn handshake(&mut self) -> Result<(), Error> {
+        let prefix = "API\0";
+        let version = format!("v{MIN_SERVER_VERSION}..{MAX_SERVER_VERSION}");
+
+        let packet = prefix.to_owned() + &encode_packet(&version);
+        self.write(&packet)?;
+
+        let ack = self.read_message();
+
+        match ack {
+            Ok(mut response) => {
+                self.server_version = response.next_int()?;
+
+                let time = response.next_string()?;
+                (self.connection_time, self.time_zone) = parse_connection_time(time.as_str());
+            }
+            Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
+                return Err(Error::Simple(format!("The server may be rejecting connections from this host: {err}")));
+            }
+            Err(err) => {
+                return Err(err);
+            }
+        }
+        Ok(())
+    }
+
+    // asks server to start processing messages
+    fn start_api(&mut self) -> Result<(), Error> {
+        const VERSION: i32 = 2;
+
+        let prelude = &mut RequestMessage::default();
+
+        prelude.push_field(&OutgoingMessages::StartApi);
+        prelude.push_field(&VERSION);
+        prelude.push_field(&self.client_id);
+
+        if self.server_version > server_versions::OPTIONAL_CAPABILITIES {
+            prelude.push_field(&"");
+        }
+
+        self.write_message(prelude)?;
+
+        Ok(())
+    }
+
+    // Fetches next order id and managed accounts.
+    fn receive_account_info(&mut self) -> Result<(), Error> {
+        let mut saw_next_order_id: bool = false;
+        let mut saw_managed_accounts: bool = false;
+
+        let mut attempts = 0;
+        const MAX_ATTEMPTS: i32 = 100;
+        loop {
+            let mut message = self.read_message()?;
+
+            match message.message_type() {
+                IncomingMessages::NextValidId => {
+                    saw_next_order_id = true;
+
+                    message.skip(); // message type
+                    message.skip(); // message version
+
+                    self.account_info.next_order_id = message.next_int()?;
+                }
+                IncomingMessages::ManagedAccounts => {
+                    saw_managed_accounts = true;
+
+                    message.skip(); // message type
+                    message.skip(); // message version
+
+                    self.account_info.managed_accounts = message.next_string()?;
+                }
+                IncomingMessages::Error => {
+                    error!("message: {message:?}")
+                }
+                _ => info!("message: {message:?}"),
+            }
+
+            attempts += 1;
+            if (saw_next_order_id && saw_managed_accounts) || attempts > MAX_ATTEMPTS {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+// Parses following format: 20230405 22:20:39 PST
+fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, Option<&'static Tz>) {
+    let parts: Vec<&str> = connection_time.split(' ').collect();
+
+    let zones = timezones::find_by_name(parts[2]);
+    if zones.is_empty() {
+        error!("time zone not found for {}", parts[2]);
+        return (None, None);
+    }
+
+    let timezone = zones[0];
+
+    let format = format_description!("[year][month][day] [hour]:[minute]:[second]");
+    let date_str = format!("{} {}", parts[0], parts[1]);
+    let date = time::PrimitiveDateTime::parse(date_str.as_str(), format);
+    match date {
+        Ok(connected_at) => match connected_at.assume_timezone(timezone) {
+            OffsetResult::Some(date) => (Some(date), Some(timezone)),
+            _ => {
+                error!("error setting timezone");
+                (None, Some(timezone))
+            }
+        },
+        Err(err) => {
+            error!("could not parse connection time from {date_str}: {err}");
+            (None, Some(timezone))
+        }
+    }
+}
+
+fn encode_packet(message: &str) -> String {
+    let data = message.as_bytes();
+
+    let mut packet: Vec<u8> = Vec::with_capacity(data.len() + 4);
+
+    packet.write_u32::<BigEndian>(data.len() as u32).unwrap();
+    packet.write_all(data).unwrap();
+
+    std::str::from_utf8(&packet).unwrap().into()
 }
 
 #[cfg(test)]
