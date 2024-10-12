@@ -19,6 +19,52 @@ use crate::{server_versions, Client, Error};
 mod decoders;
 mod encoders;
 
+#[derive(Debug, Default)]
+/// Account information as it appears in the TWS’ Account Summary Window
+pub struct AccountSummary {
+    /// The account identifier.
+    pub account: String,
+    /// The account’s attribute.
+    pub tag: String,
+    /// The account’s attribute’s value.    
+    pub value: String,
+    /// The currency in which the value is expressed.
+    pub currency: String,
+}
+
+pub struct AccountSummaryTags {}
+
+impl AccountSummaryTags {
+    pub const ALL: &[&str] = &["A"];
+}
+
+pub enum AccountUpdate {
+    Summary(AccountSummary),
+    End,
+}
+
+impl From<AccountSummary> for AccountUpdate {
+    fn from(val: AccountSummary) -> Self {
+        AccountUpdate::Summary(val)
+    }
+}
+
+impl Subscribable<AccountUpdate> for AccountUpdate {
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
+
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+        match message.message_type() {
+            IncomingMessages::Position => Ok(AccountUpdate::End),
+            IncomingMessages::PositionEnd => Ok(AccountUpdate::End),
+            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+        }
+    }
+
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
+        encoders::encode_cancel_positions()
+    }
+}
+
 // Realtime PnL update for account.
 #[derive(Debug, Default)]
 pub struct PnL {
@@ -257,6 +303,22 @@ pub(crate) fn pnl_single<'a>(
     let request_id = client.next_request_id();
 
     let request = encoders::encode_request_pnl_single(request_id, account, contract_id, model_code)?;
+    let responses = client.send_request(request_id, request)?;
+
+    Ok(Subscription {
+        client,
+        request_id: Some(request_id),
+        responses,
+        phantom: PhantomData,
+    })
+}
+
+pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Result<Subscription<'a, PnLSingle>, Error> {
+    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support account summary requests.")?;
+
+    let request_id = client.next_request_id();
+
+    let request = encoders::encode_request_account_summary(request_id, group, tags)?;
     let responses = client.send_request(request_id, request)?;
 
     Ok(Subscription {

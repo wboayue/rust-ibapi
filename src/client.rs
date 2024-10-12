@@ -305,6 +305,31 @@ impl Client {
         accounts::pnl_single(self, account, contract_id, model_code)
     }
 
+    /// Requests a specific account’s summary. Subscribes to the account summary as presented in the TWS’ Account Summary tab. Data received is specified by using a specific tags value.
+    ///
+    /// # Arguments
+    /// * `group` - Set to “All” to return account summary data for all accounts, or set to a specific Advisor Account Group name that has already been created in TWS Global Configuration.
+    /// * `tags`  - List of the desired tags.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::accounts::AccountSummaryTags;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let group = "All";
+    ///
+    /// let subscription = client.account_summary(group, AccountSummaryTags::ALL).expect("error requesting pnl");
+    /// for summary in &subscription {
+    ///     println!("{summary:?}")
+    /// }
+    /// ```
+    pub fn account_summary<'a>(&'a self, group: &str, tags: &[&str]) -> Result<Subscription<'a, PnLSingle>, Error> {
+        accounts::account_summary(self, group, tags)
+    }
+
     // === Contracts ===
 
     /// Requests contract information.
