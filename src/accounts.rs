@@ -53,17 +53,17 @@ impl AccountSummaryTags {
     pub const EXCESS_LIQUIDITY: &str = "ExcessLiquidity";
     pub const CUSHION: &str = "Cushion";
     pub const FULL_INIT_MARGIN_REQ: &str = "FullInitMarginReq";
-    // public const string FullMaintMarginReq = "FullMaintMarginReq";
-    // public const string FullAvailableFunds = "FullAvailableFunds";
-    // public const string FullExcessLiquidity = "FullExcessLiquidity";
-    // public const string LookAheadNextChange = "LookAheadNextChange";
-    // public const string LookAheadInitMarginReq = "LookAheadInitMarginReq";
-    // public const string LookAheadMaintMarginReq = "LookAheadMaintMarginReq";
-    // public const string LookAheadAvailableFunds = "LookAheadAvailableFunds";
-    // public const string LookAheadExcessLiquidity = "LookAheadExcessLiquidity";
-    // public const string HighestSeverity = "HighestSeverity";
-    // public const string DayTradesRemaining = "DayTradesRemaining";
-    // public const string Leverage = "Leverage";
+    pub const FULL_MAINT_MARGIN_REQ: &str = "FullMaintMarginReq";
+    pub const FULL_AVAILABLE_FUNDS: &str = "FullAvailableFunds";
+    pub const FULL_EXCESS_LIQUIDITY: &str = "FullExcessLiquidity";
+    pub const LOOK_AHEAD_NEXT_CHANGE: &str = "LookAheadNextChange";
+    pub const LOOK_AHEAD_INIT_MARGIN_REQ: &str = "LookAheadInitMarginReq";
+    pub const LOOK_AHEAD_MAINT_MARGIN_REQ: &str = "LookAheadMaintMarginReq";
+    pub const LOOK_AHEAD_AVAILABLE_FUNDS: &str = "LookAheadAvailableFunds";
+    pub const LOOK_AHEAD_EXCESS_LIQUIDITY: &str = "LookAheadExcessLiquidity";
+    pub const HIGHEST_SEVERITY: &str = "HighestSeverity";
+    pub const DAY_TRADES_REMAINING: &str = "DayTradesRemaining";
+    pub const LEVERAGE: &str = "Leverage";
 
     pub const ALL: &[&str] = &[
         Self::ACCOUNT_TYPE,
@@ -84,6 +84,17 @@ impl AccountSummaryTags {
         Self::EXCESS_LIQUIDITY,
         Self::CUSHION,
         Self::FULL_INIT_MARGIN_REQ,
+        Self::FULL_MAINT_MARGIN_REQ,
+        Self::FULL_AVAILABLE_FUNDS,
+        Self::FULL_EXCESS_LIQUIDITY,
+        Self::LOOK_AHEAD_NEXT_CHANGE,
+        Self::LOOK_AHEAD_INIT_MARGIN_REQ,
+        Self::LOOK_AHEAD_MAINT_MARGIN_REQ,
+        Self::LOOK_AHEAD_AVAILABLE_FUNDS,
+        Self::LOOK_AHEAD_EXCESS_LIQUIDITY,
+        Self::HIGHEST_SEVERITY,
+        Self::DAY_TRADES_REMAINING,
+        Self::LEVERAGE,
     ];
 }
 
