@@ -108,7 +108,7 @@ impl Subscribable<PositionUpdate> for PositionUpdate {
     }
 
     fn cancel_message(_server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
-        Ok(encoders::encode_cancel_positions()?)
+        encoders::encode_cancel_positions()
     }
 }
 
@@ -129,15 +129,15 @@ impl From<PositionMulti> for PositionUpdateMulti {
 #[derive(Debug, Clone, Default)]
 pub struct PositionMulti {
     /// The account holding the position.
-    account: String,
+    pub account: String,
     /// The model code holding the position.
-    model_code: String,
+    pub model_code: String,
     /// The position's Contract
-    contract: Contract,
+    pub contract: Contract,
     /// The number of positions held.
-    position: f64,
+    pub position: f64,
     /// The average cost of the position.
-    average_cost: f64,
+    pub average_cost: f64,
 }
 
 impl Subscribable<PositionUpdateMulti> for PositionUpdateMulti {
@@ -153,7 +153,7 @@ impl Subscribable<PositionUpdateMulti> for PositionUpdateMulti {
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel positions multi");
-        Ok(encoders::encode_cancel_positions_multi(request_id)?)
+        encoders::encode_cancel_positions_multi(request_id)
     }
 }
 
@@ -207,11 +207,10 @@ pub(crate) fn positions_multi<'a>(
 pub(crate) fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
     client.check_server_version(server_versions::REQ_FAMILY_CODES, "It does not support family codes requests.")?;
 
-    let message = encoders::encode_request_family_codes()?;
+    let request = encoders::encode_request_family_codes()?;
+    let subscription = client.send_shared_request(OutgoingMessages::RequestFamilyCodes, request)?;
 
-    let mut messages = client.send_shared_request(OutgoingMessages::RequestFamilyCodes, message)?;
-
-    if let Some(mut message) = messages.next() {
+    if let Some(mut message) = subscription.next() {
         decoders::decode_family_codes(&mut message)
     } else {
         Ok(Vec::default())

@@ -31,7 +31,7 @@
 //!
 //! let mut channel = BreakoutChannel::new(30);
 //!
-//! for bar in bars {
+//! for bar in bars.iter() {
 //!     channel.add_bar(&bar);
 //!
 //!     // Ensure enough bars and no open positions.
@@ -121,6 +121,8 @@ pub(crate) mod news;
 pub mod orders;
 
 mod server_versions;
+
+#[cfg(test)]
 pub(crate) mod stubs;
 
 #[doc(inline)]

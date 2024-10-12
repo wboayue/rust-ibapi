@@ -302,9 +302,9 @@ pub(crate) fn head_timestamp(client: &Client, contract: &Contract, what_to_show:
     let request_id = client.next_request_id();
     let request = encoders::encode_request_head_timestamp(request_id, contract, what_to_show, use_rth)?;
 
-    let mut messages = client.send_request(request_id, request)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    if let Some(mut message) = messages.next() {
+    if let Some(mut message) = subscription.next() {
         decoders::decode_head_timestamp(&mut message)
     } else {
         Err(Error::Simple("did not receive head timestamp message".into()))
@@ -357,9 +357,9 @@ pub(crate) fn historical_data(
         Vec::<crate::contracts::TagValue>::default(),
     )?;
 
-    let mut messages = client.send_request(request_id, request)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    if let Some(mut message) = messages.next() {
+    if let Some(mut message) = subscription.next() {
         let time_zone = if let Some(tz) = client.time_zone {
             tz
         } else {
@@ -408,9 +408,9 @@ pub(crate) fn historical_schedule(
         Vec::<crate::contracts::TagValue>::default(),
     )?;
 
-    let mut messages = client.send_request(request_id, request)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    if let Some(mut message) = messages.next() {
+    if let Some(mut message) = subscription.next() {
         match message.message_type() {
             IncomingMessages::HistoricalSchedule => decoders::decode_historical_schedule(&mut message),
             IncomingMessages::Error => Err(Error::Simple(message.peek_string(4))),

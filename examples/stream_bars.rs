@@ -34,7 +34,7 @@ fn main() -> anyhow::Result<()> {
 
     let bars = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)?;
 
-    for (i, bar) in bars.enumerate().take(60) {
+    for (i, bar) in bars.iter().enumerate().take(60) {
         println!("bar: {i:?} {bar:?}");
     }
 

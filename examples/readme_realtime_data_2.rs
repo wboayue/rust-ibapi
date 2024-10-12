@@ -10,10 +10,10 @@ fn main() {
     let contract_aapl = Contract::stock("AAPL");
     let contract_nvda = Contract::stock("NVDA");
 
-    let mut subscription_aapl = client
+    let subscription_aapl = client
         .realtime_bars(&contract_aapl, BarSize::Sec5, WhatToShow::Trades, false)
         .expect("realtime bars request failed!");
-    let mut subscription_nvda = client
+    let subscription_nvda = client
         .realtime_bars(&contract_nvda, BarSize::Sec5, WhatToShow::Trades, false)
         .expect("realtime bars request failed!");
 

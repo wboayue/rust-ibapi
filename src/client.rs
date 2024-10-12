@@ -11,7 +11,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::accounts::{FamilyCode, PnL, PnLSingle, PositionMulti, PositionUpdate, PositionUpdateMulti};
+use crate::accounts::{FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
@@ -222,7 +222,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let subscription = client.positions().expect("error requesting positions");
-    /// for position_response in subscription {
+    /// for position_response in subscription.iter() {
     ///     match position_response {
     ///         PositionUpdate::Position(position) => println!("{position:?}"),
     ///         PositionUpdate::PositionEnd => println!("initial set of positions received"),
@@ -249,7 +249,7 @@ impl Client {
     ///
     /// let account = "U1234567";
     /// let subscription = client.positions_multi(Some(account), None).expect("error requesting positions by model");
-    /// for position in subscription {
+    /// for position in subscription.iter() {
     ///     println!("{position:?}")
     /// }
     /// ```
@@ -270,8 +270,8 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let account = "account id";
-    /// let responses = client.pnl(account, None).expect("error requesting pnl");
-    /// for pnl in responses {
+    /// let subscription = client.pnl(account, None).expect("error requesting pnl");
+    /// for pnl in subscription.iter() {
     ///     println!("{pnl:?}")
     /// }
     /// ```
@@ -296,8 +296,8 @@ impl Client {
     /// let account = "<account id>";
     /// let contract_id = 1001;
     ///
-    /// let responses = client.pnl_single(account, contract_id, None).expect("error requesting pnl");
-    /// for pnl in responses {
+    /// let subscription = client.pnl_single(account, contract_id, None).expect("error requesting pnl");
+    /// for pnl in &subscription {
     ///     println!("{pnl:?}")
     /// }
     /// ```
@@ -895,9 +895,9 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("TSLA");
-    /// let bars = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("request failed");
+    /// let subscription = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("request failed");
     ///
-    /// for (i, bar) in bars.enumerate().take(60) {
+    /// for (i, bar) in subscription.iter().enumerate().take(60) {
     ///     println!("bar[{i}]: {bar:?}");
     /// }
     /// ```
@@ -1031,7 +1031,11 @@ impl Debug for Client {
     }
 }
 
+/// Server sends data until not required
 /// Supports the handling of responses from TWS.
+/// Cancelled with dropped if not already cancelled.
+///
+#[allow(private_bounds)]
 pub struct Subscription<'a, T: Subscribable<T>> {
     pub(crate) client: &'a Client,
     pub(crate) request_id: Option<i32>,
@@ -1039,95 +1043,10 @@ pub struct Subscription<'a, T: Subscribable<T>> {
     pub(crate) phantom: PhantomData<T>,
 }
 
+#[allow(private_bounds)]
 impl<'a, T: Subscribable<T>> Subscription<'a, T> {
-    /// To request the next bar in a non-blocking manner.
-    ///
-    /// ```
-    /// //loop {
-    ///    // Check if the next bar is available without waiting
-    ///    //if let Some(bar) = subscription.try_next() {
-    ///        // Process the available bar (e.g., use it in calculations)
-    ///    //}
-    ///    // Perform other work before checking for the next bar
-    /// //}
-    /// ```
-    pub fn try_next(&mut self) -> Option<T> {
-        if let Some(mut message) = self.responses.try_next() {
-            if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
-                match T::decode(self.client.server_version(), &mut message) {
-                    Ok(val) => return Some(val),
-                    Err(err) => {
-                        error!("error decoding execution data: {err}");
-                        return None;
-                    }
-                }
-            }
-            None
-        } else {
-            None
-        }
-    }
-
-    /// To request the next bar in a non-blocking manner.
-    ///
-    /// ```
-    /// //loop {
-    ///    // Check if the next bar is available without waiting
-    ///   // if let Some(bar) = subscription.next_timeout() {
-    ///        // Process the available bar (e.g., use it in calculations)
-    ///   // }
-    ///    // Perform other work before checking for the next bar
-    /// //}
-    /// ```
-    pub fn next_timeout(&mut self, timeout: Duration) -> Option<T> {
-        if let Some(mut message) = self.responses.next_timeout(timeout) {
-            if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
-                match T::decode(self.client.server_version(), &mut message) {
-                    Ok(val) => return Some(val),
-                    Err(err) => {
-                        error!("error decoding execution data: {err}");
-                        return None;
-                    }
-                }
-            }
-            None
-        } else {
-            None
-        }
-    }
-
-    /// Cancel the subscription
-    pub fn cancel(&mut self) -> Result<(), Error> {
-        if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
-            self.client.send_message(message)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'a, T: Subscribable<T>> Drop for Subscription<'a, T> {
-    fn drop(&mut self) {
-        if let Err(err) = self.cancel() {
-            error!("error cancelling subscription: {err}");
-        }
-    }
-}
-
-pub(crate) trait Subscribable<T> {
-    const RESPONSE_MESSAGE_IDS: &[IncomingMessages];
-    const CANCEL_MESSAGE_ID: Option<IncomingMessages> = None;
-
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
-        Err(Error::Simple("not implemented".into()))
-    }
-}
-
-impl<'a, T: Subscribable<T>> Iterator for Subscription<'a, T> {
-    type Item = T;
-
-    // Returns the next [Position]. Waits up to x seconds for next [OrderDataResult].
-    fn next(&mut self) -> Option<Self::Item> {
+    /// Blocks until the item become available.
+    pub fn next(&self) -> Option<T> {
         loop {
             if let Some(mut message) = self.responses.next() {
                 if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
@@ -1149,8 +1068,159 @@ impl<'a, T: Subscribable<T>> Iterator for Subscription<'a, T> {
             }
         }
     }
+
+    /// To request the next bar in a non-blocking manner.
+    ///
+    /// ```text
+    /// //loop {
+    ///    // Check if the next bar is available without waiting
+    ///    //if let Some(bar) = subscription.try_next() {
+    ///        // Process the available bar (e.g., use it in calculations)
+    ///    //}
+    ///    // Perform other work before checking for the next bar
+    /// //}
+    /// ```
+    pub fn try_next(&self) -> Option<T> {
+        if let Some(mut message) = self.responses.try_next() {
+            if message.message_type() == IncomingMessages::Error {
+                error!("{}", message.peek_string(4));
+                return None;
+            }
+
+            match T::decode(self.client.server_version(), &mut message) {
+                Ok(val) => Some(val),
+                Err(err) => {
+                    error!("error decoding message: {err}");
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    }
+
+    /// To request the next bar in a non-blocking manner.
+    ///
+    /// ```text
+    /// //loop {
+    ///    // Check if the next bar is available without waiting
+    ///   // if let Some(bar) = subscription.next_timeout() {
+    ///        // Process the available bar (e.g., use it in calculations)
+    ///   // }
+    ///    // Perform other work before checking for the next bar
+    /// //}
+    /// ```
+    pub fn next_timeout(&self, timeout: Duration) -> Option<T> {
+        if let Some(mut message) = self.responses.next_timeout(timeout) {
+            if message.message_type() == IncomingMessages::Error {
+                error!("{}", message.peek_string(4));
+                return None;
+            }
+
+            match T::decode(self.client.server_version(), &mut message) {
+                Ok(val) => Some(val),
+                Err(err) => {
+                    error!("error decoding message: {err}");
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Cancel the subscription
+    pub fn cancel(&self) -> Result<(), Error> {
+        if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
+            self.client.send_message(message)?;
+        }
+        Ok(())
+    }
+
+    pub fn iter(&self) -> SubscriptionIter<T> {
+        SubscriptionIter { subscription: self }
+    }
+
+    pub fn try_iter(&self) -> SubscriptionTryIter<T> {
+        SubscriptionTryIter { subscription: self }
+    }
+
+    pub fn timeout_iter(&self, timeout: Duration) -> SubscriptionTimeoutIter<T> {
+        SubscriptionTimeoutIter { subscription: self, timeout }
+    }
 }
 
+impl<'a, T: Subscribable<T>> Drop for Subscription<'a, T> {
+    fn drop(&mut self) {
+        if let Err(err) = self.cancel() {
+            error!("error cancelling subscription: {err}");
+        }
+    }
+}
+
+pub(crate) trait Subscribable<T> {
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages];
+    const CANCEL_MESSAGE_ID: Option<IncomingMessages> = None;
+
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
+        Err(Error::Simple("not implemented".into()))
+    }
+}
+
+/// Blocking iterator. Blocks until next item available.
+#[allow(private_bounds)]
+pub struct SubscriptionIter<'a, T: Subscribable<T>> {
+    subscription: &'a Subscription<'a, T>,
+}
+
+impl<'a, T: Subscribable<T>> Iterator for SubscriptionIter<'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.subscription.next()
+    }
+}
+
+impl<'a, T: Subscribable<T>> IntoIterator for &'a Subscription<'a, T> {
+    type Item = T;
+    type IntoIter = SubscriptionIter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+/// Non-Blocking iterator. Returns immediately if not available.
+#[allow(private_bounds)]
+pub struct SubscriptionTryIter<'a, T: Subscribable<T>> {
+    subscription: &'a Subscription<'a, T>,
+}
+
+impl<'a, T: Subscribable<T>> Iterator for SubscriptionTryIter<'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.subscription.try_next()
+    }
+}
+
+/// Blocks and waits for timeout
+#[allow(private_bounds)]
+pub struct SubscriptionTimeoutIter<'a, T: Subscribable<T>> {
+    subscription: &'a Subscription<'a, T>,
+    timeout: Duration,
+}
+
+impl<'a, T: Subscribable<T>> Iterator for SubscriptionTimeoutIter<'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.subscription.next_timeout(self.timeout)
+    }
+}
+
+/// Marker trait for shared channels
 pub trait SharesChannel {}
 
 // Parses following format: 20230405 22:20:39 PST

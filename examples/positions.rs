@@ -3,7 +3,7 @@ use ibapi::{accounts::PositionUpdate, Client};
 fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
-    let mut positions = client.positions().expect("request failed");
+    let positions = client.positions().expect("request failed");
     while let Some(position_update) = positions.next() {
         match position_update {
             PositionUpdate::Position(position) => {

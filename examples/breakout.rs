@@ -15,7 +15,7 @@ fn main() {
 
     let mut channel = BreakoutChannel::new(30);
 
-    for bar in bars {
+    for bar in bars.iter() {
         channel.add_bar(&bar);
 
         // Ensure enough bars and no open positions.
