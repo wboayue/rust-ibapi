@@ -157,6 +157,12 @@ impl ToField for &str {
     }
 }
 
+impl ToField for Option<&str> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
 impl ToField for usize {
     fn to_field(&self) -> String {
         self.to_string()

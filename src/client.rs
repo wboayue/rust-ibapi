@@ -11,7 +11,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::accounts::{FamilyCode, PnL, PnLSingle, PositionResponse};
+use crate::accounts::{FamilyCode, PnL, PnLSingle, PositionMulti, PositionUpdate, PositionUpdateMulti};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
@@ -211,9 +211,50 @@ impl Client {
 
     // === Accounts ===
 
-    /// Get current [Position](accounts::Position)s for all accessible accounts.
-    pub fn positions(&self) -> core::result::Result<Subscription<PositionResponse>, Error> {
+    /// Subscribes to [PositionUpdate](accounts::PositionUpdate)s for all accessible accounts.
+    /// All positions sent initially, and then only updates as positions change.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::accounts::PositionUpdate;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let subscription = client.positions().expect("error requesting positions");
+    /// for position_response in subscription {
+    ///     match position_response {
+    ///         PositionUpdate::Position(position) => println!("{position:?}"),
+    ///         PositionUpdate::PositionEnd => println!("initial set of positions received"),
+    ///     }
+    /// }
+    /// ```
+    pub fn positions(&self) -> core::result::Result<Subscription<PositionUpdate>, Error> {
         accounts::positions(self)
+    }
+
+    /// Subscribes to [PositionUpdateMulti](accounts::PositionUpdateMulti) updates for account and/or model.
+    /// Initially all positions are returned, and then updates are returned for any position changes in real time.
+    ///
+    /// # Arguments
+    /// * `account`    - If an account Id is provided, only the account’s positions belonging to the specified model will be delivered.
+    /// * `model_code` - The code of the model’s positions we are interested in.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let account = "U1234567";
+    /// let subscription = client.positions_multi(Some(account), None).expect("error requesting positions by model");
+    /// for position in subscription {
+    ///     println!("{position:?}")
+    /// }
+    /// ```
+    pub fn positions_multi(&self, account: Option<&str>, model_code: Option<&str>) -> Result<Subscription<PositionUpdateMulti>, Error> {
+        accounts::positions_multi(self, account, model_code)
     }
 
     /// Creates subscription for real time daily PnL and unrealized PnL updates.

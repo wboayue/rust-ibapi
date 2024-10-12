@@ -1,4 +1,4 @@
-use ibapi::{accounts::PositionResponse, Client};
+use ibapi::{accounts::PositionUpdate, Client};
 
 fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -6,10 +6,10 @@ fn main() {
     let mut positions = client.positions().expect("request failed");
     while let Some(position_update) = positions.next() {
         match position_update {
-            PositionResponse::Position(position) => {
+            PositionUpdate::Position(position) => {
                 println!("{:4} {:4} @ {}", position.position, position.contract.symbol, position.average_cost)
             }
-            PositionResponse::PositionEnd => {
+            PositionUpdate::PositionEnd => {
                 println!("PositionEnd");
                 // all positions received. could continue listening for new additions or cancel.
                 positions.cancel();

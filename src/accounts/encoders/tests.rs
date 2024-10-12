@@ -3,7 +3,7 @@ use crate::ToField;
 use super::*;
 
 #[test]
-fn test_request_positions() {
+fn test_encode_request_positions() {
     let message = super::encode_request_positions().expect("error encoding request");
 
     assert_eq!(message[0], OutgoingMessages::RequestPositions.to_field(), "message.type");
@@ -11,7 +11,7 @@ fn test_request_positions() {
 }
 
 #[test]
-fn test_cancel_positions() {
+fn test_encode_cancel_positions() {
     let message = super::encode_cancel_positions().expect("error encoding request");
 
     assert_eq!(message[0], OutgoingMessages::CancelPositions.to_field(), "message.type");
@@ -19,7 +19,35 @@ fn test_cancel_positions() {
 }
 
 #[test]
-fn test_request_family_codes() {
+fn test_encode_request_positions_multi() {
+    let request_id = 9000;
+    let version = 1;
+    let account = Some("U1234567");
+    let model_code = Some("TARGET2024");
+
+    let message = super::encode_request_positions_multi(request_id, account, model_code).expect("error encoding request");
+
+    assert_eq!(message[0], OutgoingMessages::RequestPositionsMulti.to_field(), "message.type");
+    assert_eq!(message[1], version.to_field(), "message.version");
+    assert_eq!(message[2], request_id.to_field(), "message.request_id");
+    assert_eq!(message[3], account.to_field(), "message.account");
+    assert_eq!(message[4], model_code.to_field(), "message.model_code");
+}
+
+#[test]
+fn test_encode_cancel_positions_multi() {
+    let request_id = 9000;
+    let version = 1;
+
+    let message = super::encode_cancel_positions_multi(request_id).expect("error encoding request");
+
+    assert_eq!(message[0], OutgoingMessages::CancelPositionsMulti.to_field(), "message.type");
+    assert_eq!(message[1], version.to_field(), "message.version");
+    assert_eq!(message[2], request_id.to_field(), "message.request_id");
+}
+
+#[test]
+fn test_encode_request_family_codes() {
     let message = super::encode_request_family_codes().expect("error encoding request");
 
     assert_eq!(message[0], OutgoingMessages::RequestFamilyCodes.to_field(), "message.type");
