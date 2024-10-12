@@ -522,10 +522,6 @@ impl ResponseMessage {
         self.i += 1;
     }
 
-    pub fn reset(&mut self) {
-        self.i = 0;
-    }
-
     pub fn encode(&self) -> String {
         let mut data = self.fields.join("\0");
         data.push('\0');

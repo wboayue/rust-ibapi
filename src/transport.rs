@@ -43,8 +43,8 @@ pub(crate) trait MessageBus: Send + Sync {
     // Starts a dedicated thread to process responses from TWS.
     fn process_messages(&mut self, server_version: i32) -> Result<(), Error>;
 
-    // Testing interface. Tracks requests sent when Bus is stubbed.
-    #[allow(unused)]
+    // Testing interface. Tracks requests sent messages when Bus is stubbed.
+    #[cfg(test)]
     fn request_messages(&self) -> Vec<RequestMessage> {
         vec![]
     }
@@ -684,24 +684,24 @@ impl SubscriptionBuilder {
 
     pub(crate) fn build(self) -> InternalSubscription {
         if let (Some(receiver), Some(signaler)) = (self.receiver, self.signaler) {
-            return InternalSubscription {
+            InternalSubscription {
                 receiver: Some(receiver),
                 shared_receiver: None,
                 signaler: Some(signaler),
                 request_id: self.request_id,
                 order_id: self.order_id,
-            };
+            }
         } else if let Some(receiver) = self.shared_receiver {
-            return InternalSubscription {
+            InternalSubscription {
                 receiver: None,
                 shared_receiver: Some(receiver),
                 signaler: None,
                 request_id: self.request_id,
                 order_id: self.order_id,
-            };
+            }
+        } else {
+            panic!("bad configuration");
         }
-
-        panic!("bad configuration");
     }
 }
 

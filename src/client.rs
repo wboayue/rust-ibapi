@@ -1035,6 +1035,7 @@ impl Debug for Client {
 /// Supports the handling of responses from TWS.
 /// Cancelled with dropped if not already cancelled.
 ///
+#[allow(private_bounds)]
 pub struct Subscription<'a, T: Subscribable<T>> {
     pub(crate) client: &'a Client,
     pub(crate) request_id: Option<i32>,
@@ -1042,6 +1043,7 @@ pub struct Subscription<'a, T: Subscribable<T>> {
     pub(crate) phantom: PhantomData<T>,
 }
 
+#[allow(private_bounds)]
 impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// Blocks until the item become available.
     pub fn next(&self) -> Option<T> {
@@ -1167,6 +1169,7 @@ pub(crate) trait Subscribable<T> {
 }
 
 /// Blocking iterator. Blocks until next item available.
+#[allow(private_bounds)]
 pub struct SubscriptionIter<'a, T: Subscribable<T>> {
     subscription: &'a Subscription<'a, T>,
 }
@@ -1189,6 +1192,7 @@ impl<'a, T: Subscribable<T>> IntoIterator for &'a Subscription<'a, T> {
 }
 
 /// Non-Blocking iterator. Returns immediately if not available.
+#[allow(private_bounds)]
 pub struct SubscriptionTryIter<'a, T: Subscribable<T>> {
     subscription: &'a Subscription<'a, T>,
 }
@@ -1202,6 +1206,7 @@ impl<'a, T: Subscribable<T>> Iterator for SubscriptionTryIter<'a, T> {
 }
 
 /// Blocks and waits for timeout
+#[allow(private_bounds)]
 pub struct SubscriptionTimeoutIter<'a, T: Subscribable<T>> {
     subscription: &'a Subscription<'a, T>,
     timeout: Duration,
