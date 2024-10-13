@@ -19,6 +19,113 @@ use crate::{server_versions, Client, Error};
 mod decoders;
 mod encoders;
 
+#[derive(Debug, Default)]
+/// Account information as it appears in the TWS’ Account Summary Window
+pub struct AccountSummary {
+    /// The account identifier.
+    pub account: String,
+    /// The account’s attribute.
+    pub tag: String,
+    /// The account’s attribute’s value.
+    pub value: String,
+    /// The currency in which the value is expressed.
+    pub currency: String,
+}
+
+pub struct AccountSummaryTags {}
+
+impl AccountSummaryTags {
+    pub const ACCOUNT_TYPE: &str = "AccountType";
+    pub const NET_LIQUIDATION: &str = "NetLiquidation";
+    pub const TOTAL_CASH_VALUE: &str = "TotalCashValue";
+    pub const SETTLED_CASH: &str = "SettledCash";
+    pub const ACCRUED_CASH: &str = "AccruedCash";
+    pub const BUYING_POWER: &str = "BuyingPower";
+    pub const EQUITY_WITH_LOAN_VALUE: &str = "EquityWithLoanValue";
+    pub const PREVIOUS_DAY_EQUITY_WITH_LOAN_VALUE: &str = "PreviousDayEquityWithLoanValue";
+    pub const GROSS_POSITION_VALUE: &str = "GrossPositionValue";
+    pub const REQ_T_EQUITY: &str = "ReqTEquity";
+    pub const REQ_T_MARGIN: &str = "ReqTMargin";
+    pub const SMA: &str = "SMA";
+    pub const INIT_MARGIN_REQ: &str = "InitMarginReq";
+    pub const MAINT_MARGIN_REQ: &str = "MaintMarginReq";
+    pub const AVAILABLE_FUNDS: &str = "AvailableFunds";
+    pub const EXCESS_LIQUIDITY: &str = "ExcessLiquidity";
+    pub const CUSHION: &str = "Cushion";
+    pub const FULL_INIT_MARGIN_REQ: &str = "FullInitMarginReq";
+    pub const FULL_MAINT_MARGIN_REQ: &str = "FullMaintMarginReq";
+    pub const FULL_AVAILABLE_FUNDS: &str = "FullAvailableFunds";
+    pub const FULL_EXCESS_LIQUIDITY: &str = "FullExcessLiquidity";
+    pub const LOOK_AHEAD_NEXT_CHANGE: &str = "LookAheadNextChange";
+    pub const LOOK_AHEAD_INIT_MARGIN_REQ: &str = "LookAheadInitMarginReq";
+    pub const LOOK_AHEAD_MAINT_MARGIN_REQ: &str = "LookAheadMaintMarginReq";
+    pub const LOOK_AHEAD_AVAILABLE_FUNDS: &str = "LookAheadAvailableFunds";
+    pub const LOOK_AHEAD_EXCESS_LIQUIDITY: &str = "LookAheadExcessLiquidity";
+    pub const HIGHEST_SEVERITY: &str = "HighestSeverity";
+    pub const DAY_TRADES_REMAINING: &str = "DayTradesRemaining";
+    pub const LEVERAGE: &str = "Leverage";
+
+    pub const ALL: &[&str] = &[
+        Self::ACCOUNT_TYPE,
+        Self::NET_LIQUIDATION,
+        Self::TOTAL_CASH_VALUE,
+        Self::SETTLED_CASH,
+        Self::ACCRUED_CASH,
+        Self::BUYING_POWER,
+        Self::EQUITY_WITH_LOAN_VALUE,
+        Self::PREVIOUS_DAY_EQUITY_WITH_LOAN_VALUE,
+        Self::GROSS_POSITION_VALUE,
+        Self::REQ_T_EQUITY,
+        Self::REQ_T_MARGIN,
+        Self::SMA,
+        Self::INIT_MARGIN_REQ,
+        Self::MAINT_MARGIN_REQ,
+        Self::AVAILABLE_FUNDS,
+        Self::EXCESS_LIQUIDITY,
+        Self::CUSHION,
+        Self::FULL_INIT_MARGIN_REQ,
+        Self::FULL_MAINT_MARGIN_REQ,
+        Self::FULL_AVAILABLE_FUNDS,
+        Self::FULL_EXCESS_LIQUIDITY,
+        Self::LOOK_AHEAD_NEXT_CHANGE,
+        Self::LOOK_AHEAD_INIT_MARGIN_REQ,
+        Self::LOOK_AHEAD_MAINT_MARGIN_REQ,
+        Self::LOOK_AHEAD_AVAILABLE_FUNDS,
+        Self::LOOK_AHEAD_EXCESS_LIQUIDITY,
+        Self::HIGHEST_SEVERITY,
+        Self::DAY_TRADES_REMAINING,
+        Self::LEVERAGE,
+    ];
+}
+
+#[derive(Debug)]
+pub enum AccountUpdate {
+    Summary(AccountSummary),
+    End,
+}
+
+impl From<AccountSummary> for AccountUpdate {
+    fn from(val: AccountSummary) -> Self {
+        AccountUpdate::Summary(val)
+    }
+}
+
+impl Subscribable<AccountUpdate> for AccountUpdate {
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::AccountSummary, IncomingMessages::AccountSummaryEnd];
+
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+        match message.message_type() {
+            IncomingMessages::AccountSummary => Ok(AccountUpdate::Summary(decoders::decode_account_summary(server_version, message)?)),
+            IncomingMessages::AccountSummaryEnd => Ok(AccountUpdate::End),
+            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+        }
+    }
+
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
+        encoders::encode_cancel_positions()
+    }
+}
+
 // Realtime PnL update for account.
 #[derive(Debug, Default)]
 pub struct PnL {
@@ -51,9 +158,9 @@ pub struct PnLSingle {
     /// DailyPnL for the position
     pub daily_pnl: f64,
     /// UnrealizedPnL total unrealized PnL for the position (since inception) updating in real time.
-    pub unrealized_pnl: Option<f64>,
+    pub unrealized_pnl: f64,
     /// Realized PnL for the position
-    pub realized_pnl: Option<f64>,
+    pub realized_pnl: f64,
     /// Current market value of the position
     pub value: f64,
 }
@@ -176,7 +283,7 @@ pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionUpdate>,
     Ok(Subscription {
         client,
         request_id: None,
-        responses,
+        subscription: responses,
         phantom: PhantomData,
     })
 }
@@ -198,7 +305,7 @@ pub(crate) fn positions_multi<'a>(
     Ok(Subscription {
         client,
         request_id: Some(request_id),
-        responses,
+        subscription: responses,
         phantom: PhantomData,
     })
 }
@@ -234,7 +341,7 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
     Ok(Subscription {
         client,
         request_id: Some(request_id),
-        responses,
+        subscription: responses,
         phantom: PhantomData,
     })
 }
@@ -252,7 +359,7 @@ pub(crate) fn pnl_single<'a>(
     contract_id: i32,
     model_code: Option<&str>,
 ) -> Result<Subscription<'a, PnLSingle>, Error> {
-    client.check_server_version(server_versions::PNL, "It does not support PnL requests.")?;
+    client.check_server_version(server_versions::REALIZED_PNL, "It does not support PnL requests.")?;
 
     let request_id = client.next_request_id();
 
@@ -262,7 +369,23 @@ pub(crate) fn pnl_single<'a>(
     Ok(Subscription {
         client,
         request_id: Some(request_id),
-        responses,
+        subscription: responses,
+        phantom: PhantomData,
+    })
+}
+
+pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountUpdate>, Error> {
+    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support account summary requests.")?;
+
+    let request_id = client.next_request_id();
+
+    let request = encoders::encode_request_account_summary(request_id, group, tags)?;
+    let responses = client.send_request(request_id, request)?;
+
+    Ok(Subscription {
+        client,
+        request_id: Some(request_id),
+        subscription: responses,
         phantom: PhantomData,
     })
 }

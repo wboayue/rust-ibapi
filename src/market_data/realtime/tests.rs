@@ -28,7 +28,7 @@ fn realtime_bars() {
     assert!(bars.is_ok(), "failed to request realtime bars: {}", bars.err().unwrap());
 
     // Verify Responses
-    let mut bars = bars.unwrap();
+    let bars = bars.unwrap();
     if let Some(bar) = bars.next() {
         let timestamp = OffsetDateTime::from_unix_timestamp(1678323335).unwrap();
 

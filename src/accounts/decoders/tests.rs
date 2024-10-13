@@ -1,4 +1,4 @@
-use crate::server_versions;
+use crate::{accounts::AccountSummaryTags, server_versions};
 
 #[test]
 fn test_decode_positions() {
@@ -97,27 +97,25 @@ fn test_decode_pnl() {
 
 #[test]
 fn test_decode_pnl_single() {
-    let mut message = super::ResponseMessage::from("94\09000\00.1\00.2\00.3\0");
+    let mut message = super::ResponseMessage::from("95\09000\0100.0\00.1\00.2\00.3\00.4\0");
 
-    let pnl = super::decode_pnl_single(server_versions::REALIZED_PNL, &mut message).expect("error decoding pnl");
+    let pnl_single = super::decode_pnl_single(server_versions::REALIZED_PNL, &mut message).expect("error decoding pnl single");
 
-    assert_eq!(pnl.daily_pnl, 0.10, "pnl.daily_pnl");
-    assert_eq!(pnl.unrealized_pnl, Some(0.20), "pnl.unrealized_pnl");
-    assert_eq!(pnl.realized_pnl, Some(0.30), "pnl.realized_pnl");
+    assert_eq!(pnl_single.position, 100., "pnl_single.position");
+    assert_eq!(pnl_single.daily_pnl, 0.10, "pnl_single.daily_pnl");
+    assert_eq!(pnl_single.unrealized_pnl, 0.20, "pnl_single.unrealized_pnl");
+    assert_eq!(pnl_single.realized_pnl, 0.30, "pnl_single.realized_pnl");
+    assert_eq!(pnl_single.value, 0.40, "pnl_single.value");
+}
 
-    let mut message = super::ResponseMessage::from("94\09000\00.1\00.2\00.3\0");
+#[test]
+fn test_decode_account_summary() {
+    let mut message = super::ResponseMessage::from("94\01\09000\0DU1234567\0AccountType\0FA\0");
 
-    let pnl = super::decode_pnl_single(server_versions::UNREALIZED_PNL, &mut message).expect("error decoding pnl");
+    let account_summary = super::decode_account_summary(server_versions::REALIZED_PNL, &mut message).expect("error decoding pnl");
 
-    assert_eq!(pnl.daily_pnl, 0.10, "pnl.daily_pnl");
-    assert_eq!(pnl.unrealized_pnl, Some(0.20), "pnl.unrealized_pnl");
-    assert_eq!(pnl.realized_pnl, None, "pnl.realized_pnl");
-
-    let mut message = super::ResponseMessage::from("94\09000\00.1\00.2\00.3\0");
-
-    let pnl = super::decode_pnl_single(server_versions::PNL, &mut message).expect("error decoding pnl");
-
-    assert_eq!(pnl.daily_pnl, 0.10, "pnl.daily_pnl");
-    assert_eq!(pnl.unrealized_pnl, None, "pnl.unrealized_pnl");
-    assert_eq!(pnl.realized_pnl, None, "pnl.realized_pnl");
+    assert_eq!(account_summary.account, "DU1234567", "account_summary.account");
+    assert_eq!(account_summary.tag, AccountSummaryTags::ACCOUNT_TYPE, "account_summary.tag");
+    assert_eq!(account_summary.value, "FA", "account_summary.value");
+    assert_eq!(account_summary.currency, "", "account_summary.currency");
 }

@@ -21,7 +21,7 @@ fn recorder_is_disabled() {
 
     env::set_var(&key, &"");
 
-    let recorder = MessageRecorder::new();
+    let _recorder = MessageRecorder::new();
 
     // assert_eq!(false, recorder.enabled);
     // assert_eq!("", &recorder.recording_dir);

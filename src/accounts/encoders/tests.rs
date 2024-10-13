@@ -83,3 +83,19 @@ fn test_encode_request_pnl_single() {
     assert_eq!(request[3], "", "message.model_code");
     assert_eq!(request[4], contract_id.to_field(), "message.contract_id");
 }
+
+#[test]
+fn test_encode_request_account_summary() {
+    let version = 1;
+    let request_id = 3000;
+    let group = "All";
+    let tags: &[&str] = &["AccountType", "TotalCashValue"];
+
+    let request = super::encode_request_account_summary(request_id, group, tags).expect("encode request pnl failed");
+
+    assert_eq!(request[0], OutgoingMessages::RequestAccountSummary.to_field(), "message.type");
+    assert_eq!(request[1], version.to_field(), "message.version");
+    assert_eq!(request[2], request_id.to_field(), "message.request_id");
+    assert_eq!(request[3], group.to_field(), "message.group");
+    assert_eq!(request[4], tags.join(","), "message.tags");
+}

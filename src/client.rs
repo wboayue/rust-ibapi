@@ -11,7 +11,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::accounts::{FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
+use crate::accounts::{AccountUpdate, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
@@ -303,6 +303,31 @@ impl Client {
     /// ```
     pub fn pnl_single<'a>(&'a self, account: &str, contract_id: i32, model_code: Option<&str>) -> Result<Subscription<'a, PnLSingle>, Error> {
         accounts::pnl_single(self, account, contract_id, model_code)
+    }
+
+    /// Requests a specific account’s summary. Subscribes to the account summary as presented in the TWS’ Account Summary tab. Data received is specified by using a specific tags value.
+    ///
+    /// # Arguments
+    /// * `group` - Set to “All” to return account summary data for all accounts, or set to a specific Advisor Account Group name that has already been created in TWS Global Configuration.
+    /// * `tags`  - List of the desired tags.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::accounts::AccountSummaryTags;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let group = "All";
+    ///
+    /// let subscription = client.account_summary(group, AccountSummaryTags::ALL).expect("error requesting pnl");
+    /// for summary in &subscription {
+    ///     println!("{summary:?}")
+    /// }
+    /// ```
+    pub fn account_summary<'a>(&'a self, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountUpdate>, Error> {
+        accounts::account_summary(self, group, tags)
     }
 
     // === Contracts ===
@@ -1039,7 +1064,7 @@ impl Debug for Client {
 pub struct Subscription<'a, T: Subscribable<T>> {
     pub(crate) client: &'a Client,
     pub(crate) request_id: Option<i32>,
-    pub(crate) responses: InternalSubscription,
+    pub(crate) subscription: InternalSubscription,
     pub(crate) phantom: PhantomData<T>,
 }
 
@@ -1048,7 +1073,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// Blocks until the item become available.
     pub fn next(&self) -> Option<T> {
         loop {
-            if let Some(mut message) = self.responses.next() {
+            if let Some(mut message) = self.subscription.next() {
                 if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
                     match T::decode(self.client.server_version(), &mut message) {
                         Ok(val) => return Some(val),
@@ -1081,7 +1106,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// //}
     /// ```
     pub fn try_next(&self) -> Option<T> {
-        if let Some(mut message) = self.responses.try_next() {
+        if let Some(mut message) = self.subscription.try_next() {
             if message.message_type() == IncomingMessages::Error {
                 error!("{}", message.peek_string(4));
                 return None;
@@ -1111,7 +1136,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// //}
     /// ```
     pub fn next_timeout(&self, timeout: Duration) -> Option<T> {
-        if let Some(mut message) = self.responses.next_timeout(timeout) {
+        if let Some(mut message) = self.subscription.next_timeout(timeout) {
             if message.message_type() == IncomingMessages::Error {
                 error!("{}", message.peek_string(4));
                 return None;
@@ -1133,6 +1158,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     pub fn cancel(&self) -> Result<(), Error> {
         if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
             self.client.send_message(message)?;
+            self.subscription.cancel()?;
         }
         Ok(())
     }
