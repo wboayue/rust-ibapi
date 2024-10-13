@@ -111,7 +111,7 @@ impl From<AccountSummary> for AccountUpdate {
 }
 
 impl Subscribable<AccountUpdate> for AccountUpdate {
-    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::AccountSummary, IncomingMessages::AccountSummaryEnd];
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
