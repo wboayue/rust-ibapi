@@ -599,7 +599,7 @@ impl InternalSubscription {
         match receiver.recv() {
             Ok(message) => Some(message),
             Err(err) => {
-                error!("error receiving message: {err}");
+                error!("receive error: {err}");
                 None
             }
         }
@@ -608,20 +608,14 @@ impl InternalSubscription {
     fn try_receive(receiver: &Receiver<ResponseMessage>) -> Option<ResponseMessage> {
         match receiver.try_recv() {
             Ok(message) => Some(message),
-            Err(err) => {
-                error!("error receiving message: {err}");
-                None
-            }
+            Err(_) => None,
         }
     }
 
     fn timeout_receive(receiver: &Receiver<ResponseMessage>, timeout: Duration) -> Option<ResponseMessage> {
         match receiver.recv_timeout(timeout) {
             Ok(message) => Some(message),
-            Err(err) => {
-                error!("error receiving message: {err}");
-                None
-            }
+            Err(_) => None,
         }
     }
 }

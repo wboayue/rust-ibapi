@@ -6,11 +6,11 @@ fn main() {
 
     let group = "All";
 
-    let subscription = client.account_summary(group, AccountSummaryTags::ALL).expect("error requesting pnl");
+    let subscription = client.account_summary(group, AccountSummaryTags::ALL).expect("error requesting account summary");
     for update in &subscription {
         match update {
             AccountUpdate::Summary(summary) => println!("{summary:?}"),
-            AccountUpdate::End => subscription.cancel().unwrap(),
+            AccountUpdate::End => subscription.cancel().expect("cancel failed"),
         }
     }
 }

@@ -158,9 +158,9 @@ pub struct PnLSingle {
     /// DailyPnL for the position
     pub daily_pnl: f64,
     /// UnrealizedPnL total unrealized PnL for the position (since inception) updating in real time.
-    pub unrealized_pnl: Option<f64>,
+    pub unrealized_pnl: f64,
     /// Realized PnL for the position
-    pub realized_pnl: Option<f64>,
+    pub realized_pnl: f64,
     /// Current market value of the position
     pub value: f64,
 }
@@ -359,7 +359,7 @@ pub(crate) fn pnl_single<'a>(
     contract_id: i32,
     model_code: Option<&str>,
 ) -> Result<Subscription<'a, PnLSingle>, Error> {
-    client.check_server_version(server_versions::PNL, "It does not support PnL requests.")?;
+    client.check_server_version(server_versions::REALIZED_PNL, "It does not support PnL requests.")?;
 
     let request_id = client.next_request_id();
 

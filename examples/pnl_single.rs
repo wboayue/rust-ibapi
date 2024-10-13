@@ -4,7 +4,7 @@ use ibapi::Client;
 fn main() {
     env_logger::init();
 
-    let matches = Command::new("pnl")
+    let matches = Command::new("pnl_single")
         .about("Gets realtime profit and loss updates of single contract")
         .arg(arg!(--connection_url <VALUE>).default_value("127.0.0.1:4002"))
         .arg(arg!(--account <ACCOUNT>).required(true))
@@ -22,14 +22,14 @@ fn main() {
 
     // Get next item non-blocking
     if let Some(pnl) = subscription.try_next() {
-        println!("non-blocking PnL: {:?}", pnl);
+        println!("non-blocking PnL single: {:?}", pnl);
     }
 
     // Consume items blocking for next
     while let Some(pnl) = subscription.next() {
-        println!("PnL: {:?}", pnl);
+        println!("PnL single: {:?}", pnl);
 
         // After processing items subscription could be cancelled.
-        subscription.cancel();
+//        subscription.cancel();
     }
 }
