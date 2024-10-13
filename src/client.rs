@@ -63,7 +63,6 @@ impl Client {
     ///
     /// println!("server_version: {}", client.server_version());
     /// println!("connection_time: {:?}", client.connection_time());
-    /// println!("managed_accounts: {}", client.managed_accounts());
     /// println!("next_order_id: {}", client.next_order_id());
     /// ```
     pub fn connect(address: &str, client_id: i32) -> Result<Client, Error> {
@@ -204,11 +203,6 @@ impl Client {
         self.connection_time
     }
 
-    /// Returns the managed accounts.
-    pub fn managed_accounts(&self) -> String {
-        self.managed_accounts.to_owned()
-    }
-
     // === Accounts ===
 
     /// Subscribes to [PositionUpdate](accounts::PositionUpdate)s for all accessible accounts.
@@ -328,6 +322,22 @@ impl Client {
     /// ```
     pub fn account_summary<'a>(&'a self, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
         accounts::account_summary(self, group, tags)
+    }
+
+    /// Requests the accounts to which the logged user has access to.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let accounts = client.managed_accounts().expect("error requesting managed accounts");
+    /// println!("managed accounts: {accounts:?}")
+    /// ```
+    pub fn managed_accounts(&self) -> Result<Vec<String>, Error> {
+        accounts::managed_accounts(self)
     }
 
     // === Contracts ===

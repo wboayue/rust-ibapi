@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::{accounts::AccountSummaryTags, server_versions, stubs::MessageBusStub, Client};
+use crate::testdata::responses;
 
 #[test]
 fn test_pnl() {
@@ -110,4 +111,20 @@ fn test_account_summary() {
 
     assert_eq!(request_messages[0].encode_simple(), "62|1|9000|All|AccountType|");
     assert_eq!(request_messages[1].encode_simple(), "64|1|");
+}
+
+#[test]
+fn test_managed_accounts() {
+    let message_bus = Arc::new(Mutex::new(MessageBusStub {
+        request_messages: RwLock::new(vec![]),
+        response_messages: vec![
+            responses::MANAGED_ACCOUNT.into(),
+        ],
+    }));
+
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+
+    let accounts = client.managed_accounts().expect("request managed accounts failed");
+
+    assert_eq!(accounts, &["DU1234567", "DU7654321"]);
 }

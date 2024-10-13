@@ -29,7 +29,6 @@ fn main() -> anyhow::Result<()> {
 
     println!("server_version: {}", client.server_version());
     println!("server_time: {:?}", client.connection_time());
-    println!("managed_accounts: {}", client.managed_accounts());
     println!("next_order_id: {}", client.next_order_id());
 
     let bars = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)?;
