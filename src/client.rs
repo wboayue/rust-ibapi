@@ -1064,7 +1064,7 @@ impl Debug for Client {
 pub struct Subscription<'a, T: Subscribable<T>> {
     pub(crate) client: &'a Client,
     pub(crate) request_id: Option<i32>,
-    pub(crate) responses: InternalSubscription,
+    pub(crate) subscription: InternalSubscription,
     pub(crate) phantom: PhantomData<T>,
 }
 
@@ -1073,7 +1073,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// Blocks until the item become available.
     pub fn next(&self) -> Option<T> {
         loop {
-            if let Some(mut message) = self.responses.next() {
+            if let Some(mut message) = self.subscription.next() {
                 if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
                     match T::decode(self.client.server_version(), &mut message) {
                         Ok(val) => return Some(val),
@@ -1106,7 +1106,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// //}
     /// ```
     pub fn try_next(&self) -> Option<T> {
-        if let Some(mut message) = self.responses.try_next() {
+        if let Some(mut message) = self.subscription.try_next() {
             if message.message_type() == IncomingMessages::Error {
                 error!("{}", message.peek_string(4));
                 return None;
@@ -1136,7 +1136,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// //}
     /// ```
     pub fn next_timeout(&self, timeout: Duration) -> Option<T> {
-        if let Some(mut message) = self.responses.next_timeout(timeout) {
+        if let Some(mut message) = self.subscription.next_timeout(timeout) {
             if message.message_type() == IncomingMessages::Error {
                 error!("{}", message.peek_string(4));
                 return None;
@@ -1158,6 +1158,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     pub fn cancel(&self) -> Result<(), Error> {
         if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
             self.client.send_message(message)?;
+            self.subscription.cancel()?;
         }
         Ok(())
     }

@@ -30,6 +30,7 @@ fn main() {
         println!("PnL single: {:?}", pnl);
 
         // After processing items subscription could be cancelled.
-//        subscription.cancel();
+        subscription.cancel();
+        break;
     }
 }

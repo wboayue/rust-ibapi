@@ -7,7 +7,10 @@ fn main() {
     while let Some(position_update) = positions.next() {
         match position_update {
             PositionUpdate::Position(position) => {
-                println!("{:4} {:4} {} @ {}", position.position, position.contract.symbol, position.contract.contract_id, position.average_cost)
+                println!(
+                    "{:4} {:4} {} @ {}",
+                    position.position, position.contract.symbol, position.contract.contract_id, position.average_cost
+                )
             }
             PositionUpdate::PositionEnd => {
                 println!("PositionEnd");

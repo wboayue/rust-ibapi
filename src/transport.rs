@@ -595,28 +595,20 @@ impl InternalSubscription {
         }
     }
 
+    pub(crate) fn cancel(&self) -> Result<(), Error> {
+        Ok(())
+    }
+
     fn receive(receiver: &Receiver<ResponseMessage>) -> Option<ResponseMessage> {
-        match receiver.recv() {
-            Ok(message) => Some(message),
-            Err(err) => {
-                error!("receive error: {err}");
-                None
-            }
-        }
+        receiver.recv().ok()
     }
 
     fn try_receive(receiver: &Receiver<ResponseMessage>) -> Option<ResponseMessage> {
-        match receiver.try_recv() {
-            Ok(message) => Some(message),
-            Err(_) => None,
-        }
+        receiver.try_recv().ok()
     }
 
     fn timeout_receive(receiver: &Receiver<ResponseMessage>, timeout: Duration) -> Option<ResponseMessage> {
-        match receiver.recv_timeout(timeout) {
-            Ok(message) => Some(message),
-            Err(_) => None,
-        }
+        receiver.recv_timeout(timeout).ok()
     }
 }
 

@@ -283,7 +283,7 @@ pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionUpdate>,
     Ok(Subscription {
         client,
         request_id: None,
-        responses,
+        subscription: responses,
         phantom: PhantomData,
     })
 }
@@ -305,7 +305,7 @@ pub(crate) fn positions_multi<'a>(
     Ok(Subscription {
         client,
         request_id: Some(request_id),
-        responses,
+        subscription: responses,
         phantom: PhantomData,
     })
 }
@@ -341,7 +341,7 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
     Ok(Subscription {
         client,
         request_id: Some(request_id),
-        responses,
+        subscription: responses,
         phantom: PhantomData,
     })
 }
@@ -369,7 +369,7 @@ pub(crate) fn pnl_single<'a>(
     Ok(Subscription {
         client,
         request_id: Some(request_id),
-        responses,
+        subscription: responses,
         phantom: PhantomData,
     })
 }
@@ -385,7 +385,7 @@ pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Re
     Ok(Subscription {
         client,
         request_id: Some(request_id),
-        responses,
+        subscription: responses,
         phantom: PhantomData,
     })
 }
