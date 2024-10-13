@@ -3,9 +3,9 @@
 //! and responses from TWS back to the Client.
 
 use std::collections::HashMap;
-use std::io::{prelude::*, Cursor};
+use std::io::{prelude::*, Cursor, ErrorKind};
 use std::net::TcpStream;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -28,30 +28,29 @@ const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
 
 pub(crate) trait MessageBus: Send + Sync {
-    // Reads the next available message from TWS
-    fn read_message(&mut self) -> Result<ResponseMessage, Error>;
-
-    // Sends a formatted packet TWS
-    fn write_message(&mut self, packet: &RequestMessage) -> Result<(), Error>;
-
-    // Sends raw data to TWS
-    fn write(&mut self, packet: &str) -> Result<(), Error>;
-
     // Sends formatted message to TWS and creates a reply channel by request id.
     fn send_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
 
-    // Sends formatted order specific message to TWS and creates a reply channel by order id.
-    fn send_order_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
+    // Sends formatted message to TWS and creates a reply channel by request id.
+    fn cancel_subscription(&mut self, request_id: i32, packet: &RequestMessage) -> Result<(), Error>;
 
     // Sends formatted message to TWS and creates a reply channel by message type.
     fn send_shared_request(&mut self, message_id: OutgoingMessages, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
 
+    // Sends formatted message to TWS and creates a reply channel by message type.
+    fn cancel_shared_subscription(&mut self, message_id: OutgoingMessages, packet: &RequestMessage) -> Result<(), Error>;
+
+    // Sends formatted order specific message to TWS and creates a reply channel by order id.
+    fn send_order_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
+
+    fn cancel_order_subscription(&mut self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
+        Ok(())
+    }
+
     // Starts a dedicated thread to process responses from TWS.
     fn process_messages(&mut self, server_version: i32) -> Result<(), Error>;
 
-    fn shutdown(&self) {
-
-    }
+    fn shutdown(&self) {}
 
     // Testing interface. Tracks requests sent messages when Bus is stubbed.
     #[cfg(test)]
@@ -145,8 +144,7 @@ pub enum Signal {
 
 #[derive(Debug)]
 pub struct TcpMessageBus {
-    reader: Arc<TcpStream>,
-    writer: Arc<Mutex<TcpStream>>,
+    connection: Arc<Connection>,
     handles: Vec<JoinHandle<i32>>,
     requests: Arc<SenderHash<i32, ResponseMessage>>,
     orders: Arc<SenderHash<i32, ResponseMessage>>,
@@ -154,23 +152,19 @@ pub struct TcpMessageBus {
     shared_channels: Arc<SharedChannels>,
     signals_send: Sender<Signal>,
     signals_recv: Receiver<Signal>,
+    shutdown_requested: Arc<AtomicBool>,
+    is_alive: bool,
 }
 
 impl TcpMessageBus {
-    // establishes TCP connection to server
-    pub fn connect(connection_string: &str) -> Result<TcpMessageBus, Error> {
-        let stream = TcpStream::connect(connection_string)?;
-
-        let reader = Arc::new(stream.try_clone()?);
-        let writer = Arc::new(Mutex::new(stream));
+    pub fn new(connection: Connection) -> Result<TcpMessageBus, Error> {
         let requests = Arc::new(SenderHash::new());
         let orders = Arc::new(SenderHash::new());
 
         let (signals_send, signals_recv) = channel::unbounded();
 
         Ok(TcpMessageBus {
-            reader,
-            writer,
+            connection: Arc::new(connection),
             handles: Vec::default(),
             requests,
             orders,
@@ -178,30 +172,52 @@ impl TcpMessageBus {
             shared_channels: Arc::new(SharedChannels::new()),
             signals_send,
             signals_recv,
+            shutdown_requested: Arc::new(AtomicBool::new(false)),
+            is_alive: true,
         })
     }
 
     // Dispatcher thread reads messages from TWS and dispatches them to
     // appropriate channel.
     fn start_dispatcher_thread(&mut self, server_version: i32) -> JoinHandle<i32> {
-        let reader = Arc::clone(&self.reader);
+        let connection = Arc::clone(&self.connection);
         let requests = Arc::clone(&self.requests);
         let recorder = self.recorder.clone();
         let orders = Arc::clone(&self.orders);
         let shared_channels = Arc::clone(&self.shared_channels);
         let executions = SenderHash::<String, ResponseMessage>::new();
+        let shutdown_requested = Arc::clone(&self.shutdown_requested);
+
+        const RECONNECT_ERRORS: &[ErrorKind] = &[ErrorKind::ConnectionReset];
+        const RETRY_ERRORS: &[ErrorKind] = &[ErrorKind::Interrupted];
 
         thread::spawn(move || loop {
-            match read_packet(&reader) {
+            // connection.read_message()
+
+            match read_packet(&connection.stream) {
                 Ok(message) => {
                     recorder.record_response(&message);
                     dispatch_message(message, server_version, &requests, &orders, &shared_channels, &executions);
                 }
-                Err(err) => {
-                    error!("error reading packet: {:?}", err);
+                Err(Error::Io(e)) if RECONNECT_ERRORS.contains(&e.kind()) => {
+                    error!("error reading packet: {:?}", e);
+                    // reset hashes
+                    // connection.reconnect()
+                }
+                Err(Error::Io(e)) if RETRY_ERRORS.contains(&e.kind()) => {
+                    error!("error reading packet: {:?}", e);
                     continue;
                 }
+                Err(err) => {
+                    error!("error reading packet: {:?}", err);
+                    shutdown_requested.store(true, Ordering::Relaxed);
+                    return 0;
+                }
             };
+
+            if shutdown_requested.load(Ordering::SeqCst) {
+                return 0;
+            }
         })
     }
 
@@ -211,6 +227,7 @@ impl TcpMessageBus {
         let requests = Arc::clone(&self.requests);
         let orders = Arc::clone(&self.orders);
         let signal_recv = self.signals_recv.clone();
+        let shutdown_requested = Arc::clone(&self.shutdown_requested);
 
         thread::spawn(move || loop {
             for signal in &signal_recv {
@@ -224,6 +241,10 @@ impl TcpMessageBus {
                         debug!("released order_id {}, orders.len()={}", order_id, requests.len());
                     }
                 }
+
+                if shutdown_requested.load(Ordering::SeqCst) {
+                    return 0;
+                }
             }
         })
     }
@@ -232,16 +253,14 @@ impl TcpMessageBus {
 const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 impl MessageBus for TcpMessageBus {
-    fn read_message(&mut self) -> Result<ResponseMessage, Error> {
-        read_packet(&self.reader)
-    }
-
     fn send_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error> {
         let (sender, receiver) = channel::unbounded();
 
         self.requests.insert(request_id, sender);
 
-        self.write_message(packet)?;
+        //FIXME
+        // write_message(&mut self.connection.stream, packet)?;
+        // self.connection.write_message(packet)?;
 
         let subscription = SubscriptionBuilder::new()
             .receiver(receiver)
@@ -252,12 +271,19 @@ impl MessageBus for TcpMessageBus {
         Ok(subscription)
     }
 
+    fn cancel_subscription(&mut self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
+        // write_message(&self.connection.stream, packet)?;
+        self.requests.remove(&request_id);
+        Ok(())
+    }
+
     fn send_order_request(&mut self, order_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         let (sender, receiver) = channel::unbounded();
 
         self.orders.insert(order_id, sender);
 
-        self.write_message(message)?;
+        // FIXME
+        //self.write_message(message)?;
 
         let subscription = SubscriptionBuilder::new()
             .receiver(receiver)
@@ -268,8 +294,15 @@ impl MessageBus for TcpMessageBus {
         Ok(subscription)
     }
 
+    fn cancel_order_subscription(&mut self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
+        // write_message(&self.connection.stream, packet)?;
+        self.orders.remove(&request_id);
+        Ok(())
+    }
+
     fn send_shared_request(&mut self, message_id: OutgoingMessages, message: &RequestMessage) -> Result<InternalSubscription, Error> {
-        self.write_message(message)?;
+        // FIXME
+        //self.write_message(message)?;
 
         let shared_receiver = self.shared_channels.get_receiver(message_id);
 
@@ -278,27 +311,8 @@ impl MessageBus for TcpMessageBus {
         Ok(subscription)
     }
 
-    fn write_message(&mut self, message: &RequestMessage) -> Result<(), Error> {
-        let data = message.encode();
-        debug!("-> {data:?}");
-
-        let data = data.as_bytes();
-
-        let mut packet = Vec::with_capacity(data.len() + 4);
-
-        packet.write_u32::<BigEndian>(data.len() as u32)?;
-        packet.write_all(data)?;
-
-        self.writer.lock()?.write_all(&packet)?;
-
-        self.recorder.record_request(message);
-
-        Ok(())
-    }
-
-    fn write(&mut self, data: &str) -> Result<(), Error> {
-        debug!("{data:?} ->");
-        self.writer.lock()?.write_all(data.as_bytes())?;
+    fn cancel_shared_subscription(&mut self, message_type: OutgoingMessages, packet: &RequestMessage) -> Result<(), Error> {
+        // write_message(&self.connection.stream, packet)?;
         Ok(())
     }
 
@@ -715,28 +729,30 @@ impl SubscriptionBuilder {
     }
 }
 
-
-#[derive(Default)]
-pub (crate) struct AccountInfo {
+#[derive(Default, Clone, Debug)]
+pub(crate) struct AccountInfo {
     next_order_id: i32,
-    managed_accounts: String,
+    pub(crate) client_id: i32,
+    pub(crate) server_version: i32,
+    pub(crate) managed_accounts: String,
 }
 
-pub (crate) struct Connection {
-    pub (crate) client_id: i32,
-    pub (crate) connection_url: String,
+#[derive(Debug)]
+pub(crate) struct Connection {
+    pub(crate) client_id: i32,
+    pub(crate) connection_url: String,
     stream: TcpStream,
-    pub (crate) server_version: i32,
-    pub (crate) connection_time: Option<OffsetDateTime>,
-    pub (crate) time_zone: Option<&'static Tz>,
-    pub (crate) account_info: AccountInfo
+    pub(crate) server_version: i32,
+    pub(crate) connection_time: Option<OffsetDateTime>,
+    pub(crate) time_zone: Option<&'static Tz>,
+    pub(crate) account_info: AccountInfo,
 }
 
 impl Connection {
     pub fn connect(client_id: i32, connection_url: &str) -> Result<Self, Error> {
         let stream = TcpStream::connect(connection_url)?;
 
-        let mut connection = Self{
+        let mut connection = Self {
             client_id,
             connection_url: connection_url.into(),
             stream,
@@ -931,6 +947,46 @@ fn encode_packet(message: &str) -> String {
 
     std::str::from_utf8(&packet).unwrap().into()
 }
+
+fn write_message(stream: &mut TcpStream, message: &RequestMessage) -> Result<(), Error> {
+    let data = message.encode();
+    debug!("-> {data:?}");
+
+    let data = data.as_bytes();
+
+    let mut packet = Vec::with_capacity(data.len() + 4);
+
+    packet.write_u32::<BigEndian>(data.len() as u32)?;
+    packet.write_all(data)?;
+
+    stream.write_all(&packet)?;
+
+    Ok(())
+}
+
+// fn write_message(&mut self, message: &RequestMessage) -> Result<(), Error> {
+//     let data = message.encode();
+//     debug!("-> {data:?}");
+
+//     let data = data.as_bytes();
+
+//     let mut packet = Vec::with_capacity(data.len() + 4);
+
+//     packet.write_u32::<BigEndian>(data.len() as u32)?;
+//     packet.write_all(data)?;
+
+//     self.writer.lock()?.write_all(&packet)?;
+
+//     self.recorder.record_request(message);
+
+//     Ok(())
+// }
+
+// fn write(&mut self, data: &str) -> Result<(), Error> {
+//     debug!("{data:?} ->");
+//     self.writer.lock()?.write_all(data.as_bytes())?;
+//     Ok(())
+// }
 
 #[cfg(test)]
 mod tests;

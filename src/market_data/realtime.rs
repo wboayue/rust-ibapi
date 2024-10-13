@@ -357,7 +357,7 @@ pub(crate) struct BidAskIterator<'a> {
 fn cancel_tick_by_tick(client: &Client, request_id: i32) {
     if client.server_version() >= server_versions::TICK_BY_TICK {
         let message = encoders::cancel_tick_by_tick(request_id).unwrap();
-        client.send_message(message).unwrap();
+        client.message_bus.lock().unwrap().cancel_subscription(request_id, &message).unwrap();
     }
 }
 
