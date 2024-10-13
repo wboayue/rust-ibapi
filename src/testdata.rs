@@ -1,5 +1,5 @@
 #[cfg(test)]
-pub(crate) mod incoming_messages;
+pub(crate) mod responses;
 
 #[cfg(test)]
-pub(crate) mod outgoing_messages;
+pub(crate) mod requests;

@@ -380,14 +380,30 @@ pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Re
     let request_id = client.next_request_id();
 
     let request = encoders::encode_request_account_summary(request_id, group, tags)?;
-    let responses = client.send_request(request_id, request)?;
+    let subscription = client.send_request(request_id, request)?;
 
     Ok(Subscription {
         client,
         request_id: Some(request_id),
-        subscription: responses,
+        subscription,
         phantom: PhantomData,
     })
+}
+
+pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
+    let request = encoders::encode_request_managed_accounts()?;
+    let subscription = client.send_shared_request(OutgoingMessages::RequestManagedAccounts, request)?;
+
+    match subscription.next() {
+        Some(mut message) => {
+            message.skip(); // message type
+            message.skip(); // message version
+
+            let accounts = message.next_string()?;
+            Ok(accounts.split(",").map(String::from).collect())
+        }
+        None => Ok(Vec::default()),
+    }
 }
 
 #[cfg(test)]

@@ -84,6 +84,7 @@ impl SharedChannels {
             OutgoingMessages::RequestOpenOrders,
             &[IncomingMessages::OpenOrder, IncomingMessages::OpenOrderEnd],
         );
+        instance.register(OutgoingMessages::RequestManagedAccounts, &[IncomingMessages::ManagedAccounts]);
 
         instance
     }
@@ -106,7 +107,7 @@ impl SharedChannels {
         let receiver = self
             .receivers
             .get(&message_type)
-            .unwrap_or_else(|| panic!("unsupported request message {message_type:?}"));
+            .unwrap_or_else(|| panic!("unsupported request message {message_type:?}. check mapping in SharedChannels::new() located in transport.rs"));
 
         Arc::clone(receiver)
     }
@@ -320,8 +321,7 @@ fn dispatch_message(
             } else {
                 process_response(requests, orders, shared_channels, message);
             }
-        }
-        IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
+        },
         IncomingMessages::OrderStatus
         | IncomingMessages::OpenOrder
         | IncomingMessages::OpenOrderEnd
@@ -385,14 +385,6 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), E
         println!("[{error_code}] {error_message}");
         Ok(())
     }
-}
-
-fn process_managed_accounts(_server_version: i32, mut packet: ResponseMessage) {
-    packet.skip(); // message_id
-    packet.skip(); // version
-
-    let managed_accounts = packet.next_string().unwrap_or_else(|_| String::default());
-    info!("managed accounts: {}", managed_accounts)
 }
 
 fn process_response(

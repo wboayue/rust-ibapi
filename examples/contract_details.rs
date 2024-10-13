@@ -6,7 +6,6 @@ fn main() -> anyhow::Result<()> {
 
     println!("server_version: {}", client.server_version());
     println!("connection_time: {:?}", client.connection_time());
-    println!("managed_accounts: {}", client.managed_accounts());
     println!("next_order_id: {}", client.next_order_id());
 
     let mut contract = Contract::stock("TSLA");
