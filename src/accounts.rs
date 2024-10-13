@@ -99,24 +99,24 @@ impl AccountSummaryTags {
 }
 
 #[derive(Debug)]
-pub enum AccountUpdate {
+pub enum AccountSummaries {
     Summary(AccountSummary),
     End,
 }
 
-impl From<AccountSummary> for AccountUpdate {
+impl From<AccountSummary> for AccountSummaries {
     fn from(val: AccountSummary) -> Self {
-        AccountUpdate::Summary(val)
+        AccountSummaries::Summary(val)
     }
 }
 
-impl Subscribable<AccountUpdate> for AccountUpdate {
+impl Subscribable<AccountSummaries> for AccountSummaries {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::AccountSummary, IncomingMessages::AccountSummaryEnd];
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::AccountSummary => Ok(AccountUpdate::Summary(decoders::decode_account_summary(server_version, message)?)),
-            IncomingMessages::AccountSummaryEnd => Ok(AccountUpdate::End),
+            IncomingMessages::AccountSummary => Ok(AccountSummaries::Summary(decoders::decode_account_summary(server_version, message)?)),
+            IncomingMessages::AccountSummaryEnd => Ok(AccountSummaries::End),
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
     }
@@ -374,7 +374,7 @@ pub(crate) fn pnl_single<'a>(
     })
 }
 
-pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountUpdate>, Error> {
+pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support account summary requests.")?;
 
     let request_id = client.next_request_id();

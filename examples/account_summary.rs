@@ -1,4 +1,4 @@
-use ibapi::accounts::{AccountSummaryTags, AccountUpdate};
+use ibapi::accounts::{AccountSummaries, AccountSummaryTags};
 use ibapi::Client;
 
 fn main() {
@@ -11,8 +11,8 @@ fn main() {
         .expect("error requesting account summary");
     for update in &subscription {
         match update {
-            AccountUpdate::Summary(summary) => println!("{summary:?}"),
-            AccountUpdate::End => subscription.cancel().expect("cancel failed"),
+            AccountSummaries::Summary(summary) => println!("{summary:?}"),
+            AccountSummaries::End => subscription.cancel().expect("cancel failed"),
         }
     }
 }
