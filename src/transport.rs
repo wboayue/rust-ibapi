@@ -104,10 +104,9 @@ impl SharedChannels {
 
     // Get receiver for specified message type. Panics if receiver not found.
     pub fn get_receiver(&self, message_type: OutgoingMessages) -> Arc<Receiver<ResponseMessage>> {
-        let receiver = self
-            .receivers
-            .get(&message_type)
-            .unwrap_or_else(|| panic!("unsupported request message {message_type:?}. check mapping in SharedChannels::new() located in transport.rs"));
+        let receiver = self.receivers.get(&message_type).unwrap_or_else(|| {
+            panic!("unsupported request message {message_type:?}. check mapping in SharedChannels::new() located in transport.rs")
+        });
 
         Arc::clone(receiver)
     }
@@ -321,7 +320,7 @@ fn dispatch_message(
             } else {
                 process_response(requests, orders, shared_channels, message);
             }
-        },
+        }
         IncomingMessages::OrderStatus
         | IncomingMessages::OpenOrder
         | IncomingMessages::OpenOrderEnd

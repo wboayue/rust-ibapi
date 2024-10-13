@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex, RwLock};
 
-use crate::{accounts::AccountSummaryTags, server_versions, stubs::MessageBusStub, Client};
 use crate::testdata::responses;
+use crate::{accounts::AccountSummaryTags, server_versions, stubs::MessageBusStub, Client};
 
 #[test]
 fn test_pnl() {
@@ -117,9 +117,7 @@ fn test_account_summary() {
 fn test_managed_accounts() {
     let message_bus = Arc::new(Mutex::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            responses::MANAGED_ACCOUNT.into(),
-        ],
+        response_messages: vec![responses::MANAGED_ACCOUNT.into()],
     }));
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
