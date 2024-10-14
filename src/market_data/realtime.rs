@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use log::error;
 use time::OffsetDateTime;
 
@@ -195,18 +193,10 @@ pub(crate) fn realtime_bars<'a>(
     }
 
     let request_id = client.next_request_id();
-    let packet = encoders::encode_request_realtime_bars(client.server_version(), request_id, contract, bar_size, what_to_show, use_rth, options)?;
+    let request = encoders::encode_request_realtime_bars(client.server_version(), request_id, contract, bar_size, what_to_show, use_rth, options)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    let responses = client.send_request(request_id, packet)?;
-
-    Ok(Subscription {
-        client,
-        request_id: Some(request_id),
-        order_id: None,
-        message_type: None,
-        subscription: responses,
-        phantom: PhantomData,
-    })
+    Ok(Subscription::new(client, subscription))
 }
 
 // Requests tick by tick AllLast ticks.
@@ -302,16 +292,9 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
     let request_id = client.next_request_id();
 
     let message = encoders::tick_by_tick(server_version, request_id, contract, "MidPoint", number_of_ticks, ignore_size)?;
-    let responses = client.send_request(request_id, message)?;
+    let subscription = client.send_request(request_id, message)?;
 
-    Ok(Subscription {
-        client,
-        request_id: Some(request_id),
-        order_id: None,
-        message_type: None,
-        subscription: responses,
-        phantom: PhantomData,
-    })
+    Ok(Subscription::new(client, subscription))
 }
 
 // Iterators
