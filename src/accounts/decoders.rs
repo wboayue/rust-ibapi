@@ -2,7 +2,7 @@ use crate::contracts::SecurityType;
 use crate::messages::ResponseMessage;
 use crate::{server_versions, Error};
 
-use super::{FamilyCode, PnL, PnLSingle, Position, PositionMulti};
+use super::{AccountSummary, FamilyCode, PnL, PnLSingle, Position, PositionMulti};
 
 pub(crate) fn decode_position(message: &mut ResponseMessage) -> Result<Position, Error> {
     message.skip(); // message type
@@ -112,21 +112,14 @@ pub(crate) fn decode_pnl(server_version: i32, message: &mut ResponseMessage) -> 
     })
 }
 
-pub(crate) fn decode_pnl_single(server_version: i32, message: &mut ResponseMessage) -> Result<PnLSingle, Error> {
+pub(crate) fn decode_pnl_single(_server_version: i32, message: &mut ResponseMessage) -> Result<PnLSingle, Error> {
+    message.skip(); // message type
     message.skip(); // request id
 
     let position = message.next_double()?;
     let daily_pnl = message.next_double()?;
-    let unrealized_pnl = if server_version >= server_versions::UNREALIZED_PNL {
-        Some(message.next_double()?)
-    } else {
-        None
-    };
-    let realized_pnl = if server_version >= server_versions::REALIZED_PNL {
-        Some(message.next_double()?)
-    } else {
-        None
-    };
+    let unrealized_pnl = message.next_double()?;
+    let realized_pnl = message.next_double()?;
     let value = message.next_double()?;
 
     Ok(PnLSingle {
@@ -135,6 +128,19 @@ pub(crate) fn decode_pnl_single(server_version: i32, message: &mut ResponseMessa
         unrealized_pnl,
         realized_pnl,
         value,
+    })
+}
+
+pub(crate) fn decode_account_summary(_server_version: i32, message: &mut ResponseMessage) -> Result<AccountSummary, Error> {
+    message.skip(); // message type
+    message.skip(); // version
+    message.skip(); // request id
+
+    Ok(AccountSummary {
+        account: message.next_string()?,
+        tag: message.next_string()?,
+        value: message.next_string()?,
+        currency: message.next_string()?,
     })
 }
 

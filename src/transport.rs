@@ -93,6 +93,7 @@ impl SharedChannels {
             OutgoingMessages::RequestOpenOrders,
             &[IncomingMessages::OpenOrder, IncomingMessages::OpenOrderEnd],
         );
+        instance.register(OutgoingMessages::RequestManagedAccounts, &[IncomingMessages::ManagedAccounts]);
 
         instance
     }
@@ -112,10 +113,9 @@ impl SharedChannels {
 
     // Get receiver for specified message type. Panics if receiver not found.
     pub fn get_receiver(&self, message_type: OutgoingMessages) -> Arc<Receiver<ResponseMessage>> {
-        let receiver = self
-            .receivers
-            .get(&message_type)
-            .unwrap_or_else(|| panic!("unsupported request message {message_type:?}"));
+        let receiver = self.receivers.get(&message_type).unwrap_or_else(|| {
+            panic!("unsupported request message {message_type:?}. check mapping in SharedChannels::new() located in transport.rs")
+        });
 
         Arc::clone(receiver)
     }
@@ -348,7 +348,6 @@ fn dispatch_message(
                 process_response(requests, orders, shared_channels, message);
             }
         }
-        IncomingMessages::ManagedAccounts => process_managed_accounts(server_version, message),
         IncomingMessages::OrderStatus
         | IncomingMessages::OpenOrder
         | IncomingMessages::OpenOrderEnd
@@ -412,14 +411,6 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), E
         println!("[{error_code}] {error_message}");
         Ok(())
     }
-}
-
-fn process_managed_accounts(_server_version: i32, mut packet: ResponseMessage) {
-    packet.skip(); // message_id
-    packet.skip(); // version
-
-    let managed_accounts = packet.next_string().unwrap_or_else(|_| String::default());
-    info!("managed accounts: {}", managed_accounts)
 }
 
 fn process_response(
@@ -623,34 +614,20 @@ impl InternalSubscription {
         }
     }
 
+    pub(crate) fn cancel(&self) -> Result<(), Error> {
+        Ok(())
+    }
+
     fn receive(receiver: &Receiver<ResponseMessage>) -> Option<ResponseMessage> {
-        match receiver.recv() {
-            Ok(message) => Some(message),
-            Err(err) => {
-                error!("error receiving message: {err}");
-                None
-            }
-        }
+        receiver.recv().ok()
     }
 
     fn try_receive(receiver: &Receiver<ResponseMessage>) -> Option<ResponseMessage> {
-        match receiver.try_recv() {
-            Ok(message) => Some(message),
-            Err(err) => {
-                error!("error receiving message: {err}");
-                None
-            }
-        }
+        receiver.try_recv().ok()
     }
 
     fn timeout_receive(receiver: &Receiver<ResponseMessage>, timeout: Duration) -> Option<ResponseMessage> {
-        match receiver.recv_timeout(timeout) {
-            Ok(message) => Some(message),
-            Err(err) => {
-                error!("error receiving message: {err}");
-                None
-            }
-        }
+        receiver.recv_timeout(timeout).ok()
     }
 }
 

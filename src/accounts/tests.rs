@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex, RwLock};
 
-use crate::{server_versions, stubs::MessageBusStub, Client};
+use crate::testdata::responses;
+use crate::{accounts::AccountSummaryTags, server_versions, stubs::MessageBusStub, Client};
 
 #[test]
 fn test_pnl() {
@@ -90,4 +91,38 @@ fn test_positions_multi() {
 
     assert_eq!(request_messages[2].encode_simple(), "74|1|9001||TARGET2024|");
     assert_eq!(request_messages[3].encode_simple(), "75|1|9001|");
+}
+
+#[test]
+fn test_account_summary() {
+    let message_bus = Arc::new(Mutex::new(MessageBusStub {
+        request_messages: RwLock::new(vec![]),
+        response_messages: vec![],
+    }));
+
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+
+    let group = "All";
+    let tags = &[AccountSummaryTags::ACCOUNT_TYPE];
+
+    let _ = client.account_summary(group, tags).expect("request account summary failed");
+
+    let request_messages = client.message_bus.lock().unwrap().request_messages();
+
+    assert_eq!(request_messages[0].encode_simple(), "62|1|9000|All|AccountType|");
+    assert_eq!(request_messages[1].encode_simple(), "64|1|");
+}
+
+#[test]
+fn test_managed_accounts() {
+    let message_bus = Arc::new(Mutex::new(MessageBusStub {
+        request_messages: RwLock::new(vec![]),
+        response_messages: vec![responses::MANAGED_ACCOUNT.into()],
+    }));
+
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+
+    let accounts = client.managed_accounts().expect("request managed accounts failed");
+
+    assert_eq!(accounts, &["DU1234567", "DU7654321"]);
 }

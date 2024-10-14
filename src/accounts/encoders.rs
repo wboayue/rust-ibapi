@@ -61,13 +61,7 @@ pub(crate) fn encode_request_pnl_single(request_id: i32, account: &str, contract
     message.push_field(&OutgoingMessages::RequestPnLSingle);
     message.push_field(&request_id);
     message.push_field(&account);
-
-    if let Some(model_code) = model_code {
-        message.push_field(&model_code);
-    } else {
-        message.push_field(&"");
-    }
-
+    message.push_field(&model_code);
     message.push_field(&contract_id);
 
     Ok(message)
@@ -75,6 +69,31 @@ pub(crate) fn encode_request_pnl_single(request_id: i32, account: &str, contract
 
 pub(crate) fn encode_cancel_pnl_single(request_id: i32) -> Result<RequestMessage, Error> {
     encode_simple_with_request_id(OutgoingMessages::CancelPnLSingle, request_id)
+}
+
+pub(crate) fn encode_request_account_summary(request_id: i32, group: &str, tags: &[&str]) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 1;
+
+    let mut message = RequestMessage::new();
+
+    message.push_field(&OutgoingMessages::RequestAccountSummary);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    message.push_field(&group);
+    message.push_field(&tags.join(","));
+
+    Ok(message)
+}
+
+pub(crate) fn encode_request_managed_accounts() -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 1;
+
+    let mut message = RequestMessage::new();
+
+    message.push_field(&OutgoingMessages::RequestManagedAccounts);
+    message.push_field(&VERSION);
+
+    Ok(message)
 }
 
 fn encode_simple(message_type: OutgoingMessages, version: i32) -> Result<RequestMessage, Error> {

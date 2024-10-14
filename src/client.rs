@@ -8,7 +8,7 @@ use log::{debug, error, info};
 use time::OffsetDateTime;
 use time_tz::Tz;
 
-use crate::accounts::{FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
+use crate::accounts::{AccountSummaries, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
@@ -57,7 +57,6 @@ impl Client {
     ///
     /// println!("server_version: {}", client.server_version());
     /// println!("connection_time: {:?}", client.connection_time());
-    /// println!("managed_accounts: {}", client.managed_accounts());
     /// println!("next_order_id: {}", client.next_order_id());
     /// ```
     pub fn connect(address: &str, client_id: i32) -> Result<Client, Error> {
@@ -108,11 +107,6 @@ impl Client {
     /// The time of the server when the client connected
     pub fn connection_time(&self) -> Option<OffsetDateTime> {
         self.connection_time
-    }
-
-    /// Returns the managed accounts.
-    pub fn managed_accounts(&self) -> String {
-        self.managed_accounts.to_owned()
     }
 
     // === Accounts ===
@@ -209,6 +203,47 @@ impl Client {
     /// ```
     pub fn pnl_single<'a>(&'a self, account: &str, contract_id: i32, model_code: Option<&str>) -> Result<Subscription<'a, PnLSingle>, Error> {
         accounts::pnl_single(self, account, contract_id, model_code)
+    }
+
+    /// Requests a specific account’s summary. Subscribes to the account summary as presented in the TWS’ Account Summary tab. Data received is specified by using a specific tags value.
+    ///
+    /// # Arguments
+    /// * `group` - Set to “All” to return account summary data for all accounts, or set to a specific Advisor Account Group name that has already been created in TWS Global Configuration.
+    /// * `tags`  - List of the desired tags.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::accounts::AccountSummaryTags;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let group = "All";
+    ///
+    /// let subscription = client.account_summary(group, AccountSummaryTags::ALL).expect("error requesting pnl");
+    /// for summary in &subscription {
+    ///     println!("{summary:?}")
+    /// }
+    /// ```
+    pub fn account_summary<'a>(&'a self, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
+        accounts::account_summary(self, group, tags)
+    }
+
+    /// Requests the accounts to which the logged user has access to.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let accounts = client.managed_accounts().expect("error requesting managed accounts");
+    /// println!("managed accounts: {accounts:?}")
+    /// ```
+    pub fn managed_accounts(&self) -> Result<Vec<String>, Error> {
+        accounts::managed_accounts(self)
     }
 
     // === Contracts ===
@@ -950,13 +985,13 @@ pub struct Subscription<'a, T: Subscribable<T>> {
 #[allow(private_bounds)]
 impl<'a, T: Subscribable<T>> Subscription<'a, T> {
 
-    pub fn new(client:&Client, request_id: i32, subscription: InternalSubscription) -> Self {
+    pub fn new(client:&'a Client, request_id: i32, subscription: InternalSubscription) -> Self {
         Subscription {
             client,
             request_id: Some(request_id),
             order_id: None,
             message_type: None,
-            responses,
+            responses: subscription,
             phantom: PhantomData,
         }
     }
