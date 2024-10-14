@@ -329,7 +329,7 @@ pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionUpdate>,
     let request = encoders::encode_request_positions()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestPositions, request)?;
 
-    Ok(Subscription::new_shared(client, OutgoingMessages::RequestPositions, subscription))
+    Ok(Subscription::new(client, subscription))
 }
 
 impl SharesChannel for Subscription<'_, PositionUpdate> {}
@@ -346,7 +346,7 @@ pub(crate) fn positions_multi<'a>(
     let request = encoders::encode_request_positions_multi(request_id, account, model_code)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, request_id, subscription))
+    Ok(Subscription::new(client, subscription))
 }
 
 // Determine whether an account exists under an account family and find the account family code.
@@ -377,7 +377,7 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
     let request = encoders::encode_request_pnl(request_id, account, model_code)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, request_id, subscription))
+    Ok(Subscription::new(client, subscription))
 }
 
 // Requests real time updates for daily PnL of individual positions.
@@ -400,7 +400,7 @@ pub(crate) fn pnl_single<'a>(
     let request = encoders::encode_request_pnl_single(request_id, account, contract_id, model_code)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, request_id, subscription))
+    Ok(Subscription::new(client, subscription))
 }
 
 pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
@@ -411,7 +411,7 @@ pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Re
     let request = encoders::encode_request_account_summary(request_id, group, tags)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, request_id, subscription))
+    Ok(Subscription::new(client, subscription))
 }
 
 pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {

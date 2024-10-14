@@ -575,9 +575,9 @@ pub(crate) struct InternalSubscription {
     receiver: Option<Receiver<ResponseMessage>>, // requests with request ids receive responses via this channel
     shared_receiver: Option<Arc<Receiver<ResponseMessage>>>, // this channel is for responses that share channel based on message type
     signaler: Option<Sender<Signal>>,            // for client to signal termination
-    request_id: Option<i32>,                     // initiating request_id
-    order_id: Option<i32>,                       // initiating order_id
-    message_type: Option<OutgoingMessages>,      // initiating order_id
+    pub(crate) request_id: Option<i32>,          // initiating request id
+    pub(crate) order_id: Option<i32>,            // initiating order id
+    pub(crate) message_type: Option<OutgoingMessages>, // initiating message type
 }
 
 impl InternalSubscription {

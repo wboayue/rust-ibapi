@@ -20,30 +20,29 @@ impl MessageBus for MessageBusStub {
     }
 
     fn send_request(&mut self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
-        mock_request(self, request_id, message)
+        mock_request(self, Some(request_id), None, message)
     }
 
     fn cancel_subscription(&mut self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
-        mock_request(self, request_id, packet);
+        mock_request(self, Some(request_id), None, packet);
         Ok(())
     }
 
     fn send_order_request(&mut self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
-        mock_request(self, request_id, message)
+        mock_request(self, Some(request_id), None, message)
     }
 
     fn cancel_order_subscription(&mut self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
-        mock_request(self, request_id, packet);
+        mock_request(self, Some(request_id), None, packet);
         Ok(())
     }
 
-    fn send_shared_request(&mut self, _message_id: OutgoingMessages, message: &RequestMessage) -> Result<InternalSubscription, Error> {
-        mock_global_request(self, message)
+    fn send_shared_request(&mut self, message_type: OutgoingMessages, message: &RequestMessage) -> Result<InternalSubscription, Error> {
+        mock_request(self, None, Some(message_type), message)
     }
 
-    fn cancel_shared_subscription(&mut self, request_id: OutgoingMessages, packet: &RequestMessage) -> Result<(), Error> {
-        //        mock_request(self, request_id,packet);
-        mock_global_request(self, packet)?;
+    fn cancel_shared_subscription(&mut self, message_type: OutgoingMessages, packet: &RequestMessage) -> Result<(), Error> {
+        mock_request(self, None, Some(message_type), packet)?;
         Ok(())
     }
 
@@ -52,7 +51,12 @@ impl MessageBus for MessageBusStub {
     }
 }
 
-fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
+fn mock_request(
+    stub: &mut MessageBusStub,
+    request_id: Option<i32>,
+    message_type: Option<OutgoingMessages>,
+    message: &RequestMessage,
+) -> Result<InternalSubscription, Error> {
     stub.request_messages.write().unwrap().push(message.clone());
 
     let (sender, receiver) = channel::unbounded();
@@ -62,9 +66,15 @@ fn mock_request(stub: &mut MessageBusStub, _request_id: i32, message: &RequestMe
         sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
     }
 
-    let subscription = SubscriptionBuilder::new().shared_receiver(Arc::new(receiver)).signaler(s1).build();
+    let mut subscription = SubscriptionBuilder::new().shared_receiver(Arc::new(receiver)).signaler(s1);
+    if let Some(request_id) = request_id {
+        subscription = subscription.request_id(request_id);
+    }
+    if let Some(message_type) = message_type {
+        subscription = subscription.message_type(message_type);
+    }
 
-    Ok(subscription)
+    Ok(subscription.build())
 }
 
 fn mock_global_request(stub: &mut MessageBusStub, message: &RequestMessage) -> Result<InternalSubscription, Error> {

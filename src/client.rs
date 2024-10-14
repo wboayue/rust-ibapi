@@ -981,25 +981,36 @@ pub struct Subscription<'a, T: Subscribable<T>> {
 
 #[allow(private_bounds)]
 impl<'a, T: Subscribable<T>> Subscription<'a, T> {
-    pub(crate) fn new(client: &'a Client, request_id: i32, subscription: InternalSubscription) -> Self {
-        Subscription {
-            client,
-            request_id: Some(request_id),
-            order_id: None,
-            message_type: None,
-            subscription,
-            phantom: PhantomData,
-        }
-    }
-
-    pub(crate) fn new_shared(client: &'a Client, message_type: OutgoingMessages, subscription: InternalSubscription) -> Self {
-        Subscription {
-            client,
-            request_id: None,
-            order_id: None,
-            message_type: Some(message_type),
-            subscription,
-            phantom: PhantomData,
+    pub(crate) fn new(client: &'a Client, subscription: InternalSubscription) -> Self {
+        if let Some(request_id) = subscription.request_id {
+            Subscription {
+                client,
+                request_id: Some(request_id),
+                order_id: None,
+                message_type: None,
+                subscription,
+                phantom: PhantomData,
+            }
+        } else if let Some(order_id) = subscription.order_id {
+            Subscription {
+                client,
+                request_id: None,
+                order_id: Some(order_id),
+                message_type: None,
+                subscription,
+                phantom: PhantomData,
+            }
+        } else if let Some(message_type) = subscription.message_type {
+            Subscription {
+                client,
+                request_id: None,
+                order_id: None,
+                message_type: Some(message_type),
+                subscription,
+                phantom: PhantomData,
+            }
+        } else {
+            panic!("unsupported internal subscription: {:?}", subscription)
         }
     }
 
