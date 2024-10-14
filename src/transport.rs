@@ -300,13 +300,16 @@ impl MessageBus for TcpMessageBus {
         Ok(())
     }
 
-    fn send_shared_request(&mut self, message_id: OutgoingMessages, message: &RequestMessage) -> Result<InternalSubscription, Error> {
+    fn send_shared_request(&mut self, message_type: OutgoingMessages, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         // FIXME
         //self.write_message(message)?;
 
-        let shared_receiver = self.shared_channels.get_receiver(message_id);
+        let shared_receiver = self.shared_channels.get_receiver(message_type);
 
-        let subscription = SubscriptionBuilder::new().shared_receiver(shared_receiver).build();
+        let subscription = SubscriptionBuilder::new()
+            .shared_receiver(shared_receiver)
+            .message_type(message_type)
+            .build();
 
         Ok(subscription)
     }
@@ -583,6 +586,7 @@ pub(crate) struct InternalSubscription {
     signaler: Option<Sender<Signal>>,            // for client to signal termination
     request_id: Option<i32>,                     // initiating request_id
     order_id: Option<i32>,                       // initiating order_id
+    message_type: Option<OutgoingMessages>,      // initiating order_id
 }
 
 impl InternalSubscription {
@@ -668,6 +672,7 @@ pub(crate) struct SubscriptionBuilder {
     signaler: Option<Sender<Signal>>,
     order_id: Option<i32>,
     request_id: Option<i32>,
+    message_type: Option<OutgoingMessages>,
 }
 
 impl SubscriptionBuilder {
@@ -678,6 +683,7 @@ impl SubscriptionBuilder {
             signaler: None,
             order_id: None,
             request_id: None,
+            message_type: None,
         }
     }
 
@@ -706,6 +712,11 @@ impl SubscriptionBuilder {
         self
     }
 
+    pub(crate) fn message_type(mut self, message_type: OutgoingMessages) -> Self {
+        self.message_type = Some(message_type);
+        self
+    }
+
     pub(crate) fn build(self) -> InternalSubscription {
         if let (Some(receiver), Some(signaler)) = (self.receiver, self.signaler) {
             InternalSubscription {
@@ -714,6 +725,7 @@ impl SubscriptionBuilder {
                 signaler: Some(signaler),
                 request_id: self.request_id,
                 order_id: self.order_id,
+                message_type: self.message_type,
             }
         } else if let Some(receiver) = self.shared_receiver {
             InternalSubscription {
@@ -722,6 +734,7 @@ impl SubscriptionBuilder {
                 signaler: None,
                 request_id: self.request_id,
                 order_id: self.order_id,
+                message_type: self.message_type,
             }
         } else {
             panic!("bad configuration");

@@ -176,6 +176,8 @@ pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionUpdate>,
     Ok(Subscription {
         client,
         request_id: None,
+        order_id: None,
+        message_type: Some(OutgoingMessages::RequestPositions),
         responses,
         phantom: PhantomData,
     })
@@ -198,6 +200,8 @@ pub(crate) fn positions_multi<'a>(
     Ok(Subscription {
         client,
         request_id: Some(request_id),
+        order_id: None,
+        message_type: None,
         responses,
         phantom: PhantomData,
     })
@@ -234,6 +238,8 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
     Ok(Subscription {
         client,
         request_id: Some(request_id),
+        order_id: None,
+        message_type: None,
         responses,
         phantom: PhantomData,
     })
@@ -262,6 +268,8 @@ pub(crate) fn pnl_single<'a>(
     Ok(Subscription {
         client,
         request_id: Some(request_id),
+        order_id: None,
+        message_type: None,
         responses,
         phantom: PhantomData,
     })

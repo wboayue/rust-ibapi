@@ -19,20 +19,12 @@ impl MessageBus for MessageBusStub {
         self.request_messages.read().unwrap().clone()
     }
 
-    // fn read_message(&mut self) -> Result<ResponseMessage, Error> {
-    //     Ok(ResponseMessage::default())
-    // }
-
-    // fn write_message(&mut self, message: &RequestMessage) -> Result<(), Error> {
-    //     self.request_messages.write().unwrap().push(message.clone());
-    //     Ok(())
-    // }
-
     fn send_request(&mut self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         mock_request(self, request_id, message)
     }
 
     fn cancel_subscription(&mut self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
+        mock_request(self, request_id,packet);
         Ok(())
     }
 
@@ -41,6 +33,7 @@ impl MessageBus for MessageBusStub {
     }
 
     fn cancel_order_subscription(&mut self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
+        mock_request(self, request_id,packet);
         Ok(())
     }
 
@@ -49,12 +42,9 @@ impl MessageBus for MessageBusStub {
     }
 
     fn cancel_shared_subscription(&mut self, request_id: OutgoingMessages, packet: &RequestMessage) -> Result<(), Error> {
+//        mock_request(self, request_id,packet);
         Ok(())
     }
-
-    // fn write(&mut self, _packet: &str) -> Result<(), Error> {
-    //     Ok(())
-    // }
 
     fn process_messages(&mut self, _server_version: i32) -> Result<(), Error> {
         Ok(())

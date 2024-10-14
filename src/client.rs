@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use log::{debug, error};
+use log::{debug, error, info};
 use time::OffsetDateTime;
 use time_tz::Tz;
 
@@ -893,10 +893,6 @@ impl Client {
         }
     }
 
-    // pub(crate) fn cancel_(&self, packet: RequestMessage) -> Result<(), Error> {
-    // self.message_bus.lock()?.write_message(&packet)
-    // }
-
     pub(crate) fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<InternalSubscription, Error> {
         debug!("send_message({:?}, {:?})", request_id, message);
         self.message_bus.lock()?.send_request(request_id, &message)
@@ -945,12 +941,26 @@ impl Debug for Client {
 pub struct Subscription<'a, T: Subscribable<T>> {
     pub(crate) client: &'a Client,
     pub(crate) request_id: Option<i32>,
+    pub(crate) order_id: Option<i32>,
+    pub(crate) message_type: Option<OutgoingMessages>,
     pub(crate) responses: InternalSubscription,
     pub(crate) phantom: PhantomData<T>,
 }
 
 #[allow(private_bounds)]
 impl<'a, T: Subscribable<T>> Subscription<'a, T> {
+
+    pub fn new(client:&Client, request_id: i32, subscription: InternalSubscription) -> Self {
+        Subscription {
+            client,
+            request_id: Some(request_id),
+            order_id: None,
+            message_type: None,
+            responses,
+            phantom: PhantomData,
+        }
+    }
+
     /// Blocks until the item become available.
     pub fn next(&self) -> Option<T> {
         loop {
@@ -1041,6 +1051,16 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
             if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
                 self.client.message_bus.lock()?.cancel_subscription(request_id, &message)?;
             }
+        } else if let Some(order_id) = self.order_id {
+            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
+                self.client.message_bus.lock()?.cancel_order_subscription(order_id, &message)?;
+            }
+        } else if let Some(message_type) = self.message_type {
+            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
+                self.client.message_bus.lock()?.cancel_shared_subscription(message_type, &message)?;
+            }
+        } else {
+            debug!("Could not determine cancel method")
         }
         Ok(())
     }
