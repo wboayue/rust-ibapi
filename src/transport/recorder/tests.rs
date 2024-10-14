@@ -1,8 +1,15 @@
 use super::*;
 use std::env;
+use std::sync::Mutex;
+
+struct EnvMutex {}
+
+static ENV_MUTEX: Mutex<EnvMutex> = Mutex::new(EnvMutex {});
 
 #[test]
 fn env_var_enables_recorder() {
+    let _guard = ENV_MUTEX.lock().unwrap();
+
     let key = String::from("IBAPI_RECORDING_DIR");
     let dir = String::from("/tmp/records");
 
@@ -10,21 +17,22 @@ fn env_var_enables_recorder() {
 
     let recorder = MessageRecorder::new();
 
-    // TODO - refactor
-    // assert_eq!(true, recorder.enabled);
-    // assert!(&recorder.recording_dir.starts_with(&dir), "{} != {}", &recorder.recording_dir, &dir)
+    assert_eq!(true, recorder.enabled);
+    assert!(&recorder.recording_dir.starts_with(&dir), "{} != {}", &recorder.recording_dir, &dir)
 }
 
 #[test]
 fn recorder_is_disabled() {
+    let _guard = ENV_MUTEX.lock().unwrap();
+
     let key = String::from("IBAPI_RECORDING_DIR");
 
     env::set_var(&key, &"");
 
-    let _recorder = MessageRecorder::new();
+    let recorder = MessageRecorder::new();
 
-    // assert_eq!(false, recorder.enabled);
-    // assert_eq!("", &recorder.recording_dir);
+    assert_eq!(false, recorder.enabled);
+    assert_eq!("", &recorder.recording_dir);
 }
 
 #[test]

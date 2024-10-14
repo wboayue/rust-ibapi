@@ -272,6 +272,57 @@ pub struct FamilyCode {
     pub family_code: String,
 }
 
+/// Account's information, portfolio and last update time
+#[allow(clippy::large_enum_variant)]
+pub enum AccountUpdates {
+    /// Receives the subscribed account's information.
+    Value(AccountValue),
+    /// Receives the subscribed account's portfolio.
+    Portfolio(AccountPortfolio),
+    /// Receives the last time on which the account was updated.
+    Time(AccountTime),
+    /// Notifies when all the account’s information has finished.
+    End,
+}
+
+/// A value of subscribed account's information.
+pub struct AccountValue {
+    /// The value being updated.
+    pub key: String,
+    /// Current value
+    pub value: String,
+    /// The currency inn which the value is expressed.
+    pub currency: String,
+    /// The account identifier.
+    pub account: String,
+}
+
+/// Subscribed account's portfolio.
+pub struct AccountPortfolio {
+    /// The Contract for which a position is held.
+    pub contract: Contract,
+    /// The number of positions held.
+    pub position: f64,
+    /// The instrument's unitary price
+    pub market_price: f64,
+    /// Total market value of the instrument.
+    pub market_value: f64,
+    /// Average cost of the overall position.
+    pub average_cost: f64,
+    /// Daily unrealized profit and loss on the position.
+    pub unrealized_pnl: f64,
+    /// Daily realized profit and loss on the position.   
+    pub realized_pnl: f64,
+    /// Account identifier for the update.
+    pub account: String,
+}
+
+/// Last time at which the account was updated.
+pub struct AccountTime {
+    /// The last update system time.
+    pub timestamp: String,
+}
+
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.
 pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
