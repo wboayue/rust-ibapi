@@ -383,7 +383,7 @@ impl MessageBus for TcpMessageBus {
     }
 }
 
-pub(crate) fn process_messages(message_bus: &Arc<RwLock<TcpMessageBus>>) -> Result<(), Error> {
+pub(crate) fn process_messages(message_bus: &Arc<TcpMessageBus>) -> Result<(), Error> {
     let handle = start_dispatcher_thread(message_bus);
     //self.handles.push(handle);
 
@@ -395,11 +395,10 @@ pub(crate) fn process_messages(message_bus: &Arc<RwLock<TcpMessageBus>>) -> Resu
 
 // The cleanup thread receives signals as subscribers are dropped and
 // releases the sender channels
-fn start_cleanup_thread(message_bus: &Arc<RwLock<TcpMessageBus>>) -> JoinHandle<i32> {
+fn start_cleanup_thread(message_bus: &Arc<TcpMessageBus>) -> JoinHandle<i32> {
     let message_bus = Arc::clone(message_bus);
 
     thread::spawn(move || loop {
-        let message_bus = message_bus.read().unwrap();
         let signal_recv = message_bus.signals_recv.clone();
 
         for signal in &signal_recv {
@@ -421,9 +420,7 @@ fn start_cleanup_thread(message_bus: &Arc<RwLock<TcpMessageBus>>) -> JoinHandle<
 
 // Dispatcher thread reads messages from TWS and dispatches them to
 // appropriate channel.
-fn start_dispatcher_thread(message_bus: &Arc<RwLock<TcpMessageBus>>) -> JoinHandle<i32> {
-    let message_bus = message_bus.read().unwrap();
-
+fn start_dispatcher_thread(message_bus: &Arc<TcpMessageBus>) -> JoinHandle<i32> {
     let connection = Arc::clone(&message_bus.connection);
     let requests = Arc::clone(&message_bus.requests);
     let recorder = message_bus.recorder.clone();
@@ -431,8 +428,6 @@ fn start_dispatcher_thread(message_bus: &Arc<RwLock<TcpMessageBus>>) -> JoinHand
     let shared_channels = Arc::clone(&message_bus.shared_channels);
     let executions = SenderHash::<String, Response>::new();
     let shutdown_requested = Arc::clone(&message_bus.shutdown_requested);
-
-    drop(message_bus);
 
     const RECONNECT_ERRORS: &[ErrorKind] = &[ErrorKind::ConnectionReset];
     const RETRY_ERRORS: &[ErrorKind] = &[ErrorKind::Interrupted];

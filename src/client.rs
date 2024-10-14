@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 
 use log::{debug, error};
@@ -31,7 +31,7 @@ pub struct Client {
     //    pub server_time: OffsetDateTime,
     pub(crate) connection_time: Option<OffsetDateTime>,
     pub(crate) time_zone: Option<&'static Tz>,
-    pub(crate) message_bus: Arc<RwLock<dyn MessageBus>>,
+    pub(crate) message_bus: Arc<dyn MessageBus>,
 
     client_id: i32,             // ID of client.
     next_request_id: AtomicI32, // Next available request_id.
@@ -62,7 +62,7 @@ impl Client {
         let connection = Connection::connect(client_id, address)?;
         let connection_metadata = connection.connection_metadata();
 
-        let message_bus = Arc::new(RwLock::new(TcpMessageBus::new(connection)?));
+        let message_bus = Arc::new(TcpMessageBus::new(connection)?);
 
         // Starts thread to read messages from TWS
         process_messages(&message_bus)?;
@@ -70,7 +70,7 @@ impl Client {
         Client::new(connection_metadata, message_bus)
     }
 
-    fn new(connection_metadata: ConnectionMetadata, message_bus: Arc<RwLock<dyn MessageBus>>) -> Result<Client, Error> {
+    fn new(connection_metadata: ConnectionMetadata, message_bus: Arc<dyn MessageBus>) -> Result<Client, Error> {
         let client = Client {
             server_version: connection_metadata.server_version,
             connection_time: connection_metadata.connection_time,
@@ -914,7 +914,7 @@ impl Client {
     // == Internal Use ==
 
     #[cfg(test)]
-    pub(crate) fn stubbed(message_bus: Arc<RwLock<dyn MessageBus>>, server_version: i32) -> Client {
+    pub(crate) fn stubbed(message_bus: Arc<dyn MessageBus>, server_version: i32) -> Client {
         Client {
             server_version: server_version,
             connection_time: None,
@@ -928,17 +928,17 @@ impl Client {
 
     pub(crate) fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<InternalSubscription, Error> {
         debug!("send_message({:?}, {:?})", request_id, message);
-        self.message_bus.read()?.send_request(request_id, &message)
+        self.message_bus.send_request(request_id, &message)
     }
 
     pub(crate) fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<InternalSubscription, Error> {
         debug!("send_order({:?}, {:?})", order_id, message);
-        self.message_bus.read()?.send_order_request(order_id, &message)
+        self.message_bus.send_order_request(order_id, &message)
     }
 
     /// Sends request for the next valid order id.
     pub(crate) fn send_shared_request(&self, message_id: OutgoingMessages, message: RequestMessage) -> Result<InternalSubscription, Error> {
-        self.message_bus.read()?.send_shared_request(message_id, &message)
+        self.message_bus.send_shared_request(message_id, &message)
     }
 
     pub(crate) fn check_server_version(&self, version: i32, message: &str) -> Result<(), Error> {
@@ -1103,15 +1103,15 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     pub fn cancel(&self) -> Result<(), Error> {
         if let Some(request_id) = self.request_id {
             if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
-                self.client.message_bus.read()?.cancel_subscription(request_id, &message)?;
+                self.client.message_bus.cancel_subscription(request_id, &message)?;
             }
         } else if let Some(order_id) = self.order_id {
             if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
-                self.client.message_bus.read()?.cancel_order_subscription(order_id, &message)?;
+                self.client.message_bus.cancel_order_subscription(order_id, &message)?;
             }
         } else if let Some(message_type) = self.message_type {
             if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
-                self.client.message_bus.read()?.cancel_shared_subscription(message_type, &message)?;
+                self.client.message_bus.cancel_shared_subscription(message_type, &message)?;
             }
         } else {
             debug!("Could not determine cancel method")

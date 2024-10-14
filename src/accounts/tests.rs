@@ -1,14 +1,14 @@
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 use crate::testdata::responses;
 use crate::{accounts::AccountSummaryTags, server_versions, stubs::MessageBusStub, Client};
 
 #[test]
 fn test_pnl() {
-    let message_bus = Arc::new(RwLock::new(MessageBusStub {
+    let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
-    }));
+    });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
@@ -18,7 +18,7 @@ fn test_pnl() {
     let _ = client.pnl(account, model_code).expect("request pnl failed");
     let _ = client.pnl(account, None).expect("request pnl failed");
 
-    let request_messages = client.message_bus.read().unwrap().request_messages();
+    let request_messages = client.message_bus.request_messages();
 
     assert_eq!(request_messages[0].encode_simple(), "92|9000|DU1234567|TARGET2024|");
     assert_eq!(request_messages[1].encode_simple(), "93|9000|");
@@ -29,10 +29,10 @@ fn test_pnl() {
 
 #[test]
 fn test_pnl_single() {
-    let message_bus = Arc::new(RwLock::new(MessageBusStub {
+    let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
-    }));
+    });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
@@ -43,7 +43,7 @@ fn test_pnl_single() {
     let _ = client.pnl_single(account, contract_id, model_code).expect("request pnl failed");
     let _ = client.pnl_single(account, contract_id, None).expect("request pnl failed");
 
-    let request_messages = client.message_bus.read().unwrap().request_messages();
+    let request_messages = client.message_bus.request_messages();
 
     assert_eq!(request_messages[0].encode_simple(), "94|9000|DU1234567|TARGET2024|1001|");
     assert_eq!(request_messages[1].encode_simple(), "95|9000|");
@@ -54,16 +54,16 @@ fn test_pnl_single() {
 
 #[test]
 fn test_positions() {
-    let message_bus = Arc::new(RwLock::new(MessageBusStub {
+    let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
-    }));
+    });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let _ = client.positions().expect("request positions failed");
 
-    let request_messages = client.message_bus.read().unwrap().request_messages();
+    let request_messages = client.message_bus.request_messages();
 
     assert_eq!(request_messages[0].encode_simple(), "61|1|");
     assert_eq!(request_messages[1].encode_simple(), "64|1|");
@@ -71,10 +71,10 @@ fn test_positions() {
 
 #[test]
 fn test_positions_multi() {
-    let message_bus = Arc::new(RwLock::new(MessageBusStub {
+    let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
-    }));
+    });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
@@ -84,7 +84,7 @@ fn test_positions_multi() {
     let _ = client.positions_multi(account, model_code).expect("request positions failed");
     let _ = client.positions_multi(None, model_code).expect("request positions failed");
 
-    let request_messages = client.message_bus.read().unwrap().request_messages();
+    let request_messages = client.message_bus.request_messages();
 
     assert_eq!(request_messages[0].encode_simple(), "74|1|9000|DU1234567|TARGET2024|");
     assert_eq!(request_messages[1].encode_simple(), "75|1|9000|");
@@ -95,10 +95,10 @@ fn test_positions_multi() {
 
 #[test]
 fn test_account_summary() {
-    let message_bus = Arc::new(RwLock::new(MessageBusStub {
+    let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
-    }));
+    });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
@@ -107,7 +107,7 @@ fn test_account_summary() {
 
     let _ = client.account_summary(group, tags).expect("request account summary failed");
 
-    let request_messages = client.message_bus.read().unwrap().request_messages();
+    let request_messages = client.message_bus.request_messages();
 
     assert_eq!(request_messages[0].encode_simple(), "62|1|9000|All|AccountType|");
     assert_eq!(request_messages[1].encode_simple(), "64|1|");
@@ -115,10 +115,10 @@ fn test_account_summary() {
 
 #[test]
 fn test_managed_accounts() {
-    let message_bus = Arc::new(RwLock::new(MessageBusStub {
+    let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![responses::MANAGED_ACCOUNT.into()],
-    }));
+    });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
