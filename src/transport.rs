@@ -190,6 +190,20 @@ impl TcpMessageBus {
         })
     }
 
+    fn is_shutting_down(&self) -> bool {
+        return self.shutdown_requested.load(Ordering::SeqCst);
+    }
+
+    fn clean_request(&self, request_id: i32) {
+        self.requests.remove(&request_id);
+        debug!("released request_id {}, requests.len()={}", request_id, self.requests.len());
+    }
+
+    fn clean_order(&self, order_id: i32) {
+        self.orders.remove(&order_id);
+        debug!("released order_id {}, orders.len()={}", order_id, self.orders.len());
+    }
+
     // Dispatcher thread reads messages from TWS and dispatches them to
     // appropriate channel.
     fn start_dispatcher_thread(&mut self, server_version: i32) -> JoinHandle<i32> {
@@ -382,29 +396,23 @@ pub (crate) fn process_messages(message_bus: &Arc<RwLock<TcpMessageBus>>) -> Res
 // The cleanup thread receives signals as subscribers are dropped and
 // releases the sender channels
 fn start_cleanup_thread(message_bus: &Arc<RwLock<TcpMessageBus>>) -> JoinHandle<i32> {
-    let message_bus = message_bus.read().unwrap();
-
-    let requests = Arc::clone(&message_bus.requests);
-    let orders = Arc::clone(&message_bus.orders);
-    let signal_recv = message_bus.signals_recv.clone();
-    let shutdown_requested = Arc::clone(&message_bus.shutdown_requested);
-
-    drop(message_bus);
+    let message_bus = Arc::clone(message_bus);
 
     thread::spawn(move || loop {
+        let message_bus = message_bus.read().unwrap();
+        let signal_recv = message_bus.signals_recv.clone();
+
         for signal in &signal_recv {
             match signal {
                 Signal::Request(request_id) => {
-                    requests.remove(&request_id);
-                    debug!("released request_id {}, requests.len()={}", request_id, requests.len());
+                    message_bus.clean_request(request_id);
                 }
                 Signal::Order(order_id) => {
-                    orders.remove(&order_id);
-                    debug!("released order_id {}, orders.len()={}", order_id, requests.len());
+                    message_bus.clean_order(order_id);
                 }
             }
 
-            if shutdown_requested.load(Ordering::SeqCst) {
+            if message_bus.is_shutting_down() {
                 return 0;
             }
         }
