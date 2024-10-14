@@ -342,7 +342,6 @@ pub(crate) fn positions_multi<'a>(
     client.check_server_version(server_versions::MODELS_SUPPORT, "It does not support positions multi requests.")?;
 
     let request_id = client.next_request_id();
-
     let request = encoders::encode_request_positions_multi(request_id, account, model_code)?;
     let subscription = client.send_request(request_id, request)?;
 
@@ -373,7 +372,6 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
     client.check_server_version(server_versions::PNL, "It does not support PnL requests.")?;
 
     let request_id = client.next_request_id();
-
     let request = encoders::encode_request_pnl(request_id, account, model_code)?;
     let subscription = client.send_request(request_id, request)?;
 
@@ -396,7 +394,6 @@ pub(crate) fn pnl_single<'a>(
     client.check_server_version(server_versions::REALIZED_PNL, "It does not support PnL requests.")?;
 
     let request_id = client.next_request_id();
-
     let request = encoders::encode_request_pnl_single(request_id, account, contract_id, model_code)?;
     let subscription = client.send_request(request_id, request)?;
 
@@ -407,7 +404,6 @@ pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Re
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support account summary requests.")?;
 
     let request_id = client.next_request_id();
-
     let request = encoders::encode_request_account_summary(request_id, group, tags)?;
     let subscription = client.send_request(request_id, request)?;
 
