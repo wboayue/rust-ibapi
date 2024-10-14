@@ -16,7 +16,7 @@ use crate::market_data::realtime::{self, Bar, BarSize, MidPoint, WhatToShow};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
-use crate::transport::{ConnectionMetadata, Connection, InternalSubscription, MessageBus, Response, TcpMessageBus, process_messages};
+use crate::transport::{process_messages, Connection, ConnectionMetadata, InternalSubscription, MessageBus, Response, TcpMessageBus};
 use crate::{accounts, contracts, orders};
 
 // Client

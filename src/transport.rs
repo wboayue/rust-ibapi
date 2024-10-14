@@ -383,7 +383,7 @@ impl MessageBus for TcpMessageBus {
     }
 }
 
-pub (crate) fn process_messages(message_bus: &Arc<RwLock<TcpMessageBus>>) -> Result<(), Error> {
+pub(crate) fn process_messages(message_bus: &Arc<RwLock<TcpMessageBus>>) -> Result<(), Error> {
     let handle = start_dispatcher_thread(message_bus);
     //self.handles.push(handle);
 
@@ -566,7 +566,10 @@ fn process_response(
     } else if orders.contains(&request_id) {
         orders.send(&request_id, Response::Message(message)).unwrap();
     } else if shared_channels.contains_sender(message.message_type()) {
-        shared_channels.get_sender(message.message_type()).send(Response::Message(message)).unwrap()
+        shared_channels
+            .get_sender(message.message_type())
+            .send(Response::Message(message))
+            .unwrap()
     } else {
         info!("no recipient found for: {:?}", message)
     }
@@ -713,11 +716,11 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
 // Enables routing of response messages from TWS to Client
 #[derive(Debug)]
 pub(crate) struct InternalSubscription {
-    receiver: Option<Receiver<Response>>, // requests with request ids receive responses via this channel
-    shared_receiver: Option<Arc<Receiver<Response>>>, // this channel is for responses that share channel based on message type
-    signaler: Option<Sender<Signal>>,            // for client to signal termination
-    pub(crate) request_id: Option<i32>,          // initiating request id
-    pub(crate) order_id: Option<i32>,            // initiating order id
+    receiver: Option<Receiver<Response>>,              // requests with request ids receive responses via this channel
+    shared_receiver: Option<Arc<Receiver<Response>>>,  // this channel is for responses that share channel based on message type
+    signaler: Option<Sender<Signal>>,                  // for client to signal termination
+    pub(crate) request_id: Option<i32>,                // initiating request id
+    pub(crate) order_id: Option<i32>,                  // initiating order id
     pub(crate) message_type: Option<OutgoingMessages>, // initiating message type
 }
 
@@ -998,7 +1001,6 @@ impl Connection {
         prelude.push_field(&OutgoingMessages::StartApi);
         prelude.push_field(&VERSION);
         prelude.push_field(&self.client_id);
-
 
         if self.server_version() > server_versions::OPTIONAL_CAPABILITIES {
             prelude.push_field(&"");
