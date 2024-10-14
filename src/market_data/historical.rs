@@ -6,7 +6,7 @@ use time::{Date, OffsetDateTime};
 
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
-use crate::transport::InternalSubscription;
+use crate::transport::{InternalSubscription, Response};
 use crate::{server_versions, Client, Error, ToField};
 
 mod decoders;
@@ -304,7 +304,7 @@ pub(crate) fn head_timestamp(client: &Client, contract: &Contract, what_to_show:
 
     let subscription = client.send_request(request_id, request)?;
 
-    if let Some(mut message) = subscription.next() {
+    if let Some(Response::Message(mut message)) = subscription.next() {
         decoders::decode_head_timestamp(&mut message)
     } else {
         Err(Error::Simple("did not receive head timestamp message".into()))
@@ -359,7 +359,7 @@ pub(crate) fn historical_data(
 
     let subscription = client.send_request(request_id, request)?;
 
-    if let Some(mut message) = subscription.next() {
+    if let Some(Response::Message(mut message)) = subscription.next() {
         let time_zone = if let Some(tz) = client.time_zone {
             tz
         } else {
@@ -410,7 +410,7 @@ pub(crate) fn historical_schedule(
 
     let subscription = client.send_request(request_id, request)?;
 
-    if let Some(mut message) = subscription.next() {
+    if let Some(Response::Message(mut message)) = subscription.next() {
         match message.message_type() {
             IncomingMessages::HistoricalSchedule => decoders::decode_historical_schedule(&mut message),
             IncomingMessages::Error => Err(Error::Simple(message.peek_string(4))),
@@ -547,7 +547,7 @@ impl<T: TickDecoder<T> + Debug> Iterator for TickIterator<T> {
 
         loop {
             match self.messages.next() {
-                Some(mut message) => {
+                Some(Response::Message(mut message)) => {
                     if message.message_type() == Self::Item::message_type() {
                         let (ticks, done) = Self::Item::decode(&mut message).unwrap();
 
@@ -568,7 +568,8 @@ impl<T: TickDecoder<T> + Debug> Iterator for TickIterator<T> {
                         error!("unexpected message: {:?}", message)
                     }
                 }
-                None => return None,
+                // TODO enumerate
+                _ => return None,
             }
         }
     }

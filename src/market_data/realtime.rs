@@ -6,7 +6,7 @@ use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::orders::TagValue;
 use crate::server_versions;
-use crate::transport::InternalSubscription;
+use crate::transport::{InternalSubscription, Response};
 use crate::ToField;
 use crate::{Client, Error};
 
@@ -320,14 +320,15 @@ impl<'a> Iterator for TradeIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.responses.next() {
-                Some(mut message) => match message.message_type() {
+                Some(Response::Message(mut message)) => match message.message_type() {
                     IncomingMessages::TickByTick => match decoders::decode_trade_tick(&mut message) {
                         Ok(tick) => return Some(tick),
                         Err(e) => error!("unexpected message {message:?}: {e:?}"),
                     },
                     _ => error!("unexpected message {message:?}"),
                 },
-                None => return None,
+                // TODO enumerate
+                _ => return None,
             }
         }
     }
@@ -362,14 +363,15 @@ impl<'a> Iterator for BidAskIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.responses.next() {
-                Some(mut message) => match message.message_type() {
+                Some(Response::Message(mut message)) => match message.message_type() {
                     IncomingMessages::TickByTick => match decoders::bid_ask_tick(&mut message) {
                         Ok(tick) => return Some(tick),
                         Err(e) => error!("unexpected message {message:?}: {e:?}"),
                     },
                     _ => error!("unexpected message {message:?}"),
                 },
-                None => return None,
+                // TODO enumerate
+                _ => return None,
             }
         }
     }

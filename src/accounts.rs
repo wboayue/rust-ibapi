@@ -12,6 +12,7 @@
 use crate::client::{SharesChannel, Subscribable, Subscription};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::transport::Response;
 use crate::{server_versions, Client, Error};
 
 mod decoders;
@@ -355,7 +356,8 @@ pub(crate) fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
     let request = encoders::encode_request_family_codes()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestFamilyCodes, request)?;
 
-    if let Some(mut message) = subscription.next() {
+    // TODO: enumerate
+    if let Some(Response::Message(mut message)) = subscription.next() {
         decoders::decode_family_codes(&mut message)
     } else {
         Ok(Vec::default())
@@ -415,13 +417,19 @@ pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
     let subscription = client.send_shared_request(OutgoingMessages::RequestManagedAccounts, request)?;
 
     match subscription.next() {
-        Some(mut message) => {
+        Some(Response::Message(mut message)) => {
             message.skip(); // message type
             message.skip(); // message version
 
             let accounts = message.next_string()?;
             Ok(accounts.split(",").map(String::from).collect())
-        }
+        },
+        Some(Response::Cancelled) => {
+            Err(Error::Simple(format!("request cancelled")))
+        },
+        Some(Response::Disconnected) => {
+            Err(Error::Simple(format!("server disconnected")))
+        },
         None => Ok(Vec::default()),
     }
 }

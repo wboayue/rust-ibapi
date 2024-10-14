@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use crossbeam::channel;
 
 use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
-use crate::transport::{InternalSubscription, MessageBus, SubscriptionBuilder};
+use crate::transport::{InternalSubscription, MessageBus, Response, SubscriptionBuilder};
 use crate::Error;
 
 pub(crate) struct MessageBusStub {
@@ -63,7 +63,8 @@ fn mock_request(
     let (s1, _r1) = channel::unbounded();
 
     for message in &stub.response_messages {
-        sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
+        let message = ResponseMessage::from(&message.replace('|', "\0"));
+        sender.send(Response::from(message)).unwrap();
     }
 
     let mut subscription = SubscriptionBuilder::new().shared_receiver(Arc::new(receiver)).signaler(s1);
@@ -83,7 +84,8 @@ fn mock_global_request(stub: &mut MessageBusStub, message: &RequestMessage) -> R
     let (sender, receiver) = channel::unbounded();
 
     for message in &stub.response_messages {
-        sender.send(ResponseMessage::from(&message.replace('|', "\0"))).unwrap();
+        let message = ResponseMessage::from(&message.replace('|', "\0"));
+        sender.send(Response::from(message)).unwrap();
     }
 
     let subscription = SubscriptionBuilder::new().shared_receiver(Arc::new(receiver)).build();
