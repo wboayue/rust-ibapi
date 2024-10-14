@@ -204,7 +204,7 @@ pub(crate) fn realtime_bars<'a>(
         request_id: Some(request_id),
         order_id: None,
         message_type: None,
-        responses,
+        subscription: responses,
         phantom: PhantomData,
     })
 }
@@ -309,7 +309,7 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
         request_id: Some(request_id),
         order_id: None,
         message_type: None,
-        responses,
+        subscription: responses,
         phantom: PhantomData,
     })
 }

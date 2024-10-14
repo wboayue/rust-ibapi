@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use log::{debug, error, info};
+use log::{debug, error};
 use time::OffsetDateTime;
 use time_tz::Tz;
 
@@ -31,10 +31,9 @@ pub struct Client {
     //    pub server_time: OffsetDateTime,
     pub(crate) connection_time: Option<OffsetDateTime>,
     pub(crate) time_zone: Option<&'static Tz>,
-
-    managed_accounts: String,
-    client_id: i32, // ID of client.
     pub(crate) message_bus: Arc<Mutex<dyn MessageBus>>,
+
+    client_id: i32,             // ID of client.
     next_request_id: AtomicI32, // Next available request_id.
     order_id: AtomicI32,        // Next available order_id. Starts with value returned on connection.
 }
@@ -73,7 +72,6 @@ impl Client {
             server_version: connection_metadata.server_version,
             connection_time: None,
             time_zone: None,
-            managed_accounts: String::from(""),
             message_bus,
             client_id: connection_metadata.client_id,
             next_request_id: AtomicI32::new(9000),
@@ -920,7 +918,6 @@ impl Client {
             server_version: server_version,
             connection_time: None,
             time_zone: None,
-            managed_accounts: String::from(""),
             message_bus,
             client_id: 100,
             next_request_id: AtomicI32::new(9000),
@@ -978,20 +975,30 @@ pub struct Subscription<'a, T: Subscribable<T>> {
     pub(crate) request_id: Option<i32>,
     pub(crate) order_id: Option<i32>,
     pub(crate) message_type: Option<OutgoingMessages>,
-    pub(crate) responses: InternalSubscription,
+    pub(crate) subscription: InternalSubscription,
     pub(crate) phantom: PhantomData<T>,
 }
 
 #[allow(private_bounds)]
 impl<'a, T: Subscribable<T>> Subscription<'a, T> {
-
-    pub fn new(client:&'a Client, request_id: i32, subscription: InternalSubscription) -> Self {
+    pub(crate) fn new(client: &'a Client, request_id: i32, subscription: InternalSubscription) -> Self {
         Subscription {
             client,
             request_id: Some(request_id),
             order_id: None,
             message_type: None,
-            responses: subscription,
+            subscription,
+            phantom: PhantomData,
+        }
+    }
+
+    pub(crate) fn new_shared(client: &'a Client, message_type: OutgoingMessages, subscription: InternalSubscription) -> Self {
+        Subscription {
+            client,
+            request_id: None,
+            order_id: None,
+            message_type: Some(message_type),
+            subscription,
             phantom: PhantomData,
         }
     }
@@ -999,7 +1006,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// Blocks until the item become available.
     pub fn next(&self) -> Option<T> {
         loop {
-            if let Some(mut message) = self.responses.next() {
+            if let Some(mut message) = self.subscription.next() {
                 if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
                     match T::decode(self.client.server_version(), &mut message) {
                         Ok(val) => return Some(val),
@@ -1032,7 +1039,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// //}
     /// ```
     pub fn try_next(&self) -> Option<T> {
-        if let Some(mut message) = self.responses.try_next() {
+        if let Some(mut message) = self.subscription.try_next() {
             if message.message_type() == IncomingMessages::Error {
                 error!("{}", message.peek_string(4));
                 return None;
@@ -1062,7 +1069,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// //}
     /// ```
     pub fn next_timeout(&self, timeout: Duration) -> Option<T> {
-        if let Some(mut message) = self.responses.next_timeout(timeout) {
+        if let Some(mut message) = self.subscription.next_timeout(timeout) {
             if message.message_type() == IncomingMessages::Error {
                 error!("{}", message.peek_string(4));
                 return None;

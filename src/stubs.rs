@@ -24,7 +24,7 @@ impl MessageBus for MessageBusStub {
     }
 
     fn cancel_subscription(&mut self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
-        mock_request(self, request_id,packet);
+        mock_request(self, request_id, packet);
         Ok(())
     }
 
@@ -33,7 +33,7 @@ impl MessageBus for MessageBusStub {
     }
 
     fn cancel_order_subscription(&mut self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
-        mock_request(self, request_id,packet);
+        mock_request(self, request_id, packet);
         Ok(())
     }
 
@@ -42,7 +42,8 @@ impl MessageBus for MessageBusStub {
     }
 
     fn cancel_shared_subscription(&mut self, request_id: OutgoingMessages, packet: &RequestMessage) -> Result<(), Error> {
-//        mock_request(self, request_id,packet);
+        //        mock_request(self, request_id,packet);
+        mock_global_request(self, packet)?;
         Ok(())
     }
 

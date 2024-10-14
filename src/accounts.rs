@@ -9,8 +9,6 @@
 //! - Real-time PnL updates for individual positions
 //!
 
-use std::marker::PhantomData;
-
 use crate::client::{SharesChannel, Subscribable, Subscription};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
@@ -329,16 +327,9 @@ pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionUpdate>,
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position requests.")?;
 
     let request = encoders::encode_request_positions()?;
-    let responses = client.send_shared_request(OutgoingMessages::RequestPositions, request)?;
+    let subscription = client.send_shared_request(OutgoingMessages::RequestPositions, request)?;
 
-    Ok(Subscription {
-        client,
-        request_id: None,
-        order_id: None,
-        message_type: Some(OutgoingMessages::RequestPositions),
-        responses,
-        phantom: PhantomData,
-    })
+    Ok(Subscription::new_shared(client, OutgoingMessages::RequestPositions, subscription))
 }
 
 impl SharesChannel for Subscription<'_, PositionUpdate> {}
@@ -353,16 +344,9 @@ pub(crate) fn positions_multi<'a>(
     let request_id = client.next_request_id();
 
     let request = encoders::encode_request_positions_multi(request_id, account, model_code)?;
-    let responses = client.send_request(request_id, request)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription {
-        client,
-        request_id: Some(request_id),
-        order_id: None,
-        message_type: None,
-        responses,
-        phantom: PhantomData,
-    })
+    Ok(Subscription::new(client, request_id, subscription))
 }
 
 // Determine whether an account exists under an account family and find the account family code.
@@ -391,16 +375,9 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
     let request_id = client.next_request_id();
 
     let request = encoders::encode_request_pnl(request_id, account, model_code)?;
-    let responses = client.send_request(request_id, request)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription {
-        client,
-        request_id: Some(request_id),
-        order_id: None,
-        message_type: None,
-        responses,
-        phantom: PhantomData,
-    })
+    Ok(Subscription::new(client, request_id, subscription))
 }
 
 // Requests real time updates for daily PnL of individual positions.
@@ -421,16 +398,9 @@ pub(crate) fn pnl_single<'a>(
     let request_id = client.next_request_id();
 
     let request = encoders::encode_request_pnl_single(request_id, account, contract_id, model_code)?;
-    let responses = client.send_request(request_id, request)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription {
-        client,
-        request_id: Some(request_id),
-        order_id: None,
-        message_type: None,
-        responses,
-        phantom: PhantomData,
-    })
+    Ok(Subscription::new(client, request_id, subscription))
 }
 
 pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
@@ -441,14 +411,7 @@ pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Re
     let request = encoders::encode_request_account_summary(request_id, group, tags)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription {
-        client,
-        request_id: Some(request_id),
-        order_id: None,
-        message_type: None,
-        responses: subscription,
-        phantom: PhantomData,
-    })
+    Ok(Subscription::new(client, request_id, subscription))
 }
 
 pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
