@@ -19,29 +19,29 @@ impl MessageBus for MessageBusStub {
         self.request_messages.read().unwrap().clone()
     }
 
-    fn send_request(&mut self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
+    fn send_request(&self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         mock_request(self, Some(request_id), None, message)
     }
 
-    fn cancel_subscription(&mut self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
+    fn cancel_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
         mock_request(self, Some(request_id), None, packet);
         Ok(())
     }
 
-    fn send_order_request(&mut self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
+    fn send_order_request(&self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         mock_request(self, Some(request_id), None, message)
     }
 
-    fn cancel_order_subscription(&mut self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
+    fn cancel_order_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
         mock_request(self, Some(request_id), None, packet);
         Ok(())
     }
 
-    fn send_shared_request(&mut self, message_type: OutgoingMessages, message: &RequestMessage) -> Result<InternalSubscription, Error> {
+    fn send_shared_request(&self, message_type: OutgoingMessages, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         mock_request(self, None, Some(message_type), message)
     }
 
-    fn cancel_shared_subscription(&mut self, message_type: OutgoingMessages, packet: &RequestMessage) -> Result<(), Error> {
+    fn cancel_shared_subscription(&self, message_type: OutgoingMessages, packet: &RequestMessage) -> Result<(), Error> {
         mock_request(self, None, Some(message_type), packet)?;
         Ok(())
     }
@@ -52,7 +52,7 @@ impl MessageBus for MessageBusStub {
 }
 
 fn mock_request(
-    stub: &mut MessageBusStub,
+    stub: &MessageBusStub,
     request_id: Option<i32>,
     message_type: Option<OutgoingMessages>,
     message: &RequestMessage,

@@ -207,19 +207,19 @@ impl TcpMessageBus {
         thread::spawn(move || loop {
             let _connection = connection.read().unwrap();
 
-            match read_packet(&_connection.stream) {
+            match _connection.read_message() {
                 Ok(message) => {
                     recorder.record_response(&message);
                     dispatch_message(message, server_version, &requests, &orders, &shared_channels, &executions);
                 }
                 Err(Error::Io(e)) if RECONNECT_ERRORS.contains(&e.kind()) => {
-                    let mut connection = connection.write().unwrap();
+                    let connection = connection.write().unwrap();
                     error!("error reading packet: {:?}", e);
                     // reset hashes
                     if let Err(e) = connection.reconnect() {
                         error!("error reconnecting: {:?}", e);
                         shutdown_requested.store(true, Ordering::Relaxed);
-                        return 0;    
+                        return 0;
                     }
                 }
                 Err(Error::Io(e)) if RETRY_ERRORS.contains(&e.kind()) => {
@@ -297,9 +297,9 @@ impl MessageBus for TcpMessageBus {
         if let Err(e) = self.requests.send(&request_id, Response::Cancelled) {
             info!("error sending cancel notification: {e}");
         }
-        
+
         self.requests.remove(&request_id);
-        
+
         Ok(())
     }
 
@@ -369,11 +369,11 @@ impl MessageBus for TcpMessageBus {
     }
 }
 
-fn process_messages(message_bus: Arc<RwLock<dyn MessageBus>>) -> Result<(), Error> {
-    let handle = start_dispatcher_thread(server_version);
+pub (crate) fn process_messages(message_bus: &Arc<RwLock<TcpMessageBus>>) -> Result<(), Error> {
+    let handle = start_dispatcher_thread(message_bus);
     //self.handles.push(handle);
 
-    let handle = start_cleanup_thread();
+    let handle = start_cleanup_thread(message_bus);
     //self.handles.push(handle);
 
     Ok(())
@@ -381,12 +381,15 @@ fn process_messages(message_bus: Arc<RwLock<dyn MessageBus>>) -> Result<(), Erro
 
 // The cleanup thread receives signals as subscribers are dropped and
 // releases the sender channels
-fn start_cleanup_thread(message_bus: Arc<RwLock<dyn MessageBus>>) -> JoinHandle<i32> {
-    
-    let requests = Arc::clone(&self.requests);
-    let orders = Arc::clone(&self.orders);
-    let signal_recv = self.signals_recv.clone();
-    let shutdown_requested = Arc::clone(&self.shutdown_requested);
+fn start_cleanup_thread(message_bus: &Arc<RwLock<TcpMessageBus>>) -> JoinHandle<i32> {
+    let message_bus = message_bus.read().unwrap();
+
+    let requests = Arc::clone(&message_bus.requests);
+    let orders = Arc::clone(&message_bus.orders);
+    let signal_recv = message_bus.signals_recv.clone();
+    let shutdown_requested = Arc::clone(&message_bus.shutdown_requested);
+
+    drop(message_bus);
 
     thread::spawn(move || loop {
         for signal in &signal_recv {
@@ -404,6 +407,58 @@ fn start_cleanup_thread(message_bus: Arc<RwLock<dyn MessageBus>>) -> JoinHandle<
             if shutdown_requested.load(Ordering::SeqCst) {
                 return 0;
             }
+        }
+    })
+}
+
+// Dispatcher thread reads messages from TWS and dispatches them to
+// appropriate channel.
+fn start_dispatcher_thread(message_bus: &Arc<RwLock<TcpMessageBus>>) -> JoinHandle<i32> {
+    let message_bus = message_bus.read().unwrap();
+
+    let connection = Arc::clone(&message_bus.connection);
+    let requests = Arc::clone(&message_bus.requests);
+    let recorder = message_bus.recorder.clone();
+    let orders = Arc::clone(&message_bus.orders);
+    let shared_channels = Arc::clone(&message_bus.shared_channels);
+    let executions = SenderHash::<String, Response>::new();
+    let shutdown_requested = Arc::clone(&message_bus.shutdown_requested);
+
+    drop(message_bus);
+
+    const RECONNECT_ERRORS: &[ErrorKind] = &[ErrorKind::ConnectionReset];
+    const RETRY_ERRORS: &[ErrorKind] = &[ErrorKind::Interrupted];
+
+    thread::spawn(move || loop {
+        let connection = connection.read().unwrap();
+        match connection.read_message() {
+            Ok(message) => {
+                recorder.record_response(&message);
+                dispatch_message(message, connection.server_version(), &requests, &orders, &shared_channels, &executions);
+            }
+            Err(Error::Io(e)) if RECONNECT_ERRORS.contains(&e.kind()) => {
+                // let mut connection = connection.write().unwrap();
+                error!("error reading packet: {:?}", e);
+                // reset hashes
+                if let Err(e) = connection.reconnect() {
+                    error!("error reconnecting: {:?}", e);
+                    shutdown_requested.store(true, Ordering::Relaxed);
+                    return 0;
+                }
+            }
+            Err(Error::Io(e)) if RETRY_ERRORS.contains(&e.kind()) => {
+                error!("error reading packet: {:?}", e);
+                continue;
+            }
+            Err(err) => {
+                error!("error reading packet: {:?}", err);
+                shutdown_requested.store(true, Ordering::Relaxed);
+                return 0;
+            }
+        };
+
+        if shutdown_requested.load(Ordering::SeqCst) {
+            return 0;
         }
     })
 }
@@ -798,39 +853,35 @@ impl SubscriptionBuilder {
 }
 
 #[derive(Default, Clone, Debug)]
-pub(crate) struct AccountInfo {
+pub(crate) struct ConnectionMetadata {
     next_order_id: i32,
     pub(crate) client_id: i32,
     pub(crate) server_version: i32,
     pub(crate) managed_accounts: String,
+    pub(crate) connection_time: Option<OffsetDateTime>,
+    pub(crate) time_zone: Option<&'static Tz>,
 }
 
 #[derive(Debug)]
 pub(crate) struct Connection {
-    pub(crate) client_id: i32,
-    pub(crate) connection_url: String,
-    stream: TcpStream,
+    client_id: i32,
+    connection_url: String,
+    reader: Mutex<TcpStream>,
     writer: Mutex<TcpStream>,
-    pub(crate) server_version: i32,
-    pub(crate) connection_time: Option<OffsetDateTime>,
-    pub(crate) time_zone: Option<&'static Tz>,
-    pub(crate) account_info: AccountInfo,
+    connection_metadata: Mutex<ConnectionMetadata>,
 }
 
 impl Connection {
     pub fn connect(client_id: i32, connection_url: &str) -> Result<Self, Error> {
-        let stream = TcpStream::connect(connection_url)?;
-        let writer = Mutex::new(stream.try_clone()?);
+        let reader = TcpStream::connect(connection_url)?;
+        let writer = reader.try_clone()?;
 
-        let mut connection = Self {
+        let connection = Self {
             client_id,
             connection_url: connection_url.into(),
-            stream,
-            writer,
-            server_version: -1,
-            connection_time: None,
-            time_zone: None,
-            account_info: AccountInfo::default(),
+            reader: Mutex::new(reader),
+            writer: Mutex::new(writer),
+            connection_metadata: Mutex::new(ConnectionMetadata::default()),
         };
 
         connection.establish_connection()?;
@@ -838,24 +889,32 @@ impl Connection {
         Ok(connection)
     }
 
-    pub fn reconnect(&mut self) -> Result<(), Error> {
+    pub fn connection_metadata(&self) -> ConnectionMetadata {
+        let metadata = self.connection_metadata.lock().unwrap();
+        metadata.clone()
+    }
+
+    pub fn reconnect(&self) -> Result<(), Error> {
         // retry connection here with backoff
-        self.stream = TcpStream::connect(&self.connection_url)?;
+        let mut reader = self.reader.lock()?;
+
+        *reader = TcpStream::connect(&self.connection_url)?;
 
         self.establish_connection()?;
 
         Ok(())
     }
 
-    fn establish_connection(&mut self) -> Result<(), Error> {
+    fn establish_connection(&self) -> Result<(), Error> {
         self.handshake()?;
         self.start_api()?;
         self.receive_account_info()?;
         Ok(())
     }
 
-    fn write(&mut self, data: &str) -> Result<(), Error> {
-        self.stream.write_all(data.as_bytes())?;
+    fn write(&self, data: &str) -> Result<(), Error> {
+        let mut writer = self.writer.lock()?;
+        writer.write_all(data.as_bytes())?;
         Ok(())
     }
 
@@ -877,11 +936,13 @@ impl Connection {
         Ok(())
     }
 
-    fn read_message(&mut self) -> Result<ResponseMessage, Error> {
-        let message_size = read_header(&self.stream)?;
+    fn read_message(&self) -> Result<ResponseMessage, Error> {
+        let mut reader = self.reader.lock()?;
+
+        let message_size = read_header(&reader)?;
         let mut data = vec![0_u8; message_size];
 
-        self.stream.read_exact(&mut data)?;
+        reader.read_exact(&mut data)?;
 
         let raw_string = String::from_utf8(data)?;
         debug!("<- {:?}", raw_string);
@@ -892,7 +953,7 @@ impl Connection {
     }
 
     // sends server handshake
-    fn handshake(&mut self) -> Result<(), Error> {
+    fn handshake(&self) -> Result<(), Error> {
         let prefix = "API\0";
         let version = format!("v{MIN_SERVER_VERSION}..{MAX_SERVER_VERSION}");
 
@@ -901,12 +962,14 @@ impl Connection {
 
         let ack = self.read_message();
 
+        let mut connection_metadata = self.connection_metadata.lock()?;
+
         match ack {
             Ok(mut response) => {
-                self.server_version = response.next_int()?;
+                connection_metadata.server_version = response.next_int()?;
 
                 let time = response.next_string()?;
-                (self.connection_time, self.time_zone) = parse_connection_time(time.as_str());
+                (connection_metadata.connection_time, connection_metadata.time_zone) = parse_connection_time(time.as_str());
             }
             Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
                 return Err(Error::Simple(format!("The server may be rejecting connections from this host: {err}")));
@@ -919,7 +982,7 @@ impl Connection {
     }
 
     // asks server to start processing messages
-    fn start_api(&mut self) -> Result<(), Error> {
+    fn start_api(&self) -> Result<(), Error> {
         const VERSION: i32 = 2;
 
         let prelude = &mut RequestMessage::default();
@@ -928,7 +991,8 @@ impl Connection {
         prelude.push_field(&VERSION);
         prelude.push_field(&self.client_id);
 
-        if self.server_version > server_versions::OPTIONAL_CAPABILITIES {
+
+        if self.server_version() > server_versions::OPTIONAL_CAPABILITIES {
             prelude.push_field(&"");
         }
 
@@ -937,8 +1001,13 @@ impl Connection {
         Ok(())
     }
 
+    fn server_version(&self) -> i32 {
+        let connection_metadata = self.connection_metadata.lock().unwrap();
+        connection_metadata.server_version
+    }
+
     // Fetches next order id and managed accounts.
-    fn receive_account_info(&mut self) -> Result<(), Error> {
+    fn receive_account_info(&self) -> Result<(), Error> {
         let mut saw_next_order_id: bool = false;
         let mut saw_managed_accounts: bool = false;
 
@@ -954,7 +1023,8 @@ impl Connection {
                     message.skip(); // message type
                     message.skip(); // message version
 
-                    self.account_info.next_order_id = message.next_int()?;
+                    let mut connection_metadata = self.connection_metadata.lock()?;
+                    connection_metadata.next_order_id = message.next_int()?;
                 }
                 IncomingMessages::ManagedAccounts => {
                     saw_managed_accounts = true;
@@ -962,7 +1032,8 @@ impl Connection {
                     message.skip(); // message type
                     message.skip(); // message version
 
-                    self.account_info.managed_accounts = message.next_string()?;
+                    let mut connection_metadata = self.connection_metadata.lock()?;
+                    connection_metadata.managed_accounts = message.next_string()?;
                 }
                 IncomingMessages::Error => {
                     error!("message: {message:?}")

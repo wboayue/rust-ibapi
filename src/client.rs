@@ -16,7 +16,7 @@ use crate::market_data::realtime::{self, Bar, BarSize, MidPoint, WhatToShow};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
-use crate::transport::{AccountInfo, Connection, InternalSubscription, MessageBus, Response, TcpMessageBus};
+use crate::transport::{ConnectionMetadata, Connection, InternalSubscription, MessageBus, Response, TcpMessageBus, process_messages};
 use crate::{accounts, contracts, orders};
 
 // Client
@@ -60,26 +60,26 @@ impl Client {
     /// ```
     pub fn connect(address: &str, client_id: i32) -> Result<Client, Error> {
         let connection = Connection::connect(client_id, address)?;
-        let connection_metadata = connection.account_info.clone();
+        let connection_metadata = connection.connection_metadata();
 
         let message_bus = Arc::new(RwLock::new(TcpMessageBus::new(connection)?));
+
+        // Starts thread to read messages from TWS
+        process_messages(&message_bus)?;
 
         Client::new(connection_metadata, message_bus)
     }
 
-    fn new(connection_metadata: AccountInfo, message_bus: Arc<RwLock<dyn MessageBus>>) -> Result<Client, Error> {
+    fn new(connection_metadata: ConnectionMetadata, message_bus: Arc<RwLock<dyn MessageBus>>) -> Result<Client, Error> {
         let client = Client {
             server_version: connection_metadata.server_version,
-            connection_time: None,
-            time_zone: None,
+            connection_time: connection_metadata.connection_time,
+            time_zone: connection_metadata.time_zone,
             message_bus,
             client_id: connection_metadata.client_id,
             next_request_id: AtomicI32::new(9000),
             order_id: AtomicI32::new(-1),
         };
-
-        let message_bus = Arc::clone(&client.message_bus);
-        process_messages(message_bus)?;
 
         Ok(client)
     }
