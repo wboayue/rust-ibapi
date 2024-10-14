@@ -29,21 +29,21 @@ const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
 
 pub(crate) trait MessageBus: Send + Sync {
     // Sends formatted message to TWS and creates a reply channel by request id.
-    fn send_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
+    fn send_request(&self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
 
     // Sends formatted message to TWS and creates a reply channel by request id.
-    fn cancel_subscription(&mut self, request_id: i32, packet: &RequestMessage) -> Result<(), Error>;
+    fn cancel_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error>;
 
     // Sends formatted message to TWS and creates a reply channel by message type.
-    fn send_shared_request(&mut self, message_id: OutgoingMessages, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
+    fn send_shared_request(&self, message_id: OutgoingMessages, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
 
     // Sends formatted message to TWS and creates a reply channel by message type.
-    fn cancel_shared_subscription(&mut self, message_id: OutgoingMessages, packet: &RequestMessage) -> Result<(), Error>;
+    fn cancel_shared_subscription(&self, message_id: OutgoingMessages, packet: &RequestMessage) -> Result<(), Error>;
 
     // Sends formatted order specific message to TWS and creates a reply channel by order id.
-    fn send_order_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
+    fn send_order_request(&self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
 
-    fn cancel_order_subscription(&mut self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
+    fn cancel_order_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
         Ok(())
     }
 
@@ -271,7 +271,7 @@ impl TcpMessageBus {
 const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 impl MessageBus for TcpMessageBus {
-    fn send_request(&mut self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error> {
+    fn send_request(&self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error> {
         let connection = self.connection.read()?;
 
         let (sender, receiver) = channel::unbounded();
@@ -289,7 +289,7 @@ impl MessageBus for TcpMessageBus {
         Ok(subscription)
     }
 
-    fn cancel_subscription(&mut self, request_id: i32, message: &RequestMessage) -> Result<(), Error> {
+    fn cancel_subscription(&self, request_id: i32, message: &RequestMessage) -> Result<(), Error> {
         let connection = self.connection.read()?;
 
         connection.write_message(message)?;
@@ -303,7 +303,7 @@ impl MessageBus for TcpMessageBus {
         Ok(())
     }
 
-    fn send_order_request(&mut self, order_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
+    fn send_order_request(&self, order_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         let connection = self.connection.read()?;
 
         let (sender, receiver) = channel::unbounded();
@@ -321,7 +321,7 @@ impl MessageBus for TcpMessageBus {
         Ok(subscription)
     }
 
-    fn cancel_order_subscription(&mut self, request_id: i32, message: &RequestMessage) -> Result<(), Error> {
+    fn cancel_order_subscription(&self, request_id: i32, message: &RequestMessage) -> Result<(), Error> {
         let connection = self.connection.read()?;
 
         connection.write_message(message)?;
@@ -335,7 +335,7 @@ impl MessageBus for TcpMessageBus {
         Ok(())
     }
 
-    fn send_shared_request(&mut self, message_type: OutgoingMessages, message: &RequestMessage) -> Result<InternalSubscription, Error> {
+    fn send_shared_request(&self, message_type: OutgoingMessages, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         let connection = self.connection.read()?;
 
         connection.write_message(message)?;
@@ -350,7 +350,7 @@ impl MessageBus for TcpMessageBus {
         Ok(subscription)
     }
 
-    fn cancel_shared_subscription(&mut self, _message_type: OutgoingMessages, message: &RequestMessage) -> Result<(), Error> {
+    fn cancel_shared_subscription(&self, _message_type: OutgoingMessages, message: &RequestMessage) -> Result<(), Error> {
         let connection = self.connection.read()?;
 
         connection.write_message(message)?;
@@ -367,6 +367,45 @@ impl MessageBus for TcpMessageBus {
 
         Ok(())
     }
+}
+
+fn process_messages(message_bus: Arc<RwLock<dyn MessageBus>>) -> Result<(), Error> {
+    let handle = start_dispatcher_thread(server_version);
+    //self.handles.push(handle);
+
+    let handle = start_cleanup_thread();
+    //self.handles.push(handle);
+
+    Ok(())
+}
+
+// The cleanup thread receives signals as subscribers are dropped and
+// releases the sender channels
+fn start_cleanup_thread(message_bus: Arc<RwLock<dyn MessageBus>>) -> JoinHandle<i32> {
+    
+    let requests = Arc::clone(&self.requests);
+    let orders = Arc::clone(&self.orders);
+    let signal_recv = self.signals_recv.clone();
+    let shutdown_requested = Arc::clone(&self.shutdown_requested);
+
+    thread::spawn(move || loop {
+        for signal in &signal_recv {
+            match signal {
+                Signal::Request(request_id) => {
+                    requests.remove(&request_id);
+                    debug!("released request_id {}, requests.len()={}", request_id, requests.len());
+                }
+                Signal::Order(order_id) => {
+                    orders.remove(&order_id);
+                    debug!("released order_id {}, orders.len()={}", order_id, requests.len());
+                }
+            }
+
+            if shutdown_requested.load(Ordering::SeqCst) {
+                return 0;
+            }
+        }
+    })
 }
 
 fn dispatch_message(

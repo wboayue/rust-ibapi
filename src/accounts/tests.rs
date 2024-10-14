@@ -18,7 +18,7 @@ fn test_pnl() {
     let _ = client.pnl(account, model_code).expect("request pnl failed");
     let _ = client.pnl(account, None).expect("request pnl failed");
 
-    let request_messages = client.message_bus.lock().unwrap().request_messages();
+    let request_messages = client.message_bus.read().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode_simple(), "92|9000|DU1234567|TARGET2024|");
     assert_eq!(request_messages[1].encode_simple(), "93|9000|");

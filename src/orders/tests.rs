@@ -1,5 +1,4 @@
-use std::sync::RwLock;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 use crate::contracts::{contract_samples, Contract, SecurityType};
 use crate::stubs::MessageBusStub;
@@ -8,7 +7,7 @@ use super::*;
 
 #[test]
 fn place_order() {
-    let message_bus = Arc::new(Mutex::new(MessageBusStub{
+    let message_bus = Arc::new(RwLock::new(MessageBusStub{
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
             "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|1376327563|0|0|0||1376327563.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
@@ -36,7 +35,7 @@ fn place_order() {
 
     let result = client.place_order(order_id, &contract, &order);
 
-    let request_messages = client.message_bus.lock().unwrap().request_messages();
+    let request_messages = client.message_bus.read().unwrap().request_messages();
 
     assert_eq!(
         request_messages[0].encode().replace('\0', "|"),
@@ -297,7 +296,7 @@ fn place_order() {
 
 #[test]
 fn cancel_order() {
-    let message_bus = Arc::new(Mutex::new(MessageBusStub {
+    let message_bus = Arc::new(RwLock::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
             "3|41|Cancelled|0|100|0|71270927|0|0|100||0||".to_owned(),
@@ -310,7 +309,7 @@ fn cancel_order() {
     let order_id = 41;
     let results = client.cancel_order(order_id, "");
 
-    let request_messages = client.message_bus.lock().unwrap().request_messages();
+    let request_messages = client.message_bus.read().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode(), "4\01\041\0");
 
@@ -339,7 +338,7 @@ fn cancel_order() {
 
 #[test]
 fn global_cancel() {
-    let message_bus = Arc::new(Mutex::new(MessageBusStub {
+    let message_bus = Arc::new(RwLock::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
     }));
@@ -348,7 +347,7 @@ fn global_cancel() {
 
     let results = super::global_cancel(&mut client);
 
-    let request_messages = client.message_bus.lock().unwrap().request_messages();
+    let request_messages = client.message_bus.read().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode(), "58\01\0");
     assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
@@ -356,7 +355,7 @@ fn global_cancel() {
 
 #[test]
 fn next_valid_order_id() {
-    let message_bus = Arc::new(Mutex::new(MessageBusStub {
+    let message_bus = Arc::new(RwLock::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["9|1|43||".to_owned()],
     }));
@@ -365,7 +364,7 @@ fn next_valid_order_id() {
 
     let results = super::next_valid_order_id(&mut client);
 
-    let request_messages = client.message_bus.lock().unwrap().request_messages();
+    let request_messages = client.message_bus.read().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode(), "8\01\00\0");
 
@@ -375,7 +374,7 @@ fn next_valid_order_id() {
 
 #[test]
 fn completed_orders() {
-    let message_bus = Arc::new(Mutex::new(MessageBusStub{
+    let message_bus = Arc::new(RwLock::new(MessageBusStub{
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
             "101|265598|AAPL|STK||0|?||SMART|USD|AAPL|NMS|BUY|0|MKT|0.0|0.0|DAY||DU1234567||0||1824933227|0|0|0|||||||||||0||-1||||||2147483647|0|0||3|0||0|None||0|0|0||0|0||||0|0|0|2147483647|2147483647||||IB|0|0||0|Filled|0|0|0|1.7976931348623157E308|1.7976931348623157E308|0|1|0||100|2147483647|0|Not an insider or substantial shareholder|0|0|9223372036854775807|20230306 12:28:30 America/Los_Angeles|Filled Size: 100|".to_owned(),
@@ -388,7 +387,7 @@ fn completed_orders() {
     let api_only = true;
     let results = super::completed_orders(&mut client, api_only);
 
-    let request_messages = client.message_bus.lock().unwrap().request_messages();
+    let request_messages = client.message_bus.read().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode(), "99\01\0");
 
@@ -511,7 +510,7 @@ fn completed_orders() {
 
 #[test]
 fn open_orders() {
-    let message_bus = Arc::new(Mutex::new(MessageBusStub {
+    let message_bus = Arc::new(RwLock::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["9|1|43||".to_owned()],
     }));
@@ -520,7 +519,7 @@ fn open_orders() {
 
     let results = super::open_orders(&mut client);
 
-    let request_messages = client.message_bus.lock().unwrap().request_messages();
+    let request_messages = client.message_bus.read().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode_simple(), "5|1|");
 
@@ -529,7 +528,7 @@ fn open_orders() {
 
 #[test]
 fn all_open_orders() {
-    let message_bus = Arc::new(Mutex::new(MessageBusStub {
+    let message_bus = Arc::new(RwLock::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["9|1|43||".to_owned()],
     }));
@@ -538,7 +537,7 @@ fn all_open_orders() {
 
     let results = client.all_open_orders();
 
-    let request_messages = client.message_bus.lock().unwrap().request_messages();
+    let request_messages = client.message_bus.read().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode_simple(), "16|1|");
 
@@ -547,7 +546,7 @@ fn all_open_orders() {
 
 #[test]
 fn auto_open_orders() {
-    let message_bus = Arc::new(Mutex::new(MessageBusStub {
+    let message_bus = Arc::new(RwLock::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["9|1|43||".to_owned()],
     }));
@@ -557,7 +556,7 @@ fn auto_open_orders() {
     let api_only = true;
     let results = client.auto_open_orders(api_only);
 
-    let request_messages = client.message_bus.lock().unwrap().request_messages();
+    let request_messages = client.message_bus.read().unwrap().request_messages();
 
     assert_eq!(request_messages[0].encode_simple(), "15|1|1|");
 
@@ -566,7 +565,7 @@ fn auto_open_orders() {
 
 #[test]
 fn executions() {
-    let message_bus = Arc::new(Mutex::new(MessageBusStub {
+    let message_bus = Arc::new(RwLock::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec!["9|1|43||".to_owned()],
     }));
@@ -584,7 +583,7 @@ fn executions() {
     };
     let results = client.executions(filter);
 
-    let request_messages = client.message_bus.lock().unwrap().request_messages();
+    let request_messages = client.message_bus.read().unwrap().request_messages();
 
     assert_eq!(
         request_messages[0].encode_simple(),
@@ -597,7 +596,7 @@ fn executions() {
 
 #[test]
 fn encode_limit_order() {
-    let message_bus = Arc::new(Mutex::new(MessageBusStub {
+    let message_bus = Arc::new(RwLock::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
     }));
@@ -610,7 +609,7 @@ fn encode_limit_order() {
 
     let results = client.place_order(order_id, &contract, &order);
 
-    let request_messages = client.message_bus.lock().unwrap().request_messages();
+    let request_messages = client.message_bus.read().unwrap().request_messages();
 
     assert_eq!(
         request_messages[0].encode_simple(),
@@ -622,7 +621,7 @@ fn encode_limit_order() {
 
 #[test]
 fn encode_combo_market_order() {
-    let message_bus = Arc::new(Mutex::new(MessageBusStub {
+    let message_bus = Arc::new(RwLock::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![],
     }));
@@ -635,7 +634,7 @@ fn encode_combo_market_order() {
 
     let results = client.place_order(order_id, &contract, &order);
 
-    let request_messages = client.message_bus.lock().unwrap().request_messages();
+    let request_messages = client.message_bus.read().unwrap().request_messages();
 
     assert_eq!(
         request_messages[0].encode_simple(),
