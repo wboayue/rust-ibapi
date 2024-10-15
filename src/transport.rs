@@ -44,11 +44,9 @@ pub(crate) trait MessageBus: Send + Sync {
     // Sends formatted order specific message to TWS and creates a reply channel by order id.
     fn send_order_request(&self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
 
-    fn cancel_order_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
-        Ok(())
-    }
+    fn cancel_order_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error>;
 
-    fn shutdown(&self) {}
+    fn ensure_shutdown(&self) {}
 
     // Testing interface. Tracks requests sent messages when Bus is stubbed.
     #[cfg(test)]
