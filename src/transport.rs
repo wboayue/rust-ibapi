@@ -48,9 +48,6 @@ pub(crate) trait MessageBus: Send + Sync {
         Ok(())
     }
 
-    // Starts a dedicated thread to process responses from TWS.
-    //fn process_messages(self: Arc<Self>, server_version: i32) -> Result<(), Error>;
-
     fn shutdown(&self) {}
 
     // Testing interface. Tracks requests sent messages when Bus is stubbed.
@@ -216,7 +213,7 @@ impl TcpMessageBus {
 
     // Dispatcher thread reads messages from TWS and dispatches them to
     // appropriate channel.
-    fn start_dispatcher_thread(self: &Arc<Self>, server_version: i32) -> JoinHandle<i32> {
+    fn start_dispatcher_thread(self: &Arc<Self>, server_version: i32) -> JoinHandle<()> {
         let message_bus = Arc::clone(self);
         let recorder = self.recorder.clone();
 
@@ -232,6 +229,8 @@ impl TcpMessageBus {
                     Ok(message) => {
                         recorder.record_response(&message);
                         message_bus.dispatch_message(server_version, message);
+
+                        backoff.reset();
                         retry_attempt = 1;
                     }
                     Err(Error::Io(e)) if RECONNECT_ERRORS.contains(&e.kind()) => {
@@ -240,7 +239,7 @@ impl TcpMessageBus {
                         if let Err(e) = message_bus.connection.reconnect() {
                             error!("error reconnecting: {:?}", e);
                             message_bus.request_shutdown();
-                            return 0;
+                            return;
                         }
                         info!("reconnected");
                         message_bus.reset();
@@ -251,7 +250,7 @@ impl TcpMessageBus {
                         let next_delay = backoff.next_delay();
                         if retry_attempt > MAX_RETRIES {
                             message_bus.request_shutdown();
-                            return 0;
+                            return;
                         }
                         error!("retry read attempt {retry_attempt} of {MAX_RETRIES}");
                         thread::sleep(next_delay);
@@ -261,12 +260,12 @@ impl TcpMessageBus {
                     Err(err) => {
                         error!("error reading packet: {:?}", err);
                         message_bus.request_shutdown();
-                        return 0;
+                        return;
                     }
                 };
 
                 if message_bus.is_shutting_down() {
-                    return 0;
+                    return;
                 }
             }
         })
@@ -394,7 +393,7 @@ impl TcpMessageBus {
 
     // The cleanup thread receives signals as subscribers are dropped and
     // releases the sender channels
-    fn start_cleanup_thread(self: &Arc<Self>) -> JoinHandle<i32> {
+    fn start_cleanup_thread(self: &Arc<Self>) -> JoinHandle<()> {
         let message_bus = Arc::clone(self);
 
         thread::spawn(move || loop {
@@ -411,7 +410,7 @@ impl TcpMessageBus {
                 }
 
                 if message_bus.is_shutting_down() {
-                    return 0;
+                    return;
                 }
             }
         })
@@ -419,13 +418,15 @@ impl TcpMessageBus {
 
     pub(crate) fn process_messages(self: &Arc<Self>, server_version: i32) -> Result<(), Error> {
         let handle = self.start_dispatcher_thread(server_version);
-        //        self.handles.push(handle);
+        self.add_join_handle(handle);
 
         let handle = self.start_cleanup_thread();
-        //        self.handles.push(handle);
+        self.add_join_handle(handle);
 
         Ok(())
     }
+
+    fn add_join_handle(&self, handle: JoinHandle<()>) {}
 }
 
 const UNSPECIFIED_REQUEST_ID: i32 = -1;
@@ -433,6 +434,7 @@ const UNSPECIFIED_REQUEST_ID: i32 = -1;
 impl MessageBus for TcpMessageBus {
     fn send_request(&self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error> {
         let (sender, receiver) = channel::unbounded();
+        let sender_copy = sender.clone();
 
         self.requests.insert(request_id, sender);
 
@@ -440,6 +442,7 @@ impl MessageBus for TcpMessageBus {
 
         let subscription = SubscriptionBuilder::new()
             .receiver(receiver)
+            .sender(sender_copy)
             .signaler(self.signals_send.clone())
             .request_id(request_id)
             .build();
@@ -461,6 +464,7 @@ impl MessageBus for TcpMessageBus {
 
     fn send_order_request(&self, order_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         let (sender, receiver) = channel::unbounded();
+        let sender_copy = sender.clone();
 
         self.orders.insert(order_id, sender);
 
@@ -468,6 +472,7 @@ impl MessageBus for TcpMessageBus {
 
         let subscription = SubscriptionBuilder::new()
             .receiver(receiver)
+            .sender(sender_copy)
             .signaler(self.signals_send.clone())
             .order_id(order_id)
             .build();
@@ -601,6 +606,7 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
 #[derive(Debug)]
 pub(crate) struct InternalSubscription {
     receiver: Option<Receiver<Response>>,              // requests with request ids receive responses via this channel
+    sender: Option<Sender<Response>>,                  // requests with request ids receive responses via this channel
     shared_receiver: Option<Arc<Receiver<Response>>>,  // this channel is for responses that share channel based on message type
     signaler: Option<Sender<Signal>>,                  // for client to signal termination
     pub(crate) request_id: Option<i32>,                // initiating request id
@@ -689,6 +695,7 @@ impl Drop for InternalSubscription {
 
 pub(crate) struct SubscriptionBuilder {
     receiver: Option<Receiver<Response>>,
+    sender: Option<Sender<Response>>,
     shared_receiver: Option<Arc<Receiver<Response>>>,
     signaler: Option<Sender<Signal>>,
     order_id: Option<i32>,
@@ -700,6 +707,7 @@ impl SubscriptionBuilder {
     pub(crate) fn new() -> Self {
         Self {
             receiver: None,
+            sender: None,
             shared_receiver: None,
             signaler: None,
             order_id: None,
@@ -710,6 +718,11 @@ impl SubscriptionBuilder {
 
     pub(crate) fn receiver(mut self, receiver: Receiver<Response>) -> Self {
         self.receiver = Some(receiver);
+        self
+    }
+
+    pub(crate) fn sender(mut self, sender: Sender<Response>) -> Self {
+        self.sender = Some(sender);
         self
     }
 
@@ -742,6 +755,7 @@ impl SubscriptionBuilder {
         if let (Some(receiver), Some(signaler)) = (self.receiver, self.signaler) {
             InternalSubscription {
                 receiver: Some(receiver),
+                sender: self.sender,
                 shared_receiver: None,
                 signaler: Some(signaler),
                 request_id: self.request_id,
@@ -751,6 +765,7 @@ impl SubscriptionBuilder {
         } else if let Some(receiver) = self.shared_receiver {
             InternalSubscription {
                 receiver: None,
+                sender: None,
                 shared_receiver: Some(receiver),
                 signaler: None,
                 request_id: self.request_id,
