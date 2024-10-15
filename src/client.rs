@@ -952,6 +952,7 @@ impl Client {
 
 impl Drop for Client {
     fn drop(&mut self) {
+        //self.message_bus.join();
         debug!("dropping basic client")
     }
 }
