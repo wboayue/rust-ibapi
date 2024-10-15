@@ -1,6 +1,8 @@
 use ibapi::Client;
 
 fn main() {
+    env_logger::init();
+
     let client = Client::connect("127.0.0.1:4002", 100).unwrap();
 
     let market_rule_id = 12;

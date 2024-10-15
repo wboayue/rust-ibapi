@@ -6,6 +6,8 @@ use ibapi::orders::{order_builder, Action, OrderNotification};
 use ibapi::Client;
 
 fn main() {
+    env_logger::init();
+
     let client = Client::connect("127.0.0.1:4002", 100).unwrap();
 
     let symbol = "TSLA";

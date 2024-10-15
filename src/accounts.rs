@@ -9,11 +9,10 @@
 //! - Real-time PnL updates for individual positions
 //!
 
-use std::marker::PhantomData;
-
 use crate::client::{SharesChannel, Subscribable, Subscription};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::transport::Response;
 use crate::{server_versions, Client, Error};
 
 mod decoders;
@@ -329,14 +328,9 @@ pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionUpdate>,
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position requests.")?;
 
     let request = encoders::encode_request_positions()?;
-    let responses = client.send_shared_request(OutgoingMessages::RequestPositions, request)?;
+    let subscription = client.send_shared_request(OutgoingMessages::RequestPositions, request)?;
 
-    Ok(Subscription {
-        client,
-        request_id: None,
-        subscription: responses,
-        phantom: PhantomData,
-    })
+    Ok(Subscription::new(client, subscription))
 }
 
 impl SharesChannel for Subscription<'_, PositionUpdate> {}
@@ -349,16 +343,10 @@ pub(crate) fn positions_multi<'a>(
     client.check_server_version(server_versions::MODELS_SUPPORT, "It does not support positions multi requests.")?;
 
     let request_id = client.next_request_id();
-
     let request = encoders::encode_request_positions_multi(request_id, account, model_code)?;
-    let responses = client.send_request(request_id, request)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription {
-        client,
-        request_id: Some(request_id),
-        subscription: responses,
-        phantom: PhantomData,
-    })
+    Ok(Subscription::new(client, subscription))
 }
 
 // Determine whether an account exists under an account family and find the account family code.
@@ -368,7 +356,8 @@ pub(crate) fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
     let request = encoders::encode_request_family_codes()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestFamilyCodes, request)?;
 
-    if let Some(mut message) = subscription.next() {
+    // TODO: enumerate
+    if let Some(Response::Message(mut message)) = subscription.next() {
         decoders::decode_family_codes(&mut message)
     } else {
         Ok(Vec::default())
@@ -385,16 +374,10 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
     client.check_server_version(server_versions::PNL, "It does not support PnL requests.")?;
 
     let request_id = client.next_request_id();
-
     let request = encoders::encode_request_pnl(request_id, account, model_code)?;
-    let responses = client.send_request(request_id, request)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription {
-        client,
-        request_id: Some(request_id),
-        subscription: responses,
-        phantom: PhantomData,
-    })
+    Ok(Subscription::new(client, subscription))
 }
 
 // Requests real time updates for daily PnL of individual positions.
@@ -413,32 +396,20 @@ pub(crate) fn pnl_single<'a>(
     client.check_server_version(server_versions::REALIZED_PNL, "It does not support PnL requests.")?;
 
     let request_id = client.next_request_id();
-
     let request = encoders::encode_request_pnl_single(request_id, account, contract_id, model_code)?;
-    let responses = client.send_request(request_id, request)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription {
-        client,
-        request_id: Some(request_id),
-        subscription: responses,
-        phantom: PhantomData,
-    })
+    Ok(Subscription::new(client, subscription))
 }
 
 pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support account summary requests.")?;
 
     let request_id = client.next_request_id();
-
     let request = encoders::encode_request_account_summary(request_id, group, tags)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription {
-        client,
-        request_id: Some(request_id),
-        subscription,
-        phantom: PhantomData,
-    })
+    Ok(Subscription::new(client, subscription))
 }
 
 pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
@@ -446,13 +417,15 @@ pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
     let subscription = client.send_shared_request(OutgoingMessages::RequestManagedAccounts, request)?;
 
     match subscription.next() {
-        Some(mut message) => {
+        Some(Response::Message(mut message)) => {
             message.skip(); // message type
             message.skip(); // message version
 
             let accounts = message.next_string()?;
             Ok(accounts.split(",").map(String::from).collect())
         }
+        Some(Response::Cancelled) => Err(Error::Cancelled),
+        Some(Response::Disconnected) => Err(Error::ConnectionFailed),
         None => Ok(Vec::default()),
     }
 }

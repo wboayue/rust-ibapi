@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use log::error;
 use time::OffsetDateTime;
 
@@ -8,7 +6,7 @@ use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::orders::TagValue;
 use crate::server_versions;
-use crate::transport::InternalSubscription;
+use crate::transport::{InternalSubscription, Response};
 use crate::ToField;
 use crate::{Client, Error};
 
@@ -195,16 +193,10 @@ pub(crate) fn realtime_bars<'a>(
     }
 
     let request_id = client.next_request_id();
-    let packet = encoders::encode_request_realtime_bars(client.server_version(), request_id, contract, bar_size, what_to_show, use_rth, options)?;
+    let request = encoders::encode_request_realtime_bars(client.server_version(), request_id, contract, bar_size, what_to_show, use_rth, options)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    let responses = client.send_request(request_id, packet)?;
-
-    Ok(Subscription {
-        client,
-        request_id: Some(request_id),
-        subscription: responses,
-        phantom: PhantomData,
-    })
+    Ok(Subscription::new(client, subscription))
 }
 
 // Requests tick by tick AllLast ticks.
@@ -300,14 +292,9 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
     let request_id = client.next_request_id();
 
     let message = encoders::tick_by_tick(server_version, request_id, contract, "MidPoint", number_of_ticks, ignore_size)?;
-    let responses = client.send_request(request_id, message)?;
+    let subscription = client.send_request(request_id, message)?;
 
-    Ok(Subscription {
-        client,
-        request_id: Some(request_id),
-        subscription: responses,
-        phantom: PhantomData,
-    })
+    Ok(Subscription::new(client, subscription))
 }
 
 // Iterators
@@ -333,14 +320,15 @@ impl<'a> Iterator for TradeIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.responses.next() {
-                Some(mut message) => match message.message_type() {
+                Some(Response::Message(mut message)) => match message.message_type() {
                     IncomingMessages::TickByTick => match decoders::decode_trade_tick(&mut message) {
                         Ok(tick) => return Some(tick),
                         Err(e) => error!("unexpected message {message:?}: {e:?}"),
                     },
                     _ => error!("unexpected message {message:?}"),
                 },
-                None => return None,
+                // TODO enumerate
+                _ => return None,
             }
         }
     }
@@ -357,7 +345,7 @@ pub(crate) struct BidAskIterator<'a> {
 fn cancel_tick_by_tick(client: &Client, request_id: i32) {
     if client.server_version() >= server_versions::TICK_BY_TICK {
         let message = encoders::cancel_tick_by_tick(request_id).unwrap();
-        client.send_message(message).unwrap();
+        client.message_bus.cancel_subscription(request_id, &message).unwrap();
     }
 }
 
@@ -375,14 +363,15 @@ impl<'a> Iterator for BidAskIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.responses.next() {
-                Some(mut message) => match message.message_type() {
+                Some(Response::Message(mut message)) => match message.message_type() {
                     IncomingMessages::TickByTick => match decoders::bid_ask_tick(&mut message) {
                         Ok(tick) => return Some(tick),
                         Err(e) => error!("unexpected message {message:?}: {e:?}"),
                     },
                     _ => error!("unexpected message {message:?}"),
                 },
-                None => return None,
+                // TODO enumerate
+                _ => return None,
             }
         }
     }
