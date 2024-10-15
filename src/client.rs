@@ -1019,23 +1019,34 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// Blocks until the item become available.
     pub fn next(&self) -> Option<T> {
         loop {
-            if let Some(Response::Message(mut message)) = self.subscription.next() {
-                if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
-                    match T::decode(self.client.server_version(), &mut message) {
-                        Ok(val) => return Some(val),
-                        Err(err) => {
-                            error!("error decoding execution data: {err}");
+            match self.subscription.next() {
+                Some(Response::Message(mut message)) => {
+                    if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
+                        match T::decode(self.client.server_version(), &mut message) {
+                            Ok(val) => return Some(val),
+                            Err(err) => {
+                                error!("error decoding execution data: {err}");
+                            }
                         }
+                    } else if message.message_type() == IncomingMessages::Error {
+                        let error_message = message.peek_string(4);
+                        error!("{error_message}");
+                        return None;
+                    } else {
+                        error!("subscription iterator unexpected message: {message:?}");
                     }
-                } else if message.message_type() == IncomingMessages::Error {
-                    let error_message = message.peek_string(4);
-                    error!("{error_message}");
-                    return None;
-                } else {
-                    error!("subscription iterator unexpected message: {message:?}");
                 }
-            } else {
-                return None;
+                Some(Response::Cancelled) => {
+                    debug!("subscription cancelled");
+                    return None;
+                }
+                Some(Response::Disconnected) => {
+                    debug!("server disconnected");
+                    return None;
+                }
+                _ => {
+                    return None;
+                }
             }
         }
     }
@@ -1105,14 +1116,17 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
         if let Some(request_id) = self.request_id {
             if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
                 self.client.message_bus.cancel_subscription(request_id, &message)?;
+                self.subscription.cancel();
             }
         } else if let Some(order_id) = self.order_id {
             if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
                 self.client.message_bus.cancel_order_subscription(order_id, &message)?;
+                self.subscription.cancel();
             }
         } else if let Some(message_type) = self.message_type {
             if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
                 self.client.message_bus.cancel_shared_subscription(message_type, &message)?;
+                self.subscription.cancel();
             }
         } else {
             debug!("Could not determine cancel method")

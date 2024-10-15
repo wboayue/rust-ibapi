@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use crossbeam::channel::{self, Receiver, Sender};
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
@@ -154,16 +154,14 @@ pub enum Signal {
 #[derive(Debug)]
 pub struct TcpMessageBus {
     connection: Connection,
-    handles: Vec<JoinHandle<i32>>,
+    handles: Mutex<Vec<JoinHandle<()>>>,
     requests: SenderHash<i32, Response>,
     orders: SenderHash<i32, Response>,
     executions: SenderHash<String, Response>,
-    recorder: MessageRecorder,
     shared_channels: SharedChannels,
     signals_send: Sender<Signal>,
     signals_recv: Receiver<Signal>,
     shutdown_requested: AtomicBool,
-    is_alive: bool,
 }
 
 impl TcpMessageBus {
@@ -172,16 +170,14 @@ impl TcpMessageBus {
 
         Ok(TcpMessageBus {
             connection,
-            handles: Vec::default(),
+            handles: Mutex::new(Vec::default()),
             requests: SenderHash::new(),
             orders: SenderHash::new(),
             executions: SenderHash::new(),
-            recorder: MessageRecorder::new(),
             shared_channels: SharedChannels::new(),
             signals_send,
             signals_recv,
             shutdown_requested: AtomicBool::new(false),
-            is_alive: true,
         })
     }
 
@@ -213,7 +209,6 @@ impl TcpMessageBus {
     // appropriate channel.
     fn start_dispatcher_thread(self: &Arc<Self>, server_version: i32) -> JoinHandle<()> {
         let message_bus = Arc::clone(self);
-        let recorder = self.recorder.clone();
 
         const RECONNECT_ERRORS: &[ErrorKind] = &[ErrorKind::ConnectionReset, ErrorKind::UnexpectedEof];
         const RETRY_ERRORS: &[ErrorKind] = &[ErrorKind::Interrupted];
@@ -225,7 +220,6 @@ impl TcpMessageBus {
             loop {
                 match message_bus.read_message() {
                     Ok(message) => {
-                        recorder.record_response(&message);
                         message_bus.dispatch_message(server_version, message);
 
                         backoff.reset();
@@ -424,7 +418,21 @@ impl TcpMessageBus {
         Ok(())
     }
 
-    fn add_join_handle(&self, handle: JoinHandle<()>) {}
+    fn add_join_handle(&self, handle: JoinHandle<()>) {
+        let mut handles = self.handles.lock().unwrap();
+        handles.push(handle);
+    }
+
+    pub fn join(&self) {
+        let mut handles = self.handles.lock().unwrap();
+        while !handles.is_empty() {
+            if let Some(handle) = handles.pop() {
+                if let Err(e) = handle.join() {
+                    warn!("could not join thread: {e:?}");
+                }
+            }
+        }
+    }
 }
 
 const UNSPECIFIED_REQUEST_ID: i32 = -1;
@@ -508,6 +516,11 @@ impl MessageBus for TcpMessageBus {
         // TODO send cancel
         Ok(())
     }
+
+    fn ensure_shutdown(&self) {
+        self.join();
+    }
+
 }
 
 fn read_header(mut reader: &TcpStream) -> Result<usize, Error> {
@@ -646,25 +659,14 @@ impl InternalSubscription {
         }
     }
 
-    // pub(crate) fn cancel(&self) -> Result<(), Error> {
-    //     if let Some(receiver) = &self.receiver {
-    //         receiver.
-    //     } else if let Some(receiver) = &self.shared_receiver {
-    //         Self::timeout_receive(receiver, timeout)
-    //     } else {
-    //         None
-    //     }
-
-    //     if let (Some(request_id), Some(signaler)) = (self.request_id, &self.signaler) {
-    //         signaler.send(Signal::Ca).unwrap();
-    //     }
-
-    //     if let (Some(order_id), Some(signaler)) = (self.order_id, &self.signaler) {
-    //         signaler.send(Signal::Order(order_id)).unwrap();
-    //     }
-
-    //     Ok(())
-    // }
+    pub(crate) fn cancel(&self) {
+        if let Some(sender) = &self.sender {
+            if let Err(e) = sender.send(Response::Cancelled) {
+                warn!("error sending cancel notification: {e}")
+            }
+        }
+        // TODO - shared sender
+    }
 
     fn receive(receiver: &Receiver<Response>) -> Option<Response> {
         receiver.recv().ok()
@@ -794,6 +796,7 @@ pub(crate) struct Connection {
     writer: Mutex<TcpStream>,
     connection_metadata: Mutex<ConnectionMetadata>,
     max_retries: i32,
+    recorder: MessageRecorder,
 }
 
 impl Connection {
@@ -808,6 +811,7 @@ impl Connection {
             writer: Mutex::new(writer),
             connection_metadata: Mutex::new(ConnectionMetadata::default()),
             max_retries: MAX_RETRIES,
+            recorder: MessageRecorder::new(),
         };
 
         connection.establish_connection()?;
@@ -881,6 +885,8 @@ impl Connection {
 
         writer.write_all(&packet)?;
 
+        self.recorder.record_request(message);
+
         Ok(())
     }
 
@@ -895,9 +901,10 @@ impl Connection {
         let raw_string = String::from_utf8(data)?;
         debug!("<- {:?}", raw_string);
 
-        let packet = ResponseMessage::from(&raw_string);
+        let message = ResponseMessage::from(&raw_string);
+        self.recorder.record_response(&message);
 
-        Ok(packet)
+        Ok(message)
     }
 
     // sends server handshake

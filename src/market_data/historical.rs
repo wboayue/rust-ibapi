@@ -167,7 +167,7 @@ impl ToDuration for i32 {
 }
 
 #[derive(Debug)]
-struct HistogramData {
+pub struct HistogramData {
     pub price: f64,
     pub count: i32,
 }
@@ -575,4 +575,4 @@ impl<T: TickDecoder<T> + Debug> Iterator for TickIterator<T> {
     }
 }
 
-struct HistogramDataIterator {}
+pub struct HistogramDataIterator {}
