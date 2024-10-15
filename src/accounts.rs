@@ -424,8 +424,8 @@ pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
             let accounts = message.next_string()?;
             Ok(accounts.split(",").map(String::from).collect())
         }
-        Some(Response::Cancelled) => Err(Error::Simple(format!("request cancelled"))),
-        Some(Response::Disconnected) => Err(Error::Simple(format!("server disconnected"))),
+        Some(Response::Cancelled) => Err(Error::Cancelled),
+        Some(Response::Disconnected) => Err(Error::ConnectionFailed),
         None => Ok(Vec::default()),
     }
 }
