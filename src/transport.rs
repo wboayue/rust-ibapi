@@ -186,6 +186,13 @@ impl TcpMessageBus {
     }
 
     fn request_shutdown(&self) {
+        self.requests.notify_all(&Response::Disconnected);
+        self.orders.notify_all(&Response::Disconnected);
+
+        self.requests.clear();
+        self.orders.clear();
+        self.executions.clear();
+
         self.shutdown_requested.store(true, Ordering::Relaxed);
     }
 
@@ -223,7 +230,7 @@ impl TcpMessageBus {
                         message_bus.dispatch_message(server_version, message);
 
                         backoff.reset();
-                        retry_attempt = 1;
+                        retry_attempt = 0;
                     }
                     Err(Error::Io(e)) if RECONNECT_ERRORS.contains(&e.kind()) => {
                         error!("error reading packet: {:?}", e);
@@ -425,11 +432,10 @@ impl TcpMessageBus {
 
     pub fn join(&self) {
         let mut handles = self.handles.lock().unwrap();
-        while !handles.is_empty() {
-            if let Some(handle) = handles.pop() {
-                if let Err(e) = handle.join() {
-                    warn!("could not join thread: {e:?}");
-                }
+
+        for handle in handles.drain(..) {
+            if let Err(e) = handle.join() {
+                warn!("could not join thread: {e:?}");
             }
         }
     }
@@ -520,7 +526,6 @@ impl MessageBus for TcpMessageBus {
     fn ensure_shutdown(&self) {
         self.join();
     }
-
 }
 
 fn read_header(mut reader: &TcpStream) -> Result<usize, Error> {
@@ -564,18 +569,18 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), E
 
 #[derive(Debug)]
 struct SenderHash<K, V> {
-    data: RwLock<HashMap<K, Sender<V>>>,
+    senders: RwLock<HashMap<K, Sender<V>>>,
 }
 
-impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K, V> {
+impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug + Clone> SenderHash<K, V> {
     pub fn new() -> Self {
         Self {
-            data: RwLock::new(HashMap::new()),
+            senders: RwLock::new(HashMap::new()),
         }
     }
 
     pub fn send(&self, id: &K, message: V) -> Result<(), Error> {
-        let senders = self.data.read().unwrap();
+        let senders = self.senders.read().unwrap();
         debug!("senders: {senders:?}");
         if let Some(sender) = senders.get(id) {
             if let Err(err) = sender.send(message) {
@@ -588,28 +593,42 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K
     }
 
     pub fn copy_sender(&self, id: K) -> Option<Sender<V>> {
-        let senders = self.data.read().unwrap();
+        let senders = self.senders.read().unwrap();
         senders.get(&id).cloned()
     }
 
     pub fn insert(&self, id: K, message: Sender<V>) -> Option<Sender<V>> {
-        let mut senders = self.data.write().unwrap();
+        let mut senders = self.senders.write().unwrap();
         senders.insert(id, message)
     }
 
     pub fn remove(&self, id: &K) -> Option<Sender<V>> {
-        let mut senders = self.data.write().unwrap();
+        let mut senders = self.senders.write().unwrap();
         senders.remove(id)
     }
 
     pub fn contains(&self, id: &K) -> bool {
-        let senders = self.data.read().unwrap();
+        let senders = self.senders.read().unwrap();
         senders.contains_key(id)
     }
 
     pub fn len(&self) -> usize {
-        let senders = self.data.read().unwrap();
+        let senders = self.senders.read().unwrap();
         senders.len()
+    }
+
+    pub fn clear(&self) {
+        let mut senders = self.senders.write().unwrap();
+        senders.clear();
+    }
+
+    pub fn notify_all(&self, message: &V) {
+        let senders = self.senders.read().unwrap();
+        for sender in senders.values() {
+            if let Err(e) = sender.send(message.clone()) {
+                warn!("error sending notification: {e}");
+            }
+        }
     }
 }
 
