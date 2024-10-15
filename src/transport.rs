@@ -48,7 +48,7 @@ pub(crate) trait MessageBus: Send + Sync {
     }
 
     // Starts a dedicated thread to process responses from TWS.
-    fn process_messages(&mut self, server_version: i32) -> Result<(), Error>;
+    //fn process_messages(self: Arc<Self>, server_version: i32) -> Result<(), Error>;
 
     fn shutdown(&self) {}
 
@@ -161,6 +161,7 @@ pub struct TcpMessageBus {
     handles: Vec<JoinHandle<i32>>,
     requests: Arc<SenderHash<i32, Response>>,
     orders: Arc<SenderHash<i32, Response>>,
+    executions: Arc<SenderHash<String, Response>>,
     recorder: MessageRecorder,
     shared_channels: Arc<SharedChannels>,
     signals_send: Sender<Signal>,
@@ -173,6 +174,7 @@ impl TcpMessageBus {
     pub fn new(connection: Connection) -> Result<TcpMessageBus, Error> {
         let requests = Arc::new(SenderHash::new());
         let orders = Arc::new(SenderHash::new());
+        let executions = Arc::new(SenderHash::new());
 
         let (signals_send, signals_recv) = channel::unbounded();
 
@@ -181,6 +183,7 @@ impl TcpMessageBus {
             handles: Vec::default(),
             requests,
             orders,
+            executions,
             recorder: MessageRecorder::new(),
             shared_channels: Arc::new(SharedChannels::new()),
             signals_send,
@@ -191,7 +194,11 @@ impl TcpMessageBus {
     }
 
     fn is_shutting_down(&self) -> bool {
-        return self.shutdown_requested.load(Ordering::SeqCst);
+        self.shutdown_requested.load(Ordering::SeqCst)
+    }
+
+    fn request_shutdown(&self) {
+        self.shutdown_requested.store(true, Ordering::Relaxed);
     }
 
     fn clean_request(&self, request_id: i32) {
@@ -204,35 +211,33 @@ impl TcpMessageBus {
         debug!("released order_id {}, orders.len()={}", order_id, self.orders.len());
     }
 
+    fn read_message(&self) -> Result<ResponseMessage, Error> {
+        let connection = self.connection.read()?;
+        connection.read_message()
+    }
+
     // Dispatcher thread reads messages from TWS and dispatches them to
     // appropriate channel.
-    fn start_dispatcher_thread(&mut self, server_version: i32) -> JoinHandle<i32> {
-        let connection = Arc::clone(&self.connection);
-        let requests = Arc::clone(&self.requests);
+    fn start_dispatcher_thread(self: &Arc<Self>, server_version: i32) -> JoinHandle<i32> {
+        let message_bus = Arc::clone(self);
         let recorder = self.recorder.clone();
-        let orders = Arc::clone(&self.orders);
-        let shared_channels = Arc::clone(&self.shared_channels);
-        let executions = SenderHash::<String, Response>::new();
-        let shutdown_requested = Arc::clone(&self.shutdown_requested);
 
         const RECONNECT_ERRORS: &[ErrorKind] = &[ErrorKind::ConnectionReset];
         const RETRY_ERRORS: &[ErrorKind] = &[ErrorKind::Interrupted];
 
         thread::spawn(move || loop {
-            let _connection = connection.read().unwrap();
-
-            match _connection.read_message() {
+            match message_bus.read_message() {
                 Ok(message) => {
                     recorder.record_response(&message);
-                    dispatch_message(message, server_version, &requests, &orders, &shared_channels, &executions);
+                    message_bus.dispatch_message(server_version, message);
                 }
                 Err(Error::Io(e)) if RECONNECT_ERRORS.contains(&e.kind()) => {
-                    let connection = connection.write().unwrap();
+                    let connection = message_bus.connection.write().unwrap();
                     error!("error reading packet: {:?}", e);
                     // reset hashes
                     if let Err(e) = connection.reconnect() {
                         error!("error reconnecting: {:?}", e);
-                        shutdown_requested.store(true, Ordering::Relaxed);
+                        message_bus.request_shutdown();
                         return 0;
                     }
                 }
@@ -242,43 +247,170 @@ impl TcpMessageBus {
                 }
                 Err(err) => {
                     error!("error reading packet: {:?}", err);
-                    shutdown_requested.store(true, Ordering::Relaxed);
+                    message_bus.request_shutdown();
                     return 0;
                 }
             };
 
-            if shutdown_requested.load(Ordering::SeqCst) {
+            if message_bus.is_shutting_down() {
                 return 0;
             }
         })
     }
 
+    fn dispatch_message(&self, server_version: i32, message: ResponseMessage) {
+        match message.message_type() {
+            IncomingMessages::Error => {
+                let request_id = message.peek_int(2).unwrap_or(-1);
+
+                if request_id == UNSPECIFIED_REQUEST_ID {
+                    error_event(server_version, message).unwrap();
+                } else {
+                    self.process_response(message);
+                }
+            }
+            IncomingMessages::OrderStatus
+            | IncomingMessages::OpenOrder
+            | IncomingMessages::OpenOrderEnd
+            | IncomingMessages::CompletedOrder
+            | IncomingMessages::CompletedOrdersEnd
+            | IncomingMessages::ExecutionData
+            | IncomingMessages::ExecutionDataEnd
+            | IncomingMessages::CommissionsReport => self.process_orders(message),
+            _ => self.process_response(message),
+        };
+    }
+
+    fn process_response(&self, message: ResponseMessage) {
+        let request_id = message.request_id().unwrap_or(-1); // pass in request id?
+        if self.requests.contains(&request_id) {
+            self.requests.send(&request_id, Response::Message(message)).unwrap();
+        } else if self.orders.contains(&request_id) {
+            self.orders.send(&request_id, Response::Message(message)).unwrap();
+        } else if self.shared_channels.contains_sender(message.message_type()) {
+            self.shared_channels
+                .get_sender(message.message_type())
+                .send(Response::Message(message))
+                .unwrap()
+        } else {
+            info!("no recipient found for: {:?}", message)
+        }
+    }
+
+    fn process_orders(&self, message: ResponseMessage) {
+        match message.message_type() {
+            IncomingMessages::ExecutionData => {
+                match (message.order_id(), message.request_id()) {
+                    // First check matching orders channel
+                    (Some(order_id), _) if self.orders.contains(&order_id) => {
+                        if let Err(e) = self.orders.send(&order_id, Response::Message(message)) {
+                            error!("error routing message for order_id({order_id}): {e}");
+                        }
+                    }
+                    (_, Some(request_id)) if self.requests.contains(&request_id) => {
+                        if let Some(sender) = self.requests.copy_sender(request_id) {
+                            if let Some(execution_id) = message.execution_id() {
+                                self.executions.insert(execution_id, sender);
+                            }
+                        }
+
+                        if let Err(e) = self.requests.send(&request_id, Response::Message(message)) {
+                            error!("error routing message for request_id({request_id}): {e}");
+                        }
+                    }
+                    _ => {
+                        error!("could not route message {message:?}");
+                    }
+                }
+            }
+            IncomingMessages::ExecutionDataEnd => {
+                match (message.order_id(), message.request_id()) {
+                    // First check matching orders channel
+                    (Some(order_id), _) if self.orders.contains(&order_id) => {
+                        if let Err(e) = self.orders.send(&order_id, Response::from(message)) {
+                            error!("error routing message for order_id({order_id}): {e}");
+                        }
+                    }
+                    (_, Some(request_id)) if self.requests.contains(&request_id) => {
+                        if let Err(e) = self.requests.send(&request_id, Response::from(message)) {
+                            error!("error routing message for request_id({request_id}): {e}");
+                        }
+                    }
+                    _ => {
+                        error!("could not route message {message:?}");
+                    }
+                }
+            }
+            IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => {
+                if let Some(order_id) = message.order_id() {
+                    if self.orders.contains(&order_id) {
+                        if let Err(e) = self.orders.send(&order_id, Response::from(message)) {
+                            error!("error routing message for order_id({order_id}): {e}");
+                        }
+                    } else if let Err(e) = self.shared_channels.get_sender(IncomingMessages::OpenOrder).send(Response::from(message)) {
+                        error!("error sending IncomingMessages::OpenOrder: {e}");
+                    }
+                }
+            }
+            IncomingMessages::CompletedOrder => {
+                if let Err(e) = self.shared_channels.get_sender(message.message_type()).send(Response::from(message)) {
+                    error!("error sending IncomingMessages::CompletedOrder: {e}");
+                }
+            }
+            IncomingMessages::OpenOrderEnd => {
+                if let Err(e) = self.shared_channels.get_sender(message.message_type()).send(Response::from(message)) {
+                    error!("error sending IncomingMessages::OpenOrderEnd: {e}");
+                }
+            }
+            IncomingMessages::CompletedOrdersEnd => {
+                if let Err(e) = self.shared_channels.get_sender(message.message_type()).send(Response::from(message)) {
+                    error!("error sending IncomingMessages::CompletedOrdersEnd: {e}");
+                }
+            }
+            IncomingMessages::CommissionsReport => {
+                if let Some(execution_id) = message.execution_id() {
+                    if let Err(e) = self.executions.send(&execution_id, Response::from(message)) {
+                        error!("error sending commission report for execution {}: {}", execution_id, e);
+                    }
+                }
+            }
+            _ => (),
+        }
+    }
+
     // The cleanup thread receives signals as subscribers are dropped and
     // releases the sender channels
-    fn start_cleanup_thread(&mut self) -> JoinHandle<i32> {
-        let requests = Arc::clone(&self.requests);
-        let orders = Arc::clone(&self.orders);
-        let signal_recv = self.signals_recv.clone();
-        let shutdown_requested = Arc::clone(&self.shutdown_requested);
+    fn start_cleanup_thread(self: &Arc<Self>) -> JoinHandle<i32> {
+        let message_bus = Arc::clone(self);
 
         thread::spawn(move || loop {
+            let signal_recv = message_bus.signals_recv.clone();
+
             for signal in &signal_recv {
                 match signal {
                     Signal::Request(request_id) => {
-                        requests.remove(&request_id);
-                        debug!("released request_id {}, requests.len()={}", request_id, requests.len());
+                        message_bus.clean_request(request_id);
                     }
                     Signal::Order(order_id) => {
-                        orders.remove(&order_id);
-                        debug!("released order_id {}, orders.len()={}", order_id, requests.len());
+                        message_bus.clean_order(order_id);
                     }
                 }
 
-                if shutdown_requested.load(Ordering::SeqCst) {
+                if message_bus.is_shutting_down() {
                     return 0;
                 }
             }
         })
+    }
+
+    pub(crate) fn process_messages(self: &Arc<Self>, server_version: i32) -> Result<(), Error> {
+        let handle = self.start_dispatcher_thread(server_version);
+        //        self.handles.push(handle);
+
+        let handle = self.start_cleanup_thread();
+        //        self.handles.push(handle);
+
+        Ok(())
     }
 }
 
@@ -371,143 +503,6 @@ impl MessageBus for TcpMessageBus {
         // TODO send cancel
         Ok(())
     }
-
-    fn process_messages(&mut self, server_version: i32) -> Result<(), Error> {
-        let handle = self.start_dispatcher_thread(server_version);
-        self.handles.push(handle);
-
-        let handle = self.start_cleanup_thread();
-        self.handles.push(handle);
-
-        Ok(())
-    }
-}
-
-pub(crate) fn process_messages(message_bus: &Arc<TcpMessageBus>) -> Result<(), Error> {
-    let handle = start_dispatcher_thread(message_bus);
-    //self.handles.push(handle);
-
-    let handle = start_cleanup_thread(message_bus);
-    //self.handles.push(handle);
-
-    Ok(())
-}
-
-// The cleanup thread receives signals as subscribers are dropped and
-// releases the sender channels
-fn start_cleanup_thread(message_bus: &Arc<TcpMessageBus>) -> JoinHandle<i32> {
-    let message_bus = Arc::clone(message_bus);
-
-    thread::spawn(move || loop {
-        let signal_recv = message_bus.signals_recv.clone();
-
-        for signal in &signal_recv {
-            match signal {
-                Signal::Request(request_id) => {
-                    message_bus.clean_request(request_id);
-                }
-                Signal::Order(order_id) => {
-                    message_bus.clean_order(order_id);
-                }
-            }
-
-            if message_bus.is_shutting_down() {
-                return 0;
-            }
-        }
-    })
-}
-
-// Dispatcher thread reads messages from TWS and dispatches them to
-// appropriate channel.
-fn start_dispatcher_thread(message_bus: &Arc<TcpMessageBus>) -> JoinHandle<i32> {
-    let connection = Arc::clone(&message_bus.connection);
-    let requests = Arc::clone(&message_bus.requests);
-    let recorder = message_bus.recorder.clone();
-    let orders = Arc::clone(&message_bus.orders);
-    let shared_channels = Arc::clone(&message_bus.shared_channels);
-    let executions = SenderHash::<String, Response>::new();
-    let shutdown_requested = Arc::clone(&message_bus.shutdown_requested);
-
-    const RECONNECT_ERRORS: &[ErrorKind] = &[ErrorKind::ConnectionReset];
-    const RETRY_ERRORS: &[ErrorKind] = &[ErrorKind::Interrupted];
-
-    thread::spawn(move || loop {
-        let connection = connection.read().unwrap();
-        match connection.read_message() {
-            Ok(message) => {
-                recorder.record_response(&message);
-                dispatch_message(message, connection.server_version(), &requests, &orders, &shared_channels, &executions);
-            }
-            Err(Error::Io(e)) if RECONNECT_ERRORS.contains(&e.kind()) => {
-                // let mut connection = connection.write().unwrap();
-                error!("error reading packet: {:?}", e);
-                // reset hashes
-                if let Err(e) = connection.reconnect() {
-                    error!("error reconnecting: {:?}", e);
-                    shutdown_requested.store(true, Ordering::Relaxed);
-                    return 0;
-                }
-            }
-            Err(Error::Io(e)) if RETRY_ERRORS.contains(&e.kind()) => {
-                error!("error reading packet: {:?}", e);
-                continue;
-            }
-            Err(err) => {
-                error!("error reading packet: {:?}", err);
-                shutdown_requested.store(true, Ordering::Relaxed);
-                return 0;
-            }
-        };
-
-        if shutdown_requested.load(Ordering::SeqCst) {
-            return 0;
-        }
-    })
-}
-
-fn dispatch_message(
-    message: ResponseMessage,
-    server_version: i32,
-    requests: &Arc<SenderHash<i32, Response>>,
-    orders: &Arc<SenderHash<i32, Response>>,
-    shared_channels: &Arc<SharedChannels>,
-    executions: &SenderHash<String, Response>,
-) {
-    match message.message_type() {
-        IncomingMessages::Error => {
-            let request_id = message.peek_int(2).unwrap_or(-1);
-
-            if request_id == UNSPECIFIED_REQUEST_ID {
-                error_event(server_version, message).unwrap();
-            } else {
-                process_response(requests, orders, shared_channels, message);
-            }
-        }
-        IncomingMessages::OrderStatus
-        | IncomingMessages::OpenOrder
-        | IncomingMessages::OpenOrderEnd
-        | IncomingMessages::CompletedOrder
-        | IncomingMessages::CompletedOrdersEnd
-        | IncomingMessages::ExecutionData
-        | IncomingMessages::ExecutionDataEnd
-        | IncomingMessages::CommissionsReport => process_orders(message, requests, orders, executions, shared_channels),
-        _ => process_response(requests, orders, shared_channels, message),
-    };
-}
-
-fn read_packet(mut reader: &TcpStream) -> Result<ResponseMessage, Error> {
-    let message_size = read_header(reader)?;
-    let mut data = vec![0_u8; message_size];
-
-    reader.read_exact(&mut data)?;
-
-    let raw_string = String::from_utf8(data)?;
-    debug!("<- {:?}", raw_string);
-
-    let packet = ResponseMessage::from(&raw_string);
-
-    Ok(packet)
 }
 
 fn read_header(mut reader: &TcpStream) -> Result<usize, Error> {
@@ -546,114 +541,6 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), E
         );
         println!("[{error_code}] {error_message}");
         Ok(())
-    }
-}
-
-fn process_response(
-    requests: &Arc<SenderHash<i32, Response>>,
-    orders: &Arc<SenderHash<i32, Response>>,
-    shared_channels: &Arc<SharedChannels>,
-    message: ResponseMessage,
-) {
-    let request_id = message.request_id().unwrap_or(-1); // pass in request id?
-    if requests.contains(&request_id) {
-        requests.send(&request_id, Response::Message(message)).unwrap();
-    } else if orders.contains(&request_id) {
-        orders.send(&request_id, Response::Message(message)).unwrap();
-    } else if shared_channels.contains_sender(message.message_type()) {
-        shared_channels
-            .get_sender(message.message_type())
-            .send(Response::Message(message))
-            .unwrap()
-    } else {
-        info!("no recipient found for: {:?}", message)
-    }
-}
-
-fn process_orders(
-    message: ResponseMessage,
-    requests: &Arc<SenderHash<i32, Response>>,
-    orders: &Arc<SenderHash<i32, Response>>,
-    executions: &SenderHash<String, Response>,
-    shared_channels: &Arc<SharedChannels>,
-) {
-    match message.message_type() {
-        IncomingMessages::ExecutionData => {
-            match (message.order_id(), message.request_id()) {
-                // First check matching orders channel
-                (Some(order_id), _) if orders.contains(&order_id) => {
-                    if let Err(e) = orders.send(&order_id, Response::Message(message)) {
-                        error!("error routing message for order_id({order_id}): {e}");
-                    }
-                }
-                (_, Some(request_id)) if requests.contains(&request_id) => {
-                    if let Some(sender) = requests.copy_sender(request_id) {
-                        if let Some(execution_id) = message.execution_id() {
-                            executions.insert(execution_id, sender);
-                        }
-                    }
-
-                    if let Err(e) = requests.send(&request_id, Response::Message(message)) {
-                        error!("error routing message for request_id({request_id}): {e}");
-                    }
-                }
-                _ => {
-                    error!("could not route message {message:?}");
-                }
-            }
-        }
-        IncomingMessages::ExecutionDataEnd => {
-            match (message.order_id(), message.request_id()) {
-                // First check matching orders channel
-                (Some(order_id), _) if orders.contains(&order_id) => {
-                    if let Err(e) = orders.send(&order_id, Response::from(message)) {
-                        error!("error routing message for order_id({order_id}): {e}");
-                    }
-                }
-                (_, Some(request_id)) if requests.contains(&request_id) => {
-                    if let Err(e) = requests.send(&request_id, Response::from(message)) {
-                        error!("error routing message for request_id({request_id}): {e}");
-                    }
-                }
-                _ => {
-                    error!("could not route message {message:?}");
-                }
-            }
-        }
-        IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => {
-            if let Some(order_id) = message.order_id() {
-                if orders.contains(&order_id) {
-                    if let Err(e) = orders.send(&order_id, Response::from(message)) {
-                        error!("error routing message for order_id({order_id}): {e}");
-                    }
-                } else if let Err(e) = shared_channels.get_sender(IncomingMessages::OpenOrder).send(Response::from(message)) {
-                    error!("error sending IncomingMessages::OpenOrder: {e}");
-                }
-            }
-        }
-        IncomingMessages::CompletedOrder => {
-            if let Err(e) = shared_channels.get_sender(message.message_type()).send(Response::from(message)) {
-                error!("error sending IncomingMessages::CompletedOrder: {e}");
-            }
-        }
-        IncomingMessages::OpenOrderEnd => {
-            if let Err(e) = shared_channels.get_sender(message.message_type()).send(Response::from(message)) {
-                error!("error sending IncomingMessages::OpenOrderEnd: {e}");
-            }
-        }
-        IncomingMessages::CompletedOrdersEnd => {
-            if let Err(e) = shared_channels.get_sender(message.message_type()).send(Response::from(message)) {
-                error!("error sending IncomingMessages::CompletedOrdersEnd: {e}");
-            }
-        }
-        IncomingMessages::CommissionsReport => {
-            if let Some(execution_id) = message.execution_id() {
-                if let Err(e) = executions.send(&execution_id, Response::from(message)) {
-                    error!("error sending commission report for execution {}: {}", execution_id, e);
-                }
-            }
-        }
-        _ => (),
     }
 }
 
@@ -754,6 +641,22 @@ impl InternalSubscription {
     }
 
     // pub(crate) fn cancel(&self) -> Result<(), Error> {
+    //     if let Some(receiver) = &self.receiver {
+    //         receiver.
+    //     } else if let Some(receiver) = &self.shared_receiver {
+    //         Self::timeout_receive(receiver, timeout)
+    //     } else {
+    //         None
+    //     }
+
+    //     if let (Some(request_id), Some(signaler)) = (self.request_id, &self.signaler) {
+    //         signaler.send(Signal::Ca).unwrap();
+    //     }
+
+    //     if let (Some(order_id), Some(signaler)) = (self.order_id, &self.signaler) {
+    //         signaler.send(Signal::Order(order_id)).unwrap();
+    //     }
+
     //     Ok(())
     // }
 

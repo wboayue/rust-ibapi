@@ -16,7 +16,7 @@ use crate::market_data::realtime::{self, Bar, BarSize, MidPoint, WhatToShow};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
-use crate::transport::{process_messages, Connection, ConnectionMetadata, InternalSubscription, MessageBus, Response, TcpMessageBus};
+use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, Response, TcpMessageBus};
 use crate::{accounts, contracts, orders};
 
 // Client
@@ -65,7 +65,7 @@ impl Client {
         let message_bus = Arc::new(TcpMessageBus::new(connection)?);
 
         // Starts thread to read messages from TWS
-        process_messages(&message_bus)?;
+        message_bus.process_messages(connection_metadata.server_version)?;
 
         Client::new(connection_metadata, message_bus)
     }

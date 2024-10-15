@@ -46,9 +46,9 @@ impl MessageBus for MessageBusStub {
         Ok(())
     }
 
-    fn process_messages(&mut self, _server_version: i32) -> Result<(), Error> {
-        Ok(())
-    }
+    // fn process_messages(&mut self, _server_version: i32) -> Result<(), Error> {
+    //     Ok(())
+    // }
 }
 
 fn mock_request(
