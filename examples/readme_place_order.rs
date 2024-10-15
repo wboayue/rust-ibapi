@@ -3,6 +3,8 @@ use ibapi::orders::{order_builder, Action, OrderNotification};
 use ibapi::Client;
 
 pub fn main() {
+    env_logger::init();
+
     let connection_url = "127.0.0.1:4002";
     let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 

@@ -132,6 +132,9 @@ pub use client::Client;
 pub(crate) mod stubs;
 
 #[cfg(test)]
+pub(crate) mod tests;
+
+#[cfg(test)]
 pub(crate) mod testdata;
 
 // ToField

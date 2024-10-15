@@ -15,6 +15,7 @@ pub enum Error {
     Parse(usize, String, String),
     ServerVersion(i32, i32, String),
     Simple(String),
+    ConnectionFailed,
 }
 
 impl std::error::Error for Error {}
@@ -31,6 +32,7 @@ impl std::fmt::Display for Error {
             Error::NotImplemented => write!(f, "not implemented"),
             Error::Parse(i, value, message) => write!(f, "parse error: {i} - {value} - {message}"),
             Error::ServerVersion(wanted, have, message) => write!(f, "server version {wanted} required, got {have}: {message}"),
+            Error::ConnectionFailed => write!(f, "ConnectionFailed"),
 
             Error::Simple(ref err) => write!(f, "error occurred: {err}"),
         }

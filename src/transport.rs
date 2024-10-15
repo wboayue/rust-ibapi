@@ -26,6 +26,7 @@ mod recorder;
 
 const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
+const MAX_RETRIES: i32 = 20;
 
 pub(crate) trait MessageBus: Send + Sync {
     // Sends formatted message to TWS and creates a reply channel by request id.
@@ -157,38 +158,34 @@ pub enum Signal {
 
 #[derive(Debug)]
 pub struct TcpMessageBus {
-    connection: Arc<RwLock<Connection>>,
+    connection: Connection,
     handles: Vec<JoinHandle<i32>>,
-    requests: Arc<SenderHash<i32, Response>>,
-    orders: Arc<SenderHash<i32, Response>>,
-    executions: Arc<SenderHash<String, Response>>,
+    requests: SenderHash<i32, Response>,
+    orders: SenderHash<i32, Response>,
+    executions: SenderHash<String, Response>,
     recorder: MessageRecorder,
-    shared_channels: Arc<SharedChannels>,
+    shared_channels: SharedChannels,
     signals_send: Sender<Signal>,
     signals_recv: Receiver<Signal>,
-    shutdown_requested: Arc<AtomicBool>,
+    shutdown_requested: AtomicBool,
     is_alive: bool,
 }
 
 impl TcpMessageBus {
     pub fn new(connection: Connection) -> Result<TcpMessageBus, Error> {
-        let requests = Arc::new(SenderHash::new());
-        let orders = Arc::new(SenderHash::new());
-        let executions = Arc::new(SenderHash::new());
-
         let (signals_send, signals_recv) = channel::unbounded();
 
         Ok(TcpMessageBus {
-            connection: Arc::new(RwLock::new(connection)),
+            connection,
             handles: Vec::default(),
-            requests,
-            orders,
-            executions,
+            requests: SenderHash::new(),
+            orders: SenderHash::new(),
+            executions: SenderHash::new(),
             recorder: MessageRecorder::new(),
-            shared_channels: Arc::new(SharedChannels::new()),
+            shared_channels: SharedChannels::new(),
             signals_send,
             signals_recv,
-            shutdown_requested: Arc::new(AtomicBool::new(false)),
+            shutdown_requested: AtomicBool::new(false),
             is_alive: true,
         })
     }
@@ -201,6 +198,8 @@ impl TcpMessageBus {
         self.shutdown_requested.store(true, Ordering::Relaxed);
     }
 
+    fn reset(&self) {}
+
     fn clean_request(&self, request_id: i32) {
         self.requests.remove(&request_id);
         debug!("released request_id {}, requests.len()={}", request_id, self.requests.len());
@@ -212,8 +211,7 @@ impl TcpMessageBus {
     }
 
     fn read_message(&self) -> Result<ResponseMessage, Error> {
-        let connection = self.connection.read()?;
-        connection.read_message()
+        self.connection.read_message()
     }
 
     // Dispatcher thread reads messages from TWS and dispatches them to
@@ -222,38 +220,54 @@ impl TcpMessageBus {
         let message_bus = Arc::clone(self);
         let recorder = self.recorder.clone();
 
-        const RECONNECT_ERRORS: &[ErrorKind] = &[ErrorKind::ConnectionReset];
+        const RECONNECT_ERRORS: &[ErrorKind] = &[ErrorKind::ConnectionReset, ErrorKind::UnexpectedEof];
         const RETRY_ERRORS: &[ErrorKind] = &[ErrorKind::Interrupted];
 
-        thread::spawn(move || loop {
-            match message_bus.read_message() {
-                Ok(message) => {
-                    recorder.record_response(&message);
-                    message_bus.dispatch_message(server_version, message);
-                }
-                Err(Error::Io(e)) if RECONNECT_ERRORS.contains(&e.kind()) => {
-                    let connection = message_bus.connection.write().unwrap();
-                    error!("error reading packet: {:?}", e);
-                    // reset hashes
-                    if let Err(e) = connection.reconnect() {
-                        error!("error reconnecting: {:?}", e);
+        thread::spawn(move || {
+            let mut backoff = FibonacciBackoff::new(30);
+            let mut retry_attempt = 0;
+
+            loop {
+                match message_bus.read_message() {
+                    Ok(message) => {
+                        recorder.record_response(&message);
+                        message_bus.dispatch_message(server_version, message);
+                        retry_attempt = 1;
+                    }
+                    Err(Error::Io(e)) if RECONNECT_ERRORS.contains(&e.kind()) => {
+                        error!("error reading packet: {:?}", e);
+                        // reset hashes
+                        if let Err(e) = message_bus.connection.reconnect() {
+                            error!("error reconnecting: {:?}", e);
+                            message_bus.request_shutdown();
+                            return 0;
+                        }
+                        info!("reconnected");
+                        message_bus.reset();
+                        continue;
+                    }
+                    Err(Error::Io(e)) if RETRY_ERRORS.contains(&e.kind()) => {
+                        error!("error reading packet: {:?}", e);
+                        let next_delay = backoff.next_delay();
+                        if retry_attempt > MAX_RETRIES {
+                            message_bus.request_shutdown();
+                            return 0;
+                        }
+                        error!("retry read attempt {retry_attempt} of {MAX_RETRIES}");
+                        thread::sleep(next_delay);
+                        retry_attempt += 1;
+                        continue;
+                    }
+                    Err(err) => {
+                        error!("error reading packet: {:?}", err);
                         message_bus.request_shutdown();
                         return 0;
                     }
-                }
-                Err(Error::Io(e)) if RETRY_ERRORS.contains(&e.kind()) => {
-                    error!("error reading packet: {:?}", e);
-                    continue;
-                }
-                Err(err) => {
-                    error!("error reading packet: {:?}", err);
-                    message_bus.request_shutdown();
+                };
+
+                if message_bus.is_shutting_down() {
                     return 0;
                 }
-            };
-
-            if message_bus.is_shutting_down() {
-                return 0;
             }
         })
     }
@@ -418,13 +432,11 @@ const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 impl MessageBus for TcpMessageBus {
     fn send_request(&self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error> {
-        let connection = self.connection.read()?;
-
         let (sender, receiver) = channel::unbounded();
 
         self.requests.insert(request_id, sender);
 
-        connection.write_message(packet)?;
+        self.connection.write_message(packet)?;
 
         let subscription = SubscriptionBuilder::new()
             .receiver(receiver)
@@ -436,9 +448,7 @@ impl MessageBus for TcpMessageBus {
     }
 
     fn cancel_subscription(&self, request_id: i32, message: &RequestMessage) -> Result<(), Error> {
-        let connection = self.connection.read()?;
-
-        connection.write_message(message)?;
+        self.connection.write_message(message)?;
 
         if let Err(e) = self.requests.send(&request_id, Response::Cancelled) {
             info!("error sending cancel notification: {e}");
@@ -450,13 +460,11 @@ impl MessageBus for TcpMessageBus {
     }
 
     fn send_order_request(&self, order_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
-        let connection = self.connection.read()?;
-
         let (sender, receiver) = channel::unbounded();
 
         self.orders.insert(order_id, sender);
 
-        connection.write_message(message)?;
+        self.connection.write_message(message)?;
 
         let subscription = SubscriptionBuilder::new()
             .receiver(receiver)
@@ -468,9 +476,7 @@ impl MessageBus for TcpMessageBus {
     }
 
     fn cancel_order_subscription(&self, request_id: i32, message: &RequestMessage) -> Result<(), Error> {
-        let connection = self.connection.read()?;
-
-        connection.write_message(message)?;
+        self.connection.write_message(message)?;
 
         if let Err(e) = self.orders.send(&request_id, Response::Cancelled) {
             info!("error sending cancel notification: {e}");
@@ -482,9 +488,7 @@ impl MessageBus for TcpMessageBus {
     }
 
     fn send_shared_request(&self, message_type: OutgoingMessages, message: &RequestMessage) -> Result<InternalSubscription, Error> {
-        let connection = self.connection.read()?;
-
-        connection.write_message(message)?;
+        self.connection.write_message(message)?;
 
         let shared_receiver = self.shared_channels.get_receiver(message_type);
 
@@ -497,9 +501,7 @@ impl MessageBus for TcpMessageBus {
     }
 
     fn cancel_shared_subscription(&self, _message_type: OutgoingMessages, message: &RequestMessage) -> Result<(), Error> {
-        let connection = self.connection.read()?;
-
-        connection.write_message(message)?;
+        self.connection.write_message(message)?;
         // TODO send cancel
         Ok(())
     }
@@ -778,6 +780,7 @@ pub(crate) struct Connection {
     reader: Mutex<TcpStream>,
     writer: Mutex<TcpStream>,
     connection_metadata: Mutex<ConnectionMetadata>,
+    max_retries: i32,
 }
 
 impl Connection {
@@ -791,6 +794,7 @@ impl Connection {
             reader: Mutex::new(reader),
             writer: Mutex::new(writer),
             connection_metadata: Mutex::new(ConnectionMetadata::default()),
+            max_retries: MAX_RETRIES,
         };
 
         connection.establish_connection()?;
@@ -804,14 +808,36 @@ impl Connection {
     }
 
     pub fn reconnect(&self) -> Result<(), Error> {
-        // retry connection here with backoff
-        let mut reader = self.reader.lock()?;
+        let mut backoff = FibonacciBackoff::new(30);
 
-        *reader = TcpStream::connect(&self.connection_url)?;
+        for i in 0..self.max_retries {
+            let next_delay = backoff.next_delay();
+            info!("next reconnection attempt in {next_delay:#?}");
 
-        self.establish_connection()?;
+            thread::sleep(next_delay);
 
-        Ok(())
+            match TcpStream::connect(&self.connection_url) {
+                Ok(stream) => {
+                    {
+                        let mut reader = self.reader.lock()?;
+                        let mut writer = self.writer.lock()?;
+
+                        *reader = stream.try_clone()?;
+                        *writer = stream;
+                    }
+
+                    info!("reconnected !!!");
+                    self.establish_connection()?;
+
+                    return Ok(());
+                }
+                Err(e) => {
+                    error!("reconnection attempt {i} of {} failed: {e}", self.max_retries);
+                }
+            }
+        }
+
+        Err(Error::ConnectionFailed)
     }
 
     fn establish_connection(&self) -> Result<(), Error> {
@@ -956,6 +982,39 @@ impl Connection {
         }
 
         Ok(())
+    }
+}
+
+struct FibonacciBackoff {
+    previous: u64,
+    current: u64,
+    max: u64,
+}
+
+impl FibonacciBackoff {
+    fn new(max: u64) -> Self {
+        FibonacciBackoff {
+            previous: 0,
+            current: 1,
+            max,
+        }
+    }
+
+    fn next_delay(&mut self) -> Duration {
+        let next = self.previous + self.current;
+        self.previous = self.current;
+        self.current = next;
+
+        if next > self.max {
+            Duration::from_secs(self.max)
+        } else {
+            Duration::from_secs(next)
+        }
+    }
+
+    fn reset(&mut self) {
+        self.previous = 0;
+        self.current = 1;
     }
 }
 
