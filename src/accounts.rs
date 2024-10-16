@@ -284,6 +284,24 @@ pub enum AccountUpdates {
     End,
 }
 
+impl Subscribable<AccountUpdates> for AccountUpdates {
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PositionMulti, IncomingMessages::PositionMultiEnd];
+
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+        // match message.message_type() {
+        //     IncomingMessages::PositionMulti => Ok(PositionUpdateMulti::Position(decoders::decode_position_multi(message)?)),
+        //     IncomingMessages::PositionMultiEnd => Ok(PositionUpdateMulti::PositionEnd),
+        //     message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+        // }
+        Err(Error::NotImplemented)
+    }
+
+    fn cancel_message(_server_version: i32, request_id: Option<i32>) -> Result<RequestMessage, Error> {
+        let request_id = request_id.expect("Request ID required to encode cancel positions multi");
+        encoders::encode_cancel_positions_multi(request_id)
+    }
+}
+
 /// A value of subscribed account's information.
 pub struct AccountValue {
     /// The value being updated.
@@ -310,7 +328,7 @@ pub struct AccountPortfolio {
     pub average_cost: f64,
     /// Daily unrealized profit and loss on the position.
     pub unrealized_pnl: f64,
-    /// Daily realized profit and loss on the position.   
+    /// Daily realized profit and loss on the position.
     pub realized_pnl: f64,
     /// Account identifier for the update.
     pub account: String,
@@ -410,6 +428,17 @@ pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Re
     let subscription = client.send_request(request_id, request)?;
 
     Ok(Subscription::new(client, subscription))
+}
+
+pub fn account_updates<'a>(client: &'a Client, account: &str) -> Result<Subscription<'a, AccountUpdates>, Error> {
+    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support account summary requests.")?;
+
+    // let request_id = client.next_request_id();
+    // let request = encoders::encode_request_account_summary(request_id, group, tags)?;
+    // let subscription = client.send_request(request_id, request)?;
+
+    // Ok(Subscription::new(client, subscription))
+    Err(Error::NotImplemented)
 }
 
 pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
