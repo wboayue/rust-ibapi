@@ -1,6 +1,8 @@
 use ibapi::{accounts::PositionUpdate, Client};
 
 fn main() {
+    env_logger::init();
+
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
     let positions = client.positions().expect("request failed");

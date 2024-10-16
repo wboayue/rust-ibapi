@@ -116,7 +116,7 @@ pub mod errors;
 /// APIs for retrieving market data
 pub mod market_data;
 mod messages;
-pub(crate) mod news;
+pub mod news;
 /// Data types for building and placing orders.
 pub mod orders;
 
@@ -130,6 +130,9 @@ pub use client::Client;
 
 #[cfg(test)]
 pub(crate) mod stubs;
+
+#[cfg(test)]
+pub(crate) mod tests;
 
 #[cfg(test)]
 pub(crate) mod testdata;

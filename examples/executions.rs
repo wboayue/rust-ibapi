@@ -2,6 +2,8 @@ use ibapi::orders::ExecutionFilter;
 use ibapi::Client;
 
 fn main() -> anyhow::Result<()> {
+    env_logger::init();
+
     let mut filter = ExecutionFilter::default();
 
     filter.client_id = Some(32);

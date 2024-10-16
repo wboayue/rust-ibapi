@@ -1,15 +1,12 @@
 use std::fmt::Debug;
-use std::io::Write;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
-use byteorder::{BigEndian, WriteBytesExt};
-use log::{debug, error, info};
-use time::macros::format_description;
+use log::{debug, error};
 use time::OffsetDateTime;
-use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
+use time_tz::Tz;
 
 use crate::accounts::{AccountSummaries, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::contracts::Contract;
@@ -19,13 +16,10 @@ use crate::market_data::realtime::{self, Bar, BarSize, MidPoint, WhatToShow};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
-use crate::transport::{InternalSubscription, MessageBus, TcpMessageBus};
-use crate::{accounts, contracts, orders, server_versions};
+use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, Response, TcpMessageBus};
+use crate::{accounts, contracts, orders};
 
 // Client
-
-const MIN_SERVER_VERSION: i32 = 100;
-const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
 
 /// TWS API Client. Manages the connection to TWS or Gateway.
 /// Tracks some global information such as server version and server time.
@@ -37,10 +31,9 @@ pub struct Client {
     //    pub server_time: OffsetDateTime,
     pub(crate) connection_time: Option<OffsetDateTime>,
     pub(crate) time_zone: Option<&'static Tz>,
+    pub(crate) message_bus: Arc<dyn MessageBus>,
 
-    managed_accounts: String,
-    client_id: i32, // ID of client.
-    pub(crate) message_bus: Arc<Mutex<dyn MessageBus>>,
+    client_id: i32,             // ID of client.
     next_request_id: AtomicI32, // Next available request_id.
     order_id: AtomicI32,        // Next available order_id. Starts with value returned on connection.
 }
@@ -66,117 +59,29 @@ impl Client {
     /// println!("next_order_id: {}", client.next_order_id());
     /// ```
     pub fn connect(address: &str, client_id: i32) -> Result<Client, Error> {
-        let message_bus = Arc::new(Mutex::new(TcpMessageBus::connect(address)?));
-        Client::do_connect(client_id, message_bus)
+        let connection = Connection::connect(client_id, address)?;
+        let connection_metadata = connection.connection_metadata();
+
+        let message_bus = Arc::new(TcpMessageBus::new(connection)?);
+
+        // Starts thread to read messages from TWS
+        message_bus.process_messages(connection_metadata.server_version)?;
+
+        Client::new(connection_metadata, message_bus)
     }
 
-    fn do_connect(client_id: i32, message_bus: Arc<Mutex<dyn MessageBus>>) -> Result<Client, Error> {
-        let mut client = Client {
-            server_version: 0,
-            connection_time: None,
-            time_zone: None,
-            managed_accounts: String::from(""),
+    fn new(connection_metadata: ConnectionMetadata, message_bus: Arc<dyn MessageBus>) -> Result<Client, Error> {
+        let client = Client {
+            server_version: connection_metadata.server_version,
+            connection_time: connection_metadata.connection_time,
+            time_zone: connection_metadata.time_zone,
             message_bus,
-            client_id,
+            client_id: connection_metadata.client_id,
             next_request_id: AtomicI32::new(9000),
             order_id: AtomicI32::new(-1),
         };
 
-        client.handshake()?;
-        client.start_api()?;
-        client.receive_account_info()?;
-
-        client.message_bus.lock()?.process_messages(client.server_version)?;
-
         Ok(client)
-    }
-
-    // sends server handshake
-    fn handshake(&mut self) -> Result<(), Error> {
-        let prefix = "API\0";
-        let version = format!("v{MIN_SERVER_VERSION}..{MAX_SERVER_VERSION}");
-
-        let packet = prefix.to_owned() + &encode_packet(&version);
-        self.message_bus.lock()?.write(&packet)?;
-
-        let ack = self.message_bus.lock()?.read_message();
-
-        match ack {
-            Ok(mut response_message) => {
-                self.server_version = response_message.next_int()?;
-
-                let time = response_message.next_string()?;
-                (self.connection_time, self.time_zone) = parse_connection_time(time.as_str());
-            }
-            Err(Error::Io(err)) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
-                return Err(Error::Simple(format!("The server may be rejecting connections from this host: {err}")));
-            }
-            Err(err) => {
-                return Err(err);
-            }
-        }
-        Ok(())
-    }
-
-    // asks server to start processing messages
-    fn start_api(&mut self) -> Result<(), Error> {
-        const VERSION: i32 = 2;
-
-        let prelude = &mut RequestMessage::default();
-
-        prelude.push_field(&OutgoingMessages::StartApi);
-        prelude.push_field(&VERSION);
-        prelude.push_field(&self.client_id);
-
-        if self.server_version > server_versions::OPTIONAL_CAPABILITIES {
-            prelude.push_field(&"");
-        }
-
-        self.message_bus.lock()?.write_message(prelude)?;
-
-        Ok(())
-    }
-
-    // Fetches next order id and managed accounts.
-    fn receive_account_info(&mut self) -> Result<(), Error> {
-        let mut saw_next_order_id: bool = false;
-        let mut saw_managed_accounts: bool = false;
-
-        let mut attempts = 0;
-        const MAX_ATTEMPTS: i32 = 100;
-        loop {
-            let mut message = self.message_bus.lock()?.read_message()?;
-
-            match message.message_type() {
-                IncomingMessages::NextValidId => {
-                    saw_next_order_id = true;
-
-                    message.skip(); // message type
-                    message.skip(); // message version
-
-                    self.order_id.store(message.next_int()?, Ordering::Relaxed);
-                }
-                IncomingMessages::ManagedAccounts => {
-                    saw_managed_accounts = true;
-
-                    message.skip(); // message type
-                    message.skip(); // message version
-
-                    self.managed_accounts = message.next_string()?;
-                }
-                IncomingMessages::Error => {
-                    error!("message: {message:?}")
-                }
-                _ => info!("message: {message:?}"),
-            }
-
-            attempts += 1;
-            if (saw_next_order_id && saw_managed_accounts) || attempts > MAX_ATTEMPTS {
-                break;
-            }
-        }
-
-        Ok(())
     }
 
     /// Returns the next request ID.
@@ -1009,12 +914,11 @@ impl Client {
     // == Internal Use ==
 
     #[cfg(test)]
-    pub(crate) fn stubbed(message_bus: Arc<Mutex<dyn MessageBus>>, server_version: i32) -> Client {
+    pub(crate) fn stubbed(message_bus: Arc<dyn MessageBus>, server_version: i32) -> Client {
         Client {
             server_version: server_version,
             connection_time: None,
             time_zone: None,
-            managed_accounts: String::from(""),
             message_bus,
             client_id: 100,
             next_request_id: AtomicI32::new(9000),
@@ -1022,23 +926,19 @@ impl Client {
         }
     }
 
-    pub(crate) fn send_message(&self, packet: RequestMessage) -> Result<(), Error> {
-        self.message_bus.lock()?.write_message(&packet)
-    }
-
     pub(crate) fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<InternalSubscription, Error> {
         debug!("send_message({:?}, {:?})", request_id, message);
-        self.message_bus.lock()?.send_request(request_id, &message)
+        self.message_bus.send_request(request_id, &message)
     }
 
     pub(crate) fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<InternalSubscription, Error> {
         debug!("send_order({:?}, {:?})", order_id, message);
-        self.message_bus.lock()?.send_order_request(order_id, &message)
+        self.message_bus.send_order_request(order_id, &message)
     }
 
     /// Sends request for the next valid order id.
     pub(crate) fn send_shared_request(&self, message_id: OutgoingMessages, message: RequestMessage) -> Result<InternalSubscription, Error> {
-        self.message_bus.lock()?.send_shared_request(message_id, &message)
+        self.message_bus.send_shared_request(message_id, &message)
     }
 
     pub(crate) fn check_server_version(&self, version: i32, message: &str) -> Result<(), Error> {
@@ -1052,7 +952,8 @@ impl Client {
 
 impl Drop for Client {
     fn drop(&mut self) {
-        debug!("dropping basic client")
+        debug!("dropping basic client");
+        self.message_bus.ensure_shutdown();
     }
 }
 
@@ -1074,32 +975,78 @@ impl Debug for Client {
 pub struct Subscription<'a, T: Subscribable<T>> {
     pub(crate) client: &'a Client,
     pub(crate) request_id: Option<i32>,
+    pub(crate) order_id: Option<i32>,
+    pub(crate) message_type: Option<OutgoingMessages>,
     pub(crate) subscription: InternalSubscription,
     pub(crate) phantom: PhantomData<T>,
 }
 
 #[allow(private_bounds)]
 impl<'a, T: Subscribable<T>> Subscription<'a, T> {
+    pub(crate) fn new(client: &'a Client, subscription: InternalSubscription) -> Self {
+        if let Some(request_id) = subscription.request_id {
+            Subscription {
+                client,
+                request_id: Some(request_id),
+                order_id: None,
+                message_type: None,
+                subscription,
+                phantom: PhantomData,
+            }
+        } else if let Some(order_id) = subscription.order_id {
+            Subscription {
+                client,
+                request_id: None,
+                order_id: Some(order_id),
+                message_type: None,
+                subscription,
+                phantom: PhantomData,
+            }
+        } else if let Some(message_type) = subscription.message_type {
+            Subscription {
+                client,
+                request_id: None,
+                order_id: None,
+                message_type: Some(message_type),
+                subscription,
+                phantom: PhantomData,
+            }
+        } else {
+            panic!("unsupported internal subscription: {:?}", subscription)
+        }
+    }
+
     /// Blocks until the item become available.
     pub fn next(&self) -> Option<T> {
         loop {
-            if let Some(mut message) = self.subscription.next() {
-                if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
-                    match T::decode(self.client.server_version(), &mut message) {
-                        Ok(val) => return Some(val),
-                        Err(err) => {
-                            error!("error decoding execution data: {err}");
+            match self.subscription.next() {
+                Some(Response::Message(mut message)) => {
+                    if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
+                        match T::decode(self.client.server_version(), &mut message) {
+                            Ok(val) => return Some(val),
+                            Err(err) => {
+                                error!("error decoding execution data: {err}");
+                            }
                         }
+                    } else if message.message_type() == IncomingMessages::Error {
+                        let error_message = message.peek_string(4);
+                        error!("{error_message}");
+                        return None;
+                    } else {
+                        error!("subscription iterator unexpected message: {message:?}");
                     }
-                } else if message.message_type() == IncomingMessages::Error {
-                    let error_message = message.peek_string(4);
-                    error!("{error_message}");
-                    return None;
-                } else {
-                    error!("subscription iterator unexpected message: {message:?}");
                 }
-            } else {
-                return None;
+                Some(Response::Cancelled) => {
+                    debug!("subscription cancelled");
+                    return None;
+                }
+                Some(Response::Disconnected) => {
+                    debug!("server disconnected");
+                    return None;
+                }
+                _ => {
+                    return None;
+                }
             }
         }
     }
@@ -1116,7 +1063,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// //}
     /// ```
     pub fn try_next(&self) -> Option<T> {
-        if let Some(mut message) = self.subscription.try_next() {
+        if let Some(Response::Message(mut message)) = self.subscription.try_next() {
             if message.message_type() == IncomingMessages::Error {
                 error!("{}", message.peek_string(4));
                 return None;
@@ -1146,7 +1093,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// //}
     /// ```
     pub fn next_timeout(&self, timeout: Duration) -> Option<T> {
-        if let Some(mut message) = self.subscription.next_timeout(timeout) {
+        if let Some(Response::Message(mut message)) = self.subscription.next_timeout(timeout) {
             if message.message_type() == IncomingMessages::Error {
                 error!("{}", message.peek_string(4));
                 return None;
@@ -1166,9 +1113,23 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
 
     /// Cancel the subscription
     pub fn cancel(&self) -> Result<(), Error> {
-        if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
-            self.client.send_message(message)?;
-            self.subscription.cancel()?;
+        if let Some(request_id) = self.request_id {
+            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
+                self.client.message_bus.cancel_subscription(request_id, &message)?;
+                self.subscription.cancel();
+            }
+        } else if let Some(order_id) = self.order_id {
+            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
+                self.client.message_bus.cancel_order_subscription(order_id, &message)?;
+                self.subscription.cancel();
+            }
+        } else if let Some(message_type) = self.message_type {
+            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
+                self.client.message_bus.cancel_shared_subscription(message_type, &message)?;
+                self.subscription.cancel();
+            }
+        } else {
+            debug!("Could not determine cancel method")
         }
         Ok(())
     }
@@ -1258,47 +1219,6 @@ impl<'a, T: Subscribable<T>> Iterator for SubscriptionTimeoutIter<'a, T> {
 
 /// Marker trait for shared channels
 pub trait SharesChannel {}
-
-// Parses following format: 20230405 22:20:39 PST
-fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, Option<&'static Tz>) {
-    let parts: Vec<&str> = connection_time.split(' ').collect();
-
-    let zones = timezones::find_by_name(parts[2]);
-    if zones.is_empty() {
-        error!("time zone not found for {}", parts[2]);
-        return (None, None);
-    }
-
-    let timezone = zones[0];
-
-    let format = format_description!("[year][month][day] [hour]:[minute]:[second]");
-    let date_str = format!("{} {}", parts[0], parts[1]);
-    let date = time::PrimitiveDateTime::parse(date_str.as_str(), format);
-    match date {
-        Ok(connected_at) => match connected_at.assume_timezone(timezone) {
-            OffsetResult::Some(date) => (Some(date), Some(timezone)),
-            _ => {
-                error!("error setting timezone");
-                (None, Some(timezone))
-            }
-        },
-        Err(err) => {
-            error!("could not parse connection time from {date_str}: {err}");
-            (None, Some(timezone))
-        }
-    }
-}
-
-fn encode_packet(message: &str) -> String {
-    let data = message.as_bytes();
-
-    let mut packet: Vec<u8> = Vec::with_capacity(data.len() + 4);
-
-    packet.write_u32::<BigEndian>(data.len() as u32).unwrap();
-    packet.write_all(data).unwrap();
-
-    std::str::from_utf8(&packet).unwrap().into()
-}
 
 #[cfg(test)]
 mod tests;
