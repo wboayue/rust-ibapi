@@ -1,8 +1,8 @@
-use crate::contracts::SecurityType;
+use crate::contracts::{Contract, SecurityType};
 use crate::messages::ResponseMessage;
 use crate::{server_versions, Error};
 
-use super::{AccountSummary, FamilyCode, PnL, PnLSingle, Position, PositionMulti};
+use super::{AccountPortfolioValue, AccountSummary, AccountUpdateTime, AccountValue, FamilyCode, PnL, PnLSingle, Position, PositionMulti};
 
 pub(crate) fn decode_position(message: &mut ResponseMessage) -> Result<Position, Error> {
     message.skip(); // message type
@@ -141,6 +141,83 @@ pub(crate) fn decode_account_summary(_server_version: i32, message: &mut Respons
         tag: message.next_string()?,
         value: message.next_string()?,
         currency: message.next_string()?,
+    })
+}
+
+pub(crate) fn decode_account_value(message: &mut ResponseMessage) -> Result<AccountValue, Error> {
+    message.skip(); // message type
+
+    let message_version = message.next_int()?;
+
+    let mut account_value = AccountValue {
+        key: message.next_string()?,
+        value: message.next_string()?,
+        currency: message.next_string()?,
+        ..Default::default()
+    };
+
+    if message_version >= 2 {
+        account_value.account = Some(message.next_string()?);
+    }
+
+    Ok(account_value)
+}
+
+pub(crate) fn decode_account_portfolio_value(server_version: i32, message: &mut ResponseMessage) -> Result<AccountPortfolioValue, Error> {
+    message.skip(); // message type
+
+    let message_version = message.next_int()?;
+
+    let mut contract = Contract::default();
+    if message_version >= 6 {
+        contract.contract_id = message.next_int()?;
+    }
+    contract.symbol = message.next_string()?;
+    contract.security_type = SecurityType::from(&message.next_string()?);
+    contract.last_trade_date_or_contract_month = message.next_string()?;
+    contract.strike = message.next_double()?;
+    contract.right = message.next_string()?;
+    if message_version >= 7 {
+        contract.multiplier = message.next_string()?;
+        contract.primary_exchange = message.next_string()?;
+    }
+    contract.currency = message.next_string()?;
+    if message_version >= 2 {
+        contract.local_symbol = message.next_string()?;
+    }
+    if message_version >= 8 {
+        contract.trading_class = message.next_string()?;
+    }
+
+    let mut portfolio_value = AccountPortfolioValue {
+        contract,
+        ..Default::default()
+    };
+
+    portfolio_value.position = message.next_double()?;
+    portfolio_value.market_price = message.next_double()?;
+    portfolio_value.market_value = message.next_double()?;
+    if message_version >= 3 {
+        portfolio_value.average_cost = message.next_double()?;
+        portfolio_value.unrealized_pnl = message.next_double()?;
+        portfolio_value.realized_pnl = message.next_double()?;
+    }
+    if message_version >= 4 {
+        portfolio_value.account = Some(message.next_string()?);
+    }
+    if message_version == 6 && server_version == 39 {
+        portfolio_value.contract.primary_exchange = message.next_string()?
+    }
+
+    Ok(portfolio_value)
+}
+
+pub(crate) fn decode_account_update_time(message: &mut ResponseMessage) -> Result<AccountUpdateTime, Error> {
+    message.skip(); // message type
+    message.skip(); // version
+
+    Ok(AccountUpdateTime {
+        timestamp: message.next_string()?,
     })
 }
 

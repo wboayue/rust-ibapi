@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use log::{debug, error};
+use log::{debug, error, info};
 use time::OffsetDateTime;
 use time_tz::Tz;
 
@@ -1064,7 +1064,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                         error!("{error_message}");
                         return None;
                     } else {
-                        error!("subscription iterator unexpected message: {message:?}");
+                        info!("subscription iterator unexpected message: {message:?}");
                     }
                 }
                 Some(Response::Cancelled) => {

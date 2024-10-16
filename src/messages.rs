@@ -1,7 +1,7 @@
 use std::ops::Index;
 use std::str::{self, FromStr};
 
-use log::error;
+use log::debug;
 use time::OffsetDateTime;
 
 use crate::{Error, ToField};
@@ -218,7 +218,7 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::AccountSummary
         | IncomingMessages::AccountSummaryEnd => Some(2),
         _ => {
-            error!("could not determine request id index for {kind:?}");
+            debug!("could not determine request id index for {kind:?}");
             None
         }
     }

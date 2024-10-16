@@ -276,35 +276,42 @@ pub struct FamilyCode {
 #[derive(Debug)]
 pub enum AccountUpdates {
     /// Receives the subscribed account's information.
-    Value(AccountValue),
+    AccountValue(AccountValue),
     /// Receives the subscribed account's portfolio.
-    Portfolio(AccountPortfolio),
+    PortfolioValue(AccountPortfolioValue),
     /// Receives the last time on which the account was updated.
-    Time(AccountTime),
+    UpdateTime(AccountUpdateTime),
     /// Notifies when all the account’s information has finished.
     End,
 }
 
 impl Subscribable<AccountUpdates> for AccountUpdates {
-    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PositionMulti, IncomingMessages::PositionMultiEnd];
-
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
-        // match message.message_type() {
-        //     IncomingMessages::PositionMulti => Ok(PositionUpdateMulti::Position(decoders::decode_position_multi(message)?)),
-        //     IncomingMessages::PositionMultiEnd => Ok(PositionUpdateMulti::PositionEnd),
-        //     message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
-        // }
-        Err(Error::NotImplemented)
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[
+        IncomingMessages::AccountValue,
+        IncomingMessages::PortfolioValue,
+        IncomingMessages::AccountUpdateTime,
+        IncomingMessages::AccountDownloadEnd,
+    ];
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+        match message.message_type() {
+            IncomingMessages::AccountValue => Ok(AccountUpdates::AccountValue(decoders::decode_account_value(message)?)),
+            IncomingMessages::PortfolioValue => Ok(AccountUpdates::PortfolioValue(decoders::decode_account_portfolio_value(
+                server_version,
+                message,
+            )?)),
+            IncomingMessages::AccountUpdateTime => Ok(AccountUpdates::UpdateTime(decoders::decode_account_update_time(message)?)),
+            IncomingMessages::AccountDownloadEnd => Ok(AccountUpdates::End),
+            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+        }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>) -> Result<RequestMessage, Error> {
-        let request_id = request_id.expect("Request ID required to encode cancel positions multi");
-        encoders::encode_cancel_positions_multi(request_id)
+    fn cancel_message(server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
+        encoders::encode_cancel_account_updates(server_version)
     }
 }
 
 /// A value of subscribed account's information.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct AccountValue {
     /// The value being updated.
     pub key: String,
@@ -313,12 +320,12 @@ pub struct AccountValue {
     /// The currency inn which the value is expressed.
     pub currency: String,
     /// The account identifier.
-    pub account: String,
+    pub account: Option<String>,
 }
 
 /// Subscribed account's portfolio.
-#[derive(Debug)]
-pub struct AccountPortfolio {
+#[derive(Debug, Default)]
+pub struct AccountPortfolioValue {
     /// The Contract for which a position is held.
     pub contract: Contract,
     /// The number of positions held.
@@ -334,12 +341,12 @@ pub struct AccountPortfolio {
     /// Daily realized profit and loss on the position.
     pub realized_pnl: f64,
     /// Account identifier for the update.
-    pub account: String,
+    pub account: Option<String>,
 }
 
 /// Last time at which the account was updated.
-#[derive(Debug)]
-pub struct AccountTime {
+#[derive(Debug, Default)]
+pub struct AccountUpdateTime {
     /// The last update system time.
     pub timestamp: String,
 }
@@ -435,14 +442,10 @@ pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Re
 }
 
 pub fn account_updates<'a>(client: &'a Client, account: &str) -> Result<Subscription<'a, AccountUpdates>, Error> {
-    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support account summary requests.")?;
+    let request = encoders::encode_request_account_updates(client.server_version(), account)?;
+    let subscription = client.send_shared_request(OutgoingMessages::RequestAccountData, request)?;
 
-    // let request_id = client.next_request_id();
-    // let request = encoders::encode_request_account_summary(request_id, group, tags)?;
-    // let subscription = client.send_request(request_id, request)?;
-
-    // Ok(Subscription::new(client, subscription))
-    Err(Error::NotImplemented)
+    Ok(Subscription::new(client, subscription))
 }
 
 pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {

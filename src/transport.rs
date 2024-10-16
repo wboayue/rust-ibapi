@@ -103,6 +103,15 @@ impl SharedChannels {
             &[IncomingMessages::OpenOrder, IncomingMessages::OpenOrderEnd],
         );
         instance.register(OutgoingMessages::RequestManagedAccounts, &[IncomingMessages::ManagedAccounts]);
+        instance.register(
+            OutgoingMessages::RequestAccountData,
+            &[
+                IncomingMessages::AccountValue,
+                IncomingMessages::PortfolioValue,
+                IncomingMessages::AccountDownloadEnd,
+                IncomingMessages::AccountUpdateTime,
+            ],
+        );
 
         instance
     }
