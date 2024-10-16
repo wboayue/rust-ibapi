@@ -8,7 +8,7 @@ use log::{debug, error};
 use time::OffsetDateTime;
 use time_tz::Tz;
 
-use crate::accounts::{AccountSummaries, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
+use crate::accounts::{AccountSummaries, AccountUpdates, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
@@ -227,6 +227,37 @@ impl Client {
     /// ```
     pub fn account_summary<'a>(&'a self, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
         accounts::account_summary(self, group, tags)
+    }
+
+    /// Subscribes to a specific account’s information and portfolio.
+    ///
+    /// All account values and positions will be returned initially, and then there will only be updates when there is a change in a position, or to an account value every 3 minutes if it has changed. Only one account can be subscribed at a time.
+    ///
+    /// # Arguments
+    /// * `account` - The account id (i.e. U1234567) for which the information is requested.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::accounts::AccountUpdates;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let account = "U1234567";
+    ///
+    /// let subscription = client.account_updates(account).expect("error requesting account updates");
+    /// for update in &subscription {
+    ///     println!("{update:?}");
+    ///
+    ///     // stop after full initial update
+    ///     if let AccountUpdates::End = update {
+    ///         subscription.cancel();
+    ///     }
+    /// }
+    /// ```
+    pub fn account_updates<'a>(&'a self, account: &str) -> Result<Subscription<'a, AccountUpdates>, Error> {
+        accounts::account_updates(self, account)
     }
 
     /// Requests the accounts to which the logged user has access to.
