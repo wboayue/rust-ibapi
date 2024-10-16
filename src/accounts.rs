@@ -273,6 +273,7 @@ pub struct FamilyCode {
 
 /// Account's information, portfolio and last update time
 #[allow(clippy::large_enum_variant)]
+#[derive(Debug)]
 pub enum AccountUpdates {
     /// Receives the subscribed account's information.
     Value(AccountValue),
@@ -303,6 +304,7 @@ impl Subscribable<AccountUpdates> for AccountUpdates {
 }
 
 /// A value of subscribed account's information.
+#[derive(Debug)]
 pub struct AccountValue {
     /// The value being updated.
     pub key: String,
@@ -315,6 +317,7 @@ pub struct AccountValue {
 }
 
 /// Subscribed account's portfolio.
+#[derive(Debug)]
 pub struct AccountPortfolio {
     /// The Contract for which a position is held.
     pub contract: Contract,
@@ -335,6 +338,7 @@ pub struct AccountPortfolio {
 }
 
 /// Last time at which the account was updated.
+#[derive(Debug)]
 pub struct AccountTime {
     /// The last update system time.
     pub timestamp: String,

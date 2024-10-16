@@ -240,6 +240,7 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::Client;
+    /// use ibapi::accounts::AccountUpdates;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -247,10 +248,10 @@ impl Client {
     ///
     /// let subscription = client.account_updates(account).expect("error requesting account updates");
     /// for update in &subscription {
-    ///     println!("{update:?}")
+    ///     println!("{update:?}");
     ///
     ///     // stop after full initial update
-    ///     if let AccountUpdates::End == update {
+    ///     if let AccountUpdates::End = update {
     ///         subscription.cancel();
     ///     }
     /// }
