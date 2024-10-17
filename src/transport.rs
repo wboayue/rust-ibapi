@@ -17,8 +17,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::messages::{IncomingMessages, OutgoingMessages};
-use crate::messages::{RequestMessage, ResponseMessage};
+use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Error};
 use recorder::MessageRecorder;
 
@@ -87,31 +86,9 @@ impl SharedChannels {
         };
 
         // Register request/response pairs.
-        instance.register(OutgoingMessages::RequestIds, &[IncomingMessages::NextValidId]);
-        instance.register(OutgoingMessages::RequestFamilyCodes, &[IncomingMessages::FamilyCodes]);
-        instance.register(OutgoingMessages::RequestMarketRule, &[IncomingMessages::MarketRule]);
-        instance.register(
-            OutgoingMessages::RequestPositions,
-            &[IncomingMessages::Position, IncomingMessages::PositionEnd],
-        );
-        instance.register(
-            OutgoingMessages::RequestPositionsMulti,
-            &[IncomingMessages::PositionMulti, IncomingMessages::PositionMultiEnd],
-        );
-        instance.register(
-            OutgoingMessages::RequestOpenOrders,
-            &[IncomingMessages::OpenOrder, IncomingMessages::OpenOrderEnd],
-        );
-        instance.register(OutgoingMessages::RequestManagedAccounts, &[IncomingMessages::ManagedAccounts]);
-        instance.register(
-            OutgoingMessages::RequestAccountData,
-            &[
-                IncomingMessages::AccountValue,
-                IncomingMessages::PortfolioValue,
-                IncomingMessages::AccountDownloadEnd,
-                IncomingMessages::AccountUpdateTime,
-            ],
-        );
+        for mapping in shared_channel_configuration::CHANNEL_MAPPINGS {
+            instance.register(mapping.request, mapping.responses);
+        }
 
         instance
     }

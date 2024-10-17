@@ -534,5 +534,6 @@ impl ResponseMessage {
     }
 }
 
+pub(crate) mod shared_channel_configuration;
 #[cfg(test)]
 mod tests;
