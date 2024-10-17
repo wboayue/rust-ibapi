@@ -33,8 +33,4 @@ fn test_fibonacci_backoff() {
     assert_eq!(backoff.next_delay(), Duration::from_secs(8));
     assert_eq!(backoff.next_delay(), Duration::from_secs(10));
     assert_eq!(backoff.next_delay(), Duration::from_secs(10));
-
-    backoff.reset();
-
-    assert_eq!(backoff.next_delay(), Duration::from_secs(1));
 }

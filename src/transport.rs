@@ -205,54 +205,38 @@ impl TcpMessageBus {
     fn start_dispatcher_thread(self: &Arc<Self>, server_version: i32) -> JoinHandle<()> {
         let message_bus = Arc::clone(self);
 
-        const RECONNECT_ERRORS: &[ErrorKind] = &[ErrorKind::ConnectionReset, ErrorKind::UnexpectedEof];
-        const RETRY_ERRORS: &[ErrorKind] = &[ErrorKind::Interrupted];
+        const RECONNECT_ERRORS: &[ErrorKind] = &[ErrorKind::ConnectionReset, ErrorKind::ConnectionAborted, ErrorKind::UnexpectedEof];
 
         thread::spawn(move || {
-            let mut backoff = FibonacciBackoff::new(30);
-            let mut retry_attempt = 0;
-
             loop {
                 match message_bus.read_message() {
                     Ok(message) => {
                         message_bus.dispatch_message(server_version, message);
-
-                        backoff.reset();
-                        retry_attempt = 0;
                     }
                     Err(Error::Io(e)) if e.kind() == ErrorKind::WouldBlock => {
                         if message_bus.is_shutting_down() {
                             debug!("dispatcher thread exiting");
                             return;
                         }
-                        thread::sleep(Duration::from_millis(1));
                     }
                     Err(Error::Io(e)) if RECONNECT_ERRORS.contains(&e.kind()) => {
-                        error!("error reading packet: {:?}", e);
-                        // reset hashes
+                        error!("error reading next message (will attempt reconnect): {:?}", e);
+
+                        // Attempt to reconnect to TWS.
                         if let Err(e) = message_bus.connection.reconnect() {
-                            error!("error reconnecting: {:?}", e);
+                            error!("failed to reconnect to TWS/Gateway: {:?}", e);
                             message_bus.request_shutdown();
                             return;
                         }
-                        info!("reconnected");
+
                         message_bus.reset();
-                        continue;
-                    }
-                    Err(Error::Io(e)) if RETRY_ERRORS.contains(&e.kind()) => {
-                        error!("error reading packet: {:?}", e);
-                        let next_delay = backoff.next_delay();
-                        if retry_attempt > MAX_RETRIES {
-                            message_bus.request_shutdown();
-                            return;
-                        }
-                        error!("retry read attempt {retry_attempt} of {MAX_RETRIES}");
-                        thread::sleep(next_delay);
-                        retry_attempt += 1;
+
+                        info!("successfully reconnected to TWS/Gateway");
+
                         continue;
                     }
                     Err(err) => {
-                        error!("error reading packet: {:?}", err);
+                        error!("error reading next message (shutting down): {:?}", err);
                         message_bus.request_shutdown();
                         return;
                     }
@@ -1048,11 +1032,6 @@ impl FibonacciBackoff {
         } else {
             Duration::from_secs(next)
         }
-    }
-
-    fn reset(&mut self) {
-        self.previous = 0;
-        self.current = 1;
     }
 }
 
