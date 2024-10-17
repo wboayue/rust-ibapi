@@ -8,7 +8,7 @@ use log::{debug, error, info};
 use time::OffsetDateTime;
 use time_tz::Tz;
 
-use crate::accounts::{AccountSummaries, AccountUpdates, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
+use crate::accounts::{AccountSummaries, AccountUpdateMulti, AccountUpdates, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
@@ -258,6 +258,43 @@ impl Client {
     /// ```
     pub fn account_updates<'a>(&'a self, account: &str) -> Result<Subscription<'a, AccountUpdates>, Error> {
         accounts::account_updates(self, account)
+    }
+
+    /// Requests account updates for account and/or model.
+    ///
+    /// All account values and positions will be returned initially, and then there will only be updates when there is a change in a position, or to an account value every 3 minutes if it has changed. Only one account can be subscribed at a time.
+    ///
+    /// # Arguments
+    /// * `account`        - Account values can be requested for a particular account.
+    /// * `model_code`     - Account values can also be requested for a model.
+    /// * `ledger_and_nlv` - Returns light-weight request; only currency positions as opposed to account values and currency positions.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::accounts::AccountUpdateMulti;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let account = Some("U1234567");
+    ///
+    /// let subscription = client.account_updates_multi(account, None).expect("error requesting account updates multi");
+    /// for update in &subscription {
+    ///     println!("{update:?}");
+    ///
+    ///     // stop after full initial update
+    ///     if let AccountUpdateMulti::End = update {
+    ///         subscription.cancel();
+    ///     }
+    /// }
+    /// ```
+    pub fn account_updates_multi<'a>(
+        &'a self,
+        account: Option<&str>,
+        model_code: Option<&str>,
+    ) -> Result<Subscription<'a, AccountUpdateMulti>, Error> {
+        accounts::account_updates_multi(self, account, model_code)
     }
 
     /// Requests the accounts to which the logged user has access to.

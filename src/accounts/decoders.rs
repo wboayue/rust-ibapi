@@ -2,7 +2,9 @@ use crate::contracts::{Contract, SecurityType};
 use crate::messages::ResponseMessage;
 use crate::{server_versions, Error};
 
-use super::{AccountPortfolioValue, AccountSummary, AccountUpdateTime, AccountValue, FamilyCode, PnL, PnLSingle, Position, PositionMulti};
+use super::{
+    AccountMultiValue, AccountPortfolioValue, AccountSummary, AccountUpdateTime, AccountValue, FamilyCode, PnL, PnLSingle, Position, PositionMulti,
+};
 
 pub(crate) fn decode_position(message: &mut ResponseMessage) -> Result<Position, Error> {
     message.skip(); // message type
@@ -219,6 +221,22 @@ pub(crate) fn decode_account_update_time(message: &mut ResponseMessage) -> Resul
     Ok(AccountUpdateTime {
         timestamp: message.next_string()?,
     })
+}
+
+pub(crate) fn decode_account_multi_value(message: &mut ResponseMessage) -> Result<AccountMultiValue, Error> {
+    message.skip(); // message type
+    message.skip(); // message version
+    message.skip(); // request id
+
+    let value = AccountMultiValue {
+        account: message.next_string()?,
+        model_code: message.next_string()?,
+        key: message.next_string()?,
+        value: message.next_string()?,
+        currency: message.next_string()?,
+    };
+
+    Ok(value)
 }
 
 #[cfg(test)]
