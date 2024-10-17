@@ -99,3 +99,64 @@ fn test_encode_request_account_summary() {
     assert_eq!(request[3], group.to_field(), "message.group");
     assert_eq!(request[4], tags.join(","), "message.tags");
 }
+
+#[test]
+fn test_encode_request_account_updates() {
+    let server_version = 9;
+    let version = 2;
+    let account = "DU1234567";
+
+    let request = super::encode_request_account_updates(server_version, &account).expect("encode request account updates");
+
+    assert_eq!(request[0], OutgoingMessages::RequestAccountData.to_field(), "message.type");
+    assert_eq!(request[1], version.to_field(), "message.version");
+    assert_eq!(request[2], true.to_field(), "message.subscribe");
+
+    let server_version = 10;
+
+    let request = super::encode_request_account_updates(server_version, &account).expect("encode request account updates");
+
+    assert_eq!(request[0], OutgoingMessages::RequestAccountData.to_field(), "message.type");
+    assert_eq!(request[1], version.to_field(), "message.version");
+    assert_eq!(request[2], true.to_field(), "message.subscribe");
+    assert_eq!(request[3], account.to_field(), "message.account");
+}
+
+#[test]
+fn test_encode_cancel_account_updates() {
+    let server_version = 9;
+    let version = 2;
+
+    let request = super::encode_cancel_account_updates(server_version).expect("encode cancel account updates");
+
+    assert_eq!(request[0], OutgoingMessages::RequestAccountData.to_field(), "message.type");
+    assert_eq!(request[1], version.to_field(), "message.version");
+    assert_eq!(request[2], false.to_field(), "message.subscribe");
+
+    let server_version = 10;
+    let account = "";
+
+    let request = super::encode_cancel_account_updates(server_version).expect("encode cancel account updates");
+
+    assert_eq!(request[0], OutgoingMessages::RequestAccountData.to_field(), "message.type");
+    assert_eq!(request[1], version.to_field(), "message.version");
+    assert_eq!(request[2], false.to_field(), "message.subscribe");
+    assert_eq!(request[3], account.to_field(), "message.account");
+}
+
+#[test]
+fn test_encode_request_account_updates_multi() {
+    let request_id = 9000;
+    let version = 1;
+    let account = "DU1234567";
+    let model_code = None;
+
+    let request = super::encode_request_account_updates_multi(request_id, Some(&account), model_code).expect("encode request account updates");
+
+    assert_eq!(request[0], OutgoingMessages::RequestAccountUpdatesMulti.to_field(), "message.type");
+    assert_eq!(request[1], version.to_field(), "message.version");
+    assert_eq!(request[2], request_id.to_field(), "message.request_id");
+    assert_eq!(request[3], account.to_field(), "message.account");
+    assert_eq!(request[4], model_code.to_field(), "message.model_code");
+    assert_eq!(request[5], true.to_field(), "message.subscribe");
+}

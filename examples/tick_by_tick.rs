@@ -69,14 +69,14 @@ fn contract_gc() -> Contract {
     contract
 }
 
-fn contract_zn() -> Contract {
-    let mut contract = Contract::futures("ZN");
-    contract.exchange = "CBOT".to_owned();
-    contract.contract_id = 568735904;
-    contract
-}
+// fn contract_zn() -> Contract {
+//     let mut contract = Contract::futures("ZN");
+//     contract.exchange = "CBOT".to_owned();
+//     contract.contract_id = 568735904;
+//     contract
+// }
 
-fn stream_all_last(client: &Client, symbol: &str) -> anyhow::Result<()> {
+fn stream_all_last(client: &Client, _symbol: &str) -> anyhow::Result<()> {
     let contract = contract_es();
     let ticks = client.tick_by_tick_all_last(&contract, 0, false)?;
 

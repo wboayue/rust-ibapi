@@ -135,6 +135,7 @@ fn test_account_updates_multi() {
         response_messages: vec![
             responses::ACCOUNT_UPDATE_MULTI_CASH_BALANCE.into(),
             responses::ACCOUNT_UPDATE_MULTI_CURRENCY.into(),
+            responses::ACCOUNT_UPDATE_MULTI_STOCK_MARKET_VALUE.into(),
             responses::ACCOUNT_UPDATE_MULTI_END.into(),
         ],
     });
@@ -144,15 +145,22 @@ fn test_account_updates_multi() {
     let account = Some("DU1234567");
     let subscription = client.account_updates_multi(account, None).expect("request managed accounts failed");
 
-    let update = subscription.next().unwrap();
-    match update {
-        AccountUpdateMulti::AccountMultiValue(value) => {
-            assert_eq!(value.key, "CashBalance");
-        }
-        AccountUpdateMulti::End => {
-            panic!("value expected")
+    let expected_keys = &["CashBalance", "Currency", "StockMarketValue"];
+
+    for key in expected_keys {
+        let update = subscription.next().unwrap();
+        match update {
+            AccountUpdateMulti::AccountMultiValue(value) => {
+                assert_eq!(value.key, *key);
+            }
+            AccountUpdateMulti::End => {
+                panic!("value expected")
+            }
         }
     }
+
+    let end = subscription.next().unwrap();
+    assert_eq!(end, AccountUpdateMulti::End);
 
     subscription.cancel();
 

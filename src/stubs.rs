@@ -20,7 +20,7 @@ impl MessageBus for MessageBusStub {
     }
 
     fn send_request(&self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
-        mock_request(self, Some(request_id), None, message)
+        Ok(mock_request(self, Some(request_id), None, message))
     }
 
     fn cancel_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
@@ -29,7 +29,7 @@ impl MessageBus for MessageBusStub {
     }
 
     fn send_order_request(&self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
-        mock_request(self, Some(request_id), None, message)
+        Ok(mock_request(self, Some(request_id), None, message))
     }
 
     fn cancel_order_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
@@ -38,11 +38,11 @@ impl MessageBus for MessageBusStub {
     }
 
     fn send_shared_request(&self, message_type: OutgoingMessages, message: &RequestMessage) -> Result<InternalSubscription, Error> {
-        mock_request(self, None, Some(message_type), message)
+        Ok(mock_request(self, None, Some(message_type), message))
     }
 
     fn cancel_shared_subscription(&self, message_type: OutgoingMessages, packet: &RequestMessage) -> Result<(), Error> {
-        mock_request(self, None, Some(message_type), packet)?;
+        mock_request(self, None, Some(message_type), packet);
         Ok(())
     }
 
@@ -58,7 +58,7 @@ fn mock_request(
     request_id: Option<i32>,
     message_type: Option<OutgoingMessages>,
     message: &RequestMessage,
-) -> Result<InternalSubscription, Error> {
+) -> InternalSubscription {
     stub.request_messages.write().unwrap().push(message.clone());
 
     let (sender, receiver) = channel::unbounded();
@@ -77,20 +77,5 @@ fn mock_request(
         subscription = subscription.message_type(message_type);
     }
 
-    Ok(subscription.build())
-}
-
-fn mock_global_request(stub: &mut MessageBusStub, message: &RequestMessage) -> Result<InternalSubscription, Error> {
-    stub.request_messages.write().unwrap().push(message.clone());
-
-    let (sender, receiver) = channel::unbounded();
-
-    for message in &stub.response_messages {
-        let message = ResponseMessage::from(&message.replace('|', "\0"));
-        sender.send(Response::from(message)).unwrap();
-    }
-
-    let subscription = SubscriptionBuilder::new().shared_receiver(Arc::new(receiver)).build();
-
-    Ok(subscription)
+    subscription.build()
 }
