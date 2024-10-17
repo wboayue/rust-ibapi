@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use time::OffsetDateTime;
 use time_tz::Tz;
 
@@ -1180,26 +1180,31 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     }
 
     /// Cancel the subscription
-    pub fn cancel(&self) -> Result<(), Error> {
+    pub fn cancel(&self) {
         if let Some(request_id) = self.request_id {
             if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
-                self.client.message_bus.cancel_subscription(request_id, &message)?;
+                if let Err(e) = self.client.message_bus.cancel_subscription(request_id, &message) {
+                    warn!("error cancelling subscription: {e}")
+                }
                 self.subscription.cancel();
             }
         } else if let Some(order_id) = self.order_id {
             if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
-                self.client.message_bus.cancel_order_subscription(order_id, &message)?;
+                if let Err(e) = self.client.message_bus.cancel_order_subscription(order_id, &message) {
+                    warn!("error cancelling order subscription: {e}")
+                }
                 self.subscription.cancel();
             }
         } else if let Some(message_type) = self.message_type {
             if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
-                self.client.message_bus.cancel_shared_subscription(message_type, &message)?;
+                if let Err(e) = self.client.message_bus.cancel_shared_subscription(message_type, &message) {
+                    warn!("error cancelling shared subscription: {e}")
+                }
                 self.subscription.cancel();
             }
         } else {
             debug!("Could not determine cancel method")
         }
-        Ok(())
     }
 
     pub fn iter(&self) -> SubscriptionIter<T> {
@@ -1217,9 +1222,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
 
 impl<'a, T: Subscribable<T>> Drop for Subscription<'a, T> {
     fn drop(&mut self) {
-        if let Err(err) = self.cancel() {
-            error!("error cancelling subscription: {err}");
-        }
+        self.cancel();
     }
 }
 

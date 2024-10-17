@@ -519,10 +519,17 @@ impl ResponseMessage {
     }
 
     pub fn from(fields: &str) -> ResponseMessage {
+        let fields = fields.replace("|", "\0");
         ResponseMessage {
             i: 0,
             fields: fields.split('\x00').map(|x| x.to_string()).collect(),
         }
+    }
+
+    #[cfg(test)]
+    pub fn from_simple(fields: &str) -> ResponseMessage {
+        let fields = fields.replace("|", "\0");
+        Self::from(&fields)
     }
 
     pub fn skip(&mut self) {

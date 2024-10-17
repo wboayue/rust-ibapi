@@ -1,4 +1,4 @@
-use crate::{accounts::AccountSummaryTags, server_versions};
+use crate::{accounts::AccountSummaryTags, server_versions, testdata::responses};
 
 #[test]
 fn test_decode_positions() {
@@ -118,4 +118,17 @@ fn test_decode_account_summary() {
     assert_eq!(account_summary.tag, AccountSummaryTags::ACCOUNT_TYPE, "account_summary.tag");
     assert_eq!(account_summary.value, "FA", "account_summary.value");
     assert_eq!(account_summary.currency, "", "account_summary.currency");
+}
+
+#[test]
+fn test_decode_account_multi_value() {
+    let mut message = super::ResponseMessage::from_simple(responses::ACCOUNT_UPDATE_MULTI_CURRENCY);
+
+    let value = super::decode_account_multi_value(&mut message).expect("error decoding account multi value");
+
+    assert_eq!(value.account, "DU1234567", "value.account");
+    assert_eq!(value.model_code, "", "value.model_code");
+    assert_eq!(value.key, "Currency", "value.key");
+    assert_eq!(value.value, "USD", "value.value");
+    assert_eq!(value.currency, "USD", "value.currency");
 }
