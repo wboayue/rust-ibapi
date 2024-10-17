@@ -150,12 +150,9 @@ pub(crate) fn encode_cancel_account_updates_multi(_server_version: i32, request_
 
     let mut message = RequestMessage::new();
 
-    message.push_field(&OutgoingMessages::RequestAccountUpdatesMulti);
+    message.push_field(&OutgoingMessages::CancelAccountUpdatesMulti);
     message.push_field(&VERSION);
     message.push_field(&request_id);
-    message.push_field(&""); // account
-    message.push_field(&""); // model code
-    message.push_field(&false); // subscribe
 
     Ok(message)
 }
