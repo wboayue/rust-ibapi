@@ -145,6 +145,21 @@ pub(crate) fn encode_cancel_account_updates(server_version: i32) -> Result<Reque
     Ok(message)
 }
 
+pub(crate) fn encode_cancel_account_updates_multi(_server_version: i32, request_id: i32) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 1;
+
+    let mut message = RequestMessage::new();
+
+    message.push_field(&OutgoingMessages::RequestAccountUpdatesMulti);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    message.push_field(&""); // account
+    message.push_field(&""); // model code
+    message.push_field(&false); // subscribe
+
+    Ok(message)
+}
+
 fn encode_simple(message_type: OutgoingMessages, version: i32) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 

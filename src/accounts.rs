@@ -274,7 +274,7 @@ pub struct FamilyCode {
 /// Account's information, portfolio and last update time
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
-pub enum AccountUpdates {
+pub enum AccountUpdate {
     /// Receives the subscribed account's information.
     AccountValue(AccountValue),
     /// Receives the subscribed account's portfolio.
@@ -285,22 +285,23 @@ pub enum AccountUpdates {
     End,
 }
 
-impl Subscribable<AccountUpdates> for AccountUpdates {
+impl Subscribable<AccountUpdate> for AccountUpdate {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[
         IncomingMessages::AccountValue,
         IncomingMessages::PortfolioValue,
         IncomingMessages::AccountUpdateTime,
         IncomingMessages::AccountDownloadEnd,
     ];
+
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::AccountValue => Ok(AccountUpdates::AccountValue(decoders::decode_account_value(message)?)),
-            IncomingMessages::PortfolioValue => Ok(AccountUpdates::PortfolioValue(decoders::decode_account_portfolio_value(
+            IncomingMessages::AccountValue => Ok(AccountUpdate::AccountValue(decoders::decode_account_value(message)?)),
+            IncomingMessages::PortfolioValue => Ok(AccountUpdate::PortfolioValue(decoders::decode_account_portfolio_value(
                 server_version,
                 message,
             )?)),
-            IncomingMessages::AccountUpdateTime => Ok(AccountUpdates::UpdateTime(decoders::decode_account_update_time(message)?)),
-            IncomingMessages::AccountDownloadEnd => Ok(AccountUpdates::End),
+            IncomingMessages::AccountUpdateTime => Ok(AccountUpdate::UpdateTime(decoders::decode_account_update_time(message)?)),
+            IncomingMessages::AccountDownloadEnd => Ok(AccountUpdate::End),
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
     }
@@ -378,6 +379,7 @@ pub struct AccountMultiValue {
 
 impl Subscribable<AccountUpdateMulti> for AccountUpdateMulti {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::AccountUpdateMulti, IncomingMessages::AccountUpdateMultiEnd];
+
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::AccountUpdateMulti => Ok(AccountUpdateMulti::AccountMultiValue(decoders::decode_account_multi_value(message)?)),
@@ -386,8 +388,9 @@ impl Subscribable<AccountUpdateMulti> for AccountUpdateMulti {
         }
     }
 
-    fn cancel_message(server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
-        encoders::encode_cancel_account_updates(server_version)
+    fn cancel_message(server_version: i32, request_id: Option<i32>) -> Result<RequestMessage, Error> {
+        let request_id = request_id.expect("Request ID required to encode cancel account updates multi");
+        encoders::encode_cancel_account_updates_multi(server_version, request_id)
     }
 }
 
@@ -481,7 +484,7 @@ pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Re
     Ok(Subscription::new(client, subscription))
 }
 
-pub fn account_updates<'a>(client: &'a Client, account: &str) -> Result<Subscription<'a, AccountUpdates>, Error> {
+pub fn account_updates<'a>(client: &'a Client, account: &str) -> Result<Subscription<'a, AccountUpdate>, Error> {
     let request = encoders::encode_request_account_updates(client.server_version(), account)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAccountData, request)?;
 

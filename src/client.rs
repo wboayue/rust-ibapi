@@ -8,7 +8,7 @@ use log::{debug, error, info};
 use time::OffsetDateTime;
 use time_tz::Tz;
 
-use crate::accounts::{AccountSummaries, AccountUpdateMulti, AccountUpdates, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
+use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
@@ -240,7 +240,7 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::Client;
-    /// use ibapi::accounts::AccountUpdates;
+    /// use ibapi::accounts::AccountUpdate;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -251,12 +251,12 @@ impl Client {
     ///     println!("{update:?}");
     ///
     ///     // stop after full initial update
-    ///     if let AccountUpdates::End = update {
+    ///     if let AccountUpdate::End = update {
     ///         subscription.cancel();
     ///     }
     /// }
     /// ```
-    pub fn account_updates<'a>(&'a self, account: &str) -> Result<Subscription<'a, AccountUpdates>, Error> {
+    pub fn account_updates<'a>(&'a self, account: &str) -> Result<Subscription<'a, AccountUpdate>, Error> {
         accounts::account_updates(self, account)
     }
 
