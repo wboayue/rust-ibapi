@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -1047,6 +1047,7 @@ pub struct Subscription<'a, T: Subscribable<T>> {
     pub(crate) message_type: Option<OutgoingMessages>,
     pub(crate) subscription: InternalSubscription,
     pub(crate) phantom: PhantomData<T>,
+    cancelled: AtomicBool,
 }
 
 #[allow(private_bounds)]
@@ -1060,6 +1061,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                 message_type: None,
                 subscription,
                 phantom: PhantomData,
+                cancelled: AtomicBool::new(false),
             }
         } else if let Some(order_id) = subscription.order_id {
             Subscription {
@@ -1069,6 +1071,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                 message_type: None,
                 subscription,
                 phantom: PhantomData,
+                cancelled: AtomicBool::new(false),
             }
         } else if let Some(message_type) = subscription.message_type {
             Subscription {
@@ -1078,6 +1081,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                 message_type: Some(message_type),
                 subscription,
                 phantom: PhantomData,
+                cancelled: AtomicBool::new(false),
             }
         } else {
             panic!("unsupported internal subscription: {:?}", subscription)
@@ -1181,6 +1185,12 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
 
     /// Cancel the subscription
     pub fn cancel(&self) {
+        if self.cancelled.load(Ordering::Relaxed) {
+            return;
+        }
+
+        self.cancelled.store(true, Ordering::Relaxed);
+
         if let Some(request_id) = self.request_id {
             if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
                 if let Err(e) = self.client.message_bus.cancel_subscription(request_id, &message) {
