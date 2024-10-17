@@ -1,5 +1,6 @@
 use std::sync::{Arc, RwLock};
 
+use crate::accounts::AccountUpdateMulti;
 use crate::testdata::responses;
 use crate::{accounts::AccountSummaryTags, server_versions, stubs::MessageBusStub, Client};
 
@@ -125,4 +126,38 @@ fn test_managed_accounts() {
     let accounts = client.managed_accounts().expect("request managed accounts failed");
 
     assert_eq!(accounts, &["DU1234567", "DU7654321"]);
+}
+
+#[test]
+fn test_account_updates_multi() {
+    let message_bus = Arc::new(MessageBusStub {
+        request_messages: RwLock::new(vec![]),
+        response_messages: vec![
+            responses::ACCOUNT_UPDATE_MULTI_CASH_BALANCE.into(),
+            responses::ACCOUNT_UPDATE_MULTI_CURRENCY.into(),
+            responses::ACCOUNT_UPDATE_MULTI_END.into(),
+        ],
+    });
+
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+
+    let account = Some("DU1234567");
+    let subscription = client.account_updates_multi(account, None).expect("request managed accounts failed");
+
+    let update = subscription.next().unwrap();
+    match update {
+        AccountUpdateMulti::AccountMultiValue(value) => {
+            assert_eq!(value.key, "CashBalance");
+        }
+        AccountUpdateMulti::End => {
+            panic!("value expected")
+        }
+    }
+
+    subscription.cancel();
+
+    let request_messages = client.message_bus.request_messages();
+
+    assert_eq!(request_messages[0].encode_simple(), "76|1|9000|DU1234567||1|");
+    assert_eq!(request_messages[1].encode_simple(), "77|1|9000|");
 }

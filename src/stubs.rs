@@ -46,6 +46,8 @@ impl MessageBus for MessageBusStub {
         Ok(())
     }
 
+    fn ensure_shutdown(&self) {}
+
     // fn process_messages(&mut self, _server_version: i32) -> Result<(), Error> {
     //     Ok(())
     // }

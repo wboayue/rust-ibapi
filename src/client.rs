@@ -1,14 +1,14 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use log::{debug, error};
+use log::{debug, error, info, warn};
 use time::OffsetDateTime;
 use time_tz::Tz;
 
-use crate::accounts::{AccountSummaries, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
+use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::historical;
@@ -227,6 +227,74 @@ impl Client {
     /// ```
     pub fn account_summary<'a>(&'a self, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
         accounts::account_summary(self, group, tags)
+    }
+
+    /// Subscribes to a specific account’s information and portfolio.
+    ///
+    /// All account values and positions will be returned initially, and then there will only be updates when there is a change in a position, or to an account value every 3 minutes if it has changed. Only one account can be subscribed at a time.
+    ///
+    /// # Arguments
+    /// * `account` - The account id (i.e. U1234567) for which the information is requested.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::accounts::AccountUpdate;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let account = "U1234567";
+    ///
+    /// let subscription = client.account_updates(account).expect("error requesting account updates");
+    /// for update in &subscription {
+    ///     println!("{update:?}");
+    ///
+    ///     // stop after full initial update
+    ///     if let AccountUpdate::End = update {
+    ///         subscription.cancel();
+    ///     }
+    /// }
+    /// ```
+    pub fn account_updates<'a>(&'a self, account: &str) -> Result<Subscription<'a, AccountUpdate>, Error> {
+        accounts::account_updates(self, account)
+    }
+
+    /// Requests account updates for account and/or model.
+    ///
+    /// All account values and positions will be returned initially, and then there will only be updates when there is a change in a position, or to an account value every 3 minutes if it has changed. Only one account can be subscribed at a time.
+    ///
+    /// # Arguments
+    /// * `account`        - Account values can be requested for a particular account.
+    /// * `model_code`     - Account values can also be requested for a model.
+    /// * `ledger_and_nlv` - Returns light-weight request; only currency positions as opposed to account values and currency positions.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::accounts::AccountUpdateMulti;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let account = Some("U1234567");
+    ///
+    /// let subscription = client.account_updates_multi(account, None).expect("error requesting account updates multi");
+    /// for update in &subscription {
+    ///     println!("{update:?}");
+    ///
+    ///     // stop after full initial update
+    ///     if let AccountUpdateMulti::End = update {
+    ///         subscription.cancel();
+    ///     }
+    /// }
+    /// ```
+    pub fn account_updates_multi<'a>(
+        &'a self,
+        account: Option<&str>,
+        model_code: Option<&str>,
+    ) -> Result<Subscription<'a, AccountUpdateMulti>, Error> {
+        accounts::account_updates_multi(self, account, model_code)
     }
 
     /// Requests the accounts to which the logged user has access to.
@@ -979,6 +1047,7 @@ pub struct Subscription<'a, T: Subscribable<T>> {
     pub(crate) message_type: Option<OutgoingMessages>,
     pub(crate) subscription: InternalSubscription,
     pub(crate) phantom: PhantomData<T>,
+    cancelled: AtomicBool,
 }
 
 #[allow(private_bounds)]
@@ -992,6 +1061,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                 message_type: None,
                 subscription,
                 phantom: PhantomData,
+                cancelled: AtomicBool::new(false),
             }
         } else if let Some(order_id) = subscription.order_id {
             Subscription {
@@ -1001,6 +1071,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                 message_type: None,
                 subscription,
                 phantom: PhantomData,
+                cancelled: AtomicBool::new(false),
             }
         } else if let Some(message_type) = subscription.message_type {
             Subscription {
@@ -1010,6 +1081,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                 message_type: Some(message_type),
                 subscription,
                 phantom: PhantomData,
+                cancelled: AtomicBool::new(false),
             }
         } else {
             panic!("unsupported internal subscription: {:?}", subscription)
@@ -1033,7 +1105,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                         error!("{error_message}");
                         return None;
                     } else {
-                        error!("subscription iterator unexpected message: {message:?}");
+                        info!("subscription iterator unexpected message: {message:?}");
                     }
                 }
                 Some(Response::Cancelled) => {
@@ -1112,26 +1184,37 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     }
 
     /// Cancel the subscription
-    pub fn cancel(&self) -> Result<(), Error> {
+    pub fn cancel(&self) {
+        if self.cancelled.load(Ordering::Relaxed) {
+            return;
+        }
+
+        self.cancelled.store(true, Ordering::Relaxed);
+
         if let Some(request_id) = self.request_id {
             if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
-                self.client.message_bus.cancel_subscription(request_id, &message)?;
+                if let Err(e) = self.client.message_bus.cancel_subscription(request_id, &message) {
+                    warn!("error cancelling subscription: {e}")
+                }
                 self.subscription.cancel();
             }
         } else if let Some(order_id) = self.order_id {
             if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
-                self.client.message_bus.cancel_order_subscription(order_id, &message)?;
+                if let Err(e) = self.client.message_bus.cancel_order_subscription(order_id, &message) {
+                    warn!("error cancelling order subscription: {e}")
+                }
                 self.subscription.cancel();
             }
         } else if let Some(message_type) = self.message_type {
             if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
-                self.client.message_bus.cancel_shared_subscription(message_type, &message)?;
+                if let Err(e) = self.client.message_bus.cancel_shared_subscription(message_type, &message) {
+                    warn!("error cancelling shared subscription: {e}")
+                }
                 self.subscription.cancel();
             }
         } else {
             debug!("Could not determine cancel method")
         }
-        Ok(())
     }
 
     pub fn iter(&self) -> SubscriptionIter<T> {
@@ -1149,9 +1232,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
 
 impl<'a, T: Subscribable<T>> Drop for Subscription<'a, T> {
     fn drop(&mut self) {
-        if let Err(err) = self.cancel() {
-            error!("error cancelling subscription: {err}");
-        }
+        self.cancel();
     }
 }
 

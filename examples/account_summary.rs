@@ -15,7 +15,7 @@ fn main() {
     for update in &subscription {
         match update {
             AccountSummaries::Summary(summary) => println!("{summary:?}"),
-            AccountSummaries::End => subscription.cancel().expect("cancel failed"),
+            AccountSummaries::End => subscription.cancel(),
         }
     }
 }

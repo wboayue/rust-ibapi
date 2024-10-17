@@ -96,6 +96,67 @@ pub(crate) fn encode_request_managed_accounts() -> Result<RequestMessage, Error>
     Ok(message)
 }
 
+pub(crate) fn encode_request_account_updates(server_version: i32, account: &str) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 2;
+
+    let mut message = RequestMessage::new();
+
+    message.push_field(&OutgoingMessages::RequestAccountData);
+    message.push_field(&VERSION);
+    message.push_field(&true); // subscribe
+    if server_version > 9 {
+        message.push_field(&account);
+    }
+
+    Ok(message)
+}
+
+pub(crate) fn encode_request_account_updates_multi(
+    request_id: i32,
+    account: Option<&str>,
+    model_code: Option<&str>,
+) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 1;
+
+    let mut message = RequestMessage::new();
+
+    message.push_field(&OutgoingMessages::RequestAccountUpdatesMulti);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    message.push_field(&account);
+    message.push_field(&model_code);
+    message.push_field(&true); // subscribe
+
+    Ok(message)
+}
+
+pub(crate) fn encode_cancel_account_updates(server_version: i32) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 2;
+
+    let mut message = RequestMessage::new();
+
+    message.push_field(&OutgoingMessages::RequestAccountData);
+    message.push_field(&VERSION);
+    message.push_field(&false); // subscribe
+    if server_version > 9 {
+        message.push_field(&"");
+    }
+
+    Ok(message)
+}
+
+pub(crate) fn encode_cancel_account_updates_multi(_server_version: i32, request_id: i32) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 1;
+
+    let mut message = RequestMessage::new();
+
+    message.push_field(&OutgoingMessages::CancelAccountUpdatesMulti);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+
+    Ok(message)
+}
+
 fn encode_simple(message_type: OutgoingMessages, version: i32) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 

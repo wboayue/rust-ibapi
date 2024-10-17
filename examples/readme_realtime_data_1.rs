@@ -19,6 +19,6 @@ fn main() {
         println!("bar: {bar:?}");
 
         // when your algorithm is done, cancel subscription
-        subscription.cancel().expect("cancel failed");
+        subscription.cancel();
     }
 }

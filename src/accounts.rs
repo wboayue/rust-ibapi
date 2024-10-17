@@ -273,31 +273,60 @@ pub struct FamilyCode {
 
 /// Account's information, portfolio and last update time
 #[allow(clippy::large_enum_variant)]
-pub enum AccountUpdates {
+#[derive(Debug)]
+pub enum AccountUpdate {
     /// Receives the subscribed account's information.
-    Value(AccountValue),
+    AccountValue(AccountValue),
     /// Receives the subscribed account's portfolio.
-    Portfolio(AccountPortfolio),
+    PortfolioValue(AccountPortfolioValue),
     /// Receives the last time on which the account was updated.
-    Time(AccountTime),
+    UpdateTime(AccountUpdateTime),
     /// Notifies when all the account’s information has finished.
     End,
 }
 
+impl Subscribable<AccountUpdate> for AccountUpdate {
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[
+        IncomingMessages::AccountValue,
+        IncomingMessages::PortfolioValue,
+        IncomingMessages::AccountUpdateTime,
+        IncomingMessages::AccountDownloadEnd,
+    ];
+
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+        match message.message_type() {
+            IncomingMessages::AccountValue => Ok(AccountUpdate::AccountValue(decoders::decode_account_value(message)?)),
+            IncomingMessages::PortfolioValue => Ok(AccountUpdate::PortfolioValue(decoders::decode_account_portfolio_value(
+                server_version,
+                message,
+            )?)),
+            IncomingMessages::AccountUpdateTime => Ok(AccountUpdate::UpdateTime(decoders::decode_account_update_time(message)?)),
+            IncomingMessages::AccountDownloadEnd => Ok(AccountUpdate::End),
+            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+        }
+    }
+
+    fn cancel_message(server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
+        encoders::encode_cancel_account_updates(server_version)
+    }
+}
+
 /// A value of subscribed account's information.
+#[derive(Debug, Default)]
 pub struct AccountValue {
     /// The value being updated.
     pub key: String,
     /// Current value
     pub value: String,
-    /// The currency inn which the value is expressed.
+    /// The currency in which the value is expressed.
     pub currency: String,
     /// The account identifier.
-    pub account: String,
+    pub account: Option<String>,
 }
 
 /// Subscribed account's portfolio.
-pub struct AccountPortfolio {
+#[derive(Debug, Default)]
+pub struct AccountPortfolioValue {
     /// The Contract for which a position is held.
     pub contract: Contract,
     /// The number of positions held.
@@ -310,16 +339,59 @@ pub struct AccountPortfolio {
     pub average_cost: f64,
     /// Daily unrealized profit and loss on the position.
     pub unrealized_pnl: f64,
-    /// Daily realized profit and loss on the position.   
+    /// Daily realized profit and loss on the position.
     pub realized_pnl: f64,
     /// Account identifier for the update.
-    pub account: String,
+    pub account: Option<String>,
 }
 
 /// Last time at which the account was updated.
-pub struct AccountTime {
+#[derive(Debug, Default)]
+pub struct AccountUpdateTime {
     /// The last update system time.
     pub timestamp: String,
+}
+
+/// Account's information, portfolio and last update time
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug)]
+pub enum AccountUpdateMulti {
+    /// Receives the subscribed account's information.
+    AccountMultiValue(AccountMultiValue),
+    /// Notifies when all the account’s information has finished.
+    End,
+}
+
+// Provides the account updates.
+#[derive(Debug, Default)]
+pub struct AccountMultiValue {
+    /// he account with updates.
+    pub account: String,
+    /// The model code with updates.
+    pub model_code: String,
+    /// The name of parameter.
+    pub key: String,
+    /// The value of parameter.
+    pub value: String,
+    /// The currency of parameter.
+    pub currency: String,
+}
+
+impl Subscribable<AccountUpdateMulti> for AccountUpdateMulti {
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::AccountUpdateMulti, IncomingMessages::AccountUpdateMultiEnd];
+
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+        match message.message_type() {
+            IncomingMessages::AccountUpdateMulti => Ok(AccountUpdateMulti::AccountMultiValue(decoders::decode_account_multi_value(message)?)),
+            IncomingMessages::AccountUpdateMultiEnd => Ok(AccountUpdateMulti::End),
+            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+        }
+    }
+
+    fn cancel_message(server_version: i32, request_id: Option<i32>) -> Result<RequestMessage, Error> {
+        let request_id = request_id.expect("Request ID required to encode cancel account updates multi");
+        encoders::encode_cancel_account_updates_multi(server_version, request_id)
+    }
 }
 
 // Subscribes to position updates for all accessible accounts.
@@ -407,6 +479,27 @@ pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Re
 
     let request_id = client.next_request_id();
     let request = encoders::encode_request_account_summary(request_id, group, tags)?;
+    let subscription = client.send_request(request_id, request)?;
+
+    Ok(Subscription::new(client, subscription))
+}
+
+pub fn account_updates<'a>(client: &'a Client, account: &str) -> Result<Subscription<'a, AccountUpdate>, Error> {
+    let request = encoders::encode_request_account_updates(client.server_version(), account)?;
+    let subscription = client.send_shared_request(OutgoingMessages::RequestAccountData, request)?;
+
+    Ok(Subscription::new(client, subscription))
+}
+
+pub fn account_updates_multi<'a>(
+    client: &'a Client,
+    account: Option<&str>,
+    model_code: Option<&str>,
+) -> Result<Subscription<'a, AccountUpdateMulti>, Error> {
+    client.check_server_version(server_versions::MODELS_SUPPORT, "It does not support account updates multi requests.")?;
+
+    let request_id = client.next_request_id();
+    let request = encoders::encode_request_account_updates_multi(request_id, account, model_code)?;
     let subscription = client.send_request(request_id, request)?;
 
     Ok(Subscription::new(client, subscription))

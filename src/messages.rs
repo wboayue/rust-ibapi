@@ -1,7 +1,7 @@
 use std::ops::Index;
 use std::str::{self, FromStr};
 
-use log::error;
+use log::debug;
 use time::OffsetDateTime;
 
 use crate::{Error, ToField};
@@ -216,9 +216,11 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::Error
         | IncomingMessages::ExecutionDataEnd
         | IncomingMessages::AccountSummary
-        | IncomingMessages::AccountSummaryEnd => Some(2),
+        | IncomingMessages::AccountSummaryEnd
+        | IncomingMessages::AccountUpdateMulti
+        | IncomingMessages::AccountUpdateMultiEnd => Some(2),
         _ => {
-            error!("could not determine request id index for {kind:?}");
+            debug!("could not determine request id index for {kind:?}");
             None
         }
     }
@@ -517,10 +519,17 @@ impl ResponseMessage {
     }
 
     pub fn from(fields: &str) -> ResponseMessage {
+        let fields = fields.replace("|", "\0");
         ResponseMessage {
             i: 0,
             fields: fields.split('\x00').map(|x| x.to_string()).collect(),
         }
+    }
+
+    #[cfg(test)]
+    pub fn from_simple(fields: &str) -> ResponseMessage {
+        let fields = fields.replace("|", "\0");
+        Self::from(&fields)
     }
 
     pub fn skip(&mut self) {
@@ -534,5 +543,6 @@ impl ResponseMessage {
     }
 }
 
+pub(crate) mod shared_channel_configuration;
 #[cfg(test)]
 mod tests;
