@@ -103,12 +103,6 @@ pub enum AccountSummaries {
     End,
 }
 
-impl From<AccountSummary> for AccountSummaries {
-    fn from(val: AccountSummary) -> Self {
-        AccountSummaries::Summary(val)
-    }
-}
-
 impl Subscribable<AccountSummaries> for AccountSummaries {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::AccountSummary, IncomingMessages::AccountSummaryEnd];
 
@@ -196,12 +190,6 @@ pub enum PositionUpdate {
     PositionEnd,
 }
 
-impl From<Position> for PositionUpdate {
-    fn from(val: Position) -> Self {
-        PositionUpdate::Position(val)
-    }
-}
-
 impl Subscribable<PositionUpdate> for PositionUpdate {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
 
@@ -223,12 +211,6 @@ impl Subscribable<PositionUpdate> for PositionUpdate {
 pub enum PositionUpdateMulti {
     Position(PositionMulti),
     PositionEnd,
-}
-
-impl From<PositionMulti> for PositionUpdateMulti {
-    fn from(val: PositionMulti) -> Self {
-        PositionUpdateMulti::Position(val)
-    }
 }
 
 /// Portfolio's open positions.
@@ -354,7 +336,7 @@ pub struct AccountUpdateTime {
 
 /// Account's information, portfolio and last update time
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum AccountUpdateMulti {
     /// Receives the subscribed account's information.
     AccountMultiValue(AccountMultiValue),
@@ -363,7 +345,7 @@ pub enum AccountUpdateMulti {
 }
 
 // Provides the account updates.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct AccountMultiValue {
     /// he account with updates.
     pub account: String,
