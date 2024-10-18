@@ -407,13 +407,13 @@ pub struct OptionComputation {
     /// The present value of dividends expected on the option’s underlying.
     pub present_value_dividend: Option<f64>,
     /// The option gamma value.
-    pub gamma: f64,
+    pub gamma: Option<f64>,
     /// The option vega value.
-    pub vega: f64,
+    pub vega: Option<f64>,
     /// The option theta value.
-    pub theta: f64,
+    pub theta: Option<f64>,
     /// The price of the underlying.
-    pub underlying_price: f64,
+    pub underlying_price: Option<f64>,
 }
 
 impl Subscribable<OptionComputation> for OptionComputation {
@@ -445,7 +445,7 @@ pub(crate) fn contract_details(client: &Client, contract: &Contract) -> Result<V
     verify_contract(client, contract)?;
 
     let request_id = client.next_request_id();
-    let packet = encoders::request_contract_data(client.server_version(), request_id, contract)?;
+    let packet = encoders::encode_request_contract_data(client.server_version(), request_id, contract)?;
 
     let responses = client.send_request(request_id, packet)?;
 
@@ -522,7 +522,7 @@ pub(crate) fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<Con
     client.check_server_version(server_versions::REQ_MATCHING_SYMBOLS, "It does not support matching symbols requests.")?;
 
     let request_id = client.next_request_id();
-    let request = encoders::request_matching_symbols(request_id, pattern)?;
+    let request = encoders::encode_request_matching_symbols(request_id, pattern)?;
     let subscription = client.send_request(request_id, request)?;
 
     if let Some(Response::Message(mut message)) = subscription.next() {
@@ -564,7 +564,7 @@ pub struct PriceIncrement {
 pub(crate) fn market_rule(client: &Client, market_rule_id: i32) -> Result<MarketRule, Error> {
     client.check_server_version(server_versions::MARKET_RULES, "It does not support market rule requests.")?;
 
-    let request = encoders::request_market_rule(market_rule_id)?;
+    let request = encoders::encode_request_market_rule(market_rule_id)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestMarketRule, request)?;
 
     match subscription.next() {

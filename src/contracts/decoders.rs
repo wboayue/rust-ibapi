@@ -213,31 +213,14 @@ pub(crate) fn decode_option_computation(server_version: i32, message: &mut Respo
         computation.present_value_dividend = next_optional_double(message, -1.0)?;
     }
 
-    // if (msgVersion >= 6)
-    // {
-    //     gamma = ReadDouble();
-    //     if (gamma.Equals(-2))
-    //     { // -2 is the "not yet computed" indicator
-    //         gamma = double.MaxValue;
-    //     }
-    //     vega = ReadDouble();
-    //     if (vega.Equals(-2))
-    //     { // -2 is the "not yet computed" indicator
-    //         vega = double.MaxValue;
-    //     }
-    //     theta = ReadDouble();
-    //     if (theta.Equals(-2))
-    //     { // -2 is the "not yet computed" indicator
-    //         theta = double.MaxValue;
-    //     }
-    //     undPrice = ReadDouble();
-    //     if (undPrice.Equals(-1))
-    //     { // -1 is the "not yet computed" indicator
-    //         undPrice = double.MaxValue;
-    //     }
-    // }
+    if message_version >= 6 {
+        computation.gamma = next_optional_double(message, -2.0)?;
+        computation.vega = next_optional_double(message, -2.0)?;
+        computation.theta = next_optional_double(message, -2.0)?;
+        computation.underlying_price = next_optional_double(message, -1.0)?;
+    }
 
-    Err(Error::NotImplemented)
+    Ok(computation)
 }
 
 fn next_optional_double(message: &mut ResponseMessage, none_value: f64) -> Result<Option<f64>, Error> {
@@ -250,26 +233,4 @@ fn next_optional_double(message: &mut ResponseMessage, none_value: f64) -> Resul
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_decode_market_rule() {
-        let mut message = ResponseMessage::from("93\026\01\00\00.01\0");
-
-        let results = decode_market_rule(&mut message);
-
-        if let Ok(market_rule) = results {
-            assert_eq!(market_rule.market_rule_id, 26, "market_rule.market_rule_id");
-
-            assert_eq!(market_rule.price_increments.len(), 1, "market_rule.price_increments.len()");
-            assert_eq!(market_rule.price_increments[0].low_edge, 0.0, "market_rule.price_increments[0].low_edge");
-            assert_eq!(
-                market_rule.price_increments[0].increment, 0.01,
-                "market_rule.price_increments[0].increment"
-            );
-        } else if let Err(err) = results {
-            assert!(false, "error decoding market rule: {err}");
-        }
-    }
-}
+mod tests;

@@ -3,7 +3,7 @@ use crate::messages::OutgoingMessages;
 use crate::messages::RequestMessage;
 use crate::{server_versions, Error};
 
-pub(crate) fn request_contract_data(server_version: i32, request_id: i32, contract: &Contract) -> Result<RequestMessage, Error> {
+pub(crate) fn encode_request_contract_data(server_version: i32, request_id: i32, contract: &Contract) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 8;
 
     let mut packet = RequestMessage::default();
@@ -60,7 +60,7 @@ pub(crate) fn request_contract_data(server_version: i32, request_id: i32, contra
     Ok(packet)
 }
 
-pub(crate) fn request_matching_symbols(request_id: i32, pattern: &str) -> Result<RequestMessage, Error> {
+pub(crate) fn encode_request_matching_symbols(request_id: i32, pattern: &str) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::RequestMatchingSymbols);
@@ -70,7 +70,7 @@ pub(crate) fn request_matching_symbols(request_id: i32, pattern: &str) -> Result
     Ok(message)
 }
 
-pub(crate) fn request_market_rule(market_rule_id: i32) -> Result<RequestMessage, Error> {
+pub(crate) fn encode_request_market_rule(market_rule_id: i32) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::RequestMarketRule);
@@ -141,19 +141,4 @@ fn encode_contract(server_version: i32, message: &mut RequestMessage, contract: 
 }
 
 #[cfg(test)]
-mod tests {
-
-    #[test]
-    fn request_market_rule() {
-        let results = super::request_market_rule(26);
-
-        match results {
-            Ok(message) => {
-                assert_eq!(message.encode(), "91\026\0", "message.encode()");
-            }
-            Err(err) => {
-                assert!(false, "error encoding market rule request: {err}");
-            }
-        }
-    }
-}
+mod tests;
