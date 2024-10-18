@@ -385,6 +385,16 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("AAPL");
+    /// let subscription = client.calculate_option_price(&contract, 100.0, 235.0).expect("request failed");
+    /// for calculation in &subscription {
+    ///     println!("calculation: {:?}", calculation);
+    /// }
     /// ```
     pub fn calculate_option_price<'a>(
         &'a self,
@@ -405,6 +415,16 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("AAPL");
+    /// let subscription = client.calculate_implied_volatility(&contract, 300.0, 235.0).expect("request failed");
+    /// for calculation in &subscription {
+    ///     println!("calculation: {:?}", calculation);
+    /// }
     /// ```
     pub fn calculate_implied_volatility<'a>(
         &'a self,
