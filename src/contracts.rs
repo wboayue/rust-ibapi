@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use std::string::ToString;
 
 use log::{error, info};
+use tick_types::TickType;
 
 use crate::client::ResponseContext;
 use crate::client::Subscribable;
@@ -18,6 +19,7 @@ use crate::{server_versions, Error, ToField};
 
 mod decoders;
 mod encoders;
+pub mod tick_types;
 
 #[cfg(test)]
 pub(crate) mod contract_samples;
@@ -388,22 +390,18 @@ impl ToField for Vec<TagValue> {
     }
 }
 
-enum TickType {}
-//Pass the field value into
-//TickType.getField(int tickType) to retrieve the field description. For example, a field value of 13 will map to modelOptComp, etc. 10 = Bid 11 = Ask 12 = Last
-
 /// Receives option specific market data.
 /// TWS’s options model volatility, prices, and deltas, along with the present value of dividends expected on that options underlier.
 #[derive(Debug, Default)]
 pub struct OptionComputation {
     /// Specifies the type of option computation.
-    pub field: i32,
+    pub field: TickType,
     /// 0 – return based, 1- price based.
-    pub tick_attribute: i32,
+    pub tick_attribute: Option<i32>,
     /// The implied volatility calculated by the TWS option modeler, using the specified tick type value.
-    pub implied_volatility: f64,
+    pub implied_volatility: Option<f64>,
     /// The option delta value.
-    pub delta: f64,
+    pub delta: Option<f64>,
     /// The option price.
     pub option_price: f64,
     /// The present value of dividends expected on the option’s underlying.
@@ -600,7 +598,6 @@ pub(crate) fn calculate_option_price<'a>(
         ResponseContext {
             subscription,
             request_type: Some(OutgoingMessages::ReqCalcOptionPrice),
-            ..Default::default()
         },
     ))
 }
@@ -631,7 +628,6 @@ pub(crate) fn calculate_implied_volatility<'a>(
         ResponseContext {
             subscription,
             request_type: Some(OutgoingMessages::ReqCalcImpliedVolat),
-            ..Default::default()
         },
     ))
 }
