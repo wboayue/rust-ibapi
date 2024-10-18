@@ -403,9 +403,9 @@ pub struct OptionComputation {
     /// The option delta value.
     pub delta: Option<f64>,
     /// The option price.
-    pub option_price: f64,
+    pub option_price: Option<f64>,
     /// The present value of dividends expected on the option’s underlying.
-    pub present_value_dividend: f64,
+    pub present_value_dividend: Option<f64>,
     /// The option gamma value.
     pub gamma: f64,
     /// The option vega value.

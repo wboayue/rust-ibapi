@@ -194,7 +194,7 @@ pub(crate) fn decode_option_computation(server_version: i32, message: &mut Respo
         message.next_int()?
     };
 
-    let _request_id = message.next_int()?;
+    message.skip(); // request id
 
     let mut computation = OptionComputation {
         field: TickType::from(message.next_int()?),
@@ -204,35 +204,15 @@ pub(crate) fn decode_option_computation(server_version: i32, message: &mut Respo
     if server_version >= server_versions::PRICE_BASED_VOLATILITY {
         computation.tick_attribute = Some(message.next_int()?);
     }
-    let implied_volatility = message.next_double()?;
-    if implied_volatility != -1.0 {
-        // -1 is the "not yet computed" indicator
-        computation.implied_volatility = Some(implied_volatility);
+
+    computation.implied_volatility = next_optional_double(message, -1.0)?;
+    computation.delta = next_optional_double(message, -2.0)?;
+
+    if message_version >= 6 || computation.field == TickType::ModelOption || computation.field == TickType::DelayedModelOption {
+        computation.option_price = next_optional_double(message, -1.0)?;
+        computation.present_value_dividend = next_optional_double(message, -1.0)?;
     }
-    let delta = message.next_double()?;
-    if delta != -2.0 {
-        // -2 is the "not yet computed" indicator
-        computation.delta = Some(delta)
-    }
-    // var optPrice = double.MaxValue;
-    // var pvDividend = double.MaxValue;
-    // var gamma = double.MaxValue;
-    // var vega = double.MaxValue;
-    // var theta = double.MaxValue;
-    // var undPrice = double.MaxValue;
-    // if (msgVersion >= 6 || tickType == TickType.MODEL_OPTION || tickType == TickType.DELAYED_MODEL_OPTION)
-    // {
-    //     optPrice = ReadDouble();
-    //     if (optPrice.Equals(-1))
-    //     { // -1 is the "not yet computed" indicator
-    //         optPrice = double.MaxValue;
-    //     }
-    //     pvDividend = ReadDouble();
-    //     if (pvDividend.Equals(-1))
-    //     { // -1 is the "not yet computed" indicator
-    //         pvDividend = double.MaxValue;
-    //     }
-    // }
+
     // if (msgVersion >= 6)
     // {
     //     gamma = ReadDouble();
@@ -258,6 +238,15 @@ pub(crate) fn decode_option_computation(server_version: i32, message: &mut Respo
     // }
 
     Err(Error::NotImplemented)
+}
+
+fn next_optional_double(message: &mut ResponseMessage, none_value: f64) -> Result<Option<f64>, Error> {
+    let value = message.next_double()?;
+    if value == none_value {
+        Ok(None)
+    } else {
+        Ok(Some(value))
+    }
 }
 
 #[cfg(test)]
