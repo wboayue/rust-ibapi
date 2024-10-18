@@ -114,7 +114,7 @@ impl Subscribable<AccountSummaries> for AccountSummaries {
         }
     }
 
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         encoders::encode_cancel_positions()
     }
 }
@@ -137,7 +137,7 @@ impl Subscribable<PnL> for PnL {
         decoders::decode_pnl(server_version, message)
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel pnl");
         encoders::encode_cancel_pnl(request_id)
     }
@@ -165,7 +165,7 @@ impl Subscribable<PnLSingle> for PnLSingle {
         decoders::decode_pnl_single(server_version, message)
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel pnl single");
         encoders::encode_cancel_pnl_single(request_id)
     }
@@ -201,7 +201,7 @@ impl Subscribable<PositionUpdate> for PositionUpdate {
         }
     }
 
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         encoders::encode_cancel_positions()
     }
 }
@@ -239,7 +239,7 @@ impl Subscribable<PositionUpdateMulti> for PositionUpdateMulti {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel positions multi");
         encoders::encode_cancel_positions_multi(request_id)
     }
@@ -288,7 +288,7 @@ impl Subscribable<AccountUpdate> for AccountUpdate {
         }
     }
 
-    fn cancel_message(server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
+    fn cancel_message(server_version: i32, _request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         encoders::encode_cancel_account_updates(server_version)
     }
 }
@@ -370,7 +370,7 @@ impl Subscribable<AccountUpdateMulti> for AccountUpdateMulti {
         }
     }
 
-    fn cancel_message(server_version: i32, request_id: Option<i32>) -> Result<RequestMessage, Error> {
+    fn cancel_message(server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel account updates multi");
         encoders::encode_cancel_account_updates_multi(server_version, request_id)
     }
@@ -384,13 +384,7 @@ pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionUpdate>,
     let request = encoders::encode_request_positions()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestPositions, request)?;
 
-    Ok(Subscription::new(
-        client,
-        ResponseContext {
-            subscription,
-            ..Default::default()
-        },
-    ))
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 impl SharesChannel for Subscription<'_, PositionUpdate> {}
@@ -406,13 +400,7 @@ pub(crate) fn positions_multi<'a>(
     let request = encoders::encode_request_positions_multi(request_id, account, model_code)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(
-        client,
-        ResponseContext {
-            subscription,
-            ..Default::default()
-        },
-    ))
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 // Determine whether an account exists under an account family and find the account family code.
@@ -443,13 +431,7 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
     let request = encoders::encode_request_pnl(request_id, account, model_code)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(
-        client,
-        ResponseContext {
-            subscription,
-            ..Default::default()
-        },
-    ))
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 // Requests real time updates for daily PnL of individual positions.
@@ -471,13 +453,7 @@ pub(crate) fn pnl_single<'a>(
     let request = encoders::encode_request_pnl_single(request_id, account, contract_id, model_code)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(
-        client,
-        ResponseContext {
-            subscription,
-            ..Default::default()
-        },
-    ))
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
@@ -487,26 +463,14 @@ pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Re
     let request = encoders::encode_request_account_summary(request_id, group, tags)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(
-        client,
-        ResponseContext {
-            subscription,
-            ..Default::default()
-        },
-    ))
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 pub fn account_updates<'a>(client: &'a Client, account: &str) -> Result<Subscription<'a, AccountUpdate>, Error> {
     let request = encoders::encode_request_account_updates(client.server_version(), account)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAccountData, request)?;
 
-    Ok(Subscription::new(
-        client,
-        ResponseContext {
-            subscription,
-            ..Default::default()
-        },
-    ))
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 pub fn account_updates_multi<'a>(
@@ -520,13 +484,7 @@ pub fn account_updates_multi<'a>(
     let request = encoders::encode_request_account_updates_multi(request_id, account, model_code)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(
-        client,
-        ResponseContext {
-            subscription,
-            ..Default::default()
-        },
-    ))
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {

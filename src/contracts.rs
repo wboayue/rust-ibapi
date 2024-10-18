@@ -426,9 +426,15 @@ impl Subscribable<OptionComputation> for OptionComputation {
         }
     }
 
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
-        //        encoders::encode_cancel_positions()
-        Err(Error::NotImplemented)
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: &ResponseContext) -> Result<RequestMessage, Error> {
+        let request_id = request_id.expect("request id required to cancel option calculations");
+        match context.request_type {
+            Some(OutgoingMessages::ReqCalcImpliedVolat) => {
+                encoders::encode_cancel_option_computation(OutgoingMessages::CancelImpliedVolatility, request_id)
+            }
+            Some(OutgoingMessages::ReqCalcOptionPrice) => encoders::encode_cancel_option_computation(OutgoingMessages::CancelOptionPrice, request_id),
+            _ => panic!("Unsupported request message type option computation cancel: {:?}", context.request_type),
+        }
     }
 }
 
@@ -595,8 +601,8 @@ pub(crate) fn calculate_option_price<'a>(
 
     Ok(Subscription::new(
         client,
+        subscription,
         ResponseContext {
-            subscription,
             request_type: Some(OutgoingMessages::ReqCalcOptionPrice),
         },
     ))
@@ -625,8 +631,8 @@ pub(crate) fn calculate_implied_volatility<'a>(
 
     Ok(Subscription::new(
         client,
+        subscription,
         ResponseContext {
-            subscription,
             request_type: Some(OutgoingMessages::ReqCalcImpliedVolat),
         },
     ))

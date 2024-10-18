@@ -70,7 +70,7 @@ impl Subscribable<MidPoint> for MidPoint {
         decoders::mid_point_tick(message)
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         if let Some(request_id) = request_id {
             encoders::cancel_tick_by_tick(request_id)
         } else {
@@ -98,7 +98,7 @@ impl Subscribable<Bar> for Bar {
         decoders::decode_realtime_bar(message)
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         if let Some(request_id) = request_id {
             encoders::encode_cancel_realtime_bars(request_id)
         } else {
@@ -132,7 +132,7 @@ impl Subscribable<Trade> for Trade {
         decoders::decode_trade_tick(message)
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         if let Some(request_id) = request_id {
             encoders::cancel_tick_by_tick(request_id)
         } else {
@@ -196,13 +196,7 @@ pub(crate) fn realtime_bars<'a>(
     let request = encoders::encode_request_realtime_bars(client.server_version(), request_id, contract, bar_size, what_to_show, use_rth, options)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(
-        client,
-        ResponseContext {
-            subscription,
-            ..Default::default()
-        },
-    ))
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 // Requests tick by tick AllLast ticks.
@@ -300,13 +294,7 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
     let message = encoders::tick_by_tick(server_version, request_id, contract, "MidPoint", number_of_ticks, ignore_size)?;
     let subscription = client.send_request(request_id, message)?;
 
-    Ok(Subscription::new(
-        client,
-        ResponseContext {
-            subscription,
-            ..Default::default()
-        },
-    ))
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 // Iterators

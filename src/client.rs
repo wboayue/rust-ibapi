@@ -1087,58 +1087,61 @@ pub struct Subscription<'a, T: Subscribable<T>> {
     pub(crate) message_type: Option<OutgoingMessages>,
     pub(crate) phantom: PhantomData<T>,
     cancelled: AtomicBool,
+    subscription: InternalSubscription,
     response_context: ResponseContext,
 }
 
 // Extra metadata that might be need
 #[derive(Debug, Default)]
 pub(crate) struct ResponseContext {
-    pub(crate) subscription: InternalSubscription,
     pub(crate) request_type: Option<OutgoingMessages>,
 }
 
 #[allow(private_bounds)]
 impl<'a, T: Subscribable<T>> Subscription<'a, T> {
-    pub(crate) fn new(client: &'a Client, context: ResponseContext) -> Self {
-        if let Some(request_id) = context.subscription.request_id {
+    pub(crate) fn new(client: &'a Client, subscription: InternalSubscription, context: ResponseContext) -> Self {
+        if let Some(request_id) = subscription.request_id {
             Subscription {
                 client,
                 request_id: Some(request_id),
                 order_id: None,
                 message_type: None,
+                subscription,
                 response_context: context,
                 phantom: PhantomData,
                 cancelled: AtomicBool::new(false),
             }
-        } else if let Some(order_id) = context.subscription.order_id {
+        } else if let Some(order_id) = subscription.order_id {
             Subscription {
                 client,
                 request_id: None,
                 order_id: Some(order_id),
                 message_type: None,
+                subscription,
                 response_context: context,
                 phantom: PhantomData,
                 cancelled: AtomicBool::new(false),
             }
-        } else if let Some(message_type) = context.subscription.message_type {
+        } else if let Some(message_type) = subscription.message_type {
             Subscription {
                 client,
                 request_id: None,
                 order_id: None,
                 message_type: Some(message_type),
+                subscription,
                 response_context: context,
                 phantom: PhantomData,
                 cancelled: AtomicBool::new(false),
             }
         } else {
-            panic!("unsupported internal subscription: {:?}", context.subscription)
+            panic!("unsupported internal subscription: {:?}", subscription)
         }
     }
 
     /// Blocks until the item become available.
     pub fn next(&self) -> Option<T> {
         loop {
-            match self.response_context.subscription.next() {
+            match self.subscription.next() {
                 Some(Response::Message(mut message)) => {
                     if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
                         match T::decode(self.client.server_version(), &mut message) {
@@ -1182,7 +1185,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// //}
     /// ```
     pub fn try_next(&self) -> Option<T> {
-        if let Some(Response::Message(mut message)) = self.response_context.subscription.try_next() {
+        if let Some(Response::Message(mut message)) = self.subscription.try_next() {
             if message.message_type() == IncomingMessages::Error {
                 error!("{}", message.peek_string(4));
                 return None;
@@ -1212,7 +1215,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// //}
     /// ```
     pub fn next_timeout(&self, timeout: Duration) -> Option<T> {
-        if let Some(Response::Message(mut message)) = self.response_context.subscription.next_timeout(timeout) {
+        if let Some(Response::Message(mut message)) = self.subscription.next_timeout(timeout) {
             if message.message_type() == IncomingMessages::Error {
                 error!("{}", message.peek_string(4));
                 return None;
@@ -1239,25 +1242,25 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
         self.cancelled.store(true, Ordering::Relaxed);
 
         if let Some(request_id) = self.request_id {
-            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
+            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, &self.response_context) {
                 if let Err(e) = self.client.message_bus.cancel_subscription(request_id, &message) {
                     warn!("error cancelling subscription: {e}")
                 }
-                self.response_context.subscription.cancel();
+                self.subscription.cancel();
             }
         } else if let Some(order_id) = self.order_id {
-            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
+            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, &self.response_context) {
                 if let Err(e) = self.client.message_bus.cancel_order_subscription(order_id, &message) {
                     warn!("error cancelling order subscription: {e}")
                 }
-                self.response_context.subscription.cancel();
+                self.subscription.cancel();
             }
         } else if let Some(message_type) = self.message_type {
-            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
+            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, &self.response_context) {
                 if let Err(e) = self.client.message_bus.cancel_shared_subscription(message_type, &message) {
                     warn!("error cancelling shared subscription: {e}")
                 }
-                self.response_context.subscription.cancel();
+                self.subscription.cancel();
             }
         } else {
             debug!("Could not determine cancel method")
@@ -1288,8 +1291,8 @@ pub(crate) trait Subscribable<T> {
     const CANCEL_MESSAGE_ID: Option<IncomingMessages> = None;
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
-        Err(Error::Simple("not implemented".into()))
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
+        Err(Error::NotImplemented)
     }
 }
 

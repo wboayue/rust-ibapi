@@ -140,5 +140,17 @@ fn encode_contract(server_version: i32, message: &mut RequestMessage, contract: 
     }
 }
 
+pub(crate) fn encode_cancel_option_computation(message_type: OutgoingMessages, request_id: i32) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 1;
+
+    let mut message = RequestMessage::default();
+
+    message.push_field(&message_type);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+
+    Ok(message)
+}
+
 #[cfg(test)]
 mod tests;

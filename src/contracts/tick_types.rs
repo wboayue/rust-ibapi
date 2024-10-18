@@ -1,5 +1,3 @@
-use std::fmt::{Display, Formatter, Result};
-
 #[derive(Debug, PartialEq, Default)]
 pub enum TickType {
     #[default]
