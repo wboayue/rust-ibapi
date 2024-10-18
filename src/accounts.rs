@@ -9,7 +9,7 @@
 //! - Real-time PnL updates for individual positions
 //!
 
-use crate::client::{SharesChannel, Subscribable, Subscription};
+use crate::client::{SharesChannel, Subscribable, Subscription, SubscriptionContext};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::transport::Response;
@@ -384,7 +384,7 @@ pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionUpdate>,
     let request = encoders::encode_request_positions()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestPositions, request)?;
 
-    Ok(Subscription::new(client, subscription))
+    Ok(Subscription::new(client, SubscriptionContext{subscription, ..Default::default()}))
 }
 
 impl SharesChannel for Subscription<'_, PositionUpdate> {}
@@ -400,7 +400,7 @@ pub(crate) fn positions_multi<'a>(
     let request = encoders::encode_request_positions_multi(request_id, account, model_code)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription))
+    Ok(Subscription::new(client, SubscriptionContext{subscription, ..Default::default()}))
 }
 
 // Determine whether an account exists under an account family and find the account family code.
@@ -431,7 +431,7 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
     let request = encoders::encode_request_pnl(request_id, account, model_code)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription))
+    Ok(Subscription::new(client, SubscriptionContext{subscription, ..Default::default()}))
 }
 
 // Requests real time updates for daily PnL of individual positions.
@@ -453,7 +453,7 @@ pub(crate) fn pnl_single<'a>(
     let request = encoders::encode_request_pnl_single(request_id, account, contract_id, model_code)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription))
+    Ok(Subscription::new(client, SubscriptionContext{subscription, ..Default::default()}))
 }
 
 pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
@@ -463,14 +463,14 @@ pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Re
     let request = encoders::encode_request_account_summary(request_id, group, tags)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription))
+    Ok(Subscription::new(client, SubscriptionContext{subscription, ..Default::default()}))
 }
 
 pub fn account_updates<'a>(client: &'a Client, account: &str) -> Result<Subscription<'a, AccountUpdate>, Error> {
     let request = encoders::encode_request_account_updates(client.server_version(), account)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAccountData, request)?;
 
-    Ok(Subscription::new(client, subscription))
+    Ok(Subscription::new(client, SubscriptionContext{subscription, ..Default::default()}))
 }
 
 pub fn account_updates_multi<'a>(
@@ -484,7 +484,7 @@ pub fn account_updates_multi<'a>(
     let request = encoders::encode_request_account_updates_multi(request_id, account, model_code)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription))
+    Ok(Subscription::new(client, SubscriptionContext{subscription, ..Default::default()}))
 }
 
 pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {

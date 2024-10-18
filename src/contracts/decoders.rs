@@ -1,8 +1,8 @@
 use crate::{contracts::SecurityType, messages::ResponseMessage, orders::TagValue, server_versions, Error};
 
-use super::{Contract, ContractDescription, ContractDetails, MarketRule, PriceIncrement};
+use super::{Contract, ContractDescription, ContractDetails, MarketRule, OptionComputation, PriceIncrement};
 
-pub(crate) fn contract_details(server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails, Error> {
+pub(crate) fn decode_contract_details(server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails, Error> {
     message.skip(); // message type
 
     let mut message_version = 8;
@@ -124,7 +124,7 @@ fn read_last_trade_date(contract: &mut ContractDetails, last_trade_date_or_contr
     Ok(())
 }
 
-pub(crate) fn contract_descriptions(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ContractDescription>, Error> {
+pub(crate) fn decode_contract_descriptions(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ContractDescription>, Error> {
     message.skip(); // message type
 
     let _request_id = message.next_int()?;
@@ -166,7 +166,7 @@ pub(crate) fn contract_descriptions(server_version: i32, message: &mut ResponseM
     Ok(contract_descriptions)
 }
 
-pub(crate) fn market_rule(message: &mut ResponseMessage) -> Result<MarketRule, Error> {
+pub(crate) fn decode_market_rule(message: &mut ResponseMessage) -> Result<MarketRule, Error> {
     message.skip(); // message type
 
     let mut market_rule = MarketRule {
@@ -185,15 +185,35 @@ pub(crate) fn market_rule(message: &mut ResponseMessage) -> Result<MarketRule, E
     Ok(market_rule)
 }
 
+pub(crate) fn decode_option_computation(server_version: i32, message: &mut ResponseMessage) -> Result<OptionComputation, Error> {
+    // message.skip(); // message type
+
+    // let mut market_rule = MarketRule {
+    //     market_rule_id: message.next_int()?,
+    //     ..Default::default()
+    // };
+
+    // let price_increments_count = message.next_int()?;
+    // for _ in 0..price_increments_count {
+    //     market_rule.price_increments.push(PriceIncrement {
+    //         low_edge: message.next_double()?,
+    //         increment: message.next_double()?,
+    //     });
+    // }
+
+    // Ok(market_rule)
+    Err(Error::NotImplemented)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn decode_market_rule() {
+    fn test_decode_market_rule() {
         let mut message = ResponseMessage::from("93\026\01\00\00.01\0");
 
-        let results = market_rule(&mut message);
+        let results = decode_market_rule(&mut message);
 
         if let Ok(market_rule) = results {
             assert_eq!(market_rule.market_rule_id, 26, "market_rule.market_rule_id");

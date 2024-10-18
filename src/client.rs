@@ -1090,41 +1090,48 @@ pub struct Subscription<'a, T: Subscribable<T>> {
     cancelled: AtomicBool,
 }
 
+// Extra metadata that might be need
+#[derive(Debug, Default)]
+pub(crate) struct SubscriptionContext {
+    pub(crate) subscription: InternalSubscription,
+    pub(crate) request_type: Option<OutgoingMessages>
+}
+
 #[allow(private_bounds)]
 impl<'a, T: Subscribable<T>> Subscription<'a, T> {
-    pub(crate) fn new(client: &'a Client, subscription: InternalSubscription) -> Self {
-        if let Some(request_id) = subscription.request_id {
+    pub(crate) fn new(client: &'a Client, context: SubscriptionContext) -> Self {
+        if let Some(request_id) = context.subscription.request_id {
             Subscription {
                 client,
                 request_id: Some(request_id),
                 order_id: None,
                 message_type: None,
-                subscription,
+                subscription: context.subscription,
                 phantom: PhantomData,
                 cancelled: AtomicBool::new(false),
             }
-        } else if let Some(order_id) = subscription.order_id {
+        } else if let Some(order_id) = context.subscription.order_id {
             Subscription {
                 client,
                 request_id: None,
                 order_id: Some(order_id),
                 message_type: None,
-                subscription,
+                subscription: context.subscription,
                 phantom: PhantomData,
                 cancelled: AtomicBool::new(false),
             }
-        } else if let Some(message_type) = subscription.message_type {
+        } else if let Some(message_type) = context.subscription.message_type {
             Subscription {
                 client,
                 request_id: None,
                 order_id: None,
                 message_type: Some(message_type),
-                subscription,
+                subscription: context.subscription,
                 phantom: PhantomData,
                 cancelled: AtomicBool::new(false),
             }
         } else {
-            panic!("unsupported internal subscription: {:?}", subscription)
+            panic!("unsupported internal subscription: {:?}", context.subscription)
         }
     }
 

@@ -6,6 +6,7 @@ use log::{error, info};
 
 use crate::client::Subscribable;
 use crate::client::Subscription;
+use crate::client::SubscriptionContext;
 use crate::encode_option_field;
 use crate::messages::IncomingMessages;
 use crate::messages::OutgoingMessages;
@@ -418,15 +419,13 @@ pub struct OptionComputation {
 }
 
 impl Subscribable<OptionComputation> for OptionComputation {
-    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickOptionComputation];
 
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
-        // match message.message_type() {
-        //     IncomingMessages::Position => Ok(PositionUpdate::Position(decoders::decode_position(message)?)),
-        //     IncomingMessages::PositionEnd => Ok(PositionUpdate::PositionEnd),
-        //     message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
-        // }
-        Err(Error::NotImplemented)
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+        match message.message_type() {
+            IncomingMessages::TickOptionComputation => Ok(decoders::decode_option_computation(server_version, message)?),
+            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+        }
     }
 
     fn cancel_message(_server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
@@ -458,7 +457,7 @@ pub(crate) fn contract_details(client: &Client, contract: &Contract) -> Result<V
     while let Some(Response::Message(mut message)) = responses.next() {
         match message.message_type() {
             IncomingMessages::ContractData => {
-                let decoded = decoders::contract_details(client.server_version(), &mut message)?;
+                let decoded = decoders::decode_contract_details(client.server_version(), &mut message)?;
                 contract_details.push(decoded);
             }
             IncomingMessages::ContractDataEnd => {
@@ -531,7 +530,7 @@ pub(crate) fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<Con
     if let Some(Response::Message(mut message)) = subscription.next() {
         match message.message_type() {
             IncomingMessages::SymbolSamples => {
-                return decoders::contract_descriptions(client.server_version(), &mut message);
+                return decoders::decode_contract_descriptions(client.server_version(), &mut message);
             }
             IncomingMessages::Error => {
                 // TODO custom error
@@ -571,7 +570,7 @@ pub(crate) fn market_rule(client: &Client, market_rule_id: i32) -> Result<Market
     let subscription = client.send_shared_request(OutgoingMessages::RequestMarketRule, request)?;
 
     match subscription.next() {
-        Some(Response::Message(mut message)) => Ok(decoders::market_rule(&mut message)?),
+        Some(Response::Message(mut message)) => Ok(decoders::decode_market_rule(&mut message)?),
         Some(Response::Cancelled) => Err(Error::Simple("subscription cancelled".into())),
         Some(Response::Disconnected) => Err(Error::Simple("server gone".into())),
         None => Err(Error::Simple("no market rule found".into())),
@@ -596,7 +595,7 @@ pub(crate) fn calculate_option_price<'a>(
     let message = encoders::encode_calculate_option_price(client.server_version(), request_id, contract, volatility, underlying_price)?;
     let subscription = client.send_request(request_id, message)?;
 
-    Ok(Subscription::new(client, subscription))
+    Ok(Subscription::new(client, SubscriptionContext{subscription, ..Default::default()}))
 }
 
 // Calculates the implied volatility based on hypothetical option and its underlying prices.
@@ -620,5 +619,5 @@ pub(crate) fn calculate_implied_volatility<'a>(
     let message = encoders::encode_calculate_implied_volatility(client.server_version(), request_id, contract, option_price, underlying_price)?;
     let subscription = client.send_request(request_id, message)?;
 
-    Ok(Subscription::new(client, subscription))
+    Ok(Subscription::new(client, SubscriptionContext{subscription, ..Default::default()}))
 }
