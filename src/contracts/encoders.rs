@@ -79,6 +79,67 @@ pub(crate) fn request_market_rule(market_rule_id: i32) -> Result<RequestMessage,
     Ok(message)
 }
 
+pub(crate) fn encode_calculate_option_price(
+    server_version: i32,
+    request_id: i32,
+    contract: &Contract,
+    volatility: f64,
+    underlying_price: f64,
+) -> Result<RequestMessage, Error> {
+    encode_option_computation(server_version, request_id, contract, volatility, underlying_price)
+}
+
+pub(crate) fn encode_calculate_implied_volatility(
+    server_version: i32,
+    request_id: i32,
+    contract: &Contract,
+    option_price: f64,
+    underlying_price: f64,
+) -> Result<RequestMessage, Error> {
+    encode_option_computation(server_version, request_id, contract, option_price, underlying_price)
+}
+
+pub(crate) fn encode_option_computation(
+    server_version: i32,
+    request_id: i32,
+    contract: &Contract,
+    price_or_volatility: f64,
+    underlying_price: f64,
+) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 3;
+
+    let mut message = RequestMessage::default();
+
+    message.push_field(&OutgoingMessages::ReqCalcImpliedVolat);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    encode_contract(server_version, &mut message, contract);
+    message.push_field(&price_or_volatility);
+    message.push_field(&underlying_price);
+    if server_version >= server_versions::LINKING {
+        message.push_field(&"");
+    }
+
+    Ok(message)
+}
+
+fn encode_contract(server_version: i32, message: &mut RequestMessage, contract: &Contract) {
+    message.push_field(&contract.contract_id);
+    message.push_field(&contract.symbol);
+    message.push_field(&contract.security_type);
+    message.push_field(&contract.last_trade_date_or_contract_month);
+    message.push_field(&contract.strike);
+    message.push_field(&contract.right);
+    message.push_field(&contract.multiplier);
+    message.push_field(&contract.exchange);
+    message.push_field(&contract.primary_exchange);
+    message.push_field(&contract.currency);
+    message.push_field(&contract.local_symbol);
+    if server_version >= server_versions::TRADING_CLASS {
+        message.push_field(&contract.trading_class);
+    }
+}
+
 #[cfg(test)]
 mod tests {
 

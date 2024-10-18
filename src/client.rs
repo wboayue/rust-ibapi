@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use time_tz::Tz;
 
 use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
-use crate::contracts::Contract;
+use crate::contracts::{Contract, OptionComputation};
 use crate::errors::Error;
 use crate::market_data::historical;
 use crate::market_data::realtime::{self, Bar, BarSize, MidPoint, WhatToShow};
@@ -373,6 +373,46 @@ impl Client {
     /// ```
     pub fn matching_symbols(&self, pattern: &str) -> Result<impl Iterator<Item = contracts::ContractDescription>, Error> {
         Ok(contracts::matching_symbols(self, pattern)?.into_iter())
+    }
+
+    /// Calculates an option’s price based on the provided volatility and its underlying’s price.
+    ///
+    /// # Arguments
+    /// * `contract`   - The [Contract] object for which the depth is being requested.
+    /// * `volatility` - Hypothetical volatility.
+    /// * `underlying_price` - Hypothetical option’s underlying price.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// ```
+    pub fn calculate_option_price<'a>(
+        &'a self,
+        contract: &Contract,
+        volatility: f64,
+        underlying_price: f64,
+    ) -> Result<Subscription<'a, OptionComputation>, Error> {
+        contracts::calculate_option_price(self, contract, volatility, underlying_price)
+    }
+
+    /// Calculates the implied volatility based on hypothetical option and its underlying prices.
+    ///
+    /// # Arguments
+    /// * `contract`   - The [Contract] object for which the depth is being requested.
+    /// * `volatility` - Hypothetical option price.
+    /// * `underlying_price` - Hypothetical option’s underlying price.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// ```
+    pub fn calculate_implied_volatility<'a>(
+        &'a self,
+        contract: &Contract,
+        option_price: f64,
+        underlying_price: f64,
+    ) -> Result<Subscription<'a, OptionComputation>, Error> {
+        contracts::calculate_implied_volatility(self, contract, option_price, underlying_price)
     }
 
     // === Orders ===
