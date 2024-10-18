@@ -612,7 +612,7 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug + Clone> Send
 }
 
 // Enables routing of response messages from TWS to Client
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct InternalSubscription {
     receiver: Option<Receiver<Response>>,              // requests with request ids receive responses via this channel
     sender: Option<Sender<Response>>,                  // requests with request ids receive responses via this channel

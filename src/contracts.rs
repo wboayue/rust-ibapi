@@ -3,17 +3,23 @@ use std::fmt::Debug;
 use std::string::ToString;
 
 use log::{error, info};
+use tick_types::TickType;
 
+use crate::client::ResponseContext;
+use crate::client::Subscribable;
+use crate::client::Subscription;
 use crate::encode_option_field;
 use crate::messages::IncomingMessages;
 use crate::messages::OutgoingMessages;
 use crate::messages::RequestMessage;
+use crate::messages::ResponseMessage;
 use crate::transport::Response;
 use crate::Client;
 use crate::{server_versions, Error, ToField};
 
 mod decoders;
 mod encoders;
+pub mod tick_types;
 
 #[cfg(test)]
 pub(crate) mod contract_samples;
@@ -384,6 +390,54 @@ impl ToField for Vec<TagValue> {
     }
 }
 
+/// Receives option specific market data.
+/// TWS’s options model volatility, prices, and deltas, along with the present value of dividends expected on that options underlier.
+#[derive(Debug, Default)]
+pub struct OptionComputation {
+    /// Specifies the type of option computation.
+    pub field: TickType,
+    /// 0 – return based, 1- price based.
+    pub tick_attribute: Option<i32>,
+    /// The implied volatility calculated by the TWS option modeler, using the specified tick type value.
+    pub implied_volatility: Option<f64>,
+    /// The option delta value.
+    pub delta: Option<f64>,
+    /// The option price.
+    pub option_price: Option<f64>,
+    /// The present value of dividends expected on the option’s underlying.
+    pub present_value_dividend: Option<f64>,
+    /// The option gamma value.
+    pub gamma: Option<f64>,
+    /// The option vega value.
+    pub vega: Option<f64>,
+    /// The option theta value.
+    pub theta: Option<f64>,
+    /// The price of the underlying.
+    pub underlying_price: Option<f64>,
+}
+
+impl Subscribable<OptionComputation> for OptionComputation {
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickOptionComputation];
+
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+        match message.message_type() {
+            IncomingMessages::TickOptionComputation => Ok(decoders::decode_option_computation(server_version, message)?),
+            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+        }
+    }
+
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: &ResponseContext) -> Result<RequestMessage, Error> {
+        let request_id = request_id.expect("request id required to cancel option calculations");
+        match context.request_type {
+            Some(OutgoingMessages::ReqCalcImpliedVolat) => {
+                encoders::encode_cancel_option_computation(OutgoingMessages::CancelImpliedVolatility, request_id)
+            }
+            Some(OutgoingMessages::ReqCalcOptionPrice) => encoders::encode_cancel_option_computation(OutgoingMessages::CancelOptionPrice, request_id),
+            _ => panic!("Unsupported request message type option computation cancel: {:?}", context.request_type),
+        }
+    }
+}
+
 // === API ===
 
 // Requests contract information.
@@ -397,7 +451,7 @@ pub(crate) fn contract_details(client: &Client, contract: &Contract) -> Result<V
     verify_contract(client, contract)?;
 
     let request_id = client.next_request_id();
-    let packet = encoders::request_contract_data(client.server_version(), request_id, contract)?;
+    let packet = encoders::encode_request_contract_data(client.server_version(), request_id, contract)?;
 
     let responses = client.send_request(request_id, packet)?;
 
@@ -407,7 +461,7 @@ pub(crate) fn contract_details(client: &Client, contract: &Contract) -> Result<V
     while let Some(Response::Message(mut message)) = responses.next() {
         match message.message_type() {
             IncomingMessages::ContractData => {
-                let decoded = decoders::contract_details(client.server_version(), &mut message)?;
+                let decoded = decoders::decode_contract_details(client.server_version(), &mut message)?;
                 contract_details.push(decoded);
             }
             IncomingMessages::ContractDataEnd => {
@@ -471,16 +525,16 @@ pub struct ContractDescription {
 // * `client` - [Client] with an active connection to gateway.
 // * `pattern` - Either start of ticker symbol or (for larger strings) company name.
 pub(crate) fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<ContractDescription>, Error> {
-    client.check_server_version(server_versions::REQ_MATCHING_SYMBOLS, "It does not support mathing symbols requests.")?;
+    client.check_server_version(server_versions::REQ_MATCHING_SYMBOLS, "It does not support matching symbols requests.")?;
 
     let request_id = client.next_request_id();
-    let request = encoders::request_matching_symbols(request_id, pattern)?;
+    let request = encoders::encode_request_matching_symbols(request_id, pattern)?;
     let subscription = client.send_request(request_id, request)?;
 
     if let Some(Response::Message(mut message)) = subscription.next() {
         match message.message_type() {
             IncomingMessages::SymbolSamples => {
-                return decoders::contract_descriptions(client.server_version(), &mut message);
+                return decoders::decode_contract_descriptions(client.server_version(), &mut message);
             }
             IncomingMessages::Error => {
                 // TODO custom error
@@ -516,13 +570,70 @@ pub struct PriceIncrement {
 pub(crate) fn market_rule(client: &Client, market_rule_id: i32) -> Result<MarketRule, Error> {
     client.check_server_version(server_versions::MARKET_RULES, "It does not support market rule requests.")?;
 
-    let request = encoders::request_market_rule(market_rule_id)?;
+    let request = encoders::encode_request_market_rule(market_rule_id)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestMarketRule, request)?;
 
     match subscription.next() {
-        Some(Response::Message(mut message)) => Ok(decoders::market_rule(&mut message)?),
+        Some(Response::Message(mut message)) => Ok(decoders::decode_market_rule(&mut message)?),
         Some(Response::Cancelled) => Err(Error::Simple("subscription cancelled".into())),
         Some(Response::Disconnected) => Err(Error::Simple("server gone".into())),
         None => Err(Error::Simple("no market rule found".into())),
     }
+}
+
+// Calculates an option’s price based on the provided volatility and its underlying’s price.
+//
+// # Arguments
+// * `contract`   - The [Contract] object for which the depth is being requested.
+// * `volatility` - Hypothetical volatility.
+// * `underlying_price` - Hypothetical option’s underlying price.
+pub(crate) fn calculate_option_price<'a>(
+    client: &'a Client,
+    contract: &Contract,
+    volatility: f64,
+    underlying_price: f64,
+) -> Result<Subscription<'a, OptionComputation>, Error> {
+    client.check_server_version(server_versions::REQ_CALC_OPTION_PRICE, "It does not support calculation price requests.")?;
+
+    let request_id = client.next_request_id();
+    let message = encoders::encode_calculate_option_price(client.server_version(), request_id, contract, volatility, underlying_price)?;
+    let subscription = client.send_request(request_id, message)?;
+
+    Ok(Subscription::new(
+        client,
+        subscription,
+        ResponseContext {
+            request_type: Some(OutgoingMessages::ReqCalcOptionPrice),
+        },
+    ))
+}
+
+// Calculates the implied volatility based on hypothetical option and its underlying prices.
+//
+// # Arguments
+// * `contract`   - The [Contract] object for which the depth is being requested.
+// * `option_price` - Hypothetical option price.
+// * `underlying_price` - Hypothetical option’s underlying price.
+pub(crate) fn calculate_implied_volatility<'a>(
+    client: &'a Client,
+    contract: &Contract,
+    option_price: f64,
+    underlying_price: f64,
+) -> Result<Subscription<'a, OptionComputation>, Error> {
+    client.check_server_version(
+        server_versions::REQ_CALC_IMPLIED_VOLAT,
+        "It does not support calculate implied volatility.",
+    )?;
+
+    let request_id = client.next_request_id();
+    let message = encoders::encode_calculate_implied_volatility(client.server_version(), request_id, contract, option_price, underlying_price)?;
+    let subscription = client.send_request(request_id, message)?;
+
+    Ok(Subscription::new(
+        client,
+        subscription,
+        ResponseContext {
+            request_type: Some(OutgoingMessages::ReqCalcImpliedVolat),
+        },
+    ))
 }
