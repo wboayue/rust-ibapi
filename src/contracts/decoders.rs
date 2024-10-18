@@ -1,8 +1,8 @@
-use crate::{contracts::SecurityType, messages::ResponseMessage, orders::TagValue, server_versions, Error};
+use crate::{contracts::tick_types::TickType, contracts::SecurityType, messages::ResponseMessage, orders::TagValue, server_versions, Error};
 
-use super::{Contract, ContractDescription, ContractDetails, MarketRule, PriceIncrement};
+use super::{Contract, ContractDescription, ContractDetails, MarketRule, OptionComputation, PriceIncrement};
 
-pub(crate) fn contract_details(server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails, Error> {
+pub(crate) fn decode_contract_details(server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails, Error> {
     message.skip(); // message type
 
     let mut message_version = 8;
@@ -124,7 +124,7 @@ fn read_last_trade_date(contract: &mut ContractDetails, last_trade_date_or_contr
     Ok(())
 }
 
-pub(crate) fn contract_descriptions(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ContractDescription>, Error> {
+pub(crate) fn decode_contract_descriptions(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ContractDescription>, Error> {
     message.skip(); // message type
 
     let _request_id = message.next_int()?;
@@ -166,7 +166,7 @@ pub(crate) fn contract_descriptions(server_version: i32, message: &mut ResponseM
     Ok(contract_descriptions)
 }
 
-pub(crate) fn market_rule(message: &mut ResponseMessage) -> Result<MarketRule, Error> {
+pub(crate) fn decode_market_rule(message: &mut ResponseMessage) -> Result<MarketRule, Error> {
     message.skip(); // message type
 
     let mut market_rule = MarketRule {
@@ -185,27 +185,52 @@ pub(crate) fn market_rule(message: &mut ResponseMessage) -> Result<MarketRule, E
     Ok(market_rule)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub(crate) fn decode_option_computation(server_version: i32, message: &mut ResponseMessage) -> Result<OptionComputation, Error> {
+    message.skip(); // message type
 
-    #[test]
-    fn decode_market_rule() {
-        let mut message = ResponseMessage::from("93\026\01\00\00.01\0");
+    let message_version = if server_version >= server_versions::PRICE_BASED_VOLATILITY {
+        i32::MAX
+    } else {
+        message.next_int()?
+    };
 
-        let results = market_rule(&mut message);
+    message.skip(); // request id
 
-        if let Ok(market_rule) = results {
-            assert_eq!(market_rule.market_rule_id, 26, "market_rule.market_rule_id");
+    let mut computation = OptionComputation {
+        field: TickType::from(message.next_int()?),
+        ..Default::default()
+    };
 
-            assert_eq!(market_rule.price_increments.len(), 1, "market_rule.price_increments.len()");
-            assert_eq!(market_rule.price_increments[0].low_edge, 0.0, "market_rule.price_increments[0].low_edge");
-            assert_eq!(
-                market_rule.price_increments[0].increment, 0.01,
-                "market_rule.price_increments[0].increment"
-            );
-        } else if let Err(err) = results {
-            assert!(false, "error decoding market rule: {err}");
-        }
+    if server_version >= server_versions::PRICE_BASED_VOLATILITY {
+        computation.tick_attribute = Some(message.next_int()?);
+    }
+
+    computation.implied_volatility = next_optional_double(message, -1.0)?;
+    computation.delta = next_optional_double(message, -2.0)?;
+
+    if message_version >= 6 || computation.field == TickType::ModelOption || computation.field == TickType::DelayedModelOption {
+        computation.option_price = next_optional_double(message, -1.0)?;
+        computation.present_value_dividend = next_optional_double(message, -1.0)?;
+    }
+
+    if message_version >= 6 {
+        computation.gamma = next_optional_double(message, -2.0)?;
+        computation.vega = next_optional_double(message, -2.0)?;
+        computation.theta = next_optional_double(message, -2.0)?;
+        computation.underlying_price = next_optional_double(message, -1.0)?;
+    }
+
+    Ok(computation)
+}
+
+fn next_optional_double(message: &mut ResponseMessage, none_value: f64) -> Result<Option<f64>, Error> {
+    let value = message.next_double()?;
+    if value == none_value {
+        Ok(None)
+    } else {
+        Ok(Some(value))
     }
 }
+
+#[cfg(test)]
+mod tests;

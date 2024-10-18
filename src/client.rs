@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use time_tz::Tz;
 
 use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
-use crate::contracts::Contract;
+use crate::contracts::{Contract, OptionComputation};
 use crate::errors::Error;
 use crate::market_data::historical;
 use crate::market_data::realtime::{self, Bar, BarSize, MidPoint, WhatToShow};
@@ -373,6 +373,66 @@ impl Client {
     /// ```
     pub fn matching_symbols(&self, pattern: &str) -> Result<impl Iterator<Item = contracts::ContractDescription>, Error> {
         Ok(contracts::matching_symbols(self, pattern)?.into_iter())
+    }
+
+    /// Calculates an option’s price based on the provided volatility and its underlying’s price.
+    ///
+    /// # Arguments
+    /// * `contract`   - The [Contract] object for which the depth is being requested.
+    /// * `volatility` - Hypothetical volatility.
+    /// * `underlying_price` - Hypothetical option’s underlying price.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("AAPL");
+    /// let subscription = client.calculate_option_price(&contract, 100.0, 235.0).expect("request failed");
+    /// for calculation in &subscription {
+    ///     println!("calculation: {:?}", calculation);
+    /// }
+    /// ```
+    pub fn calculate_option_price<'a>(
+        &'a self,
+        contract: &Contract,
+        volatility: f64,
+        underlying_price: f64,
+    ) -> Result<Subscription<'a, OptionComputation>, Error> {
+        contracts::calculate_option_price(self, contract, volatility, underlying_price)
+    }
+
+    /// Calculates the implied volatility based on hypothetical option and its underlying prices.
+    ///
+    /// # Arguments
+    /// * `contract`   - The [Contract] object for which the depth is being requested.
+    /// * `volatility` - Hypothetical option price.
+    /// * `underlying_price` - Hypothetical option’s underlying price.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("AAPL");
+    /// let subscription = client.calculate_implied_volatility(&contract, 300.0, 235.0).expect("request failed");
+    /// for calculation in &subscription {
+    ///     println!("calculation: {:?}", calculation);
+    /// }
+    /// ```
+    pub fn calculate_implied_volatility<'a>(
+        &'a self,
+        contract: &Contract,
+        option_price: f64,
+        underlying_price: f64,
+    ) -> Result<Subscription<'a, OptionComputation>, Error> {
+        contracts::calculate_implied_volatility(self, contract, option_price, underlying_price)
     }
 
     // === Orders ===
@@ -1045,14 +1105,21 @@ pub struct Subscription<'a, T: Subscribable<T>> {
     pub(crate) request_id: Option<i32>,
     pub(crate) order_id: Option<i32>,
     pub(crate) message_type: Option<OutgoingMessages>,
-    pub(crate) subscription: InternalSubscription,
     pub(crate) phantom: PhantomData<T>,
     cancelled: AtomicBool,
+    subscription: InternalSubscription,
+    response_context: ResponseContext,
+}
+
+// Extra metadata that might be need
+#[derive(Debug, Default)]
+pub(crate) struct ResponseContext {
+    pub(crate) request_type: Option<OutgoingMessages>,
 }
 
 #[allow(private_bounds)]
 impl<'a, T: Subscribable<T>> Subscription<'a, T> {
-    pub(crate) fn new(client: &'a Client, subscription: InternalSubscription) -> Self {
+    pub(crate) fn new(client: &'a Client, subscription: InternalSubscription, context: ResponseContext) -> Self {
         if let Some(request_id) = subscription.request_id {
             Subscription {
                 client,
@@ -1060,6 +1127,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                 order_id: None,
                 message_type: None,
                 subscription,
+                response_context: context,
                 phantom: PhantomData,
                 cancelled: AtomicBool::new(false),
             }
@@ -1070,6 +1138,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                 order_id: Some(order_id),
                 message_type: None,
                 subscription,
+                response_context: context,
                 phantom: PhantomData,
                 cancelled: AtomicBool::new(false),
             }
@@ -1080,6 +1149,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                 order_id: None,
                 message_type: Some(message_type),
                 subscription,
+                response_context: context,
                 phantom: PhantomData,
                 cancelled: AtomicBool::new(false),
             }
@@ -1192,21 +1262,21 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
         self.cancelled.store(true, Ordering::Relaxed);
 
         if let Some(request_id) = self.request_id {
-            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
+            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, &self.response_context) {
                 if let Err(e) = self.client.message_bus.cancel_subscription(request_id, &message) {
                     warn!("error cancelling subscription: {e}")
                 }
                 self.subscription.cancel();
             }
         } else if let Some(order_id) = self.order_id {
-            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
+            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, &self.response_context) {
                 if let Err(e) = self.client.message_bus.cancel_order_subscription(order_id, &message) {
                     warn!("error cancelling order subscription: {e}")
                 }
                 self.subscription.cancel();
             }
         } else if let Some(message_type) = self.message_type {
-            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id) {
+            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, &self.response_context) {
                 if let Err(e) = self.client.message_bus.cancel_shared_subscription(message_type, &message) {
                     warn!("error cancelling shared subscription: {e}")
                 }
@@ -1241,8 +1311,8 @@ pub(crate) trait Subscribable<T> {
     const CANCEL_MESSAGE_ID: Option<IncomingMessages> = None;
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>) -> Result<RequestMessage, Error> {
-        Err(Error::Simple("not implemented".into()))
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
+        Err(Error::NotImplemented)
     }
 }
 
