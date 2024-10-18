@@ -1092,14 +1092,14 @@ pub struct Subscription<'a, T: Subscribable<T>> {
 
 // Extra metadata that might be need
 #[derive(Debug, Default)]
-pub(crate) struct SubscriptionContext {
+pub(crate) struct ResponseContext {
     pub(crate) subscription: InternalSubscription,
     pub(crate) request_type: Option<OutgoingMessages>
 }
 
 #[allow(private_bounds)]
 impl<'a, T: Subscribable<T>> Subscription<'a, T> {
-    pub(crate) fn new(client: &'a Client, context: SubscriptionContext) -> Self {
+    pub(crate) fn new(client: &'a Client, context: ResponseContext) -> Self {
         if let Some(request_id) = context.subscription.request_id {
             Subscription {
                 client,

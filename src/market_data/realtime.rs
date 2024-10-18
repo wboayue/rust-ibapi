@@ -1,7 +1,7 @@
 use log::error;
 use time::OffsetDateTime;
 
-use crate::client::{Subscribable, Subscription, SubscriptionContext};
+use crate::client::{Subscribable, Subscription, ResponseContext};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::orders::TagValue;
@@ -196,7 +196,7 @@ pub(crate) fn realtime_bars<'a>(
     let request = encoders::encode_request_realtime_bars(client.server_version(), request_id, contract, bar_size, what_to_show, use_rth, options)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, SubscriptionContext{subscription, ..Default::default()}))
+    Ok(Subscription::new(client, ResponseContext{subscription, ..Default::default()}))
 }
 
 // Requests tick by tick AllLast ticks.
@@ -294,7 +294,7 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
     let message = encoders::tick_by_tick(server_version, request_id, contract, "MidPoint", number_of_ticks, ignore_size)?;
     let subscription = client.send_request(request_id, message)?;
 
-    Ok(Subscription::new(client, SubscriptionContext{subscription, ..Default::default()}))
+    Ok(Subscription::new(client, ResponseContext{subscription, ..Default::default()}))
 }
 
 // Iterators

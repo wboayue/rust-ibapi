@@ -6,7 +6,7 @@ use log::{error, info};
 
 use crate::client::Subscribable;
 use crate::client::Subscription;
-use crate::client::SubscriptionContext;
+use crate::client::ResponseContext;
 use crate::encode_option_field;
 use crate::messages::IncomingMessages;
 use crate::messages::OutgoingMessages;
@@ -595,7 +595,7 @@ pub(crate) fn calculate_option_price<'a>(
     let message = encoders::encode_calculate_option_price(client.server_version(), request_id, contract, volatility, underlying_price)?;
     let subscription = client.send_request(request_id, message)?;
 
-    Ok(Subscription::new(client, SubscriptionContext{subscription, ..Default::default()}))
+    Ok(Subscription::new(client, ResponseContext{subscription, ..Default::default()}))
 }
 
 // Calculates the implied volatility based on hypothetical option and its underlying prices.
@@ -619,5 +619,5 @@ pub(crate) fn calculate_implied_volatility<'a>(
     let message = encoders::encode_calculate_implied_volatility(client.server_version(), request_id, contract, option_price, underlying_price)?;
     let subscription = client.send_request(request_id, message)?;
 
-    Ok(Subscription::new(client, SubscriptionContext{subscription, ..Default::default()}))
+    Ok(Subscription::new(client, ResponseContext{subscription, ..Default::default()}))
 }
