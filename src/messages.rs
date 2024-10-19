@@ -541,6 +541,14 @@ impl ResponseMessage {
         data.push('\0');
         data
     }
+
+    #[cfg(test)]
+    pub fn encode_simple(&self) -> String {
+        let mut data = self.fields.join("|");
+        data.push('|');
+        data
+    }
+
 }
 
 pub(crate) mod shared_channel_configuration;
