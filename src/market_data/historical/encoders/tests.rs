@@ -168,10 +168,10 @@ fn test_encode_request_historical_ticks() {
 fn test_encode_request_histogram_data() {
     let request_id = 3000;
     let contract = Contract::stock("MSFT");
-    let duration = 1.weeks();
+    let period = BarSize::Week;
     let use_rth = true;
 
-    let message = encode_request_histogram_data(request_id, &contract, use_rth, duration).expect("error encoding request histogram data");
+    let message = encode_request_histogram_data(request_id, &contract, use_rth, period).expect("error encoding request histogram data");
 
     assert_eq!(message[0], OutgoingMessages::RequestHistogramData.to_field(), "message.message_type");
     assert_eq!(message[1], request_id.to_field(), "message.request_id");
@@ -192,5 +192,5 @@ fn test_encode_request_histogram_data() {
     assert_eq!(message[13], contract.trading_class, "message.trading_class");
     assert_eq!(message[14], contract.include_expired.to_field(), "message.include_expired");
     assert_eq!(message[15], use_rth.to_field(), "message.use_rth");
-    assert_eq!(message[16], duration.to_field(), "message.duration");
+    assert_eq!(message[16], period.to_field(), "message.duration");
 }

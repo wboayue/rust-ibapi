@@ -1,5 +1,5 @@
 use ibapi::contracts::Contract;
-use ibapi::market_data::historical::ToDuration;
+use ibapi::market_data::historical::BarSize;
 use ibapi::Client;
 
 fn main() {
@@ -7,7 +7,7 @@ fn main() {
 
     let contract = Contract::stock("GM");
 
-    let histogram = client.histogram_data(&contract, true, 1.days()).expect("histogram request failed");
+    let histogram = client.histogram_data(&contract, true, BarSize::Week).expect("histogram request failed");
 
     for item in &histogram {
         println!("{item:?}");

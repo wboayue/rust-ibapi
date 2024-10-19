@@ -311,14 +311,6 @@ pub(crate) fn head_timestamp(client: &Client, contract: &Contract, what_to_show:
     }
 }
 
-/// Returns data histogram of specified contract
-fn _histogram_data(_client: &Client, _contract: &Contract, _use_rth: bool, _period: &str) -> Result<HistogramDataIterator, Error> {
-    // " S (seconds) - " D (days)
-    // " W (weeks) - " M (months)
-    // " Y (years)
-    Err(Error::NotImplemented)
-}
-
 // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
 pub(crate) fn historical_data(
     client: &Client,
@@ -485,11 +477,11 @@ pub(crate) fn historical_ticks_trade(
     Ok(TickIterator::new(messages))
 }
 
-pub(crate) fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, duration: Duration) -> Result<Vec<HistogramEntry>, Error> {
+pub(crate) fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: BarSize) -> Result<Vec<HistogramEntry>, Error> {
     client.check_server_version(server_versions::REQ_HISTOGRAM, "It does not support histogram data requests.")?;
 
     let request_id = client.next_request_id();
-    let message = encoders::encode_request_histogram_data(request_id, contract, use_rth, duration)?;
+    let message = encoders::encode_request_histogram_data(request_id, contract, use_rth, period)?;
 
     let subscription = client.send_request(request_id, message)?;
 
@@ -589,5 +581,3 @@ impl<T: TickDecoder<T> + Debug> Iterator for TickIterator<T> {
         }
     }
 }
-
-pub struct HistogramDataIterator {}
