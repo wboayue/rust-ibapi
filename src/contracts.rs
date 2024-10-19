@@ -13,7 +13,6 @@ use crate::messages::IncomingMessages;
 use crate::messages::OutgoingMessages;
 use crate::messages::RequestMessage;
 use crate::messages::ResponseMessage;
-use crate::transport::Response;
 use crate::Client;
 use crate::{server_versions, Error, ToField};
 
@@ -458,7 +457,7 @@ pub(crate) fn contract_details(client: &Client, contract: &Contract) -> Result<V
     let mut contract_details: Vec<ContractDetails> = Vec::default();
 
     // TODO create iterator
-    while let Some(Response::Message(mut message)) = responses.next() {
+    while let Some(Ok(mut message)) = responses.next() {
         match message.message_type() {
             IncomingMessages::ContractData => {
                 let decoded = decoders::decode_contract_details(client.server_version(), &mut message)?;
@@ -531,7 +530,7 @@ pub(crate) fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<Con
     let request = encoders::encode_request_matching_symbols(request_id, pattern)?;
     let subscription = client.send_request(request_id, request)?;
 
-    if let Some(Response::Message(mut message)) = subscription.next() {
+    if let Some(Ok(mut message)) = subscription.next() {
         match message.message_type() {
             IncomingMessages::SymbolSamples => {
                 return decoders::decode_contract_descriptions(client.server_version(), &mut message);
@@ -574,9 +573,8 @@ pub(crate) fn market_rule(client: &Client, market_rule_id: i32) -> Result<Market
     let subscription = client.send_shared_request(OutgoingMessages::RequestMarketRule, request)?;
 
     match subscription.next() {
-        Some(Response::Message(mut message)) => Ok(decoders::decode_market_rule(&mut message)?),
-        Some(Response::Cancelled) => Err(Error::Simple("subscription cancelled".into())),
-        Some(Response::Disconnected) => Err(Error::Simple("server gone".into())),
+        Some(Ok(mut message)) => Ok(decoders::decode_market_rule(&mut message)?),
+        Some(Err(e)) => Err(e),
         None => Err(Error::Simple("no market rule found".into())),
     }
 }
