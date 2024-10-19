@@ -7,7 +7,6 @@ use tick_types::TickType;
 
 use crate::client::ResponseContext;
 use crate::client::Subscribable;
-use crate::client::Subscription;
 use crate::encode_option_field;
 use crate::messages::IncomingMessages;
 use crate::messages::OutgoingMessages;
@@ -610,12 +609,12 @@ pub(crate) fn calculate_option_price(
 // * `contract`   - The [Contract] object for which the depth is being requested.
 // * `option_price` - Hypothetical option price.
 // * `underlying_price` - Hypothetical option’s underlying price.
-pub(crate) fn calculate_implied_volatility<'a>(
-    client: &'a Client,
+pub(crate) fn calculate_implied_volatility(
+    client: &Client,
     contract: &Contract,
     option_price: f64,
     underlying_price: f64,
-) -> Result<Subscription<'a, OptionComputation>, Error> {
+) -> Result<OptionComputation, Error> {
     client.check_server_version(
         server_versions::REQ_CALC_IMPLIED_VOLAT,
         "It does not support calculate implied volatility.",
@@ -625,11 +624,9 @@ pub(crate) fn calculate_implied_volatility<'a>(
     let message = encoders::encode_calculate_implied_volatility(client.server_version(), request_id, contract, option_price, underlying_price)?;
     let subscription = client.send_request(request_id, message)?;
 
-    Ok(Subscription::new(
-        client,
-        subscription,
-        ResponseContext {
-            request_type: Some(OutgoingMessages::ReqCalcImpliedVolat),
-        },
-    ))
+    match subscription.next() {
+        Some(Ok(mut message)) => OptionComputation::decode(client.server_version(), &mut message),
+        Some(Err(e)) => Err(e),
+        None => Err(Error::Simple("no data for option calculation".into())),
+    }
 }

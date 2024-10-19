@@ -17,8 +17,6 @@ fn main() {
         ..Default::default()
     };
 
-    let subscription = client.calculate_implied_volatility(&contract, 300.0, 235.0).expect("request failed");
-    for calculation in &subscription {
-        println!("calculation: {:?}", calculation);
-    }
+    let calculation = client.calculate_implied_volatility(&contract, 25.0, 235.0).expect("request failed");
+    println!("calculation: {:?}", calculation);
 }

@@ -414,17 +414,10 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("AAPL");
-    /// let subscription = client.calculate_implied_volatility(&contract, 300.0, 235.0).expect("request failed");
-    /// for calculation in &subscription {
-    ///     println!("calculation: {:?}", calculation);
-    /// }
+    /// let calculation = client.calculate_implied_volatility(&contract, 25.0, 235.0).expect("request failed");
+    /// println!("calculation: {:?}", calculation);
     /// ```
-    pub fn calculate_implied_volatility<'a>(
-        &'a self,
-        contract: &Contract,
-        option_price: f64,
-        underlying_price: f64,
-    ) -> Result<Subscription<'a, OptionComputation>, Error> {
+    pub fn calculate_implied_volatility(&self, contract: &Contract, option_price: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
         contracts::calculate_implied_volatility(self, contract, option_price, underlying_price)
     }
 
