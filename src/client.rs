@@ -391,17 +391,10 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("AAPL");
-    /// let subscription = client.calculate_option_price(&contract, 100.0, 235.0).expect("request failed");
-    /// for calculation in &subscription {
-    ///     println!("calculation: {:?}", calculation);
-    /// }
+    /// let calculation = client.calculate_option_price(&contract, 100.0, 235.0).expect("request failed");
+    /// println!("calculation: {:?}", calculation);
     /// ```
-    pub fn calculate_option_price<'a>(
-        &'a self,
-        contract: &Contract,
-        volatility: f64,
-        underlying_price: f64,
-    ) -> Result<Subscription<'a, OptionComputation>, Error> {
+    pub fn calculate_option_price(&self, contract: &Contract, volatility: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
         contracts::calculate_option_price(self, contract, volatility, underlying_price)
     }
 

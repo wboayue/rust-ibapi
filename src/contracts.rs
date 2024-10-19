@@ -585,25 +585,23 @@ pub(crate) fn market_rule(client: &Client, market_rule_id: i32) -> Result<Market
 // * `contract`   - The [Contract] object for which the depth is being requested.
 // * `volatility` - Hypothetical volatility.
 // * `underlying_price` - Hypothetical option’s underlying price.
-pub(crate) fn calculate_option_price<'a>(
-    client: &'a Client,
+pub(crate) fn calculate_option_price(
+    client: &Client,
     contract: &Contract,
     volatility: f64,
     underlying_price: f64,
-) -> Result<Subscription<'a, OptionComputation>, Error> {
+) -> Result<OptionComputation, Error> {
     client.check_server_version(server_versions::REQ_CALC_OPTION_PRICE, "It does not support calculation price requests.")?;
 
     let request_id = client.next_request_id();
     let message = encoders::encode_calculate_option_price(client.server_version(), request_id, contract, volatility, underlying_price)?;
     let subscription = client.send_request(request_id, message)?;
 
-    Ok(Subscription::new(
-        client,
-        subscription,
-        ResponseContext {
-            request_type: Some(OutgoingMessages::ReqCalcOptionPrice),
-        },
-    ))
+    match subscription.next() {
+        Some(Ok(mut message)) => OptionComputation::decode(client.server_version(), &mut message),
+        Some(Err(e)) => Err(e),
+        None => Err(Error::Simple("no data for option calculation".into())),
+    }
 }
 
 // Calculates the implied volatility based on hypothetical option and its underlying prices.
