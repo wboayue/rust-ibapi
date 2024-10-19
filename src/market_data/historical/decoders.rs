@@ -198,6 +198,23 @@ pub(super) fn decode_historical_ticks_last(message: &mut ResponseMessage) -> Res
     Ok((ticks, done))
 }
 
+pub(super) fn decode_histogram_data(message: &mut ResponseMessage) -> Result<Vec<HistogramEntry>, Error> {
+    message.skip(); // message type
+    message.skip(); // request id
+
+    let count = message.next_int()?;
+    let mut items = Vec::with_capacity(count as usize);
+
+    for _ in 0..count {
+        items.push(HistogramEntry {
+            price: message.next_double()?,
+            size: message.next_int()?,
+        });
+    }
+
+    Ok(items)
+}
+
 fn parse_time_zone(name: &str) -> &Tz {
     let zones = timezones::find_by_name(name);
     if zones.is_empty() {
