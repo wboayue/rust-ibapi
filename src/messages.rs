@@ -548,7 +548,6 @@ impl ResponseMessage {
         data.push('|');
         data
     }
-
 }
 
 pub(crate) mod shared_channel_configuration;
