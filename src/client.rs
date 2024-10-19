@@ -13,11 +13,12 @@ use crate::contracts::{Contract, OptionComputation};
 use crate::errors::Error;
 use crate::market_data::historical::{self, HistogramEntry};
 use crate::market_data::realtime::{self, Bar, BarSize, MidPoint, WhatToShow};
+use crate::market_data::MarketDataType;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
 use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus};
-use crate::{accounts, contracts, orders};
+use crate::{accounts, contracts, market_data, orders};
 
 // Client
 
@@ -1055,6 +1056,10 @@ impl Client {
         ignore_size: bool,
     ) -> Result<Subscription<'a, MidPoint>, Error> {
         realtime::tick_by_tick_midpoint(self, contract, number_of_ticks, ignore_size)
+    }
+
+    pub fn switch_market_data_type(&self, market_data_type: MarketDataType) -> Result<(), Error> {
+        market_data::switch_market_data_type(self, market_data_type)
     }
 
     // == Internal Use ==

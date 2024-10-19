@@ -44,4 +44,8 @@ pub(crate) const CHANNEL_MAPPINGS: &[ChannelMapping] = &[
             IncomingMessages::AccountUpdateTime,
         ],
     },
+    ChannelMapping {
+        request: OutgoingMessages::RequestMarketDataType,
+        responses: &[IncomingMessages::MarketDataType],
+    },
 ];
