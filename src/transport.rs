@@ -595,23 +595,21 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug + Clone> Send
     }
 }
 
-type Response = Result<ResponseMessage, Error>;
-
 // Enables routing of response messages from TWS to Client
 #[derive(Debug, Default)]
 pub(crate) struct InternalSubscription {
-    receiver: Option<Receiver<Response>>,              // requests with request ids receive responses via this channel
-    sender: Option<Sender<Response>>,                  // requests with request ids receive responses via this channel
-    shared_receiver: Option<Arc<Receiver<Response>>>,  // this channel is for responses that share channel based on message type
-    signaler: Option<Sender<Signal>>,                  // for client to signal termination
-    pub(crate) request_id: Option<i32>,                // initiating request id
-    pub(crate) order_id: Option<i32>,                  // initiating order id
-    pub(crate) message_type: Option<OutgoingMessages>, // initiating message type
+    receiver: Option<Receiver<Result<ResponseMessage, Error>>>, // requests with request ids receive responses via this channel
+    sender: Option<Sender<Result<ResponseMessage, Error>>>,     // requests with request ids receive responses via this channel
+    shared_receiver: Option<Arc<Receiver<Result<ResponseMessage, Error>>>>, // this channel is for responses that share channel based on message type
+    signaler: Option<Sender<Signal>>,                           // for client to signal termination
+    pub(crate) request_id: Option<i32>,                         // initiating request id
+    pub(crate) order_id: Option<i32>,                           // initiating order id
+    pub(crate) message_type: Option<OutgoingMessages>,          // initiating message type
 }
 
 impl InternalSubscription {
     // Blocks until next message become available.
-    pub(crate) fn next(&self) -> Option<Response> {
+    pub(crate) fn next(&self) -> Option<Result<ResponseMessage, Error>> {
         if let Some(receiver) = &self.receiver {
             Self::receive(receiver)
         } else if let Some(receiver) = &self.shared_receiver {
@@ -622,7 +620,7 @@ impl InternalSubscription {
     }
 
     // Returns message if available or immediately returns None.
-    pub(crate) fn try_next(&self) -> Option<Response> {
+    pub(crate) fn try_next(&self) -> Option<Result<ResponseMessage, Error>> {
         if let Some(receiver) = &self.receiver {
             Self::try_receive(receiver)
         } else if let Some(receiver) = &self.shared_receiver {
@@ -633,7 +631,7 @@ impl InternalSubscription {
     }
 
     // Waits for next message until specified timeout.
-    pub(crate) fn next_timeout(&self, timeout: Duration) -> Option<Response> {
+    pub(crate) fn next_timeout(&self, timeout: Duration) -> Option<Result<ResponseMessage, Error>> {
         if let Some(receiver) = &self.receiver {
             Self::timeout_receive(receiver, timeout)
         } else if let Some(receiver) = &self.shared_receiver {
@@ -652,15 +650,15 @@ impl InternalSubscription {
         // TODO - shared sender
     }
 
-    fn receive(receiver: &Receiver<Response>) -> Option<Response> {
+    fn receive(receiver: &Receiver<Result<ResponseMessage, Error>>) -> Option<Result<ResponseMessage, Error>> {
         receiver.recv().ok()
     }
 
-    fn try_receive(receiver: &Receiver<Response>) -> Option<Response> {
+    fn try_receive(receiver: &Receiver<Result<ResponseMessage, Error>>) -> Option<Result<ResponseMessage, Error>> {
         receiver.try_recv().ok()
     }
 
-    fn timeout_receive(receiver: &Receiver<Response>, timeout: Duration) -> Option<Response> {
+    fn timeout_receive(receiver: &Receiver<Result<ResponseMessage, Error>>, timeout: Duration) -> Option<Result<ResponseMessage, Error>> {
         receiver.recv_timeout(timeout).ok()
     }
 }
@@ -678,9 +676,9 @@ impl Drop for InternalSubscription {
 }
 
 pub(crate) struct SubscriptionBuilder {
-    receiver: Option<Receiver<Response>>,
-    sender: Option<Sender<Response>>,
-    shared_receiver: Option<Arc<Receiver<Response>>>,
+    receiver: Option<Receiver<Result<ResponseMessage, Error>>>,
+    sender: Option<Sender<Result<ResponseMessage, Error>>>,
+    shared_receiver: Option<Arc<Receiver<Result<ResponseMessage, Error>>>>,
     signaler: Option<Sender<Signal>>,
     order_id: Option<i32>,
     request_id: Option<i32>,
@@ -700,17 +698,17 @@ impl SubscriptionBuilder {
         }
     }
 
-    pub(crate) fn receiver(mut self, receiver: Receiver<Response>) -> Self {
+    pub(crate) fn receiver(mut self, receiver: Receiver<Result<ResponseMessage, Error>>) -> Self {
         self.receiver = Some(receiver);
         self
     }
 
-    pub(crate) fn sender(mut self, sender: Sender<Response>) -> Self {
+    pub(crate) fn sender(mut self, sender: Sender<Result<ResponseMessage, Error>>) -> Self {
         self.sender = Some(sender);
         self
     }
 
-    pub(crate) fn shared_receiver(mut self, shared_receiver: Arc<Receiver<Response>>) -> Self {
+    pub(crate) fn shared_receiver(mut self, shared_receiver: Arc<Receiver<Result<ResponseMessage, Error>>>) -> Self {
         self.shared_receiver = Some(shared_receiver);
         self
     }
