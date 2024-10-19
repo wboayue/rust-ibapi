@@ -11,7 +11,7 @@ use time_tz::Tz;
 use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::contracts::{Contract, OptionComputation};
 use crate::errors::Error;
-use crate::market_data::historical;
+use crate::market_data::historical::{self, HistogramEntry};
 use crate::market_data::realtime::{self, Bar, BarSize, MidPoint, WhatToShow};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
@@ -710,7 +710,7 @@ impl Client {
         historical::historical_data(self, contract, Some(interval_end), duration, bar_size, Some(what_to_show), use_rth)
     }
 
-    /// Requests interval of historical data end now for [Contract].
+    /// Requests interval of historical data ending now for [Contract].
     ///
     /// # Arguments
     /// * `contract`     - [Contract] to retrieve [historical::HistoricalData] for.
@@ -942,6 +942,38 @@ impl Client {
         use_rth: bool,
     ) -> Result<impl Iterator<Item = historical::TickLast>, Error> {
         historical::historical_ticks_trade(self, contract, start, end, number_of_ticks, use_rth)
+    }
+
+    /// Requests data histogram of specified contract.
+    ///
+    /// # Arguments
+    /// * `contract`  - [Contract] to retrieve [HistogramData](historical::HistogramData) for.
+    /// * `use_rth`   - Data from regular trading hours (true), or all available hours (false).
+    /// * `duration`  - Duration of interval to retrieve.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    //
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    /// use ibapi::market_data::historical::ToDuration;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("GM");
+    ///
+    /// let histogram = client
+    ///     .histogram_data(&contract, true, 1.days())
+    ///     .expect("histogram request failed");
+    ///
+    /// for item in &histogram {
+    ///     println!("{item:?}");
+    /// }
+    /// ```
+    pub fn histogram_data(&self, contract: &Contract, use_rth: bool, duration: historical::Duration) -> Result<Vec<HistogramEntry>, Error> {
+        historical::histogram_data(self, contract, use_rth, duration)
     }
 
     // === Realtime Market Data ===

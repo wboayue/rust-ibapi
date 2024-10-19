@@ -167,9 +167,9 @@ impl ToDuration for i32 {
 }
 
 #[derive(Debug)]
-pub struct HistogramData {
+pub struct HistogramEntry {
     pub price: f64,
-    pub count: i32,
+    pub size: i32,
 }
 
 #[derive(Clone, Debug)]
@@ -483,6 +483,21 @@ pub(crate) fn historical_ticks_trade(
     let messages = client.send_request(request_id, message)?;
 
     Ok(TickIterator::new(messages))
+}
+
+pub(crate) fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, duration: Duration) -> Result<Vec<HistogramEntry>, Error> {
+    client.check_server_version(server_versions::REQ_HISTOGRAM, "It does not support histogram data requests.")?;
+
+    let request_id = client.next_request_id();
+    let message = encoders::encode_request_histogram_data(request_id, contract, use_rth, duration)?;
+
+    let subscription = client.send_request(request_id, message)?;
+
+    match subscription.next() {
+        Some(Ok(mut message)) => decoders::decode_histogram_data(&mut message),
+        Some(Err(e)) => Err(e),
+        None => Ok(Vec::new()),
+    }
 }
 
 pub(crate) trait TickDecoder<T> {
