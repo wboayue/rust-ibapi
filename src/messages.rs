@@ -210,7 +210,8 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::HistoricalTickBidAsk
         | IncomingMessages::HistoricalTickLast
         | IncomingMessages::PnL
-        | IncomingMessages::PnLSingle => Some(1),
+        | IncomingMessages::PnLSingle
+        | IncomingMessages::HistogramData => Some(1),
         IncomingMessages::ContractDataEnd
         | IncomingMessages::RealTimeBars
         | IncomingMessages::Error
@@ -218,7 +219,8 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::AccountSummary
         | IncomingMessages::AccountSummaryEnd
         | IncomingMessages::AccountUpdateMulti
-        | IncomingMessages::AccountUpdateMultiEnd => Some(2),
+        | IncomingMessages::AccountUpdateMultiEnd
+        | IncomingMessages::TickOptionComputation => Some(2),
         _ => {
             debug!("could not determine request id index for {kind:?}");
             None
