@@ -16,7 +16,7 @@ use crate::market_data::realtime::{self, Bar, BarSize, MidPoint, WhatToShow};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
-use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, Response, TcpMessageBus};
+use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus};
 use crate::{accounts, contracts, orders};
 
 // Client
@@ -1162,7 +1162,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     pub fn next(&self) -> Option<T> {
         loop {
             match self.subscription.next() {
-                Some(Response::Message(mut message)) => {
+                Some(Ok(mut message)) => {
                     if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
                         match T::decode(self.client.server_version(), &mut message) {
                             Ok(val) => return Some(val),
@@ -1178,11 +1178,11 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                         info!("subscription iterator unexpected message: {message:?}");
                     }
                 }
-                Some(Response::Cancelled) => {
+                Some(Err(Error::Cancelled)) => {
                     debug!("subscription cancelled");
                     return None;
                 }
-                Some(Response::Disconnected) => {
+                Some(Err(Error::Shutdown)) => {
                     debug!("server disconnected");
                     return None;
                 }
@@ -1205,7 +1205,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// //}
     /// ```
     pub fn try_next(&self) -> Option<T> {
-        if let Some(Response::Message(mut message)) = self.subscription.try_next() {
+        if let Some(Ok(mut message)) = self.subscription.try_next() {
             if message.message_type() == IncomingMessages::Error {
                 error!("{}", message.peek_string(4));
                 return None;
@@ -1235,7 +1235,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// //}
     /// ```
     pub fn next_timeout(&self, timeout: Duration) -> Option<T> {
-        if let Some(Response::Message(mut message)) = self.subscription.next_timeout(timeout) {
+        if let Some(Ok(mut message)) = self.subscription.next_timeout(timeout) {
             if message.message_type() == IncomingMessages::Error {
                 error!("{}", message.peek_string(4));
                 return None;

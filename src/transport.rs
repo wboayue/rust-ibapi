@@ -54,27 +54,14 @@ pub(crate) trait MessageBus: Send + Sync {
     }
 }
 
-#[derive(Clone, Debug)]
-pub(crate) enum Response {
-    Message(ResponseMessage),
-    Cancelled,
-    Disconnected,
-}
-
-impl From<ResponseMessage> for Response {
-    fn from(val: ResponseMessage) -> Self {
-        Response::Message(val)
-    }
-}
-
 // For requests without an identifier, shared channels are created
 // to route request/response pairs based on message type.
 #[derive(Debug)]
 struct SharedChannels {
     // Maps an inbound reply to channel used to send responses.
-    senders: HashMap<IncomingMessages, Arc<Sender<Response>>>,
+    senders: HashMap<IncomingMessages, Arc<Sender<Result<ResponseMessage, Error>>>>,
     // Maps an outbound request to channel used to receive responses.
-    receivers: HashMap<OutgoingMessages, Arc<Receiver<Response>>>,
+    receivers: HashMap<OutgoingMessages, Arc<Receiver<Result<ResponseMessage, Error>>>>,
 }
 
 impl SharedChannels {
@@ -95,7 +82,7 @@ impl SharedChannels {
 
     // Maps an outgoing message to incoming message(s)
     fn register(&mut self, outbound: OutgoingMessages, inbounds: &[IncomingMessages]) {
-        let (sender, receiver) = channel::unbounded::<Response>();
+        let (sender, receiver) = channel::unbounded::<Result<ResponseMessage, Error>>();
 
         self.receivers.insert(outbound, Arc::new(receiver));
 
@@ -107,7 +94,7 @@ impl SharedChannels {
     }
 
     // Get receiver for specified message type. Panics if receiver not found.
-    pub fn get_receiver(&self, message_type: OutgoingMessages) -> Arc<Receiver<Response>> {
+    pub fn get_receiver(&self, message_type: OutgoingMessages) -> Arc<Receiver<Result<ResponseMessage, Error>>> {
         let receiver = self.receivers.get(&message_type).unwrap_or_else(|| {
             panic!("unsupported request message {message_type:?}. check mapping in SharedChannels::new() located in transport.rs")
         });
@@ -116,7 +103,7 @@ impl SharedChannels {
     }
 
     // Get sender for specified message type. Panics if sender not found.
-    pub fn get_sender(&self, message_type: IncomingMessages) -> Arc<Sender<Response>> {
+    pub fn get_sender(&self, message_type: IncomingMessages) -> Arc<Sender<Result<ResponseMessage, Error>>> {
         let sender = self
             .senders
             .get(&message_type)
@@ -141,9 +128,9 @@ pub enum Signal {
 pub struct TcpMessageBus {
     connection: Connection,
     handles: Mutex<Vec<JoinHandle<()>>>,
-    requests: SenderHash<i32, Response>,
-    orders: SenderHash<i32, Response>,
-    executions: SenderHash<String, Response>,
+    requests: SenderHash<i32, Result<ResponseMessage, Error>>,
+    orders: SenderHash<i32, Result<ResponseMessage, Error>>,
+    executions: SenderHash<String, Result<ResponseMessage, Error>>,
     shared_channels: SharedChannels,
     signals_send: Sender<Signal>,
     signals_recv: Receiver<Signal>,
@@ -174,8 +161,8 @@ impl TcpMessageBus {
     fn request_shutdown(&self) {
         debug!("shutdown requested");
 
-        self.requests.notify_all(&Response::Disconnected);
-        self.orders.notify_all(&Response::Disconnected);
+        self.requests.notify_all(&Err(Error::Shutdown));
+        self.orders.notify_all(&Err(Error::Shutdown));
 
         self.requests.clear();
         self.orders.clear();
@@ -271,14 +258,11 @@ impl TcpMessageBus {
     fn process_response(&self, message: ResponseMessage) {
         let request_id = message.request_id().unwrap_or(-1); // pass in request id?
         if self.requests.contains(&request_id) {
-            self.requests.send(&request_id, Response::Message(message)).unwrap();
+            self.requests.send(&request_id, Ok(message)).unwrap();
         } else if self.orders.contains(&request_id) {
-            self.orders.send(&request_id, Response::Message(message)).unwrap();
+            self.orders.send(&request_id, Ok(message)).unwrap();
         } else if self.shared_channels.contains_sender(message.message_type()) {
-            self.shared_channels
-                .get_sender(message.message_type())
-                .send(Response::Message(message))
-                .unwrap()
+            self.shared_channels.get_sender(message.message_type()).send(Ok(message)).unwrap()
         } else {
             info!("no recipient found for: {:?}", message)
         }
@@ -290,7 +274,7 @@ impl TcpMessageBus {
                 match (message.order_id(), message.request_id()) {
                     // First check matching orders channel
                     (Some(order_id), _) if self.orders.contains(&order_id) => {
-                        if let Err(e) = self.orders.send(&order_id, Response::Message(message)) {
+                        if let Err(e) = self.orders.send(&order_id, Ok(message)) {
                             error!("error routing message for order_id({order_id}): {e}");
                         }
                     }
@@ -301,7 +285,7 @@ impl TcpMessageBus {
                             }
                         }
 
-                        if let Err(e) = self.requests.send(&request_id, Response::Message(message)) {
+                        if let Err(e) = self.requests.send(&request_id, Ok(message)) {
                             error!("error routing message for request_id({request_id}): {e}");
                         }
                     }
@@ -314,12 +298,12 @@ impl TcpMessageBus {
                 match (message.order_id(), message.request_id()) {
                     // First check matching orders channel
                     (Some(order_id), _) if self.orders.contains(&order_id) => {
-                        if let Err(e) = self.orders.send(&order_id, Response::from(message)) {
+                        if let Err(e) = self.orders.send(&order_id, Ok(message)) {
                             error!("error routing message for order_id({order_id}): {e}");
                         }
                     }
                     (_, Some(request_id)) if self.requests.contains(&request_id) => {
-                        if let Err(e) = self.requests.send(&request_id, Response::from(message)) {
+                        if let Err(e) = self.requests.send(&request_id, Ok(message)) {
                             error!("error routing message for request_id({request_id}): {e}");
                         }
                     }
@@ -331,32 +315,32 @@ impl TcpMessageBus {
             IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => {
                 if let Some(order_id) = message.order_id() {
                     if self.orders.contains(&order_id) {
-                        if let Err(e) = self.orders.send(&order_id, Response::from(message)) {
+                        if let Err(e) = self.orders.send(&order_id, Ok(message)) {
                             error!("error routing message for order_id({order_id}): {e}");
                         }
-                    } else if let Err(e) = self.shared_channels.get_sender(IncomingMessages::OpenOrder).send(Response::from(message)) {
+                    } else if let Err(e) = self.shared_channels.get_sender(IncomingMessages::OpenOrder).send(Ok(message)) {
                         error!("error sending IncomingMessages::OpenOrder: {e}");
                     }
                 }
             }
             IncomingMessages::CompletedOrder => {
-                if let Err(e) = self.shared_channels.get_sender(message.message_type()).send(Response::from(message)) {
+                if let Err(e) = self.shared_channels.get_sender(message.message_type()).send(Ok(message)) {
                     error!("error sending IncomingMessages::CompletedOrder: {e}");
                 }
             }
             IncomingMessages::OpenOrderEnd => {
-                if let Err(e) = self.shared_channels.get_sender(message.message_type()).send(Response::from(message)) {
+                if let Err(e) = self.shared_channels.get_sender(message.message_type()).send(Ok(message)) {
                     error!("error sending IncomingMessages::OpenOrderEnd: {e}");
                 }
             }
             IncomingMessages::CompletedOrdersEnd => {
-                if let Err(e) = self.shared_channels.get_sender(message.message_type()).send(Response::from(message)) {
+                if let Err(e) = self.shared_channels.get_sender(message.message_type()).send(Ok(message)) {
                     error!("error sending IncomingMessages::CompletedOrdersEnd: {e}");
                 }
             }
             IncomingMessages::CommissionsReport => {
                 if let Some(execution_id) = message.execution_id() {
-                    if let Err(e) = self.executions.send(&execution_id, Response::from(message)) {
+                    if let Err(e) = self.executions.send(&execution_id, Ok(message)) {
                         error!("error sending commission report for execution {}: {}", execution_id, e);
                     }
                 }
@@ -443,7 +427,7 @@ impl MessageBus for TcpMessageBus {
     fn cancel_subscription(&self, request_id: i32, message: &RequestMessage) -> Result<(), Error> {
         self.connection.write_message(message)?;
 
-        if let Err(e) = self.requests.send(&request_id, Response::Cancelled) {
+        if let Err(e) = self.requests.send(&request_id, Err(Error::Cancelled)) {
             info!("error sending cancel notification: {e}");
         }
 
@@ -473,7 +457,7 @@ impl MessageBus for TcpMessageBus {
     fn cancel_order_subscription(&self, request_id: i32, message: &RequestMessage) -> Result<(), Error> {
         self.connection.write_message(message)?;
 
-        if let Err(e) = self.orders.send(&request_id, Response::Cancelled) {
+        if let Err(e) = self.orders.send(&request_id, Err(Error::Cancelled)) {
             info!("error sending cancel notification: {e}");
         }
 
@@ -614,18 +598,18 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug + Clone> Send
 // Enables routing of response messages from TWS to Client
 #[derive(Debug, Default)]
 pub(crate) struct InternalSubscription {
-    receiver: Option<Receiver<Response>>,              // requests with request ids receive responses via this channel
-    sender: Option<Sender<Response>>,                  // requests with request ids receive responses via this channel
-    shared_receiver: Option<Arc<Receiver<Response>>>,  // this channel is for responses that share channel based on message type
-    signaler: Option<Sender<Signal>>,                  // for client to signal termination
-    pub(crate) request_id: Option<i32>,                // initiating request id
-    pub(crate) order_id: Option<i32>,                  // initiating order id
-    pub(crate) message_type: Option<OutgoingMessages>, // initiating message type
+    receiver: Option<Receiver<Result<ResponseMessage, Error>>>, // requests with request ids receive responses via this channel
+    sender: Option<Sender<Result<ResponseMessage, Error>>>,     // requests with request ids receive responses via this channel
+    shared_receiver: Option<Arc<Receiver<Result<ResponseMessage, Error>>>>, // this channel is for responses that share channel based on message type
+    signaler: Option<Sender<Signal>>,                           // for client to signal termination
+    pub(crate) request_id: Option<i32>,                         // initiating request id
+    pub(crate) order_id: Option<i32>,                           // initiating order id
+    pub(crate) message_type: Option<OutgoingMessages>,          // initiating message type
 }
 
 impl InternalSubscription {
     // Blocks until next message become available.
-    pub(crate) fn next(&self) -> Option<Response> {
+    pub(crate) fn next(&self) -> Option<Result<ResponseMessage, Error>> {
         if let Some(receiver) = &self.receiver {
             Self::receive(receiver)
         } else if let Some(receiver) = &self.shared_receiver {
@@ -636,7 +620,7 @@ impl InternalSubscription {
     }
 
     // Returns message if available or immediately returns None.
-    pub(crate) fn try_next(&self) -> Option<Response> {
+    pub(crate) fn try_next(&self) -> Option<Result<ResponseMessage, Error>> {
         if let Some(receiver) = &self.receiver {
             Self::try_receive(receiver)
         } else if let Some(receiver) = &self.shared_receiver {
@@ -647,7 +631,7 @@ impl InternalSubscription {
     }
 
     // Waits for next message until specified timeout.
-    pub(crate) fn next_timeout(&self, timeout: Duration) -> Option<Response> {
+    pub(crate) fn next_timeout(&self, timeout: Duration) -> Option<Result<ResponseMessage, Error>> {
         if let Some(receiver) = &self.receiver {
             Self::timeout_receive(receiver, timeout)
         } else if let Some(receiver) = &self.shared_receiver {
@@ -659,22 +643,22 @@ impl InternalSubscription {
 
     pub(crate) fn cancel(&self) {
         if let Some(sender) = &self.sender {
-            if let Err(e) = sender.send(Response::Cancelled) {
+            if let Err(e) = sender.send(Err(Error::Cancelled)) {
                 warn!("error sending cancel notification: {e}")
             }
         }
         // TODO - shared sender
     }
 
-    fn receive(receiver: &Receiver<Response>) -> Option<Response> {
+    fn receive(receiver: &Receiver<Result<ResponseMessage, Error>>) -> Option<Result<ResponseMessage, Error>> {
         receiver.recv().ok()
     }
 
-    fn try_receive(receiver: &Receiver<Response>) -> Option<Response> {
+    fn try_receive(receiver: &Receiver<Result<ResponseMessage, Error>>) -> Option<Result<ResponseMessage, Error>> {
         receiver.try_recv().ok()
     }
 
-    fn timeout_receive(receiver: &Receiver<Response>, timeout: Duration) -> Option<Response> {
+    fn timeout_receive(receiver: &Receiver<Result<ResponseMessage, Error>>, timeout: Duration) -> Option<Result<ResponseMessage, Error>> {
         receiver.recv_timeout(timeout).ok()
     }
 }
@@ -692,9 +676,9 @@ impl Drop for InternalSubscription {
 }
 
 pub(crate) struct SubscriptionBuilder {
-    receiver: Option<Receiver<Response>>,
-    sender: Option<Sender<Response>>,
-    shared_receiver: Option<Arc<Receiver<Response>>>,
+    receiver: Option<Receiver<Result<ResponseMessage, Error>>>,
+    sender: Option<Sender<Result<ResponseMessage, Error>>>,
+    shared_receiver: Option<Arc<Receiver<Result<ResponseMessage, Error>>>>,
     signaler: Option<Sender<Signal>>,
     order_id: Option<i32>,
     request_id: Option<i32>,
@@ -714,17 +698,17 @@ impl SubscriptionBuilder {
         }
     }
 
-    pub(crate) fn receiver(mut self, receiver: Receiver<Response>) -> Self {
+    pub(crate) fn receiver(mut self, receiver: Receiver<Result<ResponseMessage, Error>>) -> Self {
         self.receiver = Some(receiver);
         self
     }
 
-    pub(crate) fn sender(mut self, sender: Sender<Response>) -> Self {
+    pub(crate) fn sender(mut self, sender: Sender<Result<ResponseMessage, Error>>) -> Self {
         self.sender = Some(sender);
         self
     }
 
-    pub(crate) fn shared_receiver(mut self, shared_receiver: Arc<Receiver<Response>>) -> Self {
+    pub(crate) fn shared_receiver(mut self, shared_receiver: Arc<Receiver<Result<ResponseMessage, Error>>>) -> Self {
         self.shared_receiver = Some(shared_receiver);
         self
     }

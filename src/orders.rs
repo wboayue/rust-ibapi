@@ -6,7 +6,7 @@ use log::{error, info};
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
-use crate::transport::{InternalSubscription, Response};
+use crate::transport::InternalSubscription;
 use crate::Client;
 use crate::{encode_option_field, ToField};
 use crate::{server_versions, Error};
@@ -1055,7 +1055,7 @@ impl Iterator for OrderNotificationIterator {
         }
 
         loop {
-            if let Some(Response::Message(mut message)) = self.messages.next() {
+            if let Some(Ok(mut message)) = self.messages.next() {
                 match message.message_type() {
                     IncomingMessages::OpenOrder => {
                         let open_order = decoders::decode_open_order(self.server_version, message);
@@ -1332,7 +1332,7 @@ impl Iterator for CancelOrderResultIterator {
     /// Returns the next [CancelOrderResult]. Waits up to x seconds for next [CancelOrderResult].
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(Response::Message(mut message)) = self.messages.next() {
+            if let Some(Ok(mut message)) = self.messages.next() {
                 match message.message_type() {
                     IncomingMessages::OrderStatus => match decoders::decode_order_status(self.server_version, &mut message) {
                         Ok(val) => return Some(CancelOrderResult::OrderStatus(val)),
@@ -1373,7 +1373,7 @@ pub(crate) fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
 
     let subscription = client.send_shared_request(OutgoingMessages::RequestIds, message)?;
 
-    if let Some(Response::Message(message)) = subscription.next() {
+    if let Some(Ok(message)) = subscription.next() {
         let order_id_index = 2;
         let next_order_id = message.peek_int(order_id_index)?;
 
@@ -1418,7 +1418,7 @@ impl Iterator for OrderDataIterator {
     /// Returns the next [OrderDataResult]. Waits up to x seconds for next [OrderDataResult].
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(Response::Message(mut message)) = self.messages.next() {
+            if let Some(Ok(mut message)) = self.messages.next() {
                 match message.message_type() {
                     IncomingMessages::CompletedOrder => match decoders::decode_completed_order(self.server_version, message) {
                         Ok(val) => return Some(OrderDataResult::OrderData(Box::new(val))),
@@ -1554,7 +1554,7 @@ impl Iterator for ExecutionDataIterator {
     /// Returns the next [OrderDataResult]. Waits up to x seconds for next [OrderDataResult].
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(Response::Message(mut message)) = self.messages.next() {
+            if let Some(Ok(mut message)) = self.messages.next() {
                 match message.message_type() {
                     IncomingMessages::ExecutionData => match decoders::decode_execution_data(self.server_version, &mut message) {
                         Ok(val) => return Some(ExecutionDataResult::ExecutionData(Box::new(val))),

@@ -1,10 +1,10 @@
-use std::{num::ParseIntError, string::FromUtf8Error};
+use std::{num::ParseIntError, string::FromUtf8Error, sync::Arc};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum Error {
     // Errors from external libraries
-    Io(std::io::Error),
+    Io(Arc<std::io::Error>),
     ParseInt(ParseIntError),
     FromUtf8(FromUtf8Error),
     ParseTime(time::error::Parse),
@@ -17,6 +17,7 @@ pub enum Error {
     Simple(String),
     ConnectionFailed,
     Cancelled,
+    Shutdown,
 }
 
 impl std::error::Error for Error {}
@@ -35,6 +36,7 @@ impl std::fmt::Display for Error {
             Error::ServerVersion(wanted, have, message) => write!(f, "server version {wanted} required, got {have}: {message}"),
             Error::ConnectionFailed => write!(f, "ConnectionFailed"),
             Error::Cancelled => write!(f, "Cancelled"),
+            Error::Shutdown => write!(f, "Shutdown"),
 
             Error::Simple(ref err) => write!(f, "error occurred: {err}"),
         }
@@ -43,7 +45,7 @@ impl std::fmt::Display for Error {
 
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Error {
-        Error::Io(err)
+        Error::Io(Arc::new(err))
     }
 }
 
@@ -89,7 +91,10 @@ mod tests {
     #[test]
     fn test_error_display() {
         let cases = vec![
-            (Error::Io(io::Error::new(io::ErrorKind::NotFound, "file not found")), "file not found"),
+            (
+                Error::Io(Arc::new(io::Error::new(io::ErrorKind::NotFound, "file not found"))),
+                "file not found",
+            ),
             (Error::ParseInt("123x".parse::<i32>().unwrap_err()), "invalid digit found in string"),
             (
                 Error::FromUtf8(String::from_utf8(vec![0, 159, 146, 150]).unwrap_err()),
