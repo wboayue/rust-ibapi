@@ -150,19 +150,14 @@ pub(super) fn encode_request_historical_ticks(
     Ok(message)
 }
 
-pub(super) fn encode_request_histogram_data(
-    request_id: i32,
-    contract: &Contract,
-    use_rth: bool,
-    duration: Duration,
-) -> Result<RequestMessage, Error> {
+pub(super) fn encode_request_histogram_data(request_id: i32, contract: &Contract, use_rth: bool, period: BarSize) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::RequestHistogramData);
     message.push_field(&request_id);
     contract.push_fields(&mut message);
     message.push_field(&use_rth);
-    message.push_field(&duration);
+    message.push_field(&period);
 
     Ok(message)
 }

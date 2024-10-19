@@ -958,22 +958,22 @@ impl Client {
     //
     /// use ibapi::contracts::Contract;
     /// use ibapi::Client;
-    /// use ibapi::market_data::historical::ToDuration;
+    /// use ibapi::market_data::historical::BarSize;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("GM");
     ///
     /// let histogram = client
-    ///     .histogram_data(&contract, true, 1.days())
+    ///     .histogram_data(&contract, true, BarSize::Week)
     ///     .expect("histogram request failed");
     ///
     /// for item in &histogram {
     ///     println!("{item:?}");
     /// }
     /// ```
-    pub fn histogram_data(&self, contract: &Contract, use_rth: bool, duration: historical::Duration) -> Result<Vec<HistogramEntry>, Error> {
-        historical::histogram_data(self, contract, use_rth, duration)
+    pub fn histogram_data(&self, contract: &Contract, use_rth: bool, period: historical::BarSize) -> Result<Vec<HistogramEntry>, Error> {
+        historical::histogram_data(self, contract, use_rth, period)
     }
 
     // === Realtime Market Data ===
