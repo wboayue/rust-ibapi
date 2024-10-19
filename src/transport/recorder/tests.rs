@@ -3,7 +3,6 @@ use crate::testdata::responses::{MANAGED_ACCOUNT, MARKET_RULE};
 
 use super::*;
 use std::fs;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 #[test]
@@ -62,9 +61,9 @@ fn test_record_response() {
     let temp_path = temp_dir.path().to_str().unwrap();
 
     temp_env::with_var("IBAPI_RECORDING_DIR", Some(temp_path), || {
-        let recorder = MessageRecorder::new();
-
         let message = ResponseMessage::from_simple(MARKET_RULE);
+
+        let recorder = MessageRecorder::new();
         recorder.record_response(&message);
 
         let files = fs::read_dir(&recorder.recording_dir)
