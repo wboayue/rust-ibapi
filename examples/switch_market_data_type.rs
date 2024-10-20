@@ -6,7 +6,7 @@ fn main() {
 
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
-    let market_data_type = MarketDataType::Realtime;
+    let market_data_type = MarketDataType::Live;
 
     client.switch_market_data_type(market_data_type).expect("request failed");
     println!("market data switched: {:?}", market_data_type);

@@ -1058,6 +1058,23 @@ impl Client {
         realtime::tick_by_tick_midpoint(self, contract, number_of_ticks, ignore_size)
     }
 
+    /// Switches market data type returned from request_market_data requests to Live, Frozen, Delayed, or FrozenDelayed.
+    ///
+    /// # Arguments
+    /// * `market_data_type` - Type of market data to retrieve.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::market_data::{MarketDataType};
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let market_data_type = MarketDataType::Live;
+    /// client.switch_market_data_type(market_data_type).expect("request failed");
+    /// println!("market data switched: {:?}", market_data_type);
+    /// ```
     pub fn switch_market_data_type(&self, market_data_type: MarketDataType) -> Result<(), Error> {
         market_data::switch_market_data_type(self, market_data_type)
     }

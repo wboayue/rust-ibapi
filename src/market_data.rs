@@ -7,7 +7,7 @@ pub mod realtime;
 #[derive(Debug, Clone, Copy)]
 pub enum MarketDataType {
     /// Disables frozen, delayed and delayed-frozen market data sending.
-    Realtime = 1,
+    Live = 1,
     /// Enables frozen market data sending.
     Frozen = 2,
     /// Enables delayed and disables delayed-frozen market data sending.
@@ -51,7 +51,7 @@ mod encoders {
         #[test]
         fn test_encode_request_market_data_type() {
             let market_data_types = vec![
-                MarketDataType::Realtime,
+                MarketDataType::Live,
                 MarketDataType::Frozen,
                 MarketDataType::Delayed,
                 MarketDataType::DelayedFrozen,
