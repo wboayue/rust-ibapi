@@ -108,12 +108,47 @@ pub(crate) fn cancel_tick_by_tick(request_id: i32) -> Result<RequestMessage, Err
 }
 
 pub(crate) fn encode_request_market_depth(
+    server_version: i32,
     request_id: i32,
     contract: &Contract,
-    number_of_row: i32,
+    number_of_rows: i32,
     is_smart_depth: bool,
 ) -> Result<RequestMessage, Error> {
-    Err(Error::NotImplemented)
+    const VERSION: i32 = 5;
+
+    let mut message = RequestMessage::new();
+
+    message.push_field(&OutgoingMessages::RequestMarketDepth);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    // Contract fields
+    if server_version >= server_versions::TRADING_CLASS {
+        message.push_field(&contract.contract_id);
+    }
+    message.push_field(&contract.symbol);
+    message.push_field(&contract.security_type);
+    message.push_field(&contract.last_trade_date_or_contract_month);
+    message.push_field(&contract.strike);
+    message.push_field(&contract.right);
+    message.push_field(&contract.multiplier);
+    message.push_field(&contract.exchange);
+    if server_version >= server_versions::MKT_DEPTH_PRIM_EXCHANGE {
+        message.push_field(&contract.primary_exchange);
+    }
+    message.push_field(&contract.currency);
+    message.push_field(&contract.local_symbol);
+    if server_version >= server_versions::TRADING_CLASS {
+        message.push_field(&contract.trading_class);
+    }
+    message.push_field(&number_of_rows);
+    if server_version >= server_versions::SMART_DEPTH {
+        message.push_field(&is_smart_depth);
+    }
+    if server_version >= server_versions::LINKING {
+        message.push_field(&"");
+    }
+
+    Ok(message)
 }
 
 //let request = encoders::encode_request_market_depth(request_id, contract, number_of_rows, is_smart_depth)?;

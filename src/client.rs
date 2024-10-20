@@ -12,7 +12,7 @@ use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, Famil
 use crate::contracts::{Contract, OptionComputation};
 use crate::errors::Error;
 use crate::market_data::historical::{self, HistogramEntry};
-use crate::market_data::realtime::{self, Bar, BarSize, MidPoint, WhatToShow};
+use crate::market_data::realtime::{self, Bar, BarSize, MarketDepth, MidPoint, WhatToShow};
 use crate::market_data::MarketDataType;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
@@ -1099,7 +1099,7 @@ impl Client {
     /// client.switch_market_data_type(market_data_type).expect("request failed");
     /// println!("market data switched: {:?}", market_data_type);
     /// ```
-    pub fn market_depth(&self, contract: &Contract, number_of_rows: i32, is_smart_depth: bool) -> Result<(), Error> {
+    pub fn market_depth<'a>(&'a self, contract: &Contract, number_of_rows: i32, is_smart_depth: bool) -> Result<Subscription<'a, MarketDepth>, Error> {
         realtime::market_depth(self, contract, number_of_rows, is_smart_depth)
     }
 

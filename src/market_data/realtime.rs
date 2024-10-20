@@ -172,6 +172,41 @@ impl ToField for WhatToShow {
     }
 }
 
+#[derive(Debug)]
+pub struct MarketDepth {
+    /// Tick type: "Last" or "AllLast"
+    pub tick_type: String,
+    /// The trade's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
+    pub time: OffsetDateTime,
+    /// Tick last price
+    pub price: f64,
+    /// Tick last size
+    pub size: i64,
+    /// Tick attribs (bit 0 - past limit, bit 1 - unreported)
+    pub trade_attribute: TradeAttribute,
+    /// Tick exchange
+    pub exchange: String,
+    /// Tick special conditions
+    pub special_conditions: String,
+}
+
+impl Subscribable<MarketDepth> for MarketDepth {
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
+
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+        // decoders::decode_trade_tick(message)
+        Err(Error::NotImplemented)
+    }
+
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
+        if let Some(request_id) = request_id {
+            encoders::cancel_tick_by_tick(request_id)
+        } else {
+            Err(Error::Simple("Request ID required to encode cancel realtime bars".into()))
+        }
+    }
+}
+
 // === Implementation ===
 
 // Requests realtime bars.
@@ -297,16 +332,22 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
     Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
-pub(crate) fn market_depth(client: &Client, contract: &Contract, number_of_rows: i32, is_smart_depth: bool) -> Result<(), Error> {
-    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support account summary requests.")?;
+pub(crate) fn market_depth<'a>(client: &'a Client, contract: &Contract, number_of_rows: i32, is_smart_depth: bool) -> Result<Subscription<'a, MarketDepth>, Error> {
+    if !contract.trading_class.is_empty() || contract.contract_id > 0 {
+        client.check_server_version(server_versions::TRADING_CLASS, "It does not support contract_id nor trading_class parameters in request_market_depth.")?;
+    }
+    if is_smart_depth {
+        client.check_server_version(server_versions::SMART_DEPTH, "It does not support SMART depth request.")?;
+    }
+    if !contract.primary_exchange.is_empty() {
+        client.check_server_version(server_versions::MKT_DEPTH_PRIM_EXCHANGE, "It does not support primary_exchange parameter in request_market_depth")?;
+    }
 
     let request_id = client.next_request_id();
-    let request = encoders::encode_request_market_depth(request_id, contract, number_of_rows, is_smart_depth)?;
-    // let subscription = client.send_request(request_id, request)?;
+    let request = encoders::encode_request_market_depth(client.server_version, request_id, contract, number_of_rows, is_smart_depth)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    // Ok(Subscription::new(client, subscription, ResponseContext::default()))
-
-    Ok(())
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 // Iterators
