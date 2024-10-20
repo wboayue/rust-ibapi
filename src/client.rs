@@ -1079,6 +1079,30 @@ impl Client {
         market_data::switch_market_data_type(self, market_data_type)
     }
 
+    /// Requests the contract's market depth (order book).
+    ///
+    /// # Arguments
+    ///
+    /// * `contract` - The Contract for which the depth is being requested.
+    /// * `number_of_rows` - The number of rows on each side of the order book.
+    /// * `is_smart_depth` - Flag indicates that this is smart depth request.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::market_data::{MarketDataType};
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let market_data_type = MarketDataType::Live;
+    /// client.switch_market_data_type(market_data_type).expect("request failed");
+    /// println!("market data switched: {:?}", market_data_type);
+    /// ```
+    pub fn market_depth(&self, contract: &Contract, number_of_rows: i32, is_smart_depth: bool) -> Result<(), Error> {
+        realtime::market_depth(self, contract, number_of_rows, is_smart_depth)
+    }
+
     // == Internal Use ==
 
     #[cfg(test)]

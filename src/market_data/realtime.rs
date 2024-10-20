@@ -297,6 +297,18 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
     Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
+pub(crate) fn market_depth(client: &Client, contract: &Contract, number_of_rows: i32, is_smart_depth: bool) -> Result<(), Error> {
+    client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support account summary requests.")?;
+
+    let request_id = client.next_request_id();
+    let request = encoders::encode_request_market_depth(request_id, contract, number_of_rows, is_smart_depth)?;
+    // let subscription = client.send_request(request_id, request)?;
+
+    // Ok(Subscription::new(client, subscription, ResponseContext::default()))
+
+    Ok(())
+}
+
 // Iterators
 
 /// TradeIterator supports iteration over [Trade] ticks.
