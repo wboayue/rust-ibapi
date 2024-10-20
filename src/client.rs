@@ -13,11 +13,12 @@ use crate::contracts::{Contract, OptionComputation};
 use crate::errors::Error;
 use crate::market_data::historical::{self, HistogramEntry};
 use crate::market_data::realtime::{self, Bar, BarSize, MidPoint, WhatToShow};
+use crate::market_data::MarketDataType;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::orders::{Order, OrderDataResult, OrderNotification};
 use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus};
-use crate::{accounts, contracts, orders};
+use crate::{accounts, contracts, market_data, orders};
 
 // Client
 
@@ -1055,6 +1056,27 @@ impl Client {
         ignore_size: bool,
     ) -> Result<Subscription<'a, MidPoint>, Error> {
         realtime::tick_by_tick_midpoint(self, contract, number_of_ticks, ignore_size)
+    }
+
+    /// Switches market data type returned from request_market_data requests to Live, Frozen, Delayed, or FrozenDelayed.
+    ///
+    /// # Arguments
+    /// * `market_data_type` - Type of market data to retrieve.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::market_data::{MarketDataType};
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let market_data_type = MarketDataType::Live;
+    /// client.switch_market_data_type(market_data_type).expect("request failed");
+    /// println!("market data switched: {:?}", market_data_type);
+    /// ```
+    pub fn switch_market_data_type(&self, market_data_type: MarketDataType) -> Result<(), Error> {
+        market_data::switch_market_data_type(self, market_data_type)
     }
 
     // == Internal Use ==
