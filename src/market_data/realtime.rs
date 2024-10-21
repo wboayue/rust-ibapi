@@ -1,4 +1,3 @@
-use log::error;
 use time::OffsetDateTime;
 
 use crate::client::{ResponseContext, Subscribable, Subscription};
@@ -6,7 +5,6 @@ use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::orders::TagValue;
 use crate::server_versions;
-use crate::transport::InternalSubscription;
 use crate::ToField;
 use crate::{Client, Error};
 
@@ -49,6 +47,22 @@ pub struct BidAsk {
     pub bid_ask_attribute: BidAskAttribute,
 }
 
+// Some(Ok(mut message)) => match message.message_type() {
+//     IncomingMessages::TickByTick => match decoders::bid_ask_tick(&mut message) {
+
+impl Subscribable<BidAsk> for BidAsk {
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
+
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+        decoders::decode_bid_ask_tick(message)
+    }
+
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
+        let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
+        encoders::encode_cancel_tick_by_tick(request_id)
+    }
+}
+
 #[derive(Debug)]
 pub struct BidAskAttribute {
     pub bid_past_low: bool,
@@ -71,11 +85,8 @@ impl Subscribable<MidPoint> for MidPoint {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
-        if let Some(request_id) = request_id {
-            encoders::cancel_tick_by_tick(request_id)
-        } else {
-            Err(Error::Simple("Request ID required to encode cancel mid point ticks".into()))
-        }
+        let request_id = request_id.expect("Request ID required to encode cancel mid point ticks");
+        encoders::encode_cancel_tick_by_tick(request_id)
     }
 }
 
@@ -99,11 +110,8 @@ impl Subscribable<Bar> for Bar {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
-        if let Some(request_id) = request_id {
-            encoders::encode_cancel_realtime_bars(request_id)
-        } else {
-            Err(Error::Simple("Request ID required to encode cancel realtime bars".into()))
-        }
+        let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
+        encoders::encode_cancel_realtime_bars(request_id)
     }
 }
 
@@ -133,11 +141,8 @@ impl Subscribable<Trade> for Trade {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
-        if let Some(request_id) = request_id {
-            encoders::cancel_tick_by_tick(request_id)
-        } else {
-            Err(Error::Simple("Request ID required to encode cancel realtime bars".into()))
-        }
+        let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
+        encoders::encode_cancel_tick_by_tick(request_id)
     }
 }
 
@@ -172,6 +177,75 @@ impl ToField for WhatToShow {
     }
 }
 
+#[derive(Debug)]
+pub enum MarketDepths {
+    MarketDepth(MarketDepth),
+    MarketDepthL2(MarketDepthL2),
+}
+
+#[derive(Debug, Default)]
+pub struct MarketDepth {}
+#[derive(Debug, Default)]
+pub struct MarketDepthL2 {}
+
+impl Subscribable<MarketDepths> for MarketDepths {
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2];
+
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+        match message.message_type() {
+            IncomingMessages::MarketDepth => Ok(MarketDepths::MarketDepth(decoders::decode_market_depth(message)?)),
+            IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(decoders::decode_market_depth_l2(message)?)),
+            e => Err(Error::NotImplemented),
+        }
+    }
+
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
+        let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
+        encoders::encode_cancel_tick_by_tick(request_id)
+    }
+}
+
+
+/// Stores depth market data description.
+#[derive(Debug, Default)]
+pub struct DepthMarketDataDescription{
+    /// The exchange name
+    pub exchange_name: String,
+    /// The security type
+    pub security_type: String,
+    /// The listing exchange name
+    pub listing_exchange: String,
+    /// The service data type
+    pub service_data_type: String,
+    /// The aggregated group
+    pub aggregated_group: String,
+}
+
+pub enum TickTypes {
+    Price(TickPrice),
+    Size(TickSize),
+    String(TickString),
+    EFP(TickEFP),
+    Generic(TickGeneric),
+    OptionComputation(TickOptionComputation),
+    SnapshotEnd,
+}
+
+pub struct TickPrice {}
+
+pub struct TickSize {}
+
+pub struct TickString {}
+
+pub struct TickEFP {}
+
+pub struct TickGeneric {}
+
+pub struct TickOptionComputation {}
+
+//        * @sa cancelMktData, EWrapper::tickPrice, EWrapper::tickSize, EWrapper::tickString,
+// EWrapper::tickEFP, EWrapper::tickGeneric, EWrapper::tickOptionComputation, EWrapper::tickSnapshotEnd
+
 // === Implementation ===
 
 // Requests realtime bars.
@@ -205,20 +279,16 @@ pub(crate) fn tick_by_tick_all_last<'a>(
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<impl Iterator<Item = Trade> + 'a, Error> {
+) -> Result<Subscription<'a, Trade>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
     let request_id = client.next_request_id();
 
-    let message = encoders::tick_by_tick(server_version, request_id, contract, "AllLast", number_of_ticks, ignore_size)?;
-    let responses = client.send_request(request_id, message)?;
+    let request = encoders::encode_tick_by_tick(server_version, request_id, contract, "AllLast", number_of_ticks, ignore_size)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    Ok(TradeIterator {
-        client,
-        request_id,
-        responses,
-    })
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 // Validates that server supports the given request.
@@ -228,7 +298,7 @@ fn validate_tick_by_tick_request(client: &Client, _contract: &Contract, number_o
     if number_of_ticks != 0 || ignore_size {
         client.check_server_version(
             server_versions::TICK_BY_TICK_IGNORE_SIZE,
-            "It does not support ignoreSize and numberOfTicks parameters in tick-by-tick requests.",
+            "It does not support ignore_size and number_of_ticks parameters in tick-by-tick requests.",
         )?;
     }
 
@@ -241,20 +311,16 @@ pub(crate) fn tick_by_tick_last<'a>(
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<TradeIterator<'a>, Error> {
+) -> Result<Subscription<'a, Trade>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
     let request_id = client.next_request_id();
 
-    let message = encoders::tick_by_tick(server_version, request_id, contract, "Last", number_of_ticks, ignore_size)?;
-    let responses = client.send_request(request_id, message)?;
+    let request = encoders::encode_tick_by_tick(server_version, request_id, contract, "Last", number_of_ticks, ignore_size)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    Ok(TradeIterator {
-        client,
-        request_id,
-        responses,
-    })
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 // Requests tick by tick BidAsk ticks.
@@ -263,20 +329,16 @@ pub(crate) fn tick_by_tick_bid_ask<'a>(
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<BidAskIterator<'a>, Error> {
+) -> Result<Subscription<'a, BidAsk>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
     let request_id = client.next_request_id();
 
-    let message = encoders::tick_by_tick(server_version, request_id, contract, "BidAsk", number_of_ticks, ignore_size)?;
-    let responses = client.send_request(request_id, message)?;
+    let request = encoders::encode_tick_by_tick(server_version, request_id, contract, "BidAsk", number_of_ticks, ignore_size)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    Ok(BidAskIterator {
-        client,
-        request_id,
-        responses,
-    })
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 // Requests tick by tick MidPoint ticks.
@@ -291,87 +353,48 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
     let server_version = client.server_version();
     let request_id = client.next_request_id();
 
-    let message = encoders::tick_by_tick(server_version, request_id, contract, "MidPoint", number_of_ticks, ignore_size)?;
-    let subscription = client.send_request(request_id, message)?;
+    let request = encoders::encode_tick_by_tick(server_version, request_id, contract, "MidPoint", number_of_ticks, ignore_size)?;
+    let subscription = client.send_request(request_id, request)?;
 
     Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
-// Iterators
-
-/// TradeIterator supports iteration over [Trade] ticks.
-pub(crate) struct TradeIterator<'a> {
+pub(crate) fn market_depth<'a>(
     client: &'a Client,
-    request_id: i32,
-    responses: InternalSubscription,
-}
-
-impl<'a> Drop for TradeIterator<'a> {
-    // Ensures tick by tick request is cancelled
-    fn drop(&mut self) {
-        cancel_tick_by_tick(self.client, self.request_id);
+    contract: &Contract,
+    number_of_rows: i32,
+    is_smart_depth: bool,
+) -> Result<Subscription<'a, MarketDepths>, Error> {
+    if !contract.trading_class.is_empty() || contract.contract_id > 0 {
+        client.check_server_version(
+            server_versions::TRADING_CLASS,
+            "It does not support contract_id nor trading_class parameters in request_market_depth.",
+        )?;
     }
-}
-
-impl<'a> Iterator for TradeIterator<'a> {
-    type Item = Trade;
-
-    /// Advances the iterator and returns the next value.
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.responses.next() {
-                Some(Ok(mut message)) => match message.message_type() {
-                    IncomingMessages::TickByTick => match decoders::decode_trade_tick(&mut message) {
-                        Ok(tick) => return Some(tick),
-                        Err(e) => error!("unexpected message {message:?}: {e:?}"),
-                    },
-                    _ => error!("unexpected message {message:?}"),
-                },
-                // TODO enumerate
-                _ => return None,
-            }
-        }
+    if is_smart_depth {
+        client.check_server_version(server_versions::SMART_DEPTH, "It does not support SMART depth request.")?;
     }
-}
-
-/// BidAskIterator supports iteration over [BidAsk] ticks.
-pub(crate) struct BidAskIterator<'a> {
-    client: &'a Client,
-    request_id: i32,
-    responses: InternalSubscription,
-}
-
-/// Cancels the tick by tick request
-fn cancel_tick_by_tick(client: &Client, request_id: i32) {
-    if client.server_version() >= server_versions::TICK_BY_TICK {
-        let message = encoders::cancel_tick_by_tick(request_id).unwrap();
-        client.message_bus.cancel_subscription(request_id, &message).unwrap();
+    if !contract.primary_exchange.is_empty() {
+        client.check_server_version(
+            server_versions::MKT_DEPTH_PRIM_EXCHANGE,
+            "It does not support primary_exchange parameter in request_market_depth",
+        )?;
     }
+
+    let request_id = client.next_request_id();
+    let request = encoders::encode_request_market_depth(client.server_version, request_id, contract, number_of_rows, is_smart_depth)?;
+    let subscription = client.send_request(request_id, request)?;
+
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
-impl<'a> Drop for BidAskIterator<'a> {
-    // Ensures tick by tick request is cancelled
-    fn drop(&mut self) {
-        cancel_tick_by_tick(self.client, self.request_id);
-    }
+// Requests venues for which market data is returned to market_depth (those with market makers)
+pub fn market_depth_exchanges(client: &Client) -> Result<Vec<DepthMarketDataDescription>, Error> {
+    Ok(Vec::new())
 }
 
-impl<'a> Iterator for BidAskIterator<'a> {
-    type Item = BidAsk;
-
-    /// Advances the iterator and returns the next value.
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.responses.next() {
-                Some(Ok(mut message)) => match message.message_type() {
-                    IncomingMessages::TickByTick => match decoders::bid_ask_tick(&mut message) {
-                        Ok(tick) => return Some(tick),
-                        Err(e) => error!("unexpected message {message:?}: {e:?}"),
-                    },
-                    _ => error!("unexpected message {message:?}"),
-                },
-                _ => return None,
-            }
-        }
-    }
+// Requests real time market data.
+pub fn market_data(client: &Client, contract: &Contract, generic_ticks: &[&str], snapshot: bool, regulatory_snapshot: bool) {
+//        * @sa cancelMktData, EWrapper::tickPrice, EWrapper::tickSize, EWrapper::tickString, EWrapper::tickEFP, EWrapper::tickGeneric, EWrapper::tickOptionComputation, EWrapper::tickSnapshotEnd
 }
+

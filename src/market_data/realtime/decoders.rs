@@ -1,7 +1,7 @@
 use crate::messages::ResponseMessage;
 use crate::Error;
 
-use super::{Bar, BidAsk, BidAskAttribute, MidPoint, Trade, TradeAttribute};
+use super::{Bar, BidAsk, BidAskAttribute, MarketDepth, MarketDepthL2, MidPoint, Trade, TradeAttribute};
 
 pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, Error> {
     message.skip(); // message type
@@ -50,7 +50,7 @@ pub(crate) fn decode_trade_tick(message: &mut ResponseMessage) -> Result<Trade, 
     })
 }
 
-pub(crate) fn bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk, Error> {
+pub(crate) fn decode_bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk, Error> {
     message.skip(); // message type
     message.skip(); // message request id
 
@@ -94,6 +94,43 @@ pub(crate) fn mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint, 
     })
 }
 
+pub(crate) fn decode_market_depth(message: &mut ResponseMessage) -> Result<MarketDepth, Error> {
+    message.skip(); // message type
+    message.skip(); // message version
+    message.skip(); // message request id
+
+    // Ok(Bar {
+    //     date: message.next_date_time()?,
+    //     open: message.next_double()?,
+    //     high: message.next_double()?,
+    //     low: message.next_double()?,
+    //     close: message.next_double()?,
+    //     volume: message.next_double()?,
+    //     wap: message.next_double()?,
+    //     count: message.next_int()?,
+    // })
+
+    Ok(MarketDepth::default())
+}
+
+pub(crate) fn decode_market_depth_l2(message: &mut ResponseMessage) -> Result<MarketDepthL2, Error> {
+    message.skip(); // message type
+    message.skip(); // message version
+    message.skip(); // message request id
+
+    // Ok(Bar {
+    //     date: message.next_date_time()?,
+    //     open: message.next_double()?,
+    //     high: message.next_double()?,
+    //     low: message.next_double()?,
+    //     close: message.next_double()?,
+    //     volume: message.next_double()?,
+    //     wap: message.next_double()?,
+    //     count: message.next_int()?,
+    // })
+    Ok(MarketDepthL2::default())
+}
+
 #[cfg(test)]
 mod tests {
     use time::OffsetDateTime;
@@ -124,7 +161,7 @@ mod tests {
     fn decode_bid_ask() {
         let mut message = ResponseMessage::from("99\09000\03\01678745793\03895.50\03896.00\09\011\01\0");
 
-        let results = bid_ask_tick(&mut message);
+        let results = decode_bid_ask_tick(&mut message);
 
         if let Ok(bid_ask) = results {
             assert_eq!(bid_ask.time, OffsetDateTime::from_unix_timestamp(01678745793).unwrap(), "bid_ask.time");
