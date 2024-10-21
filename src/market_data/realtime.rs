@@ -205,6 +205,47 @@ impl Subscribable<MarketDepths> for MarketDepths {
     }
 }
 
+
+/// Stores depth market data description.
+#[derive(Debug, Default)]
+pub struct DepthMarketDataDescription{
+    /// The exchange name
+    pub exchange_name: String,
+    /// The security type
+    pub security_type: String,
+    /// The listing exchange name
+    pub listing_exchange: String,
+    /// The service data type
+    pub service_data_type: String,
+    /// The aggregated group
+    pub aggregated_group: String,
+}
+
+pub enum TickTypes {
+    Price(TickPrice),
+    Size(TickSize),
+    String(TickString),
+    EFP(TickEFP),
+    Generic(TickGeneric),
+    OptionComputation(TickOptionComputation),
+    SnapshotEnd,
+}
+
+pub struct TickPrice {}
+
+pub struct TickSize {}
+
+pub struct TickString {}
+
+pub struct TickEFP {}
+
+pub struct TickGeneric {}
+
+pub struct TickOptionComputation {}
+
+//        * @sa cancelMktData, EWrapper::tickPrice, EWrapper::tickSize, EWrapper::tickString,
+// EWrapper::tickEFP, EWrapper::tickGeneric, EWrapper::tickOptionComputation, EWrapper::tickSnapshotEnd
+
 // === Implementation ===
 
 // Requests realtime bars.
@@ -346,3 +387,14 @@ pub(crate) fn market_depth<'a>(
 
     Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
+
+// Requests venues for which market data is returned to market_depth (those with market makers)
+pub fn market_depth_exchanges(client: &Client) -> Result<Vec<DepthMarketDataDescription>, Error> {
+    Ok(Vec::new())
+}
+
+// Requests real time market data.
+pub fn market_data(client: &Client, contract: &Contract, generic_ticks: &[&str], snapshot: bool, regulatory_snapshot: bool) {
+//        * @sa cancelMktData, EWrapper::tickPrice, EWrapper::tickSize, EWrapper::tickString, EWrapper::tickEFP, EWrapper::tickGeneric, EWrapper::tickOptionComputation, EWrapper::tickSnapshotEnd
+}
+
