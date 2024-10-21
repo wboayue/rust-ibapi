@@ -1141,11 +1141,11 @@ impl Debug for Client {
 ///
 #[allow(private_bounds)]
 pub struct Subscription<'a, T: Subscribable<T>> {
-    pub(crate) client: &'a Client,
-    pub(crate) request_id: Option<i32>,
-    pub(crate) order_id: Option<i32>,
-    pub(crate) message_type: Option<OutgoingMessages>,
-    pub(crate) phantom: PhantomData<T>,
+    client: &'a Client,
+    request_id: Option<i32>,
+    order_id: Option<i32>,
+    message_type: Option<OutgoingMessages>,
+    phantom: PhantomData<T>,
     cancelled: AtomicBool,
     subscription: InternalSubscription,
     response_context: ResponseContext,
@@ -1222,11 +1222,11 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     fn process_message(&self, mut message: ResponseMessage) -> Option<T> {
         if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
             match T::decode(self.client.server_version(), &mut message) {
-                Ok(val) => return Some(val),
+                Ok(val) => Some(val),
                 Err(err) => {
                     let mut error = self.error.lock().unwrap();
                     *error = Some(err);
-                    return None;
+                    None
                 }
             }
         } else if message.message_type() == IncomingMessages::Error {
@@ -1234,10 +1234,10 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
             error!("{error_message}");
             let mut error = self.error.lock().unwrap();
             *error = Some(Error::Simple(error_message));
-            return None;
+            None
         } else {
             info!("subscription iterator unexpected message: {message:?}");
-            self.next()
+            None
         }
     }
 
