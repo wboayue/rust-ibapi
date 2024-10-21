@@ -5,7 +5,7 @@ use super::*;
 #[test]
 fn test_cancel_tick_by_tick() {
     let request_id = 9000;
-    let message = super::cancel_tick_by_tick(request_id).expect("error encoding cancel_tick_by_tick");
+    let message = super::encode_cancel_tick_by_tick(request_id).expect("error encoding cancel_tick_by_tick");
 
     assert_eq!(message[0], "98", "message.type");
     assert_eq!(message[1], request_id.to_string(), "message.request_id");
@@ -31,8 +31,8 @@ fn test_tick_by_tick() {
     let number_of_ticks = 1;
     let ignore_size = true;
 
-    let message =
-        super::tick_by_tick(server_version, request_id, &contract, tick_type, number_of_ticks, ignore_size).expect("error encoding tick_by_tick");
+    let message = super::encode_tick_by_tick(server_version, request_id, &contract, tick_type, number_of_ticks, ignore_size)
+        .expect("error encoding tick_by_tick");
 
     assert_eq!(message[0], OutgoingMessages::RequestTickByTickData.to_field(), "message.type");
     assert_eq!(message[1], request_id.to_field(), "message.request_id");

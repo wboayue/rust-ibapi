@@ -64,7 +64,7 @@ pub(crate) fn encode_cancel_realtime_bars(request_id: i32) -> Result<RequestMess
     Ok(message)
 }
 
-pub(crate) fn tick_by_tick(
+pub(crate) fn encode_tick_by_tick(
     server_version: i32,
     request_id: i32,
     contract: &Contract,
@@ -98,7 +98,7 @@ pub(crate) fn tick_by_tick(
     Ok(message)
 }
 
-pub(crate) fn cancel_tick_by_tick(request_id: i32) -> Result<RequestMessage, Error> {
+pub(crate) fn encode_cancel_tick_by_tick(request_id: i32) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::CancelTickByTickData);

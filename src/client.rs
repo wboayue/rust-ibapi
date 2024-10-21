@@ -12,7 +12,7 @@ use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, Famil
 use crate::contracts::{Contract, OptionComputation};
 use crate::errors::Error;
 use crate::market_data::historical::{self, HistogramEntry};
-use crate::market_data::realtime::{self, Bar, BarSize, MarketDepth, MidPoint, WhatToShow};
+use crate::market_data::realtime::{self, Bar, BarSize, MarketDepths, MidPoint, WhatToShow};
 use crate::market_data::MarketDataType;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
@@ -1009,7 +1009,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<impl Iterator<Item = realtime::Trade> + 'a, Error> {
+    ) -> Result<Subscription<'a, realtime::Trade>, Error> {
         realtime::tick_by_tick_all_last(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -1024,7 +1024,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<impl Iterator<Item = realtime::BidAsk> + 'a, Error> {
+    ) -> Result<Subscription<'a, realtime::BidAsk>, Error> {
         realtime::tick_by_tick_bid_ask(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -1039,7 +1039,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<impl Iterator<Item = realtime::Trade> + 'a, Error> {
+    ) -> Result<Subscription<'a, realtime::Trade>, Error> {
         realtime::tick_by_tick_last(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -1099,7 +1099,12 @@ impl Client {
     /// client.switch_market_data_type(market_data_type).expect("request failed");
     /// println!("market data switched: {:?}", market_data_type);
     /// ```
-    pub fn market_depth<'a>(&'a self, contract: &Contract, number_of_rows: i32, is_smart_depth: bool) -> Result<Subscription<'a, MarketDepth>, Error> {
+    pub fn market_depth<'a>(
+        &'a self,
+        contract: &Contract,
+        number_of_rows: i32,
+        is_smart_depth: bool,
+    ) -> Result<Subscription<'a, MarketDepths>, Error> {
         realtime::market_depth(self, contract, number_of_rows, is_smart_depth)
     }
 

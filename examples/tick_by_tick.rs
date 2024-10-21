@@ -46,7 +46,7 @@ fn stream_last(client: &mut Client, _symbol: &str) -> anyhow::Result<()> {
     let contract = contract_gc();
     let ticks = client.tick_by_tick_last(&contract, 0, false)?;
 
-    for (i, tick) in ticks.enumerate() {
+    for (i, tick) in ticks.iter().enumerate() {
         println!("{}: {i:?} {tick:?}", contract.symbol);
     }
 
@@ -80,7 +80,7 @@ fn stream_all_last(client: &Client, _symbol: &str) -> anyhow::Result<()> {
     let contract = contract_es();
     let ticks = client.tick_by_tick_all_last(&contract, 0, false)?;
 
-    for (i, tick) in ticks.enumerate().take(60) {
+    for (i, tick) in ticks.iter().enumerate().take(60) {
         println!("tick: {i:?} {tick:?}");
     }
 
@@ -91,7 +91,7 @@ fn stream_bid_ask(client: &mut Client, _symbol: &str) -> anyhow::Result<()> {
     let contract = contract_es();
     let ticks = client.tick_by_tick_bid_ask(&contract, 0, false)?;
 
-    for (i, tick) in ticks.enumerate() {
+    for (i, tick) in ticks.iter().enumerate() {
         println!("tick: {i:?} {tick:?}");
     }
 
