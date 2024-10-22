@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use log::{debug, error, info, warn};
@@ -1214,14 +1214,15 @@ impl Debug for Client {
 ///
 #[allow(private_bounds)]
 pub struct Subscription<'a, T: Subscribable<T>> {
-    pub(crate) client: &'a Client,
-    pub(crate) request_id: Option<i32>,
-    pub(crate) order_id: Option<i32>,
-    pub(crate) message_type: Option<OutgoingMessages>,
-    pub(crate) phantom: PhantomData<T>,
+    client: &'a Client,
+    request_id: Option<i32>,
+    order_id: Option<i32>,
+    message_type: Option<OutgoingMessages>,
+    phantom: PhantomData<T>,
     cancelled: AtomicBool,
     subscription: InternalSubscription,
     response_context: ResponseContext,
+    error: Arc<Mutex<Option<Error>>>,
 }
 
 // Extra metadata that might be need
@@ -1243,6 +1244,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                 response_context: context,
                 phantom: PhantomData,
                 cancelled: AtomicBool::new(false),
+                error: Arc::new(Mutex::new(None)),
             }
         } else if let Some(order_id) = subscription.order_id {
             Subscription {
@@ -1254,6 +1256,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                 response_context: context,
                 phantom: PhantomData,
                 cancelled: AtomicBool::new(false),
+                error: Arc::new(Mutex::new(None)),
             }
         } else if let Some(message_type) = subscription.message_type {
             Subscription {
@@ -1265,6 +1268,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
                 response_context: context,
                 phantom: PhantomData,
                 cancelled: AtomicBool::new(false),
+                error: Arc::new(Mutex::new(None)),
             }
         } else {
             panic!("unsupported internal subscription: {:?}", subscription)
@@ -1273,36 +1277,40 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
 
     /// Blocks until the item become available.
     pub fn next(&self) -> Option<T> {
-        loop {
-            match self.subscription.next() {
-                Some(Ok(mut message)) => {
-                    if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
-                        match T::decode(self.client.server_version(), &mut message) {
-                            Ok(val) => return Some(val),
-                            Err(err) => {
-                                error!("error decoding execution data: {err}");
-                            }
-                        }
-                    } else if message.message_type() == IncomingMessages::Error {
-                        let error_message = message.peek_string(4);
-                        error!("{error_message}");
-                        return None;
-                    } else {
-                        info!("subscription iterator unexpected message: {message:?}");
-                    }
-                }
-                Some(Err(Error::Cancelled)) => {
-                    debug!("subscription cancelled");
-                    return None;
-                }
-                Some(Err(Error::Shutdown)) => {
-                    debug!("server disconnected");
-                    return None;
-                }
-                _ => {
-                    return None;
+        self.process_response(self.subscription.next())
+    }
+
+    fn process_response(&self, response: Option<Result<ResponseMessage, Error>>) -> Option<T> {
+        match response {
+            Some(Ok(message)) => self.process_message(message),
+            Some(Err(e)) => {
+                let mut error = self.error.lock().unwrap();
+                *error = Some(e);
+                None
+            }
+            None => None,
+        }
+    }
+
+    fn process_message(&self, mut message: ResponseMessage) -> Option<T> {
+        if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
+            match T::decode(self.client.server_version(), &mut message) {
+                Ok(val) => Some(val),
+                Err(err) => {
+                    let mut error = self.error.lock().unwrap();
+                    *error = Some(err);
+                    None
                 }
             }
+        } else if message.message_type() == IncomingMessages::Error {
+            let error_message = message.peek_string(4);
+            error!("{error_message}");
+            let mut error = self.error.lock().unwrap();
+            *error = Some(Error::Simple(error_message));
+            None
+        } else {
+            info!("subscription iterator unexpected message: {message:?}");
+            None
         }
     }
 
@@ -1318,22 +1326,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// //}
     /// ```
     pub fn try_next(&self) -> Option<T> {
-        if let Some(Ok(mut message)) = self.subscription.try_next() {
-            if message.message_type() == IncomingMessages::Error {
-                error!("{}", message.peek_string(4));
-                return None;
-            }
-
-            match T::decode(self.client.server_version(), &mut message) {
-                Ok(val) => Some(val),
-                Err(err) => {
-                    error!("error decoding message: {err}");
-                    None
-                }
-            }
-        } else {
-            None
-        }
+        self.process_response(self.subscription.try_next())
     }
 
     /// To request the next bar in a non-blocking manner.
@@ -1348,22 +1341,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     /// //}
     /// ```
     pub fn next_timeout(&self, timeout: Duration) -> Option<T> {
-        if let Some(Ok(mut message)) = self.subscription.next_timeout(timeout) {
-            if message.message_type() == IncomingMessages::Error {
-                error!("{}", message.peek_string(4));
-                return None;
-            }
-
-            match T::decode(self.client.server_version(), &mut message) {
-                Ok(val) => Some(val),
-                Err(err) => {
-                    error!("error decoding message: {err}");
-                    None
-                }
-            }
-        } else {
-            None
-        }
+        self.process_response(self.subscription.next_timeout(timeout))
     }
 
     /// Cancel the subscription
@@ -1410,6 +1388,11 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
 
     pub fn timeout_iter(&self, timeout: Duration) -> SubscriptionTimeoutIter<T> {
         SubscriptionTimeoutIter { subscription: self, timeout }
+    }
+
+    pub fn error(&self) -> Option<Error> {
+        let error = self.error.lock().unwrap();
+        error.clone()
     }
 }
 
