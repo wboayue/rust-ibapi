@@ -116,6 +116,13 @@ impl SharedChannels {
     fn contains_sender(&self, message_type: IncomingMessages) -> bool {
         self.senders.contains_key(&message_type)
     }
+
+    // Notify all senders with a given message
+    fn notify_all(&self, message: &Result<ResponseMessage, Error>) {
+        for sender in self.senders.values() {
+            let _ = sender.send(message.clone());
+        }
+    }
 }
 
 // Signals are used to notify the backend when a subscriber is dropped.
@@ -164,6 +171,7 @@ impl TcpMessageBus {
 
         self.requests.notify_all(&Err(Error::Shutdown));
         self.orders.notify_all(&Err(Error::Shutdown));
+        self.shared_channels.notify_all(&Err(Error::Shutdown));
 
         self.requests.clear();
         self.orders.clear();
@@ -172,7 +180,17 @@ impl TcpMessageBus {
         self.shutdown_requested.store(true, Ordering::Relaxed);
     }
 
-    fn reset(&self) {}
+    fn reset(&self) {
+        debug!("reset message bus");
+
+        self.requests.notify_all(&Err(Error::ConnectionReset));
+        self.orders.notify_all(&Err(Error::ConnectionReset));
+        self.shared_channels.notify_all(&Err(Error::ConnectionReset));
+
+        self.requests.clear();
+        self.orders.clear();
+        self.executions.clear();
+    }
 
     fn clean_request(&self, request_id: i32) {
         self.requests.remove(&request_id);
@@ -217,10 +235,8 @@ impl TcpMessageBus {
                             return;
                         }
 
-                        message_bus.reset();
-
                         info!("successfully reconnected to TWS/Gateway");
-
+                        message_bus.reset();
                         continue;
                     }
                     Err(err) => {
