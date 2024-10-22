@@ -1,6 +1,3 @@
-use std::thread;
-use std::time::Duration;
-
 use ibapi::contracts::Contract;
 use ibapi::Client;
 
@@ -12,8 +9,7 @@ fn main() {
     let contract = Contract::stock("AAPL");
 
     let subscription = client.market_depth(&contract, 5, true).expect("error requesting market depth");
-
-    thread::sleep(Duration::from_secs(3));
-    // for row in &subscription {
-    // }
+    for row in &subscription {
+        println!("row: {row:?}")
+    }
 }

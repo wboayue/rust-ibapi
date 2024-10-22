@@ -1109,7 +1109,7 @@ impl Client {
     }
 
     /// Requests venues for which market data is returned to market_depth (those with market makers)
-    /// 
+    ///
     /// # Examples
     ///
     /// ```no_run
@@ -1119,9 +1119,9 @@ impl Client {
     }
 
     /// Requests real time market data.
-    /// 
+    ///
     /// Returns market data for an instrument either in real time or 10-15 minutes delayed data.
-    /// 
+    ///
     /// # Arguments
     ///
     /// * `contract` - Contract for which the data is being requested.

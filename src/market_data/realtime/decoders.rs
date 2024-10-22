@@ -1,5 +1,5 @@
-use crate::messages::ResponseMessage;
 use crate::Error;
+use crate::{messages::ResponseMessage, server_versions};
 
 use super::{Bar, BidAsk, BidAskAttribute, MarketDepth, MarketDepthL2, MidPoint, Trade, TradeAttribute};
 
@@ -99,36 +99,37 @@ pub(crate) fn decode_market_depth(message: &mut ResponseMessage) -> Result<Marke
     message.skip(); // message version
     message.skip(); // message request id
 
-    // Ok(Bar {
-    //     date: message.next_date_time()?,
-    //     open: message.next_double()?,
-    //     high: message.next_double()?,
-    //     low: message.next_double()?,
-    //     close: message.next_double()?,
-    //     volume: message.next_double()?,
-    //     wap: message.next_double()?,
-    //     count: message.next_int()?,
-    // })
+    let depth = MarketDepth {
+        position: message.next_int()?,
+        operation: message.next_int()?,
+        side: message.next_int()?,
+        price: message.next_double()?,
+        size: message.next_double()?,
+    };
 
-    Ok(MarketDepth::default())
+    Ok(depth)
 }
 
-pub(crate) fn decode_market_depth_l2(message: &mut ResponseMessage) -> Result<MarketDepthL2, Error> {
+pub(crate) fn decode_market_depth_l2(server_version: i32, message: &mut ResponseMessage) -> Result<MarketDepthL2, Error> {
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
 
-    // Ok(Bar {
-    //     date: message.next_date_time()?,
-    //     open: message.next_double()?,
-    //     high: message.next_double()?,
-    //     low: message.next_double()?,
-    //     close: message.next_double()?,
-    //     volume: message.next_double()?,
-    //     wap: message.next_double()?,
-    //     count: message.next_int()?,
-    // })
-    Ok(MarketDepthL2::default())
+    let mut depth = MarketDepthL2 {
+        position: message.next_int()?,
+        market_maker: message.next_string()?,
+        operation: message.next_int()?,
+        side: message.next_int()?,
+        price: message.next_double()?,
+        size: message.next_double()?,
+        ..Default::default()
+    };
+
+    if server_version >= server_versions::SMART_DEPTH {
+        depth.smart_depth = message.next_bool()?;
+    }
+
+    Ok(depth)
 }
 
 #[cfg(test)]

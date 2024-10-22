@@ -220,7 +220,9 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::AccountSummary
         | IncomingMessages::AccountSummaryEnd
         | IncomingMessages::AccountUpdateMulti
-        | IncomingMessages::AccountUpdateMultiEnd => Some(2),
+        | IncomingMessages::AccountUpdateMultiEnd
+        | IncomingMessages::MarketDepth
+        | IncomingMessages::MarketDepthL2 => Some(2),
         _ => {
             debug!("could not determine request id index for {kind:?}");
             None

@@ -184,18 +184,47 @@ pub enum MarketDepths {
 }
 
 #[derive(Debug, Default)]
-pub struct MarketDepth {}
+/// Returns the order book.
+pub struct MarketDepth {
+    /// The order book's row being updated
+    pub position: i32,
+    /// How to refresh the row: 0 - insert (insert this new order into the row identified by 'position')· 1 - update (update the existing order in the row identified by 'position')· 2 - delete (delete the existing order at the row identified by 'position').
+    pub operation: i32,
+    /// 0 for ask, 1 for bid
+    pub side: i32,
+    // The order's price
+    pub price: f64,
+    // The order's size
+    pub size: f64,
+}
+
+/// Returns the order book.
 #[derive(Debug, Default)]
-pub struct MarketDepthL2 {}
+pub struct MarketDepthL2 {
+    /// The order book's row being updated
+    pub position: i32,
+    /// The exchange holding the order if isSmartDepth is True, otherwise the MPID of the market maker
+    pub market_maker: String,
+    /// How to refresh the row: 0 - insert (insert this new order into the row identified by 'position')· 1 - update (update the existing order in the row identified by 'position')· 2 - delete (delete the existing order at the row identified by 'position').
+    pub operation: i32,
+    /// 0 for ask, 1 for bid
+    pub side: i32,
+    // The order's price
+    pub price: f64,
+    // The order's size
+    pub size: f64,
+    /// Flag indicating if this is smart depth response (aggregate data from multiple exchanges, v974+)
+    pub smart_depth: bool,
+}
 
 impl Subscribable<MarketDepths> for MarketDepths {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2];
 
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::MarketDepth => Ok(MarketDepths::MarketDepth(decoders::decode_market_depth(message)?)),
-            IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(decoders::decode_market_depth_l2(message)?)),
-            e => Err(Error::NotImplemented),
+            IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(decoders::decode_market_depth_l2(server_version, message)?)),
+            _ => Err(Error::NotImplemented),
         }
     }
 
@@ -205,10 +234,9 @@ impl Subscribable<MarketDepths> for MarketDepths {
     }
 }
 
-
 /// Stores depth market data description.
 #[derive(Debug, Default)]
-pub struct DepthMarketDataDescription{
+pub struct DepthMarketDataDescription {
     /// The exchange name
     pub exchange_name: String,
     /// The security type
@@ -395,6 +423,5 @@ pub fn market_depth_exchanges(client: &Client) -> Result<Vec<DepthMarketDataDesc
 
 // Requests real time market data.
 pub fn market_data(client: &Client, contract: &Contract, generic_ticks: &[&str], snapshot: bool, regulatory_snapshot: bool) {
-//        * @sa cancelMktData, EWrapper::tickPrice, EWrapper::tickSize, EWrapper::tickString, EWrapper::tickEFP, EWrapper::tickGeneric, EWrapper::tickOptionComputation, EWrapper::tickSnapshotEnd
+    //        * @sa cancelMktData, EWrapper::tickPrice, EWrapper::tickSize, EWrapper::tickString, EWrapper::tickEFP, EWrapper::tickGeneric, EWrapper::tickOptionComputation, EWrapper::tickSnapshotEnd
 }
-
