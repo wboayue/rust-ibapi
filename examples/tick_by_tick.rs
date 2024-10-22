@@ -11,7 +11,7 @@ fn main() {
         .version("1.0")
         .author("Wil Boayue <wil@wsbsolutions.com")
         .about("Streams tick by tick data")
-        .arg(arg!(--connection_string <VALUE>).default_value("localhost:4002"))
+        .arg(arg!(--connection_string <VALUE>).default_value("127.0.0.1:4002"))
         .arg(arg!(--last <SYMBOL>))
         .arg(arg!(--all_last <SYMBOL>))
         .arg(arg!(--bid_ask <SYMBOL>))
