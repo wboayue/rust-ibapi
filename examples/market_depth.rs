@@ -6,7 +6,8 @@ fn main() {
 
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
-    let contract = Contract::stock("AAPL");
+    let mut contract = Contract::stock("AAL");
+    contract.exchange = "IEX".into();
 
     let subscription = client.market_depth(&contract, 5, true).expect("error requesting market depth");
     for row in &subscription {

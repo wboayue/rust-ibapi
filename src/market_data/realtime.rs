@@ -2,7 +2,7 @@ use time::OffsetDateTime;
 
 use crate::client::{ResponseContext, Subscribable, Subscription};
 use crate::contracts::Contract;
-use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage, MESSAGE_INDEX};
 use crate::orders::TagValue;
 use crate::server_versions;
 use crate::ToField;
@@ -181,6 +181,7 @@ impl ToField for WhatToShow {
 pub enum MarketDepths {
     MarketDepth(MarketDepth),
     MarketDepthL2(MarketDepthL2),
+    Error(String),
 }
 
 #[derive(Debug, Default)]
@@ -218,12 +219,13 @@ pub struct MarketDepthL2 {
 }
 
 impl Subscribable<MarketDepths> for MarketDepths {
-    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2];
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2, IncomingMessages::Error];
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::MarketDepth => Ok(MarketDepths::MarketDepth(decoders::decode_market_depth(message)?)),
             IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(decoders::decode_market_depth_l2(server_version, message)?)),
+            IncomingMessages::Error => Ok(MarketDepths::Error(message.peek_string(MESSAGE_INDEX).trim().into())),
             _ => Err(Error::NotImplemented),
         }
     }
