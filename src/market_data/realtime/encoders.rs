@@ -5,7 +5,10 @@ use crate::messages::RequestMessage;
 use crate::orders::TagValue;
 use crate::{server_versions, Error};
 
-pub(crate) fn encode_request_realtime_bars(
+#[cfg(test)]
+mod tests;
+
+pub(super) fn encode_request_realtime_bars(
     server_version: i32,
     ticker_id: i32,
     contract: &Contract,
@@ -52,7 +55,7 @@ pub(crate) fn encode_request_realtime_bars(
     Ok(packet)
 }
 
-pub(crate) fn encode_cancel_realtime_bars(request_id: i32) -> Result<RequestMessage, Error> {
+pub(super) fn encode_cancel_realtime_bars(request_id: i32) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::default();
@@ -64,7 +67,7 @@ pub(crate) fn encode_cancel_realtime_bars(request_id: i32) -> Result<RequestMess
     Ok(message)
 }
 
-pub(crate) fn encode_tick_by_tick(
+pub(super) fn encode_tick_by_tick(
     server_version: i32,
     request_id: i32,
     contract: &Contract,
@@ -98,7 +101,7 @@ pub(crate) fn encode_tick_by_tick(
     Ok(message)
 }
 
-pub(crate) fn encode_cancel_tick_by_tick(request_id: i32) -> Result<RequestMessage, Error> {
+pub(super) fn encode_cancel_tick_by_tick(request_id: i32) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::CancelTickByTickData);
@@ -107,7 +110,7 @@ pub(crate) fn encode_cancel_tick_by_tick(request_id: i32) -> Result<RequestMessa
     Ok(message)
 }
 
-pub(crate) fn encode_request_market_depth(
+pub(super) fn encode_request_market_depth(
     server_version: i32,
     request_id: i32,
     contract: &Contract,
@@ -151,7 +154,10 @@ pub(crate) fn encode_request_market_depth(
     Ok(message)
 }
 
-//let request = encoders::encode_request_market_depth(request_id, contract, number_of_rows, is_smart_depth)?;
+pub(super) fn encode_request_market_depth_exchanges() -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
 
-#[cfg(test)]
-mod tests;
+    message.push_field(&OutgoingMessages::RequestMktDepthExchanges);
+
+    Ok(message)
+}

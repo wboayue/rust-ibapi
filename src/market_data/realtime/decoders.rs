@@ -1,9 +1,9 @@
 use crate::Error;
 use crate::{messages::ResponseMessage, server_versions};
 
-use super::{Bar, BidAsk, BidAskAttribute, MarketDepth, MarketDepthL2, MidPoint, Trade, TradeAttribute};
+use super::{Bar, BidAsk, BidAskAttribute, DepthMarketDataDescription, MarketDepth, MarketDepthL2, MidPoint, Trade, TradeAttribute};
 
-pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, Error> {
+pub(super) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, Error> {
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
@@ -20,7 +20,7 @@ pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, 
     })
 }
 
-pub(crate) fn decode_trade_tick(message: &mut ResponseMessage) -> Result<Trade, Error> {
+pub(super) fn decode_trade_tick(message: &mut ResponseMessage) -> Result<Trade, Error> {
     message.skip(); // message type
     message.skip(); // message request id
 
@@ -50,7 +50,7 @@ pub(crate) fn decode_trade_tick(message: &mut ResponseMessage) -> Result<Trade, 
     })
 }
 
-pub(crate) fn decode_bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk, Error> {
+pub(super) fn decode_bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk, Error> {
     message.skip(); // message type
     message.skip(); // message request id
 
@@ -79,7 +79,7 @@ pub(crate) fn decode_bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAs
     })
 }
 
-pub(crate) fn mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint, Error> {
+pub(super) fn decode_mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint, Error> {
     message.skip(); // message type
     message.skip(); // message request id
 
@@ -94,7 +94,7 @@ pub(crate) fn mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint, 
     })
 }
 
-pub(crate) fn decode_market_depth(message: &mut ResponseMessage) -> Result<MarketDepth, Error> {
+pub(super) fn decode_market_depth(message: &mut ResponseMessage) -> Result<MarketDepth, Error> {
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
@@ -110,7 +110,7 @@ pub(crate) fn decode_market_depth(message: &mut ResponseMessage) -> Result<Marke
     Ok(depth)
 }
 
-pub(crate) fn decode_market_depth_l2(server_version: i32, message: &mut ResponseMessage) -> Result<MarketDepthL2, Error> {
+pub(super) fn decode_market_depth_l2(server_version: i32, message: &mut ResponseMessage) -> Result<MarketDepthL2, Error> {
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
@@ -130,6 +130,37 @@ pub(crate) fn decode_market_depth_l2(server_version: i32, message: &mut Response
     }
 
     Ok(depth)
+}
+
+pub(super) fn decode_market_depth_exchanges(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<DepthMarketDataDescription>, Error> {
+    message.skip(); // message type
+
+    let count = message.next_int()?;
+    let mut descriptions = Vec::with_capacity(count as usize);
+
+    for _ in 0..count {
+        let description = if server_version >= server_versions::SERVICE_DATA_TYPE {
+            DepthMarketDataDescription {
+                exchange_name: message.next_string()?,
+                security_type: message.next_string()?,
+                listing_exchange: message.next_string()?,
+                service_data_type: message.next_string()?,
+                aggregated_group: Some(message.next_string()?),
+            }
+        } else {
+            DepthMarketDataDescription {
+                exchange_name: message.next_string()?,
+                security_type: message.next_string()?,
+                listing_exchange: "".into(),
+                service_data_type: if message.next_bool()? { "Deep2".into() } else { "Deep".into() },
+                aggregated_group: None,
+            }
+        };
+
+        descriptions.push(description);
+    }
+
+    Ok(descriptions)
 }
 
 #[cfg(test)]
@@ -181,7 +212,7 @@ mod tests {
     fn decode_mid_point() {
         let mut message = ResponseMessage::from("99\09000\04\01678746113\03896.875\0");
 
-        let results = mid_point_tick(&mut message);
+        let results = decode_mid_point_tick(&mut message);
 
         if let Ok(mid_point) = results {
             assert_eq!(mid_point.time, OffsetDateTime::from_unix_timestamp(1678746113).unwrap(), "mid_point.time");

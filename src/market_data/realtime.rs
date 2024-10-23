@@ -1,8 +1,9 @@
+use log::debug;
 use time::OffsetDateTime;
 
 use crate::client::{ResponseContext, Subscribable, Subscription};
 use crate::contracts::Contract;
-use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage, MESSAGE_INDEX};
+use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage, MESSAGE_INDEX};
 use crate::orders::TagValue;
 use crate::server_versions;
 use crate::ToField;
@@ -81,7 +82,7 @@ impl Subscribable<MidPoint> for MidPoint {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
-        decoders::mid_point_tick(message)
+        decoders::decode_mid_point_tick(message)
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
@@ -248,7 +249,7 @@ pub struct DepthMarketDataDescription {
     /// The service data type
     pub service_data_type: String,
     /// The aggregated group
-    pub aggregated_group: String,
+    pub aggregated_group: Option<String>,
 }
 
 pub enum TickTypes {
@@ -420,7 +421,24 @@ pub(crate) fn market_depth<'a>(
 
 // Requests venues for which market data is returned to market_depth (those with market makers)
 pub fn market_depth_exchanges(client: &Client) -> Result<Vec<DepthMarketDataDescription>, Error> {
-    Ok(Vec::new())
+    client.check_server_version(
+        server_versions::REQ_MKT_DEPTH_EXCHANGES,
+        "It does not support market depth exchanges requests.",
+    )?;
+
+    let request = encoders::encode_request_market_depth_exchanges()?;
+    let subscription = client.send_shared_request(OutgoingMessages::RequestMktDepthExchanges, request)?;
+    let response = subscription.next();
+
+    match response {
+        Some(Ok(mut message)) => Ok(decoders::decode_market_depth_exchanges(client.server_version(), &mut message)?),
+        Some(Err(Error::ConnectionReset)) => {
+            debug!("connection reset. retrying market_depth_exchanges");
+            market_depth_exchanges(client)
+        }
+        Some(Err(e)) => Err(e),
+        None => Ok(Vec::new()),
+    }
 }
 
 // Requests real time market data.
