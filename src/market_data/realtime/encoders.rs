@@ -161,3 +161,11 @@ pub(super) fn encode_request_market_depth_exchanges() -> Result<RequestMessage, 
 
     Ok(message)
 }
+
+pub(super) fn encode_request_market_data(request_id: i32,contract: &Contract, generic_ticks: &[&str], snapshot: bool, regulatory_snapshot: bool) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+
+    message.push_field(&OutgoingMessages::RequestMktDepthExchanges);
+
+    Ok(message)
+}
