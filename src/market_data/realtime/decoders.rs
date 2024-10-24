@@ -4,7 +4,7 @@ use crate::{messages::ResponseMessage, server_versions};
 
 use super::{
     Bar, BidAsk, BidAskAttribute, DepthMarketDataDescription, MarketDepth, MarketDepthL2, MidPoint, TickEFP, TickGeneric, TickOptionComputation,
-    TickPrice, TickRequestParameters, TickSize, TickString, Trade, TradeAttribute,
+    TickPrice, TickPriceSize, TickRequestParameters, TickSize, TickString, TickTypes, Trade, TradeAttribute,
 };
 
 #[cfg(test)]
@@ -170,11 +170,53 @@ pub(super) fn decode_market_depth_exchanges(server_version: i32, message: &mut R
     Ok(descriptions)
 }
 
-pub(super) fn decode_tick_price(message: &mut ResponseMessage) -> Result<TickPrice, Error> {
+pub(super) fn decode_tick_price(server_version: i32, message: &mut ResponseMessage) -> Result<TickTypes, Error> {
     message.skip(); // message type
+    let message_version = message.next_int()?;
     message.skip(); // message request id
 
-    Ok(TickPrice {})
+    let mut tick_price = TickPrice {
+        tick_type: TickType::from(message.next_int()?),
+        price: message.next_double()?,
+        ..Default::default()
+    };
+
+    let size = if message_version >= 2 { message.next_double()? } else { f64::MAX };
+
+    if message_version >= 3 {
+        let mask = message.next_int()?;
+
+        if server_version >= server_versions::PAST_LIMIT {
+            tick_price.attributes.can_auto_execute = mask & 0x1 != 0;
+            tick_price.attributes.past_limit = mask & 0x2 != 0;
+
+            if server_version >= server_versions::PRE_OPEN_BID_ASK {
+                tick_price.attributes.pre_open = mask & 0x4 != 0;
+            }
+        }
+    }
+
+    let size_tick_type = match tick_price.tick_type {
+        TickType::Bid => TickType::BidSize,
+        TickType::Ask => TickType::AskSize,
+        TickType::Last => TickType::LastSize,
+        TickType::DelayedBid => TickType::DelayedBidSize,
+        TickType::DelayedAsk => TickType::DelayedAskSize,
+        TickType::DelayedLast => TickType::DelayedLastSize,
+        _ => TickType::Unknown,
+    };
+
+    if message_version < 2 || size_tick_type == TickType::Unknown {
+        Ok(TickTypes::Price(tick_price))
+    } else {
+        Ok(TickTypes::PriceSize(TickPriceSize {
+            price_tick_type: tick_price.tick_type,
+            price: tick_price.price,
+            attributes: tick_price.attributes,
+            size_tick_type,
+            size,
+        }))
+    }
 }
 
 pub(super) fn decode_tick_size(message: &mut ResponseMessage) -> Result<TickSize, Error> {

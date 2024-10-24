@@ -9,7 +9,7 @@ fn main() {
 
     let contract = Contract::stock("AAPL");
     let generic_ticks = &[];
-    let snapshot = true;
+    let snapshot = false;
     let regulatory_snapshot = false;
 
     let subscription = client

@@ -261,6 +261,7 @@ pub enum TickTypes {
     SnapshotEnd,
     Notice(String),
     RequestParameters(TickRequestParameters),
+    PriceSize(TickPriceSize),
 }
 
 impl Subscribable<TickTypes> for TickTypes {
@@ -278,7 +279,7 @@ impl Subscribable<TickTypes> for TickTypes {
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickPrice => Ok(TickTypes::Price(decoders::decode_tick_price(message)?)),
+            IncomingMessages::TickPrice => Ok(decoders::decode_tick_price(server_version, message)?),
             IncomingMessages::TickSize => Ok(TickTypes::Size(decoders::decode_tick_size(message)?)),
             IncomingMessages::TickString => Ok(TickTypes::String(decoders::decode_tick_string(message)?)),
             IncomingMessages::TickEFP => Ok(TickTypes::EFP(decoders::decode_tick_efp(message)?)),
@@ -300,22 +301,42 @@ impl Subscribable<TickTypes> for TickTypes {
     }
 }
 
-#[derive(Debug)]
-pub struct TickPrice {}
+#[derive(Debug, Default)]
+pub struct TickPrice {
+    pub tick_type: TickType,
+    pub price: f64,
+    pub attributes: TickAttribute,
+}
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Default)]
+pub struct TickAttribute {
+    pub can_auto_execute: bool,
+    pub past_limit: bool,
+    pub pre_open: bool,
+}
+
+#[derive(Debug, Default)]
 pub struct TickSize {
     pub tick_type: TickType,
     pub size: f64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
+pub struct TickPriceSize {
+    pub price_tick_type: TickType,
+    pub price: f64,
+    pub attributes: TickAttribute,
+    pub size_tick_type: TickType,
+    pub size: f64,
+}
+
+#[derive(Debug, Default)]
 pub struct TickString {
     pub tick_type: TickType,
     pub value: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct TickEFP {
     pub tick_type: TickType,
     pub basis_points: f64,
@@ -327,16 +348,16 @@ pub struct TickEFP {
     pub dividends_to_last_trade_date: f64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct TickGeneric {
     pub tick_type: TickType,
     pub value: f64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct TickOptionComputation {}
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct TickRequestParameters {
     pub min_tick: f64,
     pub bbo_exchange: String,
