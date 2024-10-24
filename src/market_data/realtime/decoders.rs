@@ -1,10 +1,10 @@
-use crate::contracts;
+use crate::contracts::tick_types::TickType;
 use crate::Error;
 use crate::{messages::ResponseMessage, server_versions};
 
 use super::{
     Bar, BidAsk, BidAskAttribute, DepthMarketDataDescription, MarketDepth, MarketDepthL2, MidPoint, TickEFP, TickGeneric, TickOptionComputation,
-    TickPrice, TickSize, TickString, Trade, TradeAttribute,
+    TickPrice, TickRequestParameters, TickSize, TickString, Trade, TradeAttribute,
 };
 
 #[cfg(test)]
@@ -183,7 +183,7 @@ pub(super) fn decode_tick_size(message: &mut ResponseMessage) -> Result<TickSize
     message.skip(); // message request id
 
     Ok(TickSize {
-        tick_type: message.next_int()?,
+        tick_type: TickType::from(message.next_int()?),
         size: message.next_double()?,
     })
 }
@@ -194,7 +194,7 @@ pub(super) fn decode_tick_string(message: &mut ResponseMessage) -> Result<TickSt
     message.skip(); // message request id
 
     Ok(TickString {
-        tick_type: message.next_int()?,
+        tick_type: TickType::from(message.next_int()?),
         value: message.next_string()?,
     })
 }
@@ -205,7 +205,7 @@ pub(super) fn decode_tick_efp(message: &mut ResponseMessage) -> Result<TickEFP, 
     message.skip(); // message request id
 
     Ok(TickEFP {
-        tick_type: message.next_int()?,
+        tick_type: TickType::from(message.next_int()?),
         basis_points: message.next_double()?,
         formatted_basis_points: message.next_string()?,
         implied_futures_price: message.next_double()?,
@@ -222,7 +222,7 @@ pub(super) fn decode_tick_generic(message: &mut ResponseMessage) -> Result<TickG
     message.skip(); // message request id
 
     Ok(TickGeneric {
-        tick_type: message.next_int()?,
+        tick_type: TickType::from(message.next_int()?),
         value: message.next_double()?,
     })
 }
@@ -235,4 +235,15 @@ pub(super) fn decode_tick_option_computation(server_version: i32, message: &mut 
     message.skip(); // message request id
 
     Ok(TickOptionComputation {})
+}
+
+pub(super) fn decode_tick_request_parameters(message: &mut ResponseMessage) -> Result<TickRequestParameters, Error> {
+    message.skip(); // message type
+    message.skip(); // message request id
+
+    Ok(TickRequestParameters {
+        min_tick: message.next_double()?,
+        bbo_exchange: message.next_string()?,
+        snapshot_permissions: message.next_int()?,
+    })
 }

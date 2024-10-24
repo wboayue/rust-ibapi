@@ -2,6 +2,7 @@ use log::debug;
 use time::OffsetDateTime;
 
 use crate::client::{ResponseContext, Subscribable, Subscription};
+use crate::contracts::tick_types::TickType;
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage, MESSAGE_INDEX};
 use crate::orders::TagValue;
@@ -259,11 +260,9 @@ pub enum TickTypes {
     OptionComputation(TickOptionComputation),
     SnapshotEnd,
     Notice(String),
+    RequestParameters(TickRequestParameters),
 }
 
-//        * @sa cancelMktData, EWrapper::tickPrice, EWrapper::tickSize, EWrapper::tickString, EWrapper::tickEFP, EWrapper::tickGeneric, EWrapper::tickOptionComputation, EWrapper::tickSnapshotEnd
-//        * @sa cancelMktData, EWrapper::tickPrice, EWrapper::tickSize, EWrapper::tickString,
-// EWrapper::tickEFP, EWrapper::tickGeneric, EWrapper::tickOptionComputation, EWrapper::tickSnapshotEnd
 impl Subscribable<TickTypes> for TickTypes {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[
         IncomingMessages::TickPrice,
@@ -274,6 +273,7 @@ impl Subscribable<TickTypes> for TickTypes {
         IncomingMessages::TickOptionComputation,
         IncomingMessages::TickSnapshotEnd,
         IncomingMessages::Error,
+        IncomingMessages::TickReqParams,
     ];
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -287,6 +287,7 @@ impl Subscribable<TickTypes> for TickTypes {
                 server_version,
                 message,
             )?)),
+            IncomingMessages::TickReqParams => Ok(TickTypes::RequestParameters(decoders::decode_tick_request_parameters(message)?)),
             IncomingMessages::TickSnapshotEnd => Ok(TickTypes::SnapshotEnd),
             IncomingMessages::Error => Ok(TickTypes::Notice(message.peek_string(MESSAGE_INDEX).trim().into())),
             _ => Err(Error::NotImplemented),
@@ -304,19 +305,19 @@ pub struct TickPrice {}
 
 #[derive(Debug)]
 pub struct TickSize {
-    pub tick_type: i32,
+    pub tick_type: TickType,
     pub size: f64,
 }
 
 #[derive(Debug)]
 pub struct TickString {
-    pub tick_type: i32,
+    pub tick_type: TickType,
     pub value: String,
 }
 
 #[derive(Debug)]
 pub struct TickEFP {
-    pub tick_type: i32,
+    pub tick_type: TickType,
     pub basis_points: f64,
     pub formatted_basis_points: String,
     pub implied_futures_price: f64,
@@ -328,12 +329,19 @@ pub struct TickEFP {
 
 #[derive(Debug)]
 pub struct TickGeneric {
-    pub tick_type: i32,
+    pub tick_type: TickType,
     pub value: f64,
 }
 
 #[derive(Debug)]
 pub struct TickOptionComputation {}
+
+#[derive(Debug)]
+pub struct TickRequestParameters {
+    pub min_tick: f64,
+    pub bbo_exchange: String,
+    pub snapshot_permissions: i32,
+}
 
 // === Implementation ===
 

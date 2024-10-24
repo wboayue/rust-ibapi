@@ -230,6 +230,7 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::TickSize
         | IncomingMessages::TickString
         | IncomingMessages::TickEFP
+        | IncomingMessages::TickReqParams
         | IncomingMessages::TickGeneric => Some(2),
         _ => {
             debug!("could not determine request id index for {kind:?}");
