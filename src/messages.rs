@@ -1,17 +1,25 @@
 use std::ops::Index;
 use std::str::{self, FromStr};
+use std::fmt::Display;
 
 use log::debug;
 use time::OffsetDateTime;
 
 use crate::{Error, ToField};
 
+pub(crate) mod shared_channel_configuration;
+#[cfg(test)]
+mod tests;
+
 const INFINITY_STR: &str = "Infinity";
 const UNSET_DOUBLE: &str = "1.7976931348623157E308";
 const UNSET_INTEGER: &str = "2147483647";
 const UNSET_LONG: &str = "9223372036854775807";
 
+// Index of message text in the response message
 pub(crate) const MESSAGE_INDEX: usize = 4;
+// Index of message code in the response message
+pub(crate) const CODE_INDEX: usize = 3;
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub enum IncomingMessages {
@@ -563,6 +571,24 @@ impl ResponseMessage {
     }
 }
 
-pub(crate) mod shared_channel_configuration;
-#[cfg(test)]
-mod tests;
+/// An error message from the TWS API.
+#[derive(Debug, Clone)]
+pub struct Notice {
+    pub code: i32,
+    pub message: String,
+}
+
+impl Notice {
+    #[allow(private_interfaces)]
+    pub fn from(message: &ResponseMessage) -> Notice {
+        let code = message.peek_int(CODE_INDEX).unwrap_or(-1);
+        let message = message.peek_string(MESSAGE_INDEX);
+        Notice { code, message }
+    }
+}
+
+impl Display for Notice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] {}", self.code, self.message)
+    }
+}

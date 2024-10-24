@@ -1,5 +1,9 @@
 //pub const POSITION: &str = "61\03\0DU1234567\076792991\0TSLA\0STK\0\00.0\0\0\0NASDAQ\0USD\0TSLA\0NMS\0500\0196.77\0";
 
+// error
+
+pub const NOTICE_DATA_FARM_CONNECTION: &str = "4|2|-1|2107|HMDS data farm connection is inactive.|";
+
 // accounts
 
 pub const MANAGED_ACCOUNT: &str = "15|1|DU1234567,DU7654321|";

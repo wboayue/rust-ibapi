@@ -4,7 +4,7 @@ use time::OffsetDateTime;
 use crate::client::{ResponseContext, Subscribable, Subscription};
 use crate::contracts::tick_types::TickType;
 use crate::contracts::Contract;
-use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage, MESSAGE_INDEX};
+use crate::messages::{IncomingMessages, Notice, OutgoingMessages, RequestMessage, ResponseMessage, MESSAGE_INDEX};
 use crate::orders::TagValue;
 use crate::server_versions;
 use crate::ToField;
@@ -180,7 +180,7 @@ impl ToField for WhatToShow {
 pub enum MarketDepths {
     MarketDepth(MarketDepth),
     MarketDepthL2(MarketDepthL2),
-    Error(String),
+    Notice(Notice),
 }
 
 #[derive(Debug, Default)]
@@ -224,7 +224,7 @@ impl Subscribable<MarketDepths> for MarketDepths {
         match message.message_type() {
             IncomingMessages::MarketDepth => Ok(MarketDepths::MarketDepth(decoders::decode_market_depth(message)?)),
             IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(decoders::decode_market_depth_l2(server_version, message)?)),
-            IncomingMessages::Error => Ok(MarketDepths::Error(message.peek_string(MESSAGE_INDEX).trim().into())),
+            IncomingMessages::Error => Ok(MarketDepths::Notice(Notice::from(message))),
             _ => Err(Error::NotImplemented),
         }
     }
@@ -259,7 +259,7 @@ pub enum TickTypes {
     Generic(TickGeneric),
     OptionComputation(TickOptionComputation),
     SnapshotEnd,
-    Notice(String),
+    Notice(Notice),
     RequestParameters(TickRequestParameters),
     PriceSize(TickPriceSize),
 }
@@ -290,7 +290,7 @@ impl Subscribable<TickTypes> for TickTypes {
             )?)),
             IncomingMessages::TickReqParams => Ok(TickTypes::RequestParameters(decoders::decode_tick_request_parameters(message)?)),
             IncomingMessages::TickSnapshotEnd => Ok(TickTypes::SnapshotEnd),
-            IncomingMessages::Error => Ok(TickTypes::Notice(message.peek_string(MESSAGE_INDEX).trim().into())),
+            IncomingMessages::Error => Ok(TickTypes::Notice(Notice::from(&message))),
             _ => Err(Error::NotImplemented),
         }
     }
