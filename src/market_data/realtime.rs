@@ -1,4 +1,3 @@
-use anyhow::Result;
 use log::debug;
 use time::OffsetDateTime;
 
@@ -250,6 +249,7 @@ pub struct DepthMarketDataDescription {
     pub aggregated_group: Option<String>,
 }
 
+#[derive(Debug)]
 pub enum TickTypes {
     Price(TickPrice),
     Size(TickSize),
@@ -258,41 +258,82 @@ pub enum TickTypes {
     Generic(TickGeneric),
     OptionComputation(TickOptionComputation),
     SnapshotEnd,
+    Notice(String),
 }
 
+//        * @sa cancelMktData, EWrapper::tickPrice, EWrapper::tickSize, EWrapper::tickString, EWrapper::tickEFP, EWrapper::tickGeneric, EWrapper::tickOptionComputation, EWrapper::tickSnapshotEnd
+//        * @sa cancelMktData, EWrapper::tickPrice, EWrapper::tickSize, EWrapper::tickString,
+// EWrapper::tickEFP, EWrapper::tickGeneric, EWrapper::tickOptionComputation, EWrapper::tickSnapshotEnd
 impl Subscribable<TickTypes> for TickTypes {
-    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2, IncomingMessages::Error];
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[
+        IncomingMessages::TickPrice,
+        IncomingMessages::TickSize,
+        IncomingMessages::TickString,
+        IncomingMessages::TickEFP,
+        IncomingMessages::TickGeneric,
+        IncomingMessages::TickOptionComputation,
+        IncomingMessages::TickSnapshotEnd,
+        IncomingMessages::Error,
+    ];
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            // IncomingMessages::MarketDepth => Ok(MarketDepths::MarketDepth(decoders::decode_market_depth(message)?)),
-            // IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(decoders::decode_market_depth_l2(server_version, message)?)),
-            // IncomingMessages::Error => Ok(MarketDepths::Error(message.peek_string(MESSAGE_INDEX).trim().into())),
+            IncomingMessages::TickPrice => Ok(TickTypes::Price(decoders::decode_tick_price(message)?)),
+            IncomingMessages::TickSize => Ok(TickTypes::Size(decoders::decode_tick_size(message)?)),
+            IncomingMessages::TickString => Ok(TickTypes::String(decoders::decode_tick_string(message)?)),
+            IncomingMessages::TickEFP => Ok(TickTypes::EFP(decoders::decode_tick_efp(message)?)),
+            IncomingMessages::TickGeneric => Ok(TickTypes::Generic(decoders::decode_tick_generic(message)?)),
+            IncomingMessages::TickOptionComputation => Ok(TickTypes::OptionComputation(decoders::decode_tick_option_computation(
+                server_version,
+                message,
+            )?)),
+            IncomingMessages::TickSnapshotEnd => Ok(TickTypes::SnapshotEnd),
+            IncomingMessages::Error => Ok(TickTypes::Notice(message.peek_string(MESSAGE_INDEX).trim().into())),
             _ => Err(Error::NotImplemented),
         }
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
-        encoders::encode_cancel_tick_by_tick(request_id)
+        encoders::encode_cancel_market_data(request_id)
     }
 }
 
+#[derive(Debug)]
 pub struct TickPrice {}
 
-pub struct TickSize {}
+#[derive(Debug)]
+pub struct TickSize {
+    pub tick_type: i32,
+    pub size: f64,
+}
 
-pub struct TickString {}
+#[derive(Debug)]
+pub struct TickString {
+    pub tick_type: i32,
+    pub value: String,
+}
 
-pub struct TickEFP {}
+#[derive(Debug)]
+pub struct TickEFP {
+    pub tick_type: i32,
+    pub basis_points: f64,
+    pub formatted_basis_points: String,
+    pub implied_futures_price: f64,
+    pub hold_days: i32,
+    pub future_last_trade_date: String,
+    pub dividend_impact: f64,
+    pub dividends_to_last_trade_date: f64,
+}
 
-pub struct TickGeneric {}
+#[derive(Debug)]
+pub struct TickGeneric {
+    pub tick_type: i32,
+    pub value: f64,
+}
 
+#[derive(Debug)]
 pub struct TickOptionComputation {}
-
-    //        * @sa cancelMktData, EWrapper::tickPrice, EWrapper::tickSize, EWrapper::tickString, EWrapper::tickEFP, EWrapper::tickGeneric, EWrapper::tickOptionComputation, EWrapper::tickSnapshotEnd
-//        * @sa cancelMktData, EWrapper::tickPrice, EWrapper::tickSize, EWrapper::tickString,
-// EWrapper::tickEFP, EWrapper::tickGeneric, EWrapper::tickOptionComputation, EWrapper::tickSnapshotEnd
 
 // === Implementation ===
 
@@ -305,15 +346,6 @@ pub(crate) fn realtime_bars<'a>(
     use_rth: bool,
     options: Vec<TagValue>,
 ) -> Result<Subscription<'a, Bar>, Error> {
-    client.check_server_version(server_versions::REAL_TIME_BARS, "It does not support real time bars.")?;
-
-    if !contract.trading_class.is_empty() || contract.contract_id > 0 {
-        client.check_server_version(
-            server_versions::TRADING_CLASS,
-            "It does not support ConId nor TradingClass parameters in reqRealTimeBars.",
-        )?;
-    }
-
     let request_id = client.next_request_id();
     let request = encoders::encode_request_realtime_bars(client.server_version(), request_id, contract, bar_size, what_to_show, use_rth, options)?;
     let subscription = client.send_request(request_id, request)?;
@@ -413,12 +445,6 @@ pub(crate) fn market_depth<'a>(
     number_of_rows: i32,
     is_smart_depth: bool,
 ) -> Result<Subscription<'a, MarketDepths>, Error> {
-    if !contract.trading_class.is_empty() || contract.contract_id > 0 {
-        client.check_server_version(
-            server_versions::TRADING_CLASS,
-            "It does not support contract_id nor trading_class parameters in request_market_depth.",
-        )?;
-    }
     if is_smart_depth {
         client.check_server_version(server_versions::SMART_DEPTH, "It does not support SMART depth request.")?;
     }
@@ -459,9 +485,22 @@ pub fn market_depth_exchanges(client: &Client) -> Result<Vec<DepthMarketDataDesc
 }
 
 // Requests real time market data.
-pub fn market_data<'a >(client: &'a Client, contract: &Contract, generic_ticks: &[&str], snapshot: bool, regulatory_snapshot: bool) -> Result<Subscription<'a, TickTypes>, Error> {
+pub fn market_data<'a>(
+    client: &'a Client,
+    contract: &Contract,
+    generic_ticks: &[&str],
+    snapshot: bool,
+    regulatory_snapshot: bool,
+) -> Result<Subscription<'a, TickTypes>, Error> {
     let request_id = client.next_request_id();
-    let request = encoders::encode_request_market_data(request_id, contract, generic_ticks, snapshot, regulatory_snapshot)?;
+    let request = encoders::encode_request_market_data(
+        client.server_version(),
+        request_id,
+        contract,
+        generic_ticks,
+        snapshot,
+        regulatory_snapshot,
+    )?;
     let subscription = client.send_request(request_id, request)?;
 
     Ok(Subscription::new(client, subscription, ResponseContext::default()))

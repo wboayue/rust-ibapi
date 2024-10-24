@@ -1,5 +1,6 @@
 use super::{BarSize, WhatToShow};
 use crate::contracts::Contract;
+use crate::contracts::SecurityType;
 use crate::messages::OutgoingMessages;
 use crate::messages::RequestMessage;
 use crate::orders::TagValue;
@@ -162,10 +163,74 @@ pub(super) fn encode_request_market_depth_exchanges() -> Result<RequestMessage, 
     Ok(message)
 }
 
-pub(super) fn encode_request_market_data(request_id: i32,contract: &Contract, generic_ticks: &[&str], snapshot: bool, regulatory_snapshot: bool) -> Result<RequestMessage, Error> {
+pub(super) fn encode_request_market_data(
+    server_version: i32,
+    request_id: i32,
+    contract: &Contract,
+    generic_ticks: &[&str],
+    snapshot: bool,
+    regulatory_snapshot: bool,
+) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 11;
+
     let mut message = RequestMessage::new();
 
-    message.push_field(&OutgoingMessages::RequestMktDepthExchanges);
+    message.push_field(&OutgoingMessages::RequestMarketData);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    message.push_field(&contract.contract_id);
+    message.push_field(&contract.symbol);
+    message.push_field(&contract.security_type);
+    message.push_field(&contract.last_trade_date_or_contract_month);
+    message.push_field(&contract.strike);
+    message.push_field(&contract.right);
+    message.push_field(&contract.multiplier);
+    message.push_field(&contract.exchange);
+    message.push_field(&contract.primary_exchange);
+    message.push_field(&contract.currency);
+    message.push_field(&contract.local_symbol);
+    message.push_field(&contract.trading_class);
+
+    if contract.security_type == SecurityType::Spread {
+        message.push_field(&contract.combo_legs.len());
+
+        for leg in &contract.combo_legs {
+            message.push_field(&leg.contract_id);
+            message.push_field(&leg.ratio);
+            message.push_field(&leg.action);
+            message.push_field(&leg.exchange);
+        }
+    }
+
+    if let Some(delta_neutral_contract) = &contract.delta_neutral_contract {
+        message.push_field(&true);
+        message.push_field(&delta_neutral_contract.contract_id);
+        message.push_field(&delta_neutral_contract.delta);
+        message.push_field(&delta_neutral_contract.price);
+    } else {
+        message.push_field(&false);
+    }
+
+    message.push_field(&generic_ticks.join(","));
+    message.push_field(&snapshot);
+
+    if server_version >= server_versions::REQ_SMART_COMPONENTS {
+        message.push_field(&regulatory_snapshot);
+    }
+
+    message.push_field(&"");
+
+    Ok(message)
+}
+
+pub(super) fn encode_cancel_market_data(request_id: i32) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+
+    const VERSION: i32 = 1;
+
+    message.push_field(&OutgoingMessages::CancelMarketData);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
 
     Ok(message)
 }

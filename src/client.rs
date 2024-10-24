@@ -12,7 +12,7 @@ use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, Famil
 use crate::contracts::{Contract, OptionComputation};
 use crate::errors::Error;
 use crate::market_data::historical::{self, HistogramEntry};
-use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescription, MarketDepths, MidPoint, WhatToShow};
+use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, WhatToShow};
 use crate::market_data::MarketDataType;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
@@ -1148,8 +1148,14 @@ impl Client {
     ///
     /// ```no_run
     /// ```
-    pub fn market_data(&self, contract: &Contract, generic_ticks: &[&str], snapshot: bool, regulatory_snapshot: bool) {
-        realtime::market_data(self, contract, generic_ticks, snapshot, regulatory_snapshot);
+    pub fn market_data(
+        &self,
+        contract: &Contract,
+        generic_ticks: &[&str],
+        snapshot: bool,
+        regulatory_snapshot: bool,
+    ) -> Result<Subscription<TickTypes>, Error> {
+        realtime::market_data(self, contract, generic_ticks, snapshot, regulatory_snapshot)
     }
 
     // == Internal Use ==

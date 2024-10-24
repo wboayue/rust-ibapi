@@ -179,7 +179,7 @@ fn test_incoming_message_from_i32() {
     assert_eq!(IncomingMessages::from(20), IncomingMessages::ScannerData);
     assert_eq!(IncomingMessages::from(21), IncomingMessages::TickOptionComputation);
     assert_eq!(IncomingMessages::from(45), IncomingMessages::TickGeneric);
-    assert_eq!(IncomingMessages::from(46), IncomingMessages::Tickstring);
+    assert_eq!(IncomingMessages::from(46), IncomingMessages::TickString);
     assert_eq!(IncomingMessages::from(47), IncomingMessages::TickEFP);
     assert_eq!(IncomingMessages::from(49), IncomingMessages::CurrentTime);
     assert_eq!(IncomingMessages::from(50), IncomingMessages::RealTimeBars);

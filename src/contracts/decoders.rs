@@ -2,7 +2,7 @@ use crate::{contracts::tick_types::TickType, contracts::SecurityType, messages::
 
 use super::{Contract, ContractDescription, ContractDetails, MarketRule, OptionComputation, PriceIncrement};
 
-pub(crate) fn decode_contract_details(server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails, Error> {
+pub(super) fn decode_contract_details(server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails, Error> {
     message.skip(); // message type
 
     let mut message_version = 8;
@@ -124,7 +124,7 @@ fn read_last_trade_date(contract: &mut ContractDetails, last_trade_date_or_contr
     Ok(())
 }
 
-pub(crate) fn decode_contract_descriptions(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ContractDescription>, Error> {
+pub(super) fn decode_contract_descriptions(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ContractDescription>, Error> {
     message.skip(); // message type
 
     let _request_id = message.next_int()?;
@@ -166,7 +166,7 @@ pub(crate) fn decode_contract_descriptions(server_version: i32, message: &mut Re
     Ok(contract_descriptions)
 }
 
-pub(crate) fn decode_market_rule(message: &mut ResponseMessage) -> Result<MarketRule, Error> {
+pub(super) fn decode_market_rule(message: &mut ResponseMessage) -> Result<MarketRule, Error> {
     message.skip(); // message type
 
     let mut market_rule = MarketRule {

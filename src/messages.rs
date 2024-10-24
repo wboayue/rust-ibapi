@@ -38,7 +38,7 @@ pub enum IncomingMessages {
     ScannerData = 20,
     TickOptionComputation = 21,
     TickGeneric = 45,
-    Tickstring = 46,
+    TickString = 46,
     TickEFP = 47, //TICK EFP 47
     CurrentTime = 49,
     RealTimeBars = 50,
@@ -125,7 +125,7 @@ impl From<i32> for IncomingMessages {
             20 => IncomingMessages::ScannerData,
             21 => IncomingMessages::TickOptionComputation,
             45 => IncomingMessages::TickGeneric,
-            46 => IncomingMessages::Tickstring,
+            46 => IncomingMessages::TickString,
             47 => IncomingMessages::TickEFP, //TICK EFP 47
             49 => IncomingMessages::CurrentTime,
             50 => IncomingMessages::RealTimeBars,
@@ -224,7 +224,13 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::AccountUpdateMulti
         | IncomingMessages::AccountUpdateMultiEnd
         | IncomingMessages::MarketDepth
-        | IncomingMessages::MarketDepthL2 => Some(2),
+        | IncomingMessages::MarketDepthL2
+        | IncomingMessages::TickSnapshotEnd
+        | IncomingMessages::TickPrice
+        | IncomingMessages::TickSize
+        | IncomingMessages::TickString
+        | IncomingMessages::TickEFP
+        | IncomingMessages::TickGeneric => Some(2),
         _ => {
             debug!("could not determine request id index for {kind:?}");
             None
