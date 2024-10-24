@@ -1,9 +1,16 @@
-use crate::messages::ResponseMessage;
+use crate::contracts::tick_types::TickType;
 use crate::Error;
+use crate::{messages::ResponseMessage, server_versions};
 
-use super::{Bar, BidAsk, BidAskAttribute, MidPoint, Trade, TradeAttribute};
+use super::{
+    Bar, BidAsk, BidAskAttribute, DepthMarketDataDescription, MarketDepth, MarketDepthL2, MidPoint, TickEFP, TickGeneric, TickOptionComputation,
+    TickPrice, TickPriceSize, TickRequestParameters, TickSize, TickString, TickTypes, Trade, TradeAttribute,
+};
 
-pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, Error> {
+#[cfg(test)]
+mod tests;
+
+pub(super) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, Error> {
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
@@ -20,7 +27,7 @@ pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, 
     })
 }
 
-pub(crate) fn decode_trade_tick(message: &mut ResponseMessage) -> Result<Trade, Error> {
+pub(super) fn decode_trade_tick(message: &mut ResponseMessage) -> Result<Trade, Error> {
     message.skip(); // message type
     message.skip(); // message request id
 
@@ -50,7 +57,7 @@ pub(crate) fn decode_trade_tick(message: &mut ResponseMessage) -> Result<Trade, 
     })
 }
 
-pub(crate) fn bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk, Error> {
+pub(super) fn decode_bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk, Error> {
     message.skip(); // message type
     message.skip(); // message request id
 
@@ -79,7 +86,7 @@ pub(crate) fn bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk, Erro
     })
 }
 
-pub(crate) fn mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint, Error> {
+pub(super) fn decode_mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint, Error> {
     message.skip(); // message type
     message.skip(); // message request id
 
@@ -94,62 +101,191 @@ pub(crate) fn mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint, 
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use time::OffsetDateTime;
+pub(super) fn decode_market_depth(message: &mut ResponseMessage) -> Result<MarketDepth, Error> {
+    message.skip(); // message type
+    message.skip(); // message version
+    message.skip(); // message request id
 
-    use super::*;
+    let depth = MarketDepth {
+        position: message.next_int()?,
+        operation: message.next_int()?,
+        side: message.next_int()?,
+        price: message.next_double()?,
+        size: message.next_double()?,
+    };
 
-    #[test]
-    fn decode_trade() {
-        let mut message = ResponseMessage::from("99\09000\01\01678740829\03895.25\07\02\0\0\0");
+    Ok(depth)
+}
 
-        let results = decode_trade_tick(&mut message);
+pub(super) fn decode_market_depth_l2(server_version: i32, message: &mut ResponseMessage) -> Result<MarketDepthL2, Error> {
+    message.skip(); // message type
+    message.skip(); // message version
+    message.skip(); // message request id
 
-        if let Ok(trade) = results {
-            assert_eq!(trade.tick_type, "1", "trade.tick_type");
-            assert_eq!(trade.time, OffsetDateTime::from_unix_timestamp(1678740829).unwrap(), "trade.time");
-            assert_eq!(trade.price, 3895.25, "trade.price");
-            assert_eq!(trade.size, 7, "trade.size");
-            assert_eq!(trade.trade_attribute.past_limit, false, "trade.trade_attribute.past_limit");
-            assert_eq!(trade.trade_attribute.unreported, true, "trade.trade_attribute.unreported");
-            assert_eq!(trade.exchange, "", "trade.exchange");
-            assert_eq!(trade.special_conditions, "", "trade.special_conditions");
-        } else if let Err(err) = results {
-            assert!(false, "error decoding trade tick: {err}");
+    let mut depth = MarketDepthL2 {
+        position: message.next_int()?,
+        market_maker: message.next_string()?,
+        operation: message.next_int()?,
+        side: message.next_int()?,
+        price: message.next_double()?,
+        size: message.next_double()?,
+        ..Default::default()
+    };
+
+    if server_version >= server_versions::SMART_DEPTH {
+        depth.smart_depth = message.next_bool()?;
+    }
+
+    Ok(depth)
+}
+
+pub(super) fn decode_market_depth_exchanges(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<DepthMarketDataDescription>, Error> {
+    message.skip(); // message type
+
+    let count = message.next_int()?;
+    let mut descriptions = Vec::with_capacity(count as usize);
+
+    for _ in 0..count {
+        let description = if server_version >= server_versions::SERVICE_DATA_TYPE {
+            DepthMarketDataDescription {
+                exchange_name: message.next_string()?,
+                security_type: message.next_string()?,
+                listing_exchange: message.next_string()?,
+                service_data_type: message.next_string()?,
+                aggregated_group: Some(message.next_string()?),
+            }
+        } else {
+            DepthMarketDataDescription {
+                exchange_name: message.next_string()?,
+                security_type: message.next_string()?,
+                listing_exchange: "".into(),
+                service_data_type: if message.next_bool()? { "Deep2".into() } else { "Deep".into() },
+                aggregated_group: None,
+            }
+        };
+
+        descriptions.push(description);
+    }
+
+    Ok(descriptions)
+}
+
+pub(super) fn decode_tick_price(server_version: i32, message: &mut ResponseMessage) -> Result<TickTypes, Error> {
+    message.skip(); // message type
+    let message_version = message.next_int()?;
+    message.skip(); // message request id
+
+    let mut tick_price = TickPrice {
+        tick_type: TickType::from(message.next_int()?),
+        price: message.next_double()?,
+        ..Default::default()
+    };
+
+    let size = if message_version >= 2 { message.next_double()? } else { f64::MAX };
+
+    if message_version >= 3 {
+        let mask = message.next_int()?;
+
+        if server_version >= server_versions::PAST_LIMIT {
+            tick_price.attributes.can_auto_execute = mask & 0x1 != 0;
+            tick_price.attributes.past_limit = mask & 0x2 != 0;
+
+            if server_version >= server_versions::PRE_OPEN_BID_ASK {
+                tick_price.attributes.pre_open = mask & 0x4 != 0;
+            }
         }
     }
 
-    #[test]
-    fn decode_bid_ask() {
-        let mut message = ResponseMessage::from("99\09000\03\01678745793\03895.50\03896.00\09\011\01\0");
+    let size_tick_type = match tick_price.tick_type {
+        TickType::Bid => TickType::BidSize,
+        TickType::Ask => TickType::AskSize,
+        TickType::Last => TickType::LastSize,
+        TickType::DelayedBid => TickType::DelayedBidSize,
+        TickType::DelayedAsk => TickType::DelayedAskSize,
+        TickType::DelayedLast => TickType::DelayedLastSize,
+        _ => TickType::Unknown,
+    };
 
-        let results = bid_ask_tick(&mut message);
-
-        if let Ok(bid_ask) = results {
-            assert_eq!(bid_ask.time, OffsetDateTime::from_unix_timestamp(01678745793).unwrap(), "bid_ask.time");
-            assert_eq!(bid_ask.bid_price, 3895.5, "bid_ask.bid_price");
-            assert_eq!(bid_ask.ask_price, 3896.0, "bid_ask.ask_price");
-            assert_eq!(bid_ask.bid_size, 9, "bid_ask.bid_size");
-            assert_eq!(bid_ask.ask_size, 11, "bid_ask.ask_size");
-            assert_eq!(bid_ask.bid_ask_attribute.bid_past_low, true, "bid_ask.bid_ask_attribute.bid_past_low");
-            assert_eq!(bid_ask.bid_ask_attribute.ask_past_high, false, "bid_ask.bid_ask_attribute.ask_past_high");
-        } else if let Err(err) = results {
-            assert!(false, "error decoding trade tick: {err}");
-        }
+    if message_version < 2 || size_tick_type == TickType::Unknown {
+        Ok(TickTypes::Price(tick_price))
+    } else {
+        Ok(TickTypes::PriceSize(TickPriceSize {
+            price_tick_type: tick_price.tick_type,
+            price: tick_price.price,
+            attributes: tick_price.attributes,
+            size_tick_type,
+            size,
+        }))
     }
+}
 
-    #[test]
-    fn decode_mid_point() {
-        let mut message = ResponseMessage::from("99\09000\04\01678746113\03896.875\0");
+pub(super) fn decode_tick_size(message: &mut ResponseMessage) -> Result<TickSize, Error> {
+    message.skip(); // message type
+    message.skip(); // message version
+    message.skip(); // message request id
 
-        let results = mid_point_tick(&mut message);
+    Ok(TickSize {
+        tick_type: TickType::from(message.next_int()?),
+        size: message.next_double()?,
+    })
+}
 
-        if let Ok(mid_point) = results {
-            assert_eq!(mid_point.time, OffsetDateTime::from_unix_timestamp(1678746113).unwrap(), "mid_point.time");
-            assert_eq!(mid_point.mid_point, 3896.875, "mid_point.mid_point");
-        } else if let Err(err) = results {
-            assert!(false, "error decoding mid point tick: {err}");
-        }
-    }
+pub(super) fn decode_tick_string(message: &mut ResponseMessage) -> Result<TickString, Error> {
+    message.skip(); // message type
+    message.skip(); // message version
+    message.skip(); // message request id
+
+    Ok(TickString {
+        tick_type: TickType::from(message.next_int()?),
+        value: message.next_string()?,
+    })
+}
+
+pub(super) fn decode_tick_efp(message: &mut ResponseMessage) -> Result<TickEFP, Error> {
+    message.skip(); // message type
+    message.skip(); // message version
+    message.skip(); // message request id
+
+    Ok(TickEFP {
+        tick_type: TickType::from(message.next_int()?),
+        basis_points: message.next_double()?,
+        formatted_basis_points: message.next_string()?,
+        implied_futures_price: message.next_double()?,
+        hold_days: message.next_int()?,
+        future_last_trade_date: message.next_string()?,
+        dividend_impact: message.next_double()?,
+        dividends_to_last_trade_date: message.next_double()?,
+    })
+}
+
+pub(super) fn decode_tick_generic(message: &mut ResponseMessage) -> Result<TickGeneric, Error> {
+    message.skip(); // message type
+    message.skip(); // message version
+    message.skip(); // message request id
+
+    Ok(TickGeneric {
+        tick_type: TickType::from(message.next_int()?),
+        value: message.next_double()?,
+    })
+}
+
+pub(super) fn decode_tick_option_computation(server_version: i32, message: &mut ResponseMessage) -> Result<TickOptionComputation, Error> {
+    // use crate::contracts::decoders::decode_option_computation();
+
+    message.skip(); // message type
+    message.skip(); // message version
+    message.skip(); // message request id
+
+    Ok(TickOptionComputation {})
+}
+
+pub(super) fn decode_tick_request_parameters(message: &mut ResponseMessage) -> Result<TickRequestParameters, Error> {
+    message.skip(); // message type
+    message.skip(); // message request id
+
+    Ok(TickRequestParameters {
+        min_tick: message.next_double()?,
+        bbo_exchange: message.next_string()?,
+        snapshot_permissions: message.next_int()?,
+    })
 }

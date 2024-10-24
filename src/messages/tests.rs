@@ -1,5 +1,6 @@
 use crate::contracts::{ComboLegOpenClose, SecurityType};
 use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A};
+use crate::testdata::responses::NOTICE_DATA_FARM_CONNECTION;
 
 use super::*;
 
@@ -179,7 +180,7 @@ fn test_incoming_message_from_i32() {
     assert_eq!(IncomingMessages::from(20), IncomingMessages::ScannerData);
     assert_eq!(IncomingMessages::from(21), IncomingMessages::TickOptionComputation);
     assert_eq!(IncomingMessages::from(45), IncomingMessages::TickGeneric);
-    assert_eq!(IncomingMessages::from(46), IncomingMessages::Tickstring);
+    assert_eq!(IncomingMessages::from(46), IncomingMessages::TickString);
     assert_eq!(IncomingMessages::from(47), IncomingMessages::TickEFP);
     assert_eq!(IncomingMessages::from(49), IncomingMessages::CurrentTime);
     assert_eq!(IncomingMessages::from(50), IncomingMessages::RealTimeBars);
@@ -273,4 +274,15 @@ fn test_request_id_index() {
 #[test]
 fn test_request_id_index_invalid() {
     assert_eq!(request_id_index(IncomingMessages::NotValid), None);
+}
+
+#[test]
+fn test_notice() {
+    let message = ResponseMessage::from(NOTICE_DATA_FARM_CONNECTION);
+
+    let notice = Notice::from(&message);
+
+    assert_eq!(notice.code, 2107);
+    assert_eq!(notice.message, "HMDS data farm connection is inactive.");
+    assert_eq!(format!("{notice}"), "[2107] HMDS data farm connection is inactive.");
 }

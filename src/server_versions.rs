@@ -6,7 +6,7 @@
 //  pub const CURRENT_TIME: i32 = 33;
 pub const REAL_TIME_BARS: i32 = 34;
 pub const SCALE_ORDERS: i32 = 35;
-//  pub const SNAPSHOT_MKT_DATA: i32 = 35;
+pub const SNAPSHOT_MKT_DATA: i32 = 35;
 pub const SSHORT_COMBO_LEGS: i32 = 35;
 pub const WHAT_IF_ORDERS: i32 = 36;
 pub const CONTRACT_CONID: i32 = 37;

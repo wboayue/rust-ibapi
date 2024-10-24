@@ -1,15 +1,25 @@
 use std::ops::Index;
 use std::str::{self, FromStr};
+use std::fmt::Display;
 
 use log::debug;
 use time::OffsetDateTime;
 
 use crate::{Error, ToField};
 
+pub(crate) mod shared_channel_configuration;
+#[cfg(test)]
+mod tests;
+
 const INFINITY_STR: &str = "Infinity";
 const UNSET_DOUBLE: &str = "1.7976931348623157E308";
 const UNSET_INTEGER: &str = "2147483647";
 const UNSET_LONG: &str = "9223372036854775807";
+
+// Index of message text in the response message
+pub(crate) const MESSAGE_INDEX: usize = 4;
+// Index of message code in the response message
+pub(crate) const CODE_INDEX: usize = 3;
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub enum IncomingMessages {
@@ -36,7 +46,7 @@ pub enum IncomingMessages {
     ScannerData = 20,
     TickOptionComputation = 21,
     TickGeneric = 45,
-    Tickstring = 46,
+    TickString = 46,
     TickEFP = 47, //TICK EFP 47
     CurrentTime = 49,
     RealTimeBars = 50,
@@ -123,7 +133,7 @@ impl From<i32> for IncomingMessages {
             20 => IncomingMessages::ScannerData,
             21 => IncomingMessages::TickOptionComputation,
             45 => IncomingMessages::TickGeneric,
-            46 => IncomingMessages::Tickstring,
+            46 => IncomingMessages::TickString,
             47 => IncomingMessages::TickEFP, //TICK EFP 47
             49 => IncomingMessages::CurrentTime,
             50 => IncomingMessages::RealTimeBars,
@@ -220,7 +230,16 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::AccountSummary
         | IncomingMessages::AccountSummaryEnd
         | IncomingMessages::AccountUpdateMulti
-        | IncomingMessages::AccountUpdateMultiEnd => Some(2),
+        | IncomingMessages::AccountUpdateMultiEnd
+        | IncomingMessages::MarketDepth
+        | IncomingMessages::MarketDepthL2
+        | IncomingMessages::TickSnapshotEnd
+        | IncomingMessages::TickPrice
+        | IncomingMessages::TickSize
+        | IncomingMessages::TickString
+        | IncomingMessages::TickEFP
+        | IncomingMessages::TickReqParams
+        | IncomingMessages::TickGeneric => Some(2),
         _ => {
             debug!("could not determine request id index for {kind:?}");
             None
@@ -552,6 +571,24 @@ impl ResponseMessage {
     }
 }
 
-pub(crate) mod shared_channel_configuration;
-#[cfg(test)]
-mod tests;
+/// An error message from the TWS API.
+#[derive(Debug, Clone)]
+pub struct Notice {
+    pub code: i32,
+    pub message: String,
+}
+
+impl Notice {
+    #[allow(private_interfaces)]
+    pub fn from(message: &ResponseMessage) -> Notice {
+        let code = message.peek_int(CODE_INDEX).unwrap_or(-1);
+        let message = message.peek_string(MESSAGE_INDEX);
+        Notice { code, message }
+    }
+}
+
+impl Display for Notice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] {}", self.code, self.message)
+    }
+}

@@ -48,4 +48,8 @@ pub(crate) const CHANNEL_MAPPINGS: &[ChannelMapping] = &[
         request: OutgoingMessages::RequestMarketDataType,
         responses: &[IncomingMessages::MarketDataType],
     },
+    ChannelMapping {
+        request: OutgoingMessages::RequestMktDepthExchanges,
+        responses: &[IncomingMessages::MktDepthExchanges],
+    },
 ];

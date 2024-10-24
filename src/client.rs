@@ -12,7 +12,7 @@ use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, Famil
 use crate::contracts::{Contract, OptionComputation};
 use crate::errors::Error;
 use crate::market_data::historical::{self, HistogramEntry};
-use crate::market_data::realtime::{self, Bar, BarSize, MidPoint, WhatToShow};
+use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, WhatToShow};
 use crate::market_data::MarketDataType;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
@@ -1009,7 +1009,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<impl Iterator<Item = realtime::Trade> + 'a, Error> {
+    ) -> Result<Subscription<'a, realtime::Trade>, Error> {
         realtime::tick_by_tick_all_last(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -1024,7 +1024,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<impl Iterator<Item = realtime::BidAsk> + 'a, Error> {
+    ) -> Result<Subscription<'a, realtime::BidAsk>, Error> {
         realtime::tick_by_tick_bid_ask(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -1039,7 +1039,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<impl Iterator<Item = realtime::Trade> + 'a, Error> {
+    ) -> Result<Subscription<'a, realtime::Trade>, Error> {
         realtime::tick_by_tick_last(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -1077,6 +1077,85 @@ impl Client {
     /// ```
     pub fn switch_market_data_type(&self, market_data_type: MarketDataType) -> Result<(), Error> {
         market_data::switch_market_data_type(self, market_data_type)
+    }
+
+    /// Requests the contract's market depth (order book).
+    ///
+    /// # Arguments
+    ///
+    /// * `contract` - The Contract for which the depth is being requested.
+    /// * `number_of_rows` - The number of rows on each side of the order book.
+    /// * `is_smart_depth` - Flag indicates that this is smart depth request.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::market_data::{MarketDataType};
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let market_data_type = MarketDataType::Live;
+    /// client.switch_market_data_type(market_data_type).expect("request failed");
+    /// println!("market data switched: {:?}", market_data_type);
+    /// ```
+    pub fn market_depth<'a>(
+        &'a self,
+        contract: &Contract,
+        number_of_rows: i32,
+        is_smart_depth: bool,
+    ) -> Result<Subscription<'a, MarketDepths>, Error> {
+        realtime::market_depth(self, contract, number_of_rows, is_smart_depth)
+    }
+
+    /// Requests venues for which market data is returned to market_depth (those with market makers)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// ```
+    pub fn market_depth_exchanges(&self) -> Result<Vec<DepthMarketDataDescription>, Error> {
+        realtime::market_depth_exchanges(self)
+    }
+
+    /// Requests real time market data.
+    ///
+    /// Returns market data for an instrument either in real time or 10-15 minutes delayed data.
+    ///
+    /// # Arguments
+    ///
+    /// * `contract` - Contract for which the data is being requested.
+    /// * `generic_ticks` - IDs of the available generic ticks:
+    ///         - 100 Option Volume (currently for stocks)
+    ///         - 101 Option Open Interest (currently for stocks)
+    ///         - 104 Historical Volatility (currently for stocks)
+    ///         - 105 Average Option Volume (currently for stocks)
+    ///         - 106 Option Implied Volatility (currently for stocks)
+    ///         - 162 Index Future Premium
+    ///         - 165 Miscellaneous Stats
+    ///         - 221 Mark Price (used in TWS P&L computations)
+    ///         - 225 Auction values (volume, price and imbalance)
+    ///         - 233 RTVolume - contains the last trade price, last trade size, last trade time, total volume, VWAP, and single trade flag.
+    ///         - 236 Shortable
+    ///         - 256 Inventory
+    ///         - 258 Fundamental Ratios
+    ///         - 411 Realtime Historical Volatility
+    ///         - 456 IBDividends
+    /// * `snapshot` - for users with corresponding real time market data subscriptions. A true value will return a one-time snapshot, while a false value will provide streaming data.
+    /// * `regulatory_snapshot` - snapshot for US stocks requests NBBO snapshots for users which have "US Securities Snapshot Bundle" subscription but not corresponding Network A, B, or C subscription necessary for streaming market data. One-time snapshot of current market price that will incur a fee of 1 cent to the account per snapshot.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// ```
+    pub fn market_data(
+        &self,
+        contract: &Contract,
+        generic_ticks: &[&str],
+        snapshot: bool,
+        regulatory_snapshot: bool,
+    ) -> Result<Subscription<TickTypes>, Error> {
+        realtime::market_data(self, contract, generic_ticks, snapshot, regulatory_snapshot)
     }
 
     // == Internal Use ==
