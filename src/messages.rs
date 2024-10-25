@@ -388,6 +388,10 @@ pub(crate) struct ResponseMessage {
 }
 
 impl ResponseMessage {
+    pub fn len(&self) -> usize {
+        self.fields.len()
+    }
+
     pub fn message_type(&self) -> IncomingMessages {
         if self.fields.is_empty() {
             IncomingMessages::NotValid
