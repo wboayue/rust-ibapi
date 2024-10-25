@@ -354,27 +354,22 @@ mod tick_string_tests {
         assert_eq!(tick.value, "2023-03-13 09:30:00", "Wrong value");
     }
 
-    // #[test]
-    // fn test_decode_tick_string_types() {
-    //     let test_cases = vec![
-    //         (32, TickType::BidExchange, "ISLAND"),
-    //         (33, TickType::AskExchange, "NYSE"),
-    //         (84, TickType::LastExchange, "NASDAQ"),
-    //     ];
+    #[test]
+    fn test_decode_tick_string_types() {
+        let test_cases = vec![
+            (0, TickType::BidSize, "ISLAND"),
+            (32, TickType::BidExch, "NYSE"),
+            (84, TickType::LastExch, "NASDAQ"),
+        ];
 
-    //     for (type_id, expected_type, value) in test_cases {
-    //         let mut message = ResponseMessage::from(format!(
-    //             "3\0\09000\0{}\0{}\0",
-    //             type_id, value
-    //         ).as_str());
+        for (type_id, expected_type, value) in test_cases {
+            let mut message = ResponseMessage::from(format!("3\0\09000\0{}\0{}\0", type_id, value).as_str());
 
-    //         let tick = decode_tick_string(&mut message).expect("Failed to decode tick string");
-    //         assert_eq!(tick.tick_type, expected_type,
-    //             "Wrong tick type for type_id {}", type_id);
-    //         assert_eq!(tick.value, value,
-    //             "Wrong value for type_id {}", type_id);
-    //     }
-    // }
+            let tick = decode_tick_string(&mut message).expect("Failed to decode tick string");
+            assert_eq!(tick.tick_type, expected_type, "Wrong tick type for type_id {}", type_id);
+            assert_eq!(tick.value, value, "Wrong value for type_id {}", type_id);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -420,7 +415,7 @@ mod tick_efp_tests {
 
         let tick = decode_tick_efp(&mut message).expect("Failed to decode tick EFP");
 
-        // assert_eq!(tick.tick_type, TickType::BidEFP, "Wrong tick type");
+        assert_eq!(tick.tick_type, TickType::BidEfpComputation, "Wrong tick type");
         assert_eq!(tick.basis_points, 2.5, "Wrong basis points");
         assert_eq!(tick.formatted_basis_points, "+2.50", "Wrong formatted basis points");
         assert_eq!(tick.implied_futures_price, 100.0, "Wrong implied futures price");
@@ -430,27 +425,23 @@ mod tick_efp_tests {
         assert_eq!(tick.dividends_to_last_trade_date, 0.75, "Wrong dividends to last trade");
     }
 
-    // #[test]
-    // fn test_decode_tick_efp_types() {
-    //     let test_cases = vec![
-    //         (38, TickType::BidEFP),
-    //         (39, TickType::AskEFP),
-    //         (40, TickType::LastEFP),
-    //         (41, TickType::OpenEFP),
-    //         (42, TickType::HighEFP),
-    //         (43, TickType::LowEFP),
-    //         (44, TickType::CloseEFP),
-    //     ];
+    #[test]
+    fn test_decode_tick_efp_types() {
+        let test_cases = vec![
+            (38, TickType::BidEfpComputation),
+            (39, TickType::AskEfpComputation),
+            (40, TickType::LastEfpComputation),
+            (41, TickType::OpenEfpComputation),
+            (42, TickType::HighEfpComputation),
+            (43, TickType::LowEfpComputation),
+            (44, TickType::CloseEfpComputation),
+        ];
 
-    //     for (type_id, expected_type) in test_cases {
-    //         let mut message = ResponseMessage::from(format!(
-    //             "4\0\09000\0{}\02.5\0+2.50\0100.0\030\020230315\00.5\00.75\0",
-    //             type_id
-    //         ).as_str());
+        for (type_id, expected_type) in test_cases {
+            let mut message = ResponseMessage::from(format!("4\0\09000\0{}\02.5\0+2.50\0100.0\030\020230315\00.5\00.75\0", type_id).as_str());
 
-    //         let tick = decode_tick_efp(&mut message).expect("Failed to decode tick EFP");
-    //         assert_eq!(tick.tick_type, expected_type,
-    //             "Wrong tick type for type_id {}", type_id);
-    //     }
-    // }
+            let tick = decode_tick_efp(&mut message).expect("Failed to decode tick EFP");
+            assert_eq!(tick.tick_type, expected_type, "Wrong tick type for type_id {}", type_id);
+        }
+    }
 }

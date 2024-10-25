@@ -19,3 +19,6 @@ mod tick_data_tests;
 
 #[cfg(test)]
 mod market_data_tests;
+
+#[cfg(test)]
+mod tick_by_tick_last_tests;
