@@ -1,6 +1,6 @@
+use std::fmt::Display;
 use std::ops::Index;
 use std::str::{self, FromStr};
-use std::fmt::Display;
 
 use log::debug;
 use time::OffsetDateTime;
@@ -358,6 +358,11 @@ impl RequestMessage {
         let mut data = self.fields.join("\0");
         data.push('\0');
         data
+    }
+
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        self.fields.len()
     }
 
     #[cfg(test)]
