@@ -1219,6 +1219,7 @@ impl Debug for Client {
 /// Cancelled with dropped if not already cancelled.
 ///
 #[allow(private_bounds)]
+#[derive(Debug)]
 pub struct Subscription<'a, T: Subscribable<T>> {
     client: &'a Client,
     request_id: Option<i32>,

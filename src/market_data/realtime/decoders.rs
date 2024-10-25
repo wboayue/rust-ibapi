@@ -11,6 +11,10 @@ use super::{
 mod tests;
 
 pub(super) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, Error> {
+    if message.len() < 11 {
+        return Err(Error::Simple("Invalid message length".into()));
+    }
+
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
@@ -187,11 +191,11 @@ pub(super) fn decode_tick_price(server_version: i32, message: &mut ResponseMessa
         let mask = message.next_int()?;
 
         if server_version >= server_versions::PAST_LIMIT {
-            tick_price.attributes.can_auto_execute = mask & 0x1 != 0;
-            tick_price.attributes.past_limit = mask & 0x2 != 0;
+            tick_price.attributes.can_auto_execute = mask & 0x1 == 0x1;
+            tick_price.attributes.past_limit = mask & 0x2 == 0x2;
 
             if server_version >= server_versions::PRE_OPEN_BID_ASK {
-                tick_price.attributes.pre_open = mask & 0x4 != 0;
+                tick_price.attributes.pre_open = mask & 0x4 == 0x4;
             }
         }
     }

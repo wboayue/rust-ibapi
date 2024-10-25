@@ -89,15 +89,24 @@ impl Subscribable<MidPoint> for MidPoint {
     }
 }
 
+/// Represents a real-time bar with OHLCV data
 #[derive(Clone, Debug)]
 pub struct Bar {
+    /// The timestamp of the bar in market timezone
     pub date: OffsetDateTime,
+    /// Opening price during the bar period
     pub open: f64,
+    /// Highest price during the bar period
     pub high: f64,
+    /// Lowest price during the bar period
     pub low: f64,
+    /// Closing price of the bar period
     pub close: f64,
+    /// Total volume traded during the bar period
     pub volume: f64,
+    /// Volume weighted average price
     pub wap: f64,
+    /// Number of trades during the bar period
     pub count: i32,
 }
 
