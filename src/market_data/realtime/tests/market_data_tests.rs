@@ -19,17 +19,12 @@ fn test_basic_market_data() {
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
     let contract = Contract::stock("AAPL");
-    let generic_ticks = &["100", "101", "104", "106"];  // Option Volume, OI, Historical Vol, Implied Vol
+    let generic_ticks = &["100", "101", "104", "106"]; // Option Volume, OI, Historical Vol, Implied Vol
     let snapshot = false;
     let regulatory_snapshot = false;
 
     // Test subscription creation
-    let result = client.market_data(
-        &contract,
-        generic_ticks,
-        snapshot,
-        regulatory_snapshot
-    );
+    let result = client.market_data(&contract, generic_ticks, snapshot, regulatory_snapshot);
 
     // Test receiving data
     let subscription = result.expect("Failed to create market data subscription");
@@ -73,11 +68,7 @@ fn test_basic_market_data() {
     assert_eq!(request_messages.len(), 1, "Should send one request message");
 
     let request = &request_messages[0];
-    assert_eq!(
-        request[0],
-        OutgoingMessages::RequestMarketData.to_field(),
-        "Wrong message type"
-    );
+    assert_eq!(request[0], OutgoingMessages::RequestMarketData.to_field(), "Wrong message type");
     assert_eq!(request[1], "11", "Wrong version");
     assert_eq!(request[16], "100,101,104,106", "Wrong generic ticks");
     assert_eq!(request[17], snapshot.to_field(), "Wrong snapshot flag");
@@ -87,9 +78,7 @@ fn test_basic_market_data() {
 fn test_market_data_with_combo_legs() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            "1|2|9001|1|185.50|100|7|".to_owned(),
-        ],
+        response_messages: vec!["1|2|9001|1|185.50|100|7|".to_owned()],
     });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -117,12 +106,9 @@ fn test_market_data_with_combo_legs() {
     let snapshot = false;
     let regulatory_snapshot = false;
 
-    let market_data = client.market_data(
-        &contract,
-        generic_ticks,
-        snapshot,
-        regulatory_snapshot
-    ).expect("Failed to create market data subscription");
+    let market_data = client
+        .market_data(&contract, generic_ticks, snapshot, regulatory_snapshot)
+        .expect("Failed to create market data subscription");
 
     // Verify request message contains combo legs
     let request_messages = client.message_bus.request_messages();
@@ -149,9 +135,7 @@ fn test_market_data_with_combo_legs() {
 fn test_market_data_with_delta_neutral() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            "1|2|9001|1|185.50|100|7|".to_owned(),
-        ],
+        response_messages: vec!["1|2|9001|1|185.50|100|7|".to_owned()],
     });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -167,12 +151,9 @@ fn test_market_data_with_delta_neutral() {
     let snapshot = false;
     let regulatory_snapshot = false;
 
-    let _ = client.market_data(
-        &contract,
-        generic_ticks,
-        snapshot,
-        regulatory_snapshot
-    ).expect("Failed to create market data subscription");
+    let _ = client
+        .market_data(&contract, generic_ticks, snapshot, regulatory_snapshot)
+        .expect("Failed to create market data subscription");
 
     // Verify request message contains delta neutral contract
     let request_messages = client.message_bus.request_messages();
@@ -197,12 +178,14 @@ fn test_market_data_regulatory_snapshot() {
     let client = Client::stubbed(message_bus, server_versions::REQ_SMART_COMPONENTS);
     let contract = Contract::stock("AAPL");
 
-    let _ = client.market_data(
-        &contract,
-        &[],
-        false,
-        true  // regulatory snapshot
-    ).expect("Failed to create market data subscription");
+    let _ = client
+        .market_data(
+            &contract,
+            &[],
+            false,
+            true, // regulatory snapshot
+        )
+        .expect("Failed to create market data subscription");
 
     let request_messages = client.message_bus.request_messages();
     let request = &request_messages[0];
@@ -214,19 +197,16 @@ fn test_market_data_error_handling() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
-            "4|2|9001|123|Error Message|".to_owned(),  // Error message
+            "4|2|9001|123|Error Message|".to_owned(), // Error message
         ],
     });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
     let contract = Contract::stock("AAPL");
 
-    let subscription = client.market_data(
-        &contract,
-        &[],
-        false,
-        false
-    ).expect("Failed to create market data subscription");
+    let subscription = client
+        .market_data(&contract, &[], false, false)
+        .expect("Failed to create market data subscription");
 
     let received_messages: Vec<TickTypes> = subscription.iter().take(1).collect();
     assert_eq!(received_messages.len(), 1, "Should receive error message");

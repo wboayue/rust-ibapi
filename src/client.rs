@@ -1300,15 +1300,10 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     }
 
     fn process_message(&self, mut message: ResponseMessage) -> Option<T> {
-        println!("message: {:?}", message);
         if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
-            println!("message processing: {:?}", message);
-
             match T::decode(self.client.server_version(), &mut message) {
                 Ok(val) => Some(val),
                 Err(err) => {
-                    println!("message error");
-
                     let mut error = self.error.lock().unwrap();
                     *error = Some(err);
                     None

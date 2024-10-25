@@ -94,10 +94,6 @@ fn test_tick_by_tick_all_last() {
     assert_eq!(request_messages.len(), 1, "Should send one request message");
 
     let request = &request_messages[0];
-    assert_eq!(
-        request[0],
-        OutgoingMessages::RequestTickByTickData.to_field(),
-        "Wrong message type"
-    );
+    assert_eq!(request[0], OutgoingMessages::RequestTickByTickData.to_field(), "Wrong message type");
     assert_eq!(request[14], "AllLast", "Wrong tick type");
 }

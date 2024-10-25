@@ -1,10 +1,9 @@
 use super::*;
+use crate::contracts::contract_samples;
+use crate::messages::OutgoingMessages;
+use crate::stubs::MessageBusStub;
 use std::sync::Arc;
 use std::sync::RwLock;
-use crate::stubs::MessageBusStub;
-use crate::messages::OutgoingMessages;
-use crate::contracts::contract_samples;
-
 
 #[cfg(test)]
 mod subscription_tests;

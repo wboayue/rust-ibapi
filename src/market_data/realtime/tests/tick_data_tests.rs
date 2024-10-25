@@ -4,9 +4,7 @@ use super::*;
 fn test_tick_by_tick_bid_ask() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            "99|9001|3|1678745793|3895.50|3896.00|9|11|3|".to_owned(),
-        ],
+        response_messages: vec!["99|9001|3|1678745793|3895.50|3896.00|9|11|3|".to_owned()],
     });
 
     let client = Client::stubbed(message_bus, server_versions::TICK_BY_TICK_IGNORE_SIZE);
@@ -40,9 +38,7 @@ fn test_tick_by_tick_bid_ask() {
 fn test_tick_by_tick_midpoint() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            "99|9001|4|1678746113|3896.875|".to_owned(),
-        ],
+        response_messages: vec!["99|9001|4|1678746113|3896.875|".to_owned()],
     });
 
     let client = Client::stubbed(message_bus, server_versions::TICK_BY_TICK_IGNORE_SIZE);

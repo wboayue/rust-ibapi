@@ -4,10 +4,7 @@ use super::*;
 fn test_market_depth() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            "12|9001|0|1|1|185.50|100|".to_owned(),
-            "12|9001|1|1|0|185.45|200|".to_owned(),
-        ],
+        response_messages: vec!["12|2|9001|0|1|1|185.50|100|".to_owned(), "12|2|9001|1|1|0|185.45|200|".to_owned()],
     });
 
     let client = Client::stubbed(message_bus, server_versions::SMART_DEPTH);
@@ -20,11 +17,10 @@ fn test_market_depth() {
 
     // Test receiving data
     let subscription = result.expect("Failed to create market depth subscription");
-    eprintln!("Subscription: {:?}", subscription);
+    let received_depth: Vec<MarketDepths> = subscription.iter().take(2).collect();
     if subscription.error().is_some() {
         panic!("Error received: {:?}", subscription.error());
     }
-    let received_depth: Vec<MarketDepths> = subscription.iter().take(2).collect();
 
     assert_eq!(received_depth.len(), 2, "Should receive 2 market depth updates");
 
@@ -44,20 +40,14 @@ fn test_market_depth() {
     assert_eq!(request_messages.len(), 1, "Should send one request message");
 
     let request = &request_messages[0];
-    assert_eq!(
-        request[0],
-        OutgoingMessages::RequestMarketDepth.to_field(),
-        "Wrong message type"
-    );
+    assert_eq!(request[0], OutgoingMessages::RequestMarketDepth.to_field(), "Wrong message type");
 }
 
 #[test]
 fn test_market_depth_exchanges() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            "71|2|ISLAND|STK|NASDAQ|DEEP2|1|NYSE|STK|NYSE|DEEP|1|".to_owned(),
-        ],
+        response_messages: vec!["71|2|ISLAND|STK|NASDAQ|DEEP2|1|NYSE|STK|NYSE|DEEP|1|".to_owned()],
     });
 
     let client = Client::stubbed(message_bus, server_versions::SERVICE_DATA_TYPE);
@@ -82,9 +72,5 @@ fn test_market_depth_exchanges() {
     assert_eq!(request_messages.len(), 1, "Should send one request message");
 
     let request = &request_messages[0];
-    assert_eq!(
-        request[0],
-        OutgoingMessages::RequestMktDepthExchanges.to_field(),
-        "Wrong message type"
-    );
+    assert_eq!(request[0], OutgoingMessages::RequestMktDepthExchanges.to_field(), "Wrong message type");
 }
