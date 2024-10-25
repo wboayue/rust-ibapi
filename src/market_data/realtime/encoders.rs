@@ -1,11 +1,15 @@
 use super::{BarSize, WhatToShow};
 use crate::contracts::Contract;
+use crate::contracts::SecurityType;
 use crate::messages::OutgoingMessages;
 use crate::messages::RequestMessage;
 use crate::orders::TagValue;
 use crate::{server_versions, Error};
 
-pub(crate) fn encode_request_realtime_bars(
+#[cfg(test)]
+mod tests;
+
+pub(super) fn encode_request_realtime_bars(
     server_version: i32,
     ticker_id: i32,
     contract: &Contract,
@@ -52,7 +56,7 @@ pub(crate) fn encode_request_realtime_bars(
     Ok(packet)
 }
 
-pub(crate) fn encode_cancel_realtime_bars(request_id: i32) -> Result<RequestMessage, Error> {
+pub(super) fn encode_cancel_realtime_bars(request_id: i32) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::default();
@@ -64,7 +68,7 @@ pub(crate) fn encode_cancel_realtime_bars(request_id: i32) -> Result<RequestMess
     Ok(message)
 }
 
-pub(crate) fn tick_by_tick(
+pub(super) fn encode_tick_by_tick(
     server_version: i32,
     request_id: i32,
     contract: &Contract,
@@ -98,7 +102,7 @@ pub(crate) fn tick_by_tick(
     Ok(message)
 }
 
-pub(crate) fn cancel_tick_by_tick(request_id: i32) -> Result<RequestMessage, Error> {
+pub(super) fn encode_cancel_tick_by_tick(request_id: i32) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::CancelTickByTickData);
@@ -107,125 +111,126 @@ pub(crate) fn cancel_tick_by_tick(request_id: i32) -> Result<RequestMessage, Err
     Ok(message)
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::{contracts::contract_samples, ToField};
+pub(super) fn encode_request_market_depth(
+    server_version: i32,
+    request_id: i32,
+    contract: &Contract,
+    number_of_rows: i32,
+    is_smart_depth: bool,
+) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 5;
 
-    use super::*;
+    let mut message = RequestMessage::new();
 
-    #[test]
-    fn cancel_tick_by_tick() {
-        let request_id = 9000;
+    message.push_field(&OutgoingMessages::RequestMarketDepth);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    // Contract fields
+    if server_version >= server_versions::TRADING_CLASS {
+        message.push_field(&contract.contract_id);
+    }
+    message.push_field(&contract.symbol);
+    message.push_field(&contract.security_type);
+    message.push_field(&contract.last_trade_date_or_contract_month);
+    message.push_field(&contract.strike);
+    message.push_field(&contract.right);
+    message.push_field(&contract.multiplier);
+    message.push_field(&contract.exchange);
+    if server_version >= server_versions::MKT_DEPTH_PRIM_EXCHANGE {
+        message.push_field(&contract.primary_exchange);
+    }
+    message.push_field(&contract.currency);
+    message.push_field(&contract.local_symbol);
+    if server_version >= server_versions::TRADING_CLASS {
+        message.push_field(&contract.trading_class);
+    }
+    message.push_field(&number_of_rows);
+    if server_version >= server_versions::SMART_DEPTH {
+        message.push_field(&is_smart_depth);
+    }
+    if server_version >= server_versions::LINKING {
+        message.push_field(&"");
+    }
 
-        let results = super::cancel_tick_by_tick(request_id);
+    Ok(message)
+}
 
-        match results {
-            Ok(message) => {
-                assert_eq!(message[0], "98", "message.type");
-                assert_eq!(message[1], request_id.to_string(), "message.request_id");
-            }
-            Err(err) => {
-                assert!(false, "error encoding cancel_tick_by_tick request: {err}");
-            }
+pub(super) fn encode_request_market_depth_exchanges() -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+
+    message.push_field(&OutgoingMessages::RequestMktDepthExchanges);
+
+    Ok(message)
+}
+
+pub(super) fn encode_request_market_data(
+    server_version: i32,
+    request_id: i32,
+    contract: &Contract,
+    generic_ticks: &[&str],
+    snapshot: bool,
+    regulatory_snapshot: bool,
+) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 11;
+
+    let mut message = RequestMessage::new();
+
+    message.push_field(&OutgoingMessages::RequestMarketData);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    message.push_field(&contract.contract_id);
+    message.push_field(&contract.symbol);
+    message.push_field(&contract.security_type);
+    message.push_field(&contract.last_trade_date_or_contract_month);
+    message.push_field(&contract.strike);
+    message.push_field(&contract.right);
+    message.push_field(&contract.multiplier);
+    message.push_field(&contract.exchange);
+    message.push_field(&contract.primary_exchange);
+    message.push_field(&contract.currency);
+    message.push_field(&contract.local_symbol);
+    message.push_field(&contract.trading_class);
+
+    if contract.security_type == SecurityType::Spread {
+        message.push_field(&contract.combo_legs.len());
+
+        for leg in &contract.combo_legs {
+            message.push_field(&leg.contract_id);
+            message.push_field(&leg.ratio);
+            message.push_field(&leg.action);
+            message.push_field(&leg.exchange);
         }
     }
 
-    #[test]
-    fn cancel_realtime_bars() {
-        let request_id = 9000;
-
-        let results = super::encode_cancel_realtime_bars(request_id);
-
-        match results {
-            Ok(message) => {
-                assert_eq!(message[0], OutgoingMessages::CancelRealTimeBars.to_field(), "message.type");
-                assert_eq!(message[1], "1", "message.version");
-                assert_eq!(message[2], request_id.to_string(), "message.request_id");
-            }
-            Err(err) => {
-                assert!(false, "error encoding cancel_tick_by_tick request: {err}");
-            }
-        }
+    if let Some(delta_neutral_contract) = &contract.delta_neutral_contract {
+        message.push_field(&true);
+        message.push_field(&delta_neutral_contract.contract_id);
+        message.push_field(&delta_neutral_contract.delta);
+        message.push_field(&delta_neutral_contract.price);
+    } else {
+        message.push_field(&false);
     }
 
-    #[test]
-    fn tick_by_tick() {
-        let request_id = 9000;
-        let server_version = server_versions::TICK_BY_TICK;
-        let contract = contract_samples::simple_future();
-        let tick_type = "AllLast";
-        let number_of_ticks = 1;
-        let ignore_size = true;
+    message.push_field(&generic_ticks.join(","));
+    message.push_field(&snapshot);
 
-        let results = super::tick_by_tick(server_version, request_id, &contract, tick_type, number_of_ticks, ignore_size);
-
-        match results {
-            Ok(message) => {
-                assert_eq!(message[0], OutgoingMessages::RequestTickByTickData.to_field(), "message.type");
-                assert_eq!(message[1], request_id.to_field(), "message.request_id");
-                assert_eq!(message[2], contract.contract_id.to_field(), "message.contract_id");
-                assert_eq!(message[3], contract.symbol, "message.symbol");
-                assert_eq!(message[4], contract.security_type.to_field(), "message.security_type");
-                assert_eq!(
-                    message[5], contract.last_trade_date_or_contract_month,
-                    "message.last_trade_date_or_contract_month"
-                );
-                assert_eq!(message[6], contract.strike.to_field(), "message.strike");
-                assert_eq!(message[7], contract.right, "message.right");
-                assert_eq!(message[8], contract.multiplier, "message.multiplier");
-                assert_eq!(message[9], contract.exchange, "message.exchange");
-                assert_eq!(message[10], contract.primary_exchange, "message.primary_exchange");
-                assert_eq!(message[11], contract.currency, "message.currency");
-                assert_eq!(message[12], contract.local_symbol, "message.local_symbol");
-                assert_eq!(message[13], contract.trading_class, "message.trading_class");
-                assert_eq!(message[14], tick_type, "message.tick_type");
-            }
-            Err(err) => {
-                assert!(false, "error encoding tick_by_tick request: {err}");
-            }
-        }
+    if server_version >= server_versions::REQ_SMART_COMPONENTS {
+        message.push_field(&regulatory_snapshot);
     }
 
-    #[test]
-    fn realtime_bars() {
-        let request_id = 9000;
-        let server_version = server_versions::TICK_BY_TICK;
-        let contract = contract_samples::simple_future();
-        let bar_size = BarSize::Sec5;
-        let what_to_show = WhatToShow::Trades;
-        let use_rth = true;
-        let options = vec![];
+    message.push_field(&"");
 
-        let results = super::encode_request_realtime_bars(server_version, request_id, &contract, &bar_size, &what_to_show, use_rth, options);
+    Ok(message)
+}
 
-        match results {
-            Ok(message) => {
-                assert_eq!(message[0], OutgoingMessages::RequestRealTimeBars.to_field(), "message.type");
-                assert_eq!(message[1], "8", "message.version");
-                assert_eq!(message[2], request_id.to_field(), "message.request_id");
-                assert_eq!(message[3], contract.contract_id.to_field(), "message.contract_id");
-                assert_eq!(message[4], contract.symbol, "message.symbol");
-                assert_eq!(message[5], contract.security_type.to_field(), "message.security_type");
-                assert_eq!(
-                    message[6], contract.last_trade_date_or_contract_month,
-                    "message.last_trade_date_or_contract_month"
-                );
-                assert_eq!(message[7], contract.strike.to_field(), "message.strike");
-                assert_eq!(message[8], contract.right, "message.right");
-                assert_eq!(message[9], contract.multiplier, "message.multiplier");
-                assert_eq!(message[10], contract.exchange, "message.exchange");
-                assert_eq!(message[11], contract.primary_exchange, "message.primary_exchange");
-                assert_eq!(message[12], contract.currency, "message.currency");
-                assert_eq!(message[13], contract.local_symbol, "message.local_symbol");
-                assert_eq!(message[14], contract.trading_class, "message.trading_class");
-                assert_eq!(message[15], "0", "message.bar_size");
-                assert_eq!(message[16], what_to_show.to_field(), "message.what_to_show"); // implement to_field
-                assert_eq!(message[17], use_rth.to_field(), "message.use_rth");
-                assert_eq!(message[18], "", "message.options"); // TODO what should this be?
-            }
-            Err(err) => {
-                assert!(false, "error encoding realtime_bars request: {err}");
-            }
-        }
-    }
+pub(super) fn encode_cancel_market_data(request_id: i32) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+
+    const VERSION: i32 = 1;
+
+    message.push_field(&OutgoingMessages::CancelMarketData);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+
+    Ok(message)
 }

@@ -1,0 +1,56 @@
+use time::OffsetDateTime;
+
+use super::*;
+
+#[test]
+fn decode_trade() {
+    let mut message = ResponseMessage::from("99\09000\01\01678740829\03895.25\07\02\0\0\0");
+
+    let results = decode_trade_tick(&mut message);
+
+    if let Ok(trade) = results {
+        assert_eq!(trade.tick_type, "1", "trade.tick_type");
+        assert_eq!(trade.time, OffsetDateTime::from_unix_timestamp(1678740829).unwrap(), "trade.time");
+        assert_eq!(trade.price, 3895.25, "trade.price");
+        assert_eq!(trade.size, 7, "trade.size");
+        assert_eq!(trade.trade_attribute.past_limit, false, "trade.trade_attribute.past_limit");
+        assert_eq!(trade.trade_attribute.unreported, true, "trade.trade_attribute.unreported");
+        assert_eq!(trade.exchange, "", "trade.exchange");
+        assert_eq!(trade.special_conditions, "", "trade.special_conditions");
+    } else if let Err(err) = results {
+        assert!(false, "error decoding trade tick: {err}");
+    }
+}
+
+#[test]
+fn decode_bid_ask() {
+    let mut message = ResponseMessage::from("99\09000\03\01678745793\03895.50\03896.00\09\011\01\0");
+
+    let results = decode_bid_ask_tick(&mut message);
+
+    if let Ok(bid_ask) = results {
+        assert_eq!(bid_ask.time, OffsetDateTime::from_unix_timestamp(01678745793).unwrap(), "bid_ask.time");
+        assert_eq!(bid_ask.bid_price, 3895.5, "bid_ask.bid_price");
+        assert_eq!(bid_ask.ask_price, 3896.0, "bid_ask.ask_price");
+        assert_eq!(bid_ask.bid_size, 9, "bid_ask.bid_size");
+        assert_eq!(bid_ask.ask_size, 11, "bid_ask.ask_size");
+        assert_eq!(bid_ask.bid_ask_attribute.bid_past_low, true, "bid_ask.bid_ask_attribute.bid_past_low");
+        assert_eq!(bid_ask.bid_ask_attribute.ask_past_high, false, "bid_ask.bid_ask_attribute.ask_past_high");
+    } else if let Err(err) = results {
+        assert!(false, "error decoding trade tick: {err}");
+    }
+}
+
+#[test]
+fn decode_mid_point() {
+    let mut message = ResponseMessage::from("99\09000\04\01678746113\03896.875\0");
+
+    let results = decode_mid_point_tick(&mut message);
+
+    if let Ok(mid_point) = results {
+        assert_eq!(mid_point.time, OffsetDateTime::from_unix_timestamp(1678746113).unwrap(), "mid_point.time");
+        assert_eq!(mid_point.mid_point, 3896.875, "mid_point.mid_point");
+    } else if let Err(err) = results {
+        assert!(false, "error decoding mid point tick: {err}");
+    }
+}
