@@ -1219,6 +1219,7 @@ impl Debug for Client {
 /// Cancelled with dropped if not already cancelled.
 ///
 #[allow(private_bounds)]
+#[derive(Debug)]
 pub struct Subscription<'a, T: Subscribable<T>> {
     client: &'a Client,
     request_id: Option<i32>,
@@ -1299,10 +1300,15 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     }
 
     fn process_message(&self, mut message: ResponseMessage) -> Option<T> {
+        println!("message: {:?}", message);
         if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
+            println!("message processing: {:?}", message);
+
             match T::decode(self.client.server_version(), &mut message) {
                 Ok(val) => Some(val),
                 Err(err) => {
+                    println!("message error");
+
                     let mut error = self.error.lock().unwrap();
                     *error = Some(err);
                     None

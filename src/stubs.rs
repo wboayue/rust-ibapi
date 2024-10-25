@@ -78,12 +78,11 @@ fn mock_request(
         sender.send(Ok(message)).unwrap();
     }
 
-    let mut subscription = SubscriptionBuilder::new().shared_receiver(Arc::new(receiver)).signaler(s1);
+    let mut subscription = SubscriptionBuilder::new().signaler(s1);
     if let Some(request_id) = request_id {
-        subscription = subscription.request_id(request_id);
-    }
-    if let Some(message_type) = message_type {
-        subscription = subscription.message_type(message_type);
+        subscription = subscription.receiver(receiver).request_id(request_id);
+    } else if let Some(message_type) = message_type {
+        subscription = subscription.shared_receiver(Arc::new(receiver)).message_type(message_type);
     }
 
     subscription.build()

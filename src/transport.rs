@@ -683,7 +683,9 @@ impl InternalSubscription {
 impl Drop for InternalSubscription {
     fn drop(&mut self) {
         if let (Some(request_id), Some(signaler)) = (self.request_id, &self.signaler) {
-            signaler.send(Signal::Request(request_id)).unwrap();
+            if let Err(e) = signaler.send(Signal::Request(request_id)) {
+                error!("error sending drop signal: {e}");
+            }
         }
 
         if let (Some(order_id), Some(signaler)) = (self.order_id, &self.signaler) {
