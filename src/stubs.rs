@@ -14,6 +14,15 @@ pub(crate) struct MessageBusStub {
     // pub order_id: i32,
 }
 
+impl Default for MessageBusStub {
+    fn default() -> Self {
+        Self {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![],
+        }
+    }
+}
+
 impl MessageBus for MessageBusStub {
     fn request_messages(&self) -> Vec<RequestMessage> {
         self.request_messages.read().unwrap().clone()

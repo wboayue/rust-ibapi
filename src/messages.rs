@@ -348,6 +348,10 @@ impl RequestMessage {
         Self::default()
     }
 
+    pub fn iter(&self) -> std::slice::Iter<String> {
+        self.fields.iter()
+    }
+
     pub fn push_field<T: ToField>(&mut self, val: &T) -> &RequestMessage {
         let field = val.to_field();
         self.fields.push(field);
