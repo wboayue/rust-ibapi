@@ -1,4 +1,5 @@
 use log::debug;
+use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 use crate::client::{ResponseContext, Subscribable, Subscription};
@@ -17,7 +18,7 @@ mod tests;
 
 // === Models ===
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, Serialize, Deserialize, PartialEq)]
 pub enum BarSize {
     // Sec,
     Sec5,
@@ -33,7 +34,7 @@ pub enum BarSize {
     // Day,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BidAsk {
     /// The spread's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     pub time: OffsetDateTime,
@@ -62,13 +63,13 @@ impl Subscribable<BidAsk> for BidAsk {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct BidAskAttribute {
     pub bid_past_low: bool,
     pub ask_past_high: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct MidPoint {
     /// The trade's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     pub time: OffsetDateTime,
@@ -90,7 +91,7 @@ impl Subscribable<MidPoint> for MidPoint {
 }
 
 /// Represents a real-time bar with OHLCV data
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Bar {
     /// The timestamp of the bar in market timezone
     pub date: OffsetDateTime,
@@ -123,7 +124,7 @@ impl Subscribable<Bar> for Bar {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Trade {
     /// Tick type: "Last" or "AllLast"
     pub tick_type: String,
@@ -154,7 +155,7 @@ impl Subscribable<Trade> for Trade {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct TradeAttribute {
     pub past_limit: bool,
     pub unreported: bool,
@@ -185,14 +186,14 @@ impl ToField for WhatToShow {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum MarketDepths {
     MarketDepth(MarketDepth),
     MarketDepthL2(MarketDepthL2),
     Notice(Notice),
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 /// Returns the order book.
 pub struct MarketDepth {
     /// The order book's row being updated
@@ -208,7 +209,7 @@ pub struct MarketDepth {
 }
 
 /// Returns the order book.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct MarketDepthL2 {
     /// The order book's row being updated
     pub position: i32,

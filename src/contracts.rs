@@ -3,6 +3,8 @@ use std::fmt::Debug;
 use std::string::ToString;
 
 use log::{error, info};
+use serde::Deserialize;
+use serde::Serialize;
 use tick_types::TickType;
 
 use crate::client::ResponseContext;
@@ -372,7 +374,7 @@ pub struct ContractDetails {
 }
 
 /// TagValue is a convenience struct to define key-value pairs.
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct TagValue {
     pub tag: String,
     pub value: String,

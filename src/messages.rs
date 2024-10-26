@@ -3,6 +3,7 @@ use std::ops::Index;
 use std::str::{self, FromStr};
 
 use log::debug;
+use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 use crate::{Error, ToField};
@@ -586,7 +587,7 @@ impl ResponseMessage {
 }
 
 /// An error message from the TWS API.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Notice {
     pub code: i32,
     pub message: String,
