@@ -643,6 +643,30 @@ impl Client {
         orders::place_order(self, order_id, contract, order)
     }
 
+    /// Exercises an options contract.
+    ///
+    /// Note: this function is affected by a TWS setting which specifies if an exercise request must be finalized.
+    ///
+    /// # Arguments
+    /// * `contract`          - The option [Contract] to be exercised.
+    /// * `exercise_action`   - Exercise option. ExerciseAction::Exercise or ExerciseAction::Lapse.
+    /// * `exercise_quantity` - Number of contracts to be exercised.
+    /// * `account`           - Destination account.
+    /// * `ovrd`              - Specifies whether your setting will override the system’s natural action.
+    ///                         For example, if your action is "exercise" and the option is not in-the-money, by natural action the option would not exercise. If you have override set to true the natural action would be overridden and the out-of-the money option would be exercised.
+    /// * `manual_order_time  - Specify the time at which the options should be exercised. An empty string will assume the current time. Required TWS API 10.26 or higher.
+    pub fn exercise_options(
+        &self,
+        contract: &Contract,
+        exercise_action: orders::ExerciseAction,
+        exercise_quantity: i32,
+        account: &str,
+        ovrd: bool,
+        manual_order_time: Option<OffsetDateTime>,
+    ) -> Result<(), Error> {
+        orders::exercise_options(self, contract, exercise_action, exercise_quantity, account, ovrd, manual_order_time)
+    }
+
     // === Historical Market Data ===
 
     /// Returns the timestamp of earliest available historical data for a contract and data type.

@@ -2,6 +2,7 @@ use std::convert::From;
 use std::fmt::{self, Debug};
 
 use log::{error, info};
+use time::OffsetDateTime;
 
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, OutgoingMessages};
@@ -13,6 +14,8 @@ use crate::{server_versions, Error};
 
 mod decoders;
 mod encoders;
+#[cfg(test)]
+mod tests;
 
 /// Make sure to test using only your paper trading account when applicable. A good way of finding out if an order type/exchange combination
 /// is possible is by trying to place such order manually using the TWS.
@@ -24,7 +27,7 @@ pub use crate::contracts::TagValue;
 
 const COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID: Option<f64> = Some(f64::INFINITY);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 /// Order describes the order.
 pub struct Order {
     /// The API client's order id.
@@ -700,12 +703,12 @@ pub enum AuctionStrategy {
     Transparent,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct OrderComboLeg {
     price: Option<f64>,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum OrderCondition {
     Price = 1,
     Time = 3,
@@ -742,7 +745,7 @@ impl From<i32> for OrderCondition {
 }
 
 /// Stores Soft Dollar Tier information.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct SoftDollarTier {
     pub name: String,
     pub value: String,
@@ -1582,5 +1585,32 @@ impl Iterator for ExecutionDataIterator {
     }
 }
 
-#[cfg(test)]
-mod tests;
+pub enum ExerciseAction {
+    Exercise = 1,
+    Lapse = 2,
+}
+
+pub(crate) fn exercise_options(
+    client: &Client,
+    contract: &Contract,
+    exercise_action: ExerciseAction,
+    exercise_quantity: i32,
+    account: &str,
+    ovrd: bool,
+    manual_order_time: Option<OffsetDateTime>,
+) -> Result<(), Error> {
+    let request_id = client.next_request_id();
+    let request = encoders::encode_exercise_options(
+        client.server_version(),
+        request_id,
+        contract,
+        exercise_action,
+        exercise_quantity,
+        account,
+        ovrd,
+        manual_order_time,
+    )?;
+    let subscription = client.send_request(request_id, request)?;
+
+    Ok(())
+}

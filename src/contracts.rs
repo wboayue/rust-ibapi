@@ -372,7 +372,7 @@ pub struct ContractDetails {
 }
 
 /// TagValue is a convenience struct to define key-value pairs.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct TagValue {
     pub tag: String,
     pub value: String,

@@ -2,6 +2,9 @@ use crate::Error;
 
 use super::*;
 
+#[cfg(test)]
+mod tests;
+
 pub(crate) fn encode_place_order(server_version: i32, order_id: i32, contract: &Contract, order: &Order) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::default();
     let message_version = message_version_for(server_version);
@@ -506,5 +509,43 @@ fn message_version_for(server_version: i32) -> i32 {
     }
 }
 
-#[cfg(test)]
-mod tests;
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn encode_exercise_options(
+    server_version: i32,
+    request_id: i32,
+    contract: &Contract,
+    exercise_action: ExerciseAction,
+    exercise_quantity: i32,
+    account: &str,
+    ovrd: bool,
+    manual_order_time: Option<OffsetDateTime>,
+) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 2;
+
+    let mut message = RequestMessage::default();
+
+    message.push_field(&OutgoingMessages::ExerciseOptions);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    message.push_field(&contract.contract_id);
+    message.push_field(&contract.symbol);
+    message.push_field(&contract.security_type);
+    message.push_field(&contract.last_trade_date_or_contract_month);
+    message.push_field(&contract.strike);
+    message.push_field(&contract.right);
+    message.push_field(&contract.multiplier);
+    message.push_field(&contract.exchange);
+    message.push_field(&contract.currency);
+    message.push_field(&contract.local_symbol);
+    message.push_field(&contract.trading_class);
+    message.push_field(&(exercise_action as i32));
+    message.push_field(&exercise_quantity);
+    message.push_field(&account);
+    message.push_field(&ovrd);
+
+    if server_version >= server_versions::MANUAL_ORDER_TIME {
+        message.push_field(&manual_order_time);
+    }
+
+    Ok(message)
+}
