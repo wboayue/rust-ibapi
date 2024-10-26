@@ -52,4 +52,8 @@ pub(crate) const CHANNEL_MAPPINGS: &[ChannelMapping] = &[
         request: OutgoingMessages::RequestMktDepthExchanges,
         responses: &[IncomingMessages::MktDepthExchanges],
     },
+    ChannelMapping {
+        request: OutgoingMessages::RequestCurrentTime,
+        responses: &[IncomingMessages::CurrentTime],
+    },
 ];

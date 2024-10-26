@@ -3,8 +3,8 @@ use time::OffsetDateTime;
 
 use crate::client::{ResponseContext, Subscribable, Subscription};
 use crate::contracts::tick_types::TickType;
-use crate::contracts::Contract;
-use crate::messages::{IncomingMessages, Notice, OutgoingMessages, RequestMessage, ResponseMessage, MESSAGE_INDEX};
+use crate::contracts::{Contract, OptionComputation};
+use crate::messages::{IncomingMessages, Notice, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::orders::TagValue;
 use crate::server_versions;
 use crate::ToField;
@@ -266,7 +266,7 @@ pub enum TickTypes {
     String(TickString),
     EFP(TickEFP),
     Generic(TickGeneric),
-    OptionComputation(TickOptionComputation),
+    OptionComputation(OptionComputation),
     SnapshotEnd,
     Notice(Notice),
     RequestParameters(TickRequestParameters),
@@ -299,7 +299,7 @@ impl Subscribable<TickTypes> for TickTypes {
             )?)),
             IncomingMessages::TickReqParams => Ok(TickTypes::RequestParameters(decoders::decode_tick_request_parameters(message)?)),
             IncomingMessages::TickSnapshotEnd => Ok(TickTypes::SnapshotEnd),
-            IncomingMessages::Error => Ok(TickTypes::Notice(Notice::from(&message))),
+            IncomingMessages::Error => Ok(TickTypes::Notice(Notice::from(message))),
             _ => Err(Error::NotImplemented),
         }
     }
@@ -362,9 +362,6 @@ pub struct TickGeneric {
     pub tick_type: TickType,
     pub value: f64,
 }
-
-#[derive(Debug, Default)]
-pub struct TickOptionComputation {}
 
 #[derive(Debug, Default)]
 pub struct TickRequestParameters {

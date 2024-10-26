@@ -348,6 +348,7 @@ impl RequestMessage {
         Self::default()
     }
 
+    #[cfg(test)]
     pub fn iter(&self) -> std::slice::Iter<String> {
         self.fields.iter()
     }
