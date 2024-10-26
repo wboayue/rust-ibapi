@@ -2,15 +2,18 @@ use crate::messages::OutgoingMessages;
 use crate::messages::RequestMessage;
 use crate::Error;
 
-pub(crate) fn encode_request_positions() -> Result<RequestMessage, Error> {
+#[cfg(test)]
+mod tests;
+
+pub(super) fn encode_request_positions() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::RequestPositions, 1)
 }
 
-pub(crate) fn encode_cancel_positions() -> Result<RequestMessage, Error> {
+pub(super) fn encode_cancel_positions() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::CancelPositions, 1)
 }
 
-pub(crate) fn encode_request_positions_multi(request_id: i32, account: Option<&str>, model_code: Option<&str>) -> Result<RequestMessage, Error> {
+pub(super) fn encode_request_positions_multi(request_id: i32, account: Option<&str>, model_code: Option<&str>) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 
     const VERSION: i32 = 1;
@@ -24,7 +27,7 @@ pub(crate) fn encode_request_positions_multi(request_id: i32, account: Option<&s
     Ok(message)
 }
 
-pub(crate) fn encode_cancel_positions_multi(request_id: i32) -> Result<RequestMessage, Error> {
+pub(super) fn encode_cancel_positions_multi(request_id: i32) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 
     const VERSION: i32 = 1;
@@ -36,11 +39,11 @@ pub(crate) fn encode_cancel_positions_multi(request_id: i32) -> Result<RequestMe
     Ok(message)
 }
 
-pub(crate) fn encode_request_family_codes() -> Result<RequestMessage, Error> {
+pub(super) fn encode_request_family_codes() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::RequestFamilyCodes, 1)
 }
 
-pub(crate) fn encode_request_pnl(request_id: i32, account: &str, model_code: Option<&str>) -> Result<RequestMessage, Error> {
+pub(super) fn encode_request_pnl(request_id: i32, account: &str, model_code: Option<&str>) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 
     message.push_field(&OutgoingMessages::RequestPnL);
@@ -51,11 +54,11 @@ pub(crate) fn encode_request_pnl(request_id: i32, account: &str, model_code: Opt
     Ok(message)
 }
 
-pub(crate) fn encode_cancel_pnl(request_id: i32) -> Result<RequestMessage, Error> {
+pub(super) fn encode_cancel_pnl(request_id: i32) -> Result<RequestMessage, Error> {
     encode_simple_with_request_id(OutgoingMessages::CancelPnL, request_id)
 }
 
-pub(crate) fn encode_request_pnl_single(request_id: i32, account: &str, contract_id: i32, model_code: Option<&str>) -> Result<RequestMessage, Error> {
+pub(super) fn encode_request_pnl_single(request_id: i32, account: &str, contract_id: i32, model_code: Option<&str>) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 
     message.push_field(&OutgoingMessages::RequestPnLSingle);
@@ -67,11 +70,11 @@ pub(crate) fn encode_request_pnl_single(request_id: i32, account: &str, contract
     Ok(message)
 }
 
-pub(crate) fn encode_cancel_pnl_single(request_id: i32) -> Result<RequestMessage, Error> {
+pub(super) fn encode_cancel_pnl_single(request_id: i32) -> Result<RequestMessage, Error> {
     encode_simple_with_request_id(OutgoingMessages::CancelPnLSingle, request_id)
 }
 
-pub(crate) fn encode_request_account_summary(request_id: i32, group: &str, tags: &[&str]) -> Result<RequestMessage, Error> {
+pub(super) fn encode_request_account_summary(request_id: i32, group: &str, tags: &[&str]) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::new();
@@ -85,18 +88,12 @@ pub(crate) fn encode_request_account_summary(request_id: i32, group: &str, tags:
     Ok(message)
 }
 
-pub(crate) fn encode_request_managed_accounts() -> Result<RequestMessage, Error> {
+pub(super) fn encode_request_managed_accounts() -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
-
-    let mut message = RequestMessage::new();
-
-    message.push_field(&OutgoingMessages::RequestManagedAccounts);
-    message.push_field(&VERSION);
-
-    Ok(message)
+    encode_simple(OutgoingMessages::RequestManagedAccounts, VERSION)
 }
 
-pub(crate) fn encode_request_account_updates(server_version: i32, account: &str) -> Result<RequestMessage, Error> {
+pub(super) fn encode_request_account_updates(server_version: i32, account: &str) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 2;
 
     let mut message = RequestMessage::new();
@@ -111,7 +108,7 @@ pub(crate) fn encode_request_account_updates(server_version: i32, account: &str)
     Ok(message)
 }
 
-pub(crate) fn encode_request_account_updates_multi(
+pub(super) fn encode_request_account_updates_multi(
     request_id: i32,
     account: Option<&str>,
     model_code: Option<&str>,
@@ -130,7 +127,7 @@ pub(crate) fn encode_request_account_updates_multi(
     Ok(message)
 }
 
-pub(crate) fn encode_cancel_account_updates(server_version: i32) -> Result<RequestMessage, Error> {
+pub(super) fn encode_cancel_account_updates(server_version: i32) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 2;
 
     let mut message = RequestMessage::new();
@@ -145,7 +142,7 @@ pub(crate) fn encode_cancel_account_updates(server_version: i32) -> Result<Reque
     Ok(message)
 }
 
-pub(crate) fn encode_cancel_account_updates_multi(_server_version: i32, request_id: i32) -> Result<RequestMessage, Error> {
+pub(super) fn encode_cancel_account_updates_multi(_server_version: i32, request_id: i32) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::new();
@@ -155,6 +152,11 @@ pub(crate) fn encode_cancel_account_updates_multi(_server_version: i32, request_
     message.push_field(&request_id);
 
     Ok(message)
+}
+
+pub(super) fn encode_request_server_time() -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 1;
+    encode_simple(OutgoingMessages::RequestCurrentTime, VERSION)
 }
 
 fn encode_simple(message_type: OutgoingMessages, version: i32) -> Result<RequestMessage, Error> {
@@ -174,6 +176,3 @@ fn encode_simple_with_request_id(message_type: OutgoingMessages, request_id: i32
 
     Ok(message)
 }
-
-#[cfg(test)]
-mod tests;

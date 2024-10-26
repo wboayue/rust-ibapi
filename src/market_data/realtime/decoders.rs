@@ -1,10 +1,12 @@
+use crate::contracts::decoders::decode_option_computation;
 use crate::contracts::tick_types::TickType;
+use crate::contracts::OptionComputation;
 use crate::Error;
 use crate::{messages::ResponseMessage, server_versions};
 
 use super::{
-    Bar, BidAsk, BidAskAttribute, DepthMarketDataDescription, MarketDepth, MarketDepthL2, MidPoint, TickEFP, TickGeneric, TickOptionComputation,
-    TickPrice, TickPriceSize, TickRequestParameters, TickSize, TickString, TickTypes, Trade, TradeAttribute,
+    Bar, BidAsk, BidAskAttribute, DepthMarketDataDescription, MarketDepth, MarketDepthL2, MidPoint, TickEFP, TickGeneric, TickPrice, TickPriceSize,
+    TickRequestParameters, TickSize, TickString, TickTypes, Trade, TradeAttribute,
 };
 
 #[cfg(test)]
@@ -273,14 +275,8 @@ pub(super) fn decode_tick_generic(message: &mut ResponseMessage) -> Result<TickG
     })
 }
 
-pub(super) fn decode_tick_option_computation(server_version: i32, message: &mut ResponseMessage) -> Result<TickOptionComputation, Error> {
-    // use crate::contracts::decoders::decode_option_computation();
-
-    message.skip(); // message type
-    message.skip(); // message version
-    message.skip(); // message request id
-
-    Ok(TickOptionComputation {})
+pub(super) fn decode_tick_option_computation(server_version: i32, message: &mut ResponseMessage) -> Result<OptionComputation, Error> {
+    decode_option_computation(server_version, message)
 }
 
 pub(super) fn decode_tick_request_parameters(message: &mut ResponseMessage) -> Result<TickRequestParameters, Error> {

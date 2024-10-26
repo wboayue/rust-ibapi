@@ -9,6 +9,8 @@
 //! - Real-time PnL updates for individual positions
 //!
 
+use time::OffsetDateTime;
+
 use crate::client::{ResponseContext, SharesChannel, Subscribable, Subscription};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
@@ -16,6 +18,8 @@ use crate::{server_versions, Client, Error};
 
 mod decoders;
 mod encoders;
+#[cfg(test)]
+mod tests;
 
 #[derive(Debug, Default)]
 /// Account information as it appears in the TWS’ Account Summary Window
@@ -498,10 +502,29 @@ pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
             let accounts = message.next_string()?;
             Ok(accounts.split(",").map(String::from).collect())
         }
+        Some(Err(Error::ConnectionReset)) => managed_accounts(client),
         Some(Err(e)) => Err(e),
         None => Ok(Vec::default()),
     }
 }
 
-#[cfg(test)]
-mod tests;
+pub fn server_time(client: &Client) -> Result<OffsetDateTime, Error> {
+    let request = encoders::encode_request_server_time()?;
+    let subscription = client.send_shared_request(OutgoingMessages::RequestCurrentTime, request)?;
+
+    match subscription.next() {
+        Some(Ok(mut message)) => {
+            message.skip(); // message type
+            message.skip(); // message version
+
+            let timestamp = message.next_long()?;
+            match OffsetDateTime::from_unix_timestamp(timestamp) {
+                Ok(date) => Ok(date),
+                Err(e) => Err(Error::Simple(format!("Error parsing date: {e}"))),
+            }
+        }
+        Some(Err(Error::ConnectionReset)) => server_time(client),
+        Some(Err(e)) => Err(e),
+        None => Err(Error::Simple("No response from server".to_string())),
+    }
+}

@@ -15,7 +15,7 @@ use crate::messages::ResponseMessage;
 use crate::Client;
 use crate::{server_versions, Error, ToField};
 
-mod decoders;
+pub(crate) mod decoders;
 mod encoders;
 pub mod tick_types;
 

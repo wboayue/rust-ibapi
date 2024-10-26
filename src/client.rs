@@ -28,8 +28,6 @@ use crate::{accounts, contracts, market_data, orders};
 pub struct Client {
     /// IB server version
     pub(crate) server_version: i32,
-    /// IB Server time
-    //    pub server_time: OffsetDateTime,
     pub(crate) connection_time: Option<OffsetDateTime>,
     pub(crate) time_zone: Option<&'static Tz>,
     pub(crate) message_bus: Arc<dyn MessageBus>,
@@ -111,6 +109,21 @@ impl Client {
 
     // === Accounts ===
 
+    /// TWS's current time. TWS is synchronized with the server (not local computer) using NTP and this function will receive the current time in TWS.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let server_time = client.server_time().expect("error requesting server time");
+    /// println!("server time: {server_time:?}");
+    /// ```
+    pub fn server_time(&self) -> Result<OffsetDateTime, Error> {
+        accounts::server_time(self)
+    }
+
     /// Subscribes to [PositionUpdate](accounts::PositionUpdate)s for all accessible accounts.
     /// All positions sent initially, and then only updates as positions change.
     ///
@@ -129,7 +142,7 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub fn positions(&self) -> core::result::Result<Subscription<PositionUpdate>, Error> {
+    pub fn positions(&self) -> Result<Subscription<PositionUpdate>, Error> {
         accounts::positions(self)
     }
 
