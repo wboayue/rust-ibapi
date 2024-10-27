@@ -1392,6 +1392,7 @@ pub(crate) fn completed_orders(client: &Client, api_only: bool) -> Result<Subscr
 
 /// Enumerates possible results from querying an [Order].
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Orders {
     OrderData(OrderData),
     OrderStatus(OrderStatus),
@@ -1403,6 +1404,8 @@ impl Subscribable<Orders> for Orders {
         match message.message_type() {
             IncomingMessages::CompletedOrder => Ok(Orders::OrderData(decoders::decode_completed_order(server_version, message.clone())?)),
             IncomingMessages::CommissionsReport => Ok(Orders::OrderData(decoders::decode_open_order(server_version, message.clone())?)),
+            IncomingMessages::OpenOrder => Ok(Orders::OrderData(decoders::decode_open_order(server_version, message.clone())?)),
+            IncomingMessages::OrderStatus => Ok(Orders::OrderStatus(decoders::decode_order_status(server_version, message)?)),
             IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => Err(Error::StreamEnd),
             IncomingMessages::Error => Ok(Orders::Notice(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
@@ -1479,6 +1482,7 @@ pub(crate) fn executions(client: &Client, filter: ExecutionFilter) -> Result<Sub
 
 /// Enumerates possible results from querying an [Execution].
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Executions {
     ExecutionData(ExecutionData),
     CommissionReport(CommissionReport),

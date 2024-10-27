@@ -77,7 +77,7 @@ impl Client {
             message_bus,
             client_id: connection_metadata.client_id,
             next_request_id: AtomicI32::new(9000),
-            order_id: AtomicI32::new(-1),
+            order_id: AtomicI32::new(1000),
         };
 
         Ok(client)
