@@ -1007,15 +1007,6 @@ pub struct OrderStatus {
     pub market_cap_price: f64,
 }
 
-// #[derive(Debug)]
-// pub struct Notice(String);
-
-// impl fmt::Display for Notice {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         write!(f, "{}", self.0)
-//     }
-// }
-
 // Submits an Order.
 // After the order is submitted correctly, events will be returned concerning the order's activity.
 // https://interactivebrokers.github.io/tws-api/order_submission.html
