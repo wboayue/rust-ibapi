@@ -1381,7 +1381,7 @@ pub(crate) fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
 }
 
 // Requests completed [Order]s.
-pub(crate) fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<OpenOrders>, Error> {
+pub(crate) fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<Orders>, Error> {
     client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
 
     let request = encoders::encode_completed_orders(api_only)?;
@@ -1392,19 +1392,19 @@ pub(crate) fn completed_orders(client: &Client, api_only: bool) -> Result<Subscr
 
 /// Enumerates possible results from querying an [Order].
 #[derive(Debug)]
-pub enum OpenOrders {
+pub enum Orders {
     OrderData(OrderData),
     OrderStatus(OrderStatus),
     Notice(Notice),
 }
 
-impl Subscribable<OpenOrders> for OpenOrders {
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<OpenOrders, Error> {
+impl Subscribable<Orders> for Orders {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Orders, Error> {
         match message.message_type() {
-            IncomingMessages::CompletedOrder => Ok(OpenOrders::OrderData(decoders::decode_completed_order(server_version, message.clone())?)),
-            IncomingMessages::CommissionsReport => Ok(OpenOrders::OrderData(decoders::decode_open_order(server_version, message.clone())?)),
+            IncomingMessages::CompletedOrder => Ok(Orders::OrderData(decoders::decode_completed_order(server_version, message.clone())?)),
+            IncomingMessages::CommissionsReport => Ok(Orders::OrderData(decoders::decode_open_order(server_version, message.clone())?)),
             IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => Err(Error::StreamEnd),
-            IncomingMessages::Error => Ok(OpenOrders::Notice(Notice::from(message))),
+            IncomingMessages::Error => Ok(Orders::Notice(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -1416,7 +1416,7 @@ impl Subscribable<OpenOrders> for OpenOrders {
 /// # Arguments
 /// * `client` - [Client] used to communicate with server.
 ///
-pub(crate) fn open_orders(client: &Client) -> Result<Subscription<OpenOrders>, Error> {
+pub(crate) fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
     let request = encoders::encode_open_orders()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestOpenOrders, request)?;
 
@@ -1425,7 +1425,7 @@ pub(crate) fn open_orders(client: &Client) -> Result<Subscription<OpenOrders>, E
 
 // Requests all *current* open orders in associated accounts at the current moment.
 // Open orders are returned once; this function does not initiate a subscription.
-pub(crate) fn all_open_orders(client: &Client) -> Result<Subscription<OpenOrders>, Error> {
+pub(crate) fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
     let request = encoders::encode_all_open_orders()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAllOpenOrders, request)?;
 
@@ -1433,7 +1433,7 @@ pub(crate) fn all_open_orders(client: &Client) -> Result<Subscription<OpenOrders
 }
 
 // Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
-pub(crate) fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription<OpenOrders>, Error> {
+pub(crate) fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription<Orders>, Error> {
     let request = encoders::encode_auto_open_orders(auto_bind)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request)?;
 

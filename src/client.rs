@@ -16,7 +16,7 @@ use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescriptio
 use crate::market_data::MarketDataType;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
-use crate::orders::{Executions, ExerciseOptions, OpenOrders, Order, OrderNotification};
+use crate::orders::{Executions, ExerciseOptions, Order, OrderNotification, Orders};
 use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus};
 use crate::{accounts, contracts, market_data, orders};
 
@@ -452,7 +452,7 @@ impl Client {
     ///    println!("{order_data:?}")
     /// }
     /// ```
-    pub fn all_open_orders(&self) -> Result<Subscription<OpenOrders>, Error> {
+    pub fn all_open_orders(&self) -> Result<Subscription<Orders>, Error> {
         orders::all_open_orders(self)
     }
 
@@ -473,7 +473,7 @@ impl Client {
     ///    println!("{order_data:?}")
     /// }
     /// ```
-    pub fn auto_open_orders(&self, auto_bind: bool) -> Result<Subscription<OpenOrders>, Error> {
+    pub fn auto_open_orders(&self, auto_bind: bool) -> Result<Subscription<Orders>, Error> {
         orders::auto_open_orders(self, auto_bind)
     }
 
@@ -517,7 +517,7 @@ impl Client {
     ///    println!("{order_data:?}")
     /// }
     /// ```
-    pub fn completed_orders(&self, api_only: bool) -> Result<Subscription<OpenOrders>, Error> {
+    pub fn completed_orders(&self, api_only: bool) -> Result<Subscription<Orders>, Error> {
         orders::completed_orders(self, api_only)
     }
 
@@ -598,7 +598,7 @@ impl Client {
     ///    println!("{order_data:?}")
     /// }
     /// ```
-    pub fn open_orders(&self) -> Result<Subscription<OpenOrders>, Error> {
+    pub fn open_orders(&self) -> Result<Subscription<Orders>, Error> {
         orders::open_orders(self)
     }
 
