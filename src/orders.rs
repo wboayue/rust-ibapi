@@ -269,7 +269,7 @@ pub struct Order {
     /// IB, Away, and PTA (post trade allocation).
     pub clearing_intent: String,
     /// The algorithm strategy.
-    /// As of API verion 9.6, the following algorithms are supported:
+    /// As of API version 9.6, the following algorithms are supported:
     /// ArrivalPx - Arrival Price
     /// DarkIce - Dark Ice
     /// PctVol - Percentage of Volume
@@ -289,7 +289,7 @@ pub struct Order {
     /// For IBDARK orders only.
     pub not_held: bool,
     /// Advanced parameters for Smart combo routing.
-    /// These features are for both guaranteed and nonguaranteed combination orders routed to Smart, and are available based on combo type and order type. SmartComboRoutingParams is similar to AlgoParams in that it makes use of tag/value pairs to add parameters to combo orders.
+    /// These features are for both guaranteed and non-guaranteed combination orders routed to Smart, and are available based on combo type and order type. SmartComboRoutingParams is similar to AlgoParams in that it makes use of tag/value pairs to add parameters to combo orders.
     /// Make sure that you fully understand how Advanced Combo Routing works in TWS itself first: <https://guides.interactivebrokers.com/tws/twsguide.htm#usersguidebook/specializedorderentry/advanced_combo_routing.htm>
     /// The parameters cover the following capabilities:
     ///
@@ -334,7 +334,7 @@ pub struct Order {
     pub scale_table: String,
     /// Is used to place an order to a model. For example, "Technology" model can be used for tech stocks first created in TWS.
     pub model_code: String,
-    /// This is a regulartory attribute that applies to all US Commodity (Futures) Exchanges, provided to allow client to comply with CFTC Tag 50 Rules.
+    /// This is a regulatory attribute that applies to all US Commodity (Futures) Exchanges, provided to allow client to comply with CFTC Tag 50 Rules.
     pub ext_operator: String,
     /// The native cash quantity.
     pub cash_qty: Option<f64>,
@@ -1576,7 +1576,7 @@ impl Iterator for ExecutionDataIterator {
                         return None;
                     }
                     message => {
-                        error!("order data iterator unexpected messsage: {message:?}");
+                        error!("order data iterator unexpected message: {message:?}");
                     }
                 }
             } else {
