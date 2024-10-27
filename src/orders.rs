@@ -1381,68 +1381,31 @@ pub(crate) fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
 }
 
 // Requests completed [Order]s.
-pub(crate) fn completed_orders(client: &Client, api_only: bool) -> Result<OrderDataIterator, Error> {
+pub(crate) fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<OpenOrders>, Error> {
     client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
 
-    let message = encoders::encode_completed_orders(api_only)?;
+    let request = encoders::encode_completed_orders(api_only)?;
+    let subscription = client.send_shared_request(OutgoingMessages::RequestCompletedOrders, request)?;
 
-    let messages = client.send_shared_request(OutgoingMessages::RequestCompletedOrders, message)?;
-
-    Ok(OrderDataIterator {
-        server_version: client.server_version(),
-        messages,
-    })
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 /// Enumerates possible results from querying an [Order].
 #[derive(Debug)]
-pub enum OrderDataResult {
-    OrderData(Box<OrderData>),
-    OrderStatus(Box<OrderStatus>),
+pub enum OpenOrders {
+    OrderData(OrderData),
+    OrderStatus(OrderStatus),
+    Notice(Notice),
 }
 
-/// Supports iteration over [OrderDataResult].
-pub(crate) struct OrderDataIterator {
-    server_version: i32,
-    messages: InternalSubscription,
-}
-
-impl Iterator for OrderDataIterator {
-    type Item = OrderDataResult;
-
-    /// Returns the next [OrderDataResult]. Waits up to x seconds for next [OrderDataResult].
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(Ok(mut message)) = self.messages.next() {
-                match message.message_type() {
-                    IncomingMessages::CompletedOrder => match decoders::decode_completed_order(self.server_version, message) {
-                        Ok(val) => return Some(OrderDataResult::OrderData(Box::new(val))),
-                        Err(err) => {
-                            error!("error decoding completed order: {err}");
-                        }
-                    },
-                    IncomingMessages::OpenOrder => match decoders::decode_open_order(self.server_version, message) {
-                        Ok(val) => return Some(OrderDataResult::OrderData(Box::new(val))),
-                        Err(err) => {
-                            error!("error decoding open order: {err}");
-                        }
-                    },
-                    IncomingMessages::OrderStatus => match decoders::decode_order_status(self.server_version, &mut message) {
-                        Ok(val) => return Some(OrderDataResult::OrderStatus(Box::new(val))),
-                        Err(err) => {
-                            error!("error decoding order status: {err}");
-                        }
-                    },
-                    IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => {
-                        return None;
-                    }
-                    message => {
-                        error!("order data iterator unexpected message: {message:?}");
-                    }
-                }
-            } else {
-                return None;
-            }
+impl Subscribable<OpenOrders> for OpenOrders {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<OpenOrders, Error> {
+        match message.message_type() {
+            IncomingMessages::CompletedOrder => Ok(OpenOrders::OrderData(decoders::decode_completed_order(server_version, message.clone())?)),
+            IncomingMessages::CommissionsReport => Ok(OpenOrders::OrderData(decoders::decode_open_order(server_version, message.clone())?)),
+            IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => Err(Error::StreamEnd),
+            IncomingMessages::Error => Ok(OpenOrders::Notice(Notice::from(message))),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 }
@@ -1453,41 +1416,28 @@ impl Iterator for OrderDataIterator {
 /// # Arguments
 /// * `client` - [Client] used to communicate with server.
 ///
-pub(crate) fn open_orders(client: &Client) -> Result<OrderDataIterator, Error> {
-    let message = encoders::encode_open_orders()?;
+pub(crate) fn open_orders(client: &Client) -> Result<Subscription<OpenOrders>, Error> {
+    let request = encoders::encode_open_orders()?;
+    let subscription = client.send_shared_request(OutgoingMessages::RequestOpenOrders, request)?;
 
-    let messages = client.send_shared_request(OutgoingMessages::RequestOpenOrders, message)?;
-
-    Ok(OrderDataIterator {
-        server_version: client.server_version(),
-        messages,
-    })
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 // Requests all *current* open orders in associated accounts at the current moment.
 // Open orders are returned once; this function does not initiate a subscription.
-pub(crate) fn all_open_orders(client: &Client) -> Result<OrderDataIterator, Error> {
-    let message = encoders::encode_all_open_orders()?;
+pub(crate) fn all_open_orders(client: &Client) -> Result<Subscription<OpenOrders>, Error> {
+    let request = encoders::encode_all_open_orders()?;
+    let subscription = client.send_shared_request(OutgoingMessages::RequestAllOpenOrders, request)?;
 
-    let messages = client.send_shared_request(OutgoingMessages::RequestAllOpenOrders, message)?;
-
-    Ok(OrderDataIterator {
-        server_version: client.server_version(),
-        messages,
-    })
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 // Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
-pub(crate) fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<OrderDataIterator, Error> {
-    let message = encoders::encode_auto_open_orders(auto_bind)?;
+pub(crate) fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription<OpenOrders>, Error> {
+    let request = encoders::encode_auto_open_orders(auto_bind)?;
+    let subscription = client.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request)?;
 
-    // TODO this should probably not timeout.
-    let messages = client.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, message)?;
-
-    Ok(OrderDataIterator {
-        server_version: client.server_version(),
-        messages,
-    })
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 #[derive(Debug, Default)]
@@ -1518,61 +1468,31 @@ pub struct ExecutionFilter {
 //
 // # Arguments
 // * `filter` - filter criteria used to determine which execution reports are returned
-pub(crate) fn executions(client: &Client, filter: ExecutionFilter) -> Result<ExecutionDataIterator, Error> {
+pub(crate) fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
     let request_id = client.next_request_id();
-    let message = encoders::encode_executions(client.server_version(), request_id, &filter)?;
 
-    let messages = client.send_request(request_id, message)?;
+    let request = encoders::encode_executions(client.server_version(), request_id, &filter)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    Ok(ExecutionDataIterator {
-        server_version: client.server_version(),
-        messages,
-    })
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 /// Enumerates possible results from querying an [Execution].
 #[derive(Debug)]
-pub enum ExecutionDataResult {
-    ExecutionData(Box<ExecutionData>),
-    CommissionReport(Box<CommissionReport>),
+pub enum Executions {
+    ExecutionData(ExecutionData),
+    CommissionReport(CommissionReport),
+    Notice(Notice),
 }
 
-/// Supports iteration over [ExecutionDataResult].
-pub(crate) struct ExecutionDataIterator {
-    server_version: i32,
-    messages: InternalSubscription,
-}
-
-impl Iterator for ExecutionDataIterator {
-    type Item = ExecutionDataResult;
-
-    /// Returns the next [OrderDataResult]. Waits up to x seconds for next [OrderDataResult].
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(Ok(mut message)) = self.messages.next() {
-                match message.message_type() {
-                    IncomingMessages::ExecutionData => match decoders::decode_execution_data(self.server_version, &mut message) {
-                        Ok(val) => return Some(ExecutionDataResult::ExecutionData(Box::new(val))),
-                        Err(err) => {
-                            error!("error decoding execution data: {err}");
-                        }
-                    },
-                    IncomingMessages::CommissionsReport => match decoders::decode_commission_report(self.server_version, &mut message) {
-                        Ok(val) => return Some(ExecutionDataResult::CommissionReport(Box::new(val))),
-                        Err(err) => {
-                            error!("error decoding commission report: {err}");
-                        }
-                    },
-                    IncomingMessages::ExecutionDataEnd => {
-                        return None;
-                    }
-                    message => {
-                        error!("order data iterator unexpected message: {message:?}");
-                    }
-                }
-            } else {
-                return None;
-            }
+impl Subscribable<Executions> for Executions {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Executions, Error> {
+        match message.message_type() {
+            IncomingMessages::ExecutionData => Ok(Executions::ExecutionData(decoders::decode_execution_data(server_version, message)?)),
+            IncomingMessages::CommissionsReport => Ok(Executions::CommissionReport(decoders::decode_commission_report(server_version, message)?)),
+            IncomingMessages::ExecutionDataEnd => Err(Error::StreamEnd),
+            IncomingMessages::Error => Ok(Executions::Notice(Notice::from(message))),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 }
@@ -1592,19 +1512,12 @@ pub enum ExerciseOptions {
 }
 
 impl Subscribable<ExerciseOptions> for ExerciseOptions {
-    // fn cancel(&self) -> Result<(), Error> {
-    //     Ok(())
-    // }
-
-    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus, IncomingMessages::Error];
-
-    // decoders::decode_open_order(self.server_version, message)
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<ExerciseOptions, Error> {
         match message.message_type() {
             IncomingMessages::OpenOrder => Ok(ExerciseOptions::OpenOrder(decoders::decode_open_order(server_version, message.clone())?)),
             IncomingMessages::OrderStatus => Ok(ExerciseOptions::OrderStatus(decoders::decode_order_status(server_version, message)?)),
             IncomingMessages::Error => Ok(ExerciseOptions::Notice(Notice::from(message))),
-            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 }
@@ -1619,6 +1532,7 @@ pub(crate) fn exercise_options<'a>(
     manual_order_time: Option<OffsetDateTime>,
 ) -> Result<Subscription<'a, ExerciseOptions>, Error> {
     let request_id = client.next_request_id();
+
     let request = encoders::encode_exercise_options(
         client.server_version(),
         request_id,

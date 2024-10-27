@@ -382,10 +382,10 @@ fn completed_orders() {
         ],
     });
 
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let api_only = true;
-    let results = super::completed_orders(&mut client, api_only);
+    let results = super::completed_orders(&client, api_only);
 
     let request_messages = client.message_bus.request_messages();
 
@@ -393,8 +393,8 @@ fn completed_orders() {
 
     assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
 
-    let mut results = results.unwrap();
-    if let Some(OrderDataResult::OrderData(order_data)) = results.next() {
+    let results = results.unwrap();
+    if let Some(OpenOrders::OrderData(order_data)) = results.next() {
         assert_eq!(order_data.order_id, -1, "open_order.order_id");
 
         let contract = &order_data.contract;
@@ -515,9 +515,9 @@ fn open_orders() {
         response_messages: vec!["9|1|43||".to_owned()],
     });
 
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
-    let results = super::open_orders(&mut client);
+    let results = super::open_orders(&client);
 
     let request_messages = client.message_bus.request_messages();
 

@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use log::{debug, error, info, warn};
+use log::{debug, error, warn};
 use time::OffsetDateTime;
 use time_tz::Tz;
 
@@ -16,7 +16,7 @@ use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescriptio
 use crate::market_data::MarketDataType;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
-use crate::orders::{ExerciseOptions, Order, OrderDataResult, OrderNotification};
+use crate::orders::{Executions, ExerciseOptions, OpenOrders, Order, OrderNotification};
 use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus};
 use crate::{accounts, contracts, market_data, orders};
 
@@ -447,12 +447,12 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let results = client.all_open_orders().expect("request failed");
-    /// for order_data in results {
+    /// let subscription = client.all_open_orders().expect("request failed");
+    /// for order_data in &subscription {
     ///    println!("{order_data:?}")
     /// }
     /// ```
-    pub fn all_open_orders(&self) -> Result<impl Iterator<Item = orders::OrderDataResult>, Error> {
+    pub fn all_open_orders(&self) -> Result<Subscription<OpenOrders>, Error> {
         orders::all_open_orders(self)
     }
 
@@ -468,12 +468,12 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let results = client.auto_open_orders(false).expect("request failed");
-    /// for order_data in results {
+    /// let subscription = client.auto_open_orders(false).expect("request failed");
+    /// for order_data in &subscription {
     ///    println!("{order_data:?}")
     /// }
     /// ```
-    pub fn auto_open_orders(&self, auto_bind: bool) -> Result<impl Iterator<Item = orders::OrderDataResult>, Error> {
+    pub fn auto_open_orders(&self, auto_bind: bool) -> Result<Subscription<OpenOrders>, Error> {
         orders::auto_open_orders(self, auto_bind)
     }
 
@@ -491,8 +491,8 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let order_id = 15;
-    /// let results = client.cancel_order(order_id, "").expect("request failed");
-    /// for result in results {
+    /// let subscription = client.cancel_order(order_id, "").expect("request failed");
+    /// for result in subscription {
     ///    println!("{result:?}");
     /// }
     /// ```
@@ -512,12 +512,12 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let results = client.completed_orders(false).expect("request failed");
-    /// for order_data in results {
+    /// let subscription = client.completed_orders(false).expect("request failed");
+    /// for order_data in &subscription {
     ///    println!("{order_data:?}")
     /// }
     /// ```
-    pub fn completed_orders(&self, api_only: bool) -> Result<impl Iterator<Item = orders::OrderDataResult>, Error> {
+    pub fn completed_orders(&self, api_only: bool) -> Result<Subscription<OpenOrders>, Error> {
         orders::completed_orders(self, api_only)
     }
 
@@ -543,12 +543,12 @@ impl Client {
     ///    ..ExecutionFilter::default()
     /// };
     ///
-    /// let executions = client.executions(filter).expect("request failed");
-    /// for execution_data in executions {
+    /// let subscription = client.executions(filter).expect("request failed");
+    /// for execution_data in &subscription {
     ///    println!("{execution_data:?}")
     /// }
     /// ```
-    pub fn executions(&self, filter: orders::ExecutionFilter) -> Result<impl Iterator<Item = orders::ExecutionDataResult>, Error> {
+    pub fn executions(&self, filter: orders::ExecutionFilter) -> Result<Subscription<Executions>, Error> {
         orders::executions(self, filter)
     }
 
@@ -593,12 +593,12 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let results = client.open_orders().expect("request failed");
-    /// for order_data in results {
+    /// let subscription = client.open_orders().expect("request failed");
+    /// for order_data in &subscription {
     ///    println!("{order_data:?}")
     /// }
     /// ```
-    pub fn open_orders(&self) -> Result<impl Iterator<Item = OrderDataResult>, Error> {
+    pub fn open_orders(&self) -> Result<Subscription<OpenOrders>, Error> {
         orders::open_orders(self)
     }
 
@@ -1337,24 +1337,15 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     }
 
     fn process_message(&self, mut message: ResponseMessage) -> Option<T> {
-        if T::RESPONSE_MESSAGE_IDS.contains(&message.message_type()) {
-            match T::decode(self.client.server_version(), &mut message) {
-                Ok(val) => Some(val),
-                Err(err) => {
-                    let mut error = self.error.lock().unwrap();
-                    *error = Some(err);
-                    None
-                }
+        match T::decode(self.client.server_version(), &mut message) {
+            Ok(val) => Some(val),
+            Err(Error::StreamEnd) => None,
+            Err(err) => {
+                error!("error decoding message: {err}");
+                let mut error = self.error.lock().unwrap();
+                *error = Some(err);
+                None
             }
-        } else if message.message_type() == IncomingMessages::Error {
-            let error_message = message.peek_string(4);
-            error!("{error_message}");
-            let mut error = self.error.lock().unwrap();
-            *error = Some(Error::Simple(error_message));
-            None
-        } else {
-            info!("subscription iterator unexpected message: {message:?}");
-            None
         }
     }
 
@@ -1447,8 +1438,7 @@ impl<'a, T: Subscribable<T>> Drop for Subscription<'a, T> {
 }
 
 pub(crate) trait Subscribable<T> {
-    const RESPONSE_MESSAGE_IDS: &[IncomingMessages];
-    const CANCEL_MESSAGE_ID: Option<IncomingMessages> = None;
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[];
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
     fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {

@@ -1,5 +1,7 @@
 use std::{num::ParseIntError, string::FromUtf8Error, sync::Arc};
 
+use crate::messages::ResponseMessage;
+
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum Error {
@@ -19,6 +21,8 @@ pub enum Error {
     ConnectionReset,
     Cancelled,
     Shutdown,
+    StreamEnd,
+    UnexpectedResponse(ResponseMessage),
 }
 
 impl std::error::Error for Error {}
@@ -39,6 +43,8 @@ impl std::fmt::Display for Error {
             Error::ConnectionReset => write!(f, "ConnectionReset"),
             Error::Cancelled => write!(f, "Cancelled"),
             Error::Shutdown => write!(f, "Shutdown"),
+            Error::StreamEnd => write!(f, "StreamEnd"),
+            Error::UnexpectedResponse(message) => write!(f, "UnexpectedResponse: {:?}", message),
 
             Error::Simple(ref err) => write!(f, "error occurred: {err}"),
         }
