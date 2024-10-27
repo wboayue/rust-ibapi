@@ -1,12 +1,13 @@
 use std::convert::From;
-use std::fmt::{self, Debug};
+use std::fmt::Debug;
 
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
+use crate::client::{ResponseContext, Subscribable, Subscription};
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
-use crate::messages::{IncomingMessages, OutgoingMessages};
+use crate::messages::{IncomingMessages, Notice, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::transport::InternalSubscription;
 use crate::Client;
@@ -753,7 +754,7 @@ pub struct SoftDollarTier {
     pub display_name: String,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct OrderData {
     /// The order's unique id
     pub order_id: i32,
@@ -766,7 +767,7 @@ pub struct OrderData {
 }
 
 /// Provides an active order's current state.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct OrderState {
     /// The order's current status
     pub status: String,
@@ -971,7 +972,7 @@ impl From<CommissionReport> for OrderNotification {
 }
 
 /// Contains all relevant information on the current status of the order execution-wise (i.e. amount filled and pending, filling price, etc.).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct OrderStatus {
     /// The order's client id.
     pub order_id: i32,
@@ -1006,14 +1007,14 @@ pub struct OrderStatus {
     pub market_cap_price: f64,
 }
 
-#[derive(Debug)]
-pub struct Notice(String);
+// #[derive(Debug)]
+// pub struct Notice(String);
 
-impl fmt::Display for Notice {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
+// impl fmt::Display for Notice {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         write!(f, "{}", self.0)
+//     }
+// }
 
 // Submits an Order.
 // After the order is submitted correctly, events will be returned concerning the order's activity.
@@ -1345,8 +1346,7 @@ impl Iterator for CancelOrderResultIterator {
                         }
                     },
                     IncomingMessages::Error => {
-                        let message = message.peek_string(4);
-                        return Some(CancelOrderResult::Notice(Notice(message)));
+                        return Some(CancelOrderResult::Notice(Notice::from(&message)));
                     }
                     message => {
                         error!("unexpected messsage: {message:?}");
@@ -1586,20 +1586,47 @@ impl Iterator for ExecutionDataIterator {
     }
 }
 
+#[derive(Debug)]
 pub enum ExerciseAction {
     Exercise = 1,
     Lapse = 2,
 }
 
-pub(crate) fn exercise_options(
-    client: &Client,
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[allow(clippy::large_enum_variant)]
+pub enum ExerciseOptions {
+    OpenOrder(OrderData),
+    OrderStatus(OrderStatus),
+    Notice(Notice),
+}
+
+impl Subscribable<ExerciseOptions> for ExerciseOptions {
+    // fn cancel(&self) -> Result<(), Error> {
+    //     Ok(())
+    // }
+
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus, IncomingMessages::Error];
+
+    // decoders::decode_open_order(self.server_version, message)
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<ExerciseOptions, Error> {
+        match message.message_type() {
+            IncomingMessages::OpenOrder => Ok(ExerciseOptions::OpenOrder(decoders::decode_open_order(server_version, message.clone())?)),
+            IncomingMessages::OrderStatus => Ok(ExerciseOptions::OrderStatus(decoders::decode_order_status(server_version, message)?)),
+            IncomingMessages::Error => Ok(ExerciseOptions::Notice(Notice::from(message))),
+            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+        }
+    }
+}
+
+pub(crate) fn exercise_options<'a>(
+    client: &'a Client,
     contract: &Contract,
     exercise_action: ExerciseAction,
     exercise_quantity: i32,
     account: &str,
     ovrd: bool,
     manual_order_time: Option<OffsetDateTime>,
-) -> Result<(), Error> {
+) -> Result<Subscription<'a, ExerciseOptions>, Error> {
     let request_id = client.next_request_id();
     let request = encoders::encode_exercise_options(
         client.server_version(),
@@ -1613,5 +1640,5 @@ pub(crate) fn exercise_options(
     )?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(())
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }

@@ -16,7 +16,7 @@ use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescriptio
 use crate::market_data::MarketDataType;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
-use crate::orders::{Order, OrderDataResult, OrderNotification};
+use crate::orders::{ExerciseOptions, Order, OrderDataResult, OrderNotification};
 use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus};
 use crate::{accounts, contracts, market_data, orders};
 
@@ -655,15 +655,15 @@ impl Client {
     /// * `ovrd`              - Specifies whether your setting will override the system’s natural action.
     ///                         For example, if your action is "exercise" and the option is not in-the-money, by natural action the option would not exercise. If you have override set to true the natural action would be overridden and the out-of-the money option would be exercised.
     /// * `manual_order_time  - Specify the time at which the options should be exercised. An empty string will assume the current time. Required TWS API 10.26 or higher.
-    pub fn exercise_options(
-        &self,
+    pub fn exercise_options<'a>(
+        &'a self,
         contract: &Contract,
         exercise_action: orders::ExerciseAction,
         exercise_quantity: i32,
         account: &str,
         ovrd: bool,
         manual_order_time: Option<OffsetDateTime>,
-    ) -> Result<(), Error> {
+    ) -> Result<Subscription<'a, ExerciseOptions>, Error> {
         orders::exercise_options(self, contract, exercise_action, exercise_quantity, account, ovrd, manual_order_time)
     }
 
