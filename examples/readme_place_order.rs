@@ -1,5 +1,5 @@
 use ibapi::contracts::Contract;
-use ibapi::orders::{order_builder, Action, OrderNotification};
+use ibapi::orders::{order_builder, Action, PlaceOrder};
 use ibapi::Client;
 
 pub fn main() {
@@ -16,11 +16,11 @@ pub fn main() {
 
     let subscription = client.place_order(order_id, &contract, &order).expect("place order request failed!");
 
-    for notice in subscription {
-        if let OrderNotification::ExecutionData(data) = notice {
+    for event in &subscription {
+        if let PlaceOrder::ExecutionData(data) = event {
             println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
         } else {
-            println!("{:?}", notice);
+            println!("{:?}", event);
         }
     }
 }

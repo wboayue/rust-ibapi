@@ -2,7 +2,8 @@ use anyhow::Ok;
 use clap::builder::PossibleValue;
 use clap::{arg, Command};
 
-use ibapi::orders::OrderDataResult;
+use ibapi::client::Subscription;
+use ibapi::orders::Orders;
 use ibapi::Client;
 
 fn main() -> anyhow::Result<()> {
@@ -53,8 +54,8 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn print_orders(orders: impl Iterator<Item = OrderDataResult>) {
-    for order in orders {
+fn print_orders(orders: Subscription<Orders>) {
+    for order in &orders {
         println!("order: {order:?}")
     }
 }

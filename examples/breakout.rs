@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use ibapi::contracts::Contract;
 use ibapi::market_data::realtime::{Bar, BarSize, WhatToShow};
-use ibapi::orders::{order_builder, Action, OrderNotification};
+use ibapi::orders::{order_builder, Action, PlaceOrder};
 use ibapi::Client;
 
 fn main() {
@@ -38,7 +38,7 @@ fn main() {
 
         let notices = client.place_order(order_id, &contract, &order).unwrap();
         for notice in notices {
-            if let OrderNotification::ExecutionData(data) = notice {
+            if let PlaceOrder::ExecutionData(data) = notice {
                 println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
             } else {
                 println!("{:?}", notice);

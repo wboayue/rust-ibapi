@@ -29,7 +29,19 @@ pub(crate) const CHANNEL_MAPPINGS: &[ChannelMapping] = &[
     },
     ChannelMapping {
         request: OutgoingMessages::RequestOpenOrders,
-        responses: &[IncomingMessages::OpenOrder, IncomingMessages::OpenOrderEnd],
+        responses: &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus, IncomingMessages::OpenOrderEnd],
+    },
+    ChannelMapping {
+        request: OutgoingMessages::RequestAllOpenOrders,
+        responses: &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus, IncomingMessages::OpenOrderEnd],
+    },
+    ChannelMapping {
+        request: OutgoingMessages::RequestAutoOpenOrders,
+        responses: &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus, IncomingMessages::OpenOrderEnd],
+    },
+    ChannelMapping {
+        request: OutgoingMessages::RequestCompletedOrders,
+        responses: &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus, IncomingMessages::OpenOrderEnd],
     },
     ChannelMapping {
         request: OutgoingMessages::RequestManagedAccounts,

@@ -3,6 +3,8 @@ use std::fmt::Debug;
 use std::string::ToString;
 
 use log::{error, info};
+use serde::Deserialize;
+use serde::Serialize;
 use tick_types::TickType;
 
 use crate::client::ResponseContext;
@@ -26,7 +28,7 @@ mod tests;
 
 // Models
 
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 /// SecurityType enumerates available security types
 pub enum SecurityType {
     /// Stock (or ETF)
@@ -111,7 +113,7 @@ impl SecurityType {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 /// Contract describes an instrument's definition
 pub struct Contract {
     /// The unique IB contract identifier.
@@ -212,7 +214,7 @@ impl Contract {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 // ComboLeg represents a leg within combo orders.
 pub struct ComboLeg {
     /// The Contract's IB's unique id.
@@ -234,7 +236,7 @@ pub struct ComboLeg {
     pub exempt_code: i32,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 /// OpenClose specifies whether an order is an open or closing order.
 pub enum ComboLegOpenClose {
     /// 0 - Same as the parent security. This is the only option for retail customers.
@@ -267,7 +269,7 @@ impl From<i32> for ComboLegOpenClose {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 /// Delta and underlying price for Delta-Neutral combo orders.
 /// Underlying (STK or FUT), delta and underlying price goes into this attribute.
 pub struct DeltaNeutralContract {
@@ -372,7 +374,7 @@ pub struct ContractDetails {
 }
 
 /// TagValue is a convenience struct to define key-value pairs.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct TagValue {
     pub tag: String,
     pub value: String,

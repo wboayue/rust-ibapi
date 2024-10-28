@@ -17,11 +17,12 @@ fn main() {
         .realtime_bars(&contract_nvda, BarSize::Sec5, WhatToShow::Trades, false)
         .expect("realtime bars request failed!");
 
-    while let (Some(bar_nvda), Some(bar_aapl)) = (subscription_nvda.next(), subscription_aapl.next()) {
+    for (bar_aapl, bar_nvda) in subscription_aapl.iter().zip(subscription_nvda.iter()) {
         // Process each bar here (e.g., print or use in calculations)
-        println!("NVDA {}, AAPL {}", bar_nvda.close, bar_aapl.close);
+        println!("AAPL {}, NVDA {}", bar_nvda.close, bar_aapl.close);
 
-        // when your algorithm is done, cancel subscription
+        // You can simply break the or explicitly cancel the subscription.
+        // Subscriptions are automatically canceled when they go out of scope.
         subscription_aapl.cancel();
         subscription_nvda.cancel();
     }

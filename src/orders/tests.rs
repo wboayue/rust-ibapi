@@ -46,7 +46,7 @@ fn place_order() {
 
     let mut notifications = result.unwrap();
 
-    if let Some(OrderNotification::OpenOrder(open_order)) = notifications.next() {
+    if let Some(PlaceOrder::OpenOrder(open_order)) = notifications.next() {
         assert_eq!(open_order.order_id, 13, "open_order.order_id");
 
         let contract = &open_order.contract;
@@ -192,7 +192,7 @@ fn place_order() {
         assert!(false, "message[0] expected an open order notification");
     }
 
-    if let Some(OrderNotification::OrderStatus(order_status)) = notifications.next() {
+    if let Some(PlaceOrder::OrderStatus(order_status)) = notifications.next() {
         assert_eq!(order_status.order_id, 13, "order_status.order_id");
         assert_eq!(order_status.status, "PreSubmitted", "order_status.status");
         assert_eq!(order_status.filled, 0.0, "order_status.filled");
@@ -208,7 +208,7 @@ fn place_order() {
         assert!(false, "message[1] expected order status notification");
     }
 
-    if let Some(OrderNotification::ExecutionData(execution_data)) = notifications.next() {
+    if let Some(PlaceOrder::ExecutionData(execution_data)) = notifications.next() {
         let contract = execution_data.contract;
         let execution = execution_data.execution;
 
@@ -249,7 +249,7 @@ fn place_order() {
         assert!(false, "message[2] expected execution notification");
     }
 
-    if let Some(OrderNotification::OpenOrder(open_order)) = notifications.next() {
+    if let Some(PlaceOrder::OpenOrder(open_order)) = notifications.next() {
         let order_state = &open_order.order_state;
 
         assert_eq!(open_order.order_id, 13, "open_order.order_id");
@@ -258,7 +258,7 @@ fn place_order() {
         assert!(false, "message[3] expected an open order notification");
     }
 
-    if let Some(OrderNotification::OrderStatus(order_status)) = notifications.next() {
+    if let Some(PlaceOrder::OrderStatus(order_status)) = notifications.next() {
         assert_eq!(order_status.order_id, 13, "order_status.order_id");
         assert_eq!(order_status.status, "Filled", "order_status.status");
         assert_eq!(order_status.filled, 100.0, "order_status.filled");
@@ -269,7 +269,7 @@ fn place_order() {
         assert!(false, "message[4] expected order status notification");
     }
 
-    if let Some(OrderNotification::OpenOrder(open_order)) = notifications.next() {
+    if let Some(PlaceOrder::OpenOrder(open_order)) = notifications.next() {
         let order_state = &open_order.order_state;
 
         assert_eq!(open_order.order_id, 13, "open_order.order_id");
@@ -282,7 +282,7 @@ fn place_order() {
         assert!(false, "message[5] expected an open order notification");
     }
 
-    if let Some(OrderNotification::CommissionReport(report)) = notifications.next() {
+    if let Some(PlaceOrder::CommissionReport(report)) = notifications.next() {
         assert_eq!(report.execution_id, "00025b46.63f8f39c.01.01", "report.execution_id");
         assert_eq!(report.commission, 1.0, "report.commission");
         assert_eq!(report.currency, "USD", "report.currency");
@@ -317,7 +317,7 @@ fn cancel_order() {
 
     let mut results = results.unwrap();
 
-    if let Some(CancelOrderResult::OrderStatus(order_status)) = results.next() {
+    if let Some(CancelOrder::OrderStatus(order_status)) = results.next() {
         assert_eq!(order_status.order_id, 41, "order_status.order_id");
         assert_eq!(order_status.status, "Cancelled", "order_status.status");
         assert_eq!(order_status.filled, 0.0, "order_status.filled");
@@ -331,8 +331,8 @@ fn cancel_order() {
         assert_eq!(order_status.market_cap_price, 0.0, "order_status.market_cap_price");
     }
 
-    if let Some(CancelOrderResult::Notice(Notice(message))) = results.next() {
-        assert_eq!(message, "Order Canceled - reason:", "order status notice");
+    if let Some(CancelOrder::Notice(notice)) = results.next() {
+        assert_eq!(notice.message, "Order Canceled - reason:", "order status notice");
     }
 }
 
@@ -382,10 +382,10 @@ fn completed_orders() {
         ],
     });
 
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     let api_only = true;
-    let results = super::completed_orders(&mut client, api_only);
+    let results = super::completed_orders(&client, api_only);
 
     let request_messages = client.message_bus.request_messages();
 
@@ -393,8 +393,8 @@ fn completed_orders() {
 
     assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
 
-    let mut results = results.unwrap();
-    if let Some(OrderDataResult::OrderData(order_data)) = results.next() {
+    let results = results.unwrap();
+    if let Some(Orders::OrderData(order_data)) = results.next() {
         assert_eq!(order_data.order_id, -1, "open_order.order_id");
 
         let contract = &order_data.contract;
@@ -515,9 +515,9 @@ fn open_orders() {
         response_messages: vec!["9|1|43||".to_owned()],
     });
 
-    let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
-    let results = super::open_orders(&mut client);
+    let results = super::open_orders(&client);
 
     let request_messages = client.message_bus.request_messages();
 
