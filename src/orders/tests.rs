@@ -3,7 +3,11 @@ use std::sync::{Arc, RwLock};
 use crate::contracts::{contract_samples, Contract, SecurityType};
 use crate::stubs::MessageBusStub;
 
+use super::order_builder::*;
 use super::*;
+
+#[cfg(test)]
+mod order_build_tests;
 
 #[test]
 fn place_order() {
