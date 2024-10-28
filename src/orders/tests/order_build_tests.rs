@@ -388,15 +388,15 @@ mod specialized_order_tests {
         let order = pegged_to_benchmark(
             Action::Buy,
             100.0,
-            50.0,  // starting_price
-            false, // pegged_change_amount_decrease
-            0.02,  // pegged_change_amount
-            0.01,  // reference_change_amount
-            12345, // reference_contract_id
+            50.0,     // starting_price
+            false,    // pegged_change_amount_decrease
+            0.02,     // pegged_change_amount
+            0.01,     // reference_change_amount
+            12345,    // reference_contract_id
             "ISLAND", // reference_exchange
-            49.0,  // stock_reference_price
-            48.0,  // reference_contract_lower_range
-            52.0   // reference_contract_upper_range
+            49.0,     // stock_reference_price
+            48.0,     // reference_contract_lower_range
+            52.0,     // reference_contract_upper_range
         );
 
         assert_eq!(order.action, Action::Buy);
@@ -422,11 +422,11 @@ mod pegged_order_tests {
     fn test_peg_best_order() {
         let order = peg_best_order(
             Action::Buy,
-            100.0,    // quantity
-            50.0,     // limit_price
-            10,       // min_trade_qty
-            20,       // min_compete_size
-            0.01      // compete_against_best_offset
+            100.0, // quantity
+            50.0,  // limit_price
+            10,    // min_trade_qty
+            20,    // min_compete_size
+            0.01,  // compete_against_best_offset
         );
 
         assert_eq!(order.action, Action::Buy);
@@ -443,12 +443,12 @@ mod pegged_order_tests {
     fn test_peg_best_up_to_mid() {
         let order = peg_best_up_to_mid_order(
             Action::Buy,
-            100.0,    // quantity
-            50.0,     // limit_price
-            10,       // min_trade_qty
-            20,       // min_compete_size
-            0.01,     // mid_offset_at_whole
-            0.005     // mid_offset_at_half
+            100.0, // quantity
+            50.0,  // limit_price
+            10,    // min_trade_qty
+            20,    // min_compete_size
+            0.01,  // mid_offset_at_whole
+            0.005, // mid_offset_at_half
         );
 
         assert_eq!(order.action, Action::Buy);
@@ -467,11 +467,11 @@ mod pegged_order_tests {
     fn test_peg_mid_order() {
         let order = peg_mid_order(
             Action::Buy,
-            100.0,    // quantity
-            50.0,     // limit_price
-            10,       // min_trade_qty
-            0.01,     // mid_offset_at_whole
-            0.005     // mid_offset_at_half
+            100.0, // quantity
+            50.0,  // limit_price
+            10,    // min_trade_qty
+            0.01,  // mid_offset_at_whole
+            0.005, // mid_offset_at_half
         );
 
         assert_eq!(order.action, Action::Buy);
@@ -501,12 +501,7 @@ mod miscellaneous_order_tests {
 
     #[test]
     fn test_limit_order_with_manual_order_time() {
-        let order = limit_order_with_manual_order_time(
-            Action::Buy,
-            100.0,
-            50.0,
-            "20240101 10:00:00"
-        );
+        let order = limit_order_with_manual_order_time(Action::Buy, 100.0, 50.0, "20240101 10:00:00");
 
         assert_eq!(order.action, Action::Buy);
         assert_eq!(order.order_type, "LMT");
@@ -565,10 +560,9 @@ mod adjustable_order_tests {
     fn test_attach_adjustable_to_stop() {
         let parent = stop(Action::Buy, 100.0, 50.0);
         let order = attach_adjustable_to_stop(
-            &parent,
-            45.0,   // attached_order_stop_price
-            48.0,   // trigger_price
-            46.0    // adjusted_stop_price
+            &parent, 45.0, // attached_order_stop_price
+            48.0, // trigger_price
+            46.0, // adjusted_stop_price
         );
 
         assert_eq!(order.action, Action::Sell); // Opposite of parent
@@ -585,11 +579,10 @@ mod adjustable_order_tests {
     fn test_attach_adjustable_to_stop_limit() {
         let parent = stop(Action::Buy, 100.0, 50.0);
         let order = attach_adjustable_to_stop_limit(
-            &parent,
-            45.0,   // attached_order_stop_price
-            48.0,   // trigger_price
-            46.0,   // adjusted_stop_price
-            47.0    // adjusted_stop_limit_price
+            &parent, 45.0, // attached_order_stop_price
+            48.0, // trigger_price
+            46.0, // adjusted_stop_price
+            47.0, // adjusted_stop_limit_price
         );
 
         assert_eq!(order.action, Action::Sell); // Opposite of parent
@@ -607,12 +600,11 @@ mod adjustable_order_tests {
     fn test_attach_adjustable_to_trail() {
         let parent = stop(Action::Buy, 100.0, 50.0);
         let order = attach_adjustable_to_trail(
-            &parent,
-            45.0,   // attached_order_stop_price
-            48.0,   // trigger_price
-            46.0,   // adjusted_stop_price
-            0.02,   // adjusted_trail_amount
-            100     // trail_unit (percentage)
+            &parent, 45.0, // attached_order_stop_price
+            48.0, // trigger_price
+            46.0, // adjusted_stop_price
+            0.02, // adjusted_trail_amount
+            100,  // trail_unit (percentage)
         );
 
         assert_eq!(order.action, Action::Sell); // Opposite of parent
@@ -650,9 +642,9 @@ mod additional_specialized_order_tests {
     fn test_auction_pegged_to_stock() {
         let order = auction_pegged_to_stock(
             Action::Buy,
-            100.0,  // quantity
-            50.0,   // starting_price
-            0.5     // delta
+            100.0, // quantity
+            50.0,  // starting_price
+            0.5,   // delta
         );
 
         assert_eq!(order.action, Action::Buy);
@@ -666,10 +658,10 @@ mod additional_specialized_order_tests {
     fn test_pegged_to_stock() {
         let order = pegged_to_stock(
             Action::Buy,
-            100.0,  // quantity
-            0.5,    // delta
-            50.0,   // stock_ref_price
-            49.0    // starting_price
+            100.0, // quantity
+            0.5,   // delta
+            50.0,  // stock_ref_price
+            49.0,  // starting_price
         );
 
         assert_eq!(order.action, Action::Buy);
@@ -684,9 +676,9 @@ mod additional_specialized_order_tests {
     fn test_relative_pegged_to_primary() {
         let order = relative_pegged_to_primary(
             Action::Buy,
-            100.0,  // quantity
-            50.0,   // price_cap
-            0.01    // offset_amount
+            100.0, // quantity
+            50.0,  // price_cap
+            0.01,  // offset_amount
         );
 
         assert_eq!(order.action, Action::Buy);
@@ -700,8 +692,8 @@ mod additional_specialized_order_tests {
     fn test_passive_relative() {
         let order = passive_relative(
             Action::Buy,
-            100.0,  // quantity
-            0.01    // offset
+            100.0, // quantity
+            0.01,  // offset
         );
 
         assert_eq!(order.action, Action::Buy);
@@ -714,8 +706,8 @@ mod additional_specialized_order_tests {
     fn test_at_auction() {
         let order = at_auction(
             Action::Buy,
-            100.0,  // quantity
-            50.0    // price
+            100.0, // quantity
+            50.0,  // price
         );
 
         assert_eq!(order.action, Action::Buy);
@@ -729,8 +721,8 @@ mod additional_specialized_order_tests {
     fn test_what_if_limit_order() {
         let order = what_if_limit_order(
             Action::Buy,
-            100.0,  // quantity
-            50.0    // price
+            100.0, // quantity
+            50.0,  // price
         );
 
         assert_eq!(order.action, Action::Buy);
