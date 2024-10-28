@@ -1,6 +1,6 @@
 use ibapi::{
     contracts::{Contract, SecurityType},
-    orders::{self, order_builder, ExerciseAction},
+    orders::ExerciseAction,
     Client,
 };
 
@@ -10,8 +10,6 @@ fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
     let contract = create_option_contract("AAPL", 180.0, "C", "20250221");
-
-    purchase_option(&client, &contract);
 
     let accounts = client.managed_accounts().expect("could not get managed accounts");
     let account = &accounts[0];
@@ -37,18 +35,5 @@ fn create_option_contract(symbol: &str, strike: f64, right: &str, last_trade_dat
         right: right.to_owned(),
         multiplier: "100".to_owned(),
         ..Default::default()
-    }
-}
-
-fn purchase_option(client: &Client, contract: &Contract) {
-    let order_id = client.next_order_id();
-    println!("next order id: {order_id}");
-
-    let order = order_builder::market_order(orders::Action::Buy, 5.0);
-    println!("contract: {contract:?}, order: {order:?}");
-
-    let subscription = client.place_order(order_id, &contract, &order).expect("could not place order");
-    for status in subscription {
-        println!("{status:?}")
     }
 }
