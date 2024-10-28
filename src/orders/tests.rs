@@ -4,6 +4,10 @@ use crate::contracts::{contract_samples, Contract, SecurityType};
 use crate::stubs::MessageBusStub;
 
 use super::*;
+use super::order_builder::*;
+
+#[cfg(test)]
+mod order_build_tests;
 
 #[test]
 fn place_order() {
