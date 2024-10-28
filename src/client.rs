@@ -16,7 +16,7 @@ use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescriptio
 use crate::market_data::MarketDataType;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
-use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, OrderNotification, Orders};
+use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, PlaceOrder, Orders};
 use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus};
 use crate::{accounts, contracts, market_data, orders};
 
@@ -639,7 +639,7 @@ impl Client {
     ///    }
     /// }
     /// ```
-    pub fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<impl Iterator<Item = OrderNotification>, Error> {
+    pub fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<impl Iterator<Item = PlaceOrder>, Error> {
         orders::place_order(self, order_id, contract, order)
     }
 

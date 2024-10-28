@@ -939,7 +939,7 @@ pub struct ExecutionData {
 }
 
 #[derive(Clone, Debug)]
-pub enum OrderNotification {
+pub enum PlaceOrder {
     OrderStatus(OrderStatus),
     OpenOrder(Box<OrderData>),
     ExecutionData(Box<ExecutionData>),
@@ -947,27 +947,27 @@ pub enum OrderNotification {
     Message(String),
 }
 
-impl From<OrderStatus> for OrderNotification {
+impl From<OrderStatus> for PlaceOrder {
     fn from(val: OrderStatus) -> Self {
-        OrderNotification::OrderStatus(val)
+        PlaceOrder::OrderStatus(val)
     }
 }
 
-impl From<OrderData> for OrderNotification {
+impl From<OrderData> for PlaceOrder {
     fn from(val: OrderData) -> Self {
-        OrderNotification::OpenOrder(Box::new(val))
+        PlaceOrder::OpenOrder(Box::new(val))
     }
 }
 
-impl From<ExecutionData> for OrderNotification {
+impl From<ExecutionData> for PlaceOrder {
     fn from(val: ExecutionData) -> Self {
-        OrderNotification::ExecutionData(Box::new(val))
+        PlaceOrder::ExecutionData(Box::new(val))
     }
 }
 
-impl From<CommissionReport> for OrderNotification {
+impl From<CommissionReport> for PlaceOrder {
     fn from(val: CommissionReport) -> Self {
-        OrderNotification::CommissionReport(val)
+        PlaceOrder::CommissionReport(val)
     }
 }
 
@@ -1015,7 +1015,7 @@ pub(crate) fn place_order(
     order_id: i32,
     contract: &Contract,
     order: &Order,
-) -> Result<impl Iterator<Item = OrderNotification>, Error> {
+) -> Result<impl Iterator<Item = PlaceOrder>, Error> {
     verify_order(client, order, order_id)?;
     verify_order_contract(client, contract, order_id)?;
 
@@ -1036,11 +1036,11 @@ pub(crate) struct OrderNotificationIterator {
 }
 
 impl Iterator for OrderNotificationIterator {
-    type Item = OrderNotification;
+    type Item = PlaceOrder;
 
     /// Returns the next [OrderNotification]. Waits up to x seconds for next [OrderNotification].
     fn next(&mut self) -> Option<Self::Item> {
-        fn convert<T: Into<OrderNotification>>(result: Result<T, Error>) -> Option<OrderNotification> {
+        fn convert<T: Into<PlaceOrder>>(result: Result<T, Error>) -> Option<PlaceOrder> {
             match result {
                 Ok(val) => Some(val.into()),
                 Err(err) => {
@@ -1071,7 +1071,7 @@ impl Iterator for OrderNotificationIterator {
                     }
                     IncomingMessages::Error => {
                         let message = message.peek_string(4);
-                        return Some(OrderNotification::Message(message));
+                        return Some(PlaceOrder::Message(message));
                     }
                     message => {
                         error!("unexpected message: {message:?}");

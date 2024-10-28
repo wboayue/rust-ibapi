@@ -2,7 +2,7 @@ use clap::{arg, ArgMatches, Command};
 use log::{debug, info};
 
 use ibapi::contracts::Contract;
-use ibapi::orders::{self, order_builder, OrderNotification};
+use ibapi::orders::{self, order_builder, PlaceOrder};
 use ibapi::Client;
 
 fn main() {
@@ -45,13 +45,13 @@ fn main() {
 
     for status in results {
         match status {
-            OrderNotification::OrderStatus(order_status) => {
+            PlaceOrder::OrderStatus(order_status) => {
                 println!("order status: {order_status:?}")
             }
-            OrderNotification::OpenOrder(open_order) => println!("open order: {open_order:?}"),
-            OrderNotification::ExecutionData(execution) => println!("execution: {execution:?}"),
-            OrderNotification::CommissionReport(report) => println!("commission report: {report:?}"),
-            OrderNotification::Message(message) => println!("notice: {message}"),
+            PlaceOrder::OpenOrder(open_order) => println!("open order: {open_order:?}"),
+            PlaceOrder::ExecutionData(execution) => println!("execution: {execution:?}"),
+            PlaceOrder::CommissionReport(report) => println!("commission report: {report:?}"),
+            PlaceOrder::Message(message) => println!("notice: {message}"),
         }
     }
 }
