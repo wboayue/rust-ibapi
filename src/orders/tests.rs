@@ -317,7 +317,7 @@ fn cancel_order() {
 
     let mut results = results.unwrap();
 
-    if let Some(CancelOrderResult::OrderStatus(order_status)) = results.next() {
+    if let Some(CancelOrder::OrderStatus(order_status)) = results.next() {
         assert_eq!(order_status.order_id, 41, "order_status.order_id");
         assert_eq!(order_status.status, "Cancelled", "order_status.status");
         assert_eq!(order_status.filled, 0.0, "order_status.filled");
@@ -331,7 +331,7 @@ fn cancel_order() {
         assert_eq!(order_status.market_cap_price, 0.0, "order_status.market_cap_price");
     }
 
-    if let Some(CancelOrderResult::Notice(notice)) = results.next() {
+    if let Some(CancelOrder::Notice(notice)) = results.next() {
         assert_eq!(notice.message, "Order Canceled - reason:", "order status notice");
     }
 }

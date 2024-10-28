@@ -1291,7 +1291,7 @@ fn verify_order_contract(client: &Client, contract: &Contract, _order_id: i32) -
 }
 
 // Cancels an open [Order].
-pub(crate) fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_time: &str) -> Result<CancelOrderResultIterator, Error> {
+pub(crate) fn cancel_order<'a>(client: &'a Client, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<'a, CancelOrder>, Error> {
     if !manual_order_cancel_time.is_empty() {
         client.check_server_version(
             server_versions::MANUAL_ORDER_TIME,
@@ -1299,53 +1299,25 @@ pub(crate) fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_t
         )?
     }
 
-    let message = encoders::encode_cancel_order(client.server_version(), order_id, manual_order_cancel_time)?;
+    let request = encoders::encode_cancel_order(client.server_version(), order_id, manual_order_cancel_time)?;
+    let subscription = client.send_order(order_id, request)?;
 
-    let messages = client.send_order(order_id, message)?;
-
-    Ok(CancelOrderResultIterator {
-        messages,
-        server_version: client.server_version(),
-    })
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 /// Enumerates possible results from cancelling an order.
 #[derive(Debug)]
-pub enum CancelOrderResult {
+pub enum CancelOrder {
     OrderStatus(OrderStatus),
     Notice(Notice),
 }
 
-// Supports iteration over [CancelOrderResult]
-pub(crate) struct CancelOrderResultIterator {
-    server_version: i32,
-    messages: InternalSubscription,
-}
-
-impl Iterator for CancelOrderResultIterator {
-    type Item = CancelOrderResult;
-
-    /// Returns the next [CancelOrderResult]. Waits up to x seconds for next [CancelOrderResult].
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(Ok(mut message)) = self.messages.next() {
-                match message.message_type() {
-                    IncomingMessages::OrderStatus => match decoders::decode_order_status(self.server_version, &mut message) {
-                        Ok(val) => return Some(CancelOrderResult::OrderStatus(val)),
-                        Err(err) => {
-                            error!("error decoding order status: {err}");
-                        }
-                    },
-                    IncomingMessages::Error => {
-                        return Some(CancelOrderResult::Notice(Notice::from(&message)));
-                    }
-                    message => {
-                        error!("unexpected messsage: {message:?}");
-                    }
-                }
-            } else {
-                return None;
-            }
+impl Subscribable<CancelOrder> for CancelOrder {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<CancelOrder, Error> {
+        match message.message_type() {
+            IncomingMessages::OrderStatus => Ok(CancelOrder::OrderStatus(decoders::decode_order_status(server_version, message)?)),
+            IncomingMessages::Error => Ok(CancelOrder::Notice(Notice::from(message))),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 }

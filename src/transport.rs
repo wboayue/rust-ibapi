@@ -59,7 +59,7 @@ pub(crate) trait MessageBus: Send + Sync {
 #[derive(Debug)]
 struct SharedChannels {
     // Maps an inbound reply to channel used to send responses.
-    senders: HashMap<IncomingMessages, Arc<Sender<Result<ResponseMessage, Error>>>>,
+    senders: HashMap<IncomingMessages, Vec<Arc<Sender<Result<ResponseMessage, Error>>>>>,
     // Maps an outbound request to channel used to receive responses.
     receivers: HashMap<OutgoingMessages, Arc<Receiver<Result<ResponseMessage, Error>>>>,
 }
@@ -89,12 +89,15 @@ impl SharedChannels {
         let sender = &Arc::new(sender);
 
         for inbound in inbounds {
-            self.senders.insert(*inbound, Arc::clone(sender));
+            if !self.senders.contains_key(inbound) {
+                self.senders.insert(*inbound, Vec::new());
+            }
+            self.senders.get_mut(inbound).unwrap().push(Arc::clone(sender));
         }
     }
 
     // Get receiver for specified message type. Panics if receiver not found.
-    pub fn get_receiver(&self, message_type: OutgoingMessages) -> Arc<Receiver<Result<ResponseMessage, Error>>> {
+    fn get_receiver(&self, message_type: OutgoingMessages) -> Arc<Receiver<Result<ResponseMessage, Error>>> {
         let receiver = self
             .receivers
             .get(&message_type)
@@ -103,24 +106,29 @@ impl SharedChannels {
         Arc::clone(receiver)
     }
 
-    // Get sender for specified message type. Panics if sender not found.
-    pub fn get_sender(&self, message_type: IncomingMessages) -> Arc<Sender<Result<ResponseMessage, Error>>> {
-        let sender = self
-            .senders
-            .get(&message_type)
-            .unwrap_or_else(|| panic!("unsupported response message {message_type:?}"));
-
-        Arc::clone(sender)
-    }
-
     fn contains_sender(&self, message_type: IncomingMessages) -> bool {
         self.senders.contains_key(&message_type)
     }
 
+    // Notify all listeners of a given message type with message.
+    fn send_message(&self, message_type: IncomingMessages, message: &ResponseMessage) {
+        if let Some(senders) = self.senders.get(&message_type) {
+            for sender in senders {
+                if let Err(e) = sender.send(Ok(message.clone())) {
+                    warn!("error sending message: {e}");
+                }
+            }
+        }
+    }
+
     // Notify all senders with a given message
     fn notify_all(&self, message: &Result<ResponseMessage, Error>) {
-        for sender in self.senders.values() {
-            let _ = sender.send(message.clone());
+        for senders in self.senders.values() {
+            for sender in senders {
+                if let Err(e) = sender.send(message.clone()) {
+                    warn!("error sending notification: {e}");
+                }
+            }
         }
     }
 }
@@ -279,7 +287,7 @@ impl TcpMessageBus {
         } else if self.orders.contains(&request_id) {
             self.orders.send(&request_id, Ok(message)).unwrap();
         } else if self.shared_channels.contains_sender(message.message_type()) {
-            self.shared_channels.get_sender(message.message_type()).send(Ok(message)).unwrap()
+            self.shared_channels.send_message(message.message_type(), &message);
         } else {
             info!("no recipient found for: {:?}", message)
         }
@@ -335,25 +343,13 @@ impl TcpMessageBus {
                         if let Err(e) = self.orders.send(&order_id, Ok(message)) {
                             error!("error routing message for order_id({order_id}): {e}");
                         }
-                    } else if let Err(e) = self.shared_channels.get_sender(IncomingMessages::OpenOrder).send(Ok(message)) {
-                        error!("error sending IncomingMessages::OpenOrder: {e}");
+                    } else if self.shared_channels.contains_sender(IncomingMessages::OpenOrder) {
+                        self.shared_channels.send_message(message.message_type(), &message);
                     }
                 }
             }
-            IncomingMessages::CompletedOrder => {
-                if let Err(e) = self.shared_channels.get_sender(message.message_type()).send(Ok(message)) {
-                    error!("error sending IncomingMessages::CompletedOrder: {e}");
-                }
-            }
-            IncomingMessages::OpenOrderEnd => {
-                if let Err(e) = self.shared_channels.get_sender(message.message_type()).send(Ok(message)) {
-                    error!("error sending IncomingMessages::OpenOrderEnd: {e}");
-                }
-            }
-            IncomingMessages::CompletedOrdersEnd => {
-                if let Err(e) = self.shared_channels.get_sender(message.message_type()).send(Ok(message)) {
-                    error!("error sending IncomingMessages::CompletedOrdersEnd: {e}");
-                }
+            IncomingMessages::CompletedOrder | IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => {
+                self.shared_channels.send_message(message.message_type(), &message);
             }
             IncomingMessages::CommissionsReport => {
                 if let Some(execution_id) = message.execution_id() {

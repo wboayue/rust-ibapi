@@ -16,7 +16,7 @@ use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescriptio
 use crate::market_data::MarketDataType;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
-use crate::orders::{Executions, ExerciseOptions, Order, OrderNotification, Orders};
+use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, OrderNotification, Orders};
 use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus};
 use crate::{accounts, contracts, market_data, orders};
 
@@ -496,7 +496,7 @@ impl Client {
     ///    println!("{result:?}");
     /// }
     /// ```
-    pub fn cancel_order(&self, order_id: i32, manual_order_cancel_time: &str) -> Result<impl Iterator<Item = orders::CancelOrderResult>, Error> {
+    pub fn cancel_order(&self, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
         orders::cancel_order(self, order_id, manual_order_cancel_time)
     }
 
