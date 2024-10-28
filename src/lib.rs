@@ -19,7 +19,7 @@
 //!
 //! use ibapi::contracts::Contract;
 //! use ibapi::market_data::realtime::{BarSize, Bar, WhatToShow};
-//! use ibapi::orders::{order_builder, Action, OrderNotification};
+//! use ibapi::orders::{order_builder, Action, PlaceOrder};
 //! use ibapi::Client;
 //!
 //! let client = Client::connect("127.0.0.1:4002", 100).unwrap();
@@ -52,7 +52,7 @@
 //!
 //!     let notices = client.place_order(order_id, &contract, &order).unwrap();
 //!     for notice in notices {
-//!         if let OrderNotification::ExecutionData(data) = notice {
+//!         if let PlaceOrder::ExecutionData(data) = notice {
 //!             println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
 //!         } else {
 //!             println!("{:?}", notice);

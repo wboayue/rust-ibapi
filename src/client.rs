@@ -16,7 +16,7 @@ use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescriptio
 use crate::market_data::MarketDataType;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
-use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, PlaceOrder, Orders};
+use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, Orders, PlaceOrder};
 use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus};
 use crate::{accounts, contracts, market_data, orders};
 
@@ -617,7 +617,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
-    /// use ibapi::orders::{order_builder, Action, OrderNotification};
+    /// use ibapi::orders::{order_builder, Action, PlaceOrder};
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -629,17 +629,17 @@ impl Client {
     ///
     /// for notification in notifications {
     ///     match notification {
-    ///         OrderNotification::OrderStatus(order_status) => {
+    ///         PlaceOrder::OrderStatus(order_status) => {
     ///             println!("order status: {order_status:?}")
     ///         }
-    ///         OrderNotification::OpenOrder(open_order) => println!("open order: {open_order:?}"),
-    ///         OrderNotification::ExecutionData(execution) => println!("execution: {execution:?}"),
-    ///         OrderNotification::CommissionReport(report) => println!("commission report: {report:?}"),
-    ///         OrderNotification::Message(message) => println!("message: {message:?}"),
+    ///         PlaceOrder::OpenOrder(open_order) => println!("open order: {open_order:?}"),
+    ///         PlaceOrder::ExecutionData(execution) => println!("execution: {execution:?}"),
+    ///         PlaceOrder::CommissionReport(report) => println!("commission report: {report:?}"),
+    ///         PlaceOrder::Message(message) => println!("message: {message:?}"),
     ///    }
     /// }
     /// ```
-    pub fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<impl Iterator<Item = PlaceOrder>, Error> {
+    pub fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
         orders::place_order(self, order_id, contract, order)
     }
 
@@ -1417,6 +1417,10 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
         SubscriptionIter { subscription: self }
     }
 
+    pub fn into_iter(self) -> SubscriptionOwnedIter<'a, T> {
+        SubscriptionOwnedIter { subscription: self }
+    }
+
     pub fn try_iter(&self) -> SubscriptionTryIter<T> {
         SubscriptionTryIter { subscription: self }
     }
@@ -1466,6 +1470,27 @@ impl<'a, T: Subscribable<T>> IntoIterator for &'a Subscription<'a, T> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
+    }
+}
+
+pub struct SubscriptionOwnedIter<'a, T: Subscribable<T>> {
+    subscription: Subscription<'a, T>,
+}
+
+impl<'a, T: Subscribable<T>> Iterator for SubscriptionOwnedIter<'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.subscription.next()
+    }
+}
+
+impl<'a, T: Subscribable<T> + 'a> IntoIterator for Subscription<'a, T> {
+    type Item = T;
+    type IntoIter = SubscriptionOwnedIter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.into_iter()
     }
 }
 

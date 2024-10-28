@@ -941,34 +941,10 @@ pub struct ExecutionData {
 #[derive(Clone, Debug)]
 pub enum PlaceOrder {
     OrderStatus(OrderStatus),
-    OpenOrder(Box<OrderData>),
-    ExecutionData(Box<ExecutionData>),
+    OpenOrder(OrderData),
+    ExecutionData(ExecutionData),
     CommissionReport(CommissionReport),
-    Message(String),
-}
-
-impl From<OrderStatus> for PlaceOrder {
-    fn from(val: OrderStatus) -> Self {
-        PlaceOrder::OrderStatus(val)
-    }
-}
-
-impl From<OrderData> for PlaceOrder {
-    fn from(val: OrderData) -> Self {
-        PlaceOrder::OpenOrder(Box::new(val))
-    }
-}
-
-impl From<ExecutionData> for PlaceOrder {
-    fn from(val: ExecutionData) -> Self {
-        PlaceOrder::ExecutionData(Box::new(val))
-    }
-}
-
-impl From<CommissionReport> for PlaceOrder {
-    fn from(val: CommissionReport) -> Self {
-        PlaceOrder::CommissionReport(val)
-    }
+    Message(Notice),
 }
 
 /// Contains all relevant information on the current status of the order execution-wise (i.e. amount filled and pending, filling price, etc.).
@@ -1010,76 +986,25 @@ pub struct OrderStatus {
 // Submits an Order.
 // After the order is submitted correctly, events will be returned concerning the order's activity.
 // https://interactivebrokers.github.io/tws-api/order_submission.html
-pub(crate) fn place_order(
-    client: &Client,
-    order_id: i32,
-    contract: &Contract,
-    order: &Order,
-) -> Result<impl Iterator<Item = PlaceOrder>, Error> {
+pub(crate) fn place_order<'a>(client: &'a Client, order_id: i32, contract: &Contract, order: &Order) -> Result<Subscription<'a, PlaceOrder>, Error> {
     verify_order(client, order, order_id)?;
     verify_order_contract(client, contract, order_id)?;
 
-    let message = encoders::encode_place_order(client.server_version(), order_id, contract, order)?;
+    let request = encoders::encode_place_order(client.server_version(), order_id, contract, order)?;
+    let subscription = client.send_order(order_id, request)?;
 
-    let messages = client.send_order(order_id, message)?;
-
-    Ok(OrderNotificationIterator {
-        messages,
-        server_version: client.server_version(),
-    })
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
-// Supports iteration over OrderNotification
-pub(crate) struct OrderNotificationIterator {
-    server_version: i32,
-    messages: InternalSubscription,
-}
-
-impl Iterator for OrderNotificationIterator {
-    type Item = PlaceOrder;
-
-    /// Returns the next [OrderNotification]. Waits up to x seconds for next [OrderNotification].
-    fn next(&mut self) -> Option<Self::Item> {
-        fn convert<T: Into<PlaceOrder>>(result: Result<T, Error>) -> Option<PlaceOrder> {
-            match result {
-                Ok(val) => Some(val.into()),
-                Err(err) => {
-                    info!("error: {err:?}");
-                    None
-                }
-            }
-        }
-
-        loop {
-            if let Some(Ok(mut message)) = self.messages.next() {
-                match message.message_type() {
-                    IncomingMessages::OpenOrder => {
-                        let open_order = decoders::decode_open_order(self.server_version, message);
-                        return convert(open_order);
-                    }
-                    IncomingMessages::OrderStatus => {
-                        let order_status = decoders::decode_order_status(self.server_version, &mut message);
-                        return convert(order_status);
-                    }
-                    IncomingMessages::ExecutionData => {
-                        let execution_data = decoders::decode_execution_data(self.server_version, &mut message);
-                        return convert(execution_data);
-                    }
-                    IncomingMessages::CommissionsReport => {
-                        let commission_report = decoders::decode_commission_report(self.server_version, &mut message);
-                        return convert(commission_report);
-                    }
-                    IncomingMessages::Error => {
-                        let message = message.peek_string(4);
-                        return Some(PlaceOrder::Message(message));
-                    }
-                    message => {
-                        error!("unexpected message: {message:?}");
-                    }
-                }
-            } else {
-                return None;
-            }
+impl Subscribable<PlaceOrder> for PlaceOrder {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<PlaceOrder, Error> {
+        match message.message_type() {
+            IncomingMessages::OpenOrder => Ok(PlaceOrder::OpenOrder(decoders::decode_open_order(server_version, message.clone())?)),
+            IncomingMessages::OrderStatus => Ok(PlaceOrder::OrderStatus(decoders::decode_order_status(server_version, message)?)),
+            IncomingMessages::ExecutionData => Ok(PlaceOrder::ExecutionData(decoders::decode_execution_data(server_version, message)?)),
+            IncomingMessages::CommissionsReport => Ok(PlaceOrder::CommissionReport(decoders::decode_commission_report(server_version, message)?)),
+            IncomingMessages::Error => Ok(PlaceOrder::Message(Notice::from(message))),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 }

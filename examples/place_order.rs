@@ -41,9 +41,9 @@ fn main() {
 
     println!("contract: {contract:?}, order: {order:?}");
 
-    let results = client.place_order(order_id, &contract, &order).expect("could not place order");
+    let subscription = client.place_order(order_id, &contract, &order).expect("could not place order");
 
-    for status in results {
+    for status in subscription {
         match status {
             PlaceOrder::OrderStatus(order_status) => {
                 println!("order status: {order_status:?}")
