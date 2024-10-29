@@ -18,7 +18,10 @@ use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, Orders, PlaceOrder};
 use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus};
-use crate::{accounts, contracts, market_data, orders};
+use crate::{accounts, contracts, market_data, news, orders};
+
+#[cfg(test)]
+mod tests;
 
 // Client
 
@@ -1195,6 +1198,26 @@ impl Client {
         realtime::market_data(self, contract, generic_ticks, snapshot, regulatory_snapshot)
     }
 
+    // === News ===
+
+    /// Requests news providers which the user has subscribed to.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let news_providers = client.news_providers().expect("request news providers failed");
+    /// for news_provider in &news_providers {
+    ///   println!("news provider {:?}", news_provider);
+    /// }
+    /// ```
+    pub fn news_providers(&self) -> Result<Vec<news::NewsProvider>, Error> {
+        news::news_providers(self)
+    }
+
     // == Internal Use ==
 
     #[cfg(test)]
@@ -1525,6 +1548,3 @@ impl<'a, T: Subscribable<T>> Iterator for SubscriptionTimeoutIter<'a, T> {
 
 /// Marker trait for shared channels
 pub trait SharesChannel {}
-
-#[cfg(test)]
-mod tests;

@@ -939,6 +939,7 @@ pub struct ExecutionData {
 }
 
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum PlaceOrder {
     OrderStatus(OrderStatus),
     OpenOrder(OrderData),

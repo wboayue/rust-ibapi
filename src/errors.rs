@@ -23,6 +23,7 @@ pub enum Error {
     Shutdown,
     StreamEnd,
     UnexpectedResponse(ResponseMessage),
+    UnexpectedEndOfStream,
 }
 
 impl std::error::Error for Error {}
@@ -45,6 +46,7 @@ impl std::fmt::Display for Error {
             Error::Shutdown => write!(f, "Shutdown"),
             Error::StreamEnd => write!(f, "StreamEnd"),
             Error::UnexpectedResponse(message) => write!(f, "UnexpectedResponse: {:?}", message),
+            Error::UnexpectedEndOfStream => write!(f, "UnexpectedEndOfStream"),
 
             Error::Simple(ref err) => write!(f, "error occurred: {err}"),
         }
