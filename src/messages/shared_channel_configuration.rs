@@ -72,4 +72,8 @@ pub(crate) const CHANNEL_MAPPINGS: &[ChannelMapping] = &[
         request: OutgoingMessages::RequestNewsProviders,
         responses: &[IncomingMessages::NewsProviders],
     },
+    ChannelMapping {
+        request: OutgoingMessages::RequestNewsBulletins,
+        responses: &[IncomingMessages::NewsBulletins],
+    },
 ];
