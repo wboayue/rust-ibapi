@@ -4,6 +4,7 @@ use crate::{
     server_versions, Client, Error,
 };
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 
 mod decoders;
 mod encoders;
@@ -72,3 +73,29 @@ pub fn news_bulletins(client: &Client, all_messages: bool) -> Result<Subscriptio
 }
 
 impl SharesChannel for Subscription<'_, NewsBulletin> {}
+
+// Historical News Headlines
+pub fn historical_news<'a>(
+    client: &'a Client,
+    contract_id: i32,
+    provider_codes: &[&str],
+    start_time: OffsetDateTime,
+    end_time: OffsetDateTime,
+    total_results: u8,
+) -> Result<Subscription<'a, NewsBulletin>, Error> {
+    client.check_server_version(server_versions::REQ_HISTORICAL_NEWS, "It does not support historical news requests.")?;
+
+    let request_id = client.next_request_id();
+    let request = encoders::encode_request_historical_news(
+        client.server_version(),
+        request_id,
+        contract_id,
+        provider_codes,
+        start_time,
+        end_time,
+        total_results,
+    )?;
+    let subscription = client.send_request(request_id, request)?;
+
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+}

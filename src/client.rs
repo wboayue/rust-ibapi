@@ -1240,6 +1240,46 @@ impl Client {
         news::news_bulletins(self, all_messages)
     }
 
+    /// Requests historical news headlines.
+    ///
+    /// # Arguments
+    ///
+    /// * `contract_id`    - Contract ID of ticker. See [contract_details](Client::contract_details) for how to retrieve contract ID.
+    /// * `provider_codes` - A list of provider codes.
+    /// * `start_time`     - Marks the (exclusive) start of the date range.
+    /// * `end_time`       - Marks the (inclusive) end of the date range.
+    /// * `total_results`  - The maximum number of headlines to fetch (1 – 300)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use time::macros::datetime;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract_id = 76792991; // TSLA
+    /// let provider_codes = vec!["BRFG", "DJ-N", "DJ-RT"];
+    /// let start_time = datetime!(2023-04-15 0:00 UTC);
+    /// let end_time = datetime!(2023-04-15 0:00 UTC);
+    /// let total_results = 10;
+    ///
+    /// let news_bulletins = client.news_bulletins(true).expect("request news providers failed");
+    /// for news_bulletin in &news_bulletins {
+    ///   println!("news bulletin {:?}", news_bulletin);
+    /// }
+    /// ```
+    pub fn historical_news(
+        &self,
+        contract_id: i32,
+        provider_codes: &[&str],
+        start_time: OffsetDateTime,
+        end_time: OffsetDateTime,
+        total_results: u8,
+    ) -> Result<Subscription<news::NewsBulletin>, Error> {
+        news::historical_news(self, contract_id, provider_codes, start_time, end_time, total_results)
+    }
+
     // == Internal Use ==
 
     #[cfg(test)]
@@ -1366,7 +1406,16 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
 
     /// Blocks until the item become available.
     pub fn next(&self) -> Option<T> {
-        self.process_response(self.subscription.next())
+        match self.process_response(self.subscription.next()) {
+            Some(val) => Some(val),
+            None => match self.error() {
+                Some(Error::UnexpectedResponse(m)) => {
+                    debug!("error in subscription: {m:?}");
+                    self.next()
+                }
+                _ => None,
+            },
+        }
     }
 
     fn process_response(&self, response: Option<Result<ResponseMessage, Error>>) -> Option<T> {
