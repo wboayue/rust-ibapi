@@ -17,8 +17,8 @@ pub(super) fn decode_news_providers(mut message: ResponseMessage) -> Result<Vec<
     Ok(news_providers)
 }
 
-
 pub(super) fn decode_news_bulletin(mut message: ResponseMessage) -> Result<NewsBulletin, Error> {
+    message.skip(); // message type
     message.skip(); // message version
 
     Ok(NewsBulletin {

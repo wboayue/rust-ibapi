@@ -1,4 +1,8 @@
-use crate::{client::{ResponseContext, SharesChannel, Subscribable, Subscription}, messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage}, server_versions, Client, Error};
+use crate::{
+    client::{ResponseContext, SharesChannel, Subscribable, Subscription},
+    messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage},
+    server_versions, Client, Error,
+};
 use serde::{Deserialize, Serialize};
 
 mod decoders;
