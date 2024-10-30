@@ -1,3 +1,5 @@
+use std::str;
+
 use time::macros::format_description;
 use time::{OffsetDateTime, PrimitiveDateTime};
 use time_tz::{timezones, OffsetDateTimeExt, OffsetResult, PrimitiveDateTimeExt, Tz};
@@ -38,17 +40,7 @@ pub(super) fn decode_historical_news(time_zone: Option<&'static Tz>, mut message
     message.skip(); // request id
 
     let time = message.next_string()?;
-    println!("time: {}", time);
-
-    let timezone = time_zone.unwrap_or(timezones::db::UTC);
-
-    let format = format_description!("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond]");
-    let time = PrimitiveDateTime::parse(time.as_str(), format)?;
-    let time = time.assume_timezone(timezone);
-    let time = match time {
-        OffsetResult::Some(time) => time,
-        _ => panic!("error setting timezone"),
-    };
+    let time = parse_time(time_zone, &time);
 
     Ok(HistoricalNews {
         time,
@@ -56,4 +48,13 @@ pub(super) fn decode_historical_news(time_zone: Option<&'static Tz>, mut message
         article_id: message.next_string()?,
         headline: message.next_string()?,
     })
+}
+
+fn parse_time(time_zone: Option<&'static Tz>, time:  &str) -> OffsetDateTime {
+    let timezone = time_zone.unwrap_or(timezones::db::UTC);
+
+    let format = format_description!("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond]");
+    let time = PrimitiveDateTime::parse(time, format).unwrap();
+
+    time.assume_timezone(timezone).unwrap()
 }
