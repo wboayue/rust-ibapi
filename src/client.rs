@@ -1276,7 +1276,7 @@ impl Client {
         start_time: OffsetDateTime,
         end_time: OffsetDateTime,
         total_results: u8,
-    ) -> Result<Subscription<news::NewsBulletin>, Error> {
+    ) -> Result<Subscription<news::HistoricalNews>, Error> {
         news::historical_news(self, contract_id, provider_codes, start_time, end_time, total_results)
     }
 
@@ -1406,6 +1406,8 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
 
     /// Blocks until the item become available.
     pub fn next(&self) -> Option<T> {
+        self.clear_error();
+
         match self.process_response(self.subscription.next()) {
             Some(val) => Some(val),
             None => match self.error() {
@@ -1433,7 +1435,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     fn process_message(&self, mut message: ResponseMessage) -> Option<T> {
         match T::decode(self.client.server_version(), &mut message) {
             Ok(val) => Some(val),
-            Err(Error::StreamEnd) => None,
+            Err(Error::EndOfStream) => None,
             Err(err) => {
                 error!("error decoding message: {err}");
                 let mut error = self.error.lock().unwrap();
@@ -1526,6 +1528,11 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     pub fn error(&self) -> Option<Error> {
         let error = self.error.lock().unwrap();
         error.clone()
+    }
+
+    pub fn clear_error(&self) {
+        let mut error = self.error.lock().unwrap();
+        *error = None;
     }
 }
 

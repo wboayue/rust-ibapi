@@ -74,6 +74,29 @@ pub fn news_bulletins(client: &Client, all_messages: bool) -> Result<Subscriptio
 
 impl SharesChannel for Subscription<'_, NewsBulletin> {}
 
+/// Returns news headlines for requested contracts.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+pub struct HistoricalNews {
+    /// The article’s published time.
+    pub time: OffsetDateTime,
+    /// The provider code for the news article.
+    pub provider_code: String,
+    /// Identifier used to track the particular article. See [NewsArticle] for more detail.
+    pub article_id: String,
+    /// Headline of the provided news article.
+    pub headline: String,
+}
+
+impl Subscribable<HistoricalNews> for HistoricalNews {
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<HistoricalNews, Error> {
+        match message.message_type() {
+            IncomingMessages::HistoricalNews => Ok(decoders::decode_historical_news(message.clone())?),
+            IncomingMessages::HistoricalNewsEnd => Err(Error::EndOfStream),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
+        }
+    }
+}
+
 // Historical News Headlines
 pub fn historical_news<'a>(
     client: &'a Client,
@@ -82,7 +105,7 @@ pub fn historical_news<'a>(
     start_time: OffsetDateTime,
     end_time: OffsetDateTime,
     total_results: u8,
-) -> Result<Subscription<'a, NewsBulletin>, Error> {
+) -> Result<Subscription<'a, HistoricalNews>, Error> {
     client.check_server_version(server_versions::REQ_HISTORICAL_NEWS, "It does not support historical news requests.")?;
 
     let request_id = client.next_request_id();

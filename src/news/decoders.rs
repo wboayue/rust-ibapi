@@ -1,4 +1,6 @@
-use super::{Error, NewsBulletin, NewsProvider};
+use time::OffsetDateTime;
+
+use super::{Error, HistoricalNews, NewsBulletin, NewsProvider};
 use crate::messages::ResponseMessage;
 
 pub(super) fn decode_news_providers(mut message: ResponseMessage) -> Result<Vec<NewsProvider>, Error> {
@@ -26,5 +28,18 @@ pub(super) fn decode_news_bulletin(mut message: ResponseMessage) -> Result<NewsB
         message_type: message.next_int()?,
         message: message.next_string()?,
         exchange: message.next_string()?,
+    })
+}
+
+pub(super) fn decode_historical_news(mut message: ResponseMessage) -> Result<HistoricalNews, Error> {
+    message.skip(); // message type
+    message.skip(); // request id
+    message.skip(); // time
+
+    Ok(HistoricalNews {
+        time: OffsetDateTime::now_utc(),
+        provider_code: message.next_string()?,
+        article_id: message.next_string()?,
+        headline: message.next_string()?,
     })
 }

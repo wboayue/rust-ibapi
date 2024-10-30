@@ -1304,7 +1304,7 @@ impl Subscribable<Orders> for Orders {
             IncomingMessages::CommissionsReport => Ok(Orders::OrderData(decoders::decode_open_order(server_version, message.clone())?)),
             IncomingMessages::OpenOrder => Ok(Orders::OrderData(decoders::decode_open_order(server_version, message.clone())?)),
             IncomingMessages::OrderStatus => Ok(Orders::OrderStatus(decoders::decode_order_status(server_version, message)?)),
-            IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => Err(Error::StreamEnd),
+            IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => Err(Error::EndOfStream),
             IncomingMessages::Error => Ok(Orders::Notice(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
@@ -1392,7 +1392,7 @@ impl Subscribable<Executions> for Executions {
         match message.message_type() {
             IncomingMessages::ExecutionData => Ok(Executions::ExecutionData(decoders::decode_execution_data(server_version, message)?)),
             IncomingMessages::CommissionsReport => Ok(Executions::CommissionReport(decoders::decode_commission_report(server_version, message)?)),
-            IncomingMessages::ExecutionDataEnd => Err(Error::StreamEnd),
+            IncomingMessages::ExecutionDataEnd => Err(Error::EndOfStream),
             IncomingMessages::Error => Ok(Executions::Notice(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }

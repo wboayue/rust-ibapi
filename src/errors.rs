@@ -21,7 +21,7 @@ pub enum Error {
     ConnectionReset,
     Cancelled,
     Shutdown,
-    StreamEnd,
+    EndOfStream,
     UnexpectedResponse(ResponseMessage),
     UnexpectedEndOfStream,
 }
@@ -44,9 +44,9 @@ impl std::fmt::Display for Error {
             Error::ConnectionReset => write!(f, "ConnectionReset"),
             Error::Cancelled => write!(f, "Cancelled"),
             Error::Shutdown => write!(f, "Shutdown"),
-            Error::StreamEnd => write!(f, "StreamEnd"),
+            Error::EndOfStream => write!(f, "StreamEnd"),
             Error::UnexpectedResponse(message) => write!(f, "UnexpectedResponse: {:?}", message),
-            Error::UnexpectedEndOfStream => write!(f, "UnexpectedEndOfStream"),
+            Error::UnexpectedEndOfStream => write!(f, "EndOfStream"),
 
             Error::Simple(ref err) => write!(f, "error occurred: {err}"),
         }
