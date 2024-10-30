@@ -1,4 +1,4 @@
-use super::{Error, NewsProvider};
+use super::{Error, NewsBulletin, NewsProvider};
 use crate::messages::ResponseMessage;
 
 pub(super) fn decode_news_providers(mut message: ResponseMessage) -> Result<Vec<NewsProvider>, Error> {
@@ -15,4 +15,16 @@ pub(super) fn decode_news_providers(mut message: ResponseMessage) -> Result<Vec<
     }
 
     Ok(news_providers)
+}
+
+pub(super) fn decode_news_bulletin(mut message: ResponseMessage) -> Result<NewsBulletin, Error> {
+    message.skip(); // message type
+    message.skip(); // message version
+
+    Ok(NewsBulletin {
+        message_id: message.next_int()?,
+        message_type: message.next_int()?,
+        message: message.next_string()?,
+        exchange: message.next_string()?,
+    })
 }

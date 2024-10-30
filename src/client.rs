@@ -1218,6 +1218,28 @@ impl Client {
         news::news_providers(self)
     }
 
+    /// Subscribes to IB's News Bulletins.
+    ///
+    /// # Arguments
+    ///
+    /// * `all_messages` - If set to true, will return all the existing bulletins for the current day, set to false to receive only the new bulletins.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let news_bulletins = client.news_bulletins(true).expect("request news providers failed");
+    /// for news_bulletin in &news_bulletins {
+    ///   println!("news bulletin {:?}", news_bulletin);
+    /// }
+    /// ```
+    pub fn news_bulletins(&self, all_messages: bool) -> Result<Subscription<news::NewsBulletin>, Error> {
+        news::news_bulletins(self, all_messages)
+    }
+
     // == Internal Use ==
 
     #[cfg(test)]
