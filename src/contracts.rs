@@ -419,9 +419,9 @@ pub struct OptionComputation {
 impl Subscribable<OptionComputation> for OptionComputation {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickOptionComputation];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickOptionComputation => Ok(decoders::decode_option_computation(server_version, message)?),
+            IncomingMessages::TickOptionComputation => Ok(decoders::decode_option_computation(client.server_version, message)?),
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
     }
@@ -599,7 +599,7 @@ pub(crate) fn calculate_option_price(
     let subscription = client.send_request(request_id, message)?;
 
     match subscription.next() {
-        Some(Ok(mut message)) => OptionComputation::decode(client.server_version(), &mut message),
+        Some(Ok(mut message)) => OptionComputation::decode(client, &mut message),
         Some(Err(e)) => Err(e),
         None => Err(Error::Simple("no data for option calculation".into())),
     }
@@ -627,7 +627,7 @@ pub(crate) fn calculate_implied_volatility(
     let subscription = client.send_request(request_id, message)?;
 
     match subscription.next() {
-        Some(Ok(mut message)) => OptionComputation::decode(client.server_version(), &mut message),
+        Some(Ok(mut message)) => OptionComputation::decode(client, &mut message),
         Some(Err(e)) => Err(e),
         None => Err(Error::Simple("no data for option calculation".into())),
     }

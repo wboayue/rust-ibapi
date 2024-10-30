@@ -53,7 +53,7 @@ pub struct BidAsk {
 impl Subscribable<BidAsk> for BidAsk {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_bid_ask_tick(message)
     }
 
@@ -80,7 +80,7 @@ pub struct MidPoint {
 impl Subscribable<MidPoint> for MidPoint {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_mid_point_tick(message)
     }
 
@@ -114,7 +114,7 @@ pub struct Bar {
 impl Subscribable<Bar> for Bar {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::RealTimeBars];
 
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_realtime_bar(message)
     }
 
@@ -145,7 +145,7 @@ pub struct Trade {
 impl Subscribable<Trade> for Trade {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_trade_tick(message)
     }
 
@@ -230,10 +230,13 @@ pub struct MarketDepthL2 {
 impl Subscribable<MarketDepths> for MarketDepths {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2, IncomingMessages::Error];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::MarketDepth => Ok(MarketDepths::MarketDepth(decoders::decode_market_depth(message)?)),
-            IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(decoders::decode_market_depth_l2(server_version, message)?)),
+            IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(decoders::decode_market_depth_l2(
+                client.server_version,
+                message,
+            )?)),
             IncomingMessages::Error => Ok(MarketDepths::Notice(Notice::from(message))),
             _ => Err(Error::NotImplemented),
         }
@@ -287,15 +290,15 @@ impl Subscribable<TickTypes> for TickTypes {
         IncomingMessages::TickReqParams,
     ];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickPrice => Ok(decoders::decode_tick_price(server_version, message)?),
+            IncomingMessages::TickPrice => Ok(decoders::decode_tick_price(client.server_version, message)?),
             IncomingMessages::TickSize => Ok(TickTypes::Size(decoders::decode_tick_size(message)?)),
             IncomingMessages::TickString => Ok(TickTypes::String(decoders::decode_tick_string(message)?)),
             IncomingMessages::TickEFP => Ok(TickTypes::EFP(decoders::decode_tick_efp(message)?)),
             IncomingMessages::TickGeneric => Ok(TickTypes::Generic(decoders::decode_tick_generic(message)?)),
             IncomingMessages::TickOptionComputation => Ok(TickTypes::OptionComputation(decoders::decode_tick_option_computation(
-                server_version,
+                client.server_version,
                 message,
             )?)),
             IncomingMessages::TickReqParams => Ok(TickTypes::RequestParameters(decoders::decode_tick_request_parameters(message)?)),

@@ -109,9 +109,12 @@ pub enum AccountSummaries {
 impl Subscribable<AccountSummaries> for AccountSummaries {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::AccountSummary, IncomingMessages::AccountSummaryEnd];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::AccountSummary => Ok(AccountSummaries::Summary(decoders::decode_account_summary(server_version, message)?)),
+            IncomingMessages::AccountSummary => Ok(AccountSummaries::Summary(decoders::decode_account_summary(
+                client.server_version,
+                message,
+            )?)),
             IncomingMessages::AccountSummaryEnd => Ok(AccountSummaries::End),
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
@@ -136,8 +139,8 @@ pub struct PnL {
 impl Subscribable<PnL> for PnL {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PnL];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
-        decoders::decode_pnl(server_version, message)
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+        decoders::decode_pnl(client.server_version, message)
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
@@ -164,8 +167,8 @@ pub struct PnLSingle {
 impl Subscribable<PnLSingle> for PnLSingle {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PnLSingle];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
-        decoders::decode_pnl_single(server_version, message)
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+        decoders::decode_pnl_single(client.server_version, message)
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
@@ -196,7 +199,7 @@ pub enum PositionUpdate {
 impl Subscribable<PositionUpdate> for PositionUpdate {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
 
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::Position => Ok(PositionUpdate::Position(decoders::decode_position(message)?)),
             IncomingMessages::PositionEnd => Ok(PositionUpdate::PositionEnd),
@@ -234,7 +237,7 @@ pub struct PositionMulti {
 impl Subscribable<PositionUpdateMulti> for PositionUpdateMulti {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PositionMulti, IncomingMessages::PositionMultiEnd];
 
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::PositionMulti => Ok(PositionUpdateMulti::Position(decoders::decode_position_multi(message)?)),
             IncomingMessages::PositionMultiEnd => Ok(PositionUpdateMulti::PositionEnd),
@@ -278,11 +281,11 @@ impl Subscribable<AccountUpdate> for AccountUpdate {
         IncomingMessages::AccountDownloadEnd,
     ];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::AccountValue => Ok(AccountUpdate::AccountValue(decoders::decode_account_value(message)?)),
             IncomingMessages::PortfolioValue => Ok(AccountUpdate::PortfolioValue(decoders::decode_account_portfolio_value(
-                server_version,
+                client.server_version,
                 message,
             )?)),
             IncomingMessages::AccountUpdateTime => Ok(AccountUpdate::UpdateTime(decoders::decode_account_update_time(message)?)),
@@ -365,7 +368,7 @@ pub struct AccountMultiValue {
 impl Subscribable<AccountUpdateMulti> for AccountUpdateMulti {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::AccountUpdateMulti, IncomingMessages::AccountUpdateMultiEnd];
 
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::AccountUpdateMulti => Ok(AccountUpdateMulti::AccountMultiValue(decoders::decode_account_multi_value(message)?)),
             IncomingMessages::AccountUpdateMultiEnd => Ok(AccountUpdateMulti::End),

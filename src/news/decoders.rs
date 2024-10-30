@@ -1,4 +1,6 @@
-use time::OffsetDateTime;
+use time::macros::format_description;
+use time::{OffsetDateTime, PrimitiveDateTime};
+use time_tz::{timezones, OffsetDateTimeExt, OffsetResult, PrimitiveDateTimeExt, Tz};
 
 use super::{Error, HistoricalNews, NewsBulletin, NewsProvider};
 use crate::messages::ResponseMessage;
@@ -31,13 +33,25 @@ pub(super) fn decode_news_bulletin(mut message: ResponseMessage) -> Result<NewsB
     })
 }
 
-pub(super) fn decode_historical_news(mut message: ResponseMessage) -> Result<HistoricalNews, Error> {
+pub(super) fn decode_historical_news(time_zone: Option<&'static Tz>, mut message: ResponseMessage) -> Result<HistoricalNews, Error> {
     message.skip(); // message type
     message.skip(); // request id
-    message.skip(); // time
+
+    let time = message.next_string()?;
+    println!("time: {}", time);
+
+    let timezone = time_zone.unwrap_or(timezones::db::UTC);
+
+    let format = format_description!("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond]");
+    let time = PrimitiveDateTime::parse(time.as_str(), format)?;
+    let time = time.assume_timezone(timezone);
+    let time = match time {
+        OffsetResult::Some(time) => time,
+        _ => panic!("error setting timezone"),
+    };
 
     Ok(HistoricalNews {
-        time: OffsetDateTime::now_utc(),
+        time,
         provider_code: message.next_string()?,
         article_id: message.next_string()?,
         headline: message.next_string()?,

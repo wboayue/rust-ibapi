@@ -52,7 +52,7 @@ pub struct NewsBulletin {
 }
 
 impl Subscribable<NewsBulletin> for NewsBulletin {
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<NewsBulletin, Error> {
+    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<NewsBulletin, Error> {
         match message.message_type() {
             IncomingMessages::NewsBulletins => Ok(decoders::decode_news_bulletin(message.clone())?),
             _ => Err(Error::UnexpectedResponse(message.clone())),
@@ -88,9 +88,9 @@ pub struct HistoricalNews {
 }
 
 impl Subscribable<HistoricalNews> for HistoricalNews {
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<HistoricalNews, Error> {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<HistoricalNews, Error> {
         match message.message_type() {
-            IncomingMessages::HistoricalNews => Ok(decoders::decode_historical_news(message.clone())?),
+            IncomingMessages::HistoricalNews => Ok(decoders::decode_historical_news(client.time_zone, message.clone())?),
             IncomingMessages::HistoricalNewsEnd => Err(Error::EndOfStream),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }

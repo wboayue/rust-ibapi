@@ -1433,7 +1433,7 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     }
 
     fn process_message(&self, mut message: ResponseMessage) -> Option<T> {
-        match T::decode(self.client.server_version(), &mut message) {
+        match T::decode(&self.client, &mut message) {
             Ok(val) => Some(val),
             Err(Error::EndOfStream) => None,
             Err(err) => {
@@ -1545,7 +1545,7 @@ impl<'a, T: Subscribable<T>> Drop for Subscription<'a, T> {
 pub(crate) trait Subscribable<T> {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<T, Error>;
     fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         Err(Error::NotImplemented)
     }

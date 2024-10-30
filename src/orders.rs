@@ -998,12 +998,21 @@ pub(crate) fn place_order<'a>(client: &'a Client, order_id: i32, contract: &Cont
 }
 
 impl Subscribable<PlaceOrder> for PlaceOrder {
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<PlaceOrder, Error> {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<PlaceOrder, Error> {
         match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(PlaceOrder::OpenOrder(decoders::decode_open_order(server_version, message.clone())?)),
-            IncomingMessages::OrderStatus => Ok(PlaceOrder::OrderStatus(decoders::decode_order_status(server_version, message)?)),
-            IncomingMessages::ExecutionData => Ok(PlaceOrder::ExecutionData(decoders::decode_execution_data(server_version, message)?)),
-            IncomingMessages::CommissionsReport => Ok(PlaceOrder::CommissionReport(decoders::decode_commission_report(server_version, message)?)),
+            IncomingMessages::OpenOrder => Ok(PlaceOrder::OpenOrder(decoders::decode_open_order(
+                client.server_version,
+                message.clone(),
+            )?)),
+            IncomingMessages::OrderStatus => Ok(PlaceOrder::OrderStatus(decoders::decode_order_status(client.server_version, message)?)),
+            IncomingMessages::ExecutionData => Ok(PlaceOrder::ExecutionData(decoders::decode_execution_data(
+                client.server_version,
+                message,
+            )?)),
+            IncomingMessages::CommissionsReport => Ok(PlaceOrder::CommissionReport(decoders::decode_commission_report(
+                client.server_version,
+                message,
+            )?)),
             IncomingMessages::Error => Ok(PlaceOrder::Message(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
@@ -1239,9 +1248,9 @@ pub enum CancelOrder {
 }
 
 impl Subscribable<CancelOrder> for CancelOrder {
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<CancelOrder, Error> {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<CancelOrder, Error> {
         match message.message_type() {
-            IncomingMessages::OrderStatus => Ok(CancelOrder::OrderStatus(decoders::decode_order_status(server_version, message)?)),
+            IncomingMessages::OrderStatus => Ok(CancelOrder::OrderStatus(decoders::decode_order_status(client.server_version, message)?)),
             IncomingMessages::Error => Ok(CancelOrder::Notice(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
@@ -1298,12 +1307,15 @@ pub enum Orders {
 }
 
 impl Subscribable<Orders> for Orders {
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Orders, Error> {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Orders, Error> {
         match message.message_type() {
-            IncomingMessages::CompletedOrder => Ok(Orders::OrderData(decoders::decode_completed_order(server_version, message.clone())?)),
-            IncomingMessages::CommissionsReport => Ok(Orders::OrderData(decoders::decode_open_order(server_version, message.clone())?)),
-            IncomingMessages::OpenOrder => Ok(Orders::OrderData(decoders::decode_open_order(server_version, message.clone())?)),
-            IncomingMessages::OrderStatus => Ok(Orders::OrderStatus(decoders::decode_order_status(server_version, message)?)),
+            IncomingMessages::CompletedOrder => Ok(Orders::OrderData(decoders::decode_completed_order(
+                client.server_version,
+                message.clone(),
+            )?)),
+            IncomingMessages::CommissionsReport => Ok(Orders::OrderData(decoders::decode_open_order(client.server_version, message.clone())?)),
+            IncomingMessages::OpenOrder => Ok(Orders::OrderData(decoders::decode_open_order(client.server_version, message.clone())?)),
+            IncomingMessages::OrderStatus => Ok(Orders::OrderStatus(decoders::decode_order_status(client.server_version, message)?)),
             IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => Err(Error::EndOfStream),
             IncomingMessages::Error => Ok(Orders::Notice(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
@@ -1388,10 +1400,16 @@ pub enum Executions {
 }
 
 impl Subscribable<Executions> for Executions {
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Executions, Error> {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Executions, Error> {
         match message.message_type() {
-            IncomingMessages::ExecutionData => Ok(Executions::ExecutionData(decoders::decode_execution_data(server_version, message)?)),
-            IncomingMessages::CommissionsReport => Ok(Executions::CommissionReport(decoders::decode_commission_report(server_version, message)?)),
+            IncomingMessages::ExecutionData => Ok(Executions::ExecutionData(decoders::decode_execution_data(
+                client.server_version,
+                message,
+            )?)),
+            IncomingMessages::CommissionsReport => Ok(Executions::CommissionReport(decoders::decode_commission_report(
+                client.server_version,
+                message,
+            )?)),
             IncomingMessages::ExecutionDataEnd => Err(Error::EndOfStream),
             IncomingMessages::Error => Ok(Executions::Notice(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
@@ -1414,10 +1432,16 @@ pub enum ExerciseOptions {
 }
 
 impl Subscribable<ExerciseOptions> for ExerciseOptions {
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<ExerciseOptions, Error> {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<ExerciseOptions, Error> {
         match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(ExerciseOptions::OpenOrder(decoders::decode_open_order(server_version, message.clone())?)),
-            IncomingMessages::OrderStatus => Ok(ExerciseOptions::OrderStatus(decoders::decode_order_status(server_version, message)?)),
+            IncomingMessages::OpenOrder => Ok(ExerciseOptions::OpenOrder(decoders::decode_open_order(
+                client.server_version,
+                message.clone(),
+            )?)),
+            IncomingMessages::OrderStatus => Ok(ExerciseOptions::OrderStatus(decoders::decode_order_status(
+                client.server_version,
+                message,
+            )?)),
             IncomingMessages::Error => Ok(ExerciseOptions::Notice(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
