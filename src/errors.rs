@@ -44,9 +44,9 @@ impl std::fmt::Display for Error {
             Error::ConnectionReset => write!(f, "ConnectionReset"),
             Error::Cancelled => write!(f, "Cancelled"),
             Error::Shutdown => write!(f, "Shutdown"),
-            Error::EndOfStream => write!(f, "StreamEnd"),
+            Error::EndOfStream => write!(f, "EndOfStream"),
             Error::UnexpectedResponse(message) => write!(f, "UnexpectedResponse: {:?}", message),
-            Error::UnexpectedEndOfStream => write!(f, "EndOfStream"),
+            Error::UnexpectedEndOfStream => write!(f, "UnexpectedEndOfStream"),
 
             Error::Simple(ref err) => write!(f, "error occurred: {err}"),
         }
