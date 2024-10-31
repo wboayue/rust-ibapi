@@ -163,7 +163,7 @@ pub(super) fn encode_request_market_depth_exchanges() -> Result<RequestMessage, 
     Ok(message)
 }
 
-pub(super) fn encode_request_market_data(
+pub(crate) fn encode_request_market_data(
     server_version: i32,
     request_id: i32,
     contract: &Contract,

@@ -12,7 +12,7 @@ use crate::ToField;
 use crate::{Client, Error};
 
 mod decoders;
-mod encoders;
+pub(crate) mod encoders;
 #[cfg(test)]
 mod tests;
 

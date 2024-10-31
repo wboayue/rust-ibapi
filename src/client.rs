@@ -16,6 +16,7 @@ use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescriptio
 use crate::market_data::MarketDataType;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
+use crate::news::HistoricalNews;
 use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, Orders, PlaceOrder};
 use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus};
 use crate::{accounts, contracts, market_data, news, orders};
@@ -1304,6 +1305,33 @@ impl Client {
     pub fn news_article(&self, provider_code: &str, article_id: &str) -> Result<news::NewsArticle, Error> {
         news::news_article(self, provider_code, article_id)
     }
+
+    /// Requests contract specific news
+    /// 
+    /// # Arguments
+    ///
+    /// * `contract`       - Contract for which news is being requested.
+    /// * `provider_codes` - Short codes indicating news providers, e.g. DJ-N.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// // can get these using the historical_news method
+    /// let provider_code = "DJ-N";
+    /// let article_id = "DJ-N$1915168d";
+    ///
+    /// let article = client.news_article(provider_code, article_id).expect("request news article failed");
+    /// println!("{:?}", article);
+    /// ```
+    pub fn contract_news(&self, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<HistoricalNews>, Error> {
+        news::contract_news(self, contract, provider_codes)
+    }
+
+    // broad_tape_news(provider_code
 
     // == Internal Use ==
 

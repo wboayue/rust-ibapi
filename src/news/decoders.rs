@@ -47,6 +47,7 @@ pub(super) fn decode_historical_news(time_zone: Option<&'static Tz>, mut message
         provider_code: message.next_string()?,
         article_id: message.next_string()?,
         headline: message.next_string()?,
+        extra_data: "".to_string(),
     })
 }
 
@@ -66,5 +67,28 @@ pub(super) fn decode_news_article(mut message: ResponseMessage) -> Result<NewsAr
     Ok(NewsArticle {
         article_type: ArticleType::from(message.next_int()?),
         article_text: message.next_string()?,
+    })
+}
+
+pub(super) fn decode_tick_news(mut message: ResponseMessage) -> Result<HistoricalNews, Error> {
+    message.skip(); // message type
+    message.skip(); // request id
+
+    let time = message.next_string()?;
+    let time: i64 = time.parse()?;
+    let time = time / 1000;
+    println!("time: {}", time);
+
+    let time =  match OffsetDateTime::from_unix_timestamp(time) {
+        Ok(val) => val,
+        Err(err) => return Err(Error::Simple(err.to_string())),
+    };
+
+    Ok(HistoricalNews {
+        time,
+        provider_code: message.next_string()?,
+        article_id: message.next_string()?,
+        headline: message.next_string()?,
+        extra_data: message.next_string()?,
     })
 }

@@ -1,10 +1,9 @@
 use std::default;
 
 use crate::{
-    client::{self, ResponseContext, SharesChannel, DataStream, Subscription},
-    messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage},
-    server_versions, Client, Error,
+    client::{self, DataStream, ResponseContext, SharesChannel, Subscription}, contracts::Contract, messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage}, server_versions, Client, Error
 };
+use crate::market_data::realtime;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
@@ -81,6 +80,8 @@ pub struct HistoricalNews {
     pub article_id: String,
     /// Headline of the provided news article.
     pub headline: String,
+    /// Returns any additional data available about the article.
+    pub extra_data: String,
 }
 
 impl DataStream<HistoricalNews> for HistoricalNews {
@@ -88,6 +89,7 @@ impl DataStream<HistoricalNews> for HistoricalNews {
         match message.message_type() {
             IncomingMessages::HistoricalNews => Ok(decoders::decode_historical_news(client.time_zone, message.clone())?),
             IncomingMessages::HistoricalNewsEnd => Err(Error::EndOfStream),
+            IncomingMessages::TickNews => Ok(decoders::decode_tick_news(message.clone())?),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -160,4 +162,25 @@ pub(super) fn news_article(client: &Client, provider_code: &str, article_id: &st
         Some(Err(e)) => Err(e),
         None => Err(Error::UnexpectedEndOfStream),
     }
+}
+
+pub fn contract_news<'a>(client: &'a Client, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<'a, HistoricalNews>, Error> {
+    let mut generic_ticks = vec!["mdoff".to_string()];
+    for provider in provider_codes {
+        generic_ticks.push(format!("292:{}", provider));
+    }
+    let generic_ticks: Vec<_> = generic_ticks.iter().map(|s| s.as_str()).collect();
+
+    let request_id = client.next_request_id();
+    let request = realtime::encoders::encode_request_market_data(
+        client.server_version(),
+        request_id,
+        contract,
+        generic_ticks.as_slice(),
+        false,
+        false,
+    )?;
+    let subscription = client.send_request(request_id, request)?;
+
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
