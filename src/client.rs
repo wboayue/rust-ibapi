@@ -1280,6 +1280,31 @@ impl Client {
         news::historical_news(self, contract_id, provider_codes, start_time, end_time, total_results)
     }
 
+    /// Requests news article body given articleId.
+    ///
+    /// # Arguments
+    ///
+    /// * `provider_code` - Short code indicating news provider, e.g. FLY.
+    /// * `article_id`    - ID of the specific article.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// // can get these using the historical_news method
+    /// let provider_code = "DJ-N";
+    /// let article_id = "DJ-N$1915168d"; // TSLA
+    ///
+    /// let article = client.news_article(provider_code).expect("request news article failed");
+    /// println!("{:?}", article);
+    /// ```
+    pub fn news_article(&self, provider_code: &str, article_id: &str) -> Result<news::NewsArticle, Error> {
+        news::news_article(self, provider_code, article_id)
+    }
+
     // == Internal Use ==
 
     #[cfg(test)]

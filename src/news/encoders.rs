@@ -60,3 +60,23 @@ pub(super) fn encode_request_historical_news(
 
     Ok(message)
 }
+
+pub(super) fn encode_request_news_article(
+    server_version: i32,
+    request_id: i32,
+    provider_code: &str,
+    article_id: &str,
+) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+
+    message.push_field(&OutgoingMessages::RequestNewsArticle);
+    message.push_field(&request_id);
+    message.push_field(&provider_code);
+    message.push_field(&article_id);
+
+    if server_version >= server_versions::NEWS_QUERY_ORIGINS {
+        message.push_field(&"");
+    }
+
+    Ok(message)
+}

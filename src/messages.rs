@@ -222,6 +222,7 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::HistoricalTickLast
         | IncomingMessages::HistoricalNews
         | IncomingMessages::HistoricalNewsEnd
+        | IncomingMessages::NewsArticle
         | IncomingMessages::PnL
         | IncomingMessages::PnLSingle
         | IncomingMessages::HistogramData

@@ -1,5 +1,7 @@
+use std::default;
+
 use crate::{
-    client::{ResponseContext, SharesChannel, Subscribable, Subscription},
+    client::{self, ResponseContext, SharesChannel, Subscribable, Subscription},
     messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage},
     server_versions, Client, Error,
 };
@@ -15,14 +17,8 @@ pub struct NewsProvider {
     pub name: String,
 }
 
-// https://interactivebrokers.github.io/tws-api/news.html
-
-/// Historical News Headlines
-
-/// Requesting News Articles
-
 /// Requests news providers which the user has subscribed to.
-pub fn news_providers(client: &Client) -> Result<Vec<NewsProvider>, Error> {
+pub(super) fn news_providers(client: &Client) -> Result<Vec<NewsProvider>, Error> {
     client.check_server_version(server_versions::REQ_NEWS_PROVIDERS, "It does not support news providers requests.")?;
 
     let request = encoders::encode_request_news_providers()?;
@@ -65,7 +61,7 @@ impl Subscribable<NewsBulletin> for NewsBulletin {
 }
 
 // Subscribes to IB's News Bulletins.
-pub fn news_bulletins(client: &Client, all_messages: bool) -> Result<Subscription<NewsBulletin>, Error> {
+pub(super) fn news_bulletins(client: &Client, all_messages: bool) -> Result<Subscription<NewsBulletin>, Error> {
     let request = encoders::encode_request_news_bulletins(all_messages)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestNewsBulletins, request)?;
 
@@ -98,7 +94,7 @@ impl Subscribable<HistoricalNews> for HistoricalNews {
 }
 
 // Historical News Headlines
-pub fn historical_news<'a>(
+pub(super) fn historical_news<'a>(
     client: &'a Client,
     contract_id: i32,
     provider_codes: &[&str],
@@ -121,4 +117,47 @@ pub fn historical_news<'a>(
     let subscription = client.send_request(request_id, request)?;
 
     Ok(Subscription::new(client, subscription, ResponseContext::default()))
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Default)]
+/// The type of news article ([ArticleType::Text] - plain text or html, [ArticleType::Binary] - binary data / pdf)
+pub enum ArticleType {
+    /// plain text or html
+    #[default]
+    Text = 0,
+    /// binary data / pdf
+    Binary = 1,
+}
+
+impl From<i32> for ArticleType {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => ArticleType::Text,
+            1 => ArticleType::Binary,
+            _ => ArticleType::Text,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Default)]
+pub struct NewsArticle {
+    /// The type of news article ([ArticleType::Text] - plain text or html, [ArticleType::Binary] - binary data / pdf)
+    article_type: ArticleType,
+    /// The body of article (if [ArticleType::Binary], the binary data is encoded using the Base64 scheme)
+    article_text: String,
+}
+
+pub(super) fn news_article(client: &Client, provider_code: &str, article_id: &str) -> Result<NewsArticle, Error> {
+    client.check_server_version(server_versions::REQ_NEWS_ARTICLE, "It does not support news article requests.")?;
+
+    let request_id = client.next_request_id();
+    let request = encoders::encode_request_news_article(client.server_version(), request_id, provider_code, article_id)?;
+
+    let subscription = client.send_request(request_id, request)?;
+    match subscription.next() {
+        Some(Ok(message)) => decoders::decode_news_article(message),
+        Some(Err(Error::ConnectionReset)) => news_article(client, provider_code, article_id),
+        Some(Err(e)) => Err(e),
+        None => Err(Error::UnexpectedEndOfStream),
+    }
 }

@@ -1,5 +1,3 @@
-use std::f32::consts::E;
-
 use time::macros::datetime;
 
 use ibapi::Client;
@@ -15,10 +13,11 @@ fn main() {
     let end_time = datetime!(2024-10-29 0:00 UTC);
     let total_results = 10;
 
-    let news_headlines = client
+    let articles = client
         .historical_news(contract_id, &provider_codes, start_time, end_time, total_results)
-        .expect("request news providers failed");
-    for headline in &news_headlines {
-        println!("news bulletin {:?}", headline);
+        .expect("request historical news failed");
+
+    for article in &articles {
+        println!("{}: {}", article.article_id, article.headline);
     }
 }
