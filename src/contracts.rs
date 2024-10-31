@@ -7,8 +7,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use tick_types::TickType;
 
-use crate::client::ResponseContext;
 use crate::client::DataStream;
+use crate::client::ResponseContext;
 use crate::encode_option_field;
 use crate::messages::IncomingMessages;
 use crate::messages::OutgoingMessages;
@@ -188,6 +188,16 @@ impl Contract {
             security_type: SecurityType::Crypto,
             currency: "USD".to_string(),
             exchange: "PAXOS".to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// Creates News contract from specified provider code.
+    pub fn news(provider_code: &str) -> Contract {
+        Contract {
+            symbol: format!("{}:{}_ALL", provider_code, provider_code),
+            security_type: SecurityType::News,
+            exchange: provider_code.to_string(),
             ..Default::default()
         }
     }

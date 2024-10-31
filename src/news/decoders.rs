@@ -2,9 +2,9 @@ use std::str;
 
 use time::macros::format_description;
 use time::{OffsetDateTime, PrimitiveDateTime};
-use time_tz::{timezones, OffsetDateTimeExt, OffsetResult, PrimitiveDateTimeExt, Tz};
+use time_tz::{timezones, PrimitiveDateTimeExt, Tz};
 
-use super::{ArticleType, Error, HistoricalNews, NewsArticle, NewsBulletin, NewsProvider};
+use super::{ArticleType, Error, NewsArticle, NewsArticleBody, NewsBulletin, NewsProvider};
 use crate::messages::ResponseMessage;
 
 pub(super) fn decode_news_providers(mut message: ResponseMessage) -> Result<Vec<NewsProvider>, Error> {
@@ -35,14 +35,14 @@ pub(super) fn decode_news_bulletin(mut message: ResponseMessage) -> Result<NewsB
     })
 }
 
-pub(super) fn decode_historical_news(time_zone: Option<&'static Tz>, mut message: ResponseMessage) -> Result<HistoricalNews, Error> {
+pub(super) fn decode_historical_news(time_zone: Option<&'static Tz>, mut message: ResponseMessage) -> Result<NewsArticle, Error> {
     message.skip(); // message type
     message.skip(); // request id
 
     let time = message.next_string()?;
     let time = parse_time(time_zone, &time);
 
-    Ok(HistoricalNews {
+    Ok(NewsArticle {
         time,
         provider_code: message.next_string()?,
         article_id: message.next_string()?,
@@ -60,24 +60,24 @@ fn parse_time(time_zone: Option<&'static Tz>, time: &str) -> OffsetDateTime {
     time.assume_timezone(timezone).unwrap()
 }
 
-pub(super) fn decode_news_article(mut message: ResponseMessage) -> Result<NewsArticle, Error> {
+pub(super) fn decode_news_article(mut message: ResponseMessage) -> Result<NewsArticleBody, Error> {
     message.skip(); // message type
     message.skip(); // request id
 
-    Ok(NewsArticle {
+    Ok(NewsArticleBody {
         article_type: ArticleType::from(message.next_int()?),
         article_text: message.next_string()?,
     })
 }
 
-pub(super) fn decode_tick_news(mut message: ResponseMessage) -> Result<HistoricalNews, Error> {
+pub(super) fn decode_tick_news(mut message: ResponseMessage) -> Result<NewsArticle, Error> {
     message.skip(); // message type
     message.skip(); // request id
 
     let time = message.next_string()?;
     let time = parse_unix_timestamp(&time)?;
 
-    Ok(HistoricalNews {
+    Ok(NewsArticle {
         time,
         provider_code: message.next_string()?,
         article_id: message.next_string()?,
@@ -92,6 +92,6 @@ fn parse_unix_timestamp(time: &str) -> Result<OffsetDateTime, Error> {
 
     match OffsetDateTime::from_unix_timestamp(time) {
         Ok(val) => Ok(val),
-        Err(err) => return Err(Error::Simple(err.to_string())),
+        Err(err) => Err(Error::Simple(err.to_string())),
     }
 }

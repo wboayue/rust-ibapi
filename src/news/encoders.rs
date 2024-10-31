@@ -2,7 +2,7 @@ use time::OffsetDateTime;
 
 use crate::{
     messages::{OutgoingMessages, RequestMessage},
-    server_versions, Error, ToField,
+    server_versions, Error,
 };
 
 pub(super) fn encode_request_news_providers() -> Result<RequestMessage, Error> {

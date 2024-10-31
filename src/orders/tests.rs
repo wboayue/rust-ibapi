@@ -48,7 +48,7 @@ fn place_order() {
 
     assert!(result.is_ok(), "failed to place order: {}", result.err().unwrap());
 
-    let mut notifications = result.unwrap();
+    let notifications = result.unwrap();
 
     if let Some(PlaceOrder::OpenOrder(open_order)) = notifications.next() {
         assert_eq!(open_order.order_id, 13, "open_order.order_id");
@@ -319,7 +319,7 @@ fn cancel_order() {
 
     assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
 
-    let mut results = results.unwrap();
+    let results = results.unwrap();
 
     if let Some(CancelOrder::OrderStatus(order_status)) = results.next() {
         assert_eq!(order_status.order_id, 41, "order_status.order_id");

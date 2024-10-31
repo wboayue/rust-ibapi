@@ -2,7 +2,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::client::{ResponseContext, DataStream, Subscription};
+use crate::client::{DataStream, ResponseContext, Subscription};
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{Contract, OptionComputation};
 use crate::messages::{IncomingMessages, Notice, OutgoingMessages, RequestMessage, ResponseMessage};

@@ -1,5 +1,3 @@
-//pub const POSITION: &str = "61\03\0DU1234567\076792991\0TSLA\0STK\0\00.0\0\0\0NASDAQ\0USD\0TSLA\0NMS\0500\0196.77\0";
-
 // error
 
 pub const NOTICE_DATA_FARM_CONNECTION: &str = "4|2|-1|2107|HMDS data farm connection is inactive.|";
@@ -16,15 +14,3 @@ pub const ACCOUNT_UPDATE_MULTI_END: &str = "74|1|9000||";
 // contracts
 
 pub const MARKET_RULE: &str = "93|26|1|0|0.01|";
-
-// Market Depth
-
-pub const MARKET_DEPTH_1: &str = "13|1|9000|0|OVERNIGHT|0|1|235.84|300|1||";
-pub const MARKET_DEPTH_2: &str = "13|1|9000|0|OVERNIGHT|0|0|236.09|200|1||";
-pub const MARKET_DEPTH_3: &str = "4|2|9000|2152|Exchanges - Depth: IEX; Top: BYX; AMEX; PEARL; MEMX; EDGEA; OVERNIGHT; CHX; NYSENAT; IBEOS; PSX; LTSE; ISE; DRCTEDGE; Need additional market data permissions - Depth: BATS; ARCA; ISLAND; BEX; NYSE; ||";
-pub const MARKET_DEPTH_4: &str = "13|1|9000|1|OVERNIGHT|0|1|235.84|300|1||";
-pub const MARKET_DEPTH_5: &str = "13|1|9000|0|IBEOS|1|1|235.84|100|1||";
-pub const MARKET_DEPTH_6: &str = "13|1|9000|1|IBEOS|0|0|236.26|100|1||";
-pub const MARKET_DEPTH_7: &str = "13|1|9000|1|OVERNIGHT|1|1|235.84|200|1||";
-pub const MARKET_DEPTH_8: &str = "13|1|9000|0|OVERNIGHT|1|1|235.84|200|1||";
-pub const MARKET_DEPTH_9: &str = "13|1|9000|1|IBEOS|1|1|235.82|100|1||";

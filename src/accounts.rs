@@ -11,7 +11,7 @@
 
 use time::OffsetDateTime;
 
-use crate::client::{ResponseContext, SharesChannel, DataStream, Subscription};
+use crate::client::{DataStream, ResponseContext, SharesChannel, Subscription};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Client, Error};

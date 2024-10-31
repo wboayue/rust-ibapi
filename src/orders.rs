@@ -1,15 +1,13 @@
 use std::convert::From;
 use std::fmt::Debug;
 
-use log::{error, info};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::client::{ResponseContext, DataStream, Subscription};
+use crate::client::{DataStream, ResponseContext, Subscription};
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, Notice, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
-use crate::transport::InternalSubscription;
 use crate::Client;
 use crate::{encode_option_field, ToField};
 use crate::{server_versions, Error};

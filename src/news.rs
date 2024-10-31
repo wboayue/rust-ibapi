@@ -1,9 +1,10 @@
-use std::default;
-
-use crate::{
-    client::{self, DataStream, ResponseContext, SharesChannel, Subscription}, contracts::Contract, messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage}, server_versions, Client, Error
-};
 use crate::market_data::realtime;
+use crate::{
+    client::{DataStream, ResponseContext, SharesChannel, Subscription},
+    contracts::Contract,
+    messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage},
+    server_versions, Client, Error,
+};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
@@ -71,7 +72,7 @@ impl SharesChannel for Subscription<'_, NewsBulletin> {}
 
 /// Returns news headlines for requested contracts.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-pub struct HistoricalNews {
+pub struct NewsArticle {
     /// The article’s published time.
     pub time: OffsetDateTime,
     /// The provider code for the news article.
@@ -84,8 +85,8 @@ pub struct HistoricalNews {
     pub extra_data: String,
 }
 
-impl DataStream<HistoricalNews> for HistoricalNews {
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<HistoricalNews, Error> {
+impl DataStream<NewsArticle> for NewsArticle {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<NewsArticle, Error> {
         match message.message_type() {
             IncomingMessages::HistoricalNews => Ok(decoders::decode_historical_news(client.time_zone, message.clone())?),
             IncomingMessages::HistoricalNewsEnd => Err(Error::EndOfStream),
@@ -103,7 +104,7 @@ pub(super) fn historical_news<'a>(
     start_time: OffsetDateTime,
     end_time: OffsetDateTime,
     total_results: u8,
-) -> Result<Subscription<'a, HistoricalNews>, Error> {
+) -> Result<Subscription<'a, NewsArticle>, Error> {
     client.check_server_version(server_versions::REQ_HISTORICAL_NEWS, "It does not support historical news requests.")?;
 
     let request_id = client.next_request_id();
@@ -142,14 +143,14 @@ impl From<i32> for ArticleType {
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Default)]
-pub struct NewsArticle {
+pub struct NewsArticleBody {
     /// The type of news article ([ArticleType::Text] - plain text or html, [ArticleType::Binary] - binary data / pdf)
     article_type: ArticleType,
     /// The body of article (if [ArticleType::Binary], the binary data is encoded using the Base64 scheme)
     article_text: String,
 }
 
-pub(super) fn news_article(client: &Client, provider_code: &str, article_id: &str) -> Result<NewsArticle, Error> {
+pub(super) fn news_article(client: &Client, provider_code: &str, article_id: &str) -> Result<NewsArticleBody, Error> {
     client.check_server_version(server_versions::REQ_NEWS_ARTICLE, "It does not support news article requests.")?;
 
     let request_id = client.next_request_id();
@@ -164,7 +165,7 @@ pub(super) fn news_article(client: &Client, provider_code: &str, article_id: &st
     }
 }
 
-pub fn contract_news<'a>(client: &'a Client, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<'a, HistoricalNews>, Error> {
+pub fn contract_news<'a>(client: &'a Client, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<'a, NewsArticle>, Error> {
     let mut generic_ticks = vec!["mdoff".to_string()];
     for provider in provider_codes {
         generic_ticks.push(format!("292:{}", provider));
@@ -172,14 +173,19 @@ pub fn contract_news<'a>(client: &'a Client, contract: &Contract, provider_codes
     let generic_ticks: Vec<_> = generic_ticks.iter().map(|s| s.as_str()).collect();
 
     let request_id = client.next_request_id();
-    let request = realtime::encoders::encode_request_market_data(
-        client.server_version(),
-        request_id,
-        contract,
-        generic_ticks.as_slice(),
-        false,
-        false,
-    )?;
+    let request =
+        realtime::encoders::encode_request_market_data(client.server_version(), request_id, contract, generic_ticks.as_slice(), false, false)?;
+    let subscription = client.send_request(request_id, request)?;
+
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+}
+
+pub fn broad_tape_news<'a>(client: &'a Client, provider_code: &str) -> Result<Subscription<'a, NewsArticle>, Error> {
+    let contract = Contract::news(provider_code);
+    let generic_ticks = &["mdoff", "292"];
+
+    let request_id = client.next_request_id();
+    let request = realtime::encoders::encode_request_market_data(client.server_version(), request_id, &contract, generic_ticks, false, false)?;
     let subscription = client.send_request(request_id, request)?;
 
     Ok(Subscription::new(client, subscription, ResponseContext::default()))
