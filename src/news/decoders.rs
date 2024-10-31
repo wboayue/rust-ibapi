@@ -75,14 +75,7 @@ pub(super) fn decode_tick_news(mut message: ResponseMessage) -> Result<Historica
     message.skip(); // request id
 
     let time = message.next_string()?;
-    let time: i64 = time.parse()?;
-    let time = time / 1000;
-    println!("time: {}", time);
-
-    let time =  match OffsetDateTime::from_unix_timestamp(time) {
-        Ok(val) => val,
-        Err(err) => return Err(Error::Simple(err.to_string())),
-    };
+    let time = parse_unix_timestamp(&time)?;
 
     Ok(HistoricalNews {
         time,
@@ -91,4 +84,14 @@ pub(super) fn decode_tick_news(mut message: ResponseMessage) -> Result<Historica
         headline: message.next_string()?,
         extra_data: message.next_string()?,
     })
+}
+
+fn parse_unix_timestamp(time: &str) -> Result<OffsetDateTime, Error> {
+    let time: i64 = time.parse()?;
+    let time = time / 1000;
+
+    match OffsetDateTime::from_unix_timestamp(time) {
+        Ok(val) => Ok(val),
+        Err(err) => return Err(Error::Simple(err.to_string())),
+    }
 }
