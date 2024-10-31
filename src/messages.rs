@@ -220,6 +220,10 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::HistoricalTick
         | IncomingMessages::HistoricalTickBidAsk
         | IncomingMessages::HistoricalTickLast
+        | IncomingMessages::HistoricalNews
+        | IncomingMessages::HistoricalNewsEnd
+        | IncomingMessages::NewsArticle
+        | IncomingMessages::TickNews
         | IncomingMessages::PnL
         | IncomingMessages::PnLSingle
         | IncomingMessages::HistogramData

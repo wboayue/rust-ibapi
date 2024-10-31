@@ -7,8 +7,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use tick_types::TickType;
 
+use crate::client::DataStream;
 use crate::client::ResponseContext;
-use crate::client::Subscribable;
 use crate::encode_option_field;
 use crate::messages::IncomingMessages;
 use crate::messages::OutgoingMessages;
@@ -188,6 +188,16 @@ impl Contract {
             security_type: SecurityType::Crypto,
             currency: "USD".to_string(),
             exchange: "PAXOS".to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// Creates News contract from specified provider code.
+    pub fn news(provider_code: &str) -> Contract {
+        Contract {
+            symbol: format!("{}:{}_ALL", provider_code, provider_code),
+            security_type: SecurityType::News,
+            exchange: provider_code.to_string(),
             ..Default::default()
         }
     }
@@ -416,12 +426,12 @@ pub struct OptionComputation {
     pub underlying_price: Option<f64>,
 }
 
-impl Subscribable<OptionComputation> for OptionComputation {
+impl DataStream<OptionComputation> for OptionComputation {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickOptionComputation];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickOptionComputation => Ok(decoders::decode_option_computation(server_version, message)?),
+            IncomingMessages::TickOptionComputation => Ok(decoders::decode_option_computation(client.server_version, message)?),
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
     }
@@ -599,7 +609,7 @@ pub(crate) fn calculate_option_price(
     let subscription = client.send_request(request_id, message)?;
 
     match subscription.next() {
-        Some(Ok(mut message)) => OptionComputation::decode(client.server_version(), &mut message),
+        Some(Ok(mut message)) => OptionComputation::decode(client, &mut message),
         Some(Err(e)) => Err(e),
         None => Err(Error::Simple("no data for option calculation".into())),
     }
@@ -627,7 +637,7 @@ pub(crate) fn calculate_implied_volatility(
     let subscription = client.send_request(request_id, message)?;
 
     match subscription.next() {
-        Some(Ok(mut message)) => OptionComputation::decode(client.server_version(), &mut message),
+        Some(Ok(mut message)) => OptionComputation::decode(client, &mut message),
         Some(Err(e)) => Err(e),
         None => Err(Error::Simple("no data for option calculation".into())),
     }

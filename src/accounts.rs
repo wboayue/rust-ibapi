@@ -11,7 +11,7 @@
 
 use time::OffsetDateTime;
 
-use crate::client::{ResponseContext, SharesChannel, Subscribable, Subscription};
+use crate::client::{DataStream, ResponseContext, SharesChannel, Subscription};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Client, Error};
@@ -106,12 +106,15 @@ pub enum AccountSummaries {
     End,
 }
 
-impl Subscribable<AccountSummaries> for AccountSummaries {
+impl DataStream<AccountSummaries> for AccountSummaries {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::AccountSummary, IncomingMessages::AccountSummaryEnd];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::AccountSummary => Ok(AccountSummaries::Summary(decoders::decode_account_summary(server_version, message)?)),
+            IncomingMessages::AccountSummary => Ok(AccountSummaries::Summary(decoders::decode_account_summary(
+                client.server_version,
+                message,
+            )?)),
             IncomingMessages::AccountSummaryEnd => Ok(AccountSummaries::End),
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
@@ -133,11 +136,11 @@ pub struct PnL {
     pub realized_pnl: Option<f64>,
 }
 
-impl Subscribable<PnL> for PnL {
+impl DataStream<PnL> for PnL {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PnL];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
-        decoders::decode_pnl(server_version, message)
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+        decoders::decode_pnl(client.server_version, message)
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
@@ -161,11 +164,11 @@ pub struct PnLSingle {
     pub value: f64,
 }
 
-impl Subscribable<PnLSingle> for PnLSingle {
+impl DataStream<PnLSingle> for PnLSingle {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PnLSingle];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
-        decoders::decode_pnl_single(server_version, message)
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+        decoders::decode_pnl_single(client.server_version, message)
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
@@ -193,10 +196,10 @@ pub enum PositionUpdate {
     PositionEnd,
 }
 
-impl Subscribable<PositionUpdate> for PositionUpdate {
+impl DataStream<PositionUpdate> for PositionUpdate {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
 
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::Position => Ok(PositionUpdate::Position(decoders::decode_position(message)?)),
             IncomingMessages::PositionEnd => Ok(PositionUpdate::PositionEnd),
@@ -231,10 +234,10 @@ pub struct PositionMulti {
     pub average_cost: f64,
 }
 
-impl Subscribable<PositionUpdateMulti> for PositionUpdateMulti {
+impl DataStream<PositionUpdateMulti> for PositionUpdateMulti {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PositionMulti, IncomingMessages::PositionMultiEnd];
 
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::PositionMulti => Ok(PositionUpdateMulti::Position(decoders::decode_position_multi(message)?)),
             IncomingMessages::PositionMultiEnd => Ok(PositionUpdateMulti::PositionEnd),
@@ -270,7 +273,7 @@ pub enum AccountUpdate {
     End,
 }
 
-impl Subscribable<AccountUpdate> for AccountUpdate {
+impl DataStream<AccountUpdate> for AccountUpdate {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[
         IncomingMessages::AccountValue,
         IncomingMessages::PortfolioValue,
@@ -278,11 +281,11 @@ impl Subscribable<AccountUpdate> for AccountUpdate {
         IncomingMessages::AccountDownloadEnd,
     ];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::AccountValue => Ok(AccountUpdate::AccountValue(decoders::decode_account_value(message)?)),
             IncomingMessages::PortfolioValue => Ok(AccountUpdate::PortfolioValue(decoders::decode_account_portfolio_value(
-                server_version,
+                client.server_version,
                 message,
             )?)),
             IncomingMessages::AccountUpdateTime => Ok(AccountUpdate::UpdateTime(decoders::decode_account_update_time(message)?)),
@@ -362,10 +365,10 @@ pub struct AccountMultiValue {
     pub currency: String,
 }
 
-impl Subscribable<AccountUpdateMulti> for AccountUpdateMulti {
+impl DataStream<AccountUpdateMulti> for AccountUpdateMulti {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::AccountUpdateMulti, IncomingMessages::AccountUpdateMultiEnd];
 
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::AccountUpdateMulti => Ok(AccountUpdateMulti::AccountMultiValue(decoders::decode_account_multi_value(message)?)),
             IncomingMessages::AccountUpdateMultiEnd => Ok(AccountUpdateMulti::End),

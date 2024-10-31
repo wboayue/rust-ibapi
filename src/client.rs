@@ -16,6 +16,7 @@ use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescriptio
 use crate::market_data::MarketDataType;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
+use crate::news::NewsArticle;
 use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, Orders, PlaceOrder};
 use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus};
 use crate::{accounts, contracts, market_data, news, orders};
@@ -1240,6 +1241,124 @@ impl Client {
         news::news_bulletins(self, all_messages)
     }
 
+    /// Requests historical news headlines.
+    ///
+    /// # Arguments
+    ///
+    /// * `contract_id`    - Contract ID of ticker. See [contract_details](Client::contract_details) for how to retrieve contract ID.
+    /// * `provider_codes` - A list of provider codes.
+    /// * `start_time`     - Marks the (exclusive) start of the date range.
+    /// * `end_time`       - Marks the (inclusive) end of the date range.
+    /// * `total_results`  - The maximum number of headlines to fetch (1 – 300)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use time::macros::datetime;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract_id = 76792991; // TSLA
+    /// let provider_codes = vec!["BRFG", "DJ-N", "DJ-RT"];
+    /// let start_time = datetime!(2023-04-15 0:00 UTC);
+    /// let end_time = datetime!(2023-04-15 0:00 UTC);
+    /// let total_results = 10;
+    ///
+    /// let news_bulletins = client.news_bulletins(true).expect("request news providers failed");
+    /// for news_bulletin in &news_bulletins {
+    ///   println!("news bulletin {:?}", news_bulletin);
+    /// }
+    /// ```
+    pub fn historical_news(
+        &self,
+        contract_id: i32,
+        provider_codes: &[&str],
+        start_time: OffsetDateTime,
+        end_time: OffsetDateTime,
+        total_results: u8,
+    ) -> Result<Subscription<news::NewsArticle>, Error> {
+        news::historical_news(self, contract_id, provider_codes, start_time, end_time, total_results)
+    }
+
+    /// Requests news article body given articleId.
+    ///
+    /// # Arguments
+    ///
+    /// * `provider_code` - Short code indicating news provider, e.g. FLY.
+    /// * `article_id`    - ID of the specific article.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// // can get these using the historical_news method
+    /// let provider_code = "DJ-N";
+    /// let article_id = "DJ-N$1915168d";
+    ///
+    /// let article = client.news_article(provider_code, article_id).expect("request news article failed");
+    /// println!("{:?}", article);
+    /// ```
+    pub fn news_article(&self, provider_code: &str, article_id: &str) -> Result<news::NewsArticleBody, Error> {
+        news::news_article(self, provider_code, article_id)
+    }
+
+    /// Requests realtime contract specific news
+    ///
+    /// # Arguments
+    ///
+    /// * `contract`       - Contract for which news is being requested.
+    /// * `provider_codes` - Short codes indicating news providers, e.g. DJ-N.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("AAPL");
+    /// let provider_codes = ["DJ-N"];
+    ///
+    /// let subscription = client.contract_news(&contract, &provider_codes).expect("request contract news failed");
+    /// for article in subscription {
+    ///     println!("{:?}", article);
+    /// }
+    /// ```
+    pub fn contract_news(&self, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<NewsArticle>, Error> {
+        news::contract_news(self, contract, provider_codes)
+    }
+
+    /// Requests realtime BroadTape News
+    ///
+    /// # Arguments
+    ///
+    /// * `provider_code` - Short codes indicating news provider, e.g. DJ-N.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let provider_code = "BRFG";
+    ///
+    /// let subscription = client.broad_tape_news(provider_code).expect("request broad tape news failed");
+    /// for article in subscription {
+    ///     println!("{:?}", article);
+    /// }
+    /// ```
+    pub fn broad_tape_news(&self, provider_code: &str) -> Result<Subscription<NewsArticle>, Error> {
+        news::broad_tape_news(self, provider_code)
+    }
+
+    // broad_tape_news(provider_code
+
     // == Internal Use ==
 
     #[cfg(test)]
@@ -1302,7 +1421,7 @@ impl Debug for Client {
 ///
 #[allow(private_bounds)]
 #[derive(Debug)]
-pub struct Subscription<'a, T: Subscribable<T>> {
+pub struct Subscription<'a, T: DataStream<T>> {
     client: &'a Client,
     request_id: Option<i32>,
     order_id: Option<i32>,
@@ -1321,7 +1440,7 @@ pub(crate) struct ResponseContext {
 }
 
 #[allow(private_bounds)]
-impl<'a, T: Subscribable<T>> Subscription<'a, T> {
+impl<'a, T: DataStream<T>> Subscription<'a, T> {
     pub(crate) fn new(client: &'a Client, subscription: InternalSubscription, context: ResponseContext) -> Self {
         if let Some(request_id) = subscription.request_id {
             Subscription {
@@ -1366,7 +1485,18 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
 
     /// Blocks until the item become available.
     pub fn next(&self) -> Option<T> {
-        self.process_response(self.subscription.next())
+        self.clear_error();
+
+        match self.process_response(self.subscription.next()) {
+            Some(val) => Some(val),
+            None => match self.error() {
+                Some(Error::UnexpectedResponse(m)) => {
+                    debug!("error in subscription: {m:?}");
+                    self.next()
+                }
+                _ => None,
+            },
+        }
     }
 
     fn process_response(&self, response: Option<Result<ResponseMessage, Error>>) -> Option<T> {
@@ -1382,9 +1512,9 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     }
 
     fn process_message(&self, mut message: ResponseMessage) -> Option<T> {
-        match T::decode(self.client.server_version(), &mut message) {
+        match T::decode(self.client, &mut message) {
             Ok(val) => Some(val),
-            Err(Error::StreamEnd) => None,
+            Err(Error::EndOfStream) => None,
             Err(err) => {
                 error!("error decoding message: {err}");
                 let mut error = self.error.lock().unwrap();
@@ -1478,18 +1608,23 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
         let error = self.error.lock().unwrap();
         error.clone()
     }
+
+    pub fn clear_error(&self) {
+        let mut error = self.error.lock().unwrap();
+        *error = None;
+    }
 }
 
-impl<'a, T: Subscribable<T>> Drop for Subscription<'a, T> {
+impl<'a, T: DataStream<T>> Drop for Subscription<'a, T> {
     fn drop(&mut self) {
         self.cancel();
     }
 }
 
-pub(crate) trait Subscribable<T> {
+pub(crate) trait DataStream<T> {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<T, Error>;
     fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         Err(Error::NotImplemented)
     }
@@ -1497,11 +1632,11 @@ pub(crate) trait Subscribable<T> {
 
 /// Blocking iterator. Blocks until next item available.
 #[allow(private_bounds)]
-pub struct SubscriptionIter<'a, T: Subscribable<T>> {
+pub struct SubscriptionIter<'a, T: DataStream<T>> {
     subscription: &'a Subscription<'a, T>,
 }
 
-impl<'a, T: Subscribable<T>> Iterator for SubscriptionIter<'a, T> {
+impl<'a, T: DataStream<T>> Iterator for SubscriptionIter<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1509,7 +1644,7 @@ impl<'a, T: Subscribable<T>> Iterator for SubscriptionIter<'a, T> {
     }
 }
 
-impl<'a, T: Subscribable<T>> IntoIterator for &'a Subscription<'a, T> {
+impl<'a, T: DataStream<T>> IntoIterator for &'a Subscription<'a, T> {
     type Item = T;
     type IntoIter = SubscriptionIter<'a, T>;
 
@@ -1518,11 +1653,11 @@ impl<'a, T: Subscribable<T>> IntoIterator for &'a Subscription<'a, T> {
     }
 }
 
-pub struct SubscriptionOwnedIter<'a, T: Subscribable<T>> {
+pub struct SubscriptionOwnedIter<'a, T: DataStream<T>> {
     subscription: Subscription<'a, T>,
 }
 
-impl<'a, T: Subscribable<T>> Iterator for SubscriptionOwnedIter<'a, T> {
+impl<'a, T: DataStream<T>> Iterator for SubscriptionOwnedIter<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1530,7 +1665,7 @@ impl<'a, T: Subscribable<T>> Iterator for SubscriptionOwnedIter<'a, T> {
     }
 }
 
-impl<'a, T: Subscribable<T> + 'a> IntoIterator for Subscription<'a, T> {
+impl<'a, T: DataStream<T> + 'a> IntoIterator for Subscription<'a, T> {
     type Item = T;
     type IntoIter = SubscriptionOwnedIter<'a, T>;
 
@@ -1541,11 +1676,11 @@ impl<'a, T: Subscribable<T> + 'a> IntoIterator for Subscription<'a, T> {
 
 /// Non-Blocking iterator. Returns immediately if not available.
 #[allow(private_bounds)]
-pub struct SubscriptionTryIter<'a, T: Subscribable<T>> {
+pub struct SubscriptionTryIter<'a, T: DataStream<T>> {
     subscription: &'a Subscription<'a, T>,
 }
 
-impl<'a, T: Subscribable<T>> Iterator for SubscriptionTryIter<'a, T> {
+impl<'a, T: DataStream<T>> Iterator for SubscriptionTryIter<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1555,12 +1690,12 @@ impl<'a, T: Subscribable<T>> Iterator for SubscriptionTryIter<'a, T> {
 
 /// Blocks and waits for timeout
 #[allow(private_bounds)]
-pub struct SubscriptionTimeoutIter<'a, T: Subscribable<T>> {
+pub struct SubscriptionTimeoutIter<'a, T: DataStream<T>> {
     subscription: &'a Subscription<'a, T>,
     timeout: Duration,
 }
 
-impl<'a, T: Subscribable<T>> Iterator for SubscriptionTimeoutIter<'a, T> {
+impl<'a, T: DataStream<T>> Iterator for SubscriptionTimeoutIter<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
