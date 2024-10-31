@@ -1,7 +1,7 @@
 use std::default;
 
 use crate::{
-    client::{self, ResponseContext, SharesChannel, Subscribable, Subscription},
+    client::{self, ResponseContext, SharesChannel, DataStream, Subscription},
     messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage},
     server_versions, Client, Error,
 };
@@ -47,7 +47,7 @@ pub struct NewsBulletin {
     pub exchange: String,
 }
 
-impl Subscribable<NewsBulletin> for NewsBulletin {
+impl DataStream<NewsBulletin> for NewsBulletin {
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<NewsBulletin, Error> {
         match message.message_type() {
             IncomingMessages::NewsBulletins => Ok(decoders::decode_news_bulletin(message.clone())?),
@@ -83,7 +83,7 @@ pub struct HistoricalNews {
     pub headline: String,
 }
 
-impl Subscribable<HistoricalNews> for HistoricalNews {
+impl DataStream<HistoricalNews> for HistoricalNews {
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<HistoricalNews, Error> {
         match message.message_type() {
             IncomingMessages::HistoricalNews => Ok(decoders::decode_historical_news(client.time_zone, message.clone())?),

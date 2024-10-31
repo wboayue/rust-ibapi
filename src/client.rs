@@ -1296,9 +1296,9 @@ impl Client {
     ///
     /// // can get these using the historical_news method
     /// let provider_code = "DJ-N";
-    /// let article_id = "DJ-N$1915168d"; // TSLA
+    /// let article_id = "DJ-N$1915168d";
     ///
-    /// let article = client.news_article(provider_code).expect("request news article failed");
+    /// let article = client.news_article(provider_code, article_id).expect("request news article failed");
     /// println!("{:?}", article);
     /// ```
     pub fn news_article(&self, provider_code: &str, article_id: &str) -> Result<news::NewsArticle, Error> {
@@ -1367,7 +1367,7 @@ impl Debug for Client {
 ///
 #[allow(private_bounds)]
 #[derive(Debug)]
-pub struct Subscription<'a, T: Subscribable<T>> {
+pub struct Subscription<'a, T: DataStream<T>> {
     client: &'a Client,
     request_id: Option<i32>,
     order_id: Option<i32>,
@@ -1386,7 +1386,7 @@ pub(crate) struct ResponseContext {
 }
 
 #[allow(private_bounds)]
-impl<'a, T: Subscribable<T>> Subscription<'a, T> {
+impl<'a, T: DataStream<T>> Subscription<'a, T> {
     pub(crate) fn new(client: &'a Client, subscription: InternalSubscription, context: ResponseContext) -> Self {
         if let Some(request_id) = subscription.request_id {
             Subscription {
@@ -1561,13 +1561,13 @@ impl<'a, T: Subscribable<T>> Subscription<'a, T> {
     }
 }
 
-impl<'a, T: Subscribable<T>> Drop for Subscription<'a, T> {
+impl<'a, T: DataStream<T>> Drop for Subscription<'a, T> {
     fn drop(&mut self) {
         self.cancel();
     }
 }
 
-pub(crate) trait Subscribable<T> {
+pub(crate) trait DataStream<T> {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[];
 
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<T, Error>;
@@ -1578,11 +1578,11 @@ pub(crate) trait Subscribable<T> {
 
 /// Blocking iterator. Blocks until next item available.
 #[allow(private_bounds)]
-pub struct SubscriptionIter<'a, T: Subscribable<T>> {
+pub struct SubscriptionIter<'a, T: DataStream<T>> {
     subscription: &'a Subscription<'a, T>,
 }
 
-impl<'a, T: Subscribable<T>> Iterator for SubscriptionIter<'a, T> {
+impl<'a, T: DataStream<T>> Iterator for SubscriptionIter<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1590,7 +1590,7 @@ impl<'a, T: Subscribable<T>> Iterator for SubscriptionIter<'a, T> {
     }
 }
 
-impl<'a, T: Subscribable<T>> IntoIterator for &'a Subscription<'a, T> {
+impl<'a, T: DataStream<T>> IntoIterator for &'a Subscription<'a, T> {
     type Item = T;
     type IntoIter = SubscriptionIter<'a, T>;
 
@@ -1599,11 +1599,11 @@ impl<'a, T: Subscribable<T>> IntoIterator for &'a Subscription<'a, T> {
     }
 }
 
-pub struct SubscriptionOwnedIter<'a, T: Subscribable<T>> {
+pub struct SubscriptionOwnedIter<'a, T: DataStream<T>> {
     subscription: Subscription<'a, T>,
 }
 
-impl<'a, T: Subscribable<T>> Iterator for SubscriptionOwnedIter<'a, T> {
+impl<'a, T: DataStream<T>> Iterator for SubscriptionOwnedIter<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1611,7 +1611,7 @@ impl<'a, T: Subscribable<T>> Iterator for SubscriptionOwnedIter<'a, T> {
     }
 }
 
-impl<'a, T: Subscribable<T> + 'a> IntoIterator for Subscription<'a, T> {
+impl<'a, T: DataStream<T> + 'a> IntoIterator for Subscription<'a, T> {
     type Item = T;
     type IntoIter = SubscriptionOwnedIter<'a, T>;
 
@@ -1622,11 +1622,11 @@ impl<'a, T: Subscribable<T> + 'a> IntoIterator for Subscription<'a, T> {
 
 /// Non-Blocking iterator. Returns immediately if not available.
 #[allow(private_bounds)]
-pub struct SubscriptionTryIter<'a, T: Subscribable<T>> {
+pub struct SubscriptionTryIter<'a, T: DataStream<T>> {
     subscription: &'a Subscription<'a, T>,
 }
 
-impl<'a, T: Subscribable<T>> Iterator for SubscriptionTryIter<'a, T> {
+impl<'a, T: DataStream<T>> Iterator for SubscriptionTryIter<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1636,12 +1636,12 @@ impl<'a, T: Subscribable<T>> Iterator for SubscriptionTryIter<'a, T> {
 
 /// Blocks and waits for timeout
 #[allow(private_bounds)]
-pub struct SubscriptionTimeoutIter<'a, T: Subscribable<T>> {
+pub struct SubscriptionTimeoutIter<'a, T: DataStream<T>> {
     subscription: &'a Subscription<'a, T>,
     timeout: Duration,
 }
 
-impl<'a, T: Subscribable<T>> Iterator for SubscriptionTimeoutIter<'a, T> {
+impl<'a, T: DataStream<T>> Iterator for SubscriptionTimeoutIter<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {

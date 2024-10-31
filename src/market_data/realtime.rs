@@ -2,7 +2,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::client::{ResponseContext, Subscribable, Subscription};
+use crate::client::{ResponseContext, DataStream, Subscription};
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{Contract, OptionComputation};
 use crate::messages::{IncomingMessages, Notice, OutgoingMessages, RequestMessage, ResponseMessage};
@@ -50,7 +50,7 @@ pub struct BidAsk {
     pub bid_ask_attribute: BidAskAttribute,
 }
 
-impl Subscribable<BidAsk> for BidAsk {
+impl DataStream<BidAsk> for BidAsk {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -77,7 +77,7 @@ pub struct MidPoint {
     pub mid_point: f64,
 }
 
-impl Subscribable<MidPoint> for MidPoint {
+impl DataStream<MidPoint> for MidPoint {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -111,7 +111,7 @@ pub struct Bar {
     pub count: i32,
 }
 
-impl Subscribable<Bar> for Bar {
+impl DataStream<Bar> for Bar {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::RealTimeBars];
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -142,7 +142,7 @@ pub struct Trade {
     pub special_conditions: String,
 }
 
-impl Subscribable<Trade> for Trade {
+impl DataStream<Trade> for Trade {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -227,7 +227,7 @@ pub struct MarketDepthL2 {
     pub smart_depth: bool,
 }
 
-impl Subscribable<MarketDepths> for MarketDepths {
+impl DataStream<MarketDepths> for MarketDepths {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2, IncomingMessages::Error];
 
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -277,7 +277,7 @@ pub enum TickTypes {
     PriceSize(TickPriceSize),
 }
 
-impl Subscribable<TickTypes> for TickTypes {
+impl DataStream<TickTypes> for TickTypes {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[
         IncomingMessages::TickPrice,
         IncomingMessages::TickSize,

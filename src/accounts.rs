@@ -11,7 +11,7 @@
 
 use time::OffsetDateTime;
 
-use crate::client::{ResponseContext, SharesChannel, Subscribable, Subscription};
+use crate::client::{ResponseContext, SharesChannel, DataStream, Subscription};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Client, Error};
@@ -106,7 +106,7 @@ pub enum AccountSummaries {
     End,
 }
 
-impl Subscribable<AccountSummaries> for AccountSummaries {
+impl DataStream<AccountSummaries> for AccountSummaries {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::AccountSummary, IncomingMessages::AccountSummaryEnd];
 
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -136,7 +136,7 @@ pub struct PnL {
     pub realized_pnl: Option<f64>,
 }
 
-impl Subscribable<PnL> for PnL {
+impl DataStream<PnL> for PnL {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PnL];
 
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -164,7 +164,7 @@ pub struct PnLSingle {
     pub value: f64,
 }
 
-impl Subscribable<PnLSingle> for PnLSingle {
+impl DataStream<PnLSingle> for PnLSingle {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PnLSingle];
 
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -196,7 +196,7 @@ pub enum PositionUpdate {
     PositionEnd,
 }
 
-impl Subscribable<PositionUpdate> for PositionUpdate {
+impl DataStream<PositionUpdate> for PositionUpdate {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -234,7 +234,7 @@ pub struct PositionMulti {
     pub average_cost: f64,
 }
 
-impl Subscribable<PositionUpdateMulti> for PositionUpdateMulti {
+impl DataStream<PositionUpdateMulti> for PositionUpdateMulti {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::PositionMulti, IncomingMessages::PositionMultiEnd];
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -273,7 +273,7 @@ pub enum AccountUpdate {
     End,
 }
 
-impl Subscribable<AccountUpdate> for AccountUpdate {
+impl DataStream<AccountUpdate> for AccountUpdate {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[
         IncomingMessages::AccountValue,
         IncomingMessages::PortfolioValue,
@@ -365,7 +365,7 @@ pub struct AccountMultiValue {
     pub currency: String,
 }
 
-impl Subscribable<AccountUpdateMulti> for AccountUpdateMulti {
+impl DataStream<AccountUpdateMulti> for AccountUpdateMulti {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::AccountUpdateMulti, IncomingMessages::AccountUpdateMultiEnd];
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {

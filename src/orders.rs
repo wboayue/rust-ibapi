@@ -5,7 +5,7 @@ use log::{error, info};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::client::{ResponseContext, Subscribable, Subscription};
+use crate::client::{ResponseContext, DataStream, Subscription};
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType};
 use crate::messages::{IncomingMessages, Notice, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
@@ -997,7 +997,7 @@ pub(crate) fn place_order<'a>(client: &'a Client, order_id: i32, contract: &Cont
     Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
-impl Subscribable<PlaceOrder> for PlaceOrder {
+impl DataStream<PlaceOrder> for PlaceOrder {
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<PlaceOrder, Error> {
         match message.message_type() {
             IncomingMessages::OpenOrder => Ok(PlaceOrder::OpenOrder(decoders::decode_open_order(
@@ -1247,7 +1247,7 @@ pub enum CancelOrder {
     Notice(Notice),
 }
 
-impl Subscribable<CancelOrder> for CancelOrder {
+impl DataStream<CancelOrder> for CancelOrder {
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<CancelOrder, Error> {
         match message.message_type() {
             IncomingMessages::OrderStatus => Ok(CancelOrder::OrderStatus(decoders::decode_order_status(client.server_version, message)?)),
@@ -1306,7 +1306,7 @@ pub enum Orders {
     Notice(Notice),
 }
 
-impl Subscribable<Orders> for Orders {
+impl DataStream<Orders> for Orders {
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Orders, Error> {
         match message.message_type() {
             IncomingMessages::CompletedOrder => Ok(Orders::OrderData(decoders::decode_completed_order(
@@ -1399,7 +1399,7 @@ pub enum Executions {
     Notice(Notice),
 }
 
-impl Subscribable<Executions> for Executions {
+impl DataStream<Executions> for Executions {
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Executions, Error> {
         match message.message_type() {
             IncomingMessages::ExecutionData => Ok(Executions::ExecutionData(decoders::decode_execution_data(
@@ -1431,7 +1431,7 @@ pub enum ExerciseOptions {
     Notice(Notice),
 }
 
-impl Subscribable<ExerciseOptions> for ExerciseOptions {
+impl DataStream<ExerciseOptions> for ExerciseOptions {
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<ExerciseOptions, Error> {
         match message.message_type() {
             IncomingMessages::OpenOrder => Ok(ExerciseOptions::OpenOrder(decoders::decode_open_order(

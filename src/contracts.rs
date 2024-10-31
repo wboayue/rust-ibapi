@@ -8,7 +8,7 @@ use serde::Serialize;
 use tick_types::TickType;
 
 use crate::client::ResponseContext;
-use crate::client::Subscribable;
+use crate::client::DataStream;
 use crate::encode_option_field;
 use crate::messages::IncomingMessages;
 use crate::messages::OutgoingMessages;
@@ -416,7 +416,7 @@ pub struct OptionComputation {
     pub underlying_price: Option<f64>,
 }
 
-impl Subscribable<OptionComputation> for OptionComputation {
+impl DataStream<OptionComputation> for OptionComputation {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickOptionComputation];
 
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
