@@ -148,7 +148,7 @@ mod encoders {
 
         let mut message = RequestMessage::new();
 
-        message.push_field(&OutgoingMessages::RequestScannerParameters);
+        message.push_field(&OutgoingMessages::RequestScannerSubscription);
         if server_version < server_versions::SCANNER_GENERIC_OPTS {
             message.push_field(&VERSION);
         }
