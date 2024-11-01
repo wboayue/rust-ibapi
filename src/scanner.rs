@@ -1,4 +1,4 @@
-use crate::{messages::OutgoingMessages, Client, Error};
+use crate::{client::DataStream, messages::OutgoingMessages, Client, Error};
 
 // Requests an XML list of scanner parameters valid in TWS.
 pub(super) fn scanner_parameters(client: &Client) -> Result<String, Error> {
@@ -10,6 +10,22 @@ pub(super) fn scanner_parameters(client: &Client) -> Result<String, Error> {
         Some(Err(e)) => Err(e),
         None => Err(Error::UnexpectedEndOfStream),
     }
+}
+
+pub struct ScannerSubscription {}
+
+pub enum Scanner {
+    Data(ScannerData),
+    End,
+}
+
+pub struct ScannerData {}
+
+// impl DataStream<ScannerData> for ScannerData {
+// }
+
+pub(super) fn scanner_subscription(client: &Client, subscription: ScannerSubscription, filter: &[&str]) -> Result<String, Error> {
+    Err(Error::NotImplemented)
 }
 
 mod encoders {

@@ -1375,6 +1375,22 @@ impl Client {
         scanner::scanner_parameters(self)
     }
 
+    /// Starts a subscription to market scan results based on the provided parameters.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let parameters = client.scanner_parameters().expect("request scanner parameters failed");
+    /// println!("{:?}", parameters);
+    /// ```
+    pub fn scanner_subscription(&self, subscription: scanner::ScannerSubscription, filter: &[&str]) -> Result<String, Error> {
+        scanner::scanner_subscription(self, subscription, filter)
+    }
+
     // == Internal Use ==
 
     #[cfg(test)]
