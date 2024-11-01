@@ -160,6 +160,12 @@ impl ToField for String {
     }
 }
 
+impl ToField for Option<String> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
 impl ToField for &str {
     fn to_field(&self) -> String {
         <&str>::clone(self).to_string()
