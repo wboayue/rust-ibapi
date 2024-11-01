@@ -19,7 +19,7 @@ use crate::messages::{RequestMessage, ResponseMessage};
 use crate::news::NewsArticle;
 use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, Orders, PlaceOrder};
 use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus};
-use crate::{accounts, contracts, market_data, news, orders};
+use crate::{accounts, contracts, market_data, news, orders, scanner};
 
 #[cfg(test)]
 mod tests;
@@ -1357,7 +1357,23 @@ impl Client {
         news::broad_tape_news(self, provider_code)
     }
 
-    // broad_tape_news(provider_code
+    // === Scanner ===
+
+    /// Requests an XML list of scanner parameters valid in TWS.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let parameters = client.scanner_parameters().expect("request scanner parameters failed");
+    /// println!("{:?}", parameters);
+    /// ```
+    pub fn scanner_parameters(&self) -> Result<String, Error> {
+        scanner::scanner_parameters(self)
+    }
 
     // == Internal Use ==
 

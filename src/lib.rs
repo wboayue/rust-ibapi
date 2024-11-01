@@ -118,6 +118,8 @@ mod messages;
 pub mod news;
 /// Data types for building and placing orders.
 pub mod orders;
+/// APIs for working with the market scanner.
+pub mod scanner;
 
 mod server_versions;
 
