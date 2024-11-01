@@ -13,6 +13,20 @@ This project is a work in progress and has been tested with TWS version 10.19. T
 
 If you encounter a problem or require a missing feature, please check the [issues list](https://github.com/wboayue/rust-ibapi/issues) before reporting a new one.
 
+## Install
+
+Run the following Cargo command in your project directory:
+
+```bash
+cargo add ibapi
+```
+
+Or add the following line to your Cargo.toml:
+
+```toml
+ibapi = "0.5.0"
+```
+
 ## Examples
 
 The following examples demonstrate how to use the key features of the API.
@@ -155,7 +169,7 @@ fn main() {
 
         // when your algorithm is done, cancel subscription
         subscription_aapl.cancel().expect("cancel failed");
-        subscription_nvda.cancel().expect("cancel failed");    
+        subscription_nvda.cancel().expect("cancel failed");
     }
 }
 ```
