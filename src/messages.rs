@@ -238,6 +238,7 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::AccountUpdateMultiEnd
         | IncomingMessages::MarketDepth
         | IncomingMessages::MarketDepthL2
+        | IncomingMessages::ScannerData
         | IncomingMessages::TickSnapshotEnd
         | IncomingMessages::TickPrice
         | IncomingMessages::TickSize
