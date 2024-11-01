@@ -1,5 +1,7 @@
 use ibapi::Client;
 
+// This example demonstrates requesting scanner parameters from the TWS.
+
 fn main() {
     env_logger::init();
 

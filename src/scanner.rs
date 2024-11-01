@@ -17,21 +17,21 @@ mod encoders {
     use crate::messages::RequestMessage;
     use crate::Error;
 
-   pub (super) fn encode_scanner_parameters() -> Result<RequestMessage, Error> {
+    pub(super) fn encode_scanner_parameters() -> Result<RequestMessage, Error> {
         const VERSION: i32 = 1;
 
         let mut message = RequestMessage::new();
-        
+
         message.push_field(&OutgoingMessages::RequestScannerParameters);
         message.push_field(&VERSION);
 
         Ok(message)
-   } 
+    }
 }
 
 mod decoders {
-    use crate::Error;
     use crate::messages::ResponseMessage;
+    use crate::Error;
 
     pub(super) fn decode_scanner_parameters(mut message: ResponseMessage) -> Result<String, Error> {
         message.skip(); // skip message type
