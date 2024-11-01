@@ -100,7 +100,13 @@ impl DataStream<Scanner> for Scanner {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
-pub struct ScannerData {}
+/// Provides the data resulting from the market scanner request.
+pub struct ScannerData {
+    /// The ranking position of the contract in the scanner sort.
+    pub rank: i32,
+    /// The contract matching the scanner subscription/
+    pub contract: crate::contracts::Contract,
+}
 
 pub(super) fn scanner_subscription<'a>(client: &'a Client, subscription: &ScannerSubscription, filter: &Vec<TagValue>) -> Result<Subscription<'a, Scanner>, Error> {
     if !filter.is_empty() {
