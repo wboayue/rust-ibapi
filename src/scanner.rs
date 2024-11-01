@@ -1,6 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{client::{DataStream, ResponseContext, Subscription}, messages::{IncomingMessages, OutgoingMessages}, orders::TagValue, server_versions, Client, Error};
+use crate::{
+    client::{DataStream, ResponseContext, Subscription},
+    messages::{IncomingMessages, OutgoingMessages},
+    orders::TagValue,
+    server_versions, Client, Error,
+};
 
 // Requests an XML list of scanner parameters valid in TWS.
 pub(super) fn scanner_parameters(client: &Client) -> Result<String, Error> {
@@ -87,18 +92,10 @@ impl Default for ScannerSubscription {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum Scanner {
-    Data(ScannerData),
-    End,
-}
-
 impl DataStream<Vec<ScannerData>> for Vec<ScannerData> {
-    fn decode(client: &Client, message: &mut crate::messages::ResponseMessage) -> Result<Vec<ScannerData>, Error> {
+    fn decode(_client: &Client, message: &mut crate::messages::ResponseMessage) -> Result<Vec<ScannerData>, Error> {
         match message.message_type() {
-            IncomingMessages::ScannerData => {
-                Ok(decoders::decode_scanner_data(message.clone())?)
-            }
+            IncomingMessages::ScannerData => Ok(decoders::decode_scanner_data(message.clone())?),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -112,10 +109,14 @@ pub struct ScannerData {
     /// The contract matching the scanner subscription.
     pub contract_details: crate::contracts::ContractDetails,
     ///  Describes the combo legs when the scanner is returning EFP.
-    pub leg: String
+    pub leg: String,
 }
 
-pub(super) fn scanner_subscription<'a>(client: &'a Client, subscription: &ScannerSubscription, filter: &Vec<TagValue>) -> Result<Subscription<'a, Vec<ScannerData>>, Error> {
+pub(super) fn scanner_subscription<'a>(
+    client: &'a Client,
+    subscription: &ScannerSubscription,
+    filter: &Vec<TagValue>,
+) -> Result<Subscription<'a, Vec<ScannerData>>, Error> {
     if !filter.is_empty() {
         client.check_server_version(
             server_versions::SCANNER_GENERIC_OPTS,
@@ -150,7 +151,12 @@ mod encoders {
         Ok(message)
     }
 
-    pub(super) fn encode_scanner_subscription(request_id: i32, server_version: i32, subscription: &ScannerSubscription, filter: &Vec<TagValue>) -> Result<RequestMessage, Error> {
+    pub(super) fn encode_scanner_subscription(
+        request_id: i32,
+        server_version: i32,
+        subscription: &ScannerSubscription,
+        filter: &Vec<TagValue>,
+    ) -> Result<RequestMessage, Error> {
         const VERSION: i32 = 4;
 
         let mut message = RequestMessage::new();
@@ -187,7 +193,7 @@ mod encoders {
             message.push_field(filter);
         }
         if server_version >= server_versions::LINKING {
-            message.push_field(&"");    // ignore subscription options
+            message.push_field(&""); // ignore subscription options
         }
 
         Ok(message)
@@ -195,7 +201,7 @@ mod encoders {
 }
 
 mod decoders {
-    use crate::contracts::{SecurityType};
+    use crate::contracts::SecurityType;
     use crate::messages::ResponseMessage;
     use crate::Error;
 
@@ -205,7 +211,7 @@ mod decoders {
         message.skip(); // skip message type
         message.skip(); // skip message version
 
-        Ok(message.next_string()?)
+        message.next_string()
     }
 
     pub(super) fn decode_scanner_data(mut message: ResponseMessage) -> Result<Vec<ScannerData>, Error> {
@@ -222,7 +228,7 @@ mod decoders {
                 ..Default::default()
             };
 
-            if message_version > 3 {
+            if message_version >= 3 {
                 scanner_data.contract_details.contract.contract_id = message.next_int()?;
             }
             scanner_data.contract_details.contract.symbol = message.next_string()?;
@@ -240,16 +246,11 @@ mod decoders {
             message.skip(); // benchmark
             message.skip(); // projection
 
-            scanner_data.leg = if message_version >= 2 {
-                message.next_string()?
-            } else {
-                "".to_string()
-            };
+            scanner_data.leg = if message_version >= 2 { message.next_string()? } else { "".to_string() };
 
             matches.push(scanner_data);
         }
 
         Ok(matches)
     }
-
 }

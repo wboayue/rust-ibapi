@@ -15,10 +15,16 @@ fn main() {
         ..Default::default()
     };
 
-    let subscription = client.scanner_subscription(&scanner_subscription, &Vec::default()).expect("request scanner parameters failed");
+    let subscription = client
+        .scanner_subscription(&scanner_subscription, &Vec::default())
+        .expect("request scanner parameters failed");
     for scan_results in subscription {
         for scan_data in scan_results.iter() {
-            println!("{:?}", scan_data);
+            println!(
+                "rank: {}, contract_id: {}, symbol: {}",
+                scan_data.rank, scan_data.contract_details.contract.contract_id, scan_data.contract_details.contract.symbol
+            );
         }
+        break;
     }
 }
