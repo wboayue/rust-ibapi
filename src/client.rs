@@ -1387,7 +1387,7 @@ impl Client {
     /// let parameters = client.scanner_parameters().expect("request scanner parameters failed");
     /// println!("{:?}", parameters);
     /// ```
-    pub fn scanner_subscription(&self, subscription: scanner::ScannerSubscription, filter: Vec<orders::TagValue>) -> Result<Subscription<scanner::Scanner>, Error> {
+    pub fn scanner_subscription(&self, subscription: &scanner::ScannerSubscription, filter: &Vec<orders::TagValue>) -> Result<Subscription<scanner::Scanner>, Error> {
         scanner::scanner_subscription(self, subscription, filter)
     }
 

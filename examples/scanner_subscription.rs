@@ -9,31 +9,15 @@ fn main() {
 
     let scanner_subscription = scanner::ScannerSubscription {
         number_of_rows: 10,
-        instrument: None,
+        instrument: Some("STK".to_string()),
         location_code: Some("STK.US.MAJOR".to_string()),
-        scan_code: Some("TOP_PERC_GAIN".to_string()),
-        above_price: 0.0,
-        below_price: 100.0,
-        above_volume: 1000000,
-        average_option_volume_above: 0,
-        market_cap_above: f64::MAX,
-        market_cap_below: f64::MAX,
-        moody_rating_above: None,
-        moody_rating_below: None,
-        sp_rating_above: None,
-        sp_rating_below: None,
-        maturity_date_above: None,
-        maturity_date_below: None,
-        coupon_rate_above: f64::MAX,
-        coupon_rate_below: f64::MAX,
-        exclude_convertible: false,
-        scanner_setting_pairs: None,
-        stock_type_filter: None,
+        scan_code: Some("MOST_ACTIVE".to_string()),
+        ..Default::default()
     };
 
-    let subscription = client.scanner_subscription(scanner_subscription, Vec::default()).expect("request scanner parameters failed");
-    for scanner_data in subscription {
-        match scanner_data {
+    let subscription = client.scanner_subscription(&scanner_subscription, &Vec::default()).expect("request scanner parameters failed");
+    for contract in subscription {
+        match contract {
             scanner::Scanner::Data(data) => {
                 println!("{:?}", data);
             }
