@@ -18,6 +18,7 @@ use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::news::NewsArticle;
 use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, Orders, PlaceOrder};
+use crate::scanner::ScannerData;
 use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus};
 use crate::{accounts, contracts, market_data, news, orders, scanner};
 
@@ -1387,7 +1388,7 @@ impl Client {
     /// let parameters = client.scanner_parameters().expect("request scanner parameters failed");
     /// println!("{:?}", parameters);
     /// ```
-    pub fn scanner_subscription(&self, subscription: &scanner::ScannerSubscription, filter: &Vec<orders::TagValue>) -> Result<Subscription<scanner::Scanner>, Error> {
+    pub fn scanner_subscription(&self, subscription: &scanner::ScannerSubscription, filter: &Vec<orders::TagValue>) -> Result<Subscription<Vec<ScannerData>>, Error> {
         scanner::scanner_subscription(self, subscription, filter)
     }
 

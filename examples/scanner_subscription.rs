@@ -16,15 +16,9 @@ fn main() {
     };
 
     let subscription = client.scanner_subscription(&scanner_subscription, &Vec::default()).expect("request scanner parameters failed");
-    for contract in subscription {
-        match contract {
-            scanner::Scanner::Data(data) => {
-                println!("{:?}", data);
-            }
-            scanner::Scanner::End => {
-                println!("End of scanner data");
-                break;
-            }
+    for scan_results in subscription {
+        for scan_data in scan_results.iter() {
+            println!("{:?}", scan_data);
         }
     }
 }

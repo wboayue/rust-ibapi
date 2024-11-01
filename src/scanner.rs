@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{client::{DataStream, ResponseContext, Subscription}, messages::OutgoingMessages, orders::TagValue, server_versions, Client, Error};
+use crate::{client::{DataStream, ResponseContext, Subscription}, messages::{IncomingMessages, OutgoingMessages}, orders::TagValue, server_versions, Client, Error};
 
 // Requests an XML list of scanner parameters valid in TWS.
 pub(super) fn scanner_parameters(client: &Client) -> Result<String, Error> {
@@ -93,9 +93,14 @@ pub enum Scanner {
     End,
 }
 
-impl DataStream<Scanner> for Scanner {
-    fn decode(client: &Client, message: &mut crate::messages::ResponseMessage) -> Result<Scanner, Error> {
-        Err(Error::NotImplemented)
+impl DataStream<Vec<ScannerData>> for Vec<ScannerData> {
+    fn decode(client: &Client, message: &mut crate::messages::ResponseMessage) -> Result<Vec<ScannerData>, Error> {
+        match message.message_type() {
+            IncomingMessages::ScannerData => {
+                Ok(decoders::decode_scanner_data(message.clone())?)
+            }
+            _ => Err(Error::UnexpectedResponse(message.clone())),
+        }
     }
 }
 
@@ -104,11 +109,13 @@ impl DataStream<Scanner> for Scanner {
 pub struct ScannerData {
     /// The ranking position of the contract in the scanner sort.
     pub rank: i32,
-    /// The contract matching the scanner subscription/
-    pub contract: crate::contracts::Contract,
+    /// The contract matching the scanner subscription.
+    pub contract_details: crate::contracts::ContractDetails,
+    ///  Describes the combo legs when the scanner is returning EFP.
+    pub leg: String
 }
 
-pub(super) fn scanner_subscription<'a>(client: &'a Client, subscription: &ScannerSubscription, filter: &Vec<TagValue>) -> Result<Subscription<'a, Scanner>, Error> {
+pub(super) fn scanner_subscription<'a>(client: &'a Client, subscription: &ScannerSubscription, filter: &Vec<TagValue>) -> Result<Subscription<'a, Vec<ScannerData>>, Error> {
     if !filter.is_empty() {
         client.check_server_version(
             server_versions::SCANNER_GENERIC_OPTS,
@@ -188,8 +195,11 @@ mod encoders {
 }
 
 mod decoders {
+    use crate::contracts::{SecurityType};
     use crate::messages::ResponseMessage;
     use crate::Error;
+
+    use super::ScannerData;
 
     pub(super) fn decode_scanner_parameters(mut message: ResponseMessage) -> Result<String, Error> {
         message.skip(); // skip message type
@@ -197,4 +207,49 @@ mod decoders {
 
         Ok(message.next_string()?)
     }
+
+    pub(super) fn decode_scanner_data(mut message: ResponseMessage) -> Result<Vec<ScannerData>, Error> {
+        message.skip(); // skip message type
+        let message_version = message.next_int()?;
+        message.skip(); // request id
+
+        let number_of_elements = message.next_int()?;
+        let mut matches = Vec::with_capacity(number_of_elements as usize);
+
+        for _ in 0..number_of_elements {
+            let mut scanner_data = ScannerData {
+                rank: message.next_int()?,
+                ..Default::default()
+            };
+
+            if message_version > 3 {
+                scanner_data.contract_details.contract.contract_id = message.next_int()?;
+            }
+            scanner_data.contract_details.contract.symbol = message.next_string()?;
+            scanner_data.contract_details.contract.security_type = SecurityType::from(&message.next_string()?);
+            scanner_data.contract_details.contract.last_trade_date_or_contract_month = message.next_string()?;
+            scanner_data.contract_details.contract.strike = message.next_double()?;
+            scanner_data.contract_details.contract.right = message.next_string()?;
+            scanner_data.contract_details.contract.exchange = message.next_string()?;
+            scanner_data.contract_details.contract.currency = message.next_string()?;
+            scanner_data.contract_details.contract.local_symbol = message.next_string()?;
+            scanner_data.contract_details.market_name = message.next_string()?;
+            scanner_data.contract_details.contract.trading_class = message.next_string()?;
+
+            message.skip(); // distance
+            message.skip(); // benchmark
+            message.skip(); // projection
+
+            scanner_data.leg = if message_version >= 2 {
+                message.next_string()?
+            } else {
+                "".to_string()
+            };
+
+            matches.push(scanner_data);
+        }
+
+        Ok(matches)
+    }
+
 }

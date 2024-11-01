@@ -292,7 +292,7 @@ pub struct DeltaNeutralContract {
 }
 
 /// ContractDetails provides extended contract details.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ContractDetails {
     /// A fully-defined Contract object.
     pub contract: Contract,
