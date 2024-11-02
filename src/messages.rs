@@ -227,7 +227,8 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::PnL
         | IncomingMessages::PnLSingle
         | IncomingMessages::HistogramData
-        | IncomingMessages::TickOptionComputation => Some(1),
+        | IncomingMessages::TickOptionComputation
+        | IncomingMessages::WshMetaData => Some(1),
         IncomingMessages::ContractDataEnd
         | IncomingMessages::RealTimeBars
         | IncomingMessages::Error

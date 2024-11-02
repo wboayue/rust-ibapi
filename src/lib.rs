@@ -120,6 +120,8 @@ pub mod news;
 pub mod orders;
 /// APIs for working with the market scanner.
 pub mod scanner;
+/// APIs for working with Wall Street Horizon: Earnings Calendar & Event Data.
+pub mod wsh;
 
 mod server_versions;
 

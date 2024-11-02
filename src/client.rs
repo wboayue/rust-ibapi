@@ -20,7 +20,7 @@ use crate::news::NewsArticle;
 use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, Orders, PlaceOrder};
 use crate::scanner::ScannerData;
 use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus};
-use crate::{accounts, contracts, market_data, news, orders, scanner};
+use crate::{accounts, contracts, market_data, news, orders, scanner, wsh};
 
 #[cfg(test)]
 mod tests;
@@ -1394,6 +1394,24 @@ impl Client {
         filter: &Vec<orders::TagValue>,
     ) -> Result<Subscription<Vec<ScannerData>>, Error> {
         scanner::scanner_subscription(self, subscription, filter)
+    }
+
+    // == Wall Street Horizon
+
+    /// Requests metadata from the WSH calendar.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let metadata = client.wsh_metadata().expect("request wsh metadata failed");
+    /// println!("{:?}", metadata);
+    /// ```
+    pub fn wsh_metadata(&self) -> Result<Subscription<wsh::WshMetadata>, Error> {
+        wsh::wsh_metadata(self)
     }
 
     // == Internal Use ==
