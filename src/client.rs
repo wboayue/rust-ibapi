@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use log::{debug, error, warn};
-use time::OffsetDateTime;
+use time::{Date, OffsetDateTime};
 use time_tz::Tz;
 
 use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
@@ -20,6 +20,7 @@ use crate::news::NewsArticle;
 use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, Orders, PlaceOrder};
 use crate::scanner::ScannerData;
 use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus};
+use crate::wsh::AutoFill;
 use crate::{accounts, contracts, market_data, news, orders, scanner, wsh};
 
 #[cfg(test)]
@@ -1412,6 +1413,60 @@ impl Client {
     /// ```
     pub fn wsh_metadata(&self) -> Result<Subscription<wsh::WshMetadata>, Error> {
         wsh::wsh_metadata(self)
+    }
+
+    /// Requests event data for a specified contract from the Wall Street Horizons (WSH) calendar.
+    ///
+    /// # Arguments
+    ///
+    /// * `contract_id` - Contract identifier for the event request.
+    /// * `start_date`  - Start date of the event request.
+    /// * `end_date`    - End date of the event request.
+    /// * `limit`       - Maximum number of events to return. Maximum of 100.
+    /// * `auto_fill`   - Fields to automatically fill in. See [AutoFill] for more information.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract_id = 76792991; // TSLA
+    /// let metadata = client.wsh_event_data_by_contract(contract_id, None, None, None, None).expect("request wsh event data failed");
+    /// println!("{:?}", metadata);
+    /// ```
+    pub fn wsh_event_data_by_contract(
+        &self,
+        contract_id: i32,
+        start_date: Option<Date>,
+        end_date: Option<Date>,
+        limit: Option<i32>,
+        auto_fill: Option<AutoFill>,
+    ) -> Result<Subscription<wsh::WshEventData>, Error> {
+        wsh::wsh_event_data_by_contract(self, contract_id, start_date, end_date, limit, auto_fill)
+    }
+
+    /// Requests event data from the Wall Street Horizons (WSH) calendar using a JSON filter.
+    ///
+    /// # Arguments
+    ///
+    /// * `filter`    - Json-formatted string containing all filter values.
+    /// * `limit`     - Maximum number of events to return. Maximum of 100.
+    /// * `auto_fill` - Fields to automatically fill in. See [AutoFill] for more information.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// //let metadata = client.wsh_event_data_by_contract().expect("request wsh event data failed");
+    /// //println!("{:?}", metadata);
+    /// ```
+    pub fn wsh_event_data_by_filter(&self, filter: &str, limit: i32, auto_fill: AutoFill) -> Result<Subscription<wsh::WshEventData>, Error> {
+        wsh::wsh_event_data_by_filter(self, filter, limit, auto_fill)
     }
 
     // == Internal Use ==

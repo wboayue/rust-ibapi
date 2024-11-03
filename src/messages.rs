@@ -228,7 +228,8 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::PnLSingle
         | IncomingMessages::HistogramData
         | IncomingMessages::TickOptionComputation
-        | IncomingMessages::WshMetaData => Some(1),
+        | IncomingMessages::WshMetaData
+        | IncomingMessages::WshEventData => Some(1),
         IncomingMessages::ContractDataEnd
         | IncomingMessages::RealTimeBars
         | IncomingMessages::Error
