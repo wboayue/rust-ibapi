@@ -44,6 +44,20 @@ pub struct WshEventData {
     data_json: String,
 }
 
+impl DataStream<WshEventData> for WshEventData {
+    fn decode(_client: &Client, message: &mut crate::messages::ResponseMessage) -> Result<WshEventData, Error> {
+        match message.message_type() {
+            IncomingMessages::WshEventData => Ok(decoders::decode_wsh_event_data(message.clone())?),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
+        }
+    }
+
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<crate::messages::RequestMessage, Error> {
+        let request_id = request_id.expect("Request ID required to encode cancel wsh metadata message.");
+        encoders::encode_cancel_wsh_event_data(request_id)
+    }
+}
+
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AutoFill {
     /// Automatically fill in competitor values of existing positions.
@@ -60,20 +74,6 @@ impl AutoFill {
     }
 }
 
-impl DataStream<WshEventData> for WshEventData {
-    fn decode(_client: &Client, message: &mut crate::messages::ResponseMessage) -> Result<WshEventData, Error> {
-        match message.message_type() {
-            IncomingMessages::WshEventData => Ok(decoders::decode_wsh_event_data(message.clone())?),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
-    }
-
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<crate::messages::RequestMessage, Error> {
-        let request_id = request_id.expect("Request ID required to encode cancel wsh metadata message.");
-        encoders::encode_cancel_wsh_metadata(request_id)
-    }
-}
-
 pub fn wsh_event_data_by_contract(
     client: &Client,
     contract_id: i32,
@@ -85,7 +85,7 @@ pub fn wsh_event_data_by_contract(
     client.check_server_version(server_versions::WSHE_CALENDAR, "It does not support WSHE Calendar API.")?;
 
     if client.server_version < server_versions::WSH_EVENT_DATA_FILTERS {
-        if !auto_fill.is_some() {
+        if auto_fill.is_some() {
             let message = "It does not support WSH event data filters.".to_string();
             return Err(Error::ServerVersion(
                 server_versions::WSH_EVENT_DATA_FILTERS,
@@ -107,34 +107,67 @@ pub fn wsh_event_data_by_contract(
     }
 
     let request_id = client.next_request_id();
-    let request = encoders::encode_request_wsh_metadata(request_id)?;
+    let request = encoders::encode_request_wsh_event_data(
+        client.server_version,
+        request_id,
+        Some(contract_id),
+        None,
+        start_date,
+        end_date,
+        limit,
+        auto_fill,
+    )?;
     let subscription = client.send_request(request_id, request)?;
 
-    Err(Error::NotImplemented)
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 pub fn wsh_event_data_by_filter<'a>(
     client: &'a Client,
     filter: &str,
-    limit: i32,
-    auto_fill: AutoFill,
+    limit: Option<i32>,
+    auto_fill: Option<AutoFill>,
 ) -> Result<Subscription<'a, WshEventData>, Error> {
-    Err(Error::NotImplemented)
-}
-
-pub fn wsh_event_data(client: &Client) -> Result<Subscription<WshEventData>, Error> {
     client.check_server_version(server_versions::WSHE_CALENDAR, "It does not support WSHE Calendar API.")?;
 
+    if client.server_version < server_versions::WSH_EVENT_DATA_FILTERS {
+        if auto_fill.is_some() {
+            let message = "It does not support WSH event data filters.".to_string();
+            return Err(Error::ServerVersion(
+                server_versions::WSH_EVENT_DATA_FILTERS,
+                client.server_version,
+                message,
+            ));
+        }
+    }
+
+    if client.server_version < server_versions::WSH_EVENT_DATA_FILTERS_DATE {
+        if limit.is_some() {
+            let message = "It does not support WSH event data date filters.".to_string();
+            return Err(Error::ServerVersion(
+                server_versions::WSH_EVENT_DATA_FILTERS_DATE,
+                client.server_version,
+                message,
+            ));
+        }
+    }
+
     let request_id = client.next_request_id();
-    let request = encoders::encode_request_wsh_metadata(request_id)?;
+    let request = encoders::encode_request_wsh_event_data(client.server_version, request_id, None, Some(filter), None, None, limit, auto_fill)?;
     let subscription = client.send_request(request_id, request)?;
+
     Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
 mod encoders {
-    use super::Error;
+    use time::Date;
 
-    use crate::messages::{OutgoingMessages, RequestMessage};
+    use super::{AutoFill, Error};
+
+    use crate::{
+        messages::{OutgoingMessages, RequestMessage},
+        server_versions,
+    };
 
     pub(super) fn encode_request_wsh_metadata(request_id: i32) -> Result<RequestMessage, Error> {
         let mut message = RequestMessage::new();
@@ -149,6 +182,53 @@ mod encoders {
         let mut message = RequestMessage::new();
 
         message.push_field(&OutgoingMessages::CancelWshMetaData);
+        message.push_field(&request_id);
+
+        Ok(message)
+    }
+
+    pub(super) fn encode_request_wsh_event_data(
+        server_version: i32,
+        request_id: i32,
+        contract_id: Option<i32>,
+        filter: Option<&str>,
+        start_date: Option<Date>,
+        end_date: Option<Date>,
+        limit: Option<i32>,
+        auto_fill: Option<AutoFill>,
+    ) -> Result<RequestMessage, Error> {
+        let mut message = RequestMessage::new();
+
+        message.push_field(&OutgoingMessages::RequestWshEventData);
+        message.push_field(&request_id);
+        message.push_field(&contract_id);
+
+        if server_version >= server_versions::WSH_EVENT_DATA_FILTERS {
+            message.push_field(&filter);
+            if let Some(auto_fill) = auto_fill {
+                message.push_field(&auto_fill.watchlist);
+                message.push_field(&auto_fill.portfolio);
+                message.push_field(&auto_fill.competitors);
+            } else {
+                message.push_field(&false);
+                message.push_field(&false);
+                message.push_field(&false);
+            }
+        }
+
+        if server_version >= server_versions::WSH_EVENT_DATA_FILTERS_DATE {
+            message.push_field(&start_date);
+            message.push_field(&end_date);
+            message.push_field(&limit);
+        }
+
+        Ok(message)
+    }
+
+    pub(super) fn encode_cancel_wsh_event_data(request_id: i32) -> Result<RequestMessage, Error> {
+        let mut message = RequestMessage::new();
+
+        message.push_field(&OutgoingMessages::CancelWshEventData);
         message.push_field(&request_id);
 
         Ok(message)

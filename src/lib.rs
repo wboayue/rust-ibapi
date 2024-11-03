@@ -130,6 +130,11 @@ pub use errors::Error;
 
 #[doc(inline)]
 pub use client::Client;
+use once_cell::sync::Lazy;
+use time::{
+    format_description::{self, BorrowedFormatItem},
+    Date,
+};
 
 #[cfg(test)]
 pub(crate) mod stubs;
@@ -205,6 +210,24 @@ impl ToField for f64 {
 }
 
 impl ToField for Option<f64> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
+fn date_format() -> Vec<BorrowedFormatItem<'static>> {
+    format_description::parse("YYYYMMDD").unwrap()
+}
+
+static DATE_FORMAT: Lazy<Vec<BorrowedFormatItem<'static>>> = Lazy::new(date_format);
+
+impl ToField for Date {
+    fn to_field(&self) -> String {
+        self.format(&DATE_FORMAT).unwrap()
+    }
+}
+
+impl ToField for Option<Date> {
     fn to_field(&self) -> String {
         encode_option_field(self)
     }

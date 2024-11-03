@@ -24,6 +24,7 @@ log = "0.4.17"
 time = {version = "0.3.17", features = ["formatting", "macros", "local-offset", "parsing", "serde"]}
 time-tz = "1.0.2"
 serde = {version = "1.0.213" , features = ["derive"]}
+once_cell = "1.17"
 
 [dev-dependencies]
 anyhow = "1.0.66"

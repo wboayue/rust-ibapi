@@ -1465,7 +1465,12 @@ impl Client {
     /// //let metadata = client.wsh_event_data_by_contract().expect("request wsh event data failed");
     /// //println!("{:?}", metadata);
     /// ```
-    pub fn wsh_event_data_by_filter(&self, filter: &str, limit: i32, auto_fill: AutoFill) -> Result<Subscription<wsh::WshEventData>, Error> {
+    pub fn wsh_event_data_by_filter(
+        &self,
+        filter: &str,
+        limit: Option<i32>,
+        auto_fill: Option<AutoFill>,
+    ) -> Result<Subscription<wsh::WshEventData>, Error> {
         wsh::wsh_event_data_by_filter(self, filter, limit, auto_fill)
     }
 
