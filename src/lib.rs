@@ -50,7 +50,7 @@ pub use errors::Error;
 
 #[doc(inline)]
 pub use client::Client;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use time::{
     format_description::{self, BorrowedFormatItem},
     Date,
@@ -139,7 +139,7 @@ fn date_format() -> Vec<BorrowedFormatItem<'static>> {
     format_description::parse("YYYYMMDD").unwrap()
 }
 
-static DATE_FORMAT: Lazy<Vec<BorrowedFormatItem<'static>>> = Lazy::new(date_format);
+static DATE_FORMAT: LazyLock<Vec<BorrowedFormatItem<'static>>> = LazyLock::new(date_format);
 
 impl ToField for Date {
     fn to_field(&self) -> String {
