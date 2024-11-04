@@ -11,7 +11,7 @@ fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
     let symbol = "AAPL";
-    let exchange = "";  // all exchanges
+    let exchange = ""; // all exchanges
     let security_type = SecurityType::Stock;
     let contract_id = 265598;
 
