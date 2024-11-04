@@ -1443,7 +1443,7 @@ impl Client {
         end_date: Option<Date>,
         limit: Option<i32>,
         auto_fill: Option<AutoFill>,
-    ) -> Result<Subscription<wsh::WshEventData>, Error> {
+    ) -> Result<wsh::WshEventData, Error> {
         wsh::wsh_event_data_by_contract(self, contract_id, start_date, end_date, limit, auto_fill)
     }
 

@@ -12,11 +12,9 @@ fn main() {
     let limit = None;
     let auto_fill = None;
 
-    let subscription = client
+    let event_data = client
         .wsh_event_data_by_contract(contract_id, start_date, end_date, limit, auto_fill)
         .expect("request wsh event data failed");
 
-    for event_data in subscription {
-        println!("{:?}", event_data);
-    }
+    println!("{}", event_data.data_json);
 }

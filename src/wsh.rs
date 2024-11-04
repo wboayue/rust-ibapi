@@ -64,7 +64,7 @@ impl DataStream<WshEventData> for WshEventData {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct AutoFill {
     /// Automatically fill in competitor values of existing positions.
     pub competitors: bool,
@@ -87,7 +87,7 @@ pub(super) fn wsh_event_data_by_contract(
     end_date: Option<Date>,
     limit: Option<i32>,
     auto_fill: Option<AutoFill>,
-) -> Result<Subscription<WshEventData>, Error> {
+) -> Result<WshEventData, Error> {
     client.check_server_version(server_versions::WSHE_CALENDAR, "It does not support WSHE Calendar API.")?;
 
     if client.server_version < server_versions::WSH_EVENT_DATA_FILTERS && auto_fill.is_some() {
@@ -121,7 +121,12 @@ pub(super) fn wsh_event_data_by_contract(
     )?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+    match subscription.next() {
+        Some(Ok(message)) => Ok(decoders::decode_wsh_event_data(message)?),
+        Some(Err(Error::ConnectionReset)) => wsh_event_data_by_contract(client, contract_id, start_date, end_date, limit, auto_fill),
+        Some(Err(e)) => Err(e),
+        None => Err(Error::UnexpectedEndOfStream),
+    }
 }
 
 pub(super) fn wsh_event_data_by_filter<'a>(
