@@ -135,16 +135,7 @@ pub(super) fn wsh_event_data_by_filter<'a>(
     limit: Option<i32>,
     auto_fill: Option<AutoFill>,
 ) -> Result<Subscription<'a, WshEventData>, Error> {
-    client.check_server_version(server_versions::WSHE_CALENDAR, "It does not support WSHE Calendar API.")?;
-
-    if client.server_version < server_versions::WSH_EVENT_DATA_FILTERS && auto_fill.is_some() {
-        let message = "It does not support WSH event data filters.".to_string();
-        return Err(Error::ServerVersion(
-            server_versions::WSH_EVENT_DATA_FILTERS,
-            client.server_version,
-            message,
-        ));
-    }
+    client.check_server_version(server_versions::WSH_EVENT_DATA_FILTERS, "It does not support WSH event data filters.")?;
 
     if client.server_version < server_versions::WSH_EVENT_DATA_FILTERS_DATE && limit.is_some() {
         let message = "It does not support WSH event data date filters.".to_string();
