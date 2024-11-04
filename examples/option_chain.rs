@@ -17,9 +17,9 @@ fn main() {
 
     let subscription = client
         .option_chain(symbol, exchange, security_type, contract_id)
-        .expect("exercise options request failed!");
+        .expect("request option chain failed!");
 
-    for chain in &subscription {
-        println!("{chain:?}")
+    for option_chain in &subscription {
+        println!("{option_chain:?}")
     }
 }
