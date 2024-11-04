@@ -30,13 +30,19 @@ impl DataStream<WshMetadata> for WshMetadata {
     }
 }
 
-pub(super) fn wsh_metadata(client: &Client) -> Result<Subscription<WshMetadata>, Error> {
+pub(super) fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
     client.check_server_version(server_versions::WSHE_CALENDAR, "It does not support WSHE Calendar API.")?;
 
     let request_id = client.next_request_id();
     let request = encoders::encode_request_wsh_metadata(request_id)?;
     let subscription = client.send_request(request_id, request)?;
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+
+    match subscription.next() {
+        Some(Ok(message)) => Ok(decoders::decode_wsh_metadata(message)?),
+        Some(Err(Error::ConnectionReset)) => wsh_metadata(client),
+        Some(Err(e)) => Err(e),
+        None => Err(Error::UnexpectedEndOfStream),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

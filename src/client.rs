@@ -1411,7 +1411,7 @@ impl Client {
     /// let metadata = client.wsh_metadata().expect("request wsh metadata failed");
     /// println!("{:?}", metadata);
     /// ```
-    pub fn wsh_metadata(&self) -> Result<Subscription<wsh::WshMetadata>, Error> {
+    pub fn wsh_metadata(&self) -> Result<wsh::WshMetadata, Error> {
         wsh::wsh_metadata(self)
     }
 
