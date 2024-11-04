@@ -451,14 +451,22 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
-    /// use ibapi::contracts::Contract;
+    /// use ibapi::{contracts::SecurityType, Client};
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
-    /// let calculation = client.calculate_implied_volatility(&contract, 25.0, 235.0).expect("request failed");
-    /// println!("calculation: {:?}", calculation);
+    /// let symbol = "AAPL";
+    /// let exchange = ""; // all exchanges
+    /// let security_type = SecurityType::Stock;
+    /// let contract_id = 265598;
+    ///
+    /// let subscription = client
+    ///     .option_chain(symbol, exchange, security_type, contract_id)
+    ///     .expect("request option chain failed!");
+    ///
+    /// for option_chain in &subscription {
+    ///     println!("{option_chain:?}")
+    /// }
     /// ```
     pub fn option_chain(
         &self,

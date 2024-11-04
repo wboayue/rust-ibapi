@@ -1,7 +1,4 @@
-use ibapi::{
-    contracts::{Contract, SecurityType},
-    Client,
-};
+use ibapi::{contracts::SecurityType, Client};
 
 // This example demonstrates requesting option chain data from the TWS.
 
