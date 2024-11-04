@@ -13,7 +13,7 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WshMetadata {
-    data_json: String,
+    pub data_json: String,
 }
 
 impl DataStream<WshMetadata> for WshMetadata {
@@ -30,7 +30,7 @@ impl DataStream<WshMetadata> for WshMetadata {
     }
 }
 
-pub fn wsh_metadata(client: &Client) -> Result<Subscription<WshMetadata>, Error> {
+pub(super) fn wsh_metadata(client: &Client) -> Result<Subscription<WshMetadata>, Error> {
     client.check_server_version(server_versions::WSHE_CALENDAR, "It does not support WSHE Calendar API.")?;
 
     let request_id = client.next_request_id();
@@ -41,7 +41,7 @@ pub fn wsh_metadata(client: &Client) -> Result<Subscription<WshMetadata>, Error>
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WshEventData {
-    data_json: String,
+    pub data_json: String,
 }
 
 impl DataStream<WshEventData> for WshEventData {
@@ -64,7 +64,7 @@ pub struct AutoFill {
     pub competitors: bool,
     /// Automatically fill in portfolio values.
     pub portfolio: bool,
-    // Automatically fill in watchlist values.
+    /// Automatically fill in watchlist values.
     pub watchlist: bool,
 }
 
@@ -74,7 +74,7 @@ impl AutoFill {
     }
 }
 
-pub fn wsh_event_data_by_contract(
+pub(super) fn wsh_event_data_by_contract(
     client: &Client,
     contract_id: i32,
     start_date: Option<Date>,
@@ -84,26 +84,22 @@ pub fn wsh_event_data_by_contract(
 ) -> Result<Subscription<WshEventData>, Error> {
     client.check_server_version(server_versions::WSHE_CALENDAR, "It does not support WSHE Calendar API.")?;
 
-    if client.server_version < server_versions::WSH_EVENT_DATA_FILTERS {
-        if auto_fill.is_some() {
-            let message = "It does not support WSH event data filters.".to_string();
-            return Err(Error::ServerVersion(
-                server_versions::WSH_EVENT_DATA_FILTERS,
-                client.server_version,
-                message,
-            ));
-        }
+    if client.server_version < server_versions::WSH_EVENT_DATA_FILTERS && auto_fill.is_some() {
+        let message = "It does not support WSH event data filters.".to_string();
+        return Err(Error::ServerVersion(
+            server_versions::WSH_EVENT_DATA_FILTERS,
+            client.server_version,
+            message,
+        ));
     }
 
-    if client.server_version < server_versions::WSH_EVENT_DATA_FILTERS_DATE {
-        if start_date.is_some() || end_date.is_some() || limit.is_some() {
-            let message = "It does not support WSH event data date filters.".to_string();
-            return Err(Error::ServerVersion(
-                server_versions::WSH_EVENT_DATA_FILTERS_DATE,
-                client.server_version,
-                message,
-            ));
-        }
+    if client.server_version < server_versions::WSH_EVENT_DATA_FILTERS_DATE && (start_date.is_some() || end_date.is_some() || limit.is_some()) {
+        let message = "It does not support WSH event data date filters.".to_string();
+        return Err(Error::ServerVersion(
+            server_versions::WSH_EVENT_DATA_FILTERS_DATE,
+            client.server_version,
+            message,
+        ));
     }
 
     let request_id = client.next_request_id();
@@ -122,7 +118,7 @@ pub fn wsh_event_data_by_contract(
     Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
-pub fn wsh_event_data_by_filter<'a>(
+pub(super) fn wsh_event_data_by_filter<'a>(
     client: &'a Client,
     filter: &str,
     limit: Option<i32>,
@@ -130,26 +126,22 @@ pub fn wsh_event_data_by_filter<'a>(
 ) -> Result<Subscription<'a, WshEventData>, Error> {
     client.check_server_version(server_versions::WSHE_CALENDAR, "It does not support WSHE Calendar API.")?;
 
-    if client.server_version < server_versions::WSH_EVENT_DATA_FILTERS {
-        if auto_fill.is_some() {
-            let message = "It does not support WSH event data filters.".to_string();
-            return Err(Error::ServerVersion(
-                server_versions::WSH_EVENT_DATA_FILTERS,
-                client.server_version,
-                message,
-            ));
-        }
+    if client.server_version < server_versions::WSH_EVENT_DATA_FILTERS && auto_fill.is_some() {
+        let message = "It does not support WSH event data filters.".to_string();
+        return Err(Error::ServerVersion(
+            server_versions::WSH_EVENT_DATA_FILTERS,
+            client.server_version,
+            message,
+        ));
     }
 
-    if client.server_version < server_versions::WSH_EVENT_DATA_FILTERS_DATE {
-        if limit.is_some() {
-            let message = "It does not support WSH event data date filters.".to_string();
-            return Err(Error::ServerVersion(
-                server_versions::WSH_EVENT_DATA_FILTERS_DATE,
-                client.server_version,
-                message,
-            ));
-        }
+    if client.server_version < server_versions::WSH_EVENT_DATA_FILTERS_DATE && limit.is_some() {
+        let message = "It does not support WSH event data date filters.".to_string();
+        return Err(Error::ServerVersion(
+            server_versions::WSH_EVENT_DATA_FILTERS_DATE,
+            client.server_version,
+            message,
+        ));
     }
 
     let request_id = client.next_request_id();
@@ -187,6 +179,7 @@ mod encoders {
         Ok(message)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn encode_request_wsh_event_data(
         server_version: i32,
         request_id: i32,
