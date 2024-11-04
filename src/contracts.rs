@@ -9,6 +9,7 @@ use tick_types::TickType;
 
 use crate::client::DataStream;
 use crate::client::ResponseContext;
+use crate::client::Subscription;
 use crate::encode_option_field;
 use crate::messages::IncomingMessages;
 use crate::messages::OutgoingMessages;
@@ -448,6 +449,32 @@ impl DataStream<OptionComputation> for OptionComputation {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct OptionChain {
+    /// The contract ID of the underlying security.
+    pub underlying_contract_id: i32,
+    /// The option trading class.
+    pub trading_class: String,
+    /// The option multiplier.
+    pub multiplier: String,
+    /// Exchange for which the derivative is hosted.
+    pub exchange: String,
+    /// A list of the expiries for the options of this underlying on this exchange.
+    pub expirations: Vec<String>,
+    /// A list of the possible strikes for options of this underlying on this exchange.
+    pub strikes: Vec<f64>,
+}
+
+impl DataStream<OptionChain> for OptionChain {
+    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<OptionChain, Error> {
+        match message.message_type() {
+            IncomingMessages::SecurityDefinitionOptionParameter => Ok(decoders::decode_option_chain(message)?),
+            IncomingMessages::SecurityDefinitionOptionParameterEnd => Err(Error::EndOfStream),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
+        }
+    }
+}
+
 // === API ===
 
 // Requests contract information.
@@ -457,7 +484,7 @@ impl DataStream<OptionComputation> for OptionComputation {
 // # Arguments
 // * `client` - [Client] with an active connection to gateway.
 // * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
-pub(crate) fn contract_details(client: &Client, contract: &Contract) -> Result<Vec<ContractDetails>, Error> {
+pub(super) fn contract_details(client: &Client, contract: &Contract) -> Result<Vec<ContractDetails>, Error> {
     verify_contract(client, contract)?;
 
     let request_id = client.next_request_id();
@@ -534,7 +561,7 @@ pub struct ContractDescription {
 // # Arguments
 // * `client` - [Client] with an active connection to gateway.
 // * `pattern` - Either start of ticker symbol or (for larger strings) company name.
-pub(crate) fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<ContractDescription>, Error> {
+pub(super) fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<ContractDescription>, Error> {
     client.check_server_version(server_versions::REQ_MATCHING_SYMBOLS, "It does not support matching symbols requests.")?;
 
     let request_id = client.next_request_id();
@@ -562,8 +589,11 @@ pub(crate) fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<Con
 }
 
 #[derive(Debug, Default)]
+/// Minimum price increment structure for a particular market rule ID.
 pub struct MarketRule {
+    /// Market Rule ID requested.
     pub market_rule_id: i32,
+    /// Returns the available price increments based on the market rule.
     pub price_increments: Vec<PriceIncrement>,
 }
 
@@ -573,11 +603,11 @@ pub struct PriceIncrement {
     pub increment: f64,
 }
 
-/// Requests details about a given market rule
-///
-/// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
-/// A list of market rule ids can be obtained by invoking [request_contract_details] on a particular contract. The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [ContractDetails].
-pub(crate) fn market_rule(client: &Client, market_rule_id: i32) -> Result<MarketRule, Error> {
+// Requests details about a given market rule
+//
+// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
+// A list of market rule ids can be obtained by invoking [request_contract_details] on a particular contract. The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [ContractDetails].
+pub(super) fn market_rule(client: &Client, market_rule_id: i32) -> Result<MarketRule, Error> {
     client.check_server_version(server_versions::MARKET_RULES, "It does not support market rule requests.")?;
 
     let request = encoders::encode_request_market_rule(market_rule_id)?;
@@ -596,7 +626,7 @@ pub(crate) fn market_rule(client: &Client, market_rule_id: i32) -> Result<Market
 // * `contract`   - The [Contract] object for which the depth is being requested.
 // * `volatility` - Hypothetical volatility.
 // * `underlying_price` - Hypothetical option’s underlying price.
-pub(crate) fn calculate_option_price(
+pub(super) fn calculate_option_price(
     client: &Client,
     contract: &Contract,
     volatility: f64,
@@ -621,7 +651,7 @@ pub(crate) fn calculate_option_price(
 // * `contract`   - The [Contract] object for which the depth is being requested.
 // * `option_price` - Hypothetical option price.
 // * `underlying_price` - Hypothetical option’s underlying price.
-pub(crate) fn calculate_implied_volatility(
+pub(super) fn calculate_implied_volatility(
     client: &Client,
     contract: &Contract,
     option_price: f64,
@@ -641,4 +671,23 @@ pub(crate) fn calculate_implied_volatility(
         Some(Err(e)) => Err(e),
         None => Err(Error::Simple("no data for option calculation".into())),
     }
+}
+
+pub(super) fn option_chain<'a>(
+    client: &'a Client,
+    symbol: &str,
+    exchange: &str,
+    security_type: SecurityType,
+    contract_id: i32,
+) -> Result<Subscription<'a, OptionChain>, Error> {
+    client.check_server_version(
+        server_versions::SEC_DEF_OPT_PARAMS_REQ,
+        "It does not support security definition option parameters.",
+    )?;
+
+    let request_id = client.next_request_id();
+    let request = encoders::encode_request_option_chain(request_id, symbol, exchange, security_type, contract_id)?;
+    let subscription = client.send_request(request_id, request)?;
+
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
