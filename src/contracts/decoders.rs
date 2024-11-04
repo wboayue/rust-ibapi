@@ -1,6 +1,9 @@
 use crate::{contracts::tick_types::TickType, contracts::SecurityType, messages::ResponseMessage, orders::TagValue, server_versions, Error};
 
-use super::{Contract, ContractDescription, ContractDetails, MarketRule, OptionComputation, PriceIncrement};
+use super::{Contract, ContractDescription, ContractDetails, MarketRule, OptionChain, OptionComputation, PriceIncrement};
+
+#[cfg(test)]
+mod tests;
 
 pub(super) fn decode_contract_details(server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails, Error> {
     message.skip(); // message type
@@ -232,5 +235,29 @@ fn next_optional_double(message: &mut ResponseMessage, none_value: f64) -> Resul
     }
 }
 
-#[cfg(test)]
-mod tests;
+pub(super) fn decode_option_chain(message: &mut ResponseMessage) -> Result<OptionChain, Error> {
+    message.skip(); // message type
+    message.skip(); // request id
+
+    let mut option_chain = OptionChain {
+        exchange: message.next_string()?,
+        underlying_contract_id: message.next_int()?,
+        trading_class: message.next_string()?,
+        multiplier: message.next_string()?,
+        ..Default::default()
+    };
+
+    let expirations_count = message.next_int()?;
+    option_chain.expirations.reserve(expirations_count as usize);
+    for _ in 0..expirations_count {
+        option_chain.expirations.push(message.next_string()?);
+    }
+
+    let strikes_count = message.next_int()?;
+    option_chain.strikes.reserve(strikes_count as usize);
+    for _ in 0..strikes_count {
+        option_chain.strikes.push(message.next_double()?);
+    }
+
+    Ok(option_chain)
+}

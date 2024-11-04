@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use time_tz::Tz;
 
 use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
-use crate::contracts::{Contract, OptionComputation};
+use crate::contracts::{Contract, OptionComputation, SecurityType};
 use crate::errors::Error;
 use crate::market_data::historical::{self, HistogramEntry};
 use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, WhatToShow};
@@ -438,6 +438,36 @@ impl Client {
     /// ```
     pub fn calculate_implied_volatility(&self, contract: &Contract, option_price: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
         contracts::calculate_implied_volatility(self, contract, option_price, underlying_price)
+    }
+
+    /// Requests security definition option parameters for viewing a contract’s option chain.
+    ///
+    /// # Arguments
+    /// `symbol`   - Contract symbol of the underlying.
+    /// `exchange` - The exchange on which the returned options are trading. Can be set to the empty string for all exchanges.
+    /// `security_type` - The type of the underlying security, i.e. STK
+    /// `contract_id`   - The contract ID of the underlying security.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("AAPL");
+    /// let calculation = client.calculate_implied_volatility(&contract, 25.0, 235.0).expect("request failed");
+    /// println!("calculation: {:?}", calculation);
+    /// ```
+    pub fn option_chain(
+        &self,
+        symbol: &str,
+        exchange: &str,
+        security_type: SecurityType,
+        contract_id: i32,
+    ) -> Result<Subscription<contracts::OptionChain>, Error> {
+        contracts::option_chain(self, symbol, exchange, security_type, contract_id)
     }
 
     // === Orders ===

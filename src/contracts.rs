@@ -1,5 +1,6 @@
 use std::convert::From;
 use std::fmt::Debug;
+use std::ops::Sub;
 use std::string::ToString;
 
 use log::{error, info};
@@ -9,6 +10,7 @@ use tick_types::TickType;
 
 use crate::client::DataStream;
 use crate::client::ResponseContext;
+use crate::client::Subscription;
 use crate::encode_option_field;
 use crate::messages::IncomingMessages;
 use crate::messages::OutgoingMessages;
@@ -448,6 +450,32 @@ impl DataStream<OptionComputation> for OptionComputation {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct OptionChain {
+    /// The contract ID of the underlying security.
+    pub underlying_contract_id: i32,
+    /// The option trading class.
+    pub trading_class: String,
+    /// The option multiplier.
+    pub multiplier: String,
+    /// Exchange for which the derivative is hosted.
+    pub exchange: String,
+    /// Exchange for which the derivative is hosted.
+    pub expirations: Vec<String>,
+    /// Exchange for which the derivative is hosted.
+    pub strikes: Vec<f64>,
+}
+
+impl DataStream<OptionChain> for OptionChain {
+    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<OptionChain, Error> {
+        match message.message_type() {
+            IncomingMessages::SecurityDefinitionOptionParameter => Ok(decoders::decode_option_chain(message)?),
+            IncomingMessages::SecurityDefinitionOptionParameterEnd => Err(Error::EndOfStream),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
+        }
+    }
+}
+
 // === API ===
 
 // Requests contract information.
@@ -641,4 +669,23 @@ pub(crate) fn calculate_implied_volatility(
         Some(Err(e)) => Err(e),
         None => Err(Error::Simple("no data for option calculation".into())),
     }
+}
+
+pub(super) fn option_chain<'a>(
+    client: &'a Client,
+    symbol: &str,
+    exchange: &str,
+    security_type: SecurityType,
+    contract_id: i32,
+) -> Result<Subscription<'a, OptionChain>, Error> {
+    client.check_server_version(
+        server_versions::SEC_DEF_OPT_PARAMS_REQ,
+        "It does not support security definition option parameters.",
+    )?;
+
+    let request_id = client.next_request_id();
+    let request = encoders::encode_request_option_chain(request_id, symbol, exchange, security_type, contract_id)?;
+    let subscription = client.send_request(request_id, request)?;
+
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }

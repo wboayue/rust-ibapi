@@ -226,6 +226,8 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::TickNews
         | IncomingMessages::PnL
         | IncomingMessages::PnLSingle
+        | IncomingMessages::SecurityDefinitionOptionParameter
+        | IncomingMessages::SecurityDefinitionOptionParameterEnd
         | IncomingMessages::HistogramData
         | IncomingMessages::TickOptionComputation => Some(1),
         IncomingMessages::ContractDataEnd
