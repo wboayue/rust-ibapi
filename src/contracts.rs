@@ -460,9 +460,9 @@ pub struct OptionChain {
     pub multiplier: String,
     /// Exchange for which the derivative is hosted.
     pub exchange: String,
-    /// Exchange for which the derivative is hosted.
+    /// A list of the expiries for the options of this underlying on this exchange.
     pub expirations: Vec<String>,
-    /// Exchange for which the derivative is hosted.
+    /// A list of the possible strikes for options of this underlying on this exchange.
     pub strikes: Vec<f64>,
 }
 
