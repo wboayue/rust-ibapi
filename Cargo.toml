@@ -1,9 +1,9 @@
 [package]
 name = "ibapi"
-version = "0.5.0"
+version = "1.0.0"
 edition = "2021"
 authors = ["Wil Boayue <wil@wsbsolutions.com>"]
-description = "Unofficial Rust implementation of the Interactive Brokers TWS API, providing a reliable and ergonomic interface for TWS and IB Gateway. Designed with a focus on simplicity, ensuring smooth integration into trading systems."
+description = "Unofficial Rust implementation of the Interactive Brokers TWS API, providing a reliable and user friendly interface for TWS and IB Gateway. Designed with a focus on simplicity, ensuring smooth integration into trading systems."
 readme = "README.md"
 homepage = "https://github.com/wboayue/rust-ibapi/"
 repository = "https://github.com/wboayue/rust-ibapi/"
