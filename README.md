@@ -24,7 +24,7 @@ cargo add ibapi
 Or add the following line to your Cargo.toml:
 
 ```toml
-ibapi = "0.5.0"
+ibapi = "1.0.0"
 ```
 
 ## Examples

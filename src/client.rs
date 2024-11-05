@@ -1471,8 +1471,8 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract_id = 76792991; // TSLA
-    /// let metadata = client.wsh_event_data_by_contract(contract_id, None, None, None, None).expect("request wsh event data failed");
-    /// println!("{:?}", metadata);
+    /// let event_data = client.wsh_event_data_by_contract(contract_id, None, None, None, None).expect("request wsh event data failed");
+    /// println!("{:?}", event_data);
     /// ```
     pub fn wsh_event_data_by_contract(
         &self,
@@ -1500,8 +1500,9 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// //let metadata = client.wsh_event_data_by_contract().expect("request wsh event data failed");
-    /// //println!("{:?}", metadata);
+    /// let filter = ""; // see https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#wsheventdata-object
+    /// let event_data = client.wsh_event_data_by_filter(filter, None, None).expect("request wsh event data failed");
+    /// println!("{:?}", event_data);
     /// ```
     pub fn wsh_event_data_by_filter(
         &self,

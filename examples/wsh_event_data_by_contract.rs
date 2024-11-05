@@ -1,5 +1,6 @@
-use ibapi::{wsh::AutoFill, Client};
-use time::macros::date;
+use ibapi::Client;
+
+// This example demonstrates requesting Wall Street Horizon event data by contract ID.
 
 fn main() {
     env_logger::init();

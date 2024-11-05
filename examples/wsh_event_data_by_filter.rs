@@ -1,5 +1,8 @@
 use ibapi::Client;
 
+// This example demonstrates requesting Wall Street Horizon event data by filter.
+// This featured does not appear to be released yet.
+
 fn main() {
     env_logger::init();
 

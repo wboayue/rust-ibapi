@@ -1,5 +1,7 @@
 use ibapi::Client;
 
+// This example demonstrates requesting Wall Street Horizon metadata.
+
 fn main() {
     env_logger::init();
 
