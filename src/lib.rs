@@ -6,94 +6,14 @@
 //!
 //! <br>
 //!
-//! An implementation of the Interactive Brokers [TWS API](https://interactivebrokers.github.io/tws-api/introduction.html) for Rust.
-//! This implementation is not a direct port of the official TWS API.
-//! It provides a synchronous API that simplifies the development of trading strategies.
+//! A comprehensive Rust implementation of the Interactive Brokers [TWS API](https://interactivebrokers.github.io/tws-api/introduction.html), providing a robust and
+//! user-friendly interface for TWS and IB Gateway. Designed with simplicity in mind, it integrates smoothly into trading systems.
 //!
-//! This is a work in progress and was tested using TWS 10.19. The primary reference for this implementation is the [C# source code](https://github.com/InteractiveBrokers/tws-api-public).
+//! This fully featured API enables the retrieval of account information, access to real-time and historical market data, order management,
+//! market scanning, and access to news and Wall Street Horizons (WSH) event data. Future updates will focus on bug fixes,
+//! maintaining parity with the official API, and enhancing usability.
 //!
-//! The following example gives a flavor of the API style. It is not a trading strategy recommendation and not a complete implementation.
-//!
-//!```no_run
-//! use std::collections::VecDeque;
-//!
-//! use ibapi::contracts::Contract;
-//! use ibapi::market_data::realtime::{BarSize, Bar, WhatToShow};
-//! use ibapi::orders::{order_builder, Action, PlaceOrder};
-//! use ibapi::Client;
-//!
-//! let client = Client::connect("127.0.0.1:4002", 100).unwrap();
-//!
-//! let symbol = "TSLA";
-//! let contract = Contract::stock(symbol); // defaults to USD and SMART exchange.
-//!
-//! let bars = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).unwrap();
-//!
-//! let mut channel = BreakoutChannel::new(30);
-//!
-//! for bar in bars.iter() {
-//!     channel.add_bar(&bar);
-//!
-//!     // Ensure enough bars and no open positions.
-//!     if !channel.ready() {
-//!         continue;
-//!     }
-//!
-//!     let action = if bar.close > channel.high() {
-//!         Action::Buy
-//!     } else if bar.close < channel.low() {
-//!         Action::Sell
-//!     } else {
-//!         continue;
-//!     };
-//!
-//!     let order_id = client.next_order_id();
-//!     let order = order_builder::market_order(action, 100.0);
-//!
-//!     let notices = client.place_order(order_id, &contract, &order).unwrap();
-//!     for notice in notices {
-//!         if let PlaceOrder::ExecutionData(data) = notice {
-//!             println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
-//!         } else {
-//!             println!("{:?}", notice);
-//!         }
-//!     }
-//! }
-//!
-//! struct BreakoutChannel {
-//!     ticks: VecDeque<(f64, f64)>,
-//!     size: usize,
-//! }
-//!
-//! impl BreakoutChannel {
-//!     fn new(size: usize) -> BreakoutChannel {
-//!         BreakoutChannel {
-//!             ticks: VecDeque::with_capacity(size + 1),
-//!             size,
-//!         }
-//!     }
-//!
-//!     fn ready(&self) -> bool {
-//!         self.ticks.len() >= self.size
-//!     }
-//!
-//!     fn add_bar(&mut self, bar: &Bar) {
-//!         self.ticks.push_back((bar.high, bar.low));
-//!
-//!         if self.ticks.len() > self.size {
-//!             self.ticks.pop_front();
-//!         }
-//!     }
-//!
-//!     fn high(&self) -> f64 {
-//!         self.ticks.iter().map(|x| x.0).max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap()
-//!     }
-//!
-//!     fn low(&self) -> f64 {
-//!         self.ticks.iter().map(|x| x.1).max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap()
-//!     }
-//! }
-//!```
+//! For an overview of API usage, refer to the [README](https://github.com/wboayue/rust-ibapi/blob/main/README.md).
 
 /// Describes items present in an account.
 pub mod accounts;
@@ -120,6 +40,8 @@ pub mod news;
 pub mod orders;
 /// APIs for working with the market scanner.
 pub mod scanner;
+/// APIs for working with Wall Street Horizon: Earnings Calendar & Event Data.
+pub mod wsh;
 
 mod server_versions;
 
@@ -128,6 +50,11 @@ pub use errors::Error;
 
 #[doc(inline)]
 pub use client::Client;
+use std::sync::LazyLock;
+use time::{
+    format_description::{self, BorrowedFormatItem},
+    Date,
+};
 
 #[cfg(test)]
 pub(crate) mod stubs;
@@ -203,6 +130,24 @@ impl ToField for f64 {
 }
 
 impl ToField for Option<f64> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
+fn date_format() -> Vec<BorrowedFormatItem<'static>> {
+    format_description::parse("YYYYMMDD").unwrap()
+}
+
+static DATE_FORMAT: LazyLock<Vec<BorrowedFormatItem<'static>>> = LazyLock::new(date_format);
+
+impl ToField for Date {
+    fn to_field(&self) -> String {
+        self.format(&DATE_FORMAT).unwrap()
+    }
+}
+
+impl ToField for Option<Date> {
     fn to_field(&self) -> String {
         encode_option_field(self)
     }

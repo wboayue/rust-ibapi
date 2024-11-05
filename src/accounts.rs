@@ -395,7 +395,7 @@ pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionUpdate>,
 
 impl SharesChannel for Subscription<'_, PositionUpdate> {}
 
-pub(crate) fn positions_multi<'a>(
+pub(super) fn positions_multi<'a>(
     client: &'a Client,
     account: Option<&str>,
     model_code: Option<&str>,
@@ -410,7 +410,7 @@ pub(crate) fn positions_multi<'a>(
 }
 
 // Determine whether an account exists under an account family and find the account family code.
-pub(crate) fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
+pub(super) fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
     client.check_server_version(server_versions::REQ_FAMILY_CODES, "It does not support family codes requests.")?;
 
     let request = encoders::encode_request_family_codes()?;
@@ -430,7 +430,7 @@ pub(crate) fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
 // * `client`     - client
 // * `account`    - account for which to receive PnL updates
 // * `model_code` - specify to request PnL updates for a specific model
-pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str>) -> Result<Subscription<'a, PnL>, Error> {
+pub(super) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str>) -> Result<Subscription<'a, PnL>, Error> {
     client.check_server_version(server_versions::PNL, "It does not support PnL requests.")?;
 
     let request_id = client.next_request_id();
@@ -447,7 +447,7 @@ pub(crate) fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str
 // * `account` - Account in which position exists
 // * `contract_id` - Contract ID of contract to receive daily PnL updates for. Note: does not return message if invalid conId is entered
 // * `model_code` - Model in which position exists
-pub(crate) fn pnl_single<'a>(
+pub(super) fn pnl_single<'a>(
     client: &'a Client,
     account: &str,
     contract_id: i32,
@@ -462,7 +462,7 @@ pub(crate) fn pnl_single<'a>(
     Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
-pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
+pub(super) fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support account summary requests.")?;
 
     let request_id = client.next_request_id();
@@ -472,14 +472,14 @@ pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Re
     Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
-pub fn account_updates<'a>(client: &'a Client, account: &str) -> Result<Subscription<'a, AccountUpdate>, Error> {
+pub(super) fn account_updates<'a>(client: &'a Client, account: &str) -> Result<Subscription<'a, AccountUpdate>, Error> {
     let request = encoders::encode_request_account_updates(client.server_version(), account)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAccountData, request)?;
 
     Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
-pub fn account_updates_multi<'a>(
+pub(super) fn account_updates_multi<'a>(
     client: &'a Client,
     account: Option<&str>,
     model_code: Option<&str>,
@@ -493,7 +493,7 @@ pub fn account_updates_multi<'a>(
     Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
-pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
+pub(super) fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
     let request = encoders::encode_request_managed_accounts()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestManagedAccounts, request)?;
 
@@ -511,7 +511,7 @@ pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
     }
 }
 
-pub fn server_time(client: &Client) -> Result<OffsetDateTime, Error> {
+pub(super) fn server_time(client: &Client) -> Result<OffsetDateTime, Error> {
     let request = encoders::encode_request_server_time()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestCurrentTime, request)?;
 
