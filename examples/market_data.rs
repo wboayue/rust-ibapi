@@ -8,7 +8,9 @@ fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
     let contract = Contract::stock("AAPL");
-    let generic_ticks = &[];
+
+    // https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#available-tick-types
+    let generic_ticks = &["233", "293"];
     let snapshot = false;
     let regulatory_snapshot = false;
 
@@ -17,10 +19,17 @@ fn main() {
         .expect("error requesting market data");
 
     for tick in &subscription {
-        println!("{tick:?}");
-
-        if let TickTypes::SnapshotEnd = tick {
-            subscription.cancel();
+        match tick {
+            TickTypes::Price(tick_price) => println!("{:?}", tick_price),
+            TickTypes::Size(tick_size) => println!("size: {:?}", tick_size),
+            TickTypes::PriceSize(tick_price_size) => println!("{:?}", tick_price_size),
+            TickTypes::Generic(tick_generic) => println!("{:?}", tick_generic),
+            TickTypes::String(tick_string) => println!("{:?}", tick_string),
+            TickTypes::EFP(tick_efp) => println!("{:?}", tick_efp),
+            TickTypes::OptionComputation(option_computation) => println!("{:?}", option_computation),
+            TickTypes::RequestParameters(tick_request_parameters) => println!("{:?}", tick_request_parameters),
+            TickTypes::SnapshotEnd => subscription.cancel(),
+            TickTypes::Notice(notice) => println!("{:?}", notice),
         }
     }
 }
