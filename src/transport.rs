@@ -26,6 +26,7 @@ mod recorder;
 const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
 const MAX_RETRIES: i32 = 20;
+const TWS_READ_TIMEOUT: Duration = Duration::from_secs(3);
 
 pub(crate) trait MessageBus: Send + Sync {
     // Sends formatted message to TWS and creates a reply channel by request id.
@@ -800,7 +801,7 @@ impl Connection {
         let reader = TcpStream::connect(connection_url)?;
         let writer = reader.try_clone()?;
 
-        reader.set_read_timeout(Some(Duration::from_secs(1)))?;
+        reader.set_read_timeout(Some(TWS_READ_TIMEOUT))?;
 
         let connection = Self {
             client_id,
@@ -838,7 +839,7 @@ impl Connection {
                         let mut writer = self.writer.lock()?;
 
                         *reader = stream.try_clone()?;
-                        reader.set_read_timeout(Some(Duration::from_secs(1)))?;
+                        reader.set_read_timeout(Some(TWS_READ_TIMEOUT))?;
 
                         *writer = stream;
                     }
