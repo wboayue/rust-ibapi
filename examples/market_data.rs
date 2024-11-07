@@ -21,7 +21,7 @@ fn main() {
     for tick in &subscription {
         match tick {
             TickTypes::Price(tick_price) => println!("{:?}", tick_price),
-            TickTypes::Size(tick_size) => println!("size: {:?}", tick_size),
+            TickTypes::Size(tick_size) => println!("{:?}", tick_size),
             TickTypes::PriceSize(tick_price_size) => println!("{:?}", tick_price_size),
             TickTypes::Generic(tick_generic) => println!("{:?}", tick_generic),
             TickTypes::String(tick_string) => println!("{:?}", tick_string),

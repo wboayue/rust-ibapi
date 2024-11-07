@@ -8,7 +8,7 @@ fn main() {
 
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
-    let filter = "";    // filter as JSON string.
+    let filter = ""; // filter as JSON string.
 
     let subscription = client
         .wsh_event_data_by_filter(filter, None, None)

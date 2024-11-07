@@ -14,11 +14,8 @@ fn main() {
         .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
         .expect("realtime bars request failed!");
 
-    while let Some(bar) = subscription.next() {
+    for bar in subscription {
         // Process each bar here (e.g., print or use in calculations)
         println!("bar: {bar:?}");
-
-        // when your algorithm is done, cancel subscription
-        subscription.cancel();
     }
 }

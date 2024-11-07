@@ -1763,7 +1763,7 @@ impl<'a, T: DataStream<T>> Subscription<'a, T> {
         error.clone()
     }
 
-    pub fn clear_error(&self) {
+    fn clear_error(&self) {
         let mut error = self.error.lock().unwrap();
         *error = None;
     }

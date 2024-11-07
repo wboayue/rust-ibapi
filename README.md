@@ -6,12 +6,15 @@
 
 ## Introduction
 
-A Rust implementation of the Interactive Brokers [Trader Workstation (TWS) API](https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/).
-This implementation is a simplified version of the official TWS API, intended to make trading strategy development easier.
+This library provides a comprehensive Rust implementation of the Interactive Brokers [TWS API](https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/), offering a robust and user-friendly interface for TWS and IB Gateway. Designed with simplicity in mind, `ibapi` integrates smoothly into trading systems.
 
-This project is a work in progress and has been tested with TWS version 10.19. The primary reference for this implementation is the [C# source code](https://github.com/InteractiveBrokers/tws-api-public).
+With this fully featured API, you can retrieve account information, access real-time and historical market data, manage orders, perform market scans, and access news and Wall Street Horizons (WSH) event data. Future updates will focus on bug fixes, maintaining parity with the official API, and enhancing usability.
 
-If you encounter a problem or require a missing feature, please check the [issues list](https://github.com/wboayue/rust-ibapi/issues) before reporting a new one.
+If you encounter any issues or require a missing feature, please review the [issues list](https://github.com/wboayue/rust-ibapi/issues) before submitting a new one.
+
+## Available APIs
+
+The [Client documentation](https://docs.rs/ibapi/latest/ibapi/struct.Client.html) provides comprehensive details on all currently available APIs, including trading, account management, and market data features, along with examples to help you get started.
 
 ## Install
 
@@ -21,19 +24,20 @@ Run the following Cargo command in your project directory:
 cargo add ibapi
 ```
 
-Or add the following line to your Cargo.toml:
+Or add the following line to your `Cargo.toml`:
 
 ```toml
 ibapi = "1.0.0"
 ```
+> **Note**: Check [crates.io/crates/ibapi](https://crates.io/crates/ibapi) for the latest version available version.
 
 ## Examples
 
-The following examples demonstrate how to use the key features of the API.
+These examples demonstrate key features of the `ibapi` API.
 
 ### Connecting to TWS
 
-The following is an example of connecting to TWS.
+The following example shows how to connect to TWS.
 
 ```rust
 use ibapi::Client;
@@ -45,21 +49,20 @@ fn main() {
     println!("Successfully connected to TWS at {connection_url}");
 }
 ```
-
-Note that the connection is made using `127.0.0.1` instead of `localhost`. On some systems, `localhost` resolves to a IPv6 address, which may be blocked by TWS. TWS only allows specifying IPv4 addresses in the list of allowed IP addresses.
+> **Note**: Use `127.0.0.1` instead of `localhost` for the connection. On some systems, `localhost` resolves to an IPv6 address, which TWS may block. TWS only allows specifying IPv4 addresses in the allowed IP addresses list.
 
 ### Creating Contracts
 
-The following example demonstrates how to create a stock contract for TSLA using the `stock` helper function.
+Here’s how to create a stock contract for TSLA using the [stock](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.stock) helper function.
 
 ```rust
 // Create a contract for TSLA stock (default currency: USD, exchange: SMART)
 let contract = Contract::stock("TSLA");
 ```
 
-The [stock](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.stock), [futures](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.futures), and [crypto](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.crypto) builders provide shortcuts for defining contracts with reasonable defaults that can be modified after creation.
+The [stock](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.stock), [futures](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.futures), and [crypto](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.crypto) methods provide shortcuts for defining contracts with reasonable defaults that can be modified after creation.
 
-Alternatively, contracts that require customized configurations can be fully specified as follows:
+For contracts requiring custom configurations:
 
 ```rust
 // Create a fully specified contract for TSLA stock
@@ -72,7 +75,7 @@ Contract {
 }
 ```
 
-Explore the [Contract documentation](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html) for a detailed list of contract attributes.
+For a complete list of contract attributes, explore the [Contract documentation](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html).
 
 ### Requesting Historical Market Data
 
@@ -125,23 +128,35 @@ fn main() {
 
     // Request real-time bars data for AAPL with 5-second intervals
     let contract = Contract::stock("AAPL");
-    let mut subscription = client
+    let subscription = client
         .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
         .expect("realtime bars request failed!");
 
-    while let Some(bar) = subscription.next() {
+    for bar in subscription {
         // Process each bar here (e.g., print or use in calculations)
         println!("bar: {bar:?}");
-
-        // when your algorithm is done, cancel subscription
-        subscription.cancel().expect("cancel failed");
     }
 }
 ```
 
-In this example, the request for realtime bars returns a Subscription that can be used to process the bars. Advancing with `next()` blocks until the next bar becomes available. The Subscription also supports non-blocking retrieval of the next item. Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/struct.Subscription.html) for more details.
+In this example, the request for realtime bars returns a [Subscription](https://docs.rs/ibapi/latest/ibapi/struct.Subscription.html) that is implicitly converted into a blocking iterator over the bars. The subscription is automatically cancelled when it goes out of scope. The `Subscription` can also be used to iterate over bars in a non-blocking fashion.
 
-Subscriptions also support easy iteration over bars from multiple contracts.
+```rust
+// Example of non-blocking iteration
+loop {
+    match subscription.try_next() {
+        Some(bar) => println!("bar: {bar:?}"),
+        None => {
+            // No new data yet; perform other tasks or sleep
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+}
+```
+
+Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/struct.Subscription.html) for more details.
+
+Since subscriptions can be converted to iterators, it is easy to iterate over multiple contracts.
 
 ```rust
 use ibapi::contracts::Contract;
@@ -156,23 +171,20 @@ fn main() {
     let contract_aapl = Contract::stock("AAPL");
     let contract_nvda = Contract::stock("NVDA");
 
-    let mut subscription_aapl = client
+    let subscription_aapl = client
         .realtime_bars(&contract_aapl, BarSize::Sec5, WhatToShow::Trades, false)
         .expect("realtime bars request failed!");
-    let mut subscription_nvda = client
+    let subscription_nvda = client
         .realtime_bars(&contract_nvda, BarSize::Sec5, WhatToShow::Trades, false)
         .expect("realtime bars request failed!");
 
-    while let (Some(bar_nvda), Some(bar_aapl)) = (subscription_nvda.next(), subscription_aapl.next()) {
+    for (bar_aapl, bar_nvda) in subscription_aapl.iter().zip(subscription_nvda.iter()) {
         // Process each bar here (e.g., print or use in calculations)
-        println!("NVDA {}, AAPL {}", bar_nvda.close, bar_aapl.close);
-
-        // when your algorithm is done, cancel subscription
-        subscription_aapl.cancel().expect("cancel failed");
-        subscription_nvda.cancel().expect("cancel failed");
+        println!("AAPL {}, NVDA {}", bar_aapl.close, bar_nvda.close);
     }
 }
 ```
+> **Note:** When using `zip`, the iteration will stop if either subscription ends. For independent processing, consider handling each subscription separately.
 
 ### Placing Orders
 
@@ -203,9 +215,121 @@ pub fn main() {
 }
 ```
 
-## Available APIs
+## Multi-Threading
 
-The [Client documentation](https://docs.rs/ibapi/latest/ibapi/struct.Client.html) provides comprehensive details on all currently available APIs, including trading, account management, and market data features, along with examples to help you get started.
+The [Client](https://docs.rs/ibapi/latest/ibapi/struct.Client.html) can be shared between threads to support concurrent operations. The following example demonstrates valid multi-threaded usage of [Client](https://docs.rs/ibapi/latest/ibapi/struct.Client.html).
+
+```rust
+use std::sync::Arc;
+use std::thread;
+
+use ibapi::contracts::Contract;
+use ibapi::market_data::realtime::{BarSize, WhatToShow};
+use ibapi::Client;
+
+fn main() {
+    let connection_url = "127.0.0.1:4002";
+    let client = Arc::new(Client::connect(connection_url, 100).expect("connection to TWS failed!"));
+
+    let symbols = vec!["AAPL", "NVDA"];
+    let mut handles = vec![];
+
+    for symbol in symbols {
+        let client = Arc::clone(&client);
+        let handle = thread::spawn(move || {
+            let contract = Contract::stock(symbol);
+            let subscription = client
+                .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+                .expect("realtime bars request failed!");
+
+            for bar in subscription {
+                // Process each bar here (e.g., print or use in calculations)
+                println!("bar: {bar:?}");
+            }
+        });
+        handles.push(handle);
+    }
+    
+    handles.into_iter().for_each(|handle| handle.join().unwrap());
+}
+```
+
+Some TWS API calls do not have a unique request ID and are mapped back to the initiating request by message type instead. Since the message type is not unique, concurrent requests of the same message type (if not synchronized by the application) may receive responses for other requests of the same message type. [Subscriptions](https://docs.rs/ibapi/latest/ibapi/client/struct.Subscription.html) using shared channels are tagged with the [SharesChannel](https://docs.rs/ibapi/latest/ibapi/client/trait.SharesChannel.html) trait to highlight areas that the application may need to synchronize.
+
+To avoid this issue, you can use a model of one client per thread. This ensures that each client instance handles only its own messages, reducing potential conflicts:
+
+```rust
+use std::sync::Arc;
+use std::thread;
+
+use ibapi::contracts::Contract;
+use ibapi::market_data::realtime::{BarSize, WhatToShow};
+use ibapi::Client;
+
+fn main() {
+    let symbols = vec![("AAPL", 100), ("NVDA", 101)];
+    let mut handles = vec![];
+
+    for (symbol, client_id) in symbols {
+        let handle = thread::spawn(move || {
+            let connection_url = "127.0.0.1:4002";
+            let client = Arc::new(Client::connect(connection_url, client_id).expect("connection to TWS failed!"));
+
+            let contract = Contract::stock(symbol);
+            let subscription = client
+                .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+                .expect("realtime bars request failed!");
+
+            for bar in subscription {
+                // Process each bar here (e.g., print or use in calculations)
+                println!("bar: {bar:?}");
+            }
+        });
+        handles.push(handle);
+    }
+
+    handles.into_iter().for_each(|handle| handle.join().unwrap());
+}
+```
+
+In this model, each client instance handles only the requests it initiates, improving the reliability of concurrent operations.
+
+# Fault Tolerance
+
+The API will automatically attempt to reconnect to the TWS server if a disconnection is detected. The API will attempt to reconnect up to 30 times using a Fibonacci backoff strategy. In some cases, it will retry the request in progress. When receiving a response via a [Subscription](https://docs.rs/ibapi/latest/ibapi/client/struct.Subscription.html), the application may need to handle retries manually, as shown below.
+
+```rust
+use ibapi::contracts::Contract;
+use ibapi::market_data::realtime::{BarSize, WhatToShow};
+use ibapi::{Client, Error};
+
+fn main() {
+    env_logger::init();
+
+    let connection_url = "127.0.0.1:4002";
+    let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
+
+    let contract = Contract::stock("AAPL");
+    stream_bars(&client, &contract);
+}
+
+// Request real-time bars data with 5-second intervals
+fn stream_bars(client: &Client, contract: &Contract) {
+    let subscription = client
+        .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+        .expect("realtime bars request failed!");
+
+    for bar in &subscription {
+        // Process each bar here (e.g., print or use in calculations)
+        println!("bar: {bar:?}");
+    }
+
+    if let Some(Error::ConnectionReset) = subscription.error() {
+        println!("Connection reset. Retrying stream...");
+        stream_bars(client, contract);
+    }
+}
+```
 
 ## Contributions
 
