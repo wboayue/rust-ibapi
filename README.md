@@ -29,7 +29,7 @@ Or add the following line to your `Cargo.toml`:
 ```toml
 ibapi = "1.0.0"
 ```
--> **Note**: Check [crates.io](https://crates.io/crates/ibapi) for the latest version available version.
+> **Note**: Check [crates.io/crates/ibapi](https://crates.io/crates/ibapi) for the latest version available version.
 
 ## Examples
 
