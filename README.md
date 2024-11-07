@@ -128,23 +128,35 @@ fn main() {
 
     // Request real-time bars data for AAPL with 5-second intervals
     let contract = Contract::stock("AAPL");
-    let mut subscription = client
+    let subscription = client
         .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
         .expect("realtime bars request failed!");
 
-    while let Some(bar) = subscription.next() {
+    for bar in subscription {
         // Process each bar here (e.g., print or use in calculations)
         println!("bar: {bar:?}");
-
-        // when your algorithm is done, cancel subscription
-        subscription.cancel().expect("cancel failed");
     }
 }
 ```
 
-In this example, the request for realtime bars returns a Subscription that can be used to process the bars. Advancing with `next()` blocks until the next bar becomes available. The Subscription also supports non-blocking retrieval of the next item. Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/struct.Subscription.html) for more details.
+In this example, the request for realtime bars returns a [Subscription](https://docs.rs/ibapi/latest/ibapi/struct.Subscription.html) that is implicitly converted into a blocking iterator over the bars. The subscription is automatically cancelled when it goes out of scope. The `Subscription` can also be used to iterate over bars in a non-blocking fashion.
 
-Subscriptions also support easy iteration over bars from multiple contracts.
+```rust
+// Example of non-blocking iteration
+loop {
+    match subscription.try_next() {
+        Some(bar) => println!("bar: {bar:?}"),
+        None => {
+            // No new data yet; perform other tasks or sleep
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+}
+```
+
+Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/struct.Subscription.html) for more details.
+
+Since subscriptions can be converted to iterators, it is easy to iterate over multiple contracts.
 
 ```rust
 use ibapi::contracts::Contract;
@@ -159,23 +171,20 @@ fn main() {
     let contract_aapl = Contract::stock("AAPL");
     let contract_nvda = Contract::stock("NVDA");
 
-    let mut subscription_aapl = client
+    let subscription_aapl = client
         .realtime_bars(&contract_aapl, BarSize::Sec5, WhatToShow::Trades, false)
         .expect("realtime bars request failed!");
-    let mut subscription_nvda = client
+    let subscription_nvda = client
         .realtime_bars(&contract_nvda, BarSize::Sec5, WhatToShow::Trades, false)
         .expect("realtime bars request failed!");
 
-    while let (Some(bar_nvda), Some(bar_aapl)) = (subscription_nvda.next(), subscription_aapl.next()) {
+    for (bar_aapl, bar_nvda) in subscription_aapl.iter().zip(subscription_nvda.iter()) {
         // Process each bar here (e.g., print or use in calculations)
-        println!("NVDA {}, AAPL {}", bar_nvda.close, bar_aapl.close);
-
-        // when your algorithm is done, cancel subscription
-        subscription_aapl.cancel().expect("cancel failed");
-        subscription_nvda.cancel().expect("cancel failed");
+        println!("AAPL {}, NVDA {}", bar_aapl.close, bar_nvda.close);
     }
 }
 ```
+> **Note:** When using `zip`, the iteration will stop if either subscription ends. For independent processing, consider handling each subscription separately.
 
 ### Placing Orders
 

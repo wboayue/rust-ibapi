@@ -20,10 +20,5 @@ fn main() {
     for (bar_aapl, bar_nvda) in subscription_aapl.iter().zip(subscription_nvda.iter()) {
         // Process each bar here (e.g., print or use in calculations)
         println!("AAPL {}, NVDA {}", bar_nvda.close, bar_aapl.close);
-
-        // You can simply break the or explicitly cancel the subscription.
-        // Subscriptions are automatically canceled when they go out of scope.
-        subscription_aapl.cancel();
-        subscription_nvda.cancel();
     }
 }
