@@ -26,7 +26,7 @@ mod recorder;
 const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
 const MAX_RETRIES: i32 = 20;
-const TWS_READ_TIMEOUT: Duration = Duration::from_secs(3);
+const TWS_READ_TIMEOUT: Duration = Duration::from_secs(1);
 
 pub(crate) trait MessageBus: Send + Sync {
     // Sends formatted message to TWS and creates a reply channel by request id.
@@ -220,7 +220,8 @@ impl TcpMessageBus {
     fn start_dispatcher_thread(self: &Arc<Self>, server_version: i32) -> JoinHandle<()> {
         let message_bus = Arc::clone(self);
 
-        const RECONNECT_ERRORS: &[ErrorKind] = &[ErrorKind::ConnectionReset, ErrorKind::ConnectionAborted, ErrorKind::UnexpectedEof];
+        const RECONNECT_CODES: &[ErrorKind] = &[ErrorKind::ConnectionReset, ErrorKind::ConnectionAborted, ErrorKind::UnexpectedEof];
+        const TIMEOUT_CODES: &[ErrorKind] = &[ErrorKind::WouldBlock, ErrorKind::TimedOut];
 
         thread::spawn(move || {
             loop {
@@ -228,13 +229,13 @@ impl TcpMessageBus {
                     Ok(message) => {
                         message_bus.dispatch_message(server_version, message);
                     }
-                    Err(Error::Io(e)) if e.kind() == ErrorKind::WouldBlock => {
+                    Err(Error::Io(e)) if TIMEOUT_CODES.contains(&e.kind()) => {
                         if message_bus.is_shutting_down() {
                             debug!("dispatcher thread exiting");
                             return;
                         }
                     }
-                    Err(Error::Io(e)) if RECONNECT_ERRORS.contains(&e.kind()) => {
+                    Err(Error::Io(e)) if RECONNECT_CODES.contains(&e.kind()) => {
                         error!("error reading next message (will attempt reconnect): {:?}", e);
 
                         // Attempt to reconnect to TWS.
