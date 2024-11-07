@@ -24,12 +24,12 @@ Run the following Cargo command in your project directory:
 cargo add ibapi
 ```
 
-Or add the following line to your Cargo.toml:
+Or add the following line to your `Cargo.toml`:
 
 ```toml
 ibapi = "1.0.0"
 ```
-> **Note**: Make sure to replace "1.0.0" with the latest version available on [crates.io](https://crates.io/crates/ibapi).
+-> **Note**: Check [crates.io](https://crates.io/crates/ibapi) for the latest version available version.
 
 ## Examples
 
@@ -244,7 +244,8 @@ fn main() {
     handles.into_iter().for_each(|handle| handle.join().unwrap());
 }
 ```
-> **Note**: Some TWS API calls do not have a unique request ID and are mapped back to  the initiating request by message type instead. Since the message type is not unique, concurrent requests of the same type (if not synchronized by the application) may receive responses for other requests of the same type. [Subscriptions](https://docs.rs/ibapi/latest/ibapi/client/struct.Subscription.html) using shared channels are tagged with the [SharesChannel](https://docs.rs/ibapi/latest/ibapi/client/trait.SharesChannel.html) trait to help manage this.
+
+Some TWS API calls do not have a unique request ID and are mapped back to the initiating request by message type instead. Since the message type is not unique, concurrent requests of the same message type (if not synchronized by the application) may receive responses for other requests of the same message type. [Subscriptions](https://docs.rs/ibapi/latest/ibapi/client/struct.Subscription.html) using shared channels are tagged with the [SharesChannel](https://docs.rs/ibapi/latest/ibapi/client/trait.SharesChannel.html) trait to highlight areas that the application may need to synchronize.
 
 To avoid this issue, you can use a model of one client per thread. This ensures that each client instance handles only its own messages, reducing potential conflicts:
 
