@@ -1850,7 +1850,7 @@ impl<'a, T: DataStream<T> + 'a> IntoIterator for Subscription<'a, T> {
     type IntoIter = SubscriptionOwnedIter<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.into_iter()
+        SubscriptionOwnedIter { subscription: self }
     }
 }
 
