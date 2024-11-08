@@ -27,7 +27,7 @@ fn request_stock_contract_details() {
 
     assert!(results.is_ok(), "failed to encode request: {:?}", results.err());
 
-    let contracts: Vec<ContractDetails> = results.unwrap().collect();
+    let contracts: Vec<ContractDetails> = results.unwrap();
     assert_eq!(2, contracts.len());
 
     assert_eq!(contracts[0].contract.exchange, "SMART");

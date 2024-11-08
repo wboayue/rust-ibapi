@@ -356,8 +356,8 @@ impl Client {
     ///     println!("contract: {:?}", contract_detail);
     /// }
     /// ```
-    pub fn contract_details(&self, contract: &Contract) -> Result<impl Iterator<Item = contracts::ContractDetails>, Error> {
-        Ok(contracts::contract_details(self, contract)?.into_iter())
+    pub fn contract_details(&self, contract: &Contract) -> Result<Vec<contracts::ContractDetails>, Error> {
+        Ok(contracts::contract_details(self, contract)?)
     }
 
     /// Get current [FamilyCode]s for all accessible accounts.

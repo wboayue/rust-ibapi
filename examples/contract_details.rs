@@ -10,8 +10,7 @@ fn main() -> anyhow::Result<()> {
     println!("connection_time: {:?}", client.connection_time());
     println!("next_order_id: {}", client.next_order_id());
 
-    let mut contract = Contract::stock("AAPL");
-    contract.currency = "USD".to_string();
+    let contract = Contract::stock("MSFT");
 
     let results = client.contract_details(&contract)?;
     for contract in results {
