@@ -357,7 +357,7 @@ impl Client {
     /// }
     /// ```
     pub fn contract_details(&self, contract: &Contract) -> Result<Vec<contracts::ContractDetails>, Error> {
-        Ok(contracts::contract_details(self, contract)?)
+        contracts::contract_details(self, contract)
     }
 
     /// Get current [FamilyCode]s for all accessible accounts.
