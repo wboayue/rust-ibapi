@@ -1569,10 +1569,40 @@ impl Debug for Client {
     }
 }
 
-/// Server sends data until not required
-/// Supports the handling of responses from TWS.
-/// Cancelled with dropped if not already cancelled.
+/// Subscriptions facilitate handling responses from TWS that may be delayed or delivered periodically.
 ///
+/// They offer both blocking and non-blocking methods for retrieving data.
+///
+/// In the simplest case a subscription can be implicitly converted to blocking iterator
+/// that cancels the subscription when it goes out of scope.
+///
+/// ```no_run
+/// use ibapi::contracts::Contract;
+/// use ibapi::market_data::realtime::{BarSize, WhatToShow};
+/// use ibapi::Client;
+///
+/// let connection_url = "127.0.0.1:4002";
+/// let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
+///
+/// // Request real-time bars data for AAPL with 5-second intervals
+/// let contract = Contract::stock("AAPL");
+/// let subscription = client
+///     .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+///     .expect("realtime bars request failed!");
+///
+/// // Use the subscription as a blocking iterator
+/// for bar in subscription {
+///     // Process each bar here (e.g., print or use in calculations)
+///     println!("Received bar: {bar:?}");
+/// }
+/// // The subscription is automatically cancelled when it goes out of scope
+/// ```
+///
+/// Subscriptions can be explicitly canceled using the [cancel](Subscription::cancel) method.
+///
+/// You can convert subscriptions into blocking or non-blocking iterators using the [iter](Subscription::iter), [try_iter](Subscription::try_iter) or [timeout_iter](Subscription::timeout_iter) methods.
+///
+/// Alternatively, you may poll subscriptions in a blocking or non-blocking manner using the [next](Subscription::next), [try_next](Subscription::try_next) or [next_timeout](Subscription::next_timeout) methods.
 #[allow(private_bounds)]
 #[derive(Debug)]
 pub struct Subscription<'a, T: DataStream<T>> {
@@ -1746,10 +1776,6 @@ impl<'a, T: DataStream<T>> Subscription<'a, T> {
         SubscriptionIter { subscription: self }
     }
 
-    pub fn into_iter(self) -> SubscriptionOwnedIter<'a, T> {
-        SubscriptionOwnedIter { subscription: self }
-    }
-
     pub fn try_iter(&self) -> SubscriptionTryIter<T> {
         SubscriptionTryIter { subscription: self }
     }
@@ -1824,7 +1850,7 @@ impl<'a, T: DataStream<T> + 'a> IntoIterator for Subscription<'a, T> {
     type IntoIter = SubscriptionOwnedIter<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.into_iter()
+        SubscriptionOwnedIter { subscription: self }
     }
 }
 
