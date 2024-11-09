@@ -304,10 +304,10 @@ pub struct ContractDetails {
     /// Allows execution and strike prices to be reported consistently with market data, historical data and the order price, i.e. Z on LIFFE is reported in Index points and not GBP. In TWS versions prior to 972, the price magnifier is used in defining future option strike prices (e.g. in the API the strike is specified in dollars, but in TWS it is specified in cents). In TWS versions 972 and higher, the price magnifier is not used in defining futures option strike prices so they are consistent in TWS and the API.
     pub price_magnifier: i32,
     /// Supported order types for this product.
-    pub order_types: String,
+    pub order_types: Vec<String>,
     /// Valid exchange fields when placing an order for this contract.
     /// The list of exchanges will is provided in the same order as the corresponding MarketRuleIds list.
-    pub valid_exchanges: String,
+    pub valid_exchanges: Vec<String>,
     /// For derivatives, the contract ID (conID) of the underlying instrument.
     pub under_contract_id: i32,
     /// Descriptive name of the product.
@@ -323,9 +323,9 @@ pub struct ContractDetails {
     /// The time zone for the trading hours of the product. For example, EST.
     pub time_zone_id: String,
     /// The trading hours of the product. This value will contain the trading hours of the current day as well as the next's. For example, 20090507:0700-1830,1830-2330;20090508:CLOSED. In TWS versions 965+ there is an option in the Global Configuration API settings to return 1 month of trading hours. In TWS version 970+, the format includes the date of the closing time to clarify potential ambiguity, ex: 20180323:0400-20180323:2000;20180326:0400-20180326:2000 The trading hours will correspond to the hours for the product on the associated exchange. The same instrument can have different hours on different exchanges.
-    pub trading_hours: String,
+    pub trading_hours: Vec<String>,
     /// The liquid hours of the product. This value will contain the liquid hours (regular trading hours) of the contract on the specified exchange. Format for TWS versions until 969: 20090507:0700-1830,1830-2330;20090508:CLOSED. In TWS versions 965+ there is an option in the Global Configuration API settings to return 1 month of trading hours. In TWS v970 and above, the format includes the date of the closing time to clarify potential ambiguity, e.g. 20180323:0930-20180323:1600;20180326:0930-20180326:1600.
-    pub liquid_hours: String,
+    pub liquid_hours: Vec<String>,
     /// Contains the Economic Value Rule name and the respective optional argument. The two values should be separated by a colon. For example, aussieBond:YearsToExpiration=3. When the optional argument is not present, the first value will be followed by a colon.
     pub ev_rule: String,
     /// Tells you approximately how much the market value of a contract would change if the price were to change by 1. It cannot be used to get market value by multiplying the price by the approximate multiplier.
@@ -339,7 +339,7 @@ pub struct ContractDetails {
     /// For derivatives, returns the underlying security type.
     pub under_security_type: String,
     /// The list of market rule IDs separated by comma Market rule IDs can be used to determine the minimum price increment at a given price.
-    pub market_rule_ids: String,
+    pub market_rule_ids: Vec<String>,
     /// Real expiration date. Requires TWS 968+ and API v973.04+. Python API specifically requires API v973.06+.
     pub real_expiration_date: String,
     /// Last trade time.
