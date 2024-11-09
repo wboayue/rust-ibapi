@@ -36,8 +36,8 @@ pub(super) fn decode_contract_details(server_version: i32, message: &mut Respons
         message.next_int()?; // mdSizeMultiplier no longer used
     }
     contract.contract.multiplier = message.next_string()?;
-    contract.order_types = message.next_string()?;
-    contract.valid_exchanges = message.next_string()?;
+    contract.order_types = split_to_vec(&message.next_string()?);
+    contract.valid_exchanges = split_to_vec(&message.next_string()?);
     if message_version >= 2 {
         contract.price_magnifier = message.next_int()?;
     }
@@ -55,8 +55,8 @@ pub(super) fn decode_contract_details(server_version: i32, message: &mut Respons
         contract.category = message.next_string()?;
         contract.subcategory = message.next_string()?;
         contract.time_zone_id = message.next_string()?;
-        contract.trading_hours = message.next_string()?;
-        contract.liquid_hours = message.next_string()?;
+        contract.trading_hours = split_hours(&message.next_string()?);
+        contract.liquid_hours = split_hours(&message.next_string()?);
     }
     if message_version >= 8 {
         contract.ev_rule = message.next_string()?;
@@ -78,7 +78,7 @@ pub(super) fn decode_contract_details(server_version: i32, message: &mut Respons
         contract.under_security_type = message.next_string()?;
     }
     if server_version > server_versions::MARKET_RULES {
-        contract.market_rule_ids = message.next_string()?;
+        contract.market_rule_ids = split_to_vec(&message.next_string()?);
     }
     if server_version > server_versions::REAL_EXPIRATION_DATE {
         contract.real_expiration_date = message.next_string()?;
@@ -96,6 +96,14 @@ pub(super) fn decode_contract_details(server_version: i32, message: &mut Respons
     }
 
     Ok(contract)
+}
+
+fn split_hours(hours: &str) -> Vec<String> {
+    hours.split(";").map(|s| s.to_string()).collect()
+}
+
+fn split_to_vec(s: &str) -> Vec<String> {
+    s.split(",").map(|s| s.to_string()).collect()
 }
 
 fn read_last_trade_date(contract: &mut ContractDetails, last_trade_date_or_contract_month: &str, is_bond: bool) -> Result<(), Error> {

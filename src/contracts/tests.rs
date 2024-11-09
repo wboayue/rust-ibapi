@@ -37,10 +37,87 @@ fn request_stock_contract_details() {
     assert_eq!(contracts[0].contract.security_type, SecurityType::Stock);
     assert_eq!(contracts[0].contract.currency, "USD");
     assert_eq!(contracts[0].contract.contract_id, 76792991);
-    assert_eq!(contracts[0].order_types, "ACTIVETIM,AD,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DARKONLY,DARKPOLL,DAY,DEACT,DEACTDIS,DEACTEOD,DIS,DUR,GAT,GTC,GTD,GTT,HID,IBKRATS,ICE,IMB,IOC,LIT,LMT,LOC,MIDPX,MIT,MKT,MOC,MTL,NGCOMB,NODARK,NONALGO,OCA,OPG,OPGREROUT,PEGBENCH,PEGMID,POSTATS,POSTONLY,PREOPGRTH,PRICECHK,REL,REL2MID,RELPCTOFS,RPI,RTH,SCALE,SCALEODD,SCALERST,SIZECHK,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,SWEEP,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF");
+    assert_eq!(
+        contracts[0].order_types,
+        vec![
+            "ACTIVETIM",
+            "AD",
+            "ADJUST",
+            "ALERT",
+            "ALGO",
+            "ALLOC",
+            "AON",
+            "AVGCOST",
+            "BASKET",
+            "BENCHPX",
+            "CASHQTY",
+            "COND",
+            "CONDORDER",
+            "DARKONLY",
+            "DARKPOLL",
+            "DAY",
+            "DEACT",
+            "DEACTDIS",
+            "DEACTEOD",
+            "DIS",
+            "DUR",
+            "GAT",
+            "GTC",
+            "GTD",
+            "GTT",
+            "HID",
+            "IBKRATS",
+            "ICE",
+            "IMB",
+            "IOC",
+            "LIT",
+            "LMT",
+            "LOC",
+            "MIDPX",
+            "MIT",
+            "MKT",
+            "MOC",
+            "MTL",
+            "NGCOMB",
+            "NODARK",
+            "NONALGO",
+            "OCA",
+            "OPG",
+            "OPGREROUT",
+            "PEGBENCH",
+            "PEGMID",
+            "POSTATS",
+            "POSTONLY",
+            "PREOPGRTH",
+            "PRICECHK",
+            "REL",
+            "REL2MID",
+            "RELPCTOFS",
+            "RPI",
+            "RTH",
+            "SCALE",
+            "SCALEODD",
+            "SCALERST",
+            "SIZECHK",
+            "SNAPMID",
+            "SNAPMKT",
+            "SNAPREL",
+            "STP",
+            "STPLMT",
+            "SWEEP",
+            "TRAIL",
+            "TRAILLIT",
+            "TRAILLMT",
+            "TRAILMIT",
+            "WHATIF"
+        ]
+    );
     assert_eq!(
         contracts[0].valid_exchanges,
-        "SMART,AMEX,NYSE,CBOE,PHLX,ISE,CHX,ARCA,ISLAND,DRCTEDGE,BEX,BATS,EDGEA,CSFBALGO,JEFFALGO,BYX,IEX,EDGX,FOXRIVER,PEARL,NYSENAT,LTSE,MEMX,PSX"
+        vec![
+            "SMART", "AMEX", "NYSE", "CBOE", "PHLX", "ISE", "CHX", "ARCA", "ISLAND", "DRCTEDGE", "BEX", "BATS", "EDGEA", "CSFBALGO", "JEFFALGO",
+            "BYX", "IEX", "EDGX", "FOXRIVER", "PEARL", "NYSENAT", "LTSE", "MEMX", "PSX"
+        ]
     );
     assert_eq!(contracts[0].price_magnifier, 1);
     assert_eq!(contracts[0].under_contract_id, 0);
@@ -53,11 +130,25 @@ fn request_stock_contract_details() {
     assert_eq!(contracts[0].time_zone_id, "US/Eastern");
     assert_eq!(
         contracts[0].trading_hours,
-        "20221229:0400-20221229:2000;20221230:0400-20221230:2000;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0400-20230103:2000"
+        vec![
+            "20221229:0400-20221229:2000",
+            "20221230:0400-20221230:2000",
+            "20221231:CLOSED",
+            "20230101:CLOSED",
+            "20230102:CLOSED",
+            "20230103:0400-20230103:2000"
+        ]
     );
     assert_eq!(
         contracts[0].liquid_hours,
-        "20221229:0930-20221229:1600;20221230:0930-20221230:1600;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0930-20230103:1600"
+        vec![
+            "20221229:0930-20221229:1600",
+            "20221230:0930-20221230:1600",
+            "20221231:CLOSED",
+            "20230101:CLOSED",
+            "20230102:CLOSED",
+            "20230103:0930-20230103:1600"
+        ]
     );
     assert_eq!(contracts[0].ev_rule, "");
     assert_eq!(contracts[0].ev_multiplier, 0.0);
@@ -67,7 +158,10 @@ fn request_stock_contract_details() {
     assert_eq!(contracts[0].agg_group, 1);
     assert_eq!(
         contracts[0].market_rule_ids,
-        "26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26"
+        vec![
+            "26", "26", "26", "26", "26", "26", "26", "26", "26", "26", "26", "26", "26", "26", "26", "26", "26", "26", "26", "26", "26", "26", "26",
+            "26"
+        ]
     );
     assert_eq!(contracts[0].stock_type, "COMMON");
     assert_eq!(contracts[0].min_size, 1.0);
