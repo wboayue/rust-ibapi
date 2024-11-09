@@ -392,7 +392,7 @@ impl Index<usize> for RequestMessage {
 }
 
 #[derive(Clone, Default, Debug)]
-pub(crate) struct ResponseMessage {
+pub struct ResponseMessage {
     pub i: usize,
     pub fields: Vec<String>,
 }

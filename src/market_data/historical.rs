@@ -1,7 +1,9 @@
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
-use log::{error, warn};
+use log::{debug, error, warn};
 use serde::{Deserialize, Serialize};
 use time::{Date, OffsetDateTime};
 
@@ -407,14 +409,14 @@ pub(crate) fn historical_schedule(
 
     let subscription = client.send_request(request_id, request)?;
 
-    if let Some(Ok(mut message)) = subscription.next() {
-        match message.message_type() {
-            IncomingMessages::HistoricalSchedule => decoders::decode_historical_schedule(&mut message),
-            IncomingMessages::Error => Err(Error::Simple(message.peek_string(4))),
-            _ => Err(Error::Simple(format!("unexpected message: {:?}", message.message_type()))),
+    match subscription.next() {
+        Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalSchedule => {
+            Ok(decoders::decode_historical_schedule(&mut message)?)
         }
-    } else {
-        Err(Error::Simple("did not receive historical schedule response".into()))
+        Some(Ok(message)) => Err(Error::UnexpectedResponse(message)),
+        Some(Err(Error::ConnectionReset)) => historical_schedule(client, contract, end_date, duration),
+        Some(Err(e)) => Err(e),
+        None => Err(Error::UnexpectedEndOfStream),
     }
 }
 
@@ -426,7 +428,7 @@ pub(crate) fn historical_ticks_bid_ask(
     number_of_ticks: i32,
     use_rth: bool,
     ignore_size: bool,
-) -> Result<TickIterator<TickBidAsk>, Error> {
+) -> Result<TickSubscription<TickBidAsk>, Error> {
     client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
 
     let request_id = client.next_request_id();
@@ -443,7 +445,7 @@ pub(crate) fn historical_ticks_bid_ask(
 
     let messages = client.send_request(request_id, message)?;
 
-    Ok(TickIterator::new(messages))
+    Ok(TickSubscription::new(messages))
 }
 
 pub(crate) fn historical_ticks_mid_point(
@@ -453,7 +455,7 @@ pub(crate) fn historical_ticks_mid_point(
     end: Option<OffsetDateTime>,
     number_of_ticks: i32,
     use_rth: bool,
-) -> Result<TickIterator<TickMidpoint>, Error> {
+) -> Result<TickSubscription<TickMidpoint>, Error> {
     client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
 
     let request_id = client.next_request_id();
@@ -461,7 +463,7 @@ pub(crate) fn historical_ticks_mid_point(
 
     let messages = client.send_request(request_id, message)?;
 
-    Ok(TickIterator::new(messages))
+    Ok(TickSubscription::new(messages))
 }
 
 pub(crate) fn historical_ticks_trade(
@@ -471,7 +473,7 @@ pub(crate) fn historical_ticks_trade(
     end: Option<OffsetDateTime>,
     number_of_ticks: i32,
     use_rth: bool,
-) -> Result<TickIterator<TickLast>, Error> {
+) -> Result<TickSubscription<TickLast>, Error> {
     client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
 
     let request_id = client.next_request_id();
@@ -479,7 +481,7 @@ pub(crate) fn historical_ticks_trade(
 
     let messages = client.send_request(request_id, message)?;
 
-    Ok(TickIterator::new(messages))
+    Ok(TickSubscription::new(messages))
 }
 
 pub(crate) fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: BarSize) -> Result<Vec<HistogramEntry>, Error> {
@@ -497,7 +499,7 @@ pub(crate) fn histogram_data(client: &Client, contract: &Contract, use_rth: bool
     }
 }
 
-pub(crate) trait TickDecoder<T> {
+pub trait TickDecoder<T> {
     fn decode(message: &mut ResponseMessage) -> Result<(Vec<T>, bool), Error>;
     fn message_type() -> IncomingMessages;
 }
@@ -529,31 +531,144 @@ impl TickDecoder<TickMidpoint> for TickMidpoint {
     }
 }
 
-pub(crate) struct TickIterator<T: TickDecoder<T>> {
-    done: bool,
+pub struct TickSubscription<T: TickDecoder<T>> {
+    done: AtomicBool,
     messages: InternalSubscription,
-    buffer: VecDeque<T>,
+    buffer: Mutex<VecDeque<T>>,
+    error: Mutex<Option<Error>>,
 }
 
-impl<T: TickDecoder<T>> TickIterator<T> {
+impl<T: TickDecoder<T>> TickSubscription<T> {
     fn new(messages: InternalSubscription) -> Self {
         Self {
-            done: false,
+            done: false.into(),
             messages,
-            buffer: VecDeque::new(),
+            buffer: Mutex::new(VecDeque::new()),
+            error: Mutex::new(None),
         }
+    }
+
+    pub fn next(&self) -> Option<T> {
+        self.clear_error();
+
+        if let Some(message) = self.next_buffered() {
+            return Some(message);
+        }
+
+        if self.done.load(Ordering::Relaxed) {
+            return None;
+        }
+
+        match self.messages.next() {
+            Some(Ok(message)) if message.message_type() == T::message_type() => {
+                self.fill_buffer(message);
+                self.next()
+            }
+            Some(Ok(message)) => {
+                debug!("unexpected message: {:?}", message);
+                self.next()
+            }
+            Some(Err(e)) => {
+                self.set_error(e);
+                None
+            }
+            None => None,
+        }
+    }
+
+    pub fn try_next(&self) -> Option<T> {
+        self.clear_error();
+
+        if let Some(message) = self.next_buffered() {
+            return Some(message);
+        }
+
+        if self.done.load(Ordering::Relaxed) {
+            return None;
+        }
+
+        match self.messages.try_next() {
+            Some(Ok(message)) if message.message_type() == T::message_type() => {
+                self.fill_buffer(message);
+                self.try_next()
+            }
+            Some(Ok(message)) => {
+                debug!("unexpected message: {:?}", message);
+                self.try_next()
+            }
+            Some(Err(e)) => {
+                self.set_error(e);
+                None
+            }
+            None => None,
+        }
+    }
+
+    pub fn next_timeout(&self, duration: std::time::Duration) -> Option<T> {
+        self.clear_error();
+
+        if let Some(message) = self.next_buffered() {
+            return Some(message);
+        }
+
+        if self.done.load(Ordering::Relaxed) {
+            return None;
+        }
+
+        match self.messages.next_timeout(duration) {
+            Some(Ok(message)) if message.message_type() == T::message_type() => {
+                self.fill_buffer(message);
+                self.next_timeout(duration)
+            }
+            Some(Ok(message)) => {
+                debug!("unexpected message: {:?}", message);
+                self.next_timeout(duration)
+            }
+            Some(Err(e)) => {
+                self.set_error(e);
+                None
+            }
+            None => None,
+        }
+    }
+
+    fn next_buffered(&self) -> Option<T> {
+        let mut buffer = self.buffer.lock().unwrap();
+        buffer.pop_front()
+    }
+
+    fn set_error(&self, e: Error) {
+        let mut error = self.error.lock().unwrap();
+        *error = Some(e);
+    }
+
+    fn clear_error(&self) {
+        let mut error = self.error.lock().unwrap();
+        *error = None;
+    }
+
+    fn fill_buffer(&self, mut message: ResponseMessage) {
+        let mut buffer = self.buffer.lock().unwrap();
+
+        let (ticks, done) = T::decode(&mut message).unwrap();
+
+        buffer.append(&mut ticks.into());
+        self.done.store(done, Ordering::Relaxed);
     }
 }
 
-impl<T: TickDecoder<T> + Debug> Iterator for TickIterator<T> {
+impl<T: TickDecoder<T> + Debug> Iterator for TickSubscription<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if !self.buffer.is_empty() {
-            return self.buffer.pop_front();
+        {
+            let mut buffer = self.buffer.lock().unwrap();
+            if !buffer.is_empty() {
+                return buffer.pop_front();
+            }
         }
 
-        if self.done {
+        if self.done.load(Ordering::Relaxed) {
             return None;
         }
 
@@ -561,17 +676,19 @@ impl<T: TickDecoder<T> + Debug> Iterator for TickIterator<T> {
             match self.messages.next() {
                 Some(Ok(mut message)) => {
                     if message.message_type() == Self::Item::message_type() {
+                        let mut buffer = self.buffer.lock().unwrap();
+
                         let (ticks, done) = Self::Item::decode(&mut message).unwrap();
 
-                        self.buffer.append(&mut ticks.into());
-                        self.done = done;
+                        buffer.append(&mut ticks.into());
+                        self.done.store(done, Ordering::Relaxed);
 
-                        if self.buffer.is_empty() && self.done {
+                        if buffer.is_empty() && self.done.load(Ordering::Relaxed) {
                             return None;
                         }
 
-                        if !self.buffer.is_empty() {
-                            return self.buffer.pop_front();
+                        if !buffer.is_empty() {
+                            return buffer.pop_front();
                         }
                     } else if message.message_type() == IncomingMessages::Error {
                         error!("error reading ticks: {:?}", message.peek_string(4));
@@ -584,5 +701,45 @@ impl<T: TickDecoder<T> + Debug> Iterator for TickIterator<T> {
                 _ => return None,
             }
         }
+    }
+}
+
+/// An iterator that yields items as they become available, blocking if necessary.
+pub struct TickSubscriptionIter<'a, T: TickDecoder<T>> {
+    subscription: &'a TickSubscription<T>,
+}
+
+impl<'a, T: TickDecoder<T>> Iterator for TickSubscriptionIter<'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.subscription.next()
+    }
+}
+
+/// An iterator that yields items if they are available, without waiting.
+pub struct TickSubscriptionTryIter<'a, T: TickDecoder<T>> {
+    subscription: &'a TickSubscription<T>,
+}
+
+impl<'a, T: TickDecoder<T>> Iterator for TickSubscriptionTryIter<'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.subscription.try_next()
+    }
+}
+
+/// An iterator that waits for the specified timeout duration for available data.
+pub struct TickSubscriptionTimeoutIter<'a, T: TickDecoder<T>> {
+    subscription: &'a TickSubscription<T>,
+    timeout: std::time::Duration,
+}
+
+impl<'a, T: TickDecoder<T>> Iterator for TickSubscriptionTimeoutIter<'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.subscription.next_timeout(self.timeout)
     }
 }

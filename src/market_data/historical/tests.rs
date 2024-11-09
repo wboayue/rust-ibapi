@@ -12,7 +12,7 @@ use super::*;
 fn test_head_timestamp() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec!["9|9000|1678323335|".to_owned()],
+        response_messages: vec!["88|9000|1678323335|".to_owned()],
     });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
