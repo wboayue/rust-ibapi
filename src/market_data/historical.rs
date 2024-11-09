@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::fmt::{Debug, Display};
 
 use log::{error, warn};
+use serde::{Deserialize, Serialize};
 use time::{Date, OffsetDateTime};
 
 use crate::contracts::Contract;
@@ -15,7 +16,7 @@ mod encoders;
 mod tests;
 
 /// Bar describes the historical data bar.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Copy, Serialize, Deserialize)]
 pub struct Bar {
     /// The bar's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     // pub time: OffsetDateTime,
@@ -36,7 +37,7 @@ pub struct Bar {
     pub count: i32,
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, PartialEq, Serialize, Deserialize)]
 pub enum BarSize {
     Sec,
     Sec5,
@@ -91,7 +92,7 @@ impl ToField for BarSize {
     }
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Duration {
     value: i32,
     unit: char,
@@ -166,20 +167,20 @@ impl ToDuration for i32 {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct HistogramEntry {
     pub price: f64,
     pub size: i32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct HistoricalData {
     pub start: OffsetDateTime,
     pub end: OffsetDateTime,
     pub bars: Vec<Bar>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Schedule {
     pub start: OffsetDateTime,
     pub end: OffsetDateTime,
@@ -187,7 +188,7 @@ pub struct Schedule {
     pub sessions: Vec<Session>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct Session {
     pub reference: Date,
     pub start: OffsetDateTime,
@@ -195,7 +196,7 @@ pub struct Session {
 }
 
 /// The historical tick's description. Used when requesting historical tick data with whatToShow = MIDPOINT
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct TickMidpoint {
     /// timestamp of the historical tick.
     pub timestamp: OffsetDateTime,
@@ -206,7 +207,7 @@ pub struct TickMidpoint {
 }
 
 /// The historical tick's description. Used when requesting historical tick data with whatToShow = BID_ASK.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct TickBidAsk {
     /// Timestamp of the historical tick.
     pub timestamp: OffsetDateTime,
@@ -222,14 +223,14 @@ pub struct TickBidAsk {
     pub size_ask: i32,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct TickAttributeBidAsk {
     pub bid_past_low: bool,
     pub ask_past_high: bool,
 }
 
 /// The historical last tick's description. Used when requesting historical tick data with whatToShow = TRADES.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct TickLast {
     /// Timestamp of the historical tick.
     pub timestamp: OffsetDateTime,
@@ -245,7 +246,7 @@ pub struct TickLast {
     pub special_conditions: String,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
 pub struct TickAttributeLast {
     pub past_limit: bool,
     pub unreported: bool,
