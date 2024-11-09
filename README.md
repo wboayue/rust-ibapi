@@ -6,7 +6,7 @@
 
 ## Introduction
 
-This library provides a comprehensive Rust implementation of the Interactive Brokers [TWS API](https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/), offering a robust and user-friendly interface for TWS and IB Gateway. Designed with simplicity in mind, `ibapi` integrates smoothly into trading systems.
+This library provides a comprehensive Rust implementation of the Interactive Brokers[TWS API](https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/), offering a robust and user-friendly interface for TWS and IB Gateway. Designed with performance and simplicity in mind, `ibapi` is a good fit for automated trading systems, market analysis, real-time data collection and portfolio management tools.
 
 With this fully featured API, you can retrieve account information, access real-time and historical market data, manage orders, perform market scans, and access news and Wall Street Horizons (WSH) event data. Future updates will focus on bug fixes, maintaining parity with the official API, and enhancing usability.
 
