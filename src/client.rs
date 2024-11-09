@@ -2067,6 +2067,14 @@ impl<'a, T: DataStream<T>> Drop for Subscription<'a, T> {
     }
 }
 
+/// Internal trait for types that can be streamed from TWS/Gateway responses.
+///
+/// Implementors must provide:
+/// - A decode method to convert response messages into the target type
+/// - Optionally, a cancel message generator for cleaning up subscriptions
+///
+/// This trait is used internally by the Subscription system to handle
+/// different types of streaming data from IB.
 pub(crate) trait DataStream<T> {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[];
 
