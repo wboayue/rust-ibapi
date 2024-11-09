@@ -1703,7 +1703,42 @@ impl<'a, T: DataStream<T>> Subscription<'a, T> {
         }
     }
 
-    /// Blocks until the item become available.
+    /// Polls the subscription for the next item and blocks until the next item is available.
+    ///
+    /// This method will wait indefinitely until either:
+    /// - A new item becomes available
+    /// - The subscription encounters an error
+    /// - The subscription is canceled
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::realtime::{BarSize, WhatToShow};
+    /// use ibapi::Client;
+    ///
+    /// let connection_url = "127.0.0.1:4002";
+    /// let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
+    ///
+    /// // Request real-time bars data for AAPL with 5-second intervals
+    /// let contract = Contract::stock("AAPL");
+    /// let subscription = client
+    ///     .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+    ///     .expect("realtime bars request failed!");
+    ///
+    /// // Process bars blocking until the next bar is available
+    /// while let Some(bar) = subscription.next() {
+    ///     println!("Received bar: {bar:?}");
+    /// }
+    ///
+    /// // When the loop exits, check if it was due to an error
+    /// if let Some(err) = subscription.error() {
+    ///     eprintln!("subscription error: {err}");
+    /// }
+    /// ```
+    /// # Returns
+    /// * `Some(T)` - The next available item from the subscription
+    /// * `None` - If the subscription has ended or encountered an error
     pub fn next(&self) -> Option<T> {
         self.clear_error();
 
@@ -1744,32 +1779,108 @@ impl<'a, T: DataStream<T>> Subscription<'a, T> {
         }
     }
 
-    /// To request the next bar in a non-blocking manner.
+    /// Polls the subscription for the next item, returns immediately if no data is available.
     ///
-    /// ```text
-    /// //loop {
-    ///    // Check if the next bar is available without waiting
-    ///    //if let Some(bar) = subscription.try_next() {
-    ///        // Process the available bar (e.g., use it in calculations)
-    ///    //}
-    ///    // Perform other work before checking for the next bar
-    /// //}
+    /// Unlike [next](Subscription::next) which blocks waiting for data, this method provides
+    /// non-blocking access to the subscription data. It returns immediately with:
+    /// - The next item if one is available
+    /// - None if no data is currently available
+    /// - None if an error occurred
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::realtime::{BarSize, WhatToShow};
+    /// use ibapi::Client;
+    ///
+    /// let connection_url = "127.0.0.1:4002";
+    /// let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
+    ///
+    /// // Request real-time bars data for AAPL with 5-second intervals
+    /// let contract = Contract::stock("AAPL");
+    /// let subscription = client
+    ///     .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+    ///     .expect("realtime bars request failed!");
+    ///
+    /// loop {
+    ///     // Process all currently available data
+    ///     while let Some(bar) = subscription.try_next() {
+    ///         println!("Received bar: {bar:?}");
+    ///     }
+    ///
+    ///     // Check if we stopped due to an error
+    ///     if let Some(err) = subscription.error() {
+    ///         eprintln!("subscription error: {err}");
+    ///        break;
+    ///     }
+    ///
+    ///     // No data currently available, perform other work
+    ///     // The subscription remains active and can be checked again
+    /// }
+    ///
     /// ```
+    /// # Returns
+    /// * `Some(T)` - The next available item from the subscription
+    /// * `None` - If no data is immediately available or if an error occurred
     pub fn try_next(&self) -> Option<T> {
         self.process_response(self.subscription.try_next())
     }
 
-    /// To request the next bar in a non-blocking manner.
+    /// Polls the subscription for the next item, waiting up to the specified timeout duration.
     ///
-    /// ```text
-    /// //loop {
-    ///    // Check if the next bar is available without waiting
-    ///   // if let Some(bar) = subscription.next_timeout() {
-    ///        // Process the available bar (e.g., use it in calculations)
-    ///   // }
-    ///    // Perform other work before checking for the next bar
-    /// //}
+    /// This method provides a middle ground between [try_next](Subscription::try_next) and
+    /// [next](Subscription::next):
+    /// - Unlike try_next, it will wait for data to arrive
+    /// - Unlike next, it will only wait for a specified duration
+    /// - Returns None if no data arrives within the timeout period
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::realtime::{BarSize, WhatToShow};
+    /// use ibapi::Client;
+    /// use std::time::Duration;
+    ///
+    /// let connection_url = "127.0.0.1:4002";
+    /// let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
+    ///
+    /// // Request real-time bars data for AAPL with 5-second intervals
+    /// let contract = Contract::stock("AAPL");
+    /// let subscription = client
+    ///     .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+    ///     .expect("realtime bars request failed!");
+    ///
+    /// loop {
+    ///     // Wait up to 1 second for each new piece of data
+    ///     while let Some(bar) = subscription.next_timeout(Duration::from_secs(1)) {
+    ///         println!("Received bar: {bar:?}");
+    ///     }
+    ///
+    ///     // Check if we stopped due to an error
+    ///     if let Some(err) = subscription.error() {
+    ///         eprintln!("subscription error: {err}");
+    ///        break;
+    ///     }
+    ///
+    ///     // Either timeout occurred or no more data available
+    ///     // Perform other work before checking again
+    /// }
+    ///
     /// ```
+    ///
+    /// # Arguments
+    /// * `timeout` - Maximum duration to wait for the next item
+    ///
+    /// # Returns
+    /// * `Some(T)` - The next available item from the subscription
+    /// * `None` - If no data arrives within the timeout period or if an error occurred
+    ///
+    /// # See also
+    /// - [Subscription::next] - For blocking access without timeout
+    /// - [Subscription::try_next] - For immediate non-blocking access
+    /// - [Subscription::error] - For checking error status
     pub fn next_timeout(&self, timeout: Duration) -> Option<T> {
         self.process_response(self.subscription.next_timeout(timeout))
     }
