@@ -55,7 +55,7 @@ pub(crate) trait MessageBus: Send + Sync {
     }
 }
 
-type Response = Result<ResponseMessage, Error>;
+pub(crate) type Response = Result<ResponseMessage, Error>;
 
 // For requests without an identifier, shared channels are created
 // to route request/response pairs based on message type.

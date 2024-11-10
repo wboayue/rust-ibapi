@@ -9,7 +9,7 @@ use time::{Date, OffsetDateTime};
 
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
-use crate::transport::InternalSubscription;
+use crate::transport::{InternalSubscription, Response};
 use crate::{server_versions, Client, Error, ToField};
 
 mod decoders;
@@ -339,30 +339,32 @@ pub(crate) fn historical_data(
         )?;
     }
 
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_historical_data(
-        client.server_version(),
-        request_id,
-        contract,
-        end_date,
-        duration,
-        bar_size,
-        what_to_show,
-        use_rth,
-        false,
-        Vec::<crate::contracts::TagValue>::default(),
-    )?;
+    loop {
+        let request_id = client.next_request_id();
+        let request = encoders::encode_request_historical_data(
+            client.server_version(),
+            request_id,
+            contract,
+            end_date,
+            duration,
+            bar_size,
+            what_to_show,
+            use_rth,
+            false,
+            Vec::<crate::contracts::TagValue>::default(),
+        )?;
 
-    let subscription = client.send_request(request_id, request)?;
+        let subscription = client.send_request(request_id, request)?;
 
-    match subscription.next() {
-        Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalData => {
-            Ok(decoders::decode_historical_data(client.server_version, time_zone(client), &mut message)?)
+        match subscription.next() {
+            Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalData => {
+                return decoders::decode_historical_data(client.server_version, time_zone(client), &mut message)
+            }
+            Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
+            Some(Err(Error::ConnectionReset)) => continue,
+            Some(Err(e)) => return Err(e),
+            None => return Err(Error::UnexpectedEndOfStream),
         }
-        Some(Ok(message)) => Err(Error::UnexpectedResponse(message)),
-        Some(Err(Error::ConnectionReset)) => historical_data(client, contract, end_date, duration, bar_size, what_to_show, use_rth),
-        Some(Err(e)) => Err(e),
-        None => Err(Error::UnexpectedEndOfStream),
     }
 }
 
@@ -393,30 +395,32 @@ pub(crate) fn historical_schedule(
         "It does not support requesting of historical schedule.",
     )?;
 
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_historical_data(
-        client.server_version(),
-        request_id,
-        contract,
-        end_date,
-        duration,
-        BarSize::Day,
-        Some(WhatToShow::Schedule),
-        true,
-        false,
-        Vec::<crate::contracts::TagValue>::default(),
-    )?;
+    loop {
+        let request_id = client.next_request_id();
+        let request = encoders::encode_request_historical_data(
+            client.server_version(),
+            request_id,
+            contract,
+            end_date,
+            duration,
+            BarSize::Day,
+            Some(WhatToShow::Schedule),
+            true,
+            false,
+            Vec::<crate::contracts::TagValue>::default(),
+        )?;
 
-    let subscription = client.send_request(request_id, request)?;
+        let subscription = client.send_request(request_id, request)?;
 
-    match subscription.next() {
-        Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalSchedule => {
-            Ok(decoders::decode_historical_schedule(&mut message)?)
+        match subscription.next() {
+            Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalSchedule => {
+                return decoders::decode_historical_schedule(&mut message)
+            }
+            Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
+            Some(Err(Error::ConnectionReset)) => continue,
+            Some(Err(e)) => return Err(e),
+            None => return Err(Error::UnexpectedEndOfStream),
         }
-        Some(Ok(message)) => Err(Error::UnexpectedResponse(message)),
-        Some(Err(Error::ConnectionReset)) => historical_schedule(client, contract, end_date, duration),
-        Some(Err(e)) => Err(e),
-        None => Err(Error::UnexpectedEndOfStream),
     }
 }
 
@@ -432,7 +436,7 @@ pub(crate) fn historical_ticks_bid_ask(
     client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
 
     let request_id = client.next_request_id();
-    let message = encoders::encode_request_historical_ticks(
+    let request = encoders::encode_request_historical_ticks(
         request_id,
         contract,
         start,
@@ -442,10 +446,9 @@ pub(crate) fn historical_ticks_bid_ask(
         use_rth,
         ignore_size,
     )?;
+    let subscription = client.send_request(request_id, request)?;
 
-    let messages = client.send_request(request_id, message)?;
-
-    Ok(TickSubscription::new(messages))
+    Ok(TickSubscription::new(subscription))
 }
 
 pub(crate) fn historical_ticks_mid_point(
@@ -459,11 +462,10 @@ pub(crate) fn historical_ticks_mid_point(
     client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
 
     let request_id = client.next_request_id();
-    let message = encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::MidPoint, use_rth, false)?;
+    let request = encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::MidPoint, use_rth, false)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    let messages = client.send_request(request_id, message)?;
-
-    Ok(TickSubscription::new(messages))
+    Ok(TickSubscription::new(subscription))
 }
 
 pub(crate) fn historical_ticks_trade(
@@ -477,25 +479,26 @@ pub(crate) fn historical_ticks_trade(
     client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
 
     let request_id = client.next_request_id();
-    let message = encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::Trades, use_rth, false)?;
+    let request = encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::Trades, use_rth, false)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    let messages = client.send_request(request_id, message)?;
-
-    Ok(TickSubscription::new(messages))
+    Ok(TickSubscription::new(subscription))
 }
 
 pub(crate) fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: BarSize) -> Result<Vec<HistogramEntry>, Error> {
     client.check_server_version(server_versions::REQ_HISTOGRAM, "It does not support histogram data requests.")?;
 
-    let request_id = client.next_request_id();
-    let message = encoders::encode_request_histogram_data(request_id, contract, use_rth, period)?;
+    loop {
+        let request_id = client.next_request_id();
+        let request = encoders::encode_request_histogram_data(request_id, contract, use_rth, period)?;
+        let subscription = client.send_request(request_id, request)?;
 
-    let subscription = client.send_request(request_id, message)?;
-
-    match subscription.next() {
-        Some(Ok(mut message)) => decoders::decode_histogram_data(&mut message),
-        Some(Err(e)) => Err(e),
-        None => Ok(Vec::new()),
+        match subscription.next() {
+            Some(Ok(mut message)) => return decoders::decode_histogram_data(&mut message),
+            Some(Err(Error::ConnectionReset)) => continue,
+            Some(Err(e)) => return Err(e),
+            None => return Ok(Vec::new()),
+        }
     }
 }
 
@@ -561,86 +564,60 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
     }
 
     pub fn next(&self) -> Option<T> {
-        self.clear_error();
-
-        if let Some(message) = self.next_buffered() {
-            return Some(message);
-        }
-
-        if self.done.load(Ordering::Relaxed) {
-            return None;
-        }
-
-        match self.messages.next() {
-            Some(Ok(message)) if message.message_type() == T::MESSAGE_TYPE => {
-                self.fill_buffer(message);
-                self.next()
-            }
-            Some(Ok(message)) => {
-                debug!("unexpected message: {:?}", message);
-                self.next()
-            }
-            Some(Err(e)) => {
-                self.set_error(e);
-                None
-            }
-            None => None,
-        }
+        self.next_helper(|| self.messages.next())
     }
 
     pub fn try_next(&self) -> Option<T> {
-        self.clear_error();
-
-        if let Some(message) = self.next_buffered() {
-            return Some(message);
-        }
-
-        if self.done.load(Ordering::Relaxed) {
-            return None;
-        }
-
-        match self.messages.try_next() {
-            Some(Ok(message)) if message.message_type() == T::MESSAGE_TYPE => {
-                self.fill_buffer(message);
-                self.try_next()
-            }
-            Some(Ok(message)) => {
-                debug!("unexpected message: {:?}", message);
-                self.try_next()
-            }
-            Some(Err(e)) => {
-                self.set_error(e);
-                None
-            }
-            None => None,
-        }
+        self.next_helper(|| self.messages.try_next())
     }
 
     pub fn next_timeout(&self, duration: std::time::Duration) -> Option<T> {
+        self.next_helper(|| self.messages.next_timeout(duration))
+    }
+
+    fn next_helper<F>(&self, next_response: F) -> Option<T>
+    where
+        F: Fn() -> Option<Response>,
+    {
         self.clear_error();
 
-        if let Some(message) = self.next_buffered() {
-            return Some(message);
-        }
+        loop {
+            if let Some(message) = self.next_buffered() {
+                return Some(message);
+            }
 
-        if self.done.load(Ordering::Relaxed) {
-            return None;
-        }
+            if self.done.load(Ordering::Relaxed) {
+                return None;
+            }
 
-        match self.messages.next_timeout(duration) {
-            Some(Ok(message)) if message.message_type() == T::MESSAGE_TYPE => {
-                self.fill_buffer(message);
-                self.next_timeout(duration)
+            match self.fill_buffer(next_response()) {
+                Ok(()) => continue,
+                Err(()) => return None,
+            }
+        }
+    }
+
+    fn fill_buffer(&self, response: Option<Response>) -> Result<(), ()> {
+        match response {
+            Some(Ok(mut message)) if message.message_type() == T::MESSAGE_TYPE => {
+                let mut buffer = self.buffer.lock().unwrap();
+
+                let (ticks, done) = T::decode(&mut message).unwrap();
+
+                buffer.append(&mut ticks.into());
+                self.done.store(done, Ordering::Relaxed);
+
+                Ok(())
             }
             Some(Ok(message)) => {
                 debug!("unexpected message: {:?}", message);
-                self.next_timeout(duration)
+                Ok(())
             }
             Some(Err(e)) => {
                 self.set_error(e);
-                None
+                Err(())
             }
-            None => None,
+            None => Err(()),
         }
     }
 
@@ -657,15 +634,6 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
     fn clear_error(&self) {
         let mut error = self.error.lock().unwrap();
         *error = None;
-    }
-
-    fn fill_buffer(&self, mut message: ResponseMessage) {
-        let mut buffer = self.buffer.lock().unwrap();
-
-        let (ticks, done) = T::decode(&mut message).unwrap();
-
-        buffer.append(&mut ticks.into());
-        self.done.store(done, Ordering::Relaxed);
     }
 }
 
