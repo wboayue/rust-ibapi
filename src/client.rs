@@ -2117,6 +2117,7 @@ impl<'a, T: DataStream<T>> IntoIterator for &'a Subscription<'a, T> {
     }
 }
 
+#[allow(private_bounds)]
 pub struct SubscriptionOwnedIter<'a, T: DataStream<T>> {
     subscription: Subscription<'a, T>,
 }
