@@ -95,8 +95,33 @@ impl Client {
     }
 
     /// Returns and increments the order ID.
+    ///
+    /// The client maintains a sequence of order IDs. This function returns the next order ID in the sequence.
     pub fn next_order_id(&self) -> i32 {
         self.order_id.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// Gets the next valid order ID from the TWS server.
+    ///
+    /// Unlike [Self::next_order_id], this function requests the next valid order ID from the TWS server and updates the client's internal order ID sequence.
+    /// This can be for ensuring that order IDs are unique across multiple clients.
+    ///
+    /// Use this method when coordinating order IDs across multiple client instances or when you need to synchronize with the server's order ID sequence at the start of a session.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// // Connect to the TWS server at the given address with client ID.
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// // Request the next valid order ID from the server.
+    /// let next_valid_order_id = client.next_valid_order_id().expect("request failed");
+    /// println!("next_valid_order_id: {next_valid_order_id}");
+    /// ```
+    pub fn next_valid_order_id(&self) -> Result<i32, Error> {
+        orders::next_valid_order_id(self)
     }
 
     /// Sets the current value of order ID.
@@ -240,7 +265,7 @@ impl Client {
     ///
     /// let group = "All";
     ///
-    /// let subscription = client.account_summary(group, AccountSummaryTags::ALL).expect("error requesting pnl");
+    /// let subscription = client.account_summary(group, AccountSummaryTags::ALL).expect("error requesting account summary");
     /// for summary in &subscription {
     ///     println!("{summary:?}")
     /// }
@@ -398,9 +423,9 @@ impl Client {
     /// Calculates an option’s price based on the provided volatility and its underlying’s price.
     ///
     /// # Arguments
-    /// * `contract`   - The [Contract] object for which the depth is being requested.
-    /// * `volatility` - Hypothetical volatility.
-    /// * `underlying_price` - Hypothetical option’s underlying price.
+    /// * `contract`        - The [Contract] object representing the option for which the calculation is being requested.
+    /// * `volatility`      - Hypothetical volatility as a percentage (e.g., 20.0 for 20%).
+    /// * `underlying_price` - Hypothetical price of the underlying asset.
     ///
     /// # Examples
     ///
@@ -510,7 +535,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let client = Client::connect("127.0.0.1:4002", 0).expect("connection failed");
     ///
     /// let subscription = client.auto_open_orders(false).expect("request failed");
     /// for order_data in &subscription {
@@ -521,11 +546,11 @@ impl Client {
         orders::auto_open_orders(self, auto_bind)
     }
 
-    /// Cancels an open [Order].
+    /// Cancels an active [Order] placed by the same API client ID.
     ///
     /// # Arguments
-    /// * `order_id` - ID of [Order] to cancel.
-    /// * `manual_order_cancel_time` - can't find documentation. leave blank.
+    /// * `order_id` - ID of the [Order] to cancel.
+    /// * `manual_order_cancel_time` - Optional timestamp to specify the cancellation time. Use an empty string to use the current time.
     ///
     /// # Examples
     ///
@@ -603,28 +628,12 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     ///
-    /// let mut client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// client.global_cancel().expect("request failed");
     /// ```
     pub fn global_cancel(&self) -> Result<(), Error> {
         orders::global_cancel(self)
-    }
-
-    /// Cancels all open [Order]s.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use ibapi::Client;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
-    /// let next_valid_order_id = client.next_valid_order_id().expect("request failed");
-    /// println!("next_valid_order_id: {next_valid_order_id}");
-    /// ```
-    pub fn next_valid_order_id(&self) -> Result<i32, Error> {
-        orders::next_valid_order_id(self)
     }
 
     /// Requests all open orders places by this specific API client (identified by the API client id).
@@ -646,10 +655,10 @@ impl Client {
         orders::open_orders(self)
     }
 
-    /// Submits an [Order].
+    /// Places or modifies an [Order].
     ///
     /// Submits an [Order] using [Client] for the given [Contract].
-    /// Immediately after the order was submitted correctly, the TWS will start sending events concerning the order's activity via IBApi.EWrapper.openOrder and IBApi.EWrapper.orderStatus
+    /// Upon successful submission, the client will start receiving events related to the order's activity via the subscription, including order status updates and execution reports.
     ///
     /// # Arguments
     /// * `order_id` - ID for [Order]. Get next valid ID using [Client::next_order_id].
@@ -698,7 +707,7 @@ impl Client {
     /// * `account`           - Destination account.
     /// * `ovrd`              - Specifies whether your setting will override the system’s natural action.
     ///                         For example, if your action is "exercise" and the option is not in-the-money, by natural action the option would not exercise. If you have override set to true the natural action would be overridden and the out-of-the money option would be exercised.
-    /// * `manual_order_time  - Specify the time at which the options should be exercised. An empty string will assume the current time. Required TWS API 10.26 or higher.
+    /// * `manual_order_time` - Specify the time at which the options should be exercised. If `None`, the current time will be used. Requires TWS API 10.26 or higher.
     pub fn exercise_options<'a>(
         &'a self,
         contract: &Contract,
@@ -714,12 +723,13 @@ impl Client {
     // === Historical Market Data ===
 
     /// Returns the timestamp of earliest available historical data for a contract and data type.
+    ///
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
     /// use ibapi::market_data::historical::{self, WhatToShow};
     ///
-    /// let mut client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("MSFT");
     /// let what_to_show = WhatToShow::Trades;
