@@ -22,7 +22,7 @@ fn main() {
         }
 
         if let Some(Error::ConnectionReset) = subscription.error() {
-            println!("Connection reset. Retrying stream...");
+            eprintln!("Connection reset. Retrying stream...");
             continue;
         }
 

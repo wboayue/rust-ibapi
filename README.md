@@ -6,7 +6,7 @@
 
 ## Introduction
 
-This library provides a comprehensive Rust implementation of the Interactive Brokers[TWS API](https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/), offering a robust and user-friendly interface for TWS and IB Gateway. Designed with performance and simplicity in mind, `ibapi` is a good fit for automated trading systems, market analysis, real-time data collection and portfolio management tools.
+This library provides a comprehensive Rust implementation of the Interactive Brokers [TWS API](https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/), offering a robust and user-friendly interface for TWS and IB Gateway. Designed with performance and simplicity in mind, `ibapi` is a good fit for automated trading systems, market analysis, real-time data collection and portfolio management tools.
 
 With this fully featured API, you can retrieve account information, access real-time and historical market data, manage orders, perform market scans, and access news and Wall Street Horizons (WSH) event data. Future updates will focus on bug fixes, maintaining parity with the official API, and enhancing usability.
 
@@ -29,7 +29,7 @@ Or add the following line to your `Cargo.toml`:
 ```toml
 ibapi = "1.0.0"
 ```
-> **Note**: Check [crates.io/crates/ibapi](https://crates.io/crates/ibapi) for the latest version available version.
+> **Note**: Check [crates.io/crates/ibapi](https://crates.io/crates/ibapi) for the latest available version.
 
 ## Examples
 
@@ -291,7 +291,7 @@ In this model, each client instance handles only the requests it initiates, impr
 
 # Fault Tolerance
 
-The API will automatically attempt to reconnect to the TWS server if a disconnection is detected. The API will attempt to reconnect up to 30 times using a Fibonacci backoff strategy. In some cases, it will retry the request in progress. When receiving a response via a [Subscription](https://docs.rs/ibapi/latest/ibapi/client/struct.Subscription.html), the application may need to handle retries manually, as shown below.
+The API will automatically attempt to reconnect to the TWS server if a disconnection is detected. The API will attempt to reconnect up to 30 times using a Fibonacci backoff strategy. In some cases, it will retry the request in progress. When receiving responses via a [Subscription](https://docs.rs/ibapi/latest/ibapi/client/struct.Subscription.html), the application may need to handle retries manually, as shown below.
 
 ```rust
 use ibapi::contracts::Contract;
@@ -316,7 +316,7 @@ fn main() {
         }
 
         if let Some(Error::ConnectionReset) = subscription.error() {
-            println!("Connection reset. Retrying stream...");
+            eprintln!("Connection reset. Retrying stream...");
             continue;
         }
 
