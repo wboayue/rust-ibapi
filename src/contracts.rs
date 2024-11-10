@@ -203,6 +203,27 @@ impl Contract {
         }
     }
 
+    /// Creates option contract from specified symbol, expiry date, strike price and option type.
+    /// Defaults currency to USD and exchange to SMART.
+    ///
+    /// # Arguments
+    /// * `symbol` - Symbols of the underlying asset.
+    /// * `expiration_date` - Expiration date of option contract (YYYYMMDD)
+    /// * `strike` - Strike price of the option contract.
+    /// * `right` - Option type: "C" for Call, "P" for Put
+    pub fn option(symbol: &str, expiration_date: &str, strike: f64, right: &str) -> Contract {
+        Contract {
+            symbol: symbol.into(),
+            security_type: SecurityType::Option,
+            exchange: "SMART".into(),
+            currency: "USD".into(),
+            last_trade_date_or_contract_month: expiration_date.into(), // Expiry date (YYYYMMDD)
+            strike,
+            right: right.into(), // Option type: "C" for Call, "P" for Put
+            ..Default::default()
+        }
+    }
+
     /// Is Bag request
     pub fn is_bag(&self) -> bool {
         self.security_type == SecurityType::Spread
