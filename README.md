@@ -6,7 +6,7 @@
 
 ## Introduction
 
-This library provides a comprehensive Rust implementation of the Interactive Brokers[TWS API](https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/), offering a robust and user-friendly interface for TWS and IB Gateway. Designed with performance and simplicity in mind, `ibapi` is a good fit for automated trading systems, market analysis, real-time data collection and portfolio management tools.
+This library provides a comprehensive Rust implementation of the Interactive Brokers [TWS API](https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/), offering a robust and user-friendly interface for TWS and IB Gateway. Designed with performance and simplicity in mind, `ibapi` is a good fit for automated trading systems, market analysis, real-time data collection and portfolio management tools.
 
 With this fully featured API, you can retrieve account information, access real-time and historical market data, manage orders, perform market scans, and access news and Wall Street Horizons (WSH) event data. Future updates will focus on bug fixes, maintaining parity with the official API, and enhancing usability.
 
@@ -29,7 +29,7 @@ Or add the following line to your `Cargo.toml`:
 ```toml
 ibapi = "1.0.0"
 ```
-> **Note**: Check [crates.io/crates/ibapi](https://crates.io/crates/ibapi) for the latest version available version.
+> **Note**: Check [crates.io/crates/ibapi](https://crates.io/crates/ibapi) for the latest available version.
 
 ## Examples
 
@@ -189,10 +189,6 @@ fn main() {
 ### Placing Orders
 
 ```rust
-use ibapi::contracts::Contract;
-use ibapi::orders::{order_builder, Action, OrderNotification};
-use ibapi::Client;
-
 pub fn main() {
     let connection_url = "127.0.0.1:4002";
     let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
@@ -205,11 +201,11 @@ pub fn main() {
 
     let subscription = client.place_order(order_id, &contract, &order).expect("place order request failed!");
 
-    for notice in subscription {
-        if let OrderNotification::ExecutionData(data) = notice {
+    for event in &subscription {
+        if let PlaceOrder::ExecutionData(data) = event {
             println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
         } else {
-            println!("{:?}", notice);
+            println!("{:?}", event);
         }
     }
 }
@@ -259,7 +255,6 @@ Some TWS API calls do not have a unique request ID and are mapped back to the in
 To avoid this issue, you can use a model of one client per thread. This ensures that each client instance handles only its own messages, reducing potential conflicts:
 
 ```rust
-use std::sync::Arc;
 use std::thread;
 
 use ibapi::contracts::Contract;
@@ -273,7 +268,7 @@ fn main() {
     for (symbol, client_id) in symbols {
         let handle = thread::spawn(move || {
             let connection_url = "127.0.0.1:4002";
-            let client = Arc::new(Client::connect(connection_url, client_id).expect("connection to TWS failed!"));
+            let client = Client::connect(connection_url, client_id).expect("connection to TWS failed!");
 
             let contract = Contract::stock(symbol);
             let subscription = client
@@ -296,7 +291,7 @@ In this model, each client instance handles only the requests it initiates, impr
 
 # Fault Tolerance
 
-The API will automatically attempt to reconnect to the TWS server if a disconnection is detected. The API will attempt to reconnect up to 30 times using a Fibonacci backoff strategy. In some cases, it will retry the request in progress. When receiving a response via a [Subscription](https://docs.rs/ibapi/latest/ibapi/client/struct.Subscription.html), the application may need to handle retries manually, as shown below.
+The API will automatically attempt to reconnect to the TWS server if a disconnection is detected. The API will attempt to reconnect up to 30 times using a Fibonacci backoff strategy. In some cases, it will retry the request in progress. When receiving responses via a [Subscription](https://docs.rs/ibapi/latest/ibapi/client/struct.Subscription.html), the application may need to handle retries manually, as shown below.
 
 ```rust
 use ibapi::contracts::Contract;
@@ -304,29 +299,28 @@ use ibapi::market_data::realtime::{BarSize, WhatToShow};
 use ibapi::{Client, Error};
 
 fn main() {
-    env_logger::init();
-
     let connection_url = "127.0.0.1:4002";
     let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 
     let contract = Contract::stock("AAPL");
-    stream_bars(&client, &contract);
-}
 
-// Request real-time bars data with 5-second intervals
-fn stream_bars(client: &Client, contract: &Contract) {
-    let subscription = client
-        .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
-        .expect("realtime bars request failed!");
+    loop {
+        // Request real-time bars data with 5-second intervals
+        let subscription = client
+            .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+            .expect("realtime bars request failed!");
 
-    for bar in &subscription {
-        // Process each bar here (e.g., print or use in calculations)
-        println!("bar: {bar:?}");
-    }
+        for bar in &subscription {
+            // Process each bar here (e.g., print or use in calculations)
+            println!("bar: {bar:?}");
+        }
 
-    if let Some(Error::ConnectionReset) = subscription.error() {
-        println!("Connection reset. Retrying stream...");
-        stream_bars(client, contract);
+        if let Some(Error::ConnectionReset) = subscription.error() {
+            eprintln!("Connection reset. Retrying stream...");
+            continue;
+        }
+
+        break;
     }
 }
 ```

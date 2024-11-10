@@ -508,18 +508,20 @@ pub fn market_depth_exchanges(client: &Client) -> Result<Vec<DepthMarketDataDesc
         "It does not support market depth exchanges requests.",
     )?;
 
-    let request = encoders::encode_request_market_depth_exchanges()?;
-    let subscription = client.send_shared_request(OutgoingMessages::RequestMktDepthExchanges, request)?;
-    let response = subscription.next();
+    loop {
+        let request = encoders::encode_request_market_depth_exchanges()?;
+        let subscription = client.send_shared_request(OutgoingMessages::RequestMktDepthExchanges, request)?;
+        let response = subscription.next();
 
-    match response {
-        Some(Ok(mut message)) => Ok(decoders::decode_market_depth_exchanges(client.server_version(), &mut message)?),
-        Some(Err(Error::ConnectionReset)) => {
-            debug!("connection reset. retrying market_depth_exchanges");
-            market_depth_exchanges(client)
+        match response {
+            Some(Ok(mut message)) => return decoders::decode_market_depth_exchanges(client.server_version(), &mut message),
+            Some(Err(Error::ConnectionReset)) => {
+                debug!("connection reset. retrying market_depth_exchanges");
+                continue;
+            }
+            Some(Err(e)) => return Err(e),
+            None => return Ok(Vec::new()),
         }
-        Some(Err(e)) => Err(e),
-        None => Ok(Vec::new()),
     }
 }
 
