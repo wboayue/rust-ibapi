@@ -443,12 +443,12 @@ impl Client {
         contracts::calculate_option_price(self, contract, volatility, underlying_price)
     }
 
-    /// Calculates the implied volatility based on hypothetical option and its underlying prices.
+    /// Calculates the implied volatility based on the hypothetical option price and underlying price.
     ///
     /// # Arguments
-    /// * `contract`   - The [Contract] object for which the depth is being requested.
-    /// * `volatility` - Hypothetical option price.
-    /// * `underlying_price` - Hypothetical option’s underlying price.
+    /// * `contract`        - The [Contract] object representing the option for which the calculation is being requested.
+    /// * `option_price`    - Hypothetical option price.
+    /// * `underlying_price` - Hypothetical price of the underlying asset.
     ///
     /// # Examples
     ///
@@ -458,7 +458,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::option("AAPL", "20230519", 150.0, "C");
     /// let calculation = client.calculate_implied_volatility(&contract, 25.0, 235.0).expect("request failed");
     /// println!("calculation: {:?}", calculation);
     /// ```
@@ -678,10 +678,10 @@ impl Client {
     /// let order = order_builder::market_order(Action::Buy, 100.0);
     /// let order_id = client.next_order_id();
     ///
-    /// let notifications = client.place_order(order_id, &contract, &order).expect("request failed");
+    /// let events = client.place_order(order_id, &contract, &order).expect("request failed");
     ///
-    /// for notification in notifications {
-    ///     match notification {
+    /// for event in &events {
+    ///     match event {
     ///         PlaceOrder::OrderStatus(order_status) => {
     ///             println!("order status: {order_status:?}")
     ///         }
@@ -1270,8 +1270,8 @@ impl Client {
     ///         TickTypes::EFP(tick_efp) => println!("{:?}", tick_efp),
     ///         TickTypes::OptionComputation(option_computation) => println!("{:?}", option_computation),
     ///         TickTypes::RequestParameters(tick_request_parameters) => println!("{:?}", tick_request_parameters),
-    ///         TickTypes::SnapshotEnd => subscription.cancel(),
     ///         TickTypes::Notice(notice) => println!("{:?}", notice),
+    ///         TickTypes::SnapshotEnd => subscription.cancel(),
     ///     }
     /// }
     /// ```
@@ -1411,7 +1411,7 @@ impl Client {
     /// let provider_codes = ["DJ-N"];
     ///
     /// let subscription = client.contract_news(&contract, &provider_codes).expect("request contract news failed");
-    /// for article in subscription {
+    /// for article in &subscription {
     ///     println!("{:?}", article);
     /// }
     /// ```
@@ -1435,7 +1435,7 @@ impl Client {
     /// let provider_code = "BRFG";
     ///
     /// let subscription = client.broad_tape_news(provider_code).expect("request broad tape news failed");
-    /// for article in subscription {
+    /// for article in &subscription {
     ///     println!("{:?}", article);
     /// }
     /// ```
