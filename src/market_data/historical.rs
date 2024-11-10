@@ -1,12 +1,15 @@
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
-use log::{error, warn};
+use log::{debug, warn};
+use serde::{Deserialize, Serialize};
 use time::{Date, OffsetDateTime};
 
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
-use crate::transport::InternalSubscription;
+use crate::transport::{InternalSubscription, Response};
 use crate::{server_versions, Client, Error, ToField};
 
 mod decoders;
@@ -15,7 +18,7 @@ mod encoders;
 mod tests;
 
 /// Bar describes the historical data bar.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Copy, Serialize, Deserialize)]
 pub struct Bar {
     /// The bar's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     // pub time: OffsetDateTime,
@@ -36,7 +39,7 @@ pub struct Bar {
     pub count: i32,
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, PartialEq, Serialize, Deserialize)]
 pub enum BarSize {
     Sec,
     Sec5,
@@ -91,7 +94,7 @@ impl ToField for BarSize {
     }
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Duration {
     value: i32,
     unit: char,
@@ -166,20 +169,20 @@ impl ToDuration for i32 {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct HistogramEntry {
     pub price: f64,
     pub size: i32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct HistoricalData {
     pub start: OffsetDateTime,
     pub end: OffsetDateTime,
     pub bars: Vec<Bar>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Schedule {
     pub start: OffsetDateTime,
     pub end: OffsetDateTime,
@@ -187,7 +190,7 @@ pub struct Schedule {
     pub sessions: Vec<Session>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct Session {
     pub reference: Date,
     pub start: OffsetDateTime,
@@ -195,7 +198,7 @@ pub struct Session {
 }
 
 /// The historical tick's description. Used when requesting historical tick data with whatToShow = MIDPOINT
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct TickMidpoint {
     /// timestamp of the historical tick.
     pub timestamp: OffsetDateTime,
@@ -206,7 +209,7 @@ pub struct TickMidpoint {
 }
 
 /// The historical tick's description. Used when requesting historical tick data with whatToShow = BID_ASK.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct TickBidAsk {
     /// Timestamp of the historical tick.
     pub timestamp: OffsetDateTime,
@@ -222,14 +225,14 @@ pub struct TickBidAsk {
     pub size_ask: i32,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct TickAttributeBidAsk {
     pub bid_past_low: bool,
     pub ask_past_high: bool,
 }
 
 /// The historical last tick's description. Used when requesting historical tick data with whatToShow = TRADES.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct TickLast {
     /// Timestamp of the historical tick.
     pub timestamp: OffsetDateTime,
@@ -245,7 +248,7 @@ pub struct TickLast {
     pub special_conditions: String,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
 pub struct TickAttributeLast {
     pub past_limit: bool,
     pub unreported: bool,
@@ -301,13 +304,14 @@ pub(crate) fn head_timestamp(client: &Client, contract: &Contract, what_to_show:
 
     let request_id = client.next_request_id();
     let request = encoders::encode_request_head_timestamp(request_id, contract, what_to_show, use_rth)?;
-
     let subscription = client.send_request(request_id, request)?;
 
-    if let Some(Ok(mut message)) = subscription.next() {
-        decoders::decode_head_timestamp(&mut message)
-    } else {
-        Err(Error::Simple("did not receive head timestamp message".into()))
+    match subscription.next() {
+        Some(Ok(mut message)) if message.message_type() == IncomingMessages::HeadTimestamp => Ok(decoders::decode_head_timestamp(&mut message)?),
+        Some(Ok(message)) => Err(Error::UnexpectedResponse(message)),
+        Some(Err(Error::ConnectionReset)) => head_timestamp(client, contract, what_to_show, use_rth),
+        Some(Err(e)) => Err(e),
+        None => Err(Error::UnexpectedEndOfStream),
     }
 }
 
@@ -335,36 +339,41 @@ pub(crate) fn historical_data(
         )?;
     }
 
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_historical_data(
-        client.server_version(),
-        request_id,
-        contract,
-        end_date,
-        duration,
-        bar_size,
-        what_to_show,
-        use_rth,
-        false,
-        Vec::<crate::contracts::TagValue>::default(),
-    )?;
+    loop {
+        let request_id = client.next_request_id();
+        let request = encoders::encode_request_historical_data(
+            client.server_version(),
+            request_id,
+            contract,
+            end_date,
+            duration,
+            bar_size,
+            what_to_show,
+            use_rth,
+            false,
+            Vec::<crate::contracts::TagValue>::default(),
+        )?;
 
-    let subscription = client.send_request(request_id, request)?;
+        let subscription = client.send_request(request_id, request)?;
 
-    if let Some(Ok(mut message)) = subscription.next() {
-        let time_zone = if let Some(tz) = client.time_zone {
-            tz
-        } else {
-            warn!("server timezone unknown. assuming UTC, but that may be incorrect!");
-            time_tz::timezones::db::UTC
-        };
-        match message.message_type() {
-            IncomingMessages::HistoricalData => decoders::decode_historical_data(client.server_version, time_zone, &mut message),
-            IncomingMessages::Error => Err(Error::Simple(message.peek_string(4))),
-            _ => Err(Error::Simple(format!("unexpected message: {:?}", message.message_type()))),
+        match subscription.next() {
+            Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalData => {
+                return decoders::decode_historical_data(client.server_version, time_zone(client), &mut message)
+            }
+            Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
+            Some(Err(Error::ConnectionReset)) => continue,
+            Some(Err(e)) => return Err(e),
+            None => return Err(Error::UnexpectedEndOfStream),
         }
+    }
+}
+
+fn time_zone(client: &Client) -> &time_tz::Tz {
+    if let Some(tz) = client.time_zone {
+        tz
     } else {
-        Err(Error::Simple("did not receive historical data response".into()))
+        warn!("server timezone unknown. assuming UTC, but that may be incorrect!");
+        time_tz::timezones::db::UTC
     }
 }
 
@@ -386,30 +395,32 @@ pub(crate) fn historical_schedule(
         "It does not support requesting of historical schedule.",
     )?;
 
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_historical_data(
-        client.server_version(),
-        request_id,
-        contract,
-        end_date,
-        duration,
-        BarSize::Day,
-        Some(WhatToShow::Schedule),
-        true,
-        false,
-        Vec::<crate::contracts::TagValue>::default(),
-    )?;
+    loop {
+        let request_id = client.next_request_id();
+        let request = encoders::encode_request_historical_data(
+            client.server_version(),
+            request_id,
+            contract,
+            end_date,
+            duration,
+            BarSize::Day,
+            Some(WhatToShow::Schedule),
+            true,
+            false,
+            Vec::<crate::contracts::TagValue>::default(),
+        )?;
 
-    let subscription = client.send_request(request_id, request)?;
+        let subscription = client.send_request(request_id, request)?;
 
-    if let Some(Ok(mut message)) = subscription.next() {
-        match message.message_type() {
-            IncomingMessages::HistoricalSchedule => decoders::decode_historical_schedule(&mut message),
-            IncomingMessages::Error => Err(Error::Simple(message.peek_string(4))),
-            _ => Err(Error::Simple(format!("unexpected message: {:?}", message.message_type()))),
+        match subscription.next() {
+            Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalSchedule => {
+                return decoders::decode_historical_schedule(&mut message)
+            }
+            Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
+            Some(Err(Error::ConnectionReset)) => continue,
+            Some(Err(e)) => return Err(e),
+            None => return Err(Error::UnexpectedEndOfStream),
         }
-    } else {
-        Err(Error::Simple("did not receive historical schedule response".into()))
     }
 }
 
@@ -421,11 +432,11 @@ pub(crate) fn historical_ticks_bid_ask(
     number_of_ticks: i32,
     use_rth: bool,
     ignore_size: bool,
-) -> Result<TickIterator<TickBidAsk>, Error> {
+) -> Result<TickSubscription<TickBidAsk>, Error> {
     client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
 
     let request_id = client.next_request_id();
-    let message = encoders::encode_request_historical_ticks(
+    let request = encoders::encode_request_historical_ticks(
         request_id,
         contract,
         start,
@@ -435,10 +446,9 @@ pub(crate) fn historical_ticks_bid_ask(
         use_rth,
         ignore_size,
     )?;
+    let subscription = client.send_request(request_id, request)?;
 
-    let messages = client.send_request(request_id, message)?;
-
-    Ok(TickIterator::new(messages))
+    Ok(TickSubscription::new(subscription))
 }
 
 pub(crate) fn historical_ticks_mid_point(
@@ -448,15 +458,14 @@ pub(crate) fn historical_ticks_mid_point(
     end: Option<OffsetDateTime>,
     number_of_ticks: i32,
     use_rth: bool,
-) -> Result<TickIterator<TickMidpoint>, Error> {
+) -> Result<TickSubscription<TickMidpoint>, Error> {
     client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
 
     let request_id = client.next_request_id();
-    let message = encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::MidPoint, use_rth, false)?;
+    let request = encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::MidPoint, use_rth, false)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    let messages = client.send_request(request_id, message)?;
-
-    Ok(TickIterator::new(messages))
+    Ok(TickSubscription::new(subscription))
 }
 
 pub(crate) fn historical_ticks_trade(
@@ -466,118 +475,235 @@ pub(crate) fn historical_ticks_trade(
     end: Option<OffsetDateTime>,
     number_of_ticks: i32,
     use_rth: bool,
-) -> Result<TickIterator<TickLast>, Error> {
+) -> Result<TickSubscription<TickLast>, Error> {
     client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
 
     let request_id = client.next_request_id();
-    let message = encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::Trades, use_rth, false)?;
+    let request = encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::Trades, use_rth, false)?;
+    let subscription = client.send_request(request_id, request)?;
 
-    let messages = client.send_request(request_id, message)?;
-
-    Ok(TickIterator::new(messages))
+    Ok(TickSubscription::new(subscription))
 }
 
 pub(crate) fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: BarSize) -> Result<Vec<HistogramEntry>, Error> {
     client.check_server_version(server_versions::REQ_HISTOGRAM, "It does not support histogram data requests.")?;
 
-    let request_id = client.next_request_id();
-    let message = encoders::encode_request_histogram_data(request_id, contract, use_rth, period)?;
+    loop {
+        let request_id = client.next_request_id();
+        let request = encoders::encode_request_histogram_data(request_id, contract, use_rth, period)?;
+        let subscription = client.send_request(request_id, request)?;
 
-    let subscription = client.send_request(request_id, message)?;
-
-    match subscription.next() {
-        Some(Ok(mut message)) => decoders::decode_histogram_data(&mut message),
-        Some(Err(e)) => Err(e),
-        None => Ok(Vec::new()),
+        match subscription.next() {
+            Some(Ok(mut message)) => return decoders::decode_histogram_data(&mut message),
+            Some(Err(Error::ConnectionReset)) => continue,
+            Some(Err(e)) => return Err(e),
+            None => return Ok(Vec::new()),
+        }
     }
 }
 
-pub(crate) trait TickDecoder<T> {
+pub trait TickDecoder<T> {
+    const MESSAGE_TYPE: IncomingMessages;
     fn decode(message: &mut ResponseMessage) -> Result<(Vec<T>, bool), Error>;
-    fn message_type() -> IncomingMessages;
 }
 
 impl TickDecoder<TickBidAsk> for TickBidAsk {
+    const MESSAGE_TYPE: IncomingMessages = IncomingMessages::HistoricalTickBidAsk;
+
     fn decode(message: &mut ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
         decoders::decode_historical_ticks_bid_ask(message)
-    }
-    fn message_type() -> IncomingMessages {
-        IncomingMessages::HistoricalTickBidAsk
     }
 }
 
 impl TickDecoder<TickLast> for TickLast {
+    const MESSAGE_TYPE: IncomingMessages = IncomingMessages::HistoricalTickLast;
+
     fn decode(message: &mut ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
         decoders::decode_historical_ticks_last(message)
-    }
-    fn message_type() -> IncomingMessages {
-        IncomingMessages::HistoricalTickLast
     }
 }
 
 impl TickDecoder<TickMidpoint> for TickMidpoint {
+    const MESSAGE_TYPE: IncomingMessages = IncomingMessages::HistoricalTick;
+
     fn decode(message: &mut ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
         decoders::decode_historical_ticks_mid_point(message)
     }
-    fn message_type() -> IncomingMessages {
-        IncomingMessages::HistoricalTick
-    }
 }
 
-pub(crate) struct TickIterator<T: TickDecoder<T>> {
-    done: bool,
+pub struct TickSubscription<T: TickDecoder<T>> {
+    done: AtomicBool,
     messages: InternalSubscription,
-    buffer: VecDeque<T>,
+    buffer: Mutex<VecDeque<T>>,
+    error: Mutex<Option<Error>>,
 }
 
-impl<T: TickDecoder<T>> TickIterator<T> {
+impl<T: TickDecoder<T>> TickSubscription<T> {
     fn new(messages: InternalSubscription) -> Self {
         Self {
-            done: false,
+            done: false.into(),
             messages,
-            buffer: VecDeque::new(),
+            buffer: Mutex::new(VecDeque::new()),
+            error: Mutex::new(None),
         }
+    }
+
+    pub fn iter(&self) -> TickSubscriptionIter<T> {
+        TickSubscriptionIter { subscription: self }
+    }
+
+    pub fn try_iter(&self) -> TickSubscriptionTryIter<T> {
+        TickSubscriptionTryIter { subscription: self }
+    }
+
+    pub fn timeout_iter(&self, duration: std::time::Duration) -> TickSubscriptionTimeoutIter<T> {
+        TickSubscriptionTimeoutIter {
+            subscription: self,
+            timeout: duration,
+        }
+    }
+
+    pub fn next(&self) -> Option<T> {
+        self.next_helper(|| self.messages.next())
+    }
+
+    pub fn try_next(&self) -> Option<T> {
+        self.next_helper(|| self.messages.try_next())
+    }
+
+    pub fn next_timeout(&self, duration: std::time::Duration) -> Option<T> {
+        self.next_helper(|| self.messages.next_timeout(duration))
+    }
+
+    fn next_helper<F>(&self, next_response: F) -> Option<T>
+    where
+        F: Fn() -> Option<Response>,
+    {
+        self.clear_error();
+
+        loop {
+            if let Some(message) = self.next_buffered() {
+                return Some(message);
+            }
+
+            if self.done.load(Ordering::Relaxed) {
+                return None;
+            }
+
+            match self.fill_buffer(next_response()) {
+                Ok(()) => continue,
+                Err(()) => return None,
+            }
+        }
+    }
+
+    fn fill_buffer(&self, response: Option<Response>) -> Result<(), ()> {
+        match response {
+            Some(Ok(mut message)) if message.message_type() == T::MESSAGE_TYPE => {
+                let mut buffer = self.buffer.lock().unwrap();
+
+                let (ticks, done) = T::decode(&mut message).unwrap();
+
+                buffer.append(&mut ticks.into());
+                self.done.store(done, Ordering::Relaxed);
+
+                Ok(())
+            }
+            Some(Ok(message)) => {
+                debug!("unexpected message: {:?}", message);
+                Ok(())
+            }
+            Some(Err(e)) => {
+                self.set_error(e);
+                Err(())
+            }
+            None => Err(()),
+        }
+    }
+
+    fn next_buffered(&self) -> Option<T> {
+        let mut buffer = self.buffer.lock().unwrap();
+        buffer.pop_front()
+    }
+
+    fn set_error(&self, e: Error) {
+        let mut error = self.error.lock().unwrap();
+        *error = Some(e);
+    }
+
+    fn clear_error(&self) {
+        let mut error = self.error.lock().unwrap();
+        *error = None;
     }
 }
 
-impl<T: TickDecoder<T> + Debug> Iterator for TickIterator<T> {
+/// An iterator that yields items as they become available, blocking if necessary.
+pub struct TickSubscriptionIter<'a, T: TickDecoder<T>> {
+    subscription: &'a TickSubscription<T>,
+}
+
+impl<'a, T: TickDecoder<T>> Iterator for TickSubscriptionIter<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if !self.buffer.is_empty() {
-            return self.buffer.pop_front();
-        }
+        self.subscription.next()
+    }
+}
 
-        if self.done {
-            return None;
-        }
+impl<'a, T: TickDecoder<T>> IntoIterator for &'a TickSubscription<T> {
+    type Item = T;
+    type IntoIter = TickSubscriptionIter<'a, T>;
 
-        loop {
-            match self.messages.next() {
-                Some(Ok(mut message)) => {
-                    if message.message_type() == Self::Item::message_type() {
-                        let (ticks, done) = Self::Item::decode(&mut message).unwrap();
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
 
-                        self.buffer.append(&mut ticks.into());
-                        self.done = done;
+/// An iterator that yields items as they become available, blocking if necessary.
+pub struct TickSubscriptionOwnedIter<T: TickDecoder<T>> {
+    subscription: TickSubscription<T>,
+}
 
-                        if self.buffer.is_empty() && self.done {
-                            return None;
-                        }
+impl<T: TickDecoder<T>> Iterator for TickSubscriptionOwnedIter<T> {
+    type Item = T;
 
-                        if !self.buffer.is_empty() {
-                            return self.buffer.pop_front();
-                        }
-                    } else if message.message_type() == IncomingMessages::Error {
-                        error!("error reading ticks: {:?}", message.peek_string(4));
-                        return None;
-                    } else {
-                        error!("unexpected message: {:?}", message)
-                    }
-                }
-                // TODO enumerate
-                _ => return None,
-            }
-        }
+    fn next(&mut self) -> Option<Self::Item> {
+        self.subscription.next()
+    }
+}
+
+impl<T: TickDecoder<T>> IntoIterator for TickSubscription<T> {
+    type Item = T;
+    type IntoIter = TickSubscriptionOwnedIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        TickSubscriptionOwnedIter { subscription: self }
+    }
+}
+
+/// An iterator that yields items if they are available, without waiting.
+pub struct TickSubscriptionTryIter<'a, T: TickDecoder<T>> {
+    subscription: &'a TickSubscription<T>,
+}
+
+impl<'a, T: TickDecoder<T>> Iterator for TickSubscriptionTryIter<'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.subscription.try_next()
+    }
+}
+
+/// An iterator that waits for the specified timeout duration for available data.
+pub struct TickSubscriptionTimeoutIter<'a, T: TickDecoder<T>> {
+    subscription: &'a TickSubscription<T>,
+    timeout: std::time::Duration,
+}
+
+impl<'a, T: TickDecoder<T>> Iterator for TickSubscriptionTimeoutIter<'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.subscription.next_timeout(self.timeout)
     }
 }
