@@ -224,12 +224,13 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::HistoricalNewsEnd
         | IncomingMessages::NewsArticle
         | IncomingMessages::TickNews
+        | IncomingMessages::TickOptionComputation
+        | IncomingMessages::TickReqParams
         | IncomingMessages::PnL
         | IncomingMessages::PnLSingle
         | IncomingMessages::SecurityDefinitionOptionParameter
         | IncomingMessages::SecurityDefinitionOptionParameterEnd
         | IncomingMessages::HistogramData
-        | IncomingMessages::TickOptionComputation
         | IncomingMessages::WshMetaData
         | IncomingMessages::WshEventData => Some(1),
         IncomingMessages::ContractDataEnd
@@ -248,7 +249,6 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         | IncomingMessages::TickSize
         | IncomingMessages::TickString
         | IncomingMessages::TickEFP
-        | IncomingMessages::TickReqParams
         | IncomingMessages::TickGeneric => Some(2),
         _ => {
             debug!("could not determine request id index for {kind:?}");
