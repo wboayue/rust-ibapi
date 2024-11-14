@@ -304,7 +304,7 @@ impl TcpMessageBus {
                     // First check matching orders channel
                     (Some(order_id), _) if self.orders.contains(&order_id) => {
                         if let Err(e) = self.orders.send(&order_id, Ok(message)) {
-                            error!("error routing message for order_id({order_id}): {e}");
+                            warn!("error routing message for order_id({order_id}): {e}");
                         }
                     }
                     (_, Some(request_id)) if self.requests.contains(&request_id) => {
@@ -315,11 +315,11 @@ impl TcpMessageBus {
                         }
 
                         if let Err(e) = self.requests.send(&request_id, Ok(message)) {
-                            error!("error routing message for request_id({request_id}): {e}");
+                            warn!("error routing message for request_id({request_id}): {e}");
                         }
                     }
                     _ => {
-                        error!("could not route message {message:?}");
+                        warn!("could not route message {message:?}");
                     }
                 }
             }
@@ -328,16 +328,16 @@ impl TcpMessageBus {
                     // First check matching orders channel
                     (Some(order_id), _) if self.orders.contains(&order_id) => {
                         if let Err(e) = self.orders.send(&order_id, Ok(message)) {
-                            error!("error routing message for order_id({order_id}): {e}");
+                            warn!("error routing message for order_id({order_id}): {e}");
                         }
                     }
                     (_, Some(request_id)) if self.requests.contains(&request_id) => {
                         if let Err(e) = self.requests.send(&request_id, Ok(message)) {
-                            error!("error routing message for request_id({request_id}): {e}");
+                            warn!("error routing message for request_id({request_id}): {e}");
                         }
                     }
                     _ => {
-                        error!("could not route message {message:?}");
+                        warn!("could not route message {message:?}");
                     }
                 }
             }
@@ -345,7 +345,7 @@ impl TcpMessageBus {
                 if let Some(order_id) = message.order_id() {
                     if self.orders.contains(&order_id) {
                         if let Err(e) = self.orders.send(&order_id, Ok(message)) {
-                            error!("error routing message for order_id({order_id}): {e}");
+                            warn!("error routing message for order_id({order_id}): {e}");
                         }
                     } else if self.shared_channels.contains_sender(IncomingMessages::OpenOrder) {
                         self.shared_channels.send_message(message.message_type(), &message);
@@ -358,7 +358,7 @@ impl TcpMessageBus {
             IncomingMessages::CommissionsReport => {
                 if let Some(execution_id) = message.execution_id() {
                     if let Err(e) = self.executions.send(&execution_id, Ok(message)) {
-                        error!("error sending commission report for execution {}: {}", execution_id, e);
+                        warn!("error sending commission report for execution {}: {}", execution_id, e);
                     }
                 }
             }
@@ -563,10 +563,10 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug + Clone> Send
         debug!("senders: {senders:?}");
         if let Some(sender) = senders.get(id) {
             if let Err(err) = sender.send(message) {
-                error!("error sending: {id:?}, {err}")
+                warn!("error sending: {id:?}, {err}")
             }
         } else {
-            error!("no recipient found for: {id:?}, {message:?}")
+            warn!("no recipient found for: {id:?}, {message:?}")
         }
         Ok(())
     }
@@ -683,7 +683,7 @@ impl Drop for InternalSubscription {
     fn drop(&mut self) {
         if let (Some(request_id), Some(signaler)) = (self.request_id, &self.signaler) {
             if let Err(e) = signaler.send(Signal::Request(request_id)) {
-                error!("error sending drop signal: {e}");
+                warn!("error sending drop signal: {e}");
             }
         }
 
@@ -1056,12 +1056,12 @@ fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, Opti
         Ok(connected_at) => match connected_at.assume_timezone(timezone) {
             OffsetResult::Some(date) => (Some(date), Some(timezone)),
             _ => {
-                error!("error setting timezone");
+                warn!("error setting timezone");
                 (None, Some(timezone))
             }
         },
         Err(err) => {
-            error!("could not parse connection time from {date_str}: {err}");
+            warn!("could not parse connection time from {date_str}: {err}");
             (None, Some(timezone))
         }
     }

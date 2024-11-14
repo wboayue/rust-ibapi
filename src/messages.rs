@@ -209,49 +209,50 @@ pub fn order_id_index(kind: IncomingMessages) -> Option<usize> {
 
 pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
     match kind {
-        IncomingMessages::ContractData
-        | IncomingMessages::TickByTick
-        | IncomingMessages::SymbolSamples
-        | IncomingMessages::OpenOrder
-        | IncomingMessages::ExecutionData
-        | IncomingMessages::HeadTimestamp
-        | IncomingMessages::HistoricalData
-        | IncomingMessages::HistoricalSchedule
-        | IncomingMessages::HistoricalTick
-        | IncomingMessages::HistoricalTickBidAsk
-        | IncomingMessages::HistoricalTickLast
-        | IncomingMessages::HistoricalNews
-        | IncomingMessages::HistoricalNewsEnd
-        | IncomingMessages::NewsArticle
-        | IncomingMessages::TickNews
-        | IncomingMessages::TickOptionComputation
-        | IncomingMessages::TickReqParams
-        | IncomingMessages::PnL
-        | IncomingMessages::PnLSingle
-        | IncomingMessages::SecurityDefinitionOptionParameter
-        | IncomingMessages::SecurityDefinitionOptionParameterEnd
-        | IncomingMessages::HistogramData
-        | IncomingMessages::WshMetaData
-        | IncomingMessages::WshEventData => Some(1),
-        IncomingMessages::ContractDataEnd
-        | IncomingMessages::RealTimeBars
-        | IncomingMessages::Error
-        | IncomingMessages::ExecutionDataEnd
-        | IncomingMessages::AccountSummary
-        | IncomingMessages::AccountSummaryEnd
-        | IncomingMessages::AccountUpdateMulti
-        | IncomingMessages::AccountUpdateMultiEnd
-        | IncomingMessages::MarketDepth
-        | IncomingMessages::MarketDepthL2
-        | IncomingMessages::ScannerData
-        | IncomingMessages::TickSnapshotEnd
-        | IncomingMessages::TickPrice
-        | IncomingMessages::TickSize
-        | IncomingMessages::TickString
-        | IncomingMessages::TickEFP
-        | IncomingMessages::TickGeneric => Some(2),
+        IncomingMessages::AccountSummary => Some(2),
+        IncomingMessages::AccountSummaryEnd => Some(2),
+        IncomingMessages::AccountUpdateMulti => Some(2),
+        IncomingMessages::AccountUpdateMultiEnd => Some(2),
+        IncomingMessages::ContractData => Some(1),
+        IncomingMessages::ContractDataEnd => Some(2),
+        IncomingMessages::Error => Some(2),
+        IncomingMessages::ExecutionData => Some(1),
+        IncomingMessages::ExecutionDataEnd => Some(2),
+        IncomingMessages::HeadTimestamp => Some(1),
+        IncomingMessages::HistogramData => Some(1),
+        IncomingMessages::HistoricalData => Some(1),
+        IncomingMessages::HistoricalNews => Some(1),
+        IncomingMessages::HistoricalNewsEnd => Some(1),
+        IncomingMessages::HistoricalSchedule => Some(1),
+        IncomingMessages::HistoricalTick => Some(1),
+        IncomingMessages::HistoricalTickBidAsk => Some(1),
+        IncomingMessages::HistoricalTickLast => Some(1),
+        IncomingMessages::MarketDepth => Some(2),
+        IncomingMessages::MarketDepthL2 => Some(2),
+        IncomingMessages::NewsArticle => Some(1),
+        IncomingMessages::OpenOrder => Some(1),
+        IncomingMessages::PnL => Some(1),
+        IncomingMessages::PnLSingle => Some(1),
+        IncomingMessages::RealTimeBars => Some(2),
+        IncomingMessages::ScannerData => Some(2),
+        IncomingMessages::SecurityDefinitionOptionParameter => Some(1),
+        IncomingMessages::SecurityDefinitionOptionParameterEnd => Some(1),
+        IncomingMessages::SymbolSamples => Some(1),
+        IncomingMessages::TickByTick => Some(1),
+        IncomingMessages::TickEFP => Some(2),
+        IncomingMessages::TickGeneric => Some(2),
+        IncomingMessages::TickNews => Some(1),
+        IncomingMessages::TickOptionComputation => Some(1),
+        IncomingMessages::TickPrice => Some(2),
+        IncomingMessages::TickReqParams => Some(2),
+        IncomingMessages::TickSize => Some(2),
+        IncomingMessages::TickSnapshotEnd => Some(2),
+        IncomingMessages::TickString => Some(2),
+        IncomingMessages::WshEventData => Some(1),
+        IncomingMessages::WshMetaData => Some(1),
+
         _ => {
-            debug!("could not determine request id index for {kind:?}");
+            debug!("could not determine request id index for {kind:?} (this message type may not have a request id).");
             None
         }
     }
