@@ -1,6 +1,5 @@
 use crate::contracts::{ComboLegOpenClose, SecurityType};
 use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A};
-use crate::testdata::responses::NOTICE_DATA_FARM_CONNECTION;
 
 use super::*;
 
@@ -278,7 +277,7 @@ fn test_request_id_index_invalid() {
 
 #[test]
 fn test_notice() {
-    let message = ResponseMessage::from(NOTICE_DATA_FARM_CONNECTION);
+    let message = ResponseMessage::from("4\02\0-1\02107\0HMDS data farm connection is inactive.\0");
 
     let notice = Notice::from(&message);
 
