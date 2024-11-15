@@ -1,4 +1,4 @@
-use ibapi::{scanner, Client};
+use ibapi::{orders, scanner, Client};
 
 // This example demonstrates setting up a market scanner.
 
@@ -7,17 +7,16 @@ fn main() {
 
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
-    let scanner_subscription = scanner::ScannerSubscription {
-        number_of_rows: 10,
-        instrument: Some("STK".to_string()),
-        location_code: Some("STK.US.MAJOR".to_string()),
-        scan_code: Some("MOST_ACTIVE".to_string()),
-        ..Default::default()
-    };
+    let scanner_subscription = complex_orders_and_trades();
+    let filter = vec![orders::TagValue {
+        tag: "underConID".to_string(),
+        value: "265598".to_string(),
+    }];
 
     let subscription = client
-        .scanner_subscription(&scanner_subscription, &Vec::default())
+        .scanner_subscription(&scanner_subscription, &filter)
         .expect("request scanner parameters failed");
+
     for scan_results in subscription {
         for scan_data in scan_results.iter() {
             println!(
@@ -26,5 +25,14 @@ fn main() {
             );
         }
         break;
+    }
+}
+
+fn complex_orders_and_trades() -> scanner::ScannerSubscription {
+    scanner::ScannerSubscription {
+        instrument: Some("NATCOMB".to_string()),
+        location_code: Some("NATCOMB.OPT.US".to_string()),
+        scan_code: Some("COMBO_LATEST_TRADE".to_string()),
+        ..Default::default()
     }
 }

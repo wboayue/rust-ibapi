@@ -1,7 +1,3 @@
-// error
-
-pub const NOTICE_DATA_FARM_CONNECTION: &str = "4|2|-1|2107|HMDS data farm connection is inactive.|";
-
 // accounts
 
 pub const MANAGED_ACCOUNT: &str = "15|1|DU1234567,DU7654321|";
