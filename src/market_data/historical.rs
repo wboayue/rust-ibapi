@@ -265,6 +265,7 @@ pub enum WhatToShow {
     OptionImpliedVolatility,
     FeeRate,
     Schedule,
+    AdjustedLast,
 }
 
 impl std::fmt::Display for WhatToShow {
@@ -279,6 +280,7 @@ impl std::fmt::Display for WhatToShow {
             Self::OptionImpliedVolatility => write!(f, "OPTION_IMPLIED_VOLATILITY"),
             Self::FeeRate => write!(f, "FEE_RATE"),
             Self::Schedule => write!(f, "SCHEDULE"),
+            Self::AdjustedLast => write!(f, "ADJUSTED_LAST"),
         }
     }
 }

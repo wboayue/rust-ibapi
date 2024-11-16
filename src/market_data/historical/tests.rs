@@ -174,6 +174,7 @@ fn test_what_to_show() {
     assert_eq!(WhatToShow::OptionImpliedVolatility.to_string(), "OPTION_IMPLIED_VOLATILITY");
     assert_eq!(WhatToShow::FeeRate.to_string(), "FEE_RATE");
     assert_eq!(WhatToShow::Schedule.to_string(), "SCHEDULE");
+    assert_eq!(WhatToShow::AdjustedLast.to_string(), "ADJUSTED_LAST");
 }
 
 #[test]
