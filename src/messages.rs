@@ -244,7 +244,7 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         IncomingMessages::TickNews => Some(1),
         IncomingMessages::TickOptionComputation => Some(1),
         IncomingMessages::TickPrice => Some(2),
-        IncomingMessages::TickReqParams => Some(2),
+        IncomingMessages::TickReqParams => Some(1),
         IncomingMessages::TickSize => Some(2),
         IncomingMessages::TickSnapshotEnd => Some(2),
         IncomingMessages::TickString => Some(2),
