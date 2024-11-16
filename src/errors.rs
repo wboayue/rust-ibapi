@@ -17,6 +17,7 @@ pub enum Error {
     Parse(usize, String, String),
     ServerVersion(i32, i32, String),
     Simple(String),
+    InvalidArgument(String),
     ConnectionFailed,
     ConnectionReset,
     Cancelled,
@@ -49,6 +50,7 @@ impl std::fmt::Display for Error {
             Error::UnexpectedEndOfStream => write!(f, "UnexpectedEndOfStream"),
 
             Error::Simple(ref err) => write!(f, "error occurred: {err}"),
+            Error::InvalidArgument(ref err) => write!(f, "InvalidArgument: {err}"),
         }
     }
 }
