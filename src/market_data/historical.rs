@@ -341,6 +341,10 @@ pub(crate) fn historical_data(
         )?;
     }
 
+    if end_date.is_some() && what_to_show == Some(WhatToShow::AdjustedLast) {
+        return Err(Error::InvalidArgument("end_date must be None when requesting WhatToShow::AdjustedLast. You might have called Client::historical_data with WhatToShow::AdjustedLast".into()));
+    }
+
     loop {
         let request_id = client.next_request_id();
         let request = encoders::encode_request_historical_data(

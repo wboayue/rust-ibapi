@@ -18,18 +18,7 @@ The [Client documentation](https://docs.rs/ibapi/latest/ibapi/struct.Client.html
 
 ## Install
 
-Run the following Cargo command in your project directory:
-
-```bash
-cargo add ibapi
-```
-
-Or add the following line to your `Cargo.toml`:
-
-```toml
-ibapi = "1.0.0"
-```
-> **Note**: Check [crates.io/crates/ibapi](https://crates.io/crates/ibapi) for the latest available version.
+Check [crates.io/crates/ibapi](https://crates.io/crates/ibapi) for the latest available version and installation instructions.
 
 ## Examples
 
@@ -245,7 +234,7 @@ fn main() {
         });
         handles.push(handle);
     }
-    
+
     handles.into_iter().for_each(|handle| handle.join().unwrap());
 }
 ```
