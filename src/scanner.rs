@@ -21,6 +21,8 @@ pub(super) fn scanner_parameters(client: &Client) -> Result<String, Error> {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// Scanner subscription parameters.
 pub struct ScannerSubscription {
     /// The number of rows to be returned for the query
     pub number_of_rows: i32,
