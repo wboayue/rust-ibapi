@@ -13,10 +13,6 @@ use super::{
 mod tests;
 
 pub(super) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, Error> {
-    if message.len() < 11 {
-        return Err(Error::Simple("Invalid message length".into()));
-    }
-
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
