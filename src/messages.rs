@@ -439,6 +439,10 @@ impl ResponseMessage {
     }
 
     pub fn peek_int(&self, i: usize) -> Result<i32, Error> {
+        if self.i >= self.fields.len() {
+            return Err(Error::Simple("expected int and found end of message".into()));
+        }
+
         let field = &self.fields[i];
         match field.parse() {
             Ok(val) => Ok(val),
@@ -451,6 +455,10 @@ impl ResponseMessage {
     }
 
     pub fn next_int(&mut self) -> Result<i32, Error> {
+        if self.i >= self.fields.len() {
+            return Err(Error::Simple("expected int and found end of message".into()));
+        }
+
         let field = &self.fields[self.i];
         self.i += 1;
 
@@ -461,6 +469,10 @@ impl ResponseMessage {
     }
 
     pub fn next_optional_int(&mut self) -> Result<Option<i32>, Error> {
+        if self.i >= self.fields.len() {
+            return Err(Error::Simple("expected optional int and found end of message".into()));
+        }
+
         let field = &self.fields[self.i];
         self.i += 1;
 
@@ -475,6 +487,10 @@ impl ResponseMessage {
     }
 
     pub fn next_bool(&mut self) -> Result<bool, Error> {
+        if self.i >= self.fields.len() {
+            return Err(Error::Simple("expected bool and found end of message".into()));
+        }
+
         let field = &self.fields[self.i];
         self.i += 1;
 
@@ -482,6 +498,10 @@ impl ResponseMessage {
     }
 
     pub fn next_long(&mut self) -> Result<i64, Error> {
+        if self.i >= self.fields.len() {
+            return Err(Error::Simple("expected long and found end of message".into()));
+        }
+
         let field = &self.fields[self.i];
         self.i += 1;
 
@@ -492,6 +512,10 @@ impl ResponseMessage {
     }
 
     pub fn next_optional_long(&mut self) -> Result<Option<i64>, Error> {
+        if self.i >= self.fields.len() {
+            return Err(Error::Simple("expected optional long and found end of message".into()));
+        }
+
         let field = &self.fields[self.i];
         self.i += 1;
 
@@ -506,6 +530,10 @@ impl ResponseMessage {
     }
 
     pub fn next_date_time(&mut self) -> Result<OffsetDateTime, Error> {
+        if self.i >= self.fields.len() {
+            return Err(Error::Simple("expected datetime and found end of message".into()));
+        }
+
         let field = &self.fields[self.i];
         self.i += 1;
 
@@ -522,12 +550,20 @@ impl ResponseMessage {
     }
 
     pub fn next_string(&mut self) -> Result<String, Error> {
+        if self.i >= self.fields.len() {
+            return Err(Error::Simple("expected string and found end of message".into()));
+        }
+
         let field = &self.fields[self.i];
         self.i += 1;
         Ok(String::from(field))
     }
 
     pub fn next_double(&mut self) -> Result<f64, Error> {
+        if self.i >= self.fields.len() {
+            return Err(Error::Simple("expected double and found end of message".into()));
+        }
+
         let field = &self.fields[self.i];
         self.i += 1;
 
@@ -542,6 +578,10 @@ impl ResponseMessage {
     }
 
     pub fn next_optional_double(&mut self) -> Result<Option<f64>, Error> {
+        if self.i >= self.fields.len() {
+            return Err(Error::Simple("expected optional double and found end of message".into()));
+        }
+
         let field = &self.fields[self.i];
         self.i += 1;
 
