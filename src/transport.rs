@@ -780,7 +780,7 @@ impl SubscriptionBuilder {
 
 #[derive(Default, Clone, Debug)]
 pub(crate) struct ConnectionMetadata {
-    next_order_id: i32,
+    pub(crate) next_order_id: i32,
     pub(crate) client_id: i32,
     pub(crate) server_version: i32,
     pub(crate) managed_accounts: String,
