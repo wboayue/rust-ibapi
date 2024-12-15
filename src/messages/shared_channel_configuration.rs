@@ -41,7 +41,7 @@ pub(crate) const CHANNEL_MAPPINGS: &[ChannelMapping] = &[
     },
     ChannelMapping {
         request: OutgoingMessages::RequestCompletedOrders,
-        responses: &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus, IncomingMessages::OpenOrderEnd, IncomingMessages::CompletedOrdersEnd],
+        responses: &[IncomingMessages::CompletedOrder, IncomingMessages::CompletedOrdersEnd],
     },
     ChannelMapping {
         request: OutgoingMessages::RequestManagedAccounts,
