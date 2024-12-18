@@ -9,6 +9,7 @@
 //! - Real-time PnL updates for individual positions
 //!
 
+use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 use crate::client::{DataStream, ResponseContext, SharesChannel, Subscription};
@@ -21,7 +22,7 @@ mod encoders;
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 /// Account information as it appears in the TWS’ Account Summary Window
 pub struct AccountSummary {
     /// The account identifier.
@@ -126,7 +127,7 @@ impl DataStream<AccountSummaries> for AccountSummaries {
 }
 
 // Realtime PnL update for account.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct PnL {
     /// DailyPnL for the position
     pub daily_pnl: f64,
@@ -150,7 +151,7 @@ impl DataStream<PnL> for PnL {
 }
 
 // Realtime PnL update for a position in account.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct PnLSingle {
     // Current size of the position
     pub position: f64,
@@ -177,7 +178,7 @@ impl DataStream<PnLSingle> for PnLSingle {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Position {
     /// Account holding position
     pub account: String,
@@ -220,7 +221,7 @@ pub enum PositionUpdateMulti {
 }
 
 /// Portfolio's open positions.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PositionMulti {
     /// The account holding the position.
     pub account: String,
@@ -251,7 +252,7 @@ impl DataStream<PositionUpdateMulti> for PositionUpdateMulti {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct FamilyCode {
     /// Account ID
     pub account_id: String,
@@ -300,7 +301,7 @@ impl DataStream<AccountUpdate> for AccountUpdate {
 }
 
 /// A value of subscribed account's information.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct AccountValue {
     /// The value being updated.
     pub key: String,
@@ -313,7 +314,7 @@ pub struct AccountValue {
 }
 
 /// Subscribed account's portfolio.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct AccountPortfolioValue {
     /// The Contract for which a position is held.
     pub contract: Contract,
@@ -334,7 +335,7 @@ pub struct AccountPortfolioValue {
 }
 
 /// Last time at which the account was updated.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct AccountUpdateTime {
     /// The last update system time.
     pub timestamp: String,
@@ -351,7 +352,7 @@ pub enum AccountUpdateMulti {
 }
 
 // Provides the account updates.
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct AccountMultiValue {
     /// he account with updates.
     pub account: String,
