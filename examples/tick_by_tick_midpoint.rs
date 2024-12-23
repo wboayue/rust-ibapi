@@ -1,10 +1,10 @@
 use std::time::Duration;
 
 use ibapi::contracts::Contract;
-use ibapi::market_data::realtime::{LastTicks, MidpointTicks};
+use ibapi::market_data::realtime::MidpointTicks;
 use ibapi::Client;
 
-// This example demonstrates how to stream tick by tick data for the last price of a contract.
+// This example demonstrates how to stream tick by tick data for the midpoint price of a contract.
 
 fn main() {
     env_logger::init();
@@ -18,7 +18,7 @@ fn main() {
     let ticks = client.tick_by_tick_midpoint(&contract, 0, false).expect("failed to get ticks");
 
     println!(
-        "streaming last price for security_type: {:?}, symbol: {}",
+        "streaming midpoint price for security_type: {:?}, symbol: {}",
         contract.security_type, contract.symbol
     );
 

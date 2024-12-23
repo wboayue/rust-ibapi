@@ -1115,7 +1115,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<Subscription<'a, realtime::BidAsk>, Error> {
+    ) -> Result<Subscription<'a, realtime::BidAskTicks>, Error> {
         realtime::tick_by_tick_bid_ask(self, contract, number_of_ticks, ignore_size)
     }
 

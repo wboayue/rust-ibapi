@@ -34,7 +34,13 @@ pub enum BarSize {
     // Day,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub enum BidAskTicks {
+    BidAsk(BidAsk),
+    Notice(Notice),
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct BidAsk {
     /// The spread's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     pub time: OffsetDateTime,
@@ -50,11 +56,15 @@ pub struct BidAsk {
     pub bid_ask_attribute: BidAskAttribute,
 }
 
-impl DataStream<BidAsk> for BidAsk {
+impl DataStream<BidAskTicks> for BidAskTicks {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
-        decoders::decode_bid_ask_tick(message)
+        match message.message_type() {
+            IncomingMessages::TickByTick => Ok(BidAskTicks::BidAsk(decoders::decode_bid_ask_tick(message)?)),
+            IncomingMessages::Error => Ok(BidAskTicks::Notice(Notice::from(message))),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
+        }
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
@@ -468,7 +478,7 @@ pub(crate) fn tick_by_tick_bid_ask<'a>(
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<Subscription<'a, BidAsk>, Error> {
+) -> Result<Subscription<'a, BidAskTicks>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();

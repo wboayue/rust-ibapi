@@ -18,7 +18,7 @@ fn main() {
     let ticks = client.tick_by_tick_all_last(&contract, 0, false).expect("failed to get ticks");
 
     println!(
-        "streaming last price for security_type: {:?}, symbol: {}",
+        "streaming all last price for security_type: {:?}, symbol: {}",
         contract.security_type, contract.symbol
     );
 

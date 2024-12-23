@@ -1,10 +1,10 @@
 use std::time::Duration;
 
 use ibapi::contracts::Contract;
-use ibapi::market_data::realtime::LastTicks;
+use ibapi::market_data::realtime::BidAskTicks;
 use ibapi::Client;
 
-// This example demonstrates how to stream tick by tick data for the last price of a contract.
+// This example demonstrates how to stream tick by tick data for the bid and ask price of a contract.
 
 fn main() {
     env_logger::init();
@@ -18,22 +18,20 @@ fn main() {
     let ticks = client.tick_by_tick_bid_ask(&contract, 0, false).expect("failed to get ticks");
 
     println!(
-        "streaming last price for security_type: {:?}, symbol: {}",
+        "streaming bid/ask price for security_type: {:?}, symbol: {}",
         contract.security_type, contract.symbol
     );
 
     for (i, tick) in ticks.timeout_iter(Duration::from_secs(10)).enumerate() {
-        println!("{}: {i:?} {tick:?}", contract.symbol);
-
-        // match tick {
-        //     TickLast::Trade(trade) => {
-        //         println!("{}: {i:?} {trade:?}", contract.symbol);
-        //     }
-        //     TickLast::Notice(notice) => {
-        //         // server could send a notice if it doesn't recognize the contract
-        //         println!("error_code: {}, error_message: {}", notice.code, notice.message);
-        //     }
-        // }
+        match tick {
+            BidAskTicks::BidAsk(bid_ask) => {
+                println!("{}: {i:?} {bid_ask:?}", contract.symbol);
+            }
+            BidAskTicks::Notice(notice) => {
+                // server could send a notice if it doesn't recognize the contract
+                println!("error_code: {}, error_message: {}", notice.code, notice.message);
+            }
+        }
     }
 
     // check for errors during streaming
