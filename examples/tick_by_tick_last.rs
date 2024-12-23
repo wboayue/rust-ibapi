@@ -35,7 +35,7 @@ fn main() {
     }
 
     // check for errors during streaming
-    if ticks.error().is_some() {
-        println!("error: {}", ticks.error().unwrap());
+    if let Some(error) = ticks.error() {
+        println!("error: {}", error);
     }
 }
