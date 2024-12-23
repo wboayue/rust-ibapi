@@ -7,6 +7,8 @@ use ibapi::contracts::Contract;
 use ibapi::Client;
 
 fn main() {
+    env_logger::init();
+
     let matches = Command::new("tick_by_tick")
         .version("1.0")
         .author("Wil Boayue <wil@wsbsolutions.com")

@@ -17,15 +17,19 @@ fn test_tick_by_tick_last() {
 
     // Test receiving data
     let trades = result.expect("Failed to receive tick-by-tick last data");
-    let received_trades: Vec<Trade> = trades.iter().take(1).collect();
+    let received_trades: Vec<TickLast> = trades.iter().take(1).collect();
 
     assert_eq!(received_trades.len(), 1, "Should receive 1 trade");
 
     // Verify trade data
     let trade = &received_trades[0];
-    assert_eq!(trade.price, 3895.25, "Wrong price");
-    assert_eq!(trade.size, 7, "Wrong size");
-    assert_eq!(trade.exchange, "NASDAQ", "Wrong exchange");
+    if let TickLast::Trade(trade) = trade {
+        assert_eq!(trade.price, 3895.25, "Wrong price");
+        assert_eq!(trade.size, 7, "Wrong size");
+        assert_eq!(trade.exchange, "NASDAQ", "Wrong exchange");
+    } else {
+        panic!("Expected trade, got {:?}", trade);
+    }
 
     // Verify request message uses "Last" instead of "AllLast"
     let request_messages = client.message_bus.request_messages();

@@ -125,6 +125,12 @@ impl DataStream<Bar> for Bar {
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub enum TickLast {
+    Trade(Trade),
+    Notice(Notice),
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Trade {
     /// Tick type: "Last" or "AllLast"
     pub tick_type: String,
@@ -142,11 +148,15 @@ pub struct Trade {
     pub special_conditions: String,
 }
 
-impl DataStream<Trade> for Trade {
+impl DataStream<TickLast> for TickLast {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
-        decoders::decode_trade_tick(message)
+        match message.message_type() {
+            IncomingMessages::TickByTick => Ok(TickLast::Trade(decoders::decode_trade_tick(message)?)),
+            IncomingMessages::Error => Ok(TickLast::Notice(Notice::from(message))),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
+        }
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
@@ -398,7 +408,7 @@ pub(crate) fn tick_by_tick_all_last<'a>(
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<Subscription<'a, Trade>, Error> {
+) -> Result<Subscription<'a, TickLast>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -430,7 +440,7 @@ pub(crate) fn tick_by_tick_last<'a>(
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<Subscription<'a, Trade>, Error> {
+) -> Result<Subscription<'a, TickLast>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
