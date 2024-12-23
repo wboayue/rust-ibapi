@@ -75,12 +75,12 @@ fn test_tick_by_tick_all_last() {
     let trades = trades.expect("Failed to create tick-by-tick subscription");
 
     // Test receiving data
-    let received_trades: Vec<TickLast> = trades.iter().take(2).collect();
+    let received_trades: Vec<LastTicks> = trades.iter().take(2).collect();
 
     assert_eq!(received_trades.len(), 2, "Should receive 2 trades");
 
     // Verify first trade
-    if let TickLast::Trade(trade) = &received_trades[0] {
+    if let LastTicks::Trade(trade) = &received_trades[0] {
         assert_eq!(trade.price, 3895.25, "Wrong price for first trade");
         assert_eq!(trade.size, 7, "Wrong size for first trade");
         assert_eq!(trade.exchange, "NASDAQ", "Wrong exchange for first trade");
@@ -89,7 +89,7 @@ fn test_tick_by_tick_all_last() {
     }
 
     // Verify second trade
-    if let TickLast::Trade(trade) = &received_trades[1] {
+    if let LastTicks::Trade(trade) = &received_trades[1] {
         assert_eq!(trade.price, 3895.50, "Wrong price for second trade");
         assert_eq!(trade.size, 5, "Wrong size for second trade");
         assert_eq!(trade.exchange, "NYSE", "Wrong exchange for second trade");
