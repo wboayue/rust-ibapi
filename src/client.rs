@@ -12,7 +12,7 @@ use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, Famil
 use crate::contracts::{Contract, OptionComputation, SecurityType};
 use crate::errors::Error;
 use crate::market_data::historical::{self, HistogramEntry};
-use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescription, MarketDepths, MidPoint, MidpointTicks, TickTypes, WhatToShow};
+use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescription, MarketDepths, MidpointTicks, TickTypes, WhatToShow};
 use crate::market_data::MarketDataType;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
