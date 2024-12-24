@@ -1,6 +1,6 @@
 use std::{num::ParseIntError, string::FromUtf8Error, sync::Arc};
 
-use crate::messages::ResponseMessage;
+use crate::messages::{ResponseMessage, CODE_INDEX, MESSAGE_INDEX};
 
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -25,6 +25,7 @@ pub enum Error {
     EndOfStream,
     UnexpectedResponse(ResponseMessage),
     UnexpectedEndOfStream,
+    Message(i32, String),
 }
 
 impl std::error::Error for Error {}
@@ -51,6 +52,7 @@ impl std::fmt::Display for Error {
 
             Error::Simple(ref err) => write!(f, "error occurred: {err}"),
             Error::InvalidArgument(ref err) => write!(f, "InvalidArgument: {err}"),
+            Error::Message(code, message) => write!(f, "[{code}] {message}"),
         }
     }
 }
@@ -76,6 +78,14 @@ impl From<FromUtf8Error> for Error {
 impl From<time::error::Parse> for Error {
     fn from(err: time::error::Parse) -> Error {
         Error::ParseTime(err)
+    }
+}
+
+impl From<ResponseMessage> for Error {
+    fn from(err: ResponseMessage) -> Error {
+        let code = err.peek_int(CODE_INDEX).unwrap();
+        let message = err.peek_string(MESSAGE_INDEX);
+        Error::Message(code, message)
     }
 }
 
