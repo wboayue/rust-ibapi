@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use ibapi::contracts::Contract;
-use ibapi::market_data::realtime::LastTicks;
 use ibapi::Client;
 
 // This example demonstrates how to stream tick by tick data for the last price of a contract.
@@ -22,16 +21,8 @@ fn main() {
         contract.security_type, contract.symbol
     );
 
-    for (i, tick) in ticks.timeout_iter(Duration::from_secs(10)).enumerate() {
-        match tick {
-            LastTicks::Trade(trade) => {
-                println!("{}: {i:?} {trade:?}", contract.symbol);
-            }
-            LastTicks::Notice(notice) => {
-                // server could send a notice if it doesn't recognize the contract
-                println!("error_code: {}, error_message: {}", notice.code, notice.message);
-            }
-        }
+    for (i, trade) in ticks.timeout_iter(Duration::from_secs(10)).enumerate() {
+        println!("{}: {i:?} {trade:?}", contract.symbol);
     }
 
     // check for errors during streaming
