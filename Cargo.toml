@@ -1,6 +1,6 @@
 [package]
 name = "ibapi"
-version = "1.0.7"
+version = "1.0.8"
 edition = "2021"
 authors = ["Wil Boayue <wil@wsbsolutions.com>"]
 description = "A Rust implementation of the Interactive Brokers TWS API, providing a reliable and user friendly interface for TWS and IB Gateway. Designed with a focus on simplicity and performance."
@@ -12,7 +12,7 @@ license = "MIT"
 keywords = ["algo-trading", "interactive-brokers", "tws"]
 categories = ["finance", "api-bindings"]
 exclude = [
-    "yo",
+    "justfile",
 ]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

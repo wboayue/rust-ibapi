@@ -9,6 +9,9 @@ use crate::{
 
 mod decoders;
 
+#[cfg(test)]
+mod tests;
+
 // Requests an XML list of scanner parameters valid in TWS.
 pub(super) fn scanner_parameters(client: &Client) -> Result<String, Error> {
     let request = encoders::encode_scanner_parameters()?;
