@@ -13,7 +13,7 @@ fn main() {
 
     let client = Client::connect(connection_string, 100).expect("connection failed");
 
-    let contract = Contract::stock("NVDA1");
+    let contract = Contract::stock("NVDA");
     let ticks = client.tick_by_tick_midpoint(&contract, 0, false).expect("failed to get ticks");
 
     println!(
