@@ -11,6 +11,9 @@ use time::OffsetDateTime;
 mod decoders;
 mod encoders;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct NewsProvider {
     pub code: String,
