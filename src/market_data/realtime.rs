@@ -79,12 +79,7 @@ pub struct BidAskAttribute {
     pub ask_past_high: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub enum MidpointTicks {
-    Midpoint(MidPoint),
-    Notice(Notice),
-}
-
+/// Represents `MidPoint` tick by tick realtime tick.
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct MidPoint {
     /// The trade's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
@@ -93,13 +88,13 @@ pub struct MidPoint {
     pub mid_point: f64,
 }
 
-impl DataStream<MidpointTicks> for MidpointTicks {
+impl DataStream<MidPoint> for MidPoint {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickByTick => Ok(MidpointTicks::Midpoint(decoders::decode_mid_point_tick(message)?)),
-            IncomingMessages::Error => Ok(MidpointTicks::Notice(Notice::from(message))),
+            IncomingMessages::TickByTick => decoders::decode_mid_point_tick(message),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -144,9 +139,10 @@ impl DataStream<Bar> for Bar {
     }
 }
 
+/// Represents `Last` or `AllLast` tick-by-tick real-time tick.
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Trade {
-    /// Tick type: "Last" or "AllLast"
+    /// Tick type: `Last` or `AllLast`
     pub tick_type: String,
     /// The trade's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     pub time: OffsetDateTime,
@@ -490,7 +486,7 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<Subscription<'a, MidpointTicks>, Error> {
+) -> Result<Subscription<'a, MidPoint>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();

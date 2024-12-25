@@ -54,16 +54,13 @@ fn test_tick_by_tick_midpoint() {
 
     // Test receiving data
     let subscription = result.expect("Failed to create midpoint subscription");
-    let received_ticks: Vec<MidpointTicks> = subscription.iter().take(1).collect();
+    let received_ticks: Vec<MidPoint> = subscription.iter().take(1).collect();
 
     assert_eq!(received_ticks.len(), 1, "Should receive 1 midpoint tick");
 
     // Verify tick data
-    if let MidpointTicks::Midpoint(tick) = &received_ticks[0] {
-        assert_eq!(tick.mid_point, 3896.875, "Wrong midpoint price");
-    } else {
-        panic!("Expected midpoint, got {:?}", received_ticks[0]);
-    }
+    let tick = &received_ticks[0];
+    assert_eq!(tick.mid_point, 3896.875, "Wrong midpoint price");
 
     // Verify request message
     let request_messages = client.message_bus.request_messages();
