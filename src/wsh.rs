@@ -11,6 +11,9 @@ use crate::{
     server_versions, Client, Error,
 };
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WshMetadata {
     pub data_json: String,
