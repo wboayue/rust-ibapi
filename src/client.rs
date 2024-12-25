@@ -12,7 +12,7 @@ use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, Famil
 use crate::contracts::{Contract, OptionComputation, SecurityType};
 use crate::errors::Error;
 use crate::market_data::historical::{self, HistogramEntry};
-use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescription, MarketDepths, MidpointTicks, TickTypes, WhatToShow};
+use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, WhatToShow};
 use crate::market_data::MarketDataType;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
@@ -1100,7 +1100,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<Subscription<'a, realtime::LastTicks>, Error> {
+    ) -> Result<Subscription<'a, realtime::Trade>, Error> {
         realtime::tick_by_tick_all_last(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -1115,7 +1115,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<Subscription<'a, realtime::BidAskTicks>, Error> {
+    ) -> Result<Subscription<'a, realtime::BidAsk>, Error> {
         realtime::tick_by_tick_bid_ask(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -1130,7 +1130,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<Subscription<'a, realtime::LastTicks>, Error> {
+    ) -> Result<Subscription<'a, realtime::Trade>, Error> {
         realtime::tick_by_tick_last(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -1145,7 +1145,7 @@ impl Client {
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<Subscription<'a, MidpointTicks>, Error> {
+    ) -> Result<Subscription<'a, MidPoint>, Error> {
         realtime::tick_by_tick_midpoint(self, contract, number_of_ticks, ignore_size)
     }
 

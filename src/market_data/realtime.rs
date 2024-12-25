@@ -34,12 +34,7 @@ pub enum BarSize {
     // Day,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub enum BidAskTicks {
-    BidAsk(BidAsk),
-    Notice(Notice),
-}
-
+/// Represents `BidAsk` tick by tick realtime tick.
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct BidAsk {
     /// The spread's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
@@ -56,13 +51,13 @@ pub struct BidAsk {
     pub bid_ask_attribute: BidAskAttribute,
 }
 
-impl DataStream<BidAskTicks> for BidAskTicks {
+impl DataStream<BidAsk> for BidAsk {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickByTick => Ok(BidAskTicks::BidAsk(decoders::decode_bid_ask_tick(message)?)),
-            IncomingMessages::Error => Ok(BidAskTicks::Notice(Notice::from(message))),
+            IncomingMessages::TickByTick => decoders::decode_bid_ask_tick(message),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -79,12 +74,7 @@ pub struct BidAskAttribute {
     pub ask_past_high: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub enum MidpointTicks {
-    Midpoint(MidPoint),
-    Notice(Notice),
-}
-
+/// Represents `MidPoint` tick by tick realtime tick.
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct MidPoint {
     /// The trade's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
@@ -93,13 +83,13 @@ pub struct MidPoint {
     pub mid_point: f64,
 }
 
-impl DataStream<MidpointTicks> for MidpointTicks {
+impl DataStream<MidPoint> for MidPoint {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickByTick => Ok(MidpointTicks::Midpoint(decoders::decode_mid_point_tick(message)?)),
-            IncomingMessages::Error => Ok(MidpointTicks::Notice(Notice::from(message))),
+            IncomingMessages::TickByTick => decoders::decode_mid_point_tick(message),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -144,15 +134,10 @@ impl DataStream<Bar> for Bar {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub enum LastTicks {
-    Trade(Trade),
-    Notice(Notice),
-}
-
+/// Represents `Last` or `AllLast` tick-by-tick real-time tick.
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Trade {
-    /// Tick type: "Last" or "AllLast"
+    /// Tick type: `Last` or `AllLast`
     pub tick_type: String,
     /// The trade's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
     pub time: OffsetDateTime,
@@ -168,13 +153,13 @@ pub struct Trade {
     pub special_conditions: String,
 }
 
-impl DataStream<LastTicks> for LastTicks {
+impl DataStream<Trade> for Trade {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickByTick => Ok(LastTicks::Trade(decoders::decode_trade_tick(message)?)),
-            IncomingMessages::Error => Ok(LastTicks::Notice(Notice::from(message))),
+            IncomingMessages::TickByTick => decoders::decode_trade_tick(message),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -428,7 +413,7 @@ pub(crate) fn tick_by_tick_all_last<'a>(
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<Subscription<'a, LastTicks>, Error> {
+) -> Result<Subscription<'a, Trade>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -460,7 +445,7 @@ pub(crate) fn tick_by_tick_last<'a>(
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<Subscription<'a, LastTicks>, Error> {
+) -> Result<Subscription<'a, Trade>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -478,7 +463,7 @@ pub(crate) fn tick_by_tick_bid_ask<'a>(
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<Subscription<'a, BidAskTicks>, Error> {
+) -> Result<Subscription<'a, BidAsk>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -496,7 +481,7 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<Subscription<'a, MidpointTicks>, Error> {
+) -> Result<Subscription<'a, MidPoint>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
