@@ -1,9 +1,9 @@
 use std::sync::{Arc, RwLock};
 
 use crate::contracts::SecurityType;
-use crate::stubs::MessageBusStub;
-use crate::server_versions;
 use crate::orders::TagValue;
+use crate::server_versions;
+use crate::stubs::MessageBusStub;
 
 use super::*;
 
@@ -80,7 +80,7 @@ fn test_scanner_subscription() {
     assert!(result.is_ok(), "failed to request scanner subscription: {}", result.err().unwrap());
 
     let request_messages = client.message_bus.request_messages();
-    
+
     // Verify request parameters were encoded correctly
     let expected_request = format!(
         "22|9000|10|FUT|FUT.US|TOP_PERC_GAIN|50|100|1000|1000000|10000000|A|AAA|A|AAA|20230101|20231231|2|5|1|100|Annual,true|CORP|scannerType=TOP_PERC_GAIN;numberOfRows=10;||",
@@ -91,9 +91,13 @@ fn test_scanner_subscription() {
     let subscription = result.unwrap();
     let scanner_data: Vec<Vec<ScannerData>> = subscription.iter().collect();
 
-    assert!(subscription.error().is_none(), "error getting scanner results: {}", subscription.error().unwrap());
+    assert!(
+        subscription.error().is_none(),
+        "error getting scanner results: {}",
+        subscription.error().unwrap()
+    );
     assert_eq!(scanner_data.len(), 1);
-    
+
     // Verify first scanner data entry
     let first = &scanner_data[0][0];
     assert_eq!(first.rank, 0);
@@ -101,7 +105,7 @@ fn test_scanner_subscription() {
     assert_eq!(first.contract_details.contract.security_type, SecurityType::Stock);
     assert_eq!(first.contract_details.contract.exchange, "SMART");
 
-    // Verify second scanner data entry  
+    // Verify second scanner data entry
     let second = &scanner_data[0][1];
     assert_eq!(second.rank, 1);
     assert_eq!(second.contract_details.contract.symbol, "GTI");
