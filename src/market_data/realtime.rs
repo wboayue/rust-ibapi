@@ -5,7 +5,7 @@ use time::OffsetDateTime;
 use crate::client::{DataStream, ResponseContext, Subscription};
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{Contract, OptionComputation};
-use crate::messages::{IncomingMessages, Notice, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{self, IncomingMessages, Notice, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::orders::TagValue;
 use crate::server_versions;
 use crate::ToField;
@@ -205,6 +205,7 @@ impl ToField for WhatToShow {
 pub enum MarketDepths {
     MarketDepth(MarketDepth),
     MarketDepthL2(MarketDepthL2),
+    Notice(Notice),
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -251,7 +252,14 @@ impl DataStream<MarketDepths> for MarketDepths {
                 client.server_version,
                 message,
             )?)),
-            IncomingMessages::Error => Err(Error::from(message.clone())),
+            IncomingMessages::Error => {
+                let code = message.peek_int(messages::CODE_INDEX).unwrap();
+                if code >= 2100 && code < 2200 {
+                    Ok(MarketDepths::Notice(Notice::from(message)))
+                } else {
+                    Err(Error::from(message.clone()))
+                }
+            }
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
