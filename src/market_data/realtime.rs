@@ -205,7 +205,6 @@ impl ToField for WhatToShow {
 pub enum MarketDepths {
     MarketDepth(MarketDepth),
     MarketDepthL2(MarketDepthL2),
-    Notice(Notice),
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -252,8 +251,8 @@ impl DataStream<MarketDepths> for MarketDepths {
                 client.server_version,
                 message,
             )?)),
-            IncomingMessages::Error => Ok(MarketDepths::Notice(Notice::from(message))),
-            _ => Err(Error::NotImplemented),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 

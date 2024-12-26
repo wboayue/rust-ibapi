@@ -14,4 +14,8 @@ fn main() {
     for row in &subscription {
         println!("row: {row:?}")
     }
+
+    if let Some(error) = subscription.error() {
+        println!("error: {:?}", error);
+    }
 }
