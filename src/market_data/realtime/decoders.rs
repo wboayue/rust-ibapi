@@ -71,8 +71,8 @@ pub(super) fn decode_bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAs
     let date = message.next_date_time()?;
     let bid_price = message.next_double()?;
     let ask_price = message.next_double()?;
-    let bid_size = message.next_long()?;
-    let ask_size = message.next_long()?;
+    let bid_size = message.next_double()?;
+    let ask_size = message.next_double()?;
     let mask = message.next_int()?;
 
     Ok(BidAsk {

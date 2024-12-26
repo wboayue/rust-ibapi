@@ -44,9 +44,9 @@ pub struct BidAsk {
     /// tick-by-tick real-time tick ask price
     pub ask_price: f64,
     /// tick-by-tick real-time tick bid size
-    pub bid_size: i64,
+    pub bid_size: f64,
     /// tick-by-tick real-time tick ask size
-    pub ask_size: i64,
+    pub ask_size: f64,
     /// tick-by-tick real-time bid/ask tick attribs (bit 0 - bid past low, bit 1 - ask past high)
     pub bid_ask_attribute: BidAskAttribute,
 }

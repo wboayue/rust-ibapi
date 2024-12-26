@@ -25,8 +25,8 @@ fn test_tick_by_tick_bid_ask() {
     let tick = &received_ticks[0];
     assert_eq!(tick.bid_price, 3895.50, "Wrong bid price");
     assert_eq!(tick.ask_price, 3896.00, "Wrong ask price");
-    assert_eq!(tick.bid_size, 9, "Wrong bid size");
-    assert_eq!(tick.ask_size, 11, "Wrong ask size");
+    assert_eq!(tick.bid_size, 9.0, "Wrong bid size");
+    assert_eq!(tick.ask_size, 11.0, "Wrong ask size");
 
     // Verify request message
     let request_messages = client.message_bus.request_messages();
