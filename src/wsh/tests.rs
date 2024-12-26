@@ -36,10 +36,10 @@ fn test_wsh_event_data_by_contract() {
 
     let client = Client::stubbed(message_bus, server_versions::WSH_EVENT_DATA_FILTERS_DATE);
     let result = wsh_event_data_by_contract(
-        &client, 
+        &client,
         12345,
-        Some(date!(2024-01-01)), 
-        Some(date!(2024-12-31)),
+        Some(date!(2024 - 01 - 01)),
+        Some(date!(2024 - 12 - 31)),
         Some(100),
         Some(AutoFill {
             competitors: true,
@@ -49,10 +49,7 @@ fn test_wsh_event_data_by_contract() {
     );
 
     let request_messages = client.message_bus.request_messages();
-    assert_eq!(
-        request_messages[0].encode_simple(), 
-        "102|9000|12345||1|1|1|20240101|20241231|100|"
-    );
+    assert_eq!(request_messages[0].encode_simple(), "102|9000|12345||1|1|1|20240101|20241231|100|");
 
     assert!(result.is_ok(), "failed to request wsh event data: {}", result.err().unwrap());
     assert_eq!(
@@ -106,10 +103,7 @@ fn test_wsh_event_data_by_filter() {
     );
 
     let request_messages = client.message_bus.request_messages();
-    assert_eq!(
-        request_messages[0].encode_simple(), 
-        "102|9000||filter=value|1|0|1|||100|"
-    );
+    assert_eq!(request_messages[0].encode_simple(), "102|9000||filter=value|1|0|1|||100|");
 
     assert!(result.is_ok(), "failed to request wsh event data by filter: {}", result.err().unwrap());
 }
@@ -126,10 +120,7 @@ fn test_wsh_event_data_by_filter_no_autofill() {
     let result = wsh_event_data_by_filter(&client, filter, None, None);
 
     let request_messages = client.message_bus.request_messages();
-    assert_eq!(
-        request_messages[0].encode_simple(), 
-        "102|9000||filter=value|0|0|0|"
-    );
+    assert_eq!(request_messages[0].encode_simple(), "102|9000||filter=value|0|0|0|");
 
     assert!(result.is_ok(), "failed to request wsh event data by filter: {}", result.err().unwrap());
 }
@@ -168,14 +159,7 @@ fn test_invalid_server_version_wsh_event_data_date_filters() {
     });
 
     let client = Client::stubbed(message_bus, server_versions::WSH_EVENT_DATA_FILTERS);
-    let result = wsh_event_data_by_contract(
-        &client,
-        12345,
-        Some(date!(2024-01-01)),
-        Some(date!(2024-12-31)),
-        Some(100),
-        None,
-    );
+    let result = wsh_event_data_by_contract(&client, 12345, Some(date!(2024 - 01 - 01)), Some(date!(2024 - 12 - 31)), Some(100), None);
 
     assert!(matches!(result, Err(Error::ServerVersion(_, _, _))));
 }
@@ -183,24 +167,27 @@ fn test_invalid_server_version_wsh_event_data_date_filters() {
 #[test]
 fn test_autofill_is_specified() {
     assert!(!AutoFill::default().is_specified());
-    
+
     assert!(AutoFill {
         competitors: true,
         portfolio: false,
         watchlist: false,
-    }.is_specified());
-    
+    }
+    .is_specified());
+
     assert!(AutoFill {
         competitors: false,
         portfolio: true,
         watchlist: false,
-    }.is_specified());
-    
+    }
+    .is_specified());
+
     assert!(AutoFill {
         competitors: false,
         portfolio: false,
         watchlist: true,
-    }.is_specified());
+    }
+    .is_specified());
 }
 
 #[test]
@@ -248,16 +235,7 @@ fn test_encode_request_wsh_event_data() {
     use super::encoders::encode_request_wsh_event_data;
 
     // Test with minimal params
-    let result = encode_request_wsh_event_data(
-        server_versions::WSHE_CALENDAR,
-        9000,
-        Some(12345),
-        None,
-        None,
-        None,
-        None,
-        None,
-    );
+    let result = encode_request_wsh_event_data(server_versions::WSHE_CALENDAR, 9000, Some(12345), None, None, None, None, None);
     assert!(result.is_ok());
     assert_eq!(result.unwrap().encode_simple(), "102|9000|12345|");
 
@@ -267,8 +245,8 @@ fn test_encode_request_wsh_event_data() {
         9000,
         Some(12345),
         Some("filter"),
-        Some(date!(2024-01-01)),
-        Some(date!(2024-12-31)),
+        Some(date!(2024 - 01 - 01)),
+        Some(date!(2024 - 12 - 31)),
         Some(100),
         Some(AutoFill {
             competitors: true,
@@ -277,10 +255,7 @@ fn test_encode_request_wsh_event_data() {
         }),
     );
     assert!(result.is_ok());
-    assert_eq!(
-        result.unwrap().encode_simple(),
-        "102|9000|12345|filter|1|0|1|20240101|20241231|100|"
-    );
+    assert_eq!(result.unwrap().encode_simple(), "102|9000|12345|filter|1|0|1|20240101|20241231|100|");
 }
 
 #[test]
