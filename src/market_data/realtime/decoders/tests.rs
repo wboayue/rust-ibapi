@@ -91,8 +91,8 @@ mod bid_ask_tests {
         assert_eq!(bid_ask.time, OffsetDateTime::from_unix_timestamp(1678745793).unwrap(), "Wrong timestamp");
         assert_eq!(bid_ask.bid_price, 3895.50, "Wrong bid price");
         assert_eq!(bid_ask.ask_price, 3896.00, "Wrong ask price");
-        assert_eq!(bid_ask.bid_size, 9, "Wrong bid size");
-        assert_eq!(bid_ask.ask_size, 11, "Wrong ask size");
+        assert_eq!(bid_ask.bid_size, 9.0, "Wrong bid size");
+        assert_eq!(bid_ask.ask_size, 11.0, "Wrong ask size");
         assert_eq!(bid_ask.bid_ask_attribute.bid_past_low, true, "Wrong bid past low flag");
         assert_eq!(bid_ask.bid_ask_attribute.ask_past_high, true, "Wrong ask past high flag");
     }
