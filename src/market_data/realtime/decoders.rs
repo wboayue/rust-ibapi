@@ -40,7 +40,7 @@ pub(super) fn decode_trade_tick(message: &mut ResponseMessage) -> Result<Trade, 
 
     let date = message.next_date_time()?;
     let price = message.next_double()?;
-    let size = message.next_long()?;
+    let size = message.next_double()?;
     let mask = message.next_int()?;
     let exchange = message.next_string()?;
     let special_conditions = message.next_string()?;

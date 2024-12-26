@@ -51,7 +51,7 @@ mod trade_tick_tests {
         assert_eq!(trade.tick_type, "1", "Wrong tick type");
         assert_eq!(trade.time, OffsetDateTime::from_unix_timestamp(1678740829).unwrap(), "Wrong timestamp");
         assert_eq!(trade.price, 3895.25, "Wrong price");
-        assert_eq!(trade.size, 7, "Wrong size");
+        assert_eq!(trade.size, 7.0, "Wrong size");
         assert_eq!(trade.trade_attribute.past_limit, false, "Wrong past limit flag");
         assert_eq!(trade.trade_attribute.unreported, true, "Wrong unreported flag");
         assert_eq!(trade.exchange, "NASDAQ", "Wrong exchange");

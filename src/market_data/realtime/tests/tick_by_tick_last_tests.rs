@@ -24,7 +24,7 @@ fn test_tick_by_tick_last() {
     // Verify trade data
     let trade = &received_trades[0];
     assert_eq!(trade.price, 3895.25, "Wrong price");
-    assert_eq!(trade.size, 7, "Wrong size");
+    assert_eq!(trade.size, 7.0, "Wrong size");
     assert_eq!(trade.exchange, "NASDAQ", "Wrong exchange");
 
     // Verify request message uses "Last" instead of "AllLast"

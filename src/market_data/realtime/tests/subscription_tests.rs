@@ -82,13 +82,13 @@ fn test_tick_by_tick_all_last() {
     // Verify first trade
     let trade = &received_trades[0];
     assert_eq!(trade.price, 3895.25, "Wrong price for first trade");
-    assert_eq!(trade.size, 7, "Wrong size for first trade");
+    assert_eq!(trade.size, 7.0, "Wrong size for first trade");
     assert_eq!(trade.exchange, "NASDAQ", "Wrong exchange for first trade");
 
     // Verify second trade
     let trade = &received_trades[1];
     assert_eq!(trade.price, 3895.50, "Wrong price for second trade");
-    assert_eq!(trade.size, 5, "Wrong size for second trade");
+    assert_eq!(trade.size, 5.0, "Wrong size for second trade");
     assert_eq!(trade.exchange, "NYSE", "Wrong exchange for second trade");
 
     // Verify request message

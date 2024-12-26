@@ -144,7 +144,7 @@ pub struct Trade {
     /// Tick last price
     pub price: f64,
     /// Tick last size
-    pub size: i64,
+    pub size: f64,
     /// Tick attributes (bit 0 - past limit, bit 1 - unreported)
     pub trade_attribute: TradeAttribute,
     /// Tick exchange
@@ -254,7 +254,7 @@ impl DataStream<MarketDepths> for MarketDepths {
             )?)),
             IncomingMessages::Error => {
                 let code = message.peek_int(messages::CODE_INDEX).unwrap();
-                if code >= 2100 && code < 2200 {
+                if (2100..2200).contains(&code) {
                     Ok(MarketDepths::Notice(Notice::from(message)))
                 } else {
                     Err(Error::from(message.clone()))
