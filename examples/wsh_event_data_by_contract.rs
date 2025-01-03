@@ -1,5 +1,4 @@
 use ibapi::Client;
-use time::macros::date;
 
 // This example demonstrates requesting Wall Street Horizon event data by contract ID.
 
@@ -8,7 +7,7 @@ fn main() {
 
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
-    let contract_id = 272093; // 76792991; // TSLA
+    let contract_id = 76792991; // TSLA
     let start_date = None;
     let end_date = None;
     let limit = None;
