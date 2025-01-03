@@ -53,12 +53,17 @@ pub struct WshEventData {
     pub data_json: String,
 }
 
+fn decode_event_data_message(message: crate::messages::ResponseMessage) -> Result<WshEventData, Error> {
+    match message.message_type() {
+        IncomingMessages::WshEventData => decoders::decode_wsh_event_data(message),
+        IncomingMessages::Error => Err(Error::from(message)),
+        _ => Err(Error::UnexpectedResponse(message)),
+    }
+}
+
 impl DataStream<WshEventData> for WshEventData {
     fn decode(_client: &Client, message: &mut crate::messages::ResponseMessage) -> Result<WshEventData, Error> {
-        match message.message_type() {
-            IncomingMessages::WshEventData => Ok(decoders::decode_wsh_event_data(message.clone())?),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
+        decode_event_data_message(message.clone())
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<crate::messages::RequestMessage, Error> {
@@ -125,7 +130,7 @@ pub(super) fn wsh_event_data_by_contract(
     let subscription = client.send_request(request_id, request)?;
 
     match subscription.next() {
-        Some(Ok(message)) => Ok(decoders::decode_wsh_event_data(message)?),
+        Some(Ok(message)) => decode_event_data_message(message),
         Some(Err(Error::ConnectionReset)) => wsh_event_data_by_contract(client, contract_id, start_date, end_date, limit, auto_fill),
         Some(Err(e)) => Err(e),
         None => Err(Error::UnexpectedEndOfStream),
