@@ -24,7 +24,7 @@ fn main() {
     let historical_data = client
         .historical_data(
             &contract,
-            datetime!(2023-04-11 20:00 UTC),
+            Some(datetime!(2023-04-11 20:00 UTC)),
             1.days(),
             BarSize::Hour,
             WhatToShow::Trades,
