@@ -87,7 +87,7 @@ fn test_historical_data() {
     let use_rth = true;
 
     let historical_data = client
-        .historical_data(&contract, interval_end, duration, bar_size, what_to_show, use_rth)
+        .historical_data(&contract, Some(interval_end), duration, bar_size, what_to_show, use_rth)
         .expect("historical data request failed");
 
     // Assert Response

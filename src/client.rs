@@ -767,7 +767,7 @@ impl Client {
     /// let contract = Contract::stock("TSLA");
     ///
     /// let historical_data = client
-    ///     .historical_data(&contract, datetime!(2023-04-15 0:00 UTC), 7.days(), BarSize::Day, WhatToShow::Trades, true)
+    ///     .historical_data(&contract, Some(datetime!(2023-04-15 0:00 UTC)), 7.days(), BarSize::Day, WhatToShow::Trades, true)
     ///     .expect("historical data request failed");
     ///
     /// println!("start_date: {}, end_date: {}", historical_data.start, historical_data.end);
@@ -779,13 +779,13 @@ impl Client {
     pub fn historical_data(
         &self,
         contract: &Contract,
-        interval_end: OffsetDateTime,
+        interval_end: Option<OffsetDateTime>,
         duration: historical::Duration,
         bar_size: historical::BarSize,
         what_to_show: historical::WhatToShow,
         use_rth: bool,
     ) -> Result<historical::HistoricalData, Error> {
-        historical::historical_data(self, contract, Some(interval_end), duration, bar_size, Some(what_to_show), use_rth)
+        historical::historical_data(self, contract, interval_end, duration, bar_size, Some(what_to_show), use_rth)
     }
 
     /// Requests interval of historical data ending now for [Contract].
@@ -818,6 +818,7 @@ impl Client {
     ///     println!("{bar:?}");
     /// }
     /// ```
+    #[deprecated(since = "1.1.0", note = "use `historical_data` instead")]
     pub fn historical_data_ending_now(
         &self,
         contract: &Contract,
