@@ -747,7 +747,7 @@ impl Client {
     ///
     /// # Arguments
     /// * `contract`     - [Contract] to retrieve [historical::HistoricalData] for.
-    /// * `interval_end` - end date of interval to retrieve [historical::HistoricalData] for.
+    /// * `interval_end` - optional end date of interval to retrieve [historical::HistoricalData] for. If `None` current time or last trading of contract is implied.
     /// * `duration`     - duration of interval to retrieve [historical::HistoricalData] for.
     /// * `bar_size`     - [historical::BarSize] to return.
     /// * `what_to_show` - requested bar type: [historical::WhatToShow].
