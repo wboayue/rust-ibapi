@@ -10,7 +10,7 @@ use time::{Date, OffsetDateTime};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::transport::{InternalSubscription, Response};
-use crate::{server_versions, Client, Error, ToField};
+use crate::{server_versions, Client, Error, ToField, MAX_RETRIES};
 
 mod decoders;
 mod encoders;
@@ -342,10 +342,12 @@ pub(crate) fn historical_data(
     }
 
     if end_date.is_some() && what_to_show == Some(WhatToShow::AdjustedLast) {
-        return Err(Error::InvalidArgument("end_date must be None when requesting WhatToShow::AdjustedLast. You might have called Client::historical_data with WhatToShow::AdjustedLast".into()));
+        return Err(Error::InvalidArgument(
+            "end_date must be None when requesting WhatToShow::AdjustedLast.".into(),
+        ));
     }
 
-    loop {
+    for _ in 0..MAX_RETRIES {
         let request_id = client.next_request_id();
         let request = encoders::encode_request_historical_data(
             client.server_version(),
@@ -366,12 +368,15 @@ pub(crate) fn historical_data(
             Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalData => {
                 return decoders::decode_historical_data(client.server_version, time_zone(client), &mut message)
             }
+            Some(Ok(message)) if message.message_type() == IncomingMessages::Error => return Err(Error::from(message)),
             Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
             Some(Err(Error::ConnectionReset)) => continue,
             Some(Err(e)) => return Err(e),
             None => return Err(Error::UnexpectedEndOfStream),
         }
     }
+
+    Err(Error::ConnectionReset)
 }
 
 fn time_zone(client: &Client) -> &time_tz::Tz {
