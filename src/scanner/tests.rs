@@ -79,14 +79,6 @@ fn test_scanner_subscription() {
     let result = client.scanner_subscription(&subscription, &filter);
     assert!(result.is_ok(), "failed to request scanner subscription: {}", result.err().unwrap());
 
-    let request_messages = client.message_bus.request_messages();
-
-    // Verify request parameters were encoded correctly
-    let expected_request = format!(
-        "22|9000|10|FUT|FUT.US|TOP_PERC_GAIN|50|100|1000|1000000|10000000|A|AAA|A|AAA|20230101|20231231|2|5|1|100|Annual,true|CORP|scannerType=TOP_PERC_GAIN;numberOfRows=10;||",
-    );
-    assert_eq!(request_messages[0].encode_simple(), expected_request);
-
     // Now verify we can parse the scanner data responses
     let subscription = result.unwrap();
     let scanner_data: Vec<Vec<ScannerData>> = subscription.iter().collect();
@@ -118,4 +110,19 @@ fn test_scanner_subscription() {
     assert_eq!(third.contract_details.contract.symbol, "LITM");
     assert_eq!(third.contract_details.contract.security_type, SecurityType::Stock);
     assert_eq!(third.contract_details.contract.exchange, "SMART");
+
+    // drop subscription to generate cancel request
+    drop(subscription);
+
+    let request_messages = client.message_bus.request_messages();
+
+    // Verify request parameters were encoded correctly
+    let scanner_request = format!(
+        "22|9000|10|FUT|FUT.US|TOP_PERC_GAIN|50|100|1000|1000000|10000000|A|AAA|A|AAA|20230101|20231231|2|5|1|100|Annual,true|CORP|scannerType=TOP_PERC_GAIN;numberOfRows=10;||",
+    );
+    assert_eq!(request_messages[0].encode_simple(), scanner_request);
+
+    // Verify cancel request was sent
+    assert_eq!(request_messages[1].encode_simple(), "23|1|9000|");
+
 }

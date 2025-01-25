@@ -106,6 +106,11 @@ impl DataStream<Vec<ScannerData>> for Vec<ScannerData> {
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
+
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<crate::messages::RequestMessage, Error> {
+        let request_id = request_id.expect("Request ID required to encode cancel scanner subscription.");
+        encoders::encode_cancel_scanner_subscription(request_id)        
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -202,6 +207,18 @@ mod encoders {
         if server_version >= server_versions::LINKING {
             message.push_field(&""); // ignore subscription options
         }
+
+        Ok(message)
+    }
+
+    pub(super) fn encode_cancel_scanner_subscription(request_id: i32) -> Result<RequestMessage, Error> {
+        const VERSION: i32 = 1;
+
+        let mut message = RequestMessage::new();
+
+        message.push_field(&OutgoingMessages::CancelScannerSubscription);
+        message.push_field(&VERSION);
+        message.push_field(&request_id);
 
         Ok(message)
     }
