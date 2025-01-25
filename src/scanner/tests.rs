@@ -124,5 +124,4 @@ fn test_scanner_subscription() {
 
     // Verify cancel request was sent
     assert_eq!(request_messages[1].encode_simple(), "23|1|9000|");
-
 }

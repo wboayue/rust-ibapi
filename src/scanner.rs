@@ -109,7 +109,7 @@ impl DataStream<Vec<ScannerData>> for Vec<ScannerData> {
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<crate::messages::RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel scanner subscription.");
-        encoders::encode_cancel_scanner_subscription(request_id)        
+        encoders::encode_cancel_scanner_subscription(request_id)
     }
 }
 
