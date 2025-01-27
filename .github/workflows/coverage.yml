@@ -18,9 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly
+      - uses: dtolnay/rust-toolchain@stable
 
       # Cache cargo registry, index, and build directories
       - name: Cache cargo
@@ -33,4 +31,4 @@ jobs:
       - name: install tarpaulin
         run: cargo install cargo-tarpaulin
       - name: coverage
-        run: cargo tarpaulin --engine llvm --follow-exec --post-test-delay 10 --coveralls ${{ secrets.COVERALLS_TOKEN }} 
+        run: cargo tarpaulin --engine llvm --follow-exec --post-test-delay 10 --coveralls ${{ secrets.COVERALLS_TOKEN }}
