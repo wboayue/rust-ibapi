@@ -89,6 +89,11 @@ impl Client {
         Ok(client)
     }
 
+    /// Returns the ID assigned to the [Client].
+    pub fn client_id(&self) -> i32 {
+        self.client_id
+    }
+
     /// Returns the next request ID.
     pub fn next_request_id(&self) -> i32 {
         self.next_request_id.fetch_add(1, Ordering::Relaxed)
