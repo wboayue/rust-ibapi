@@ -811,7 +811,10 @@ impl Connection {
             connection_url: connection_url.into(),
             reader: Mutex::new(reader),
             writer: Mutex::new(writer),
-            connection_metadata: Mutex::new(ConnectionMetadata::default()),
+            connection_metadata: Mutex::new(ConnectionMetadata {
+                client_id,
+                ..Default::default()
+            }),
             max_retries: MAX_RETRIES,
             recorder: MessageRecorder::new(),
         };
