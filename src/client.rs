@@ -1188,13 +1188,21 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
     /// use ibapi::market_data::{MarketDataType};
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let market_data_type = MarketDataType::Live;
-    /// client.switch_market_data_type(market_data_type).expect("request failed");
-    /// println!("market data switched: {:?}", market_data_type);
+    /// let contract = Contract::stock("AAPL");
+    ///
+    /// let subscription = client.market_depth(&contract, 5, true).expect("error requesting market depth");
+    /// for row in &subscription {
+    ///     println!("row: {row:?}");
+    /// }
+    ///
+    /// if let Some(error) = subscription.error() {
+    ///     println!("error: {:?}", error);
+    /// }
     /// ```
     pub fn market_depth<'a>(
         &'a self,
