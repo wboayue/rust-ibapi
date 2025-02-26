@@ -21,6 +21,8 @@ const UNSET_LONG: &str = "9223372036854775807";
 pub(crate) const MESSAGE_INDEX: usize = 4;
 // Index of message code in the response message
 pub(crate) const CODE_INDEX: usize = 3;
+// Index of request ID in the response message
+pub(crate) const REQUEST_ID_INDEX: usize = 2;
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub enum IncomingMessages {
