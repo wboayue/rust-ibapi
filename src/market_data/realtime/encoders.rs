@@ -155,6 +155,22 @@ pub(super) fn encode_request_market_depth(
     Ok(message)
 }
 
+pub(super) fn encode_cancel_market_depth(server_version: i32, request_id: i32, is_smart_depth: bool) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+
+    const VERSION: i32 = 1;
+
+    message.push_field(&OutgoingMessages::CancelMarketDepth);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+
+    if server_version >= server_versions::SMART_DEPTH {
+        message.push_field(&is_smart_depth);
+    }
+
+    Ok(message)
+}
+
 pub(super) fn encode_request_market_depth_exchanges() -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 

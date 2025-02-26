@@ -1681,6 +1681,7 @@ pub struct Subscription<'a, T: DataStream<T>> {
 #[derive(Debug, Default)]
 pub(crate) struct ResponseContext {
     pub(crate) request_type: Option<OutgoingMessages>,
+    pub(crate) is_smart_depth: bool,
 }
 
 #[allow(private_bounds)]

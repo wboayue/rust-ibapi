@@ -24,7 +24,7 @@ use recorder::MessageRecorder;
 mod recorder;
 
 const MIN_SERVER_VERSION: i32 = 100;
-const MAX_SERVER_VERSION: i32 = server_versions::HISTORICAL_SCHEDULE;
+const MAX_SERVER_VERSION: i32 = server_versions::WSH_EVENT_DATA_FILTERS_DATE;
 const MAX_RETRIES: i32 = 20;
 const TWS_READ_TIMEOUT: Duration = Duration::from_secs(1);
 

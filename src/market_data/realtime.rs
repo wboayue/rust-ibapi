@@ -264,9 +264,9 @@ impl DataStream<MarketDepths> for MarketDepths {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
+    fn cancel_message(server_version: i32, request_id: Option<i32>, context: &ResponseContext) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
-        encoders::encode_cancel_tick_by_tick(request_id)
+        encoders::encode_cancel_market_depth(server_version, request_id, context.is_smart_depth)
     }
 }
 
@@ -520,7 +520,14 @@ pub(crate) fn market_depth<'a>(
     let request = encoders::encode_request_market_depth(client.server_version, request_id, contract, number_of_rows, is_smart_depth)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+    Ok(Subscription::new(
+        client,
+        subscription,
+        ResponseContext {
+            is_smart_depth,
+            ..Default::default()
+        },
+    ))
 }
 
 // Requests venues for which market data is returned to market_depth (those with market makers)
