@@ -224,6 +224,21 @@ mod market_depth_tests {
         assert_eq!(message[15], number_of_rows.to_field(), "Unexpected number of rows");
         assert_eq!(message[16], is_smart_depth.to_field(), "Unexpected smart depth flag");
     }
+
+    #[test]
+    fn test_encode_cancel_market_depth() {
+        let request_id = 9000;
+        let server_version = server_versions::SMART_DEPTH;
+        let is_smart_depth = true;
+
+        let message = encode_cancel_market_depth(server_version, request_id, is_smart_depth).expect("Failed to encode cancel realtime bars");
+
+        assert_eq!(message[0], OutgoingMessages::CancelMarketDepth.to_field(), "Wrong message type");
+        assert_eq!(message[1], "1", "Wrong version");
+        assert_eq!(message[2], request_id.to_field(), "Wrong request ID");
+        assert_eq!(message[3], is_smart_depth.to_field(), "Wrong smart depth flag");
+        assert_eq!(message.len(), 4, "Unexpected message length");
+    }
 }
 
 #[cfg(test)]
