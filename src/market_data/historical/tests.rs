@@ -191,3 +191,17 @@ fn test_duration() {
     assert_eq!(5.months().to_field(), "5 M");
     assert_eq!(6.years().to_field(), "6 Y");
 }
+
+#[test]
+fn test_duration_parse() {
+    assert_eq!("1 S".parse(), Ok(Duration::seconds(1)));
+    assert_eq!("2 D".parse(), Ok(Duration::days(2)));
+    assert_eq!("3 W".parse(), Ok(Duration::weeks(3)));
+    assert_eq!("4 M".parse(), Ok(Duration::months(4)));
+    assert_eq!("5 Y".parse(), Ok(Duration::years(5)));
+
+    assert_eq!("".parse::<Duration>(), Err(DurationParseError::EmptyString));
+    assert_eq!("1S".parse::<Duration>(), Err(DurationParseError::MissingDelimiter("1S".to_string())));
+    assert!("abc S".parse::<Duration>().unwrap_err().to_string().contains("Parse integer error"));
+    assert_eq!("1 X".parse::<Duration>(), Err(DurationParseError::UnsupportedUnit("X".to_string())));
+}
