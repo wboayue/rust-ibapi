@@ -17,14 +17,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
 
       # Cache cargo registry, index, and build directories
       - name: Cache cargo
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo
