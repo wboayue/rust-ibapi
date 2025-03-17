@@ -92,26 +92,26 @@ impl Display for BarSize {
 
 impl From<&str> for BarSize {
     fn from(val: &str) -> Self {
-        match val {
-            "Sec" => Self::Sec,
-            "Sec5" => Self::Sec5,
-            "Sec15" => Self::Sec15,
-            "Sec30" => Self::Sec30,
-            "Min" => Self::Min,
-            "Min2" => Self::Min2,
-            "Min3" => Self::Min3,
-            "Min5" => Self::Min5,
-            "Min15" => Self::Min15,
-            "Min20" => Self::Min20,
-            "Min30" => Self::Min30,
-            "Hour" => Self::Hour,
-            "Hour2" => Self::Hour2,
-            "Hour3" => Self::Hour3,
-            "Hour4" => Self::Hour4,
-            "Hour8" => Self::Hour8,
-            "Day" => Self::Day,
-            "Week" => Self::Week,
-            "Month" => Self::Month,
+        match val.to_uppercase().as_str() {
+            "SEC" => Self::Sec,
+            "SEC5" => Self::Sec5,
+            "SEC15" => Self::Sec15,
+            "SEC30" => Self::Sec30,
+            "MIN" => Self::Min,
+            "MIN2" => Self::Min2,
+            "MIN3" => Self::Min3,
+            "MIN5" => Self::Min5,
+            "MIN15" => Self::Min15,
+            "MIN20" => Self::Min20,
+            "MIN30" => Self::Min30,
+            "HOUR" => Self::Hour,
+            "HOUR2" => Self::Hour2,
+            "HOUR3" => Self::Hour3,
+            "HOUR4" => Self::Hour4,
+            "HOUR8" => Self::Hour8,
+            "DAY" => Self::Day,
+            "WEEK" => Self::Week,
+            "MONTH" => Self::Month,
             _ => panic!("unsupported value: {val}"),
         }
     }
@@ -180,7 +180,7 @@ impl Display for DurationParseError {
             DurationParseError::EmptyString => write!(f, "Empty duration string"),
             DurationParseError::ParseIntError(err) => write!(f, "Parse integer error: {err}"),
             DurationParseError::MissingDelimiter(msg) => write!(f, "Missing delimiter: {msg}"),
-            DurationParseError::UnsupportedUnit(unit) => write!(f, "Unsupported duration unit: {}", unit),
+            DurationParseError::UnsupportedUnit(unit) => write!(f, "Unsupported duration unit: {unit}"),
         }
     }
 }
@@ -192,7 +192,7 @@ impl FromStr for Duration {
         if val.is_empty() {
             return Err(DurationParseError::EmptyString);
         }
-        match val.rsplit_once(' ') {
+        match val.to_uppercase().rsplit_once(' ') {
             Some((value_part, unit_part)) => {
                 let value = value_part.parse::<i32>().map_err(DurationParseError::from)?;
                 match unit_part {
@@ -373,7 +373,7 @@ impl std::fmt::Display for WhatToShow {
 
 impl From<&str> for WhatToShow {
     fn from(val: &str) -> Self {
-        match val {
+        match val.to_uppercase().as_str() {
             "TRADES" => Self::Trades,
             "MIDPOINT" => Self::MidPoint,
             "BID" => Self::Bid,
