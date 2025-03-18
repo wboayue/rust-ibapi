@@ -1,5 +1,7 @@
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display};
+use std::num::ParseIntError;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
@@ -88,6 +90,33 @@ impl Display for BarSize {
     }
 }
 
+impl From<&str> for BarSize {
+    fn from(val: &str) -> Self {
+        match val.to_uppercase().as_str() {
+            "SEC" => Self::Sec,
+            "SEC5" => Self::Sec5,
+            "SEC15" => Self::Sec15,
+            "SEC30" => Self::Sec30,
+            "MIN" => Self::Min,
+            "MIN2" => Self::Min2,
+            "MIN3" => Self::Min3,
+            "MIN5" => Self::Min5,
+            "MIN15" => Self::Min15,
+            "MIN20" => Self::Min20,
+            "MIN30" => Self::Min30,
+            "HOUR" => Self::Hour,
+            "HOUR2" => Self::Hour2,
+            "HOUR3" => Self::Hour3,
+            "HOUR4" => Self::Hour4,
+            "HOUR8" => Self::Hour8,
+            "DAY" => Self::Day,
+            "WEEK" => Self::Week,
+            "MONTH" => Self::Month,
+            _ => panic!("unsupported value: {val}"),
+        }
+    }
+}
+
 impl ToField for BarSize {
     fn to_field(&self) -> String {
         self.to_string()
@@ -131,6 +160,63 @@ impl Duration {
 impl Display for Duration {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{} {}", self.value, self.unit)
+    }
+}
+#[derive(Debug, PartialEq)]
+pub enum DurationParseError {
+    EmptyString,
+    MissingDelimiter(String),
+    ParseIntError(ParseIntError),
+    UnsupportedUnit(String),
+}
+impl From<ParseIntError> for DurationParseError {
+    fn from(err: ParseIntError) -> Self {
+        DurationParseError::ParseIntError(err)
+    }
+}
+impl Display for DurationParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            DurationParseError::EmptyString => write!(f, "Empty duration string"),
+            DurationParseError::ParseIntError(err) => write!(f, "Parse integer error: {err}"),
+            DurationParseError::MissingDelimiter(msg) => write!(f, "Missing delimiter: {msg}"),
+            DurationParseError::UnsupportedUnit(unit) => write!(f, "Unsupported duration unit: {unit}"),
+        }
+    }
+}
+impl std::error::Error for DurationParseError {}
+
+impl FromStr for Duration {
+    type Err = DurationParseError;
+    fn from_str(val: &str) -> Result<Self, DurationParseError> {
+        if val.is_empty() {
+            return Err(DurationParseError::EmptyString);
+        }
+        match val.to_uppercase().rsplit_once(' ') {
+            Some((value_part, unit_part)) => {
+                let value = value_part.parse::<i32>().map_err(DurationParseError::from)?;
+                match unit_part {
+                    "S" => Ok(Self::seconds(value)),
+                    "D" => Ok(Self::days(value)),
+                    "W" => Ok(Self::weeks(value)),
+                    "M" => Ok(Self::months(value)),
+                    "Y" => Ok(Self::years(value)),
+                    _ => Err(DurationParseError::UnsupportedUnit(unit_part.to_string())),
+                }
+            }
+            None => Err(DurationParseError::MissingDelimiter(val.to_string())),
+        }
+    }
+}
+
+impl From<&str> for Duration {
+    fn from(value: &str) -> Self {
+        Self::from_str(value).unwrap()
+    }
+}
+impl From<String> for Duration {
+    fn from(value: String) -> Self {
+        Self::from(value.as_str())
     }
 }
 
@@ -281,6 +367,24 @@ impl std::fmt::Display for WhatToShow {
             Self::FeeRate => write!(f, "FEE_RATE"),
             Self::Schedule => write!(f, "SCHEDULE"),
             Self::AdjustedLast => write!(f, "ADJUSTED_LAST"),
+        }
+    }
+}
+
+impl From<&str> for WhatToShow {
+    fn from(val: &str) -> Self {
+        match val.to_uppercase().as_str() {
+            "TRADES" => Self::Trades,
+            "MIDPOINT" => Self::MidPoint,
+            "BID" => Self::Bid,
+            "ASK" => Self::Ask,
+            "BID_ASK" => Self::BidAsk,
+            "HISTORICAL_VOLATILITY" => Self::HistoricalVolatility,
+            "OPTION_IMPLIED_VOLATILITY" => Self::OptionImpliedVolatility,
+            "FEE_RATE" => Self::FeeRate,
+            "SCHEDULE" => Self::Schedule,
+            "ADJUSTED_LAST" => Self::AdjustedLast,
+            _ => panic!("unsupported value: {val}"),
         }
     }
 }
