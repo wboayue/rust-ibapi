@@ -21,6 +21,7 @@ use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMe
 use crate::{server_versions, Error};
 use recorder::MessageRecorder;
 
+mod connection;
 mod recorder;
 
 const MIN_SERVER_VERSION: i32 = 100;
