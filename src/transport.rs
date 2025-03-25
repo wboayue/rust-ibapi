@@ -17,7 +17,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{self, shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Error};
 use recorder::MessageRecorder;
 
@@ -264,12 +264,20 @@ impl TcpMessageBus {
     fn dispatch_message(&self, server_version: i32, message: ResponseMessage) {
         match message.message_type() {
             IncomingMessages::Error => {
-                let request_id = message.peek_int(2).unwrap_or(-1);
+                let request_id = message.peek_int(messages::REQUEST_ID_INDEX).unwrap_or(-1);
+                let code = message.peek_int(messages::CODE_INDEX).unwrap_or(-1);
 
                 if request_id == UNSPECIFIED_REQUEST_ID {
                     error_event(server_version, message).unwrap();
                 } else {
-                    self.process_response(message);
+                    // Warning range defined here: https://interactivebrokers.github.io/tws-api/message_codes.html
+                    if (2100..2170).contains(&code) {
+                        // Log warning messages.
+                        let message = message.peek_string(messages::MESSAGE_INDEX);
+                        warn!("TWS returned warning - code: {code}, message: {message:?}");
+                    } else {
+                        self.process_response(message);
+                    }
                 }
             }
             IncomingMessages::OrderStatus
