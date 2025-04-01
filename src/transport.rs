@@ -17,7 +17,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestHandshake, RequestMessage, ResponseMessage};
 use crate::{server_versions, Error};
 use recorder::MessageRecorder;
 
@@ -424,13 +424,13 @@ impl TcpMessageBus {
 const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 impl MessageBus for TcpMessageBus {
-    fn send_request(&self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error> {
+    fn send_request(&self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         let (sender, receiver) = channel::unbounded();
         let sender_copy = sender.clone();
 
         self.requests.insert(request_id, sender);
 
-        self.connection.write_message(packet)?;
+        self.connection.write_message(message)?;
 
         let subscription = SubscriptionBuilder::new()
             .receiver(receiver)
@@ -874,27 +874,15 @@ impl Connection {
 
     fn write(&self, data: &str) -> Result<(), Error> {
         let mut writer = self.writer.lock()?;
+        debug!("-> {data:?}");
         writer.write_all(data.as_bytes())?;
         Ok(())
     }
 
     fn write_message(&self, message: &RequestMessage) -> Result<(), Error> {
-        let mut writer = self.writer.lock()?;
-
-        let data = message.encode();
-        debug!("-> {data:?}");
-
-        let data = data.as_bytes();
-
-        let mut packet = Vec::with_capacity(data.len() + 4);
-
-        packet.write_u32::<BigEndian>(data.len() as u32)?;
-        packet.write_all(data)?;
-
-        writer.write_all(&packet)?;
-
+        let data = message.packet();
+        self.write(&data)?;
         self.recorder.record_request(message);
-
         Ok(())
     }
 
@@ -910,6 +898,7 @@ impl Connection {
         debug!("<- {:?}", raw_string);
 
         let message = ResponseMessage::from(&raw_string);
+
         self.recorder.record_response(&message);
 
         Ok(message)
@@ -917,11 +906,9 @@ impl Connection {
 
     // sends server handshake
     fn handshake(&self) -> Result<(), Error> {
-        let prefix = "API\0";
-        let version = format!("v{MIN_SERVER_VERSION}..{MAX_SERVER_VERSION}");
+        let request = RequestHandshake::new(MIN_SERVER_VERSION, MAX_SERVER_VERSION);
 
-        let packet = prefix.to_owned() + &encode_packet(&version);
-        self.write(&packet)?;
+        self.write(&request.packet())?;
 
         let ack = self.read_message();
 
@@ -958,7 +945,7 @@ impl Connection {
             prelude.push_field(&"");
         }
 
-        self.write_message(prelude)?;
+        self.write(&prelude.packet())?;
 
         Ok(())
     }
@@ -1046,6 +1033,7 @@ fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, Opti
     let parts: Vec<&str> = connection_time.split(' ').collect();
 
     let zones = timezones::find_by_name(parts[2]);
+
     if zones.is_empty() {
         error!("time zone not found for {}", parts[2]);
         return (None, None);
@@ -1069,17 +1057,6 @@ fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, Opti
             (None, Some(timezone))
         }
     }
-}
-
-fn encode_packet(message: &str) -> String {
-    let data = message.as_bytes();
-
-    let mut packet: Vec<u8> = Vec::with_capacity(data.len() + 4);
-
-    packet.write_u32::<BigEndian>(data.len() as u32).unwrap();
-    packet.write_all(data).unwrap();
-
-    std::str::from_utf8(&packet).unwrap().into()
 }
 
 #[cfg(test)]

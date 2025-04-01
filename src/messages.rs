@@ -1,6 +1,9 @@
 use std::fmt::Display;
+use std::io::Write;
 use std::ops::Index;
 use std::str::{self, FromStr};
+
+use byteorder::{BigEndian, WriteBytesExt};
 
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -349,6 +352,50 @@ impl ToField for OutgoingMessages {
     }
 }
 
+fn encode_packet(message: &str) -> String {
+    let data = message.as_bytes();
+
+    let mut packet: Vec<u8> = Vec::with_capacity(data.len() + 4);
+
+    packet.write_u32::<BigEndian>(data.len() as u32).unwrap();
+    packet.write_all(data).unwrap();
+
+    std::str::from_utf8(&packet).unwrap().into()
+}
+
+#[derive(Default, Debug, Clone)]
+pub(crate) struct RequestHandshake {
+    min_version: i32,
+    max_version: i32,
+}
+impl RequestHandshake {
+    pub fn new(min_version: i32, max_version: i32) -> Self {
+        Self { min_version, max_version }
+    }
+    pub fn encode(&self) -> String {
+        format!("v{}..{}", self.min_version, self.max_version)
+    }
+
+    pub fn packet(&self) -> String {
+        // prefix does not get length encoded
+        "API\0".to_owned() + &encode_packet(&self.encode())
+    }
+    #[cfg(test)]
+    pub fn from_simple(field: &str) -> Self {
+        let parts: Vec<&str> = field.split("..").collect();
+
+        assert_eq!(parts.len(), 2, "Invalid handshake formatting: {:#?}", field);
+
+        let min_version = parts[0]
+            .trim_start_matches('v')
+            .parse::<i32>()
+            .expect(&format!("Invalid min version: {}", parts[0]));
+        let max_version = parts[1].parse::<i32>().expect(&format!("Invalid max version: {}", parts[1]));
+
+        Self { min_version, max_version }
+    }
+}
+
 #[derive(Default, Debug, Clone)]
 pub(crate) struct RequestMessage {
     fields: Vec<String>,
@@ -371,6 +418,10 @@ impl RequestMessage {
         data
     }
 
+    pub fn packet(&self) -> String {
+        encode_packet(&self.encode())
+    }
+
     #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.fields.len()
@@ -381,6 +432,18 @@ impl RequestMessage {
         let mut data = self.fields.join("|");
         data.push('|');
         data
+    }
+    #[cfg(test)]
+    pub fn from(fields: &str) -> RequestMessage {
+        RequestMessage {
+            fields: fields.split('\x00').map(|x| x.to_string()).collect(),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn from_simple(fields: &str) -> RequestMessage {
+        let fields = fields.replace("|", "\0");
+        Self::from(&fields)
     }
 }
 
@@ -620,6 +683,11 @@ impl ResponseMessage {
         let mut data = self.fields.join("\0");
         data.push('\0');
         data
+    }
+
+    #[cfg(test)]
+    pub fn packet(&self) -> String {
+        encode_packet(&self.encode())
     }
 
     #[cfg(test)]

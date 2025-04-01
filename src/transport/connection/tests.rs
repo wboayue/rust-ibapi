@@ -1,14 +1,43 @@
 use crate::client::Client;
 use crate::contracts::Contract;
-use crate::transport::{encode_packet, read_header};
+use crate::messages::{RequestHandshake, RequestMessage, ResponseMessage};
+use crate::transport::read_header;
 use log::debug;
 use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::net::{SocketAddr, TcpListener};
 use std::str::from_utf8;
-use std::thread::{sleep, JoinHandle};
-use std::time::Duration;
+use std::thread::JoinHandle;
+
+// Build Events with Stubs
+// struct EventBuilder {
+//     events:
+// }
+// impl EventBuilder {
+//     startup()
+// }
+
+// Trying to keep the shared functionality between the TestServer and Connection
+// in a location they can be accessed by both
+
+// #[derive(Clone, Debug)]
+// struct Message {
+//     request: RequestMessage,
+//     responses: Vec<ResponseMessage>,
+// }
+#[derive(Clone, Debug)]
+enum Message {
+    Handshake {
+        request: RequestHandshake,
+        responses: Vec<ResponseMessage>,
+    },
+    Request {
+        request: RequestMessage,
+        responses: Vec<ResponseMessage>,
+    },
+    // Subscription
+}
 
 #[derive(Clone, Debug)]
 enum Event {
@@ -16,34 +45,35 @@ enum Event {
     Message(Message),
 }
 
-#[derive(Clone, Debug, PartialEq)]
-struct Message {
-    request: String,
-    responses: Vec<String>,
-}
-
 impl Event {
-    fn message(request: &str, response: Vec<&str>) -> Self {
-        let response_vec = response.iter().map(|s| s.to_string()).collect::<Vec<String>>();
-        let message = Message {
-            request: request.to_owned(),
-            responses: response_vec,
+    fn request(request: &str, responses: &[&str]) -> Self {
+        let responses = responses
+            .into_iter()
+            .map(|s| ResponseMessage::from_simple(s))
+            .collect::<Vec<ResponseMessage>>();
+        let message = Message::Request {
+            request: RequestMessage::from_simple(request),
+            responses,
+        };
+        Event::Message(message)
+    }
+
+    fn handshake(request: &str, responses: &[&str]) -> Self {
+        let responses = responses
+            .into_iter()
+            .map(|s| ResponseMessage::from_simple(s))
+            .collect::<Vec<ResponseMessage>>();
+        let message = Message::Handshake {
+            request: RequestHandshake::from_simple(request),
+            responses,
         };
         Event::Message(message)
     }
 }
 
-#[derive(PartialEq)]
-enum MockStreamState {
-    Disconnected,
-    Connected,
-    // Maintenance,
-}
-
 struct MockStream {
     stream: TcpStream,
     messages: VecDeque<Message>,
-    state: MockStreamState,
     // keep the stream alive after messages have processed
     keep_alive: bool,
 }
@@ -53,48 +83,45 @@ impl MockStream {
         Self {
             stream,
             messages,
-            state: MockStreamState::Disconnected,
             keep_alive,
         }
     }
 
-    fn write_responses(&mut self, responses: Vec<String>) {
-        for res in responses {
-            debug!("mock -> {:#?}", res);
-            self.stream.write_all(&encode_packet(&res).clone().as_bytes()).unwrap();
-        }
-    }
-
-    fn process_handshake(&mut self) {
+    fn read_prefix(&mut self) {
         let mut data = vec![0_u8; 4];
         self.stream.read(&mut data).unwrap();
         assert_eq!(
             data,
             b"API\0",
-            "Handshake message did not start with API.\n  left: {}\n  right: {}",
+            "Handshake message did not start with API prefix.\n  left: {}\n  right: {}",
             from_utf8(&data).unwrap(),
             from_utf8(&b"API\0"[..]).unwrap(),
         );
-        self.state = MockStreamState::Connected;
     }
 
-    fn process_message(&mut self, message: Message, message_size: usize) {
+    fn handle_message(&mut self, request: String, responses: Vec<ResponseMessage>) {
+        let message_size = read_header(&self.stream).unwrap();
+
         let mut data = vec![0_u8; message_size];
+
         self.stream.read_exact(&mut data).unwrap();
 
-        debug!("mock <- {:#?}", from_utf8(&data).unwrap());
+        let raw_string = String::from_utf8(data).unwrap();
+        debug!("mock <- {:#?}", raw_string);
 
-        let request = message.request.as_bytes();
+        // let request = message.request.encode();
 
         assert_eq!(
-            data,
+            raw_string,
             request,
-            "Mock Server event request != Client request.\n  left: {},\n  right: {}",
-            from_utf8(&data).unwrap(),
-            message.request
+            // "Mock Server event request != Client request.\n  left: {},\n  right: {}",
         );
 
-        self.write_responses(message.responses);
+        for res in responses {
+            let packet = res.packet();
+            debug!("mock -> {:#?}", packet);
+            self.stream.write_all(packet.as_bytes()).unwrap();
+        }
     }
 
     pub fn process(&mut self) {
@@ -104,13 +131,13 @@ impl MockStream {
                 None => break,
             };
 
-            if self.state == MockStreamState::Disconnected {
-                self.process_handshake();
+            match message {
+                Message::Handshake { request, responses } => {
+                    self.read_prefix();
+                    self.handle_message(request.encode(), responses);
+                }
+                Message::Request { request, responses } => self.handle_message(request.encode(), responses),
             }
-
-            let message_size = read_header(&self.stream).unwrap();
-
-            self.process_message(message, message_size);
         }
 
         if self.keep_alive {
@@ -186,7 +213,7 @@ impl TestServer {
     }
 }
 
-const AAPL_CONTRACT: &str  = "AAPL\0STK\0\00\0\0SMART\0USD\0AAPL\0NMS\0NMS\0265598\00.01\0\0ACTIVETIM,AD,ADDONT,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DARKONLY,DARKPOLL,DAY,DEACT,DEACTDIS,DEACTEOD,DIS,DUR,GAT,GTC,GTD,GTT,HID,IBKRATS,ICE,IMB,IOC,LIT,LMT,LOC,MIDPX,MIT,MKT,MOC,MTL,NGCOMB,NODARK,NONALGO,OCA,OPG,OPGREROUT,PEGBENCH,PEGMID,POSTATS,POSTONLY,PREOPGRTH,PRICECHK,REL,REL2MID,RELPCTOFS,RPI,RTH,SCALE,SCALEODD,SCALERST,SIZECHK,SMARTSTG,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,SWEEP,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF\0SMART,AMEX,NYSE,CBOE,PHLX,ISE,CHX,ARCA,NASDAQ,DRCTEDGE,BEX,BATS,EDGEA,BYX,IEX,EDGX,FOXRIVER,PEARL,NYSENAT,LTSE,MEMX,IBEOS,OVERNIGHT,TPLUS0,PSX\01\00\0APPLE INC\0NASDAQ\0\0Technology\0Computers\0Computers\0US/Eastern\020250324:0400-20250324:2000;20250325:0400-20250325:2000;20250326:0400-20250326:2000;20250327:0400-20250327:2000;20250328:0400-20250328:2000\020250324:0930-20250324:1600;20250325:0930-20250325:1600;20250326:0930-20250326:1600;20250327:0930-20250327:1600;20250328:0930-20250328:1600\0\0\01\0ISIN\0US0378331005\01\0\0\026,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26\0\0COMMON\00.0001\00.0001\0100\0";
+const AAPL_CONTRACT: &str  = "AAPL|STK||0||SMART|USD|AAPL|NMS|NMS|265598|0.01||ACTIVETIM,AD,ADDONT,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DARKONLY,DARKPOLL,DAY,DEACT,DEACTDIS,DEACTEOD,DIS,DUR,GAT,GTC,GTD,GTT,HID,IBKRATS,ICE,IMB,IOC,LIT,LMT,LOC,MIDPX,MIT,MKT,MOC,MTL,NGCOMB,NODARK,NONALGO,OCA,OPG,OPGREROUT,PEGBENCH,PEGMID,POSTATS,POSTONLY,PREOPGRTH,PRICECHK,REL,REL2MID,RELPCTOFS,RPI,RTH,SCALE,SCALEODD,SCALERST,SIZECHK,SMARTSTG,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,SWEEP,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF|SMART,AMEX,NYSE,CBOE,PHLX,ISE,CHX,ARCA,NASDAQ,DRCTEDGE,BEX,BATS,EDGEA,BYX,IEX,EDGX,FOXRIVER,PEARL,NYSENAT,LTSE,MEMX,IBEOS,OVERNIGHT,TPLUS0,PSX|1|0|APPLE INC|NASDAQ||Technology|Computers|Computers|US/Eastern|20250324:0400-20250324:2000;20250325:0400-20250325:2000;20250326:0400-20250326:2000;20250327:0400-20250327:2000;20250328:0400-20250328:2000|20250324:0930-20250324:1600;20250325:0930-20250325:1600;20250326:0930-20250326:1600;20250327:0930-20250327:1600;20250328:0930-20250328:1600|||1|ISIN|US0378331005|1|||26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26||COMMON|0.0001|0.0001|100|";
 
 // Examples:
 // Testing connect -> request -> disconnect -> reconnect -> request
@@ -197,19 +224,19 @@ fn test_mock_connection() {
     // these messages could also be read from the output of MessageRecorder...
     // assuming the MessageRecorder records the full establish_connection() routine
     let events = vec![
-        Event::message("v100..173", vec!["173\020250323 22:21:01 Greenwich Mean Time\0"]),
-        Event::message("71\02\028\0\0", vec!["15\01\0DU1234567\0", "9\01\01\0"]),
-        Event::message(
-            "9\08\09000\00\0AAPL\0STK\0\00\0\0\0SMART\0\0USD\0\0\00\0\0\0",
-            vec![&format!("10\09000\0{}", AAPL_CONTRACT), "52\01\09000\0"],
+        Event::handshake("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Event::request("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        Event::request(
+            "9|8|9000|0|AAPL|STK||0|||SMART||USD|||0||",
+            &[&format!("10|9000|{}", AAPL_CONTRACT), "52|1|9000|"],
         ),
         Event::Restart,
-        Event::message("v100..173", vec!["173\020250323 22:21:01 Greenwich Mean Time\0"]),
-        Event::message("71\02\028\0\0", vec!["15\01\0DU1234567\0", "9\01\01\0"]),
-        Event::message(
-            "9\08\09001\00\0AAPL\0STK\0\00\0\0\0SMART\0\0USD\0\0\00\0\0\0",
-            vec![&format!("10\09001\0{}", AAPL_CONTRACT), "52\01\09001\0"],
-        ),
+        Event::handshake("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Event::request("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        // Event::request(
+        //     "9|8|9001|0|AAPL|STK||0|||SMART||USD|||0||",
+        //     &[&format!("10|9001|{}", AAPL_CONTRACT), "52|1|9001|"],
+        // ),
     ];
 
     let server = TestServer::start(events);
@@ -219,10 +246,27 @@ fn test_mock_connection() {
     let contract = Contract::stock("AAPL");
     client.contract_details(&contract).unwrap();
 
-    drop(server);
-
     // TODO: this should wait until the client has reconnected instead of sleeping
-    sleep(Duration::from_secs(2));
+    // sleep(Duration::from_secs(2));
+    // match client.contract_details(&contract) {
+    //     Ok(details) => {
+    //         println!("{}", "details");
+    //         println!("{:?}", details)
+    //     }
+    //     Err(e) => {
+    //         println!("{}", "error");
+    //         println!("{:#?}", e)
+    //     }
+    // }
 
+    // let responses = client.send_request(client.next_request_id(), packet)?;
+}
+
+#[test]
+fn test_connection() {
+    env_logger::init();
+    let client = Client::connect("192.168.0.5:4002", 28).unwrap();
+
+    let contract = Contract::stock("AAPL");
     client.contract_details(&contract).unwrap();
 }
