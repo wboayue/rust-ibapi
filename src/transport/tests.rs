@@ -1,3 +1,4 @@
+use crate::transport::TcpSocket;
 use time::macros::datetime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt};
 
@@ -7,8 +8,8 @@ use super::*;
 
 #[test]
 fn test_thread_safe() {
-    assert_send_and_sync::<Connection>();
-    assert_send_and_sync::<TcpMessageBus>();
+    assert_send_and_sync::<Connection<TcpSocket>>();
+    assert_send_and_sync::<TcpMessageBus<TcpSocket>>();
 }
 
 #[test]

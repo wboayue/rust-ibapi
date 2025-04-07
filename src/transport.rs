@@ -3,7 +3,7 @@
 //! and responses from TWS back to the Client.
 
 use std::collections::HashMap;
-use std::io::{prelude::*, Cursor, ErrorKind};
+use std::io::{self, prelude::*, Cursor, ErrorKind};
 use std::net::TcpStream;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -17,7 +17,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestHandshake, RequestMessage, ResponseMessage};
+use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Error};
 use recorder::MessageRecorder;
 
@@ -145,8 +145,8 @@ pub enum Signal {
 }
 
 #[derive(Debug)]
-pub struct TcpMessageBus {
-    connection: Connection,
+pub struct TcpMessageBus<S: Stream> {
+    connection: Connection<S>,
     handles: Mutex<Vec<JoinHandle<()>>>,
     requests: SenderHash<i32, Response>,
     orders: SenderHash<i32, Response>,
@@ -157,8 +157,8 @@ pub struct TcpMessageBus {
     shutdown_requested: AtomicBool,
 }
 
-impl TcpMessageBus {
-    pub fn new(connection: Connection) -> Result<TcpMessageBus, Error> {
+impl<S: Stream> TcpMessageBus<S> {
+    pub fn new(connection: Connection<S>) -> Result<TcpMessageBus<S>, Error> {
         let (signals_send, signals_recv) = channel::unbounded();
 
         Ok(TcpMessageBus {
@@ -217,48 +217,58 @@ impl TcpMessageBus {
     fn read_message(&self) -> Response {
         self.connection.read_message()
     }
+    fn dispatch(&self, server_version: i32) -> Result<(), Error> {
+        const RECONNECT_CODES: &[ErrorKind] = &[ErrorKind::ConnectionReset, ErrorKind::ConnectionAborted, ErrorKind::UnexpectedEof];
+        const TIMEOUT_CODES: &[ErrorKind] = &[ErrorKind::WouldBlock, ErrorKind::TimedOut];
+        match self.read_message() {
+            Ok(message) => {
+                self.dispatch_message(server_version, message);
+                Ok(())
+            }
+            Err(Error::Io(e)) if TIMEOUT_CODES.contains(&e.kind()) => {
+                if self.is_shutting_down() {
+                    debug!("dispatcher thread exiting");
+                    return Err(Error::Shutdown);
+                }
+                Ok(())
+            }
+            Err(Error::Io(e)) if RECONNECT_CODES.contains(&e.kind()) => {
+                error!("error reading next message (will attempt reconnect): {:?}", e);
+
+                if let Err(reconnect_err) = self.connection.reconnect() {
+                    error!("failed to reconnect to TWS/Gateway: {:?}", reconnect_err);
+                    self.request_shutdown();
+                    return Err(Error::ConnectionFailed);
+                }
+
+                info!("successfully reconnected to TWS/Gateway");
+                self.reset();
+                Ok(())
+            }
+            Err(err) => {
+                error!("error reading next message (shutting down): {:?}", err);
+                self.request_shutdown();
+                Err(err)
+            }
+        }
+    }
 
     // Dispatcher thread reads messages from TWS and dispatches them to
     // appropriate channel.
     fn start_dispatcher_thread(self: &Arc<Self>, server_version: i32) -> JoinHandle<()> {
         let message_bus = Arc::clone(self);
-
-        const RECONNECT_CODES: &[ErrorKind] = &[ErrorKind::ConnectionReset, ErrorKind::ConnectionAborted, ErrorKind::UnexpectedEof];
-        const TIMEOUT_CODES: &[ErrorKind] = &[ErrorKind::WouldBlock, ErrorKind::TimedOut];
-
         thread::spawn(move || {
             loop {
-                match message_bus.read_message() {
-                    Ok(message) => {
-                        message_bus.dispatch_message(server_version, message);
+                match message_bus.dispatch(server_version) {
+                    Ok(_) => continue,
+                    Err(Error::Shutdown) | Err(Error::ConnectionFailed) => break,
+                    Err(e) => {
+                        error!("Dispatcher encountered an error: {:?}", e);
+                        break;
                     }
-                    Err(Error::Io(e)) if TIMEOUT_CODES.contains(&e.kind()) => {
-                        if message_bus.is_shutting_down() {
-                            debug!("dispatcher thread exiting");
-                            return;
-                        }
-                    }
-                    Err(Error::Io(e)) if RECONNECT_CODES.contains(&e.kind()) => {
-                        error!("error reading next message (will attempt reconnect): {:?}", e);
-
-                        // Attempt to reconnect to TWS.
-                        if let Err(e) = message_bus.connection.reconnect() {
-                            error!("failed to reconnect to TWS/Gateway: {:?}", e);
-                            message_bus.request_shutdown();
-                            return;
-                        }
-
-                        info!("successfully reconnected to TWS/Gateway");
-                        message_bus.reset();
-                        continue;
-                    }
-                    Err(err) => {
-                        error!("error reading next message (shutting down): {:?}", err);
-                        message_bus.request_shutdown();
-                        return;
-                    }
-                };
+                }
             }
+            debug!("Dispatcher thread finished.");
         })
     }
 
@@ -423,7 +433,7 @@ impl TcpMessageBus {
 
 const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
-impl MessageBus for TcpMessageBus {
+impl<S: Stream> MessageBus for TcpMessageBus<S> {
     fn send_request(&self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         let (sender, receiver) = channel::unbounded();
         let sender_copy = sender.clone();
@@ -509,10 +519,9 @@ impl MessageBus for TcpMessageBus {
     }
 }
 
-fn read_header(mut reader: &TcpStream) -> Result<usize, Error> {
+fn read_header(reader: &impl Stream) -> Result<usize, Error> {
     let buffer = &mut [0_u8; 4];
     reader.read_exact(buffer)?;
-
     let mut reader = Cursor::new(buffer);
     let count = reader.read_u32::<BigEndian>()?;
 
@@ -790,28 +799,83 @@ pub(crate) struct ConnectionMetadata {
 }
 
 #[derive(Debug)]
-pub(crate) struct Connection {
-    client_id: i32,
-    connection_url: String,
+pub(crate) struct TcpSocket {
     reader: Mutex<TcpStream>,
     writer: Mutex<TcpStream>,
+    connection_url: String,
+}
+impl TcpSocket {
+    pub fn new(stream: TcpStream, connection_url: &str) -> Result<Self, Error> {
+        let writer = stream.try_clone()?;
+
+        stream.set_read_timeout(Some(TWS_READ_TIMEOUT))?;
+
+        Ok(Self {
+            reader: Mutex::new(stream),
+            writer: Mutex::new(writer),
+            connection_url: connection_url.to_string(),
+        })
+    }
+}
+
+impl Reconnect for TcpSocket {
+    fn reconnect(&self) -> Result<(), Error> {
+        match TcpStream::connect(&self.connection_url) {
+            Ok(stream) => {
+                stream.set_read_timeout(Some(TWS_READ_TIMEOUT))?;
+
+                let mut reader = self.reader.lock()?;
+                *reader = stream.try_clone()?;
+
+                let mut writer = self.writer.lock()?;
+                *writer = stream;
+
+                Ok(())
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+}
+
+pub trait Reconnect {
+    fn reconnect(&self) -> Result<(), Error>;
+}
+
+pub trait Stream: Io + Reconnect + Sync + Send + 'static + std::fmt::Debug {}
+impl Stream for TcpSocket {}
+
+impl Io for TcpSocket {
+    fn read_exact(&self, buf: &mut [u8]) -> Result<(), Error> {
+        let mut reader = self.reader.lock()?;
+        Ok(reader.read_exact(buf)?)
+    }
+
+    fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+        let mut writer = self.writer.lock()?;
+        writer.write(buf)?;
+        Ok(())
+    }
+}
+
+pub trait Io {
+    fn read_exact(&self, buf: &mut [u8]) -> Result<(), Error>;
+    fn write_all(&self, buf: &[u8]) -> Result<(), Error>;
+}
+
+#[derive(Debug)]
+pub(crate) struct Connection<S: Stream> {
+    client_id: i32,
+    socket: S,
     connection_metadata: Mutex<ConnectionMetadata>,
     max_retries: i32,
     recorder: MessageRecorder,
 }
 
-impl Connection {
-    pub fn connect(client_id: i32, connection_url: &str) -> Result<Self, Error> {
-        let reader = TcpStream::connect(connection_url)?;
-        let writer = reader.try_clone()?;
-
-        reader.set_read_timeout(Some(TWS_READ_TIMEOUT))?;
-
+impl<S: Stream> Connection<S> {
+    pub fn connect(socket: S, client_id: i32) -> Result<Self, Error> {
         let connection = Self {
             client_id,
-            connection_url: connection_url.into(),
-            reader: Mutex::new(reader),
-            writer: Mutex::new(writer),
+            socket,
             connection_metadata: Mutex::new(ConnectionMetadata {
                 client_id,
                 ..Default::default()
@@ -839,18 +903,8 @@ impl Connection {
 
             thread::sleep(next_delay);
 
-            match TcpStream::connect(&self.connection_url) {
-                Ok(stream) => {
-                    {
-                        let mut reader = self.reader.lock()?;
-                        let mut writer = self.writer.lock()?;
-
-                        *reader = stream.try_clone()?;
-                        reader.set_read_timeout(Some(TWS_READ_TIMEOUT))?;
-
-                        *writer = stream;
-                    }
-
+            match self.socket.reconnect() {
+                Ok(_) => {
                     info!("reconnected !!!");
                     self.establish_connection()?;
 
@@ -873,26 +927,22 @@ impl Connection {
     }
 
     fn write(&self, data: &str) -> Result<(), Error> {
-        let mut writer = self.writer.lock()?;
         debug!("-> {data:?}");
-        writer.write_all(data.as_bytes())?;
+        self.socket.write_all(data.as_bytes())?;
         Ok(())
     }
 
     fn write_message(&self, message: &RequestMessage) -> Result<(), Error> {
-        let data = message.packet();
-        self.write(&data)?;
         self.recorder.record_request(message);
+        let packet = encode_packet(&message.encode());
+        self.write(&packet)?;
         Ok(())
     }
 
     fn read_message(&self) -> Response {
-        let mut reader = self.reader.lock()?;
-
-        let message_size = read_header(&reader)?;
+        let message_size = read_header(&self.socket)?;
         let mut data = vec![0_u8; message_size];
-
-        reader.read_exact(&mut data)?;
+        self.socket.read_exact(&mut data)?;
 
         let raw_string = String::from_utf8(data)?;
         debug!("<- {:?}", raw_string);
@@ -906,9 +956,11 @@ impl Connection {
 
     // sends server handshake
     fn handshake(&self) -> Result<(), Error> {
-        let request = RequestHandshake::new(MIN_SERVER_VERSION, MAX_SERVER_VERSION);
+        let prefix = "API\0";
+        let version = format!("v{MIN_SERVER_VERSION}..{MAX_SERVER_VERSION}");
 
-        self.write(&request.packet())?;
+        let packet = prefix.to_owned() + &encode_packet(&version);
+        self.write(&packet)?;
 
         let ack = self.read_message();
 
@@ -945,7 +997,7 @@ impl Connection {
             prelude.push_field(&"");
         }
 
-        self.write(&prelude.packet())?;
+        self.write_message(&prelude)?;
 
         Ok(())
     }
@@ -1057,6 +1109,17 @@ fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, Opti
             (None, Some(timezone))
         }
     }
+}
+
+fn encode_packet(message: &str) -> String {
+    let data = message.as_bytes();
+
+    let mut packet: Vec<u8> = Vec::with_capacity(data.len() + 4);
+
+    packet.write_u32::<BigEndian>(data.len() as u32).unwrap();
+    packet.write_all(data).unwrap();
+
+    std::str::from_utf8(&packet).unwrap().into()
 }
 
 #[cfg(test)]
