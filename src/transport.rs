@@ -835,13 +835,17 @@ impl Reconnect for TcpSocket {
             Err(e) => Err(e.into()),
         }
     }
+    fn sleep(&self, duration: std::time::Duration) {
+        thread::sleep(duration)
+    }
 }
 
-pub trait Reconnect {
+pub(crate) trait Reconnect {
     fn reconnect(&self) -> Result<(), Error>;
+    fn sleep(&self, duration: std::time::Duration);
 }
 
-pub trait Stream: Io + Reconnect + Sync + Send + 'static + std::fmt::Debug {}
+pub(crate) trait Stream: Io + Reconnect + Sync + Send + 'static + std::fmt::Debug {}
 impl Stream for TcpSocket {}
 
 impl Io for TcpSocket {
@@ -857,7 +861,7 @@ impl Io for TcpSocket {
     }
 }
 
-pub trait Io {
+pub(crate) trait Io {
     fn read_exact(&self, buf: &mut [u8]) -> Result<(), Error>;
     fn write_all(&self, buf: &[u8]) -> Result<(), Error>;
 }
@@ -901,7 +905,7 @@ impl<S: Stream> Connection<S> {
             let next_delay = backoff.next_delay();
             info!("next reconnection attempt in {next_delay:#?}");
 
-            thread::sleep(next_delay);
+            self.socket.sleep(next_delay);
 
             match self.socket.reconnect() {
                 Ok(_) => {
