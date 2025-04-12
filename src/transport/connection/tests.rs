@@ -183,7 +183,6 @@ fn test_order_request() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn test_connection_establish_connection() -> Result<(), Error> {
-    env_logger::init();
     let events = vec![
         Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
         Event::from(
@@ -299,96 +298,71 @@ fn test_send_request_after_disconnect() -> Result<(), Error> {
     Ok(())
 }
 
-// const NEWS_RESPONSE: &str = "85|08|0BRFG|Briefing.com General Market Columns|BRFUPDN|Briefing.com Analyst Actions|DJ-N|Dow Jones News Service|DJ-RTA|Dow Jones Real-Time News Asia Pacific|DJ-RTE|Dow Jones Real-Time News Europe|DJ-RTG|Dow Jones Real-Time News Global|DJ-RTPRO|Dow Jones Real-Time News Pro|DJNL|Dow Jones Newsletters|";
-// #[test]
-// fn test_shared_request() -> Result<(), Box<dyn std::error::Error>> {
-//     env_logger::init();
 //
-//     let events = vec![
-//         Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-//         Event::from("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
-//         Event::from("|85|", &[NEWS_RESPONSE]),
-//     ];
-//
-//     let client = Client::connect("192.168.0.5:4002", 28).expect("connection failed");
-//
-//     client.news_providers().expect("request news providers failed");
-//
-//     Ok(())
-// }
+// // Test Error::ConnectionReset is raised on subscription.next()
+// // when sending request during disconnect
+#[test]
+fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
+    let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL"))?;
 
+    let events = vec![
+        Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Event::from("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        Event::from_request(packet.clone(), &[]),
+        Event::Restart,
+        Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Event::from("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+    ];
+
+    let stream = MockSocket::new(events, 0);
+    let connection = Connection::connect(stream, 28)?;
+    let server_version = connection.server_version();
+    let bus = TcpMessageBus::new(connection)?;
+
+    let subscription = bus.send_request(9000, &packet)?;
+
+    bus.dispatch(server_version)?;
+
+    match subscription.next() {
+        Some(Err(Error::ConnectionReset)) => {}
+        _ => panic!(),
+    }
+
+    Ok(())
+}
 //
 // // Test Error::ConnectionReset is raised on subscription.next()
 // // when sending request during disconnect
-// #[test]
-// fn test_request_before_disconnect_raises_error() -> Result<(), Box<dyn std::error::Error>> {
-//     let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL"))?;
-//
-//     let events = vec![
-//         Event::handshake("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-//         Event::request("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
-//         Event::Message(MockExchange::Request {
-//             request: packet.clone(),
-//             responses: vec![],
-//         }),
-//         Event::Restart,
-//         Event::handshake("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-//         Event::request("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
-//     ];
-//
-//     let server = TestServer::start(events);
-//
-//     let connection = Connection::connect(28, &server.address().to_string())?;
-//     let server_version = connection.server_version();
-//     let bus = Arc::new(TcpMessageBus::new(connection)?);
-//
-//     bus.process_messages(server_version)?;
-//
-//     let subscription = bus.send_request(9000, &packet)?;
-//
-//     match subscription.next() {
-//         Some(Err(Error::ConnectionReset)) => {}
-//         _ => panic!(),
-//     }
-//
-//     Ok(())
-// }
-//
-// // Test Error::ConnectionReset is raised on subscription.next()
-// // when sending request during disconnect
-// #[test]
-// fn test_request_during_disconnect_raises_error() -> Result<(), Box<dyn std::error::Error>> {
-//     let events = vec![
-//         Event::handshake("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-//         Event::request("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
-//         Event::Restart,
-//         Event::handshake("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-//         Event::request("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
-//     ];
-//
-//     let server = TestServer::start(events);
-//
-//     let connection = Connection::connect(28, &server.address().to_string())?;
-//     let server_version = connection.server_version();
-//     let bus = Arc::new(TcpMessageBus::new(connection)?);
-//
-//     bus.process_messages(server_version)?;
-//
-//     // sleep so the request is sent after the dispatcher thread enters the reconnection
-//     // routine
-//     std::thread::sleep(Duration::from_millis(1));
-//
-//     // now attempt to send the request
-//     let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL"))?;
-//     let subscription = bus.send_request(9000, &packet)?;
-//
-//     match subscription.next() {
-//         Some(Err(Error::ConnectionReset)) => {}
-//         _ => panic!(),
-//     }
-//
-//     Ok(())
-// }
+#[test]
+fn test_request_during_disconnect_raises_error() -> Result<(), Error> {
+    env_logger::init();
+    let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL"))?;
+
+    let events = vec![
+        Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Event::from("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        Event::Restart,
+        Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Event::from_request(packet.clone(), &[]),
+        Event::from("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+    ];
+
+    let stream = MockSocket::new(events, 0);
+    let connection = Connection::connect(stream, 28)?;
+
+    match connection.read_message() {
+        Ok(_) => panic!(""),
+        Err(_) => {
+            connection.socket.reconnect()?;
+            connection.handshake()?;
+            connection.write_message(&packet)?;
+            connection.start_api()?;
+            connection.receive_account_info()?;
+        }
+    };
+
+    Ok(())
+}
 //
 //
 // // TODO: This test repeats test_request_during_disconnect() with the client instead
