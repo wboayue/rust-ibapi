@@ -17,7 +17,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
-use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{encode_length, shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Error};
 use recorder::MessageRecorder;
 
@@ -519,15 +519,6 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     }
 }
 
-fn read_header(reader: &impl Stream) -> Result<usize, Error> {
-    let buffer = &mut [0_u8; 4];
-    reader.read_exact(buffer)?;
-    let mut reader = Cursor::new(buffer);
-    let count = reader.read_u32::<BigEndian>()?;
-
-    Ok(count as usize)
-}
-
 fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), Error> {
     packet.skip(); // message_id
 
@@ -848,10 +839,25 @@ pub(crate) trait Reconnect {
 pub(crate) trait Stream: Io + Reconnect + Sync + Send + 'static + std::fmt::Debug {}
 impl Stream for TcpSocket {}
 
+fn read_header(reader: &mut impl Read) -> Result<usize, Error> {
+    let buffer = &mut [0_u8; 4];
+    reader.read_exact(buffer)?;
+    let mut reader = Cursor::new(buffer);
+    let count = reader.read_u32::<BigEndian>()?;
+    Ok(count as usize)
+}
+
+fn read_message(reader: &mut impl Read) -> Result<Vec<u8>, Error> {
+    let message_size = read_header(reader)?;
+    let mut data = vec![0_u8; message_size];
+    reader.read_exact(&mut data)?;
+    Ok(data)
+}
+
 impl Io for TcpSocket {
-    fn read_exact(&self, buf: &mut [u8]) -> Result<(), Error> {
+    fn read_message(&self) -> Result<Vec<u8>, Error> {
         let mut reader = self.reader.lock()?;
-        Ok(reader.read_exact(buf)?)
+        Ok(read_message(&mut *reader)?)
     }
 
     fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
@@ -862,7 +868,7 @@ impl Io for TcpSocket {
 }
 
 pub(crate) trait Io {
-    fn read_exact(&self, buf: &mut [u8]) -> Result<(), Error>;
+    fn read_message(&self) -> Result<Vec<u8>, Error>;
     fn write_all(&self, buf: &[u8]) -> Result<(), Error>;
 }
 
@@ -930,24 +936,17 @@ impl<S: Stream> Connection<S> {
         Ok(())
     }
 
-    fn write(&self, data: &str) -> Result<(), Error> {
-        debug!("-> {data:?}");
-        self.socket.write_all(data.as_bytes())?;
-        Ok(())
-    }
-
     fn write_message(&self, message: &RequestMessage) -> Result<(), Error> {
         self.recorder.record_request(message);
-        let packet = encode_packet(&message.encode());
-        self.write(&packet)?;
+        let encoded = message.encode();
+        debug!("-> {encoded:?}");
+        let length_encoded = encode_length(&encoded);
+        self.socket.write_all(&length_encoded)?;
         Ok(())
     }
 
     fn read_message(&self) -> Response {
-        let message_size = read_header(&self.socket)?;
-        let mut data = vec![0_u8; message_size];
-        self.socket.read_exact(&mut data)?;
-
+        let data = self.socket.read_message()?;
         let raw_string = String::from_utf8(data)?;
         debug!("<- {:?}", raw_string);
 
@@ -960,11 +959,14 @@ impl<S: Stream> Connection<S> {
 
     // sends server handshake
     fn handshake(&self) -> Result<(), Error> {
-        let prefix = "API\0";
-        let version = format!("v{MIN_SERVER_VERSION}..{MAX_SERVER_VERSION}");
+        let version = &format!("v{MIN_SERVER_VERSION}..{MAX_SERVER_VERSION}");
 
-        let packet = prefix.to_owned() + &encode_packet(&version);
-        self.write(&packet)?;
+        debug!("-> {version:?}");
+
+        let mut handshake = Vec::from(b"API\0");
+        handshake.extend_from_slice(&encode_length(version));
+
+        self.socket.write_all(&handshake)?;
 
         let ack = self.read_message();
 
@@ -1113,17 +1115,6 @@ fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, Opti
             (None, Some(timezone))
         }
     }
-}
-
-fn encode_packet(message: &str) -> String {
-    let data = message.as_bytes();
-
-    let mut packet: Vec<u8> = Vec::with_capacity(data.len() + 4);
-
-    packet.write_u32::<BigEndian>(data.len() as u32).unwrap();
-    packet.write_all(data).unwrap();
-
-    std::str::from_utf8(&packet).unwrap().into()
 }
 
 #[cfg(test)]

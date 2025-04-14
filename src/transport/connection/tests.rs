@@ -2,81 +2,64 @@ use crate::client::Client;
 use crate::contracts::encoders::encode_request_contract_data;
 use crate::contracts::Contract;
 use crate::errors::Error;
-use crate::messages::{RequestMessage, ResponseMessage};
-use crate::transport::{encode_packet, Connection, Io, MessageBus, Reconnect, Stream, TcpMessageBus, MAX_RETRIES};
-use std::cell::Cell;
+use crate::messages::{encode_length, RequestMessage, ResponseMessage};
+use crate::transport::{read_message, Connection, Io, MessageBus, Reconnect, Stream, TcpMessageBus, MAX_RETRIES};
 use std::io::ErrorKind;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use log::debug;
+use log::{debug, trace};
 use std::collections::VecDeque;
-use std::io::Read;
-use std::sync::atomic::AtomicI32;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::Arc;
+
+fn mock_socket_error(kind: ErrorKind) -> Error {
+    let message = format!("Simulated {} error", kind);
+    debug!("mock -> {message}");
+    let io_error = std::io::Error::new(kind, message);
+    Error::Io(Arc::new(io_error))
+}
 
 #[derive(Debug)]
 struct MockSocket {
-    events: Arc<Mutex<VecDeque<Event>>>,
-    response_buf: Arc<Mutex<Vec<u8>>>,
-    is_reconnecting: AtomicBool,
-    reconnect_call_count: AtomicI32,
-    expected_retries: i32,
+    // Read only
+    exchanges: Vec<Exchange>,
+    expected_retries: usize,
+    reconnect_call_count: AtomicUsize,
+
+    // Accessed from reader thread
+    // Mutated by writer threads
+    exchange_index: AtomicUsize,
+
+    // Mutated from reader thread
+    read_call_count: AtomicUsize,
+
+    // Mutated by writer threads
+    write_call_count: AtomicUsize,
 }
 
 impl MockSocket {
-    pub fn new(events: Vec<Event>, expected_retries: i32) -> Self {
+    pub fn new(exchanges: Vec<Exchange>, expected_retries: usize) -> Self {
         Self {
-            events: Arc::new(Mutex::new(VecDeque::from(events))),
-            response_buf: Arc::new(Mutex::new(vec![0_u8; 0])),
-            is_reconnecting: AtomicBool::new(false),
-            reconnect_call_count: AtomicI32::new(0),
+            exchanges,
             expected_retries,
-        }
-    }
-    fn handle_write(&self, buf: &[u8], request: RequestMessage, responses: Vec<ResponseMessage>) {
-        let raw_string = str::from_utf8(buf).unwrap();
-        debug!("mock <- {:?}", raw_string);
+            reconnect_call_count: AtomicUsize::new(0),
 
-        // remove API\0 to assert against the length encoded portion of the handshake
-        match buf.starts_with(b"API\0") {
-            true => {
-                let encoded = request.encode();
-                let length_encoded = encode_packet(&encoded[..encoded.len() - 1]);
-                assert_eq!(&raw_string[4..], &length_encoded);
-            }
-            false => {
-                let encoded = encode_packet(&request.encode());
-                assert_eq!(&raw_string, &encoded);
-            }
-        };
-
-        let mut response_buf = self.response_buf.lock().unwrap();
-        for res in responses {
-            let encoded = res.encode();
-            let length_encoded = encode_packet(&encoded);
-            response_buf.extend_from_slice(length_encoded.as_bytes());
+            exchange_index: AtomicUsize::new(0),
+            read_call_count: AtomicUsize::new(0),
+            write_call_count: AtomicUsize::new(0),
         }
     }
 }
 
 impl Reconnect for MockSocket {
     fn reconnect(&self) -> Result<(), Error> {
-        let is_reconnecting = self.is_reconnecting.load(Ordering::SeqCst);
-        assert!(is_reconnecting, "Reconnect called while socket connected");
+        let reconnect_call_count = self.reconnect_call_count.load(Ordering::SeqCst);
 
-        let call_count = self.reconnect_call_count.load(Ordering::SeqCst);
-
-        if call_count == self.expected_retries {
-            self.is_reconnecting.store(false, Ordering::SeqCst);
-            self.reconnect_call_count.store(0, Ordering::SeqCst);
+        if reconnect_call_count == self.expected_retries {
             return Ok(());
         }
 
-        self.reconnect_call_count.store(call_count + 1, Ordering::SeqCst);
-
-        let io_error = std::io::Error::new(ErrorKind::ConnectionRefused, "Simulated ConnectionRefused Error");
-        return Err(Error::Io(Arc::new(io_error)));
+        self.reconnect_call_count.fetch_add(1, Ordering::SeqCst);
+        return Err(mock_socket_error(ErrorKind::ConnectionRefused));
     }
     fn sleep(&self, duration: std::time::Duration) {}
 }
@@ -84,94 +67,120 @@ impl Reconnect for MockSocket {
 impl Stream for MockSocket {}
 
 impl Io for MockSocket {
-    fn read_exact(&self, buf: &mut [u8]) -> Result<(), Error> {
-        let mut response_buf = self.response_buf.lock().unwrap();
-        let events = self.events.lock().unwrap();
+    fn read_message(&self) -> Result<Vec<u8>, Error> {
+        let exchange_index = self.exchange_index.load(Ordering::SeqCst);
+        let exchange = match self.exchanges.get(exchange_index) {
+            Some(ex) => ex,
+            None => {
+                // keep alive
+                return Err(mock_socket_error(ErrorKind::WouldBlock));
+            }
+        };
 
-        let response_buf_len = response_buf.len();
+        let response_index = self.read_call_count.load(Ordering::SeqCst);
+        let responses = &exchange.responses;
+        let new_response_index = (response_index + 1) % responses.len();
 
-        // if no events remaining & buffer is empty - test has finished, gracefully shutdown
-        if response_buf_len == 0 && events.is_empty() {
-            let io_error = std::io::Error::new(ErrorKind::WouldBlock, "Simulated WouldBlock error");
-            debug!("mock -> {}", io_error);
-            return Err(Error::Io(Arc::new(io_error)));
-        }
-
-        // If the next Event is Event::Restart & buffer is empty - restart
-        if response_buf_len == 0 && self.is_reconnecting.load(Ordering::SeqCst) {
-            let io_error = std::io::Error::new(ErrorKind::ConnectionReset, "Simulated ConnectionReset error");
-            debug!("mock -> {}", io_error);
-            return Err(Error::Io(Arc::new(io_error)));
-        }
-
-        if response_buf_len > 0 {
-            let response_slice = &response_buf[..buf.len()];
-            buf.copy_from_slice(response_slice);
-            debug!("mock -> {:?}", str::from_utf8(response_slice).unwrap());
-            response_buf.drain(..buf.len()).for_each(drop);
-        }
-
-        Ok(())
-    }
-    fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
-        let mut events = self.events.lock().unwrap();
-        assert!(
-            !events.is_empty(),
-            "write() called with no events remaining - The test is scheduled incorrectly."
+        trace!(
+            "mock read: responses.len(): {}, response_index: {}, new_response_index: {}, exchange_index: {}",
+            responses.len(),
+            self.read_call_count.load(Ordering::SeqCst),
+            new_response_index,
+            self.exchange_index.load(Ordering::SeqCst)
         );
 
-        let event = events.pop_front().unwrap();
-        match event {
-            Event::Exchange { request, responses } => {
-                self.handle_write(buf, request, responses);
+        let response = responses.get(response_index).unwrap();
 
-                // handle Event::Restart after the last client write
-                if let Some(event) = events.front() {
-                    if let Event::Restart = event {
-                        events.pop_front();
-                        debug!("restart will happen on next read");
-                        self.is_reconnecting.store(true, Ordering::SeqCst);
-                    }
-                }
-            }
-            Event::Restart => panic!("events vector scheduled incorrectly"),
+        self.read_call_count.store(new_response_index, Ordering::SeqCst);
+
+        // disconnect if a null byte response is encountered
+        if response.fields[0] == "\0" {
+            return Err(mock_socket_error(ErrorKind::ConnectionReset));
+        }
+
+        // process the declared response in the test with transport read_message()
+        // to force any errors
+        let encoded = response.encode();
+        debug!("mock -> {:?}", &encoded);
+        let expected = encode_length(&encoded);
+        Ok(read_message(&mut expected.as_slice())?)
+    }
+
+    fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
+        // do not increment exchange_index on first call
+        // otherwise increment
+        let write_call_count = self.write_call_count.load(Ordering::SeqCst);
+        if write_call_count > 0 {
+            self.exchange_index.fetch_add(1, Ordering::SeqCst);
+        }
+        let exchange_index = self.exchange_index.load(Ordering::SeqCst);
+
+        trace!("mock write: exchange_index: {exchange_index}, write_call_count: {write_call_count}");
+
+        let exchange = self.exchanges.get(exchange_index).unwrap();
+        let request = &exchange.request;
+
+        let is_handshake = buf.starts_with(b"API\0");
+
+        // strip API\0 if handshake
+        let buf = if is_handshake {
+            &buf[4..] // strip prefix
+        } else {
+            &buf
         };
+
+        // the handshake does not include the trailing null byte
+        // Message encode() cannot be used to encode the handshake
+        let expected = if is_handshake {
+            assert_eq!(request.len(), 1);
+            &encode_length(&request.fields[0])
+        } else {
+            &encode_length(&request.encode())
+        };
+
+        let raw_string = str::from_utf8(&buf[4..]).unwrap(); // strip length
+        debug!("mock -> {:?}", raw_string);
+
+        assert_eq!(
+            expected,
+            buf,
+            "assertion left == right failed\nleft: {:?}\n right: {:?}\n",
+            str::from_utf8(expected).unwrap(),
+            str::from_utf8(buf).unwrap()
+        );
+
+        self.write_call_count.fetch_add(1, Ordering::SeqCst);
+
         Ok(())
     }
 }
 
-#[derive(Clone, Debug)]
-struct MockExchange {
+#[derive(Debug)]
+struct Exchange {
     request: RequestMessage,
     responses: VecDeque<ResponseMessage>,
 }
 
-#[derive(Clone, Debug)]
-enum Event {
-    Restart,
-    Exchange {
-        request: RequestMessage,
-        responses: Vec<ResponseMessage>,
-    },
-}
-
-impl Event {
-    fn from(request: &str, responses: &[&str]) -> Self {
-        let responses = responses
-            .into_iter()
-            .map(|s| ResponseMessage::from_simple(s))
-            .collect::<Vec<ResponseMessage>>();
-        Event::Exchange {
-            request: RequestMessage::from_simple(request),
-            responses,
+impl Exchange {
+    fn new(request: RequestMessage, responses: Vec<ResponseMessage>) -> Self {
+        Self {
+            request,
+            responses: VecDeque::from(responses),
         }
     }
-    fn from_request(request: RequestMessage, responses: &[&str]) -> Self {
+    fn simple(request: &str, responses: &[&str]) -> Self {
         let responses = responses
             .into_iter()
             .map(|s| ResponseMessage::from_simple(s))
             .collect::<Vec<ResponseMessage>>();
-        Event::Exchange { request, responses }
+        Self::new(RequestMessage::from_simple(request), responses)
+    }
+    fn request(request: RequestMessage, responses: &[&str]) -> Self {
+        let responses = responses
+            .into_iter()
+            .map(|s| ResponseMessage::from_simple(s))
+            .collect::<Vec<ResponseMessage>>();
+        Self::new(request, responses)
     }
 }
 
@@ -184,8 +193,8 @@ fn test_order_request() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_connection_establish_connection() -> Result<(), Error> {
     let events = vec![
-        Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Event::from(
+        Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Exchange::simple(
             "71|2|28|",
             &[
                 "15|1|DU1234567|",
@@ -203,15 +212,18 @@ fn test_connection_establish_connection() -> Result<(), Error> {
 }
 
 #[test]
-fn test_bus_reconnect_failed() -> Result<(), Error> {
+fn test_reconnect_failed() -> Result<(), Error> {
+    env_logger::init();
     let events = vec![
-        Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Event::from("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
-        Event::Restart,
+        Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
     ];
-    let socket = MockSocket::new(events, MAX_RETRIES + 1);
+    let socket = MockSocket::new(events, MAX_RETRIES as usize + 1);
 
     let connection = Connection::connect(socket, 28)?;
+
+    // simulated dispatcher thread read to trigger disconnection
+    connection.read_message();
 
     match connection.reconnect() {
         Err(Error::ConnectionFailed) => return Ok(()),
@@ -220,17 +232,20 @@ fn test_bus_reconnect_failed() -> Result<(), Error> {
 }
 
 #[test]
-fn test_bus_reconnect_success() -> Result<(), Error> {
+fn test_reconnect_success() -> Result<(), Error> {
+    env_logger::init();
     let events = vec![
-        Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Event::from("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
-        Event::Restart,
-        Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Event::from("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
+        Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
     ];
-    let socket = MockSocket::new(events, MAX_RETRIES - 1);
+    let socket = MockSocket::new(events, MAX_RETRIES as usize - 1);
 
     let connection = Connection::connect(socket, 28)?;
+
+    // simulated dispatcher thread read to trigger disconnection
+    connection.read_message();
 
     Ok(connection.reconnect()?)
 }
@@ -239,15 +254,15 @@ fn test_bus_reconnect_success() -> Result<(), Error> {
 // MessageBus::start_cleanup_thread()
 #[test]
 fn test_client_reconnect() -> Result<(), Error> {
+    env_logger::init();
     // TODO: why 17|1 and not 17|1| for a shared request to assert true in MockSocket write_all ??
     let events = vec![
-        Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Event::from("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
-        Event::from("17|1", &[]), // ManagedAccounts
-        Event::Restart,
-        Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Event::from("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
-        Event::from("17|1", &["15|1|DU1234567|"]), // ManagedAccounts
+        Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        Exchange::simple("17|1", &["\0"]), // ManagedAccounts RESTART
+        Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        Exchange::simple("17|1", &["15|1|DU1234567|"]), // ManagedAccounts
     ];
     let stream = MockSocket::new(events, 0);
     let connection = Connection::connect(stream, 28)?;
@@ -270,12 +285,11 @@ fn test_send_request_after_disconnect() -> Result<(), Error> {
     let expected_response = &format!("10|9000|{}", AAPL_CONTRACT_RESPONSE);
 
     let events = vec![
-        Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Event::from("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
-        Event::Restart,
-        Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Event::from("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
-        Event::from_request(packet.clone(), &[expected_response, "52|1|9001|"]),
+        Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
+        Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        Exchange::request(packet.clone(), &[expected_response, "52|1|9001|"]),
     ];
 
     let stream = MockSocket::new(events, 0);
@@ -306,12 +320,11 @@ fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
     let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL"))?;
 
     let events = vec![
-        Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Event::from("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
-        Event::from_request(packet.clone(), &[]),
-        Event::Restart,
-        Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Event::from("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        Exchange::request(packet.clone(), &["\0"]), // RESTART
+        Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
     ];
 
     let stream = MockSocket::new(events, 0);
@@ -339,12 +352,11 @@ fn test_request_during_disconnect_raises_error() -> Result<(), Error> {
     let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL"))?;
 
     let events = vec![
-        Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Event::from("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
-        Event::Restart,
-        Event::from("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Event::from_request(packet.clone(), &[]),
-        Event::from("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
+        Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Exchange::request(packet.clone(), &[]),
+        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
     ];
 
     let stream = MockSocket::new(events, 0);
@@ -353,9 +365,13 @@ fn test_request_during_disconnect_raises_error() -> Result<(), Error> {
     match connection.read_message() {
         Ok(_) => panic!(""),
         Err(_) => {
+            debug!("reconnect");
             connection.socket.reconnect()?;
+            debug!("handshake");
             connection.handshake()?;
+            debug!("write_message");
             connection.write_message(&packet)?;
+            debug!("start_api");
             connection.start_api()?;
             connection.receive_account_info()?;
         }
