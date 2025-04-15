@@ -3,6 +3,8 @@ use crate::contracts::encoders::encode_request_contract_data;
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::messages::{encode_length, RequestMessage, ResponseMessage};
+use crate::orders::{Action, order_builder};
+use crate::orders::encoders::encode_place_order;
 use crate::transport::{read_message, Connection, Io, MessageBus, Reconnect, Stream, TcpMessageBus, MAX_RETRIES};
 use std::io::ErrorKind;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -185,8 +187,40 @@ impl Exchange {
 }
 
 #[test]
-#[ignore = "TODO"]
-fn test_order_request() -> Result<(), Box<dyn std::error::Error>> {
+// #[ignore = "TODO"]
+fn test_bus_send_order_request() -> Result<(), Error> {
+    let order = order_builder::market_order(Action::Buy, 100.0);
+    let contract = &Contract::stock("AAPL");
+    let request = encode_place_order(176, 5, contract, &order)?;
+
+    let events = vec![
+        Exchange::simple("v100..173", &["173|20250415 19:38:30 British Summer Time|"]),
+        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|5|"]),
+        Exchange::request(request.clone(), 
+            &[
+                "5|5|265598|AAPL|STK||0|?||SMART|USD|AAPL|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|600745656|0|0|0||600745656.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||100|0.02|||",
+                "3|5|PreSubmitted|0|100|0|600745656|0|0|100||0|",
+                "11|-1|5|265598|AAPL|STK||0.0|||IEX|USD|AAPL|NMS|0000e0d5.67fe667b.01.01|20250415  19:38:31|DU1234567|IEX|BOT|100|201.94|600745656|100|0|100|201.94|||||2|",
+                "5|5|265598|AAPL|STK||0|?||SMART|USD|AAPL|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|600745656|0|0|0||600745656.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Filled|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||100|0.02|||",
+                "3|5|Filled|100|0|201.94|600745656|0|201.94|100||0|"
+            ]),
+    ];
+
+    let stream = MockSocket::new(events, 0);
+    let connection = Connection::connect(stream, 28)?;
+    let server_version = connection.server_version();
+    let bus = Arc::new(TcpMessageBus::new(connection)?);
+
+    let subscription = bus.send_order_request(5, &request)?;
+
+    bus.dispatch(server_version)?;
+    bus.dispatch(server_version)?;
+    bus.dispatch(server_version)?;
+    bus.dispatch(server_version)?;
+    bus.dispatch(server_version)?;
+
+    subscription.next().unwrap()?;
+
     Ok(())
 }
 
@@ -213,7 +247,6 @@ fn test_connection_establish_connection() -> Result<(), Error> {
 
 #[test]
 fn test_reconnect_failed() -> Result<(), Error> {
-    env_logger::init();
     let events = vec![
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
         Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
@@ -233,7 +266,6 @@ fn test_reconnect_failed() -> Result<(), Error> {
 
 #[test]
 fn test_reconnect_success() -> Result<(), Error> {
-    env_logger::init();
     let events = vec![
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
         Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
@@ -254,7 +286,6 @@ fn test_reconnect_success() -> Result<(), Error> {
 // MessageBus::start_cleanup_thread()
 #[test]
 fn test_client_reconnect() -> Result<(), Error> {
-    env_logger::init();
     // TODO: why 17|1 and not 17|1| for a shared request to assert true in MockSocket write_all ??
     let events = vec![
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
