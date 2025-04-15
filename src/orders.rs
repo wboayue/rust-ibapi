@@ -13,7 +13,7 @@ use crate::{encode_option_field, ToField};
 use crate::{server_versions, Error};
 
 mod decoders;
-mod encoders;
+pub(crate) mod encoders;
 #[cfg(test)]
 mod tests;
 

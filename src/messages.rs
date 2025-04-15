@@ -1,6 +1,9 @@
 use std::fmt::Display;
+use std::io::Write;
 use std::ops::Index;
 use std::str::{self, FromStr};
+
+use byteorder::{BigEndian, WriteBytesExt};
 
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -349,9 +352,19 @@ impl ToField for OutgoingMessages {
     }
 }
 
+pub fn encode_length(message: &str) -> Vec<u8> {
+    let data = message.as_bytes();
+
+    let mut packet: Vec<u8> = Vec::with_capacity(data.len() + 4);
+
+    packet.write_u32::<BigEndian>(data.len() as u32).unwrap();
+    packet.write_all(data).unwrap();
+    packet
+}
+
 #[derive(Default, Debug, Clone)]
 pub(crate) struct RequestMessage {
-    fields: Vec<String>,
+    pub(crate) fields: Vec<String>,
 }
 
 impl RequestMessage {
@@ -381,6 +394,18 @@ impl RequestMessage {
         let mut data = self.fields.join("|");
         data.push('|');
         data
+    }
+    #[cfg(test)]
+    pub fn from(fields: &str) -> RequestMessage {
+        RequestMessage {
+            fields: fields.split('\x00').map(|x| x.to_string()).collect(),
+        }
+    }
+    #[cfg(test)]
+    pub fn from_simple(fields: &str) -> RequestMessage {
+        RequestMessage {
+            fields: fields.split('|').map(|x| x.to_string()).collect(),
+        }
     }
 }
 
@@ -605,11 +630,12 @@ impl ResponseMessage {
             fields: fields.split('\x00').map(|x| x.to_string()).collect(),
         }
     }
-
     #[cfg(test)]
     pub fn from_simple(fields: &str) -> ResponseMessage {
-        let fields = fields.replace("|", "\0");
-        Self::from(&fields)
+        ResponseMessage {
+            i: 0,
+            fields: fields.split('|').map(|x| x.to_string()).collect(),
+        }
     }
 
     pub fn skip(&mut self) {

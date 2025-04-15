@@ -19,7 +19,7 @@ use crate::Client;
 use crate::{server_versions, Error, ToField};
 
 pub(crate) mod decoders;
-mod encoders;
+pub(crate) mod encoders;
 pub mod tick_types;
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::net::TcpStream;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -19,7 +20,7 @@ use crate::messages::{RequestMessage, ResponseMessage};
 use crate::news::NewsArticle;
 use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, Orders, PlaceOrder};
 use crate::scanner::ScannerData;
-use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus};
+use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus, TcpSocket};
 use crate::wsh::AutoFill;
 use crate::{accounts, contracts, market_data, news, orders, scanner, wsh};
 
@@ -64,7 +65,10 @@ impl Client {
     /// println!("next_order_id: {}", client.next_order_id());
     /// ```
     pub fn connect(address: &str, client_id: i32) -> Result<Client, Error> {
-        let connection = Connection::connect(client_id, address)?;
+        let stream = TcpStream::connect(address)?;
+        let socket = TcpSocket::new(stream, address)?;
+
+        let connection = Connection::connect(socket, client_id)?;
         let connection_metadata = connection.connection_metadata();
 
         let message_bus = Arc::new(TcpMessageBus::new(connection)?);
