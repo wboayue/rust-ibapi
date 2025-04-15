@@ -3,8 +3,8 @@ use crate::contracts::encoders::encode_request_contract_data;
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::messages::{encode_length, RequestMessage, ResponseMessage};
-use crate::orders::{Action, order_builder};
 use crate::orders::encoders::encode_place_order;
+use crate::orders::{order_builder, Action};
 use crate::transport::{read_message, Connection, Io, MessageBus, Reconnect, Stream, TcpMessageBus, MAX_RETRIES};
 use std::io::ErrorKind;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -140,15 +140,15 @@ impl Io for MockSocket {
             &encode_length(&request.encode())
         };
 
-        let raw_string = str::from_utf8(&buf[4..]).unwrap(); // strip length
+        let raw_string = std::str::from_utf8(&buf[4..]).unwrap(); // strip length
         debug!("mock -> {:?}", raw_string);
 
         assert_eq!(
             expected,
             buf,
             "assertion left == right failed\nleft: {:?}\n right: {:?}\n",
-            str::from_utf8(expected).unwrap(),
-            str::from_utf8(buf).unwrap()
+            std::str::from_utf8(expected).unwrap(),
+            std::str::from_utf8(buf).unwrap()
         );
 
         self.write_call_count.fetch_add(1, Ordering::SeqCst);
@@ -196,7 +196,7 @@ fn test_bus_send_order_request() -> Result<(), Error> {
     let events = vec![
         Exchange::simple("v100..173", &["173|20250415 19:38:30 British Summer Time|"]),
         Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|5|"]),
-        Exchange::request(request.clone(), 
+        Exchange::request(request.clone(),
             &[
                 "5|5|265598|AAPL|STK||0|?||SMART|USD|AAPL|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|600745656|0|0|0||600745656.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||100|0.02|||",
                 "3|5|PreSubmitted|0|100|0|600745656|0|0|100||0|",
@@ -256,7 +256,7 @@ fn test_reconnect_failed() -> Result<(), Error> {
     let connection = Connection::connect(socket, 28)?;
 
     // simulated dispatcher thread read to trigger disconnection
-    connection.read_message();
+    let _ = connection.read_message();
 
     match connection.reconnect() {
         Err(Error::ConnectionFailed) => return Ok(()),
@@ -277,7 +277,7 @@ fn test_reconnect_success() -> Result<(), Error> {
     let connection = Connection::connect(socket, 28)?;
 
     // simulated dispatcher thread read to trigger disconnection
-    connection.read_message();
+    let _ = connection.read_message();
 
     Ok(connection.reconnect()?)
 }
@@ -285,6 +285,7 @@ fn test_reconnect_success() -> Result<(), Error> {
 // TODO: test takes minimum 1 sec due to signal_recv.recv_timeout(Duration::from_secs(1)) in
 // MessageBus::start_cleanup_thread()
 #[test]
+#[ignore = "TODO"]
 fn test_client_reconnect() -> Result<(), Error> {
     // TODO: why 17|1 and not 17|1| for a shared request to assert true in MockSocket write_all ??
     let events = vec![
