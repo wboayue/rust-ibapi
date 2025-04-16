@@ -190,3 +190,82 @@ fn test_read_last_trade_date() {
 
 #[test]
 fn request_matching_symbols() {}
+
+#[test]
+fn test_contract_option_builder() {
+    let contract = Contract::option("AAPL", "20231215", 150.0, "C");
+    assert_eq!(contract.symbol, "AAPL");
+    assert_eq!(contract.last_trade_date_or_contract_month, "20231215");
+    assert_eq!(contract.strike, 150.0);
+    assert_eq!(contract.right, "C");
+    assert_eq!(contract.currency, "USD");
+    assert_eq!(contract.exchange, "SMART");
+    assert_eq!(contract.security_type, SecurityType::Option);
+}
+
+#[test]
+fn test_contract_futures_builder() {
+    let contract = Contract::futures("ES");
+    assert_eq!(contract.symbol, "ES");
+    assert_eq!(contract.currency, "USD");
+    assert_eq!(contract.security_type, SecurityType::Future);
+}
+
+#[test]
+fn test_contract_crypto_builder() {
+    let contract = Contract::crypto("BTC");
+    assert_eq!(contract.symbol, "BTC");
+    assert_eq!(contract.security_type, SecurityType::Crypto);
+    assert_eq!(contract.exchange, "PAXOS");
+    assert_eq!(contract.currency, "USD");
+}
+
+#[test]
+fn test_security_type_from_strings() {
+    let cases = vec![
+        ("STK", SecurityType::Stock),
+        ("OPT", SecurityType::Option),
+        ("FUT", SecurityType::Future),
+        ("IND", SecurityType::Index),
+        ("FOP", SecurityType::FuturesOption),
+        ("CASH", SecurityType::ForexPair),
+        ("BAG", SecurityType::Spread),
+        ("WAR", SecurityType::Warrant),
+        ("BOND", SecurityType::Bond),
+        ("CMDTY", SecurityType::Commodity),
+        ("NEWS", SecurityType::News),
+        ("FUND", SecurityType::MutualFund),
+        ("CRYPTO", SecurityType::Crypto),
+    ];
+
+    for (input, expected) in cases {
+        assert_eq!(SecurityType::from(input), expected);
+    }
+}
+
+#[test]
+fn test_tag_value_to_field() {
+    let tags = vec![
+        TagValue {
+            tag: "foo".into(),
+            value: "bar".into(),
+        },
+        TagValue {
+            tag: "baz".into(),
+            value: "qux".into(),
+        },
+    ];
+
+    assert_eq!(tags.to_field(), "foo=bar;baz=qux;");
+}
+
+#[test]
+fn test_contract_push_fields_order() {
+    let contract = Contract::option("AAPL", "20231215", 150.0, "C");
+    let mut message = RequestMessage::default();
+    contract.push_fields(&mut message);
+
+    let expected = "0\0AAPL\0OPT\020231215\0150\0C\0\0SMART\0\0USD\0\0\00\0";
+
+    assert_eq!(message.encode(), expected);
+}
