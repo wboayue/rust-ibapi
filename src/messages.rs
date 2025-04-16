@@ -398,13 +398,13 @@ impl RequestMessage {
     #[cfg(test)]
     pub fn from(fields: &str) -> RequestMessage {
         RequestMessage {
-            fields: fields.split('\x00').map(|x| x.to_string()).collect(),
+            fields: fields.split_terminator('\x00').map(|x| x.to_string()).collect(),
         }
     }
     #[cfg(test)]
     pub fn from_simple(fields: &str) -> RequestMessage {
         RequestMessage {
-            fields: fields.split('|').map(|x| x.to_string()).collect(),
+            fields: fields.split_terminator('|').map(|x| x.to_string()).collect(),
         }
     }
 }
@@ -627,14 +627,14 @@ impl ResponseMessage {
     pub fn from(fields: &str) -> ResponseMessage {
         ResponseMessage {
             i: 0,
-            fields: fields.split('\x00').map(|x| x.to_string()).collect(),
+            fields: fields.split_terminator('\x00').map(|x| x.to_string()).collect(),
         }
     }
     #[cfg(test)]
     pub fn from_simple(fields: &str) -> ResponseMessage {
         ResponseMessage {
             i: 0,
-            fields: fields.split('|').map(|x| x.to_string()).collect(),
+            fields: fields.split_terminator('|').map(|x| x.to_string()).collect(),
         }
     }
 

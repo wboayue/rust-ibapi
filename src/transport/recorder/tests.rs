@@ -124,7 +124,7 @@ fn test_multiple_records() {
         let response_content = fs::read_to_string(response_file.unwrap()).unwrap();
 
         assert_eq!(request_content, "1|test_request|");
-        assert_eq!(response_content, "15|1|DU1234567,DU7654321||");
+        assert_eq!(response_content, "15|1|DU1234567,DU7654321|");
     });
 }
 

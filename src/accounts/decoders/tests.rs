@@ -31,7 +31,7 @@ fn test_decode_positions() {
 
 #[test]
 fn test_decode_position_multi() {
-    let mut message = super::ResponseMessage::from("61\03\06\0DU1234567\076792991\0TSLA\0STK\0\00.0\0\0\0NASDAQ\0USD\0TSLA\0NMS\0500\0196.77\0");
+    let mut message = super::ResponseMessage::from("61\03\06\0DU1234567\076792991\0TSLA\0STK\0\00.0\0\0\0NASDAQ\0USD\0TSLA\0NMS\0500\0196.77\0\0");
 
     let position = super::decode_position_multi(&mut message).expect("error decoding position multi");
 
@@ -56,6 +56,7 @@ fn test_decode_position_multi() {
     assert_eq!(position.contract.trading_class, "NMS", "position.contract.trading_class");
     assert_eq!(position.position, 500.0, "position.position");
     assert_eq!(position.average_cost, 196.77, "position.average_cost");
+    assert_eq!(position.model_code, "", "position.model_code");
 }
 
 #[test]
@@ -110,7 +111,7 @@ fn test_decode_pnl_single() {
 
 #[test]
 fn test_decode_account_summary() {
-    let mut message = super::ResponseMessage::from("94\01\09000\0DU1234567\0AccountType\0FA\0");
+    let mut message = super::ResponseMessage::from("94\01\09000\0DU1234567\0AccountType\0FA\0\0");
 
     let account_summary = super::decode_account_summary(server_versions::REALIZED_PNL, &mut message).expect("error decoding pnl");
 
