@@ -2,6 +2,7 @@ use std::convert::From;
 use std::fmt::Debug;
 use std::string::ToString;
 
+use log::warn;
 use log::{error, info};
 use serde::Deserialize;
 use serde::Serialize;
@@ -59,6 +60,10 @@ pub enum SecurityType {
     MutualFund,
     /// Crypto currency
     Crypto,
+    /// Contract for difference
+    CFD,
+    /// Other
+    Other(String),
 }
 
 impl ToField for SecurityType {
@@ -89,6 +94,8 @@ impl std::fmt::Display for SecurityType {
             SecurityType::News => write!(f, "NEWS"),
             SecurityType::MutualFund => write!(f, "FUND"),
             SecurityType::Crypto => write!(f, "CRYPTO"),
+            SecurityType::CFD => write!(f, "CFD"),
+            SecurityType::Other(name) => write!(f, "{name}"),
         }
     }
 }
@@ -109,7 +116,11 @@ impl SecurityType {
             "NEWS" => SecurityType::News,
             "FUND" => SecurityType::MutualFund,
             "CRYPTO" => SecurityType::Crypto,
-            unsupported => todo!("Unimplemented security type: {unsupported}"),
+            "CFD" => SecurityType::CFD,
+            other => {
+                warn!("Unknown security type: {other}. Defaulting to Other");
+                SecurityType::Other(other.to_string())
+            },
         }
     }
 }
