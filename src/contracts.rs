@@ -2,6 +2,7 @@ use std::convert::From;
 use std::fmt::Debug;
 use std::string::ToString;
 
+use log::warn;
 use log::{error, info};
 use serde::Deserialize;
 use serde::Serialize;
@@ -116,7 +117,10 @@ impl SecurityType {
             "FUND" => SecurityType::MutualFund,
             "CRYPTO" => SecurityType::Crypto,
             "CFD" => SecurityType::CFD,
-            other => SecurityType::Other(other.to_string()),
+            other => {
+                warn!("Unknown security type: {other}. Defaulting to Other");
+                SecurityType::Other(other.to_string())
+            },
         }
     }
 }
