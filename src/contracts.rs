@@ -59,6 +59,10 @@ pub enum SecurityType {
     MutualFund,
     /// Crypto currency
     Crypto,
+    /// Contract for difference
+    CFD,
+    /// Other
+    Other(String),
 }
 
 impl ToField for SecurityType {
@@ -89,6 +93,8 @@ impl std::fmt::Display for SecurityType {
             SecurityType::News => write!(f, "NEWS"),
             SecurityType::MutualFund => write!(f, "FUND"),
             SecurityType::Crypto => write!(f, "CRYPTO"),
+            SecurityType::CFD => write!(f, "CFD"),
+            SecurityType::Other(name) => write!(f, "{name}"),
         }
     }
 }
@@ -109,7 +115,8 @@ impl SecurityType {
             "NEWS" => SecurityType::News,
             "FUND" => SecurityType::MutualFund,
             "CRYPTO" => SecurityType::Crypto,
-            unsupported => todo!("Unimplemented security type: {unsupported}"),
+            "CFD" => SecurityType::CFD,
+            other => SecurityType::Other(other.to_string()),
         }
     }
 }

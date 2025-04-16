@@ -112,9 +112,12 @@ fn test_message_encodes_security_type() {
     message.push_field(&SecurityType::Commodity);
     message.push_field(&SecurityType::News);
     message.push_field(&SecurityType::MutualFund);
+    message.push_field(&SecurityType::Crypto);
+    message.push_field(&SecurityType::CFD);
+    message.push_field(&SecurityType::Other("??".to_owned()));
 
-    assert_eq!(12, message.fields.len());
-    assert_eq!("STK\0OPT\0FUT\0IND\0FOP\0CASH\0BAG\0WAR\0BOND\0CMDTY\0NEWS\0FUND\0", message.encode());
+    assert_eq!(15, message.fields.len());
+    assert_eq!("STK\0OPT\0FUT\0IND\0FOP\0CASH\0BAG\0WAR\0BOND\0CMDTY\0NEWS\0FUND\0CRYPTO\0CFD\0??\0", message.encode());
 }
 
 #[test]
