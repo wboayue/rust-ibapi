@@ -195,7 +195,7 @@ fn test_bus_send_order_request() -> Result<(), Error> {
 
     let events = vec![
         Exchange::simple("v100..173", &["173|20250415 19:38:30 British Summer Time|"]),
-        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|5|"]),
+        Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|5|"]),
         Exchange::request(request.clone(),
             &[
                 "5|5|265598|AAPL|STK||0|?||SMART|USD|AAPL|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|600745656|0|0|0||600745656.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||100|0.02|||",
@@ -229,7 +229,7 @@ fn test_connection_establish_connection() -> Result<(), Error> {
     let events = vec![
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
         Exchange::simple(
-            "71|2|28|",
+            "71|2|28||",
             &[
                 "15|1|DU1234567|",
                 "9|1|1|",
@@ -249,7 +249,7 @@ fn test_connection_establish_connection() -> Result<(), Error> {
 fn test_reconnect_failed() -> Result<(), Error> {
     let events = vec![
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
+        Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
     ];
     let socket = MockSocket::new(events, MAX_RETRIES as usize + 1);
 
@@ -268,9 +268,9 @@ fn test_reconnect_failed() -> Result<(), Error> {
 fn test_reconnect_success() -> Result<(), Error> {
     let events = vec![
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
+        Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
     ];
     let socket = MockSocket::new(events, MAX_RETRIES as usize - 1);
 
@@ -290,11 +290,11 @@ fn test_client_reconnect() -> Result<(), Error> {
     // TODO: why 17|1 and not 17|1| for a shared request to assert true in MockSocket write_all ??
     let events = vec![
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
-        Exchange::simple("17|1", &["\0"]), // ManagedAccounts RESTART
+        Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
+        Exchange::simple("17|1||", &["\0"]), // ManagedAccounts RESTART
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
-        Exchange::simple("17|1", &["15|1|DU1234567|"]), // ManagedAccounts
+        Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
+        Exchange::simple("17|1||", &["15|1|DU1234567|"]), // ManagedAccounts
     ];
     let stream = MockSocket::new(events, 0);
     let connection = Connection::connect(stream, 28)?;
@@ -318,9 +318,9 @@ fn test_send_request_after_disconnect() -> Result<(), Error> {
 
     let events = vec![
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
+        Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
         Exchange::request(packet.clone(), &[expected_response, "52|1|9001|"]),
     ];
 
@@ -353,10 +353,10 @@ fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
 
     let events = vec![
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
         Exchange::request(packet.clone(), &["\0"]), // RESTART
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
     ];
 
     let stream = MockSocket::new(events, 0);
@@ -380,15 +380,14 @@ fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
 // // when sending request during disconnect
 #[test]
 fn test_request_during_disconnect_raises_error() -> Result<(), Error> {
-    env_logger::init();
     let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL"))?;
 
     let events = vec![
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
+        Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
         Exchange::request(packet.clone(), &[]),
-        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
     ];
 
     let stream = MockSocket::new(events, 0);
@@ -446,17 +445,38 @@ fn test_request_during_disconnect_raises_error() -> Result<(), Error> {
 // }
 //
 // // TODO: fix this
-// #[test]
-// #[ignore = ""]
-// fn test_simple_encoding_roundtrip() {
-//     // let res = RequestMessage::from_simple(&format!("10|9000|{}", AAPL_CONTRACT_RESPONSE));
-//     let expected = "17|1|";
-//
-//     let req = RequestMessage::from_simple(expected);
-//     let req = RequestMessage::from(&req.encode()).encode_simple();
-//     assert_eq!(req, expected);
-//
-//     let res = RequestMessage::from_simple(expected);
-//     let res = RequestMessage::from(&res.encode()).encode_simple();
-//     assert_eq!(res, expected);
-// }
+#[test]
+fn test_request_simple_encoding_roundtrip() {
+    let expected = "17|1|";
+    let req = RequestMessage::from_simple(expected);
+    assert_eq!(req.fields, vec!["17", "1"]);
+    let simple_encoded = req.encode_simple();
+    assert_eq!(simple_encoded, expected);
+}
+
+#[test]
+fn test_request_encoding_roundtrip() {
+    let expected = "17\01\0";
+    let req = RequestMessage::from(expected);
+    assert_eq!(req.fields, vec!["17", "1"]);
+    let encoded = req.encode();
+    assert_eq!(encoded, expected);
+}
+
+#[test]
+fn test_response_simple_encoding_roundtrip() {
+    let expected = "15|1|DU1234567|";
+    let req = RequestMessage::from_simple(expected);
+    assert_eq!(req.fields, vec!["15", "1", "DU1234567"]);
+    let simple_encoded = req.encode_simple();
+    assert_eq!(simple_encoded, expected);
+}
+
+#[test]
+fn test_response_encoding_roundtrip() {
+    let expected = "15\01\0DU1234567\0";
+    let req = RequestMessage::from(expected);
+    assert_eq!(req.fields, vec!["15", "1", "DU1234567"]);
+    let encoded = req.encode();
+    assert_eq!(encoded, expected);
+}
