@@ -757,7 +757,7 @@ pub struct TickSubscriptionIter<'a, T: TickDecoder<T>> {
     subscription: &'a TickSubscription<T>,
 }
 
-impl<'a, T: TickDecoder<T>> Iterator for TickSubscriptionIter<'a, T> {
+impl<T: TickDecoder<T>> Iterator for TickSubscriptionIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -801,7 +801,7 @@ pub struct TickSubscriptionTryIter<'a, T: TickDecoder<T>> {
     subscription: &'a TickSubscription<T>,
 }
 
-impl<'a, T: TickDecoder<T>> Iterator for TickSubscriptionTryIter<'a, T> {
+impl<T: TickDecoder<T>> Iterator for TickSubscriptionTryIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -815,7 +815,7 @@ pub struct TickSubscriptionTimeoutIter<'a, T: TickDecoder<T>> {
     timeout: std::time::Duration,
 }
 
-impl<'a, T: TickDecoder<T>> Iterator for TickSubscriptionTimeoutIter<'a, T> {
+impl<T: TickDecoder<T>> Iterator for TickSubscriptionTimeoutIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {

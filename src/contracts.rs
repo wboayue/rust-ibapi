@@ -120,7 +120,7 @@ impl SecurityType {
             other => {
                 warn!("Unknown security type: {other}. Defaulting to Other");
                 SecurityType::Other(other.to_string())
-            },
+            }
         }
     }
 }

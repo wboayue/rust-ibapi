@@ -2090,7 +2090,7 @@ impl<'a, T: DataStream<T>> Subscription<'a, T> {
     }
 }
 
-impl<'a, T: DataStream<T>> Drop for Subscription<'a, T> {
+impl<T: DataStream<T>> Drop for Subscription<'_, T> {
     fn drop(&mut self) {
         self.cancel();
     }
@@ -2119,7 +2119,7 @@ pub struct SubscriptionIter<'a, T: DataStream<T>> {
     subscription: &'a Subscription<'a, T>,
 }
 
-impl<'a, T: DataStream<T>> Iterator for SubscriptionIter<'a, T> {
+impl<T: DataStream<T>> Iterator for SubscriptionIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -2141,7 +2141,7 @@ pub struct SubscriptionOwnedIter<'a, T: DataStream<T>> {
     subscription: Subscription<'a, T>,
 }
 
-impl<'a, T: DataStream<T>> Iterator for SubscriptionOwnedIter<'a, T> {
+impl<T: DataStream<T>> Iterator for SubscriptionOwnedIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -2164,7 +2164,7 @@ pub struct SubscriptionTryIter<'a, T: DataStream<T>> {
     subscription: &'a Subscription<'a, T>,
 }
 
-impl<'a, T: DataStream<T>> Iterator for SubscriptionTryIter<'a, T> {
+impl<T: DataStream<T>> Iterator for SubscriptionTryIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -2179,7 +2179,7 @@ pub struct SubscriptionTimeoutIter<'a, T: DataStream<T>> {
     timeout: Duration,
 }
 
-impl<'a, T: DataStream<T>> Iterator for SubscriptionTimeoutIter<'a, T> {
+impl<T: DataStream<T>> Iterator for SubscriptionTimeoutIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {

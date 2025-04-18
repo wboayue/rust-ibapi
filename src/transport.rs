@@ -3,14 +3,14 @@
 //! and responses from TWS back to the Client.
 
 use std::collections::HashMap;
-use std::io::{self, prelude::*, Cursor, ErrorKind};
+use std::io::{prelude::*, Cursor, ErrorKind};
 use std::net::TcpStream;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{BigEndian, ReadBytesExt};
 use crossbeam::channel::{self, Receiver, Sender};
 use log::{debug, error, info, warn};
 use time::macros::format_description;
@@ -857,12 +857,12 @@ fn read_message(reader: &mut impl Read) -> Result<Vec<u8>, Error> {
 impl Io for TcpSocket {
     fn read_message(&self) -> Result<Vec<u8>, Error> {
         let mut reader = self.reader.lock()?;
-        Ok(read_message(&mut *reader)?)
+        read_message(&mut *reader)
     }
 
     fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
         let mut writer = self.writer.lock()?;
-        writer.write(buf)?;
+        writer.write_all(buf)?;
         Ok(())
     }
 }
@@ -1003,7 +1003,7 @@ impl<S: Stream> Connection<S> {
             prelude.push_field(&"");
         }
 
-        self.write_message(&prelude)?;
+        self.write_message(prelude)?;
 
         Ok(())
     }
