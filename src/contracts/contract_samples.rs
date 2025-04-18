@@ -27,18 +27,6 @@ pub fn future_with_local_symbol() -> Contract {
     }
 }
 
-pub fn future_with_multiplier() -> Contract {
-    Contract {
-        symbol: "DAX".to_owned(),
-        security_type: SecurityType::Future,
-        exchange: "EUREX".to_owned(),
-        currency: "EUR".to_owned(),
-        last_trade_date_or_contract_month: "202303".to_owned(),
-        multiplier: "1".to_owned(),
-        ..Contract::default()
-    }
-}
-
 pub fn smart_future_combo_contract() -> Contract {
     let leg_1 = ComboLeg {
         contract_id: 55928698, //WTI future June 2017
