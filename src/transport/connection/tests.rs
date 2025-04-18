@@ -251,7 +251,8 @@ fn test_connection_establish_connection() -> Result<(), Error> {
         ),
     ];
     let stream = MockSocket::new(events, 0);
-    Connection::connect(stream, 28)?;
+    let connection = Connection::stubbed(stream, 28);
+    connection.establish_connection()?;
 
     Ok(())
 }
@@ -264,7 +265,8 @@ fn test_reconnect_failed() -> Result<(), Error> {
     ];
     let socket = MockSocket::new(events, MAX_RETRIES as usize + 1);
 
-    let connection = Connection::connect(socket, 28)?;
+    let connection = Connection::stubbed(socket, 28);
+    connection.establish_connection()?;
 
     // simulated dispatcher thread read to trigger disconnection
     let _ = connection.read_message();
@@ -285,7 +287,8 @@ fn test_reconnect_success() -> Result<(), Error> {
     ];
     let socket = MockSocket::new(events, MAX_RETRIES as usize - 1);
 
-    let connection = Connection::connect(socket, 28)?;
+    let connection = Connection::stubbed(socket, 28);
+    connection.establish_connection()?;
 
     // simulated dispatcher thread read to trigger disconnection
     let _ = connection.read_message();
@@ -304,7 +307,8 @@ fn test_client_reconnect() -> Result<(), Error> {
         Exchange::simple("17|1||", &["15|1|DU1234567|"]), // ManagedAccounts
     ];
     let stream = MockSocket::new(events, 0);
-    let connection = Connection::connect(stream, 28)?;
+    let connection = Connection::stubbed(stream, 28);
+    connection.establish_connection()?;
     let server_version = connection.server_version();
     let bus = Arc::new(TcpMessageBus::new(connection)?);
     bus.process_messages(server_version, std::time::Duration::from_secs(0))?;
@@ -332,7 +336,8 @@ fn test_send_request_after_disconnect() -> Result<(), Error> {
     ];
 
     let stream = MockSocket::new(events, 0);
-    let connection = Connection::connect(stream, 28)?;
+    let connection = Connection::stubbed(stream, 28);
+    connection.establish_connection()?;
     let server_version = connection.server_version();
     let bus = TcpMessageBus::new(connection)?;
 
@@ -365,7 +370,8 @@ fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
     ];
 
     let stream = MockSocket::new(events, 0);
-    let connection = Connection::connect(stream, 28)?;
+    let connection = Connection::stubbed(stream, 28);
+    connection.establish_connection()?;
     let server_version = connection.server_version();
     let bus = TcpMessageBus::new(connection)?;
 
@@ -396,7 +402,8 @@ fn test_request_during_disconnect_raises_error() -> Result<(), Error> {
     ];
 
     let stream = MockSocket::new(events, 0);
-    let connection = Connection::connect(stream, 28)?;
+    let connection = Connection::stubbed(stream, 28);
+    connection.establish_connection()?;
 
     match connection.read_message() {
         Ok(_) => panic!(""),
@@ -427,7 +434,8 @@ fn test_contract_details_disconnect_raises_error() -> Result<(), Error> {
     ];
 
     let stream = MockSocket::new(events, 0);
-    let connection = Connection::connect(stream, 28)?;
+    let connection = Connection::stubbed(stream, 28);
+    connection.establish_connection()?;
     let server_version = connection.server_version();
     let bus = Arc::new(TcpMessageBus::new(connection)?);
     bus.process_messages(server_version, std::time::Duration::from_secs(0))?;

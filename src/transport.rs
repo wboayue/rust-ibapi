@@ -891,7 +891,7 @@ impl<S: Stream> Connection<S> {
                 ..Default::default()
             }),
             max_retries: MAX_RETRIES,
-            recorder: MessageRecorder::new(),
+            recorder: MessageRecorder::from_env(),
         };
 
         connection.establish_connection()?;
@@ -1055,6 +1055,20 @@ impl<S: Stream> Connection<S> {
         }
 
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn stubbed(socket: S, client_id: i32) -> Connection<S> {
+        Connection {
+            client_id,
+            socket,
+            connection_metadata: Mutex::new(ConnectionMetadata {
+                client_id,
+                ..Default::default()
+            }),
+            max_retries: MAX_RETRIES,
+            recorder: MessageRecorder::new(false, String::from("")),
+        }
     }
 }
 
