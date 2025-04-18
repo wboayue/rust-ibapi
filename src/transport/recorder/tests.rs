@@ -8,7 +8,7 @@ use tempfile::TempDir;
 #[test]
 fn test_message_recorder_new_with_empty_env_var() {
     temp_env::with_var("IBAPI_RECORDING_DIR", Some(""), || {
-        let recorder = MessageRecorder::new();
+        let recorder = MessageRecorder::from_env();
         assert!(!recorder.enabled);
         assert_eq!(recorder.recording_dir, "");
     });
@@ -20,7 +20,7 @@ fn test_message_recorder_new_with_valid_env_var() {
     let temp_path = temp_dir.path().to_str().unwrap();
 
     temp_env::with_var("IBAPI_RECORDING_DIR", Some(temp_path), || {
-        let recorder = MessageRecorder::new();
+        let recorder = MessageRecorder::from_env();
 
         assert!(recorder.enabled);
         assert!(recorder.recording_dir.starts_with(temp_path));
@@ -38,7 +38,7 @@ fn test_record_request() {
         message.push_field(&OutgoingMessages::CancelAccountSummary);
         message.push_field(&9000);
 
-        let recorder = MessageRecorder::new();
+        let recorder = MessageRecorder::from_env();
         recorder.record_request(&message);
 
         let files = fs::read_dir(&recorder.recording_dir)
@@ -63,7 +63,7 @@ fn test_record_response() {
     temp_env::with_var("IBAPI_RECORDING_DIR", Some(temp_path), || {
         let message = ResponseMessage::from_simple(MARKET_RULE);
 
-        let recorder = MessageRecorder::new();
+        let recorder = MessageRecorder::from_env();
         recorder.record_response(&message);
 
         let files = fs::read_dir(&recorder.recording_dir)
@@ -92,7 +92,7 @@ fn test_multiple_records() {
 
         let response = ResponseMessage::from_simple(MANAGED_ACCOUNT);
 
-        let recorder = MessageRecorder::new();
+        let recorder = MessageRecorder::from_env();
 
         recorder.record_request(&request);
         recorder.record_response(&response);
@@ -131,7 +131,7 @@ fn test_multiple_records() {
 #[test]
 fn test_disabled_recorder() {
     temp_env::with_var("IBAPI_RECORDING_DIR", Some(""), || {
-        let recorder = MessageRecorder::new();
+        let recorder = MessageRecorder::from_env();
         assert!(!recorder.enabled);
 
         let request = RequestMessage::new();

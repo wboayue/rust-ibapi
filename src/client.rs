@@ -74,7 +74,7 @@ impl Client {
         let message_bus = Arc::new(TcpMessageBus::new(connection)?);
 
         // Starts thread to read messages from TWS
-        message_bus.process_messages(connection_metadata.server_version)?;
+        message_bus.process_messages(connection_metadata.server_version, Duration::from_secs(1))?;
 
         Client::new(connection_metadata, message_bus)
     }

@@ -24,7 +24,10 @@ pub(crate) struct MessageRecorder {
 }
 
 impl MessageRecorder {
-    pub fn new() -> Self {
+    pub fn new(enabled: bool, recording_dir: String) -> Self {
+        Self { enabled, recording_dir }
+    }
+    pub fn from_env() -> Self {
         match env::var("IBAPI_RECORDING_DIR") {
             Ok(dir) => {
                 if dir.is_empty() {
@@ -39,10 +42,7 @@ impl MessageRecorder {
 
                     fs::create_dir_all(&recording_dir).unwrap();
 
-                    MessageRecorder {
-                        enabled: true,
-                        recording_dir,
-                    }
+                    MessageRecorder::new(true, recording_dir)
                 }
             }
             _ => MessageRecorder {
