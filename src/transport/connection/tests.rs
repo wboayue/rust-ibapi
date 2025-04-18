@@ -156,7 +156,7 @@ impl Io for MockSocket {
         assert_eq!(
             expected,
             buf,
-            "assertion left == right failed\nleft: {:?}\n right: {:?}\n",
+            "assertion left == right failed\nexpected: {:?}\nbuf: {:?}\n",
             std::str::from_utf8(expected).unwrap(),
             std::str::from_utf8(buf).unwrap()
         );
@@ -301,10 +301,10 @@ fn test_client_reconnect() -> Result<(), Error> {
     let events = vec![
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
         Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
-        Exchange::simple("17|1||", &["\0"]), // ManagedAccounts RESTART
+        Exchange::simple("17|1|", &["\0"]), // ManagedAccounts RESTART
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
         Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
-        Exchange::simple("17|1||", &["15|1|DU1234567|"]), // ManagedAccounts
+        Exchange::simple("17|1|", &["15|1|DU1234567|"]), // ManagedAccounts
     ];
     let stream = MockSocket::new(events, 0);
     let connection = Connection::stubbed(stream, 28);
@@ -350,7 +350,7 @@ fn test_send_request_after_disconnect() -> Result<(), Error> {
 
     let result = subscription.next().unwrap()?;
 
-    // assert_eq!(&result.encode_simple(), expected_response);
+    assert_eq!(&result.encode_simple(), expected_response);
 
     Ok(())
 }
@@ -427,10 +427,10 @@ fn test_contract_details_disconnect_raises_error() -> Result<(), Error> {
 
     let events = vec![
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
         Exchange::request(packet.clone(), &["\0"]),
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-        Exchange::simple("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
+        Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
     ];
 
     let stream = MockSocket::new(events, 0);
@@ -448,8 +448,7 @@ fn test_contract_details_disconnect_raises_error() -> Result<(), Error> {
 
     Ok(())
 }
-//
-// // TODO: fix this
+
 #[test]
 fn test_request_simple_encoding_roundtrip() {
     let expected = "17|1|";
