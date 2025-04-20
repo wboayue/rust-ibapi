@@ -526,27 +526,21 @@ pub(super) fn contract_details(client: &Client, contract: &Contract) -> Result<V
 
     let mut contract_details: Vec<ContractDetails> = Vec::default();
 
-    // TODO create iterator
-    while let Some(Ok(mut message)) = responses.next() {
-        match message.message_type() {
-            IncomingMessages::ContractData => {
+    while let Some(response) = responses.next() {
+        log::debug!("response: {:#?}", response);
+        match response {
+            Ok(mut message) if message.message_type() == IncomingMessages::ContractData => {
                 let decoded = decoders::decode_contract_details(client.server_version(), &mut message)?;
                 contract_details.push(decoded);
             }
-            IncomingMessages::ContractDataEnd => {
-                break;
-            }
-            IncomingMessages::Error => {
-                error!("error: {message:?}");
-                return Err(Error::Simple(format!("contract_details {message:?}")));
-            }
-            _ => {
-                error!("unexpected message: {:?}", message);
-            }
+            Ok(message) if message.message_type() == IncomingMessages::ContractDataEnd => return Ok(contract_details),
+            Ok(message) if message.message_type() == IncomingMessages::Error => return Err(Error::from(message)),
+            Ok(message) => return Err(Error::UnexpectedResponse(message)),
+            Err(e) => return Err(e),
         }
     }
 
-    Ok(contract_details)
+    Err(Error::UnexpectedEndOfStream)
 }
 
 fn verify_contract(client: &Client, contract: &Contract) -> Result<(), Error> {

@@ -379,14 +379,14 @@ impl<S: Stream> TcpMessageBus<S> {
 
     // The cleanup thread receives signals as subscribers are dropped and
     // releases the sender channels
-    fn start_cleanup_thread(self: &Arc<Self>) -> JoinHandle<()> {
+    fn start_cleanup_thread(self: &Arc<Self>, timeout: std::time::Duration) -> JoinHandle<()> {
         let message_bus = Arc::clone(self);
 
         thread::spawn(move || {
             let signal_recv = message_bus.signals_recv.clone();
 
             loop {
-                if let Ok(signal) = signal_recv.recv_timeout(Duration::from_secs(1)) {
+                if let Ok(signal) = signal_recv.recv_timeout(timeout) {
                     match signal {
                         Signal::Request(request_id) => {
                             message_bus.clean_request(request_id);
@@ -405,11 +405,11 @@ impl<S: Stream> TcpMessageBus<S> {
         })
     }
 
-    pub(crate) fn process_messages(self: &Arc<Self>, server_version: i32) -> Result<(), Error> {
+    pub(crate) fn process_messages(self: &Arc<Self>, server_version: i32, timeout: std::time::Duration) -> Result<(), Error> {
         let handle = self.start_dispatcher_thread(server_version);
         self.add_join_handle(handle);
 
-        let handle = self.start_cleanup_thread();
+        let handle = self.start_cleanup_thread(timeout);
         self.add_join_handle(handle);
 
         Ok(())
@@ -891,7 +891,7 @@ impl<S: Stream> Connection<S> {
                 ..Default::default()
             }),
             max_retries: MAX_RETRIES,
-            recorder: MessageRecorder::new(),
+            recorder: MessageRecorder::from_env(),
         };
 
         connection.establish_connection()?;
@@ -1055,6 +1055,20 @@ impl<S: Stream> Connection<S> {
         }
 
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn stubbed(socket: S, client_id: i32) -> Connection<S> {
+        Connection {
+            client_id,
+            socket,
+            connection_metadata: Mutex::new(ConnectionMetadata {
+                client_id,
+                ..Default::default()
+            }),
+            max_retries: MAX_RETRIES,
+            recorder: MessageRecorder::new(false, String::from("")),
+        }
     }
 }
 

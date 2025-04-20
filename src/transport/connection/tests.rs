@@ -7,7 +7,7 @@ use crate::orders::encoders::encode_place_order;
 use crate::orders::{order_builder, Action};
 use crate::transport::{read_message, Connection, Io, MessageBus, Reconnect, Stream, TcpMessageBus, MAX_RETRIES};
 use std::io::ErrorKind;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use log::{debug, trace};
 use std::collections::VecDeque;
@@ -28,14 +28,17 @@ struct MockSocket {
     reconnect_call_count: AtomicUsize,
 
     // Accessed from reader thread
-    // Mutated by writer threads
-    exchange_index: AtomicUsize,
+    // Mutated by reader thread
+    keep_alive: AtomicBool,
 
-    // Mutated from reader thread
-    read_call_count: AtomicUsize,
-
+    // Accessed from reader thread
     // Mutated by writer threads
     write_call_count: AtomicUsize,
+    responses_len: AtomicUsize,
+
+    // Accessed from read thread
+    // Mutated by reader thread & writer threads
+    read_call_count: AtomicUsize,
 }
 
 impl MockSocket {
@@ -43,11 +46,11 @@ impl MockSocket {
         Self {
             exchanges,
             expected_retries,
+            keep_alive: AtomicBool::new(false),
             reconnect_call_count: AtomicUsize::new(0),
-
-            exchange_index: AtomicUsize::new(0),
-            read_call_count: AtomicUsize::new(0),
             write_call_count: AtomicUsize::new(0),
+            responses_len: AtomicUsize::new(0),
+            read_call_count: AtomicUsize::new(0),
         }
     }
 }
@@ -70,56 +73,63 @@ impl Stream for MockSocket {}
 
 impl Io for MockSocket {
     fn read_message(&self) -> Result<Vec<u8>, Error> {
-        let exchange_index = self.exchange_index.load(Ordering::SeqCst);
-        let exchange = match self.exchanges.get(exchange_index) {
-            Some(ex) => ex,
-            None => {
-                // keep alive
-                return Err(mock_socket_error(ErrorKind::WouldBlock));
-            }
-        };
+        trace!("===== mock read =====");
 
-        let response_index = self.read_call_count.load(Ordering::SeqCst);
+        if self.keep_alive.load(Ordering::SeqCst) {
+            return Err(mock_socket_error(ErrorKind::WouldBlock));
+        }
+
+        // if response_index > responses len (too many reads for the given exchange)
+        // the next read executed before the next write
+        // and happens if the mock socket is used with the dispatcher thread
+        // this blocks the dispatcher thread until the write has executed
+        while self.read_call_count.load(Ordering::SeqCst) >= self.responses_len.load(Ordering::SeqCst) {
+            std::thread::sleep(std::time::Duration::from_millis(0));
+        }
+
+        // The state may have changed while waiting
+        let write_call_count = self.write_call_count.load(Ordering::SeqCst);
+        let read_call_count = self.read_call_count.load(Ordering::SeqCst);
+        let exchange = &self.exchanges[write_call_count - 1];
         let responses = &exchange.responses;
-        let new_response_index = (response_index + 1) % responses.len();
 
         trace!(
-            "mock read: responses.len(): {}, response_index: {}, new_response_index: {}, exchange_index: {}",
+            "mock read: responses.len(): {}, read_call_count: {}, write_call_count: {}, exchange_index: {}",
             responses.len(),
-            self.read_call_count.load(Ordering::SeqCst),
-            new_response_index,
-            self.exchange_index.load(Ordering::SeqCst)
+            read_call_count,
+            write_call_count,
+            write_call_count - 1
         );
 
-        let response = responses.get(response_index).unwrap();
-
-        self.read_call_count.store(new_response_index, Ordering::SeqCst);
+        let response = responses.get(read_call_count).unwrap();
 
         // disconnect if a null byte response is encountered
         if response.fields[0] == "\0" {
             return Err(mock_socket_error(ErrorKind::ConnectionReset));
         }
 
+        // if there are no more remaining exchanges or responses
+        // set keep_alive - so the client can gracefully disconnect
+        if write_call_count >= self.exchanges.len() && read_call_count >= responses.len() - 1 {
+            self.keep_alive.store(true, Ordering::SeqCst);
+        }
+
+        self.read_call_count.fetch_add(1, Ordering::SeqCst);
+
         // process the declared response in the test with transport read_message()
         // to force any errors
         let encoded = response.encode();
-        debug!("mock -> {:?}", &encoded);
+        debug!("mock read {:?}", &encoded);
         let expected = encode_length(&encoded);
         Ok(read_message(&mut expected.as_slice())?)
     }
 
     fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
-        // do not increment exchange_index on first call
-        // otherwise increment
+        trace!("===== mock write =====");
         let write_call_count = self.write_call_count.load(Ordering::SeqCst);
-        if write_call_count > 0 {
-            self.exchange_index.fetch_add(1, Ordering::SeqCst);
-        }
-        let exchange_index = self.exchange_index.load(Ordering::SeqCst);
+        trace!("mock write: write_call_count: {write_call_count}");
 
-        trace!("mock write: exchange_index: {exchange_index}, write_call_count: {write_call_count}");
-
-        let exchange = self.exchanges.get(exchange_index).unwrap();
+        let exchange = self.exchanges.get(write_call_count).unwrap();
         let request = &exchange.request;
 
         let is_handshake = buf.starts_with(b"API\0");
@@ -141,17 +151,19 @@ impl Io for MockSocket {
         };
 
         let raw_string = std::str::from_utf8(&buf[4..]).unwrap(); // strip length
-        debug!("mock -> {:?}", raw_string);
+        debug!("mock write {:?}", raw_string);
 
         assert_eq!(
             expected,
             buf,
-            "assertion left == right failed\nleft: {:?}\n right: {:?}\n",
+            "assertion left == right failed\nexpected: {:?}\nbuf: {:?}\n",
             std::str::from_utf8(expected).unwrap(),
             std::str::from_utf8(buf).unwrap()
         );
 
+        self.read_call_count.store(0, Ordering::SeqCst);
         self.write_call_count.fetch_add(1, Ordering::SeqCst);
+        self.responses_len.store(exchange.responses.len(), Ordering::SeqCst);
 
         Ok(())
     }
@@ -187,7 +199,6 @@ impl Exchange {
 }
 
 #[test]
-// #[ignore = "TODO"]
 fn test_bus_send_order_request() -> Result<(), Error> {
     let order = order_builder::market_order(Action::Buy, 100.0);
     let contract = &Contract::stock("AAPL");
@@ -240,7 +251,8 @@ fn test_connection_establish_connection() -> Result<(), Error> {
         ),
     ];
     let stream = MockSocket::new(events, 0);
-    Connection::connect(stream, 28)?;
+    let connection = Connection::stubbed(stream, 28);
+    connection.establish_connection()?;
 
     Ok(())
 }
@@ -253,7 +265,8 @@ fn test_reconnect_failed() -> Result<(), Error> {
     ];
     let socket = MockSocket::new(events, MAX_RETRIES as usize + 1);
 
-    let connection = Connection::connect(socket, 28)?;
+    let connection = Connection::stubbed(socket, 28);
+    connection.establish_connection()?;
 
     // simulated dispatcher thread read to trigger disconnection
     let _ = connection.read_message();
@@ -274,7 +287,8 @@ fn test_reconnect_success() -> Result<(), Error> {
     ];
     let socket = MockSocket::new(events, MAX_RETRIES as usize - 1);
 
-    let connection = Connection::connect(socket, 28)?;
+    let connection = Connection::stubbed(socket, 28);
+    connection.establish_connection()?;
 
     // simulated dispatcher thread read to trigger disconnection
     let _ = connection.read_message();
@@ -282,25 +296,22 @@ fn test_reconnect_success() -> Result<(), Error> {
     Ok(connection.reconnect()?)
 }
 
-// TODO: test takes minimum 1 sec due to signal_recv.recv_timeout(Duration::from_secs(1)) in
-// MessageBus::start_cleanup_thread()
 #[test]
-#[ignore = "TODO"]
 fn test_client_reconnect() -> Result<(), Error> {
-    // TODO: why 17|1 and not 17|1| for a shared request to assert true in MockSocket write_all ??
     let events = vec![
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
         Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
-        Exchange::simple("17|1||", &["\0"]), // ManagedAccounts RESTART
+        Exchange::simple("17|1|", &["\0"]), // ManagedAccounts RESTART
         Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
         Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
-        Exchange::simple("17|1||", &["15|1|DU1234567|"]), // ManagedAccounts
+        Exchange::simple("17|1|", &["15|1|DU1234567|"]), // ManagedAccounts
     ];
     let stream = MockSocket::new(events, 0);
-    let connection = Connection::connect(stream, 28)?;
+    let connection = Connection::stubbed(stream, 28);
+    connection.establish_connection()?;
     let server_version = connection.server_version();
     let bus = Arc::new(TcpMessageBus::new(connection)?);
-    bus.process_messages(server_version)?;
+    bus.process_messages(server_version, std::time::Duration::from_secs(0))?;
     let client = Client::stubbed(bus.clone(), server_version);
 
     client.managed_accounts()?;
@@ -325,7 +336,8 @@ fn test_send_request_after_disconnect() -> Result<(), Error> {
     ];
 
     let stream = MockSocket::new(events, 0);
-    let connection = Connection::connect(stream, 28)?;
+    let connection = Connection::stubbed(stream, 28);
+    connection.establish_connection()?;
     let server_version = connection.server_version();
     let bus = TcpMessageBus::new(connection)?;
 
@@ -336,17 +348,15 @@ fn test_send_request_after_disconnect() -> Result<(), Error> {
     bus.dispatch(server_version)?;
     bus.dispatch(server_version)?;
 
-    subscription.next().unwrap()?;
+    let result = subscription.next().unwrap()?;
 
-    // TODO: assert after encoding is fixed
-    // assert_eq!(&result.encode_simple(), expected_response);
+    assert_eq!(&result.encode_simple(), expected_response);
 
     Ok(())
 }
 
-//
-// // Test Error::ConnectionReset is raised on subscription.next()
-// // when sending request during disconnect
+// If a request is sent before a restart
+// the waiter should receive Error::ConnectionReset
 #[test]
 fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
     let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL"))?;
@@ -360,7 +370,8 @@ fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
     ];
 
     let stream = MockSocket::new(events, 0);
-    let connection = Connection::connect(stream, 28)?;
+    let connection = Connection::stubbed(stream, 28);
+    connection.establish_connection()?;
     let server_version = connection.server_version();
     let bus = TcpMessageBus::new(connection)?;
 
@@ -375,9 +386,9 @@ fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
 
     Ok(())
 }
-//
-// // Test Error::ConnectionReset is raised on subscription.next()
-// // when sending request during disconnect
+
+// If a request is sent during a restart
+// the waiter should receive Error::ConnectionReset
 #[test]
 fn test_request_during_disconnect_raises_error() -> Result<(), Error> {
     let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL"))?;
@@ -391,18 +402,15 @@ fn test_request_during_disconnect_raises_error() -> Result<(), Error> {
     ];
 
     let stream = MockSocket::new(events, 0);
-    let connection = Connection::connect(stream, 28)?;
+    let connection = Connection::stubbed(stream, 28);
+    connection.establish_connection()?;
 
     match connection.read_message() {
         Ok(_) => panic!(""),
         Err(_) => {
-            debug!("reconnect");
             connection.socket.reconnect()?;
-            debug!("handshake");
             connection.handshake()?;
-            debug!("write_message");
             connection.write_message(&packet)?;
-            debug!("start_api");
             connection.start_api()?;
             connection.receive_account_info()?;
         }
@@ -410,41 +418,37 @@ fn test_request_during_disconnect_raises_error() -> Result<(), Error> {
 
     Ok(())
 }
-//
-//
-// // TODO: This test repeats test_request_during_disconnect() with the client instead
-// // the response should be the same, Error::ConnectionReset
-// #[test]
-// #[ignore = "propagate error from contract_details() to fix"]
-// fn test_client_request_during_disconnect() -> Result<(), Box<dyn std::error::Error>> {
-//     let events = vec![
-//         Event::handshake("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-//         Event::request("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
-//         Event::Restart,
-//         Event::handshake("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-//         Event::request("71|2|28|", &["15|1|DU1234567|", "9|1|1|"]),
-//     ];
-//
-//     let server = TestServer::start(events);
-//
-//     let client = Client::connect(&server.address().to_string(), 28).unwrap();
-//
-//     // sleep so the request is sent after the dispatcher thread enters the reconnection
-//     // routine
-//     std::thread::sleep(Duration::from_millis(1));
-//
-//     // now attempt to send the request
-//     let contract = &Contract::stock("AAPL");
-//
-//     match client.contract_details(&contract) {
-//         Err(Error::ConnectionReset) => {}
-//         _ => panic!(),
-//     }
-//
-//     Ok(())
-// }
-//
-// // TODO: fix this
+
+#[test]
+fn test_contract_details_disconnect_raises_error() -> Result<(), Error> {
+    let contract = &Contract::stock("AAPL");
+
+    let packet = encode_request_contract_data(173, 9000, contract)?;
+
+    let events = vec![
+        Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
+        Exchange::request(packet.clone(), &["\0"]),
+        Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+        Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
+    ];
+
+    let stream = MockSocket::new(events, 0);
+    let connection = Connection::stubbed(stream, 28);
+    connection.establish_connection()?;
+    let server_version = connection.server_version();
+    let bus = Arc::new(TcpMessageBus::new(connection)?);
+    bus.process_messages(server_version, std::time::Duration::from_secs(0))?;
+    let client = Client::stubbed(bus.clone(), server_version);
+
+    match client.contract_details(&contract) {
+        Err(Error::ConnectionReset) => {}
+        _ => panic!(),
+    }
+
+    Ok(())
+}
+
 #[test]
 fn test_request_simple_encoding_roundtrip() {
     let expected = "17|1|";
