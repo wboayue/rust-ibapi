@@ -21,11 +21,11 @@ fn test_decode_market_rule() {
 fn test_split_hours() {
     let hours = "09:30:00-16:00:00;09:30:00-16:00:00";
     let result = split_hours(hours);
-    
+
     assert_eq!(result.len(), 2, "Should split into 2 parts");
     assert_eq!(result[0], "09:30:00-16:00:00", "First part should match");
     assert_eq!(result[1], "09:30:00-16:00:00", "Second part should match");
-    
+
     // Test with empty string
     let empty = "";
     let empty_result = split_hours(empty);
@@ -38,13 +38,13 @@ fn test_split_hours() {
 fn test_split_to_vec() {
     let values = "SMART,ISLAND,NYSE,ARCA";
     let result = split_to_vec(values);
-    
+
     assert_eq!(result.len(), 4, "Should split into 4 parts");
     assert_eq!(result[0], "SMART", "First part should be SMART");
     assert_eq!(result[1], "ISLAND", "Second part should be ISLAND");
     assert_eq!(result[2], "NYSE", "Third part should be NYSE");
     assert_eq!(result[3], "ARCA", "Fourth part should be ARCA");
-    
+
     // Test with empty string
     let empty = "";
     let empty_result = split_to_vec(empty);
@@ -57,10 +57,10 @@ fn test_split_to_vec() {
 fn test_decode_option_chain() {
     // Assemble
     let mut message = ResponseMessage::from_simple("51|123|NYSE|789456|GOOG|100|2023-06,2023-09,2023-12|100.5,110.0,120.5|");
-    
+
     // Activate
     let option_chain = decode_option_chain(&mut message).expect("error decoding option chain");
-    
+
     // Assert
     assert_eq!(option_chain.exchange, "NYSE", "option_chain.exchange");
     assert_eq!(option_chain.underlying_contract_id, 789456, "option_chain.underlying_contract_id");
@@ -80,47 +80,56 @@ fn test_decode_option_chain() {
 fn test_read_last_trade_date() {
     // Assemble
     let mut contract = ContractDetails::default();
-    
+
     // Test with dash separator
     // Activate
     read_last_trade_date(&mut contract, "2023-06-15", false).expect("error reading last trade date");
-    
+
     // Assert
-    assert_eq!(contract.contract.last_trade_date_or_contract_month, "2023", "contract.last_trade_date_or_contract_month");
+    assert_eq!(
+        contract.contract.last_trade_date_or_contract_month, "2023",
+        "contract.last_trade_date_or_contract_month"
+    );
     assert_eq!(contract.last_trade_time, "06", "contract.last_trade_time");
-    
+
     // Test with space separator
     // Assemble
     let mut contract = ContractDetails::default();
-    
+
     // Activate
     read_last_trade_date(&mut contract, "2023 06 15", false).expect("error reading last trade date");
-    
+
     // Assert
-    assert_eq!(contract.contract.last_trade_date_or_contract_month, "2023", "contract.last_trade_date_or_contract_month");
+    assert_eq!(
+        contract.contract.last_trade_date_or_contract_month, "2023",
+        "contract.last_trade_date_or_contract_month"
+    );
     assert_eq!(contract.last_trade_time, "06", "contract.last_trade_time");
-    
+
     // Test for bond
     // Assemble
     let mut contract = ContractDetails::default();
-    
+
     // Activate
     read_last_trade_date(&mut contract, "2030 01 15 GMT", true).expect("error reading last trade date");
-    
+
     // Assert
     assert_eq!(contract.maturity, "2030", "contract.maturity");
     assert_eq!(contract.last_trade_time, "01", "contract.last_trade_time");
     assert_eq!(contract.time_zone_id, "15", "contract.time_zone_id");
-    
+
     // Test with empty string
     // Assemble
     let mut contract = ContractDetails::default();
-    
+
     // Activate
     read_last_trade_date(&mut contract, "", false).expect("error reading last trade date");
-    
+
     // Assert
-    assert_eq!(contract.contract.last_trade_date_or_contract_month, "", "contract.last_trade_date_or_contract_month should be empty");
+    assert_eq!(
+        contract.contract.last_trade_date_or_contract_month, "",
+        "contract.last_trade_date_or_contract_month should be empty"
+    );
     assert_eq!(contract.last_trade_time, "", "contract.last_trade_time should be empty");
 }
 
@@ -128,13 +137,13 @@ fn test_read_last_trade_date() {
 fn test_next_optional_double() {
     // Assemble
     let mut message = ResponseMessage::from_simple("1.25|2.50|-1.0|-2.0|");
-    
+
     // Activate
     let result1 = next_optional_double(&mut message, -1.0).expect("error decoding optional double");
     let result2 = next_optional_double(&mut message, -1.0).expect("error decoding optional double");
     let result3 = next_optional_double(&mut message, -1.0).expect("error decoding optional double");
     let result4 = next_optional_double(&mut message, -2.0).expect("error decoding optional double");
-    
+
     // Assert
     assert_eq!(result1, Some(1.25), "result1 should be Some(1.25)");
     assert_eq!(result2, Some(2.50), "result2 should be Some(2.50)");
@@ -147,10 +156,10 @@ fn test_decode_option_computation() {
     // Assemble
     // Message format: message_type, request_id, tick_type, tick_attribute, implied_vol, delta, option_price, dividend, gamma, vega, theta, underlying_price
     let mut message = ResponseMessage::from_simple("10|123|13|1|0.25|0.45|155.25|0.75|0.05|0.15|0.10|150.0|");
-    
+
     // Activate
     let computation = decode_option_computation(server_versions::PRICE_BASED_VOLATILITY, &mut message).expect("error decoding option computation");
-    
+
     // Assert
     assert_eq!(computation.field, TickType::ModelOption, "computation.field");
     assert_eq!(computation.tick_attribute, Some(1), "computation.tick_attribute");
@@ -168,35 +177,71 @@ fn test_decode_option_computation() {
 fn test_decode_contract_descriptions() {
     // Assemble
     // Format: message_type, request_id, count, contract_id, symbol, security_type, primary_exchange, currency, derivative_sec_types_count, deriv_types, description, issuer_id
-    let mut message = ResponseMessage::from_simple("81|42|2|12345|AAPL|STK|NASDAQ|USD|2|OPT|WAR|Apple Inc.|AAPL123|67890|MSFT|STK|NASDAQ|USD|1|OPT|Microsoft Corp.|MSFT456|");
-    
+    let mut message = ResponseMessage::from_simple(
+        "81|42|2|12345|AAPL|STK|NASDAQ|USD|2|OPT|WAR|Apple Inc.|AAPL123|67890|MSFT|STK|NASDAQ|USD|1|OPT|Microsoft Corp.|MSFT456|",
+    );
+
     // Activate
     let descriptions = decode_contract_descriptions(server_versions::BOND_ISSUERID, &mut message).expect("error decoding contract descriptions");
-    
+
     // Assert
     assert_eq!(descriptions.len(), 2, "descriptions.len()");
-    
+
     // First contract
     assert_eq!(descriptions[0].contract.contract_id, 12345, "descriptions[0].contract.contract_id");
     assert_eq!(descriptions[0].contract.symbol, "AAPL", "descriptions[0].contract.symbol");
-    assert_eq!(descriptions[0].contract.security_type, SecurityType::Stock, "descriptions[0].contract.security_type");
-    assert_eq!(descriptions[0].contract.primary_exchange, "NASDAQ", "descriptions[0].contract.primary_exchange");
+    assert_eq!(
+        descriptions[0].contract.security_type,
+        SecurityType::Stock,
+        "descriptions[0].contract.security_type"
+    );
+    assert_eq!(
+        descriptions[0].contract.primary_exchange, "NASDAQ",
+        "descriptions[0].contract.primary_exchange"
+    );
     assert_eq!(descriptions[0].contract.currency, "USD", "descriptions[0].contract.currency");
-    assert_eq!(descriptions[0].derivative_security_types.len(), 2, "descriptions[0].derivative_security_types.len()");
-    assert_eq!(descriptions[0].derivative_security_types[0], "OPT", "descriptions[0].derivative_security_types[0]");
-    assert_eq!(descriptions[0].derivative_security_types[1], "WAR", "descriptions[0].derivative_security_types[1]");
+    assert_eq!(
+        descriptions[0].derivative_security_types.len(),
+        2,
+        "descriptions[0].derivative_security_types.len()"
+    );
+    assert_eq!(
+        descriptions[0].derivative_security_types[0], "OPT",
+        "descriptions[0].derivative_security_types[0]"
+    );
+    assert_eq!(
+        descriptions[0].derivative_security_types[1], "WAR",
+        "descriptions[0].derivative_security_types[1]"
+    );
     assert_eq!(descriptions[0].contract.description, "Apple Inc.", "descriptions[0].contract.description");
     assert_eq!(descriptions[0].contract.issuer_id, "AAPL123", "descriptions[0].contract.issuer_id");
-    
+
     // Second contract
     assert_eq!(descriptions[1].contract.contract_id, 67890, "descriptions[1].contract.contract_id");
     assert_eq!(descriptions[1].contract.symbol, "MSFT", "descriptions[1].contract.symbol");
-    assert_eq!(descriptions[1].contract.security_type, SecurityType::Stock, "descriptions[1].contract.security_type");
-    assert_eq!(descriptions[1].contract.primary_exchange, "NASDAQ", "descriptions[1].contract.primary_exchange");
+    assert_eq!(
+        descriptions[1].contract.security_type,
+        SecurityType::Stock,
+        "descriptions[1].contract.security_type"
+    );
+    assert_eq!(
+        descriptions[1].contract.primary_exchange, "NASDAQ",
+        "descriptions[1].contract.primary_exchange"
+    );
     assert_eq!(descriptions[1].contract.currency, "USD", "descriptions[1].contract.currency");
-    assert_eq!(descriptions[1].derivative_security_types.len(), 1, "descriptions[1].derivative_security_types.len()");
-    assert_eq!(descriptions[1].derivative_security_types[0], "OPT", "descriptions[1].derivative_security_types[0]");
-    assert_eq!(descriptions[1].contract.description, "Microsoft Corp.", "descriptions[1].contract.description");
+    assert_eq!(
+        descriptions[1].derivative_security_types.len(),
+        1,
+        "descriptions[1].derivative_security_types.len()"
+    );
+    assert_eq!(
+        descriptions[1].derivative_security_types[0], "OPT",
+        "descriptions[1].derivative_security_types[0]"
+    );
+    assert_eq!(
+        descriptions[1].contract.description, "Microsoft Corp.",
+        "descriptions[1].contract.description"
+    );
     assert_eq!(descriptions[1].contract.issuer_id, "MSFT456", "descriptions[1].contract.issuer_id");
 }
 
@@ -206,19 +251,24 @@ fn test_decode_contract_details() {
     // Assemble
     // This is a complex test due to the many fields in ContractDetails
     // Creating a simplified test message with essential fields for different server versions
-    let mut message = ResponseMessage::from_simple("10|8|42|AAPL|STK|2023-06-15|0.0||\
+    let mut message = ResponseMessage::from_simple(
+        "10|8|42|AAPL|STK|2023-06-15|0.0||\
         SMART|USD|AAPL|Apple Inc.|AAPL|12345|0.01|100|SMART,NYSE|SMART,NYSE,NASDAQ|1000|\
         0|Apple Inc.|NASDAQ|JUN23|TECHNOLOGY|ELECTRONICS|COMPUTERS|US/Eastern|\
         09:30:00-16:00:00;09:30:00-16:00:00|09:30:00-16:00:00|VOL=P|1.0|2|TAG1|VALUE1|TAG2|VALUE2|\
-        1|AAPL|STK|26|2023-06-15|COMMON|0.1|0.01|1|");
-    
+        1|AAPL|STK|26|2023-06-15|COMMON|0.1|0.01|1|",
+    );
+
     // Activate
     let contract_details = decode_contract_details(server_versions::SIZE_RULES, &mut message).expect("error decoding contract details");
-    
+
     // Assert
     assert_eq!(contract_details.contract.symbol, "AAPL", "contract.symbol");
     assert_eq!(contract_details.contract.security_type, SecurityType::Stock, "contract.security_type");
-    assert_eq!(contract_details.contract.last_trade_date_or_contract_month, "2023-06-15", "contract.last_trade_date_or_contract_month");
+    assert_eq!(
+        contract_details.contract.last_trade_date_or_contract_month, "2023-06-15",
+        "contract.last_trade_date_or_contract_month"
+    );
     assert_eq!(contract_details.contract.strike, 0.0, "contract.strike");
     assert_eq!(contract_details.contract.right, "", "contract.right");
     assert_eq!(contract_details.contract.exchange, "SMART", "contract.exchange");
