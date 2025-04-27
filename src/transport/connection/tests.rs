@@ -66,7 +66,7 @@ impl Reconnect for MockSocket {
         self.reconnect_call_count.fetch_add(1, Ordering::SeqCst);
         return Err(mock_socket_error(ErrorKind::ConnectionRefused));
     }
-    fn sleep(&self, duration: std::time::Duration) {}
+    fn sleep(&self, _duration: std::time::Duration) {}
 }
 
 impl Stream for MockSocket {}

@@ -106,7 +106,7 @@ fn test_market_data_with_combo_legs() {
     let snapshot = false;
     let regulatory_snapshot = false;
 
-    let market_data = client
+    let _market_data = client
         .market_data(&contract, generic_ticks, snapshot, regulatory_snapshot)
         .expect("Failed to create market data subscription");
 

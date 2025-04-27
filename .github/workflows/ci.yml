@@ -26,7 +26,7 @@ jobs:
         with:
           path: |
             ~/.cargo
-          key: cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-${{ hashFiles('**/Cargo.toml') }}
 
       - name: Build
         run: cargo build --verbose
