@@ -84,7 +84,7 @@ impl Io for MockSocket {
         // and happens if the mock socket is used with the dispatcher thread
         // this blocks the dispatcher thread until the write has executed
         while self.read_call_count.load(Ordering::SeqCst) >= self.responses_len.load(Ordering::SeqCst) {
-            std::thread::sleep(std::time::Duration::from_millis(0));
+            std::thread::sleep(std::time::Duration::from_millis(1));
         }
 
         // The state may have changed while waiting
