@@ -26,7 +26,7 @@ fn main() -> anyhow::Result<()> {
     println!("connection_string: {connection_string:?}");
     println!("contract: {contract:?}");
 
-    let client = Client::connect("192.168.1.2:4002", 100).unwrap();
+    let client = Client::connect("127.0.0.1:4002", 100).unwrap();
 
     println!("server_version: {}", client.server_version());
     println!("server_time: {:?}", client.connection_time());
