@@ -184,22 +184,23 @@ impl Contract {
     }
 
     /// Creates futures contract from specified symbol
-    pub fn futures(symbol: &str) -> Contract {
+    pub fn futures(local_symbol: &str, exchange: &str) -> Contract {
         Contract {
-            symbol: symbol.to_string(),
+            local_symbol: local_symbol.to_string(),
             security_type: SecurityType::Future,
             currency: "USD".to_string(),
+            exchange: exchange.to_string(),
             ..Default::default()
         }
     }
 
     /// Creates Crypto contract from specified symbol
-    pub fn crypto(symbol: &str) -> Contract {
+    pub fn crypto(symbol: &str, exchange: &str) -> Contract {
         Contract {
             symbol: symbol.to_string(),
             security_type: SecurityType::Crypto,
             currency: "USD".to_string(),
-            exchange: "PAXOS".to_string(),
+            exchange: exchange.to_string(),
             ..Default::default()
         }
     }
