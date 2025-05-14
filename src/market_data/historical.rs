@@ -67,7 +67,7 @@ pub enum BarSize {
 impl Display for BarSize {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::Sec => write!(f, "1 sec"),
+            Self::Sec => write!(f, "1 secs"),
             Self::Sec5 => write!(f, "5 secs"),
             Self::Sec15 => write!(f, "15 secs"),
             Self::Sec30 => write!(f, "30 secs"),

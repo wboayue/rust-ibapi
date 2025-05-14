@@ -149,7 +149,7 @@ fn test_historical_data() {
 
 #[test]
 fn test_bar_size() {
-    assert_eq!(BarSize::Sec.to_string(), "1 sec");
+    assert_eq!(BarSize::Sec.to_string(), "1 secs");
     assert_eq!(BarSize::Sec5.to_string(), "5 secs");
     assert_eq!(BarSize::Sec15.to_string(), "15 secs");
     assert_eq!(BarSize::Sec30.to_string(), "30 secs");
