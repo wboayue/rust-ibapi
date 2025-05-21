@@ -252,7 +252,7 @@ impl DataStream<PositionUpdateMulti> for PositionUpdateMulti {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct FamilyCode {
     /// Account ID
     pub account_id: String,

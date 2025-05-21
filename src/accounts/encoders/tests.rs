@@ -1,37 +1,35 @@
 use crate::{messages::OutgoingMessages, ToField};
 
-use super::*;
-
 #[test]
 fn test_encode_request_positions() {
     let message = super::encode_request_positions().expect("error encoding request");
 
-    assert_eq!(message.message_type(), OutgoingMessages::RequestPositions);
-    assert_eq!(message.fields().get(1).unwrap(), "1");
+    assert_eq!(message[0], OutgoingMessages::RequestPositions.to_field());
+    assert_eq!(message[1], "1");
 }
 
 #[test]
 fn test_encode_cancel_positions() {
     let message = super::encode_cancel_positions().expect("error encoding request");
 
-    assert_eq!(message.message_type(), OutgoingMessages::CancelPositions);
-    assert_eq!(message.fields().get(1).unwrap(), "1");
+    assert_eq!(message[0], OutgoingMessages::CancelPositions.to_field());
+    assert_eq!(message[1], "1");
 }
 
 #[test]
 fn test_encode_request_positions_multi() {
     let request_id = 9000;
     let version = 1;
-    let account = Some("U1234567");
-    let model_code = Some("TARGET2024");
+    let account = "U1234567";
+    let model_code = "TARGET2024";
 
-    let message = super::encode_request_positions_multi(request_id, account, model_code).expect("error encoding request");
+    let message = super::encode_request_positions_multi(request_id, Some(account), Some(model_code)).expect("error encoding request");
 
-    assert_eq!(message.message_type(), OutgoingMessages::RequestPositionsMulti);
-    assert_eq!(message.fields().get(1).unwrap(), &version.to_field());
-    assert_eq!(message.fields().get(2).unwrap(), &request_id.to_field());
-    assert_eq!(message.fields().get(3).unwrap(), &account.unwrap().to_string());
-    assert_eq!(message.fields().get(4).unwrap(), &model_code.unwrap().to_string());
+    assert_eq!(message[0], OutgoingMessages::RequestPositionsMulti.to_field());
+    assert_eq!(message[1], version.to_field());
+    assert_eq!(message[2], request_id.to_field());
+    assert_eq!(message[3], account);
+    assert_eq!(message[4], model_code);
 }
 
 #[test]
@@ -55,11 +53,11 @@ fn test_encode_request_positions_multi_options() {
     for (i, tc) in tests.iter().enumerate() {
         let request_id = request_id_base + i as i32;
         let message = super::encode_request_positions_multi(request_id, tc.account, tc.model_code).expect(tc.name);
-        assert_eq!(message.message_type(), OutgoingMessages::RequestPositionsMulti, "Case: {} - type", tc.name);
-        assert_eq!(message.fields().get(1).unwrap(), &version.to_field(), "Case: {} - version", tc.name);
-        assert_eq!(message.fields().get(2).unwrap(), &request_id.to_field(), "Case: {} - request_id", tc.name);
-        assert_eq!(message.fields().get(3).unwrap(), tc.expected_account_field, "Case: {} - account", tc.name);
-        assert_eq!(message.fields().get(4).unwrap(), tc.expected_model_field, "Case: {} - model_code", tc.name);
+        assert_eq!(message[0], OutgoingMessages::RequestPositionsMulti.to_field(), "Case: {} - type", tc.name);
+        assert_eq!(message[1], version.to_field(), "Case: {} - version", tc.name);
+        assert_eq!(message[2], request_id.to_field(), "Case: {} - request_id", tc.name);
+        assert_eq!(message[3], tc.expected_account_field, "Case: {} - account", tc.name);
+        assert_eq!(message[4], tc.expected_model_field, "Case: {} - model_code", tc.name);
     }
 }
 
@@ -71,17 +69,17 @@ fn test_encode_cancel_positions_multi() {
 
     let message = super::encode_cancel_positions_multi(request_id).expect("error encoding request");
 
-    assert_eq!(message.message_type(), OutgoingMessages::CancelPositionsMulti);
-    assert_eq!(message.fields().get(1).unwrap(), &version.to_field());
-    assert_eq!(message.fields().get(2).unwrap(), &request_id.to_field());
+    assert_eq!(message[0], OutgoingMessages::CancelPositionsMulti.to_field());
+    assert_eq!(message[1], version.to_field());
+    assert_eq!(message[2], request_id.to_field());
 }
 
 #[test]
 fn test_encode_request_family_codes() {
     let message = super::encode_request_family_codes().expect("error encoding request");
 
-    assert_eq!(message.message_type(), OutgoingMessages::RequestFamilyCodes);
-    assert_eq!(message.fields().get(1).unwrap(), "1");
+    assert_eq!(message[0], OutgoingMessages::RequestFamilyCodes.to_field());
+    assert_eq!(message[1], "1");
 }
 
 #[test]
@@ -92,27 +90,27 @@ fn test_encode_request_pnl() {
 
     let request_no_model = super::encode_request_pnl(request_id, &account, model_code_none).expect("encode request pnl failed (no model)");
 
-    assert_eq!(request_no_model.message_type(), OutgoingMessages::RequestPnL, "type (no model)");
-    assert_eq!(request_no_model.fields().get(1).unwrap(), &request_id.to_field(), "request_id (no model)");
-    assert_eq!(request_no_model.fields().get(2).unwrap(), account, "account (no model)");
-    assert_eq!(request_no_model.fields().get(3).unwrap(), "", "model_code (no model)");
+    assert_eq!(request_no_model[0], OutgoingMessages::RequestPnL.to_field(), "type (no model)");
+    assert_eq!(request_no_model[1], request_id.to_field(), "request_id (no model)");
+    assert_eq!(request_no_model[2], account, "account (no model)");
+    assert_eq!(request_no_model[3], "", "model_code (no model)");
 
     let request_id_with_model = 3001;
     let model_code_some = Some("TestModelPnl");
     let request_with_model = super::encode_request_pnl(request_id_with_model, &account, model_code_some).expect("encode request pnl failed (with model)");
 
-    assert_eq!(request_with_model.message_type(), OutgoingMessages::RequestPnL, "type (with model)");
-    assert_eq!(request_with_model.fields().get(1).unwrap(), &request_id_with_model.to_field(), "request_id (with model)");
-    assert_eq!(request_with_model.fields().get(2).unwrap(), account, "account (with model)");
-    assert_eq!(request_with_model.fields().get(3).unwrap(), model_code_some.unwrap(), "model_code (with model)");
+    assert_eq!(request_with_model[0], OutgoingMessages::RequestPnL.to_field(), "type (with model)");
+    assert_eq!(request_with_model[1], request_id_with_model.to_field(), "request_id (with model)");
+    assert_eq!(request_with_model[2], account, "account (with model)");
+    assert_eq!(request_with_model[3], model_code_some.unwrap(), "model_code (with model)");
 }
 
 #[test]
 fn test_encode_cancel_pnl() {
     let request_id = 123;
     let message = super::encode_cancel_pnl(request_id).expect("encoding failed");
-    assert_eq!(message.message_type(), OutgoingMessages::CancelPnL);
-    assert_eq!(message.fields().get(1).unwrap(), &request_id.to_field());
+    assert_eq!(message[0], OutgoingMessages::CancelPnL.to_field());
+    assert_eq!(message[1], request_id.to_field());
 }
 
 #[test]
@@ -124,11 +122,11 @@ fn test_encode_request_pnl_single() {
 
     let request_no_model = super::encode_request_pnl_single(request_id, &account, contract_id, model_code_none).expect("encode request pnl_single failed (no model)");
 
-    assert_eq!(request_no_model.message_type(), OutgoingMessages::RequestPnLSingle, "type (no model)");
-    assert_eq!(request_no_model.fields().get(1).unwrap(), &request_id.to_field(), "request_id (no model)");
-    assert_eq!(request_no_model.fields().get(2).unwrap(), account, "account (no model)");
-    assert_eq!(request_no_model.fields().get(3).unwrap(), "", "model_code (no model)");
-    assert_eq!(request_no_model.fields().get(4).unwrap(), &contract_id.to_field(), "contract_id (no model)");
+    assert_eq!(request_no_model[0], OutgoingMessages::RequestPnLSingle.to_field(), "type (no model)");
+    assert_eq!(request_no_model[1], request_id.to_field(), "request_id (no model)");
+    assert_eq!(request_no_model[2], account, "account (no model)");
+    assert_eq!(request_no_model[3], "", "model_code (no model)");
+    assert_eq!(request_no_model[4], contract_id.to_field(), "contract_id (no model)");
 
     let request_id_with_model = 3002;
     let account_with_model = "DU456";
@@ -136,19 +134,19 @@ fn test_encode_request_pnl_single() {
     let model_code_some = Some("MyModelPnlSingle");
     let request_with_model = super::encode_request_pnl_single(request_id_with_model, &account_with_model, contract_id_with_model, model_code_some).expect("encode request pnl_single failed (with model)");
 
-    assert_eq!(request_with_model.message_type(), OutgoingMessages::RequestPnLSingle, "type (with model)");
-    assert_eq!(request_with_model.fields().get(1).unwrap(), &request_id_with_model.to_field(), "request_id (with model)");
-    assert_eq!(request_with_model.fields().get(2).unwrap(), account_with_model, "account (with model)");
-    assert_eq!(request_with_model.fields().get(3).unwrap(), model_code_some.unwrap(), "model_code (with model)");
-    assert_eq!(request_with_model.fields().get(4).unwrap(), &contract_id_with_model.to_field(), "contract_id (with model)");
+    assert_eq!(request_with_model[0], OutgoingMessages::RequestPnLSingle.to_field(), "type (with model)");
+    assert_eq!(request_with_model[1], request_id_with_model.to_field(), "request_id (with model)");
+    assert_eq!(request_with_model[2], account_with_model, "account (with model)");
+    assert_eq!(request_with_model[3], model_code_some.unwrap(), "model_code (with model)");
+    assert_eq!(request_with_model[4], contract_id_with_model.to_field(), "contract_id (with model)");
 }
 
 #[test]
 fn test_encode_cancel_pnl_single() {
     let request_id = 456;
     let message = super::encode_cancel_pnl_single(request_id).expect("encoding failed");
-    assert_eq!(message.message_type(), OutgoingMessages::CancelPnLSingle);
-    assert_eq!(message.fields().get(1).unwrap(), &request_id.to_field());
+    assert_eq!(message[0], OutgoingMessages::CancelPnLSingle.to_field());
+    assert_eq!(message[1], request_id.to_field());
 }
 
 #[test]
@@ -160,25 +158,25 @@ fn test_encode_request_account_summary() {
 
     let request = super::encode_request_account_summary(request_id, group, tags).expect("encode request account summary failed");
 
-    assert_eq!(request.message_type(), OutgoingMessages::RequestAccountSummary);
-    assert_eq!(request.fields().get(1).unwrap(), &version.to_field());
-    assert_eq!(request.fields().get(2).unwrap(), &request_id.to_field());
-    assert_eq!(request.fields().get(3).unwrap(), &group.to_string());
-    assert_eq!(request.fields().get(4).unwrap(), &tags.join(","));
+    assert_eq!(request[0], OutgoingMessages::RequestAccountSummary.to_field());
+    assert_eq!(request[1], version.to_field());
+    assert_eq!(request[2], request_id.to_field());
+    assert_eq!(request[3], group.to_string());
+    assert_eq!(request[4], tags.join(","));
 }
 
 #[test]
 fn test_encode_request_managed_accounts() {
     let message = super::encode_request_managed_accounts().expect("encoding failed");
-    assert_eq!(message.message_type(), OutgoingMessages::RequestManagedAccounts);
-    assert_eq!(message.fields().get(1).unwrap(), "1"); // Version
+    assert_eq!(message[0], OutgoingMessages::RequestManagedAccounts.to_field());
+    assert_eq!(message[1], "1"); // Version
 }
 
 #[test]
 fn test_encode_request_server_time() {
     let message = super::encode_request_server_time().expect("encoding failed");
-    assert_eq!(message.message_type(), OutgoingMessages::RequestCurrentTime);
-    assert_eq!(message.fields().get(1).unwrap(), "1"); // Version
+    assert_eq!(message[0], OutgoingMessages::RequestCurrentTime.to_field());
+    assert_eq!(message[1], "1"); // Version
 }
 
 #[test]
@@ -189,21 +187,21 @@ fn test_encode_request_account_updates() {
 
     let request = super::encode_request_account_updates(server_version, &account).expect("encode request account updates");
 
-    assert_eq!(request.message_type(), OutgoingMessages::RequestAccountData);
-    assert_eq!(request.fields().get(1).unwrap(), &version.to_field());
-    assert_eq!(request.fields().get(2).unwrap(), &true.to_field());
+    assert_eq!(request[0], OutgoingMessages::RequestAccountData.to_field());
+    assert_eq!(request[1], version.to_field());
+    assert_eq!(request[2], true.to_field());
     // For server_version < ACCOUNT_SUMMARY (which is 10), account is not sent.
-    assert!(request.fields().get(3).is_none());
+    assert_eq!(request[3], "");
 
 
     let server_version_ge10 = 10;
 
     let request_sv_ge10 = super::encode_request_account_updates(server_version_ge10, &account).expect("encode request account updates for sv >= 10");
 
-    assert_eq!(request_sv_ge10.message_type(), OutgoingMessages::RequestAccountData);
-    assert_eq!(request_sv_ge10.fields().get(1).unwrap(), &version.to_field());
-    assert_eq!(request_sv_ge10.fields().get(2).unwrap(), &true.to_field());
-    assert_eq!(request_sv_ge10.fields().get(3).unwrap(), &account.to_string());
+    assert_eq!(request_sv_ge10[0], OutgoingMessages::RequestAccountData.to_field());
+    assert_eq!(request_sv_ge10[1], version.to_field());
+    assert_eq!(request_sv_ge10[2], true.to_field());
+    assert_eq!(request_sv_ge10[3], account.to_string());
 }
 
 #[test]
@@ -213,10 +211,10 @@ fn test_encode_cancel_account_updates() {
 
     let request = super::encode_cancel_account_updates(server_version).expect("encode cancel account updates");
 
-    assert_eq!(request.message_type(), OutgoingMessages::RequestAccountData);
-    assert_eq!(request.fields().get(1).unwrap(), &version.to_field());
-    assert_eq!(request.fields().get(2).unwrap(), &false.to_field());
-    assert!(request.fields().get(3).is_none());
+    assert_eq!(request[0], OutgoingMessages::RequestAccountData.to_field());
+    assert_eq!(request[1], version.to_field());
+    assert_eq!(request[2], false.to_field());
+    assert_eq!(request[3], "");
 
 
     let server_version_ge10 = 10;
@@ -224,10 +222,10 @@ fn test_encode_cancel_account_updates() {
 
     let request_sv_ge10 = super::encode_cancel_account_updates(server_version_ge10).expect("encode cancel account updates for sv >= 10");
 
-    assert_eq!(request_sv_ge10.message_type(), OutgoingMessages::RequestAccountData);
-    assert_eq!(request_sv_ge10.fields().get(1).unwrap(), &version.to_field());
-    assert_eq!(request_sv_ge10.fields().get(2).unwrap(), &false.to_field());
-    assert_eq!(request_sv_ge10.fields().get(3).unwrap(), &account_empty.to_string());
+    assert_eq!(request_sv_ge10[0], OutgoingMessages::RequestAccountData.to_field());
+    assert_eq!(request_sv_ge10[1], version.to_field());
+    assert_eq!(request_sv_ge10[2], false.to_field());
+    assert_eq!(request_sv_ge10[3], account_empty.to_string());
 }
 
 #[test]
@@ -240,12 +238,12 @@ fn test_encode_request_account_updates_multi() {
 
     let request = super::encode_request_account_updates_multi(request_id, Some(&account), model_code).expect("encode request account updates");
 
-    assert_eq!(request.message_type(), OutgoingMessages::RequestAccountUpdatesMulti);
-    assert_eq!(request.fields().get(1).unwrap(), &version.to_field());
-    assert_eq!(request.fields().get(2).unwrap(), &request_id.to_field());
-    assert_eq!(request.fields().get(3).unwrap(), &account.to_string());
-    assert_eq!(request.fields().get(4).unwrap(), &model_code.to_field().unwrap_or_default());
-    assert_eq!(request.fields().get(5).unwrap(), &subscribe.to_field());
+    assert_eq!(request[0], OutgoingMessages::RequestAccountUpdatesMulti.to_field());
+    assert_eq!(request[1], version.to_field());
+    assert_eq!(request[2], request_id.to_field());
+    assert_eq!(request[3], account.to_string());
+    assert_eq!(request[4], model_code.to_field());
+    assert_eq!(request[5], subscribe.to_field());
 }
 
 #[test]
@@ -270,11 +268,11 @@ fn test_encode_request_account_updates_multi_options() {
     for (i, tc) in tests.iter().enumerate() {
         let request_id = request_id_base + i as i32;
         let message = super::encode_request_account_updates_multi(request_id, tc.account, tc.model_code).expect(tc.name);
-        assert_eq!(message.message_type(), OutgoingMessages::RequestAccountUpdatesMulti, "Case: {} - type", tc.name);
-        assert_eq!(message.fields().get(1).unwrap(), &version.to_field(), "Case: {} - version", tc.name);
-        assert_eq!(message.fields().get(2).unwrap(), &request_id.to_field(), "Case: {} - request_id", tc.name);
-        assert_eq!(message.fields().get(3).unwrap(), tc.expected_account_field, "Case: {} - account", tc.name);
-        assert_eq!(message.fields().get(4).unwrap(), tc.expected_model_field, "Case: {} - model_code", tc.name);
-        assert_eq!(message.fields().get(5).unwrap(), &subscribe.to_field(), "Case: {} - subscribe", tc.name);
+        assert_eq!(message[0], OutgoingMessages::RequestAccountUpdatesMulti.to_field(), "Case: {} - type", tc.name);
+        assert_eq!(message[1], version.to_field(), "Case: {} - version", tc.name);
+        assert_eq!(message[2], request_id.to_field(), "Case: {} - request_id", tc.name);
+        assert_eq!(message[3], tc.expected_account_field, "Case: {} - account", tc.name);
+        assert_eq!(message[4], tc.expected_model_field, "Case: {} - model_code", tc.name);
+        assert_eq!(message[5], subscribe.to_field(), "Case: {} - subscribe", tc.name);
     }
 }

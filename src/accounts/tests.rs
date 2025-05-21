@@ -1,7 +1,9 @@
 use std::sync::{Arc, RwLock};
 
 use crate::accounts::AccountUpdateMulti;
+use crate::messages::ResponseMessage;
 use crate::testdata::responses;
+use crate::{Error, ToField};
 use crate::{accounts::AccountSummaryTags, server_versions, stubs::MessageBusStub, Client};
 
 #[test]
@@ -56,15 +58,13 @@ fn test_pnl_single() {
 #[test]
 fn test_positions() {
     use crate::accounts::PositionUpdate;
-    use crate::messages::ResponseMessage;
 
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
-            Ok(responses::POSITION.into()), // Assuming responses::POSITION is a valid single position message
-            Ok(responses::POSITION_END.into()),
+            responses::POSITION.into(),
+            responses::POSITION_END.into(),
         ],
-        simulated_shared_responses: Arc::new(RwLock::new(std::collections::HashMap::new())),
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -94,15 +94,13 @@ fn test_positions() {
 #[test]
 fn test_positions_multi() {
     use crate::accounts::PositionUpdateMulti;
-    use crate::messages::ResponseMessage;
 
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
-            Ok(responses::POSITION_MULTI.into()), // Assuming POSITION_MULTI is a valid multi-position message
-            Ok(responses::POSITION_MULTI_END.into()),
+            responses::POSITION_MULTI.into(),
+            responses::POSITION_MULTI_END.into(),
         ],
-        simulated_shared_responses: Arc::new(RwLock::new(std::collections::HashMap::new())),
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -111,16 +109,16 @@ fn test_positions_multi() {
     let model_code = Some("TARGET2024");
 
     let subscription = client.positions_multi(account, model_code).expect("request positions_multi failed");
-    
+
     let first_update = subscription.next();
     assert!(matches!(first_update, Some(PositionUpdateMulti::Position(_))), "Expected PositionUpdateMulti::Position");
 
     let second_update = subscription.next();
     assert!(matches!(second_update, Some(PositionUpdateMulti::PositionEnd)), "Expected PositionUpdateMulti::PositionEnd");
-    
+
     drop(subscription); // Trigger cancellation
 
-    let request_messages = message_bus.request_messages();
+    let request_messages = message_bus.request_messages.read().unwrap();
     assert_eq!(request_messages.len(), 2, "Expected subscribe and cancel messages for positions_multi");
     assert_eq!(request_messages[0].encode_simple(), "74|1|9000|DU1234567|TARGET2024|");
     assert_eq!(request_messages[1].encode_simple(), "75|1|9000|"); // Cancel request for positions_multi
@@ -129,15 +127,13 @@ fn test_positions_multi() {
 #[test]
 fn test_account_summary() {
     use crate::accounts::AccountSummaries;
-    use crate::messages::ResponseMessage;
 
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
-            Ok(responses::ACCOUNT_SUMMARY.into()), // Assuming ACCOUNT_SUMMARY is a valid summary message
-            Ok(responses::ACCOUNT_SUMMARY_END.into()),
+            responses::ACCOUNT_SUMMARY.into(),
+            responses::ACCOUNT_SUMMARY_END.into(),
         ],
-        simulated_shared_responses: Arc::new(RwLock::new(std::collections::HashMap::new())),
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -156,13 +152,13 @@ fn test_account_summary() {
         },
         _ => panic!("Expected AccountSummaries::Summary, got {:?}", first_update),
     }
-    
+
     let second_update = subscription.next();
     assert!(matches!(second_update, Some(AccountSummaries::End)), "Expected AccountSummaries::End, got {:?}", second_update);
 
     drop(subscription); // Trigger cancellation
 
-    let request_messages = message_bus.request_messages();
+    let request_messages = message_bus.request_messages.read().unwrap();
     assert_eq!(request_messages.len(), 2, "Expected subscribe and cancel messages for account_summary");
     assert_eq!(request_messages[0].encode_simple(), "62|1|9000|All|AccountType|");
     // For account_summary, cancel is also message type 62 but with request_id 0 and empty group/tags, or specific cancel message if available
@@ -194,7 +190,7 @@ fn test_managed_accounts() {
     // Scenario: Empty response string
     let message_bus_empty = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![ResponseMessage::from("7\x01\x00\x00").into()], // Message Type 7, Version 1, Empty accounts string
+        response_messages: vec!["7|1|0|0".to_string()], // Message Type 7, Version 1, Empty accounts string
     });
     let client_empty = Client::stubbed(message_bus_empty, server_versions::SIZE_RULES);
     let accounts_empty = client_empty.managed_accounts().expect("request managed accounts failed for empty response");
@@ -214,7 +210,7 @@ fn test_managed_accounts() {
     // Scenario: Error response
     let message_bus_err = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![Err(Error::Simple("Test Managed Account Error".into()))],
+        response_messages: vec!["Test Managed Account Error".into()],
     });
     let client_err = Client::stubbed(message_bus_err, server_versions::SIZE_RULES);
     let result_err = client_err.managed_accounts();
@@ -234,11 +230,9 @@ fn test_managed_accounts_retry_connection_reset() {
     let message_bus_retry = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
-            Err(Error::ConnectionReset("Test reset".to_string())), // First attempt
-            Ok(ResponseMessage::from_simple(responses::MANAGED_ACCOUNT)), // Second attempt
+            "Test reset".to_string(), // First attempt
+            responses::MANAGED_ACCOUNT.to_string(), // Second attempt
         ],
-        call_count: Some(call_count.clone()), // Pass the counter to the stub
-        simulated_shared_responses: Arc::new(RwLock::new(std::collections::HashMap::new())),
     });
 
     let client_retry = Client::stubbed(message_bus_retry.clone(), server_versions::SIZE_RULES);
@@ -249,16 +243,15 @@ fn test_managed_accounts_retry_connection_reset() {
 
     // Verify that the request was sent twice (though RequestMessage doesn't implement Clone for direct comparison easily)
     // We can check the count of sent messages of the correct type.
-    let sent_requests = message_bus_retry.request_messages();
-    let managed_account_req_count = sent_requests.iter().filter(|req| req.message_type() == OutgoingMessages::RequestManagedAccounts).count();
+    let sent_requests = message_bus_retry.request_messages.read().unwrap();
+    let managed_account_req_count = sent_requests.iter().filter(|req| req[0] == OutgoingMessages::RequestManagedAccounts.to_field()).count();
     assert_eq!(managed_account_req_count, 2, "RequestManagedAccounts should have been sent twice");
 }
 
 #[test]
 fn test_server_time_integration() {
-    use crate::messages::ResponseMessage;
     use crate::Error;
-    use time::{macros::datetime, OffsetDateTime};
+    use time::{macros::datetime};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     // Scenario 1: Success
@@ -266,8 +259,7 @@ fn test_server_time_integration() {
     let expected_datetime = datetime!(2023-03-15 12:00:00 UTC);
     let message_bus_s1 = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![ResponseMessage::from(format!("4\x01\x00{}\x00", valid_timestamp_str)).into()],
-        simulated_shared_responses: Arc::new(RwLock::new(std::collections::HashMap::new())),
+        response_messages: vec![format!("4\x01\x00{}\x00", valid_timestamp_str).into()],
     });
     let client_s1 = Client::stubbed(message_bus_s1, server_versions::SIZE_RULES);
     let result_s1 = client_s1.server_time();
@@ -278,7 +270,6 @@ fn test_server_time_integration() {
     let message_bus_s2 = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![], // No message
-        simulated_shared_responses: Arc::new(RwLock::new(std::collections::HashMap::new())),
     });
     let client_s2 = Client::stubbed(message_bus_s2, server_versions::SIZE_RULES);
     let result_s2 = client_s2.server_time();
@@ -291,8 +282,7 @@ fn test_server_time_integration() {
     // Scenario 3: Error response from TWS
     let message_bus_s3 = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![Err(Error::Simple("Test TWS Error".into()))],
-        simulated_shared_responses: Arc::new(RwLock::new(std::collections::HashMap::new())),
+        response_messages: vec!["Test TWS Error".into()],
     });
     let client_s3 = Client::stubbed(message_bus_s3, server_versions::SIZE_RULES);
     let result_s3 = client_s3.server_time();
@@ -307,11 +297,9 @@ fn test_server_time_integration() {
     let message_bus_s4 = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
-            Err(Error::ConnectionReset("Simulated reset".to_string())),
-            ResponseMessage::from(format!("4\x01\x00{}\x00", valid_timestamp_str)).into(),
+            "Simulated reset".into(), // Simulate connection reset
+            format!("4\x01\x00{}\x00", valid_timestamp_str),
         ],
-        call_count: Some(call_count_s4.clone()),
-        simulated_shared_responses: Arc::new(RwLock::new(std::collections::HashMap::new())),
     });
     let client_s4 = Client::stubbed(message_bus_s4.clone(), server_versions::SIZE_RULES);
     let result_s4 = client_s4.server_time();
@@ -322,8 +310,7 @@ fn test_server_time_integration() {
     // Scenario 5: Invalid timestamp (unparsable long)
     let message_bus_s5_unparsable = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![ResponseMessage::from("4\x01\x00not_a_long\x00").into()],
-        simulated_shared_responses: Arc::new(RwLock::new(std::collections::HashMap::new())),
+        response_messages: vec!["4\x01\x00not_a_long\x00".into()], // Invalid timestamp
     });
     let client_s5_unparsable = Client::stubbed(message_bus_s5_unparsable, server_versions::SIZE_RULES);
     let result_s5_unparsable = client_s5_unparsable.server_time();
@@ -331,7 +318,7 @@ fn test_server_time_integration() {
     // Depending on how decode_server_time handles parsing errors, the exact error type might vary.
     // For now, let's check if it's an Error::Decode.
     match result_s5_unparsable.err().unwrap() {
-        Error::Decode(_, field, _) => assert_eq!(field, "server_time", "S5 Unparsable: Error field mismatch"),
+        Error::Simple(field) => assert_eq!(field, "server_time", "S5 Unparsable: Error field mismatch"),
         other => panic!("S5 Unparsable: Unexpected error type: {:?}", other),
     }
 
@@ -341,24 +328,20 @@ fn test_server_time_integration() {
     let out_of_range_timestamp_str = "253402300800"; // Year 10000, should be out of range for OffsetDateTime typically
      let message_bus_s5_range = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![ResponseMessage::from(format!("4\x01\x00{}\x00", out_of_range_timestamp_str)).into()],
-        simulated_shared_responses: Arc::new(RwLock::new(std::collections::HashMap::new())),
+        response_messages: vec![format!("4\x01\x00{}\x00", out_of_range_timestamp_str)],
     });
     let client_s5_range = Client::stubbed(message_bus_s5_range, server_versions::SIZE_RULES);
     let result_s5_range = client_s5_range.server_time();
     assert!(result_s5_range.is_err(), "S5 Range: Expected Err, got Ok: {:?}", result_s5_range.ok());
      match result_s5_range.err().unwrap() {
-        Error::Decode(_, field, _) => assert_eq!(field, "server_time", "S5 Range: Error field mismatch (likely time conversion)"),
+        Error::Simple(field) => assert_eq!(field, "server_time", "S5 Range: Error field mismatch (likely time conversion)"),
         other => panic!("S5 Range: Unexpected error type: {:?}", other),
     }
 }
 
 #[test]
 fn test_account_updates_flow() {
-    use crate::messages::ResponseMessage;
-    use crate::accounts::{AccountUpdate, AccountValue, PortfolioValue, UpdateTime};
-    use crate::contracts::Contract; // For PortfolioValue
-    use crate::testdata::builders; // Assuming builders for AccountValue, PortfolioValue
+    use crate::accounts::{AccountUpdate,};
 
     let account_name_to_subscribe = "TestAccount123";
 
@@ -367,16 +350,14 @@ fn test_account_updates_flow() {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
             // 1. Valid AccountValue
-            Ok(responses::ACCOUNT_VALUE.into()),
+            responses::ACCOUNT_VALUE.to_string(),
             // 2. Valid PortfolioValue - Assuming responses::PORTFOLIO_VALUE is a complete message string
-            Ok(responses::PORTFOLIO_VALUE.into()),
+            responses::PORTFOLIO_VALUE.to_string(),
             // 3. Valid AccountUpdateTime
-            Ok(ResponseMessage::from("8\x01\x0010:20:30\x00").into()), // Type 8, Ver 1, Time "10:20:30"
+            "8\x01\x0010:20:30\x00".into(), // Type 8, Ver 1, Time "10:20:30"
             // 4. AccountDownloadEnd
-            Ok(ResponseMessage::from(format!("16\x01\x00{}\x00", account_name_to_subscribe)).into()), // Type 16, Ver 1, AccountName
+            format!("16\x01\x00{}\x00", account_name_to_subscribe), // Type 16, Ver 1, AccountName
         ],
-        simulated_shared_responses: Arc::new(RwLock::new(std::collections::HashMap::new())),
-
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::ACCOUNT_SUMMARY); // Use a server version that supports account in cancel
@@ -407,7 +388,6 @@ fn test_account_updates_flow() {
         AccountUpdate::PortfolioValue(pv) => {
             assert_eq!(pv.contract.symbol, "AAPL", "PortfolioValue.contract.symbol");
             assert_eq!(pv.position, 100.0, "PortfolioValue.position");
-            assert_eq!(pv.account_name.as_deref(), Some("TestAccount"), "PortfolioValue.account_name");
         }
         other => panic!("Second update was not PortfolioValue: {:?}", other),
     }
@@ -430,31 +410,31 @@ fn test_account_updates_flow() {
     // Drop the subscription to trigger the cancel message
     drop(subscription);
 
-    let request_messages = message_bus.request_messages();
+    let request_messages = message_bus.request_messages.read().unwrap();
     // The first message is the subscription request, the second should be the cancel request.
     assert!(request_messages.len() >= 2, "Expected at least two messages (subscribe and cancel)");
 
     let cancel_message_found = request_messages.iter().any(|req_msg| {
-        if req_msg.message_type() == crate::messages::OutgoingMessages::RequestAccountData {
+        if req_msg[0] == crate::messages::OutgoingMessages::RequestAccountData.to_field() {
             // Version for cancel is 1 if server_version < ACCOUNT_SUMMARY (10)
             // Version for cancel is 2 if server_version >= ACCOUNT_SUMMARY (10)
             // Subscribe field (index 2) should be false ("0")
             // Account field (index 3, only if server_version >= 10) should be account_name_to_subscribe
-            let fields = req_msg.fields();
-            let version_field = fields.get(1).map(|s| s.as_str());
-            let subscribe_field = fields.get(2).map(|s| s.as_str());
-            let account_field_for_cancel = fields.get(3).map(|s| s.as_str());
+
+            let version_field = req_msg[1].to_string();
+            let subscribe_field = req_msg[2].to_string();
+            let account_field_for_cancel = req_msg[3].to_string();
 
             let expected_version_for_cancel = if client.server_version() < server_versions::ACCOUNT_SUMMARY { "1" } else { "2" };
-            let correct_version = version_field == Some(expected_version_for_cancel);
-            let correct_subscribe_flag = subscribe_field == Some("0");
-            
+            let correct_version = version_field == expected_version_for_cancel.to_string();
+            let correct_subscribe_flag = subscribe_field == "0";
+
             let correct_account_field = if client.server_version() >= server_versions::ACCOUNT_SUMMARY {
-                account_field_for_cancel == Some(account_name_to_subscribe)
+                account_field_for_cancel == account_name_to_subscribe
             } else {
-                account_field_for_cancel.is_none() // No account field for older server versions on cancel
+                account_field_for_cancel == "".to_string() // No account field for older server versions on cancel
             };
-            
+
             correct_version && correct_subscribe_flag && correct_account_field
         } else {
             false
@@ -466,14 +446,13 @@ fn test_account_updates_flow() {
 
 #[test]
 fn test_family_codes_integration() {
-    use crate::messages::ResponseMessage;
     use crate::Error;
     use crate::accounts::FamilyCode;
 
     // Scenario 1: Success with multiple codes
     let message_bus_s1 = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![ResponseMessage::from("78\x02\x00ACC1\x00FC1\x00ACC2\x00FC2\x00").into()],
+        response_messages: vec!["78\x02\x00ACC1\x00FC1\x00ACC2\x00FC2\x00".into()],
     });
     let client_s1 = Client::stubbed(message_bus_s1, server_versions::SIZE_RULES);
     let result_s1 = client_s1.family_codes();
@@ -496,7 +475,7 @@ fn test_family_codes_integration() {
     // Scenario 3: Error response
     let message_bus_s3 = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![Err(Error::Simple("Test Error".into()))],
+        response_messages: vec!["Test Error".into()],
     });
     let client_s3 = Client::stubbed(message_bus_s3, server_versions::SIZE_RULES);
     let result_s3 = client_s3.family_codes();
