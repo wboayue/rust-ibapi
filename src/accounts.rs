@@ -122,7 +122,7 @@ impl DataStream<AccountSummaries> for AccountSummaries {
     }
 
     fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
-        encoders::encode_cancel_positions()
+        encoders::encode_cancel_account_summary()
     }
 }
 
@@ -252,7 +252,7 @@ impl DataStream<PositionUpdateMulti> for PositionUpdateMulti {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct FamilyCode {
     /// Account ID
     pub account_id: String,

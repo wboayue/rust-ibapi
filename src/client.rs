@@ -862,7 +862,6 @@ impl Client {
     ///
     /// ```no_run
     /// use time::macros::datetime;
-    //
     /// use ibapi::contracts::Contract;
     /// use ibapi::Client;
     /// use ibapi::market_data::historical::ToDuration;
@@ -1447,7 +1446,7 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::Client;
-    /// // use ibapi::contracts::Contract; // Only if deriving conId; remove if conId is directly known.
+    /// use ibapi::contracts::Contract; // Or remove if conId is always known
     /// use time::macros::datetime;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -1569,11 +1568,48 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::Client;
+    /// use ibapi::scanner::ScannerSubscription;
+    /// use ibapi::orders::TagValue; // Or ensure common::TagValue is the correct path
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let parameters = client.scanner_parameters().expect("request scanner parameters failed");
-    /// println!("{:?}", parameters);
+    /// let mut sub = ScannerSubscription::default();
+    /// sub.instrument = Some("STK".to_string());
+    /// sub.location_code = Some("STK.US.MAJOR".to_string());
+    /// sub.scan_code = Some("TOP_PERC_GAIN".to_string());
+    /// // Further customize the subscription object as needed, for example:
+    /// // sub.above_price = Some(1.0);
+    /// // sub.below_price = Some(100.0);
+    /// // sub.number_of_rows = Some(20);
+    ///
+    /// // Filter options are advanced and not always needed. Pass an empty Vec if not used.
+    /// let filter_options: Vec<TagValue> = Vec::new();
+    /// // Example of adding a filter:
+    /// // filter_options.push(TagValue { tag: "marketCapAbove".to_string(), value: "1000000000".to_string() });
+    ///
+    /// match client.scanner_subscription(&sub, &filter_options) {
+    ///     Ok(subscription) => {
+    ///         // Iterate over received scanner data.
+    ///         // Note: Scanner subscriptions can be continuous or return a snapshot.
+    ///         // This example just takes the first batch if available.
+    ///         if let Some(scanner_results_vec) = subscription.iter().next() {
+    ///             println!("Scanner Results (first batch):");
+    ///             for data in scanner_results_vec {
+    ///                 println!("  Rank: {}, Symbol: {}",
+    ///                          data.rank,
+    ///                          data.contract_details.contract.symbol);
+    ///             }
+    ///         } else {
+    ///             println!("No scanner results received in the first check.");
+    ///         }
+    ///         // In a real application, you might continuously iterate or handle updates.
+    ///         // Remember to cancel the subscription when no longer needed if it's continuous.
+    ///         // subscription.cancel();
+    ///     }
+    ///     Err(e) => {
+    ///         eprintln!("Failed to start scanner subscription: {}", e);
+    ///     }
+    /// };
     /// ```
     pub fn scanner_parameters(&self) -> Result<String, Error> {
         scanner::scanner_parameters(self)
