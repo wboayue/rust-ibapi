@@ -138,6 +138,18 @@ impl Client {
         self.order_id.store(order_id, Ordering::Relaxed)
     }
 
+    /// Returns the version of the TWS API server to which the client is connected.
+    /// This version is determined during the initial connection handshake.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let server_version = client.server_version();
+    /// println!("Connected to TWS server version: {}", server_version);
+    /// ```
     pub fn server_version(&self) -> i32 {
         self.server_version
     }
@@ -321,7 +333,6 @@ impl Client {
     /// # Arguments
     /// * `account`        - Account values can be requested for a particular account.
     /// * `model_code`     - Account values can also be requested for a model.
-    /// * `ledger_and_nlv` - Returns light-weight request; only currency positions as opposed to account values and currency positions.
     ///
     /// # Examples
     ///
@@ -371,7 +382,7 @@ impl Client {
 
     /// Requests contract information.
     ///
-    /// Provides all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
+    /// Provides all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use [`option_chain()`] for that purpose.
     ///
     /// # Arguments
     /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
@@ -444,7 +455,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::option("AAPL", "20251219", 150.0, "C");
     /// let calculation = client.calculate_option_price(&contract, 100.0, 235.0).expect("request failed");
     /// println!("calculation: {:?}", calculation);
     /// ```
@@ -851,7 +862,6 @@ impl Client {
     ///
     /// ```no_run
     /// use time::macros::datetime;
-    //
     /// use ibapi::contracts::Contract;
     /// use ibapi::Client;
     /// use ibapi::market_data::historical::ToDuration;
@@ -1037,7 +1047,7 @@ impl Client {
     /// # Arguments
     /// * `contract`  - [Contract] to retrieve [Histogram Entries](historical::HistogramEntry) for.
     /// * `use_rth`   - Data from regular trading hours (true), or all available hours (false).
-    /// * `duration`  - Duration of interval to retrieve.
+    /// * `period`    - The time period of each histogram bar (e.g., `BarSize::Day`, `BarSize::Week`, `BarSize::Month`).
     ///
     /// # Examples
     ///
@@ -1067,8 +1077,6 @@ impl Client {
     // === Realtime Market Data ===
 
     /// Requests realtime bars.
-    ///
-    /// This method will provide all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
     ///
     /// # Arguments
     /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
@@ -1102,9 +1110,98 @@ impl Client {
     /// Requests tick by tick AllLast ticks.
     ///
     /// # Arguments
-    /// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
-    /// * `number_of_ticks` - number of ticks.
-    /// * `ignore_size` - ignore size flag.
+    /// * `contract`        - The [Contract] for which to request tick-by-tick data.
+    /// * `number_of_ticks` - The number of ticks to retrieve. TWS usually limits this to 1000.
+    /// * `ignore_size`     - Specifies if tick sizes should be ignored.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("AAPL");
+    /// let number_of_ticks = 10; // Request a small number of ticks for the example
+    /// let ignore_size = false;
+    ///
+    /// let subscription = client.tick_by_tick_all_last(&contract, number_of_ticks, ignore_size)
+    ///     .expect("tick-by-tick all_last data request failed");
+    ///
+    /// for tick in subscription.iter().take(number_of_ticks as usize) { // Take to limit example output
+    ///     println!("AllLast Tick: {:?}", tick);
+    /// }
+    /// ```
+    /// * `contract`        - The [Contract] for which to request tick-by-tick data.
+    /// * `number_of_ticks` - The number of ticks to retrieve. TWS usually limits this to 1000.
+    /// * `ignore_size`     - Specifies if tick sizes should be ignored (typically true for BidAsk ticks to get changes based on price).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("AAPL");
+    /// let number_of_ticks = 10; // Request a small number of ticks for the example
+    /// let ignore_size = true;
+    ///
+    /// let subscription = client.tick_by_tick_bid_ask(&contract, number_of_ticks, ignore_size)
+    ///     .expect("tick-by-tick bid_ask data request failed");
+    ///
+    /// for tick in subscription.iter().take(number_of_ticks as usize) { // Take to limit example output
+    ///     println!("BidAsk Tick: {:?}", tick);
+    /// }
+    /// ```
+    /// * `contract`        - The [Contract] for which to request tick-by-tick data.
+    /// * `number_of_ticks` - The number of ticks to retrieve. TWS usually limits this to 1000.
+    /// * `ignore_size`     - Specifies if tick sizes should be ignored (typically false for Last ticks).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("AAPL");
+    /// let number_of_ticks = 10; // Request a small number of ticks for the example
+    /// let ignore_size = false;
+    ///
+    /// let subscription = client.tick_by_tick_last(&contract, number_of_ticks, ignore_size)
+    ///     .expect("tick-by-tick last data request failed");
+    ///
+    /// for tick in subscription.iter().take(number_of_ticks as usize) { // Take to limit example output
+    ///     println!("Last Tick: {:?}", tick);
+    /// }
+    /// ```
+    /// * `contract`        - The [Contract] for which to request tick-by-tick data.
+    /// * `number_of_ticks` - The number of ticks to retrieve. TWS usually limits this to 1000.
+    /// * `ignore_size`     - Usually not applicable or set to false for MidPoint ticks.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("AAPL");
+    /// let number_of_ticks = 10; // Request a small number of ticks for the example
+    /// let ignore_size = false; // Typically false for MidPoint
+    ///
+    /// let subscription = client.tick_by_tick_midpoint(&contract, number_of_ticks, ignore_size)
+    ///     .expect("tick-by-tick midpoint data request failed");
+    ///
+    /// for tick in subscription.iter().take(number_of_ticks as usize) { // Take to limit example output
+    ///     println!("MidPoint Tick: {:?}", tick);
+    /// }
+    /// ```
     pub fn tick_by_tick_all_last<'a>(
         &'a self,
         contract: &Contract,
@@ -1193,7 +1290,6 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
-    /// use ibapi::market_data::{MarketDataType};
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -1359,19 +1455,31 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::Client;
+    /// use ibapi::contracts::Contract; // Or remove if conId is always known
     /// use time::macros::datetime;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract_id = 76792991; // TSLA
-    /// let provider_codes = vec!["BRFG", "DJ-N", "DJ-RT"];
-    /// let start_time = datetime!(2023-04-15 0:00 UTC);
-    /// let end_time = datetime!(2023-04-15 0:00 UTC);
-    /// let total_results = 10;
+    /// // Example: Fetch historical news for a known contract ID (e.g., AAPL's conId)
+    /// let contract_id = 265598; 
+    /// let provider_codes = &["DJNL", "BRFG"]; // Example provider codes
+    /// // Define a past date range for the news query
+    /// let start_time = datetime!(2023-01-01 0:00 UTC); 
+    /// let end_time = datetime!(2023-01-02 0:00 UTC);
+    /// let total_results = 5; // Request a small number of articles for the example
     ///
-    /// let news_bulletins = client.news_bulletins(true).expect("request news providers failed");
-    /// for news_bulletin in &news_bulletins {
-    ///   println!("news bulletin {:?}", news_bulletin);
+    /// let articles_subscription = client.historical_news(
+    ///     contract_id,
+    ///     provider_codes,
+    ///     start_time,
+    ///     end_time,
+    ///     total_results, // u8, so cast if needed from a different type
+    /// ).expect("request historical news failed");
+    ///
+    /// println!("Requested historical news articles:");
+    /// for article in articles_subscription.iter().take(total_results as usize) {
+    ///     println!("- Headline: {}, ID: {}, Provider: {}, Time: {}", 
+    ///              article.headline, article.article_id, article.provider_code, article.article_date);
     /// }
     /// ```
     pub fn historical_news(
@@ -1469,11 +1577,50 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::Client;
+    /// use ibapi::scanner::ScannerSubscription;
+    /// use ibapi::orders::TagValue; // Or ensure common::TagValue is the correct path
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let parameters = client.scanner_parameters().expect("request scanner parameters failed");
-    /// println!("{:?}", parameters);
+    /// let mut sub = ScannerSubscription::default();
+    /// sub.instrument = "STK".to_string();
+    /// sub.location_code = "STK.US.MAJOR".to_string();
+    /// sub.scan_code = "TOP_PERC_GAIN".to_string();
+    /// // Further customize the subscription object as needed, for example:
+    /// // sub.above_price = Some(1.0);
+    /// // sub.below_price = Some(100.0);
+    /// // sub.number_of_rows = Some(20);
+    ///
+    /// // Filter options are advanced and not always needed. Pass an empty Vec if not used.
+    /// let filter_options: Vec<TagValue> = Vec::new();
+    /// // Example of adding a filter:
+    /// // filter_options.push(TagValue { tag: "marketCapAbove".to_string(), value: "1000000000".to_string() });
+    ///
+    /// match client.scanner_subscription(&sub, &filter_options) {
+    ///     Ok(subscription) => {
+    ///         // Iterate over received scanner data.
+    ///         // Note: Scanner subscriptions can be continuous or return a snapshot.
+    ///         // This example just takes the first batch if available.
+    ///         if let Some(scanner_results_vec) = subscription.iter().next() {
+    ///             println!("Scanner Results (first batch):");
+    ///             for data in scanner_results_vec {
+    ///                 println!("  Rank: {}, Contract: {:?}, Symbol: {}, Distance: {}",
+    ///                          data.rank,
+    ///                          data.contract_details.contract.summary(), // Assuming Contract has a summary or use symbol
+    ///                          data.contract_details.contract.symbol,
+    ///                          data.distance);
+    ///             }
+    ///         } else {
+    ///             println!("No scanner results received in the first check.");
+    ///         }
+    ///         // In a real application, you might continuously iterate or handle updates.
+    ///         // Remember to cancel the subscription when no longer needed if it's continuous.
+    ///         // subscription.cancel(); 
+    ///     }
+    ///     Err(e) => {
+    ///         eprintln!("Failed to start scanner subscription: {}", e);
+    ///     }
+    /// }
     /// ```
     pub fn scanner_parameters(&self) -> Result<String, Error> {
         scanner::scanner_parameters(self)
