@@ -2,8 +2,8 @@ use std::sync::{Arc, RwLock};
 
 use crate::accounts::AccountUpdateMulti;
 use crate::testdata::responses;
-use crate::{Error, ToField};
 use crate::{accounts::AccountSummaryTags, server_versions, stubs::MessageBusStub, Client};
+use crate::{Error, ToField};
 
 #[test]
 fn test_pnl() {
@@ -60,10 +60,7 @@ fn test_positions() {
 
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            responses::POSITION.into(),
-            responses::POSITION_END.into(),
-        ],
+        response_messages: vec![responses::POSITION.into(), responses::POSITION_END.into()],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -71,10 +68,18 @@ fn test_positions() {
     let subscription = client.positions().expect("request positions failed");
 
     let first_update = subscription.next();
-    assert!(matches!(first_update, Some(PositionUpdate::Position(_))), "Expected PositionUpdate::Position, got {:?}", first_update);
+    assert!(
+        matches!(first_update, Some(PositionUpdate::Position(_))),
+        "Expected PositionUpdate::Position, got {:?}",
+        first_update
+    );
 
     let second_update = subscription.next();
-    assert!(matches!(second_update, Some(PositionUpdate::PositionEnd)), "Expected PositionUpdate::PositionEnd, got {:?}", second_update);
+    assert!(
+        matches!(second_update, Some(PositionUpdate::PositionEnd)),
+        "Expected PositionUpdate::PositionEnd, got {:?}",
+        second_update
+    );
 
     drop(subscription); // Trigger cancellation
 
@@ -82,11 +87,11 @@ fn test_positions() {
 
     assert_eq!(request_messages.len(), 2, "Expected subscribe and cancel messages for positions");
     assert_eq!(request_messages[0].encode_simple(), "61|1|"); // Subscribe
-    // For `positions()`, the cancel message is `OutgoingMessages::CancelPositions` (type 62)
-    // The `RequestMessage` for this is built by `encoders::encode_cancel_positions()`.
-    // It sends: type (62), version (1).
-    // The `Subscription` cancel logic for `shared_request` (which `positions` uses)
-    // will call `T::cancel_message`. `PositionUpdate::cancel_message` calls `encode_cancel_positions`.
+                                                              // For `positions()`, the cancel message is `OutgoingMessages::CancelPositions` (type 62)
+                                                              // The `RequestMessage` for this is built by `encoders::encode_cancel_positions()`.
+                                                              // It sends: type (62), version (1).
+                                                              // The `Subscription` cancel logic for `shared_request` (which `positions` uses)
+                                                              // will call `T::cancel_message`. `PositionUpdate::cancel_message` calls `encode_cancel_positions`.
     assert_eq!(request_messages[1].encode_simple(), "62|1|"); // Verifying CancelPositions
 }
 
@@ -96,10 +101,7 @@ fn test_positions_multi() {
 
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            responses::POSITION_MULTI.into(),
-            responses::POSITION_MULTI_END.into(),
-        ],
+        response_messages: vec![responses::POSITION_MULTI.into(), responses::POSITION_MULTI_END.into()],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -110,10 +112,16 @@ fn test_positions_multi() {
     let subscription = client.positions_multi(account, model_code).expect("request positions_multi failed");
 
     let first_update = subscription.next();
-    assert!(matches!(first_update, Some(PositionUpdateMulti::Position(_))), "Expected PositionUpdateMulti::Position");
+    assert!(
+        matches!(first_update, Some(PositionUpdateMulti::Position(_))),
+        "Expected PositionUpdateMulti::Position"
+    );
 
     let second_update = subscription.next();
-    assert!(matches!(second_update, Some(PositionUpdateMulti::PositionEnd)), "Expected PositionUpdateMulti::PositionEnd");
+    assert!(
+        matches!(second_update, Some(PositionUpdateMulti::PositionEnd)),
+        "Expected PositionUpdateMulti::PositionEnd"
+    );
 
     drop(subscription); // Trigger cancellation
 
@@ -129,10 +137,7 @@ fn test_account_summary() {
 
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            responses::ACCOUNT_SUMMARY.into(),
-            responses::ACCOUNT_SUMMARY_END.into(),
-        ],
+        response_messages: vec![responses::ACCOUNT_SUMMARY.into(), responses::ACCOUNT_SUMMARY_END.into()],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -143,17 +148,21 @@ fn test_account_summary() {
     let subscription = client.account_summary(group, tags).expect("request account_summary failed");
 
     let first_update = subscription.next();
-     match first_update {
+    match first_update {
         Some(AccountSummaries::Summary(summary_data)) => {
             assert_eq!(summary_data.account, "DU1234567"); // From responses::ACCOUNT_SUMMARY
             assert_eq!(summary_data.tag, AccountSummaryTags::NET_LIQUIDATION);
             assert_eq!(summary_data.value, "100000.0");
-        },
+        }
         _ => panic!("Expected AccountSummaries::Summary, got {:?}", first_update),
     }
 
     let second_update = subscription.next();
-    assert!(matches!(second_update, Some(AccountSummaries::End)), "Expected AccountSummaries::End, got {:?}", second_update);
+    assert!(
+        matches!(second_update, Some(AccountSummaries::End)),
+        "Expected AccountSummaries::End, got {:?}",
+        second_update
+    );
 
     drop(subscription); // Trigger cancellation
 
@@ -192,10 +201,16 @@ fn test_managed_accounts() {
         response_messages: vec!["7|1|0|0".to_string()], // Message Type 7, Version 1, Empty accounts string
     });
     let client_empty = Client::stubbed(message_bus_empty, server_versions::SIZE_RULES);
-    let accounts_empty = client_empty.managed_accounts().expect("request managed accounts failed for empty response");
+    let accounts_empty = client_empty
+        .managed_accounts()
+        .expect("request managed accounts failed for empty response");
     // Based on String::split behavior, an empty string results in a vec with one empty string.
     // If an empty Vec is desired, the parsing logic in `decode_managed_accounts` would need adjustment.
-    assert_eq!(accounts_empty, vec![""], "Empty accounts list should result in a vec with one empty string");
+    assert_eq!(
+        accounts_empty,
+        vec![""],
+        "Empty accounts list should result in a vec with one empty string"
+    );
 
     // Scenario: No message (subscription.next() returns None)
     let message_bus_no_msg = Arc::new(MessageBusStub {
@@ -222,14 +237,14 @@ fn test_managed_accounts() {
 
 #[test]
 fn test_managed_accounts_retry_connection_reset() {
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use crate::messages::OutgoingMessages;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     let call_count = Arc::new(AtomicUsize::new(0));
     let message_bus_retry = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
-            "Test reset".to_string(), // First attempt
+            "Test reset".to_string(),               // First attempt
             responses::MANAGED_ACCOUNT.to_string(), // Second attempt
         ],
     });
@@ -243,15 +258,18 @@ fn test_managed_accounts_retry_connection_reset() {
     // Verify that the request was sent twice (though RequestMessage doesn't implement Clone for direct comparison easily)
     // We can check the count of sent messages of the correct type.
     let sent_requests = message_bus_retry.request_messages.read().unwrap();
-    let managed_account_req_count = sent_requests.iter().filter(|req| req[0] == OutgoingMessages::RequestManagedAccounts.to_field()).count();
+    let managed_account_req_count = sent_requests
+        .iter()
+        .filter(|req| req[0] == OutgoingMessages::RequestManagedAccounts.to_field())
+        .count();
     assert_eq!(managed_account_req_count, 2, "RequestManagedAccounts should have been sent twice");
 }
 
 #[test]
 fn test_server_time_integration() {
     use crate::Error;
-    use time::{macros::datetime};
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use time::macros::datetime;
 
     // Scenario 1: Success
     let valid_timestamp_str = "1678886400"; // 2023-03-15 12:00:00 UTC
@@ -313,7 +331,11 @@ fn test_server_time_integration() {
     });
     let client_s5_unparsable = Client::stubbed(message_bus_s5_unparsable, server_versions::SIZE_RULES);
     let result_s5_unparsable = client_s5_unparsable.server_time();
-    assert!(result_s5_unparsable.is_err(), "S5 Unparsable: Expected Err, got Ok: {:?}", result_s5_unparsable.ok());
+    assert!(
+        result_s5_unparsable.is_err(),
+        "S5 Unparsable: Expected Err, got Ok: {:?}",
+        result_s5_unparsable.ok()
+    );
     // Depending on how decode_server_time handles parsing errors, the exact error type might vary.
     // For now, let's check if it's an Error::Decode.
     match result_s5_unparsable.err().unwrap() {
@@ -325,14 +347,14 @@ fn test_server_time_integration() {
     // OffsetDateTime::from_unix_timestamp can fail for out-of-range values.
     // A very large number that's a valid i64 but out of typical date range.
     let out_of_range_timestamp_str = "253402300800"; // Year 10000, should be out of range for OffsetDateTime typically
-     let message_bus_s5_range = Arc::new(MessageBusStub {
+    let message_bus_s5_range = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![format!("4\x01\x00{}\x00", out_of_range_timestamp_str)],
     });
     let client_s5_range = Client::stubbed(message_bus_s5_range, server_versions::SIZE_RULES);
     let result_s5_range = client_s5_range.server_time();
     assert!(result_s5_range.is_err(), "S5 Range: Expected Err, got Ok: {:?}", result_s5_range.ok());
-     match result_s5_range.err().unwrap() {
+    match result_s5_range.err().unwrap() {
         Error::Simple(field) => assert_eq!(field, "server_time", "S5 Range: Error field mismatch (likely time conversion)"),
         other => panic!("S5 Range: Unexpected error type: {:?}", other),
     }
@@ -340,7 +362,7 @@ fn test_server_time_integration() {
 
 #[test]
 fn test_account_updates_flow() {
-    use crate::accounts::{AccountUpdate,};
+    use crate::accounts::AccountUpdate;
 
     let account_name_to_subscribe = "TestAccount123";
 
@@ -364,7 +386,8 @@ fn test_account_updates_flow() {
     // Act
     let subscription = client.account_updates(account_name_to_subscribe).expect("subscribe failed");
     let mut updates_received = Vec::new();
-    for update_result in &subscription { // Iterating over &subscription
+    for update_result in &subscription {
+        // Iterating over &subscription
         updates_received.push(update_result);
     }
 
@@ -424,7 +447,11 @@ fn test_account_updates_flow() {
             let subscribe_field = req_msg[2].to_string();
             let account_field_for_cancel = req_msg[3].to_string();
 
-            let expected_version_for_cancel = if client.server_version() < server_versions::ACCOUNT_SUMMARY { "1" } else { "2" };
+            let expected_version_for_cancel = if client.server_version() < server_versions::ACCOUNT_SUMMARY {
+                "1"
+            } else {
+                "2"
+            };
             let correct_version = version_field == expected_version_for_cancel.to_string();
             let correct_subscribe_flag = subscribe_field == "0";
 
@@ -442,11 +469,10 @@ fn test_account_updates_flow() {
     assert!(cancel_message_found, "Cancel account updates message not found or incorrect");
 }
 
-
 #[test]
 fn test_family_codes_integration() {
-    use crate::Error;
     use crate::accounts::FamilyCode;
+    use crate::Error;
 
     // Scenario 1: Success with multiple codes
     let message_bus_s1 = Arc::new(MessageBusStub {
@@ -458,8 +484,20 @@ fn test_family_codes_integration() {
     assert!(result_s1.is_ok(), "Scenario 1: Expected Ok, got Err: {:?}", result_s1.err());
     let codes_s1 = result_s1.unwrap();
     assert_eq!(codes_s1.len(), 2, "Scenario 1: Expected 2 family codes");
-    assert_eq!(codes_s1[0], FamilyCode { account_id: "ACC1".to_string(), family_code: "FC1".to_string() });
-    assert_eq!(codes_s1[1], FamilyCode { account_id: "ACC2".to_string(), family_code: "FC2".to_string() });
+    assert_eq!(
+        codes_s1[0],
+        FamilyCode {
+            account_id: "ACC1".to_string(),
+            family_code: "FC1".to_string()
+        }
+    );
+    assert_eq!(
+        codes_s1[1],
+        FamilyCode {
+            account_id: "ACC2".to_string(),
+            family_code: "FC2".to_string()
+        }
+    );
 
     // Scenario 2: No message received
     let message_bus_s2 = Arc::new(MessageBusStub {

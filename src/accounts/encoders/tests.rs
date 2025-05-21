@@ -44,10 +44,28 @@ fn test_encode_request_positions_multi_options() {
         expected_model_field: &'static str,
     }
     let tests = [
-        TestCase { name: "acc_none_model_some", account: None, model_code: Some("MODEL1"), expected_account_field: "", expected_model_field: "MODEL1" },
-        TestCase { name: "acc_none_model_none", account: None, model_code: None, expected_account_field: "", expected_model_field: "" },
+        TestCase {
+            name: "acc_none_model_some",
+            account: None,
+            model_code: Some("MODEL1"),
+            expected_account_field: "",
+            expected_model_field: "MODEL1",
+        },
+        TestCase {
+            name: "acc_none_model_none",
+            account: None,
+            model_code: None,
+            expected_account_field: "",
+            expected_model_field: "",
+        },
         // Optionally re-test existing case if not refactoring the original test
-        TestCase { name: "acc_some_model_some", account: Some("U123"), model_code: Some("MODEL2"), expected_account_field: "U123", expected_model_field: "MODEL2" },
+        TestCase {
+            name: "acc_some_model_some",
+            account: Some("U123"),
+            model_code: Some("MODEL2"),
+            expected_account_field: "U123",
+            expected_model_field: "MODEL2",
+        },
     ];
 
     for (i, tc) in tests.iter().enumerate() {
@@ -60,7 +78,6 @@ fn test_encode_request_positions_multi_options() {
         assert_eq!(message[4], tc.expected_model_field, "Case: {} - model_code", tc.name);
     }
 }
-
 
 #[test]
 fn test_encode_cancel_positions_multi() {
@@ -97,7 +114,8 @@ fn test_encode_request_pnl() {
 
     let request_id_with_model = 3001;
     let model_code_some = Some("TestModelPnl");
-    let request_with_model = super::encode_request_pnl(request_id_with_model, &account, model_code_some).expect("encode request pnl failed (with model)");
+    let request_with_model =
+        super::encode_request_pnl(request_id_with_model, &account, model_code_some).expect("encode request pnl failed (with model)");
 
     assert_eq!(request_with_model[0], OutgoingMessages::RequestPnL.to_field(), "type (with model)");
     assert_eq!(request_with_model[1], request_id_with_model.to_field(), "request_id (with model)");
@@ -120,7 +138,8 @@ fn test_encode_request_pnl_single() {
     let model_code_none: Option<&str> = None;
     let contract_id = 1001;
 
-    let request_no_model = super::encode_request_pnl_single(request_id, &account, contract_id, model_code_none).expect("encode request pnl_single failed (no model)");
+    let request_no_model =
+        super::encode_request_pnl_single(request_id, &account, contract_id, model_code_none).expect("encode request pnl_single failed (no model)");
 
     assert_eq!(request_no_model[0], OutgoingMessages::RequestPnLSingle.to_field(), "type (no model)");
     assert_eq!(request_no_model[1], request_id.to_field(), "request_id (no model)");
@@ -132,7 +151,8 @@ fn test_encode_request_pnl_single() {
     let account_with_model = "DU456";
     let contract_id_with_model = 1002;
     let model_code_some = Some("MyModelPnlSingle");
-    let request_with_model = super::encode_request_pnl_single(request_id_with_model, &account_with_model, contract_id_with_model, model_code_some).expect("encode request pnl_single failed (with model)");
+    let request_with_model = super::encode_request_pnl_single(request_id_with_model, &account_with_model, contract_id_with_model, model_code_some)
+        .expect("encode request pnl_single failed (with model)");
 
     assert_eq!(request_with_model[0], OutgoingMessages::RequestPnLSingle.to_field(), "type (with model)");
     assert_eq!(request_with_model[1], request_id_with_model.to_field(), "request_id (with model)");
@@ -193,7 +213,6 @@ fn test_encode_request_account_updates() {
     // For server_version < ACCOUNT_SUMMARY (which is 10), account is not sent.
     assert_eq!(request[3], "");
 
-
     let server_version_ge10 = 10;
 
     let request_sv_ge10 = super::encode_request_account_updates(server_version_ge10, &account).expect("encode request account updates for sv >= 10");
@@ -215,7 +234,6 @@ fn test_encode_cancel_account_updates() {
     assert_eq!(request[1], version.to_field());
     assert_eq!(request[2], false.to_field());
     assert_eq!(request[3], "");
-
 
     let server_version_ge10 = 10;
     let account_empty = ""; // For cancel, account is empty string if server_version >= 10
@@ -260,15 +278,44 @@ fn test_encode_request_account_updates_multi_options() {
     }
     let tests = [
         // Existing case: Some("DU1234567"), None -> "DU1234567", ""
-        TestCase { name: "acc_some_model_none_orig", account: Some("DU1234567"), model_code: None, expected_account_field: "DU1234567", expected_model_field: "" },
-        TestCase { name: "acc_none_model_some", account: None, model_code: Some("MODEL_X"), expected_account_field: "", expected_model_field: "MODEL_X" },
-        TestCase { name: "acc_none_model_none", account: None, model_code: None, expected_account_field: "", expected_model_field: "" },
-        TestCase { name: "acc_some_model_some", account: Some("U789"), model_code: Some("MODEL_Y"), expected_account_field: "U789", expected_model_field: "MODEL_Y" },
+        TestCase {
+            name: "acc_some_model_none_orig",
+            account: Some("DU1234567"),
+            model_code: None,
+            expected_account_field: "DU1234567",
+            expected_model_field: "",
+        },
+        TestCase {
+            name: "acc_none_model_some",
+            account: None,
+            model_code: Some("MODEL_X"),
+            expected_account_field: "",
+            expected_model_field: "MODEL_X",
+        },
+        TestCase {
+            name: "acc_none_model_none",
+            account: None,
+            model_code: None,
+            expected_account_field: "",
+            expected_model_field: "",
+        },
+        TestCase {
+            name: "acc_some_model_some",
+            account: Some("U789"),
+            model_code: Some("MODEL_Y"),
+            expected_account_field: "U789",
+            expected_model_field: "MODEL_Y",
+        },
     ];
     for (i, tc) in tests.iter().enumerate() {
         let request_id = request_id_base + i as i32;
         let message = super::encode_request_account_updates_multi(request_id, tc.account, tc.model_code).expect(tc.name);
-        assert_eq!(message[0], OutgoingMessages::RequestAccountUpdatesMulti.to_field(), "Case: {} - type", tc.name);
+        assert_eq!(
+            message[0],
+            OutgoingMessages::RequestAccountUpdatesMulti.to_field(),
+            "Case: {} - type",
+            tc.name
+        );
         assert_eq!(message[1], version.to_field(), "Case: {} - version", tc.name);
         assert_eq!(message[2], request_id.to_field(), "Case: {} - request_id", tc.name);
         assert_eq!(message[3], tc.expected_account_field, "Case: {} - account", tc.name);
