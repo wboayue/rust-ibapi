@@ -13,6 +13,10 @@ pub(super) fn encode_cancel_positions() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::CancelPositions, 1)
 }
 
+pub(super) fn encode_cancel_account_summary() -> Result<RequestMessage, Error> {
+    encode_simple(OutgoingMessages::CancelAccountSummary, 1)
+}
+
 pub(super) fn encode_request_positions_multi(request_id: i32, account: Option<&str>, model_code: Option<&str>) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 

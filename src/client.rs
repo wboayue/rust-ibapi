@@ -1574,9 +1574,9 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let mut sub = ScannerSubscription::default();
-    /// sub.instrument = "STK".to_string();
-    /// sub.location_code = "STK.US.MAJOR".to_string();
-    /// sub.scan_code = "TOP_PERC_GAIN".to_string();
+    /// sub.instrument = Some("STK".to_string());
+    /// sub.location_code = Some("STK.US.MAJOR".to_string());
+    /// sub.scan_code = Some("TOP_PERC_GAIN".to_string());
     /// // Further customize the subscription object as needed, for example:
     /// // sub.above_price = Some(1.0);
     /// // sub.below_price = Some(100.0);
@@ -1595,11 +1595,9 @@ impl Client {
     ///         if let Some(scanner_results_vec) = subscription.iter().next() {
     ///             println!("Scanner Results (first batch):");
     ///             for data in scanner_results_vec {
-    ///                 println!("  Rank: {}, Contract: {:?}, Symbol: {}, Distance: {}",
+    ///                 println!("  Rank: {}, Symbol: {}",
     ///                          data.rank,
-    ///                          data.contract_details.contract.summary(), // Assuming Contract has a summary or use symbol
-    ///                          data.contract_details.contract.symbol,
-    ///                          data.distance);
+    ///                          data.contract_details.contract.symbol);
     ///             }
     ///         } else {
     ///             println!("No scanner results received in the first check.");
@@ -1611,7 +1609,7 @@ impl Client {
     ///     Err(e) => {
     ///         eprintln!("Failed to start scanner subscription: {}", e);
     ///     }
-    /// }
+    /// };
     /// ```
     pub fn scanner_parameters(&self) -> Result<String, Error> {
         scanner::scanner_parameters(self)
