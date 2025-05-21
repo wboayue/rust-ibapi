@@ -855,7 +855,7 @@ fn test_decode_account_value_versions() {
 #[test]
 fn test_decode_account_update_time_success() {
     // Assemble: type(8), version(1), time_stamp
-    let mut message = super::ResponseMessage::from("8\x01\x0012:34:56\x00");
+    let mut message = super::ResponseMessage::from("8\x001\x0012:34:56\x00");
 
     // Act
     let result = super::decode_account_update_time(&mut message);

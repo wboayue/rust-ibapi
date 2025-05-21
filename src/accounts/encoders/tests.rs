@@ -210,8 +210,7 @@ fn test_encode_request_account_updates() {
     assert_eq!(request[0], OutgoingMessages::RequestAccountData.to_field());
     assert_eq!(request[1], version.to_field());
     assert_eq!(request[2], true.to_field());
-    // For server_version < ACCOUNT_SUMMARY (which is 10), account is not sent.
-    assert_eq!(request[3], "");
+    assert_eq!(request.len(), 3);
 
     let server_version_ge10 = 10;
 
@@ -233,17 +232,16 @@ fn test_encode_cancel_account_updates() {
     assert_eq!(request[0], OutgoingMessages::RequestAccountData.to_field());
     assert_eq!(request[1], version.to_field());
     assert_eq!(request[2], false.to_field());
-    assert_eq!(request[3], "");
+    assert_eq!(request.len(), 3);
 
     let server_version_ge10 = 10;
-    let account_empty = ""; // For cancel, account is empty string if server_version >= 10
 
     let request_sv_ge10 = super::encode_cancel_account_updates(server_version_ge10).expect("encode cancel account updates for sv >= 10");
 
     assert_eq!(request_sv_ge10[0], OutgoingMessages::RequestAccountData.to_field());
     assert_eq!(request_sv_ge10[1], version.to_field());
     assert_eq!(request_sv_ge10[2], false.to_field());
-    assert_eq!(request_sv_ge10[3], account_empty.to_string());
+    assert_eq!(request_sv_ge10[3], "".to_string());
 }
 
 #[test]
