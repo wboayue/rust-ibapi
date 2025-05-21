@@ -33,7 +33,7 @@ fn test_decode_positions() {
 fn test_decode_position_v1_message() {
     // Assemble: version 1, no trading_class, no average_cost
     // Message format: type, version, account, conId, symbol, secType, lastTradeDateOrContractMonth, strike, right, multiplier, exchange, currency, localSymbol, position
-    let mut message = super::ResponseMessage::from("61\x01\x00DU123\x00123\x00SYM\x00STK\x00251212\x000.0\x00P\x00MULT\x00EXCH\x00USD\x00LOCSYM\x00100.0\x00");
+    let mut message = super::ResponseMessage::from("61\x001\x00DU123\x00123\x00SYM\x00STK\x00251212\x000.0\x00P\x00MULT\x00EXCH\x00USD\x00LOCSYM\x00100.0\x00");
 
     // Act
     let result = super::decode_position(&mut message).expect("Failed to decode position");
@@ -59,7 +59,7 @@ fn test_decode_position_v1_message() {
 fn test_decode_position_v2_message() {
     // Assemble: version 2, has trading_class, no average_cost
     // Message format: type, version, account, conId, symbol, secType, lastTradeDateOrContractMonth, strike, right, multiplier, exchange, currency, localSymbol, trading_class, position
-    let mut message = super::ResponseMessage::from("61\x02\x00DU123\x00123\x00SYM\x00STK\x00251212\x000.0\x00P\x00MULT\x00EXCH\x00USD\x00LOCSYM\x00TRDCLS\x00100.0\x00");
+    let mut message = super::ResponseMessage::from("61\x002\x00DU123\x00123\x00SYM\x00STK\x00251212\x000.0\x00P\x00MULT\x00EXCH\x00USD\x00LOCSYM\x00TRDCLS\x00100.0\x00");
 
     // Act
     let result = super::decode_position(&mut message).expect("Failed to decode position");
@@ -124,7 +124,7 @@ fn test_decode_family_codes() {
 #[test]
 fn test_decode_family_codes_empty_list() {
     // Assemble: version, 0 codes
-    let mut message = super::ResponseMessage::from("78\x00\x00");
+    let mut message = super::ResponseMessage::from("78\x000\x00");
 
     // Act
     let result = super::decode_family_codes(&mut message).expect("Failed to decode family codes");
@@ -136,7 +136,7 @@ fn test_decode_family_codes_empty_list() {
 #[test]
 fn test_decode_family_codes_multiple_codes() {
     // Assemble: version, 2 codes
-    let mut message = super::ResponseMessage::from("78\x02\x00ACC1\x00FC1\x00ACC2\x00FC2\x00");
+    let mut message = super::ResponseMessage::from("78\x002\x00ACC1\x00FC1\x00ACC2\x00FC2\x00");
 
     // Act
     let result = super::decode_family_codes(&mut message).expect("Failed to decode family codes");

@@ -1,7 +1,6 @@
 use std::sync::{Arc, RwLock};
 
 use crate::accounts::AccountUpdateMulti;
-use crate::messages::ResponseMessage;
 use crate::testdata::responses;
 use crate::{Error, ToField};
 use crate::{accounts::AccountSummaryTags, server_versions, stubs::MessageBusStub, Client};
