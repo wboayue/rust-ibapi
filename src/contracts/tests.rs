@@ -221,14 +221,12 @@ fn request_bond_contract_details() {
 }
 
 #[test]
-#[ignore = "reason: need sample messages"]
 fn request_future_contract_details() {
     let message_bus = Arc::new(MessageBusStub{
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
-            // Format similar to request_stock_contract_details but with future-specific fields
-            "10|9001|ES|FUT|202306|0||50|GLOBEX|USD|ESM3|E-mini S&P 500|ES|45687|0.25||ACTIVETIM,AD,ADJUST,ALERT,ALLOC|GLOBEX|1|0|E-mini S&P 500|GLOBEX|JUN23|Index|Future|Equity Index|US/Central|20230107:1700-20230107:1600;20230108:1700-20230108:1600|20230107:1700-20230107:1600;20230108:1700-20230108:1600|||1|||26|20230616||1|1|100|".to_string(),
-            "52|1|9001||".to_string(),
+            "10|9000|ES|FUT|20250620 08:30 US/Central|0||CME|USD|ESM5|ES|ES|620731015|0.25|50|ACTIVETIM,AD,ADJUST,ALERT,ALGO,ALLOC,AVGCOST,BASKET,BENCHPX,COND,CONDORDER,DAY,DEACT,DEACTDIS,DEACTEOD,GAT,GTC,GTD,GTT,HID,ICE,IOC,LIT,LMT,LTH,MIT,MKT,MTL,NGCOMB,NONALGO,OCA,PEGBENCH,SCALE,SCALERST,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF|CME,QBALGO|1|11004968|E-mini S&P 500||202506||||US/Central|20250521:1700-20250522:1600;20250522:1700-20250523:1600;20250524:CLOSED;20250525:1700-20250526:1200;20250526:1700-20250527:1600;20250527:1700-20250528:1600|20250522:0830-20250522:1600;20250523:0830-20250523:1600;20250524:CLOSED;20250525:1700-20250526:1200;20250527:0830-20250527:1600;20250527:1700-20250528:1600|||0|2147483647|ES|IND|67,67|20250620||1|1|1|".to_string(),
+            "52|1|9000|".to_string(),
         ]
     });
 
@@ -238,7 +236,7 @@ fn request_future_contract_details() {
     let mut contract = Contract::default();
     contract.symbol = "ES".to_string();
     contract.security_type = SecurityType::Future;
-    contract.last_trade_date_or_contract_month = "202306".to_string();
+    contract.last_trade_date_or_contract_month = "202506".to_string();
     contract.exchange = "GLOBEX".to_string();
     contract.currency = "USD".to_string();
 
@@ -247,7 +245,7 @@ fn request_future_contract_details() {
     let request_messages = client.message_bus.request_messages();
 
     // Check if the request was encoded correctly
-    assert_eq!(request_messages[0].encode_simple(), "9|8|9000|0|ES|FUT|202306|0|||GLOBEX||USD|||0|||");
+    assert_eq!(request_messages[0].encode_simple(), "9|8|9000|0|ES|FUT|202506|0|||GLOBEX||USD|||0|||");
 
     assert!(results.is_ok(), "failed to encode request: {:?}", results.err());
 
@@ -258,31 +256,18 @@ fn request_future_contract_details() {
     assert_eq!(contracts[0].contract.symbol, "ES");
     assert_eq!(contracts[0].contract.security_type, SecurityType::Future);
     assert_eq!(contracts[0].contract.currency, "USD");
-    assert_eq!(contracts[0].contract.contract_id, 45687);
+    assert_eq!(contracts[0].contract.contract_id, 620731015);
 
     // Check future-specific fields
-    assert_eq!(contracts[0].contract.last_trade_date_or_contract_month, "202306");
+    assert_eq!(contracts[0].contract.last_trade_date_or_contract_month, "20250620");
     assert_eq!(contracts[0].contract.multiplier, "50");
-    assert_eq!(contracts[0].contract.local_symbol, "ESM3");
+    assert_eq!(contracts[0].contract.local_symbol, "ESM5");
     assert_eq!(contracts[0].contract.trading_class, "ES");
-    assert_eq!(contracts[0].contract.exchange, "GLOBEX");
+    assert_eq!(contracts[0].contract.exchange, "CME");
     assert_eq!(contracts[0].min_tick, 0.25);
-    assert_eq!(contracts[0].market_name, "E-mini S&P 500");
-    assert_eq!(contracts[0].contract_month, "JUN23");
-    assert_eq!(contracts[0].real_expiration_date, "20230616");
-}
-
-#[test]
-fn test_read_last_trade_date() {
-    // let mut contract = ContractDetails::default();
-
-    // handles blank string
-    // let result = read_last_trade_date(&mut contract, "", false);
-    // assert!(!result.is_err(), "unexpected error {:?}", result);
-
-    // handles non bond contracts
-
-    // handles bond contracts
+    assert_eq!(contracts[0].market_name, "ES");
+    assert_eq!(contracts[0].contract_month, "202506");
+    assert_eq!(contracts[0].real_expiration_date, "20250620");
 }
 
 #[test]
@@ -354,13 +339,11 @@ fn test_security_type_from() {
 }
 
 #[test]
-#[ignore = "reason: need sample messages"]
 fn request_matching_symbols() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
-            // Format for symbol samples: message_type, request_id, count, contract_id, symbol, security_type, primary_exchange, currency, derivative_sec_types_count, deriv_types...
-            "81|9000|2|12345|AAPL|STK|NASDAQ|USD|2|OPT|WAR|Apple Inc.|AAPL123|67890|MSFT|STK|NASDAQ|USD|1|OPT|Microsoft Corp.|MSFT456|".to_string(),
+            "79|9000|16|76792991|TSLA|STK|ISLAND|USD|5|CFD|OPT|IOPT|WAR|BAG|78046366|TL0|STK|IBIS|EUR|2|CFD|IOPT|660309051|TSLT|STK|BATS|USD|2|OPT|BAG|684954177|TSL3|STK|LSEETF|USD|0|144303597|TSLA|STK|MEXI|MXN|0|603849333|YTSL|STK|AEQLIT|CAD|0|660309044|TSLZ|STK|BATS|USD|2|OPT|BAG|754543238|TSLY|STK|TSE|CAD|0|681568926|3TSE|STK|LSEETF|EUR|0|684954172|3TSL|STK|LSEETF|GBP|0|425172013|2TSL|STK|LSEETF|GBP|0|74619514|TXL|STK|VALUE|CAD|0|172604402|TSLA|STK|EBS|CHF|0|272100479|TES1|STK|BM|EUR|0|425172008|TSL2|STK|LSEETF|USD|0|-1||BOND|||0|".to_string(),
         ],
     });
 
@@ -372,42 +355,39 @@ fn request_matching_symbols() {
 
     let client = Client::stubbed(message_bus, server_versions::REQ_MATCHING_SYMBOLS);
 
-    let pattern = "APP";
+    let pattern = "TSLA";
     let results = client.matching_symbols(pattern);
 
     let request_messages = client.message_bus.request_messages();
 
     // Check if the request was encoded correctly
-    assert_eq!(request_messages[0].encode_simple(), "81|9000|APP|");
+    assert_eq!(request_messages[0].encode_simple(), "81|9000|TSLA|");
 
     assert!(results.is_ok(), "failed to send request: {:?}", results.err());
 
     // Collect the iterator into a vector to test each item
     let contract_descriptions: Vec<ContractDescription> = results.unwrap().collect();
-    assert_eq!(2, contract_descriptions.len());
+    assert_eq!(16, contract_descriptions.len());
 
     // Check first contract description
-    assert_eq!(contract_descriptions[0].contract.contract_id, 12345);
-    assert_eq!(contract_descriptions[0].contract.symbol, "AAPL");
+    assert_eq!(contract_descriptions[0].contract.contract_id, 76792991);
+    assert_eq!(contract_descriptions[0].contract.symbol, "TSLA");
     assert_eq!(contract_descriptions[0].contract.security_type, SecurityType::Stock);
-    assert_eq!(contract_descriptions[0].contract.primary_exchange, "NASDAQ");
+    assert_eq!(contract_descriptions[0].contract.primary_exchange, "ISLAND");
     assert_eq!(contract_descriptions[0].contract.currency, "USD");
-    assert_eq!(contract_descriptions[0].derivative_security_types.len(), 2);
-    assert_eq!(contract_descriptions[0].derivative_security_types[0], "OPT");
-    assert_eq!(contract_descriptions[0].derivative_security_types[1], "WAR");
-    assert_eq!(contract_descriptions[0].contract.description, "Apple Inc.");
-    assert_eq!(contract_descriptions[0].contract.issuer_id, "AAPL123");
+    assert_eq!(contract_descriptions[0].derivative_security_types.len(), 5);
+    assert_eq!(contract_descriptions[0].derivative_security_types[0], "CFD");
+    assert_eq!(contract_descriptions[0].derivative_security_types[1], "OPT");
 
     // Check second contract description
-    assert_eq!(contract_descriptions[1].contract.contract_id, 67890);
-    assert_eq!(contract_descriptions[1].contract.symbol, "MSFT");
+    assert_eq!(contract_descriptions[1].contract.contract_id, 78046366);
+    assert_eq!(contract_descriptions[1].contract.symbol, "TL0");
     assert_eq!(contract_descriptions[1].contract.security_type, SecurityType::Stock);
-    assert_eq!(contract_descriptions[1].contract.primary_exchange, "NASDAQ");
-    assert_eq!(contract_descriptions[1].contract.currency, "USD");
-    assert_eq!(contract_descriptions[1].derivative_security_types.len(), 1);
-    assert_eq!(contract_descriptions[1].derivative_security_types[0], "OPT");
-    assert_eq!(contract_descriptions[1].contract.description, "Microsoft Corp.");
-    assert_eq!(contract_descriptions[1].contract.issuer_id, "MSFT456");
+    assert_eq!(contract_descriptions[1].contract.primary_exchange, "IBIS");
+    assert_eq!(contract_descriptions[1].contract.currency, "EUR");
+    assert_eq!(contract_descriptions[1].derivative_security_types.len(), 2);
+    assert_eq!(contract_descriptions[1].derivative_security_types[0], "CFD");
+    assert_eq!(contract_descriptions[1].derivative_security_types[1], "IOPT");
 }
 
 #[test]
