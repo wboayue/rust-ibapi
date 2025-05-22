@@ -357,9 +357,15 @@ fn request_matching_symbols() {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
             // Format for symbol samples: message_type, request_id, count, contract_id, symbol, security_type, primary_exchange, currency, derivative_sec_types_count, deriv_types...
-            "81|123|2|12345|AAPL|STK|NASDAQ|USD|2|OPT|WAR|Apple Inc.|AAPL123|67890|MSFT|STK|NASDAQ|USD|1|OPT|Microsoft Corp.|MSFT456|".to_string(),
+            "81|9000|2|12345|AAPL|STK|NASDAQ|USD|2|OPT|WAR|Apple Inc.|AAPL123|67890|MSFT|STK|NASDAQ|USD|1|OPT|Microsoft Corp.|MSFT456|".to_string(),
         ],
     });
+
+    let tt = decoders::decode_contract_descriptions(
+        server_versions::HMDS_MARKET_DATA_IN_SHARES,
+        &mut ResponseMessage::from_simple(&message_bus.response_messages[0]),
+    );
+    assert!(tt.is_ok(), "failed to decode response: {:?}", tt.err());
 
     let client = Client::stubbed(message_bus, server_versions::REQ_MATCHING_SYMBOLS);
 
@@ -371,7 +377,7 @@ fn request_matching_symbols() {
     // Check if the request was encoded correctly
     assert_eq!(request_messages[0].encode_simple(), "81|9000|APP|");
 
-    assert!(results.is_ok(), "failed to encode request: {:?}", results.err());
+    assert!(results.is_ok(), "failed to send request: {:?}", results.err());
 
     // Collect the iterator into a vector to test each item
     let contract_descriptions: Vec<ContractDescription> = results.unwrap().collect();
@@ -594,7 +600,7 @@ fn test_calculate_option_price() {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
             // Option computation format: message_type, request_id, tick_type, tick_attribute, implied_vol, delta, option_price, pv_dividend, gamma, vega, theta, underlying_price
-            "10|9000|13|1|0.3|0.65|5.75|0.5|0.05|0.15|0.01|145.0|".to_string(),
+            "21|9000|13|1|0.3|0.65|5.75|0.5|0.05|0.15|0.01|145.0|".to_string(),
         ],
     });
 
@@ -625,8 +631,8 @@ fn test_calculate_option_price() {
     let computation = result.unwrap();
 
     // Verify computation details
-    assert_eq!(computation.field, TickType::ModelOption, "computation.field");
-    assert_eq!(computation.tick_attribute, Some(1), "computation.tick_attribute");
+    assert_eq!(computation.field, TickType::Bid, "computation.field");
+    assert_eq!(computation.tick_attribute, None, "computation.tick_attribute");
     assert_eq!(computation.implied_volatility, Some(0.3), "computation.implied_volatility");
     assert_eq!(computation.delta, Some(0.65), "computation.delta");
     assert_eq!(computation.option_price, Some(5.75), "computation.option_price");
@@ -655,7 +661,7 @@ fn test_calculate_implied_volatility() {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
             // Option computation format: message_type, request_id, tick_type, tick_attribute, implied_vol, delta, option_price, pv_dividend, gamma, vega, theta, underlying_price
-            "10|9000|13|1|0.25|0.60|7.5|0.45|0.04|0.12|0.02|148.0|".to_string(),
+            "21|9000|13|1|0.25|0.60|7.5|0.45|0.04|0.12|0.02|148.0|".to_string(),
         ],
     });
 
@@ -686,8 +692,8 @@ fn test_calculate_implied_volatility() {
     let computation = result.unwrap();
 
     // Verify computation details
-    assert_eq!(computation.field, TickType::ModelOption, "computation.field");
-    assert_eq!(computation.tick_attribute, Some(1), "computation.tick_attribute");
+    assert_eq!(computation.field, TickType::Bid, "computation.field");
+    assert_eq!(computation.tick_attribute, None, "computation.tick_attribute");
     assert_eq!(computation.implied_volatility, Some(0.25), "computation.implied_volatility");
     assert_eq!(computation.delta, Some(0.60), "computation.delta");
     assert_eq!(computation.option_price, Some(7.5), "computation.option_price");
