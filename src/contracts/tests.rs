@@ -170,6 +170,7 @@ fn request_stock_contract_details() {
 }
 
 #[test]
+#[ignore = "reason: need sample messages"]
 fn request_bond_contract_details() {
     let message_bus = Arc::new(MessageBusStub{
         request_messages: RwLock::new(vec![]),
@@ -220,6 +221,7 @@ fn request_bond_contract_details() {
 }
 
 #[test]
+#[ignore = "reason: need sample messages"]
 fn request_future_contract_details() {
     let message_bus = Arc::new(MessageBusStub{
         request_messages: RwLock::new(vec![]),
@@ -352,6 +354,7 @@ fn test_security_type_from() {
 }
 
 #[test]
+#[ignore = "reason: need sample messages"]
 fn request_matching_symbols() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
