@@ -53,10 +53,10 @@ fn test_split_to_vec() {
 }
 
 #[test]
-#[ignore]
 fn test_decode_option_chain() {
     // Assemble
-    let mut message = ResponseMessage::from_simple("51|123|NYSE|789456|GOOG|100|2023-06,2023-09,2023-12|100.5,110.0,120.5|");
+    // The message format should be: message_type, request_id, exchange, underlying_contract_id, trading_class, multiplier, expirations_count, expirations, strikes_count, strikes
+    let mut message = ResponseMessage::from_simple("75|9000|NYSE|789456|GOOG|100|3|2023-06|2023-09|2023-12|3|100.5|110.0|120.5|");
 
     // Activate
     let option_chain = decode_option_chain(&mut message).expect("error decoding option chain");
@@ -246,17 +246,16 @@ fn test_decode_contract_descriptions() {
 }
 
 #[test]
-#[ignore]
 fn test_decode_contract_details() {
     // Assemble
     // This is a complex test due to the many fields in ContractDetails
-    // Creating a simplified test message with essential fields for different server versions
+    // Creating a more accurate test message with correct field structure
     let mut message = ResponseMessage::from_simple(
-        "10|8|42|AAPL|STK|2023-06-15|0.0||\
-        SMART|USD|AAPL|Apple Inc.|AAPL|12345|0.01|100|SMART,NYSE|SMART,NYSE,NASDAQ|1000|\
+        "10|9001|AAPL|STK||0||SMART|USD|AAPL|Apple Inc.|AAPL|12345|0.01|100|\
+        ACTIVETIM,AD,ADJUST,ALERT,ALLOC|SMART,AMEX,NYSE,NASDAQ|1000|\
         0|Apple Inc.|NASDAQ|JUN23|TECHNOLOGY|ELECTRONICS|COMPUTERS|US/Eastern|\
-        09:30:00-16:00:00;09:30:00-16:00:00|09:30:00-16:00:00|VOL=P|1.0|2|TAG1|VALUE1|TAG2|VALUE2|\
-        1|AAPL|STK|26|2023-06-15|COMMON|0.1|0.01|1|",
+        20230630:0930-20230630:1600;20230701:CLOSED|20230630:0930-20230630:1600|VOL=P|1.0|1|ISIN|US0378331005|\
+        1|AAPL|STK|26|20230630|COMMON|0.1|0.01|1|",
     );
 
     // Activate
@@ -265,10 +264,6 @@ fn test_decode_contract_details() {
     // Assert
     assert_eq!(contract_details.contract.symbol, "AAPL", "contract.symbol");
     assert_eq!(contract_details.contract.security_type, SecurityType::Stock, "contract.security_type");
-    assert_eq!(
-        contract_details.contract.last_trade_date_or_contract_month, "2023-06-15",
-        "contract.last_trade_date_or_contract_month"
-    );
     assert_eq!(contract_details.contract.strike, 0.0, "contract.strike");
     assert_eq!(contract_details.contract.right, "", "contract.right");
     assert_eq!(contract_details.contract.exchange, "SMART", "contract.exchange");
@@ -279,8 +274,22 @@ fn test_decode_contract_details() {
     assert_eq!(contract_details.contract.contract_id, 12345, "contract.contract_id");
     assert_eq!(contract_details.min_tick, 0.01, "min_tick");
     assert_eq!(contract_details.contract.multiplier, "100", "contract.multiplier");
-    assert_eq!(contract_details.order_types.len(), 2, "order_types.len()");
-    assert_eq!(contract_details.valid_exchanges.len(), 3, "valid_exchanges.len()");
+
+    // Check order types parsing
+    assert_eq!(contract_details.order_types.len(), 5, "order_types.len()");
+    assert_eq!(contract_details.order_types[0], "ACTIVETIM", "order_types[0]");
+    assert_eq!(contract_details.order_types[1], "AD", "order_types[1]");
+    assert_eq!(contract_details.order_types[2], "ADJUST", "order_types[2]");
+    assert_eq!(contract_details.order_types[3], "ALERT", "order_types[3]");
+    assert_eq!(contract_details.order_types[4], "ALLOC", "order_types[4]");
+
+    // Check valid exchanges parsing
+    assert_eq!(contract_details.valid_exchanges.len(), 4, "valid_exchanges.len()");
+    assert_eq!(contract_details.valid_exchanges[0], "SMART", "valid_exchanges[0]");
+    assert_eq!(contract_details.valid_exchanges[1], "AMEX", "valid_exchanges[1]");
+    assert_eq!(contract_details.valid_exchanges[2], "NYSE", "valid_exchanges[2]");
+    assert_eq!(contract_details.valid_exchanges[3], "NASDAQ", "valid_exchanges[3]");
+
     assert_eq!(contract_details.price_magnifier, 1000, "price_magnifier");
     assert_eq!(contract_details.under_contract_id, 0, "under_contract_id");
     assert_eq!(contract_details.long_name, "Apple Inc.", "long_name");
@@ -290,19 +299,30 @@ fn test_decode_contract_details() {
     assert_eq!(contract_details.category, "ELECTRONICS", "category");
     assert_eq!(contract_details.subcategory, "COMPUTERS", "subcategory");
     assert_eq!(contract_details.time_zone_id, "US/Eastern", "time_zone_id");
+
+    // Check trading hours parsing
     assert_eq!(contract_details.trading_hours.len(), 2, "trading_hours.len()");
+    assert_eq!(contract_details.trading_hours[0], "20230630:0930-20230630:1600", "trading_hours[0]");
+    assert_eq!(contract_details.trading_hours[1], "20230701:CLOSED", "trading_hours[1]");
+
+    // Check liquid hours parsing
     assert_eq!(contract_details.liquid_hours.len(), 1, "liquid_hours.len()");
+    assert_eq!(contract_details.liquid_hours[0], "20230630:0930-20230630:1600", "liquid_hours[0]");
+
     assert_eq!(contract_details.ev_rule, "VOL=P", "ev_rule");
     assert_eq!(contract_details.ev_multiplier, 1.0, "ev_multiplier");
-    assert_eq!(contract_details.sec_id_list.len(), 2, "sec_id_list.len()");
-    assert_eq!(contract_details.sec_id_list[0].tag, "TAG1", "sec_id_list[0].tag");
-    assert_eq!(contract_details.sec_id_list[0].value, "VALUE1", "sec_id_list[0].value");
+
+    // Check sec_id_list parsing
+    assert_eq!(contract_details.sec_id_list.len(), 1, "sec_id_list.len()");
+    assert_eq!(contract_details.sec_id_list[0].tag, "ISIN", "sec_id_list[0].tag");
+    assert_eq!(contract_details.sec_id_list[0].value, "US0378331005", "sec_id_list[0].value");
+
     assert_eq!(contract_details.agg_group, 1, "agg_group");
     assert_eq!(contract_details.under_symbol, "AAPL", "under_symbol");
     assert_eq!(contract_details.under_security_type, "STK", "under_security_type");
     assert_eq!(contract_details.market_rule_ids.len(), 1, "market_rule_ids.len()");
     assert_eq!(contract_details.market_rule_ids[0], "26", "market_rule_ids[0]");
-    assert_eq!(contract_details.real_expiration_date, "2023-06-15", "real_expiration_date");
+    assert_eq!(contract_details.real_expiration_date, "20230630", "real_expiration_date");
     assert_eq!(contract_details.stock_type, "COMMON", "stock_type");
     assert_eq!(contract_details.min_size, 0.1, "min_size");
     assert_eq!(contract_details.size_increment, 0.01, "size_increment");
