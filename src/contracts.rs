@@ -718,7 +718,81 @@ pub(super) fn option_chain<'a>(
     Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
 
-/// Builder for creating and validating Contract instances
+/// Builder for creating and validating [Contract] instances
+///
+/// The [ContractBuilder] provides a fluent interface for constructing contracts with validation.
+/// It ensures that contracts are properly configured for their security type and prevents
+/// common errors through compile-time and runtime validation.
+///
+/// # Examples
+///
+/// ## Creating a Stock Contract
+///
+/// ```no_run
+/// use ibapi::contracts::{ContractBuilder, SecurityType};
+///
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// // Using the builder pattern
+/// let contract = ContractBuilder::new()
+///     .symbol("AAPL")
+///     .security_type(SecurityType::Stock)
+///     .exchange("SMART")
+///     .currency("USD")
+///     .build()?;
+///
+/// // Using the convenience method
+/// let contract = ContractBuilder::stock("AAPL", "SMART", "USD").build()?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// ## Creating an Option Contract
+///
+/// ```no_run
+/// use ibapi::contracts::{ContractBuilder, SecurityType};
+///
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let contract = ContractBuilder::option("AAPL", "SMART", "USD")
+///     .strike(150.0)
+///     .right("C")  // Call option
+///     .last_trade_date_or_contract_month("20241220")
+///     .build()?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// ## Creating a Futures Contract
+///
+/// ```no_run
+/// use ibapi::contracts::{ContractBuilder, SecurityType};
+///
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let contract = ContractBuilder::futures("ES", "GLOBEX", "USD")
+///     .last_trade_date_or_contract_month("202412")
+///     .build()?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// ## Creating a Crypto Contract
+///
+/// ```no_run
+/// use ibapi::contracts::{ContractBuilder, SecurityType};
+///
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let contract = ContractBuilder::crypto("BTC", "PAXOS", "USD").build()?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Validation
+///
+/// The builder performs validation when [build](ContractBuilder::build) is called:
+/// - Symbol is always required
+/// - Option contracts require strike, right (P/C), and expiration date
+/// - Futures contracts require contract month
+/// - Strike prices cannot be negative
+/// - Option rights must be "P" or "C" (case insensitive)
 #[derive(Clone, Debug, Default)]
 pub struct ContractBuilder {
     contract_id: Option<i32>,
@@ -744,60 +818,125 @@ pub struct ContractBuilder {
 }
 
 impl ContractBuilder {
-    /// Creates a new ContractBuilder
+    /// Creates a new [ContractBuilder]
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::{ContractBuilder, SecurityType};
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let contract = ContractBuilder::new()
+    ///     .symbol("MSFT")
+    ///     .security_type(SecurityType::Stock)
+    ///     .exchange("SMART")
+    ///     .currency("USD")
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Sets the contract ID
+    ///
+    /// The unique IB contract identifier. When specified, other contract details may be optional.
     pub fn contract_id(mut self, contract_id: i32) -> Self {
         self.contract_id = Some(contract_id);
         self
     }
 
-    /// Sets the symbol
+    /// Sets the underlying asset symbol
+    ///
+    /// Required field for all contracts.
+    ///
+    /// # Examples
+    /// - Stocks: "AAPL", "MSFT", "TSLA"
+    /// - Futures: "ES", "NQ", "CL"
+    /// - Crypto: "BTC", "ETH"
     pub fn symbol<S: Into<String>>(mut self, symbol: S) -> Self {
         self.symbol = Some(symbol.into());
         self
     }
 
     /// Sets the security type
+    ///
+    /// Defines what type of instrument this contract represents.
+    /// See [SecurityType] for available options.
     pub fn security_type(mut self, security_type: SecurityType) -> Self {
         self.security_type = Some(security_type);
         self
     }
 
     /// Sets the last trade date or contract month
+    ///
+    /// For futures and options, this field is required:
+    /// - Format YYYYMM for contract month (e.g., "202412")
+    /// - Format YYYYMMDD for specific expiration date (e.g., "20241220")
     pub fn last_trade_date_or_contract_month<S: Into<String>>(mut self, date: S) -> Self {
         self.last_trade_date_or_contract_month = Some(date.into());
         self
     }
 
-    /// Sets the strike price
+    /// Sets the option's strike price
+    ///
+    /// Required for option contracts. Must be a positive value.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use ibapi::contracts::ContractBuilder;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let contract = ContractBuilder::option("AAPL", "SMART", "USD")
+    ///     .strike(150.0)
+    ///     .right("C")
+    ///     .last_trade_date_or_contract_month("20241220")
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn strike(mut self, strike: f64) -> Self {
         self.strike = Some(strike);
         self
     }
 
-    /// Sets the option right (P for PUT, C for CALL)
+    /// Sets the option right
+    ///
+    /// Required for option contracts. Valid values:
+    /// - "P" for put options
+    /// - "C" for call options
+    ///
+    /// Case insensitive.
     pub fn right<S: Into<String>>(mut self, right: S) -> Self {
-        self.right = Some(right.into());
+        self.right = Some(right.into().to_uppercase());
         self
     }
 
-    /// Sets the multiplier
+    /// Sets the instrument's multiplier
+    ///
+    /// Defines the contract size multiplier for futures and options.
+    /// For most options, this is typically "100".
     pub fn multiplier<S: Into<String>>(mut self, multiplier: S) -> Self {
         self.multiplier = Some(multiplier.into());
         self
     }
 
-    /// Sets the exchange
+    /// Sets the destination exchange
+    ///
+    /// Common exchanges:
+    /// - "SMART" for smart routing
+    /// - "NYSE", "NASDAQ" for stocks
+    /// - "GLOBEX", "NYMEX" for futures
+    /// - "PAXOS" for crypto
     pub fn exchange<S: Into<String>>(mut self, exchange: S) -> Self {
         self.exchange = Some(exchange.into());
         self
     }
 
-    /// Sets the currency
+    /// Sets the underlying's currency
+    ///
+    /// Standard 3-letter currency codes (e.g., "USD", "EUR", "GBP").
     pub fn currency<S: Into<String>>(mut self, currency: S) -> Self {
         self.currency = Some(currency.into());
         self
@@ -869,7 +1008,25 @@ impl ContractBuilder {
         self
     }
 
-    /// Creates a stock contract with symbol, exchange, and currency
+    /// Creates a stock contract builder with symbol, exchange, and currency
+    ///
+    /// Convenience method for creating stock contracts with common defaults.
+    ///
+    /// # Arguments
+    /// * `symbol` - Stock symbol (e.g., "AAPL", "MSFT")
+    /// * `exchange` - Exchange (e.g., "SMART", "NYSE")
+    /// * `currency` - Currency (e.g., "USD")
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::ContractBuilder;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let contract = ContractBuilder::stock("AAPL", "SMART", "USD").build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn stock<S: Into<String>>(symbol: S, exchange: S, currency: S) -> Self {
         Self::new()
             .symbol(symbol)
@@ -878,7 +1035,27 @@ impl ContractBuilder {
             .currency(currency)
     }
 
-    /// Creates a futures contract with symbol, exchange, and currency
+    /// Creates a futures contract builder with symbol, exchange, and currency
+    ///
+    /// Convenience method for creating futures contracts. Remember to set the contract month.
+    ///
+    /// # Arguments
+    /// * `symbol` - Futures symbol (e.g., "ES", "NQ", "CL")
+    /// * `exchange` - Exchange (e.g., "GLOBEX", "NYMEX")
+    /// * `currency` - Currency (e.g., "USD")
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::ContractBuilder;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let contract = ContractBuilder::futures("ES", "GLOBEX", "USD")
+    ///     .last_trade_date_or_contract_month("202412")
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn futures<S: Into<String>>(symbol: S, exchange: S, currency: S) -> Self {
         Self::new()
             .symbol(symbol)
@@ -887,7 +1064,25 @@ impl ContractBuilder {
             .currency(currency)
     }
 
-    /// Creates a crypto contract with symbol, exchange, and currency
+    /// Creates a crypto contract builder with symbol, exchange, and currency
+    ///
+    /// Convenience method for creating cryptocurrency contracts.
+    ///
+    /// # Arguments
+    /// * `symbol` - Crypto symbol (e.g., "BTC", "ETH")
+    /// * `exchange` - Exchange (e.g., "PAXOS")
+    /// * `currency` - Quote currency (e.g., "USD")
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::ContractBuilder;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let contract = ContractBuilder::crypto("BTC", "PAXOS", "USD").build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn crypto<S: Into<String>>(symbol: S, exchange: S, currency: S) -> Self {
         Self::new()
             .symbol(symbol)
@@ -896,7 +1091,29 @@ impl ContractBuilder {
             .currency(currency)
     }
 
-    /// Creates an option contract with symbol, exchange, and currency
+    /// Creates an option contract builder with symbol, exchange, and currency
+    ///
+    /// Convenience method for creating option contracts. Remember to set strike, right, and expiration.
+    ///
+    /// # Arguments
+    /// * `symbol` - Underlying symbol (e.g., "AAPL", "SPY")
+    /// * `exchange` - Exchange (e.g., "SMART")
+    /// * `currency` - Currency (e.g., "USD")
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::ContractBuilder;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let contract = ContractBuilder::option("AAPL", "SMART", "USD")
+    ///     .strike(150.0)
+    ///     .right("C")
+    ///     .last_trade_date_or_contract_month("20241220")
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn option<S: Into<String>>(symbol: S, exchange: S, currency: S) -> Self {
         Self::new()
             .symbol(symbol)
@@ -905,7 +1122,31 @@ impl ContractBuilder {
             .currency(currency)
     }
 
-    /// Builds and validates the Contract
+    /// Builds and validates the [Contract]
+    ///
+    /// Performs validation based on the security type and returns a [Contract] instance
+    /// or an error if validation fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Symbol is missing
+    /// - Required fields for the security type are missing
+    /// - Strike price is negative
+    /// - Option right is not "P" or "C"
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::ContractBuilder;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let contract = ContractBuilder::stock("AAPL", "SMART", "USD")
+    ///     .build()
+    ///     .expect("Failed to build contract");
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn build(self) -> Result<Contract, Error> {
         let symbol = self.symbol.ok_or_else(|| Error::Simple("Symbol is required".to_string()))?;
         let security_type = self.security_type.unwrap_or_default();
