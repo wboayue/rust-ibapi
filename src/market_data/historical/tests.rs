@@ -342,11 +342,20 @@ fn test_duration_parse() {
     assert_eq!("1 X".parse::<Duration>(), Err(DurationParseError::UnsupportedUnit("X".to_string())));
 
     assert_eq!(DurationParseError::EmptyString.to_string(), "Empty duration string");
-    assert_eq!(DurationParseError::MissingDelimiter("1S".to_string()).to_string(), "Missing delimiter: 1S");
-    assert_eq!(DurationParseError::UnsupportedUnit("X".to_string()).to_string(), "Unsupported duration unit: X");
+    assert_eq!(
+        DurationParseError::MissingDelimiter("1S".to_string()).to_string(),
+        "Missing delimiter: 1S"
+    );
+    assert_eq!(
+        DurationParseError::UnsupportedUnit("X".to_string()).to_string(),
+        "Unsupported duration unit: X"
+    );
 
     if let Err(err) = i32::from_str("abc") {
-        assert_eq!(DurationParseError::ParseIntError(err).to_string(), "Parse integer error: invalid digit found in string");
+        assert_eq!(
+            DurationParseError::ParseIntError(err).to_string(),
+            "Parse integer error: invalid digit found in string"
+        );
     }
 
     assert_eq!(Duration::seconds(1), Duration::from("1 S"));
