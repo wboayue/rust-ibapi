@@ -779,7 +779,7 @@ impl ContractBuilder {
         self
     }
 
-    /// Sets the option right (P, PUT, C, CALL)
+    /// Sets the option right (P for PUT, C for CALL)
     pub fn right<S: Into<String>>(mut self, right: S) -> Self {
         self.right = Some(right.into());
         self
@@ -917,7 +917,7 @@ impl ContractBuilder {
                     return Err(Error::Simple("Strike price is required for options".to_string()));
                 }
                 if self.right.is_none() {
-                    return Err(Error::Simple("Right (P/PUT or C/CALL) is required for options".to_string()));
+                    return Err(Error::Simple("Right (P for PUT or C for CALL) is required for options".to_string()));
                 }
                 if self.last_trade_date_or_contract_month.is_none() {
                     return Err(Error::Simple("Expiration date is required for options".to_string()));
@@ -934,8 +934,8 @@ impl ContractBuilder {
         // Validate option right format
         if let Some(ref right) = self.right {
             let right_upper = right.to_uppercase();
-            if !["P", "PUT", "C", "CALL"].contains(&right_upper.as_str()) {
-                return Err(Error::Simple("Option right must be P, PUT, C, or CALL".to_string()));
+            if !["P", "C"].contains(&right_upper.as_str()) {
+                return Err(Error::Simple("Option right must be P for PUT or C for CALL".to_string()));
             }
         }
 

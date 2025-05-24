@@ -1061,7 +1061,7 @@ fn test_contract_builder_build_option_missing_right() {
     assert!(result.is_err());
     assert_eq!(
         result.unwrap_err().to_string(),
-        "error occurred: Right (P/PUT or C/CALL) is required for options"
+        "error occurred: Right (P for PUT or C for CALL) is required for options"
     );
 }
 
@@ -1103,12 +1103,15 @@ fn test_contract_builder_build_invalid_option_right() {
         .build();
 
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "error occurred: Option right must be P, PUT, C, or CALL");
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "error occurred: Option right must be P for PUT or C for CALL"
+    );
 }
 
 #[test]
 fn test_contract_builder_build_valid_option_rights() {
-    let valid_rights = ["P", "PUT", "C", "CALL", "p", "put", "c", "call"];
+    let valid_rights = ["P", "C", "p", "c"];
 
     for right in &valid_rights {
         let result = ContractBuilder::option("AAPL", "SMART", "USD")
