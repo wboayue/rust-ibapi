@@ -1842,13 +1842,14 @@ impl Debug for Client {
 /// Alternatively, you may poll subscriptions in a blocking or non-blocking manner using the [next](Subscription::next), [try_next](Subscription::try_next) or [next_timeout](Subscription::next_timeout) methods.
 #[allow(private_bounds)]
 #[derive(Debug)]
-pub struct Subscription<'a, T: DataStream<T>> {
+pub struct Subscription<'a, T: DataStream<T> + 'static> {
     client: &'a Client,
     request_id: Option<i32>,
     order_id: Option<i32>,
     message_type: Option<OutgoingMessages>,
     phantom: PhantomData<T>,
     cancelled: AtomicBool,
+    snapshot_ended: AtomicBool,
     subscription: InternalSubscription,
     response_context: ResponseContext,
     error: Mutex<Option<Error>>,
@@ -1862,7 +1863,7 @@ pub(crate) struct ResponseContext {
 }
 
 #[allow(private_bounds)]
-impl<'a, T: DataStream<T>> Subscription<'a, T> {
+impl<'a, T: DataStream<T> + 'static> Subscription<'a, T> {
     pub(crate) fn new(client: &'a Client, subscription: InternalSubscription, context: ResponseContext) -> Self {
         if let Some(request_id) = subscription.request_id {
             Subscription {
@@ -1874,6 +1875,7 @@ impl<'a, T: DataStream<T>> Subscription<'a, T> {
                 response_context: context,
                 phantom: PhantomData,
                 cancelled: AtomicBool::new(false),
+                snapshot_ended: AtomicBool::new(false),
                 error: Mutex::new(None),
             }
         } else if let Some(order_id) = subscription.order_id {
@@ -1886,6 +1888,7 @@ impl<'a, T: DataStream<T>> Subscription<'a, T> {
                 response_context: context,
                 phantom: PhantomData,
                 cancelled: AtomicBool::new(false),
+                snapshot_ended: AtomicBool::new(false),
                 error: Mutex::new(None),
             }
         } else if let Some(message_type) = subscription.message_type {
@@ -1898,6 +1901,7 @@ impl<'a, T: DataStream<T>> Subscription<'a, T> {
                 response_context: context,
                 phantom: PhantomData,
                 cancelled: AtomicBool::new(false),
+                snapshot_ended: AtomicBool::new(false),
                 error: Mutex::new(None),
             }
         } else {
@@ -1970,7 +1974,19 @@ impl<'a, T: DataStream<T>> Subscription<'a, T> {
 
     fn process_message(&self, mut message: ResponseMessage) -> Option<T> {
         match T::decode(self.client, &mut message) {
-            Ok(val) => Some(val),
+            Ok(val) => {
+                // Check if this is a SnapshotEnd for market data subscriptions
+                // We use std::any::TypeId to check if T is TickTypes without importing it
+                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<crate::market_data::realtime::TickTypes>() {
+                    // Use unsafe to cast the reference to check for SnapshotEnd
+                    // This is safe because we've verified the type above
+                    let tick_types_ref = unsafe { &*(&val as *const T as *const crate::market_data::realtime::TickTypes) };
+                    if matches!(tick_types_ref, crate::market_data::realtime::TickTypes::SnapshotEnd) {
+                        self.snapshot_ended.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                }
+                Some(val)
+            },
             Err(Error::EndOfStream) => None,
             Err(err) => {
                 error!("error decoding message: {err}");
@@ -2263,9 +2279,13 @@ impl<'a, T: DataStream<T>> Subscription<'a, T> {
     }
 }
 
-impl<T: DataStream<T>> Drop for Subscription<'_, T> {
+impl<T: DataStream<T> + 'static> Drop for Subscription<'_, T> {
     fn drop(&mut self) {
-        self.cancel();
+        // Only cancel if snapshot hasn't ended (for market data snapshots)
+        // For streaming subscriptions, snapshot_ended will remain false
+        if !self.snapshot_ended.load(std::sync::atomic::Ordering::Relaxed) {
+            self.cancel();
+        }
     }
 }
 
@@ -2288,11 +2308,11 @@ pub(crate) trait DataStream<T> {
 
 /// An iterator that yields items as they become available, blocking if necessary.
 #[allow(private_bounds)]
-pub struct SubscriptionIter<'a, T: DataStream<T>> {
+pub struct SubscriptionIter<'a, T: DataStream<T> + 'static> {
     subscription: &'a Subscription<'a, T>,
 }
 
-impl<T: DataStream<T>> Iterator for SubscriptionIter<'_, T> {
+impl<T: DataStream<T> + 'static> Iterator for SubscriptionIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -2300,7 +2320,7 @@ impl<T: DataStream<T>> Iterator for SubscriptionIter<'_, T> {
     }
 }
 
-impl<'a, T: DataStream<T>> IntoIterator for &'a Subscription<'a, T> {
+impl<'a, T: DataStream<T> + 'static> IntoIterator for &'a Subscription<'a, T> {
     type Item = T;
     type IntoIter = SubscriptionIter<'a, T>;
 
@@ -2310,11 +2330,11 @@ impl<'a, T: DataStream<T>> IntoIterator for &'a Subscription<'a, T> {
 }
 
 #[allow(private_bounds)]
-pub struct SubscriptionOwnedIter<'a, T: DataStream<T>> {
+pub struct SubscriptionOwnedIter<'a, T: DataStream<T> + 'static> {
     subscription: Subscription<'a, T>,
 }
 
-impl<T: DataStream<T>> Iterator for SubscriptionOwnedIter<'_, T> {
+impl<T: DataStream<T> + 'static> Iterator for SubscriptionOwnedIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -2322,7 +2342,7 @@ impl<T: DataStream<T>> Iterator for SubscriptionOwnedIter<'_, T> {
     }
 }
 
-impl<'a, T: DataStream<T> + 'a> IntoIterator for Subscription<'a, T> {
+impl<'a, T: DataStream<T> + 'static> IntoIterator for Subscription<'a, T> {
     type Item = T;
     type IntoIter = SubscriptionOwnedIter<'a, T>;
 
@@ -2333,11 +2353,11 @@ impl<'a, T: DataStream<T> + 'a> IntoIterator for Subscription<'a, T> {
 
 /// An iterator that yields items if they are available, without waiting.
 #[allow(private_bounds)]
-pub struct SubscriptionTryIter<'a, T: DataStream<T>> {
+pub struct SubscriptionTryIter<'a, T: DataStream<T> + 'static> {
     subscription: &'a Subscription<'a, T>,
 }
 
-impl<T: DataStream<T>> Iterator for SubscriptionTryIter<'_, T> {
+impl<T: DataStream<T> + 'static> Iterator for SubscriptionTryIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -2347,12 +2367,12 @@ impl<T: DataStream<T>> Iterator for SubscriptionTryIter<'_, T> {
 
 /// An iterator that waits for the specified timeout duration for available data.
 #[allow(private_bounds)]
-pub struct SubscriptionTimeoutIter<'a, T: DataStream<T>> {
+pub struct SubscriptionTimeoutIter<'a, T: DataStream<T> + 'static> {
     subscription: &'a Subscription<'a, T>,
     timeout: Duration,
 }
 
-impl<T: DataStream<T>> Iterator for SubscriptionTimeoutIter<'_, T> {
+impl<T: DataStream<T> + 'static> Iterator for SubscriptionTimeoutIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
