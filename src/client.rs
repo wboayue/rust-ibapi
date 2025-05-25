@@ -725,8 +725,7 @@ impl Client {
     /// * `exercise_action`   - Exercise option. ExerciseAction::Exercise or ExerciseAction::Lapse.
     /// * `exercise_quantity` - Number of contracts to be exercised.
     /// * `account`           - Destination account.
-    /// * `ovrd`              - Specifies whether your setting will override the system’s natural action.
-    ///                         For example, if your action is "exercise" and the option is not in-the-money, by natural action the option would not exercise. If you have override set to true the natural action would be overridden and the out-of-the money option would be exercised.
+    /// * `ovrd`              - Specifies whether your setting will override the system’s natural action. For example, if your action is "exercise" and the option is not in-the-money, by natural action the option would not exercise. If you have override set to true the natural action would be overridden and the out-of-the money option would be exercised.
     /// * `manual_order_time` - Specify the time at which the options should be exercised. If `None`, the current time will be used. Requires TWS API 10.26 or higher.
     pub fn exercise_options<'a>(
         &'a self,
@@ -1329,21 +1328,21 @@ impl Client {
     ///
     /// * `contract` - Contract for which the data is being requested.
     /// * `generic_ticks` - IDs of the available generic ticks:
-    ///         - 100 Option Volume (currently for stocks)
-    ///         - 101 Option Open Interest (currently for stocks)
-    ///         - 104 Historical Volatility (currently for stocks)
-    ///         - 105 Average Option Volume (currently for stocks)
-    ///         - 106 Option Implied Volatility (currently for stocks)
-    ///         - 162 Index Future Premium
-    ///         - 165 Miscellaneous Stats
-    ///         - 221 Mark Price (used in TWS P&L computations)
-    ///         - 225 Auction values (volume, price and imbalance)
-    ///         - 233 RTVolume - contains the last trade price, last trade size, last trade time, total volume, VWAP, and single trade flag.
-    ///         - 236 Shortable
-    ///         - 256 Inventory
-    ///         - 258 Fundamental Ratios
-    ///         - 411 Realtime Historical Volatility
-    ///         - 456 IBDividends
+    ///   - 100 Option Volume (currently for stocks)
+    ///   - 101 Option Open Interest (currently for stocks)
+    ///   - 104 Historical Volatility (currently for stocks)
+    ///   - 105 Average Option Volume (currently for stocks)
+    ///   - 106 Option Implied Volatility (currently for stocks)
+    ///   - 162 Index Future Premium
+    ///   - 165 Miscellaneous Stats
+    ///   - 221 Mark Price (used in TWS P&L computations)
+    ///   - 225 Auction values (volume, price and imbalance)
+    ///   - 233 RTVolume - contains the last trade price, last trade size, last trade time, total volume, VWAP, and single trade flag.
+    ///   - 236 Shortable
+    ///   - 256 Inventory
+    ///   - 258 Fundamental Ratios
+    ///   - 411 Realtime Historical Volatility
+    ///   - 456 IBDividends
     /// * `snapshot` - for users with corresponding real time market data subscriptions. A true value will return a one-time snapshot, while a false value will provide streaming data.
     /// * `regulatory_snapshot` - snapshot for US stocks requests NBBO snapshots for users which have "US Securities Snapshot Bundle" subscription but not corresponding Network A, B, or C subscription necessary for streaming market data. One-time snapshot of current market price that will incur a fee of 1 cent to the account per snapshot.
     ///
