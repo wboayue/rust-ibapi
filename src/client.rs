@@ -2098,6 +2098,12 @@ impl<'a, T: DataStream<T> + 'static> Subscription<'a, T> {
 
     /// Cancel the subscription
     pub fn cancel(&self) {
+        // Only cancel if snapshot hasn't ended (for market data snapshots)
+        // For streaming subscriptions, snapshot_ended will remain false
+        if self.snapshot_ended.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
+
         if self.cancelled.load(Ordering::Relaxed) {
             return;
         }
@@ -2274,11 +2280,7 @@ impl<'a, T: DataStream<T> + 'static> Subscription<'a, T> {
 
 impl<T: DataStream<T> + 'static> Drop for Subscription<'_, T> {
     fn drop(&mut self) {
-        // Only cancel if snapshot hasn't ended (for market data snapshots)
-        // For streaming subscriptions, snapshot_ended will remain false
-        if !self.snapshot_ended.load(std::sync::atomic::Ordering::Relaxed) {
-            self.cancel();
-        }
+        self.cancel();
     }
 }
 
