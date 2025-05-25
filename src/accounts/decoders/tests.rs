@@ -258,7 +258,6 @@ fn test_decode_account_portfolio_value_version_matrix() {
         expected_average_cost: Option<f64>,
         expected_unrealized_pnl: Option<f64>,
         expected_realized_pnl: Option<f64>,
-        expected_account_name: Option<&'static str>,
     }
 
     // Helper to construct message string based on version and fields
@@ -377,7 +376,6 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_average_cost: None,
             expected_unrealized_pnl: None,
             expected_realized_pnl: None,
-            expected_account_name: None,
         },
         TestCase {
             name: "mv2_sv_any_has_local_symbol",
@@ -423,7 +421,6 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_average_cost: None,
             expected_unrealized_pnl: None,
             expected_realized_pnl: None,
-            expected_account_name: None,
         },
         TestCase {
             name: "mv5_sv_any_has_avgcost_pnl_accname",
@@ -469,7 +466,6 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_average_cost: Some(9.0),
             expected_unrealized_pnl: Some(100.0),
             expected_realized_pnl: Some(50.0),
-            expected_account_name: Some("ACC1"),
         },
         TestCase {
             name: "mv6_sv_not39_has_conid",
@@ -515,7 +511,6 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_average_cost: Some(9.0),
             expected_unrealized_pnl: Some(100.0),
             expected_realized_pnl: Some(50.0),
-            expected_account_name: Some("ACC1"),
         },
         TestCase {
             name: "mv6_sv39_has_conid_prim_exch_override",
@@ -561,7 +556,6 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_average_cost: Some(9.0),
             expected_unrealized_pnl: Some(100.0),
             expected_realized_pnl: Some(50.0),
-            expected_account_name: Some("ACC1"),
         },
         TestCase {
             name: "mv7_sv_any_has_mult_prim_exch",
@@ -607,7 +601,6 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_average_cost: Some(9.0),
             expected_unrealized_pnl: Some(100.0),
             expected_realized_pnl: Some(50.0),
-            expected_account_name: Some("ACC1"),
         },
         TestCase {
             name: "mv7_sv39_has_mult_prim_exch_with_override_field",
@@ -653,7 +646,6 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_average_cost: Some(9.0),
             expected_unrealized_pnl: Some(100.0),
             expected_realized_pnl: Some(50.0),
-            expected_account_name: Some("ACC1"),
         },
         TestCase {
             name: "mv8_sv_any_has_trading_class",
@@ -699,7 +691,6 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_average_cost: Some(9.0),
             expected_unrealized_pnl: Some(100.0),
             expected_realized_pnl: Some(50.0),
-            expected_account_name: Some("ACC1"),
         },
         TestCase {
             name: "mv8_sv39_has_trading_class_with_override_field",
@@ -745,7 +736,6 @@ fn test_decode_account_portfolio_value_version_matrix() {
             expected_average_cost: Some(9.0),
             expected_unrealized_pnl: Some(100.0),
             expected_realized_pnl: Some(50.0),
-            expected_account_name: Some("ACC1"),
         },
     ];
 

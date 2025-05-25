@@ -456,7 +456,6 @@ fn test_historical_data_version_check() {
     let end_date = datetime!(2023-04-15 16:31:22 UTC);
     let duration = 2.days();
     let bar_size = BarSize::Hour;
-    let what_to_show = Some(WhatToShow::Trades);
     let use_rth = true;
 
     // This should return an error due to server version

@@ -11,7 +11,6 @@ pub const ACCOUNT_SUMMARY: &str = "63|1|9000|DU1234567|AccountType|FA||";
 pub const ACCOUNT_SUMMARY_END: &str = "64|1|9000||";
 
 pub const ACCOUNT_VALUE: &str = "6|1|CashBalance|1000.00|USD";
-pub const PORTFOLIO_VALUE: &str = "9|1|SYM|STK|251212|0.0|P|USD|100.0|10.0|1000.0|";
 
 // contracts
 
