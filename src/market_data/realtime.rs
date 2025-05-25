@@ -334,6 +334,10 @@ impl DataStream<TickTypes> for TickTypes {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
         encoders::encode_cancel_market_data(request_id)
     }
+
+    fn is_snapshot_end(&self) -> bool {
+        matches!(self, TickTypes::SnapshotEnd)
+    }
 }
 
 #[derive(Debug, Default)]

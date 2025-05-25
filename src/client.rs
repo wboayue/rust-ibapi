@@ -1974,18 +1974,12 @@ impl<'a, T: DataStream<T> + 'static> Subscription<'a, T> {
     fn process_message(&self, mut message: ResponseMessage) -> Option<T> {
         match T::decode(self.client, &mut message) {
             Ok(val) => {
-                // Check if this is a SnapshotEnd for market data subscriptions
-                // We use std::any::TypeId to check if T is TickTypes without importing it
-                if std::any::TypeId::of::<T>() == std::any::TypeId::of::<crate::market_data::realtime::TickTypes>() {
-                    // Use unsafe to cast the reference to check for SnapshotEnd
-                    // This is safe because we've verified the type above
-                    let tick_types_ref = unsafe { &*(&val as *const T as *const crate::market_data::realtime::TickTypes) };
-                    if matches!(tick_types_ref, crate::market_data::realtime::TickTypes::SnapshotEnd) {
-                        self.snapshot_ended.store(true, std::sync::atomic::Ordering::Relaxed);
-                    }
+                // Check if this decoded value represents the end of a snapshot subscription
+                if val.is_snapshot_end() {
+                    self.snapshot_ended.store(true, std::sync::atomic::Ordering::Relaxed);
                 }
                 Some(val)
-            },
+            }
             Err(Error::EndOfStream) => None,
             Err(err) => {
                 error!("error decoding message: {err}");
@@ -2302,6 +2296,11 @@ pub(crate) trait DataStream<T> {
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<T, Error>;
     fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         Err(Error::NotImplemented)
+    }
+
+    /// Returns true if this decoded value represents the end of a snapshot subscription
+    fn is_snapshot_end(&self) -> bool {
+        false
     }
 }
 
