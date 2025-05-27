@@ -89,9 +89,9 @@ pub struct NewsArticle {
 }
 
 impl DataStream<NewsArticle> for NewsArticle {
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<NewsArticle, Error> {
+    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<NewsArticle, Error> {
         match message.message_type() {
-            IncomingMessages::HistoricalNews => Ok(decoders::decode_historical_news(client.time_zone, message.clone())?),
+            IncomingMessages::HistoricalNews => Ok(decoders::decode_historical_news(None, message.clone())?),
             IncomingMessages::HistoricalNewsEnd => Err(Error::EndOfStream),
             IncomingMessages::TickNews => Ok(decoders::decode_tick_news(message.clone())?),
             _ => Err(Error::UnexpectedResponse(message.clone())),
