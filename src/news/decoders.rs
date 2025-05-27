@@ -35,12 +35,12 @@ pub(super) fn decode_news_bulletin(mut message: ResponseMessage) -> Result<NewsB
     })
 }
 
-pub(super) fn decode_historical_news(time_zone: Option<&'static Tz>, mut message: ResponseMessage) -> Result<NewsArticle, Error> {
+pub(super) fn decode_historical_news(_time_zone: Option<&'static Tz>, mut message: ResponseMessage) -> Result<NewsArticle, Error> {
     message.skip(); // message type
     message.skip(); // request id
 
     let time = message.next_string()?;
-    let time = parse_time(time_zone, &time);
+    let time = parse_time_as_utc(&time);
 
     Ok(NewsArticle {
         time,
@@ -51,13 +51,11 @@ pub(super) fn decode_historical_news(time_zone: Option<&'static Tz>, mut message
     })
 }
 
-fn parse_time(time_zone: Option<&'static Tz>, time: &str) -> OffsetDateTime {
-    let timezone = time_zone.unwrap_or(timezones::db::UTC);
-
+fn parse_time_as_utc(time: &str) -> OffsetDateTime {
     let format = format_description!("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond]");
     let time = PrimitiveDateTime::parse(time, format).unwrap();
 
-    time.assume_timezone(timezone).unwrap()
+    time.assume_timezone(timezones::db::UTC).unwrap()
 }
 
 pub(super) fn decode_news_article(mut message: ResponseMessage) -> Result<NewsArticleBody, Error> {
