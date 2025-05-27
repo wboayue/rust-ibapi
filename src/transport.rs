@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 use std::io::{prelude::*, Cursor, ErrorKind};
 use std::net::TcpStream;
+use std::ops::RangeInclusive;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::{self, JoinHandle};
@@ -28,6 +29,7 @@ const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::WSH_EVENT_DATA_FILTERS_DATE;
 const MAX_RETRIES: i32 = 20;
 const TWS_READ_TIMEOUT: Duration = Duration::from_secs(1);
+const WARNING_CODES: RangeInclusive<i32> = 2100..=2169;
 
 pub(crate) trait MessageBus: Send + Sync {
     // Sends formatted message to TWS and creates a reply channel by request id.
@@ -279,7 +281,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 let error_code = message.peek_int(3).unwrap_or(0);
 
                 // Check if this is a warning (error codes 2100-2169)
-                let is_warning = (2100..=2169).contains(&error_code);
+                let is_warning = WARNING_CODES.contains(&error_code);
 
                 if request_id == UNSPECIFIED_REQUEST_ID || is_warning {
                     error_event(server_version, message).unwrap();
@@ -537,14 +539,12 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), E
         let error_code = packet.next_int()?;
         let error_message = packet.next_string()?;
 
-        // if 322 forward to market_rule_id
-
         let mut advanced_order_reject_json: String = "".to_string();
         if server_version >= server_versions::ADVANCED_ORDER_REJECT {
             advanced_order_reject_json = packet.next_string()?;
         }
         // Log warnings and errors differently
-        let is_warning = (2100..=2169).contains(&error_code);
+        let is_warning = WARNING_CODES.contains(&error_code);
         if is_warning {
             warn!(
                 "request_id: {}, warning_code: {}, warning_message: {}, advanced_order_reject_json: {}",
