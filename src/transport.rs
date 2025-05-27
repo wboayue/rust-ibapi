@@ -29,6 +29,8 @@ const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::WSH_EVENT_DATA_FILTERS_DATE;
 const MAX_RETRIES: i32 = 20;
 const TWS_READ_TIMEOUT: Duration = Duration::from_secs(1);
+
+// Defines the range of warning codes (2100–2169) used by the TWS API.
 const WARNING_CODES: RangeInclusive<i32> = 2100..=2169;
 
 pub(crate) trait MessageBus: Send + Sync {
