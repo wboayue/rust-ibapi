@@ -276,8 +276,12 @@ impl<S: Stream> TcpMessageBus<S> {
         match message.message_type() {
             IncomingMessages::Error => {
                 let request_id = message.peek_int(2).unwrap_or(-1);
+                let error_code = message.peek_int(3).unwrap_or(0);
 
-                if request_id == UNSPECIFIED_REQUEST_ID {
+                // Check if this is a warning (error codes 2100-2169)
+                let is_warning = (2100..=2169).contains(&error_code);
+
+                if request_id == UNSPECIFIED_REQUEST_ID || is_warning {
                     error_event(server_version, message).unwrap();
                 } else {
                     self.process_response(message);
@@ -539,10 +543,19 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), E
         if server_version >= server_versions::ADVANCED_ORDER_REJECT {
             advanced_order_reject_json = packet.next_string()?;
         }
-        info!(
-            "request_id: {}, error_code: {}, error_message: {}, advanced_order_reject_json: {}",
-            request_id, error_code, error_message, advanced_order_reject_json
-        );
+        // Log warnings and errors differently
+        let is_warning = (2100..=2169).contains(&error_code);
+        if is_warning {
+            warn!(
+                "request_id: {}, warning_code: {}, warning_message: {}, advanced_order_reject_json: {}",
+                request_id, error_code, error_message, advanced_order_reject_json
+            );
+        } else {
+            error!(
+                "request_id: {}, error_code: {}, error_message: {}, advanced_order_reject_json: {}",
+                request_id, error_code, error_message, advanced_order_reject_json
+            );
+        }
         Ok(())
     }
 }
