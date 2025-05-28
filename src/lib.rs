@@ -43,6 +43,9 @@ pub mod scanner;
 /// APIs for working with Wall Street Horizon: Earnings Calendar & Event Data.
 pub mod wsh;
 
+/// A prelude module for convenient importing of commonly used types.
+pub mod prelude;
+
 mod server_versions;
 
 #[doc(inline)]
