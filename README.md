@@ -29,7 +29,7 @@ These examples demonstrate key features of the `ibapi` API.
 The following example shows how to connect to TWS.
 
 ```rust
-use ibapi::Client;
+use ibapi::prelude::*;
 
 fn main() {
     let connection_url = "127.0.0.1:4002";
@@ -45,6 +45,8 @@ fn main() {
 Here’s how to create a stock contract for TSLA using the [stock](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.stock) helper function.
 
 ```rust
+use ibapi::prelude::*;
+
 // Create a contract for TSLA stock (default currency: USD, exchange: SMART)
 let contract = Contract::stock("TSLA");
 ```
@@ -54,9 +56,11 @@ The [stock](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#me
 For contracts requiring custom configurations:
 
 ```rust
+use ibapi::prelude::*;
+
 // Create a fully specified contract for TSLA stock
 Contract {
-    symbol: "TSLA",
+    symbol: "TSLA".to_string(),
     security_type: SecurityType::Stock,
     currency: "USD".to_string(),
     exchange: "SMART".to_string(),
@@ -72,10 +76,7 @@ The following is an example of requesting historical data from TWS.
 
 ```rust
 use time::macros::datetime;
-
-use ibapi::contracts::Contract;
-use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
-use ibapi::Client;
+use ibapi::prelude::*;
 
 fn main() {
     let connection_url = "127.0.0.1:4002";
@@ -88,8 +89,8 @@ fn main() {
             &contract,
             Some(datetime!(2023-04-11 20:00 UTC)),
             1.days(),
-            BarSize::Hour,
-            WhatToShow::Trades,
+            HistoricalBarSize::Hour,
+            HistoricalWhatToShow::Trades,
             true,
         )
         .expect("historical data request failed");
@@ -107,9 +108,7 @@ fn main() {
 The following is an example of requesting realtime data from TWS.
 
 ```rust
-use ibapi::contracts::Contract;
-use ibapi::market_data::realtime::{BarSize, WhatToShow};
-use ibapi::Client;
+use ibapi::prelude::*;
 
 fn main() {
     let connection_url = "127.0.0.1:4002";
@@ -118,7 +117,7 @@ fn main() {
     // Request real-time bars data for AAPL with 5-second intervals
     let contract = Contract::stock("AAPL");
     let subscription = client
-        .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+        .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
         .expect("realtime bars request failed!");
 
     for bar in subscription {
@@ -148,9 +147,7 @@ Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/stru
 Since subscriptions can be converted to iterators, it is easy to iterate over multiple contracts.
 
 ```rust
-use ibapi::contracts::Contract;
-use ibapi::market_data::realtime::{BarSize, WhatToShow};
-use ibapi::Client;
+use ibapi::prelude::*;
 
 fn main() {
     let connection_url = "127.0.0.1:4002";
@@ -161,10 +158,10 @@ fn main() {
     let contract_nvda = Contract::stock("NVDA");
 
     let subscription_aapl = client
-        .realtime_bars(&contract_aapl, BarSize::Sec5, WhatToShow::Trades, false)
+        .realtime_bars(&contract_aapl, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
         .expect("realtime bars request failed!");
     let subscription_nvda = client
-        .realtime_bars(&contract_nvda, BarSize::Sec5, WhatToShow::Trades, false)
+        .realtime_bars(&contract_nvda, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
         .expect("realtime bars request failed!");
 
     for (bar_aapl, bar_nvda) in subscription_aapl.iter().zip(subscription_nvda.iter()) {
@@ -178,6 +175,8 @@ fn main() {
 ### Placing Orders
 
 ```rust
+use ibapi::prelude::*;
+
 pub fn main() {
     let connection_url = "127.0.0.1:4002";
     let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
@@ -207,10 +206,7 @@ The [Client](https://docs.rs/ibapi/latest/ibapi/struct.Client.html) can be share
 ```rust
 use std::sync::Arc;
 use std::thread;
-
-use ibapi::contracts::Contract;
-use ibapi::market_data::realtime::{BarSize, WhatToShow};
-use ibapi::Client;
+use ibapi::prelude::*;
 
 fn main() {
     let connection_url = "127.0.0.1:4002";
@@ -224,7 +220,7 @@ fn main() {
         let handle = thread::spawn(move || {
             let contract = Contract::stock(symbol);
             let subscription = client
-                .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+                .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
                 .expect("realtime bars request failed!");
 
             for bar in subscription {
@@ -245,10 +241,7 @@ To avoid this issue, you can use a model of one client per thread. This ensures 
 
 ```rust
 use std::thread;
-
-use ibapi::contracts::Contract;
-use ibapi::market_data::realtime::{BarSize, WhatToShow};
-use ibapi::Client;
+use ibapi::prelude::*;
 
 fn main() {
     let symbols = vec![("AAPL", 100), ("NVDA", 101)];
@@ -261,7 +254,7 @@ fn main() {
 
             let contract = Contract::stock(symbol);
             let subscription = client
-                .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+                .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
                 .expect("realtime bars request failed!");
 
             for bar in subscription {
@@ -283,9 +276,7 @@ In this model, each client instance handles only the requests it initiates, impr
 The API will automatically attempt to reconnect to the TWS server if a disconnection is detected. The API will attempt to reconnect up to 30 times using a Fibonacci backoff strategy. In some cases, it will retry the request in progress. When receiving responses via a [Subscription](https://docs.rs/ibapi/latest/ibapi/client/struct.Subscription.html), the application may need to handle retries manually, as shown below.
 
 ```rust
-use ibapi::contracts::Contract;
-use ibapi::market_data::realtime::{BarSize, WhatToShow};
-use ibapi::{Client, Error};
+use ibapi::prelude::*;
 
 fn main() {
     let connection_url = "127.0.0.1:4002";
@@ -296,7 +287,7 @@ fn main() {
     loop {
         // Request real-time bars data with 5-second intervals
         let subscription = client
-            .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+            .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
             .expect("realtime bars request failed!");
 
         for bar in &subscription {
