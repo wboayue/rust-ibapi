@@ -35,6 +35,8 @@ pub struct AccountSummary {
     pub currency: String,
 }
 
+/// Constants for account summary tags used in account summary requests.
+/// These tags define which account information fields to retrieve.
 pub struct AccountSummaryTags {}
 
 impl AccountSummaryTags {
@@ -101,6 +103,7 @@ impl AccountSummaryTags {
     ];
 }
 
+/// Account summary data and completion marker.
 #[derive(Debug)]
 pub enum AccountSummaries {
     Summary(AccountSummary),
@@ -126,7 +129,7 @@ impl DataStream<AccountSummaries> for AccountSummaries {
     }
 }
 
-// Realtime PnL update for account.
+/// Realtime PnL update for account.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct PnL {
     /// DailyPnL for the position
@@ -150,10 +153,10 @@ impl DataStream<PnL> for PnL {
     }
 }
 
-// Realtime PnL update for a position in account.
+/// Realtime PnL update for a position in account.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct PnLSingle {
-    // Current size of the position
+    /// Current size of the position
     pub position: f64,
     /// DailyPnL for the position
     pub daily_pnl: f64,
@@ -178,6 +181,7 @@ impl DataStream<PnLSingle> for PnLSingle {
     }
 }
 
+/// Position information for an account.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Position {
     /// Account holding position
@@ -190,6 +194,7 @@ pub struct Position {
     pub average_cost: f64,
 }
 
+/// Represents position update messages from TWS.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 pub enum PositionUpdate {
@@ -213,6 +218,7 @@ impl DataStream<PositionUpdate> for PositionUpdate {
     }
 }
 
+/// Represents multi-account position update messages from TWS.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 pub enum PositionUpdateMulti {
@@ -252,6 +258,7 @@ impl DataStream<PositionUpdateMulti> for PositionUpdateMulti {
     }
 }
 
+/// Family code information for account hierarchy.
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct FamilyCode {
     /// Account ID
@@ -260,7 +267,7 @@ pub struct FamilyCode {
     pub family_code: String,
 }
 
-/// Account's information, portfolio and last update time
+/// Account's information, portfolio and last update time.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum AccountUpdate {
@@ -341,7 +348,7 @@ pub struct AccountUpdateTime {
     pub timestamp: String,
 }
 
-/// Account's information, portfolio and last update time
+/// Multi-account information and updates.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, PartialEq)]
 pub enum AccountUpdateMulti {
@@ -351,10 +358,10 @@ pub enum AccountUpdateMulti {
     End,
 }
 
-// Provides the account updates.
+/// Provides the account updates for multi-account subscriptions.
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct AccountMultiValue {
-    /// he account with updates.
+    /// The account with updates.
     pub account: String,
     /// The model code with updates.
     pub model_code: String,

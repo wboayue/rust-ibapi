@@ -1,3 +1,9 @@
+//! Message encoding, decoding, and routing for TWS API communication.
+//!
+//! This module handles the low-level message protocol between the client and TWS,
+//! including request/response message formatting, field encoding/decoding,
+//! and message type definitions.
+
 use std::fmt::Display;
 use std::io::Write;
 use std::ops::Index;

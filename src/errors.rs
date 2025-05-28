@@ -1,3 +1,9 @@
+//! Error types and handling for the IBAPI library.
+//!
+//! This module defines the comprehensive error types that can occur during
+//! API operations, including network errors, parsing errors, and TWS-specific
+//! errors with detailed error codes and messages.
+
 use std::{num::ParseIntError, string::FromUtf8Error, sync::Arc};
 
 use crate::messages::{ResponseMessage, CODE_INDEX, MESSAGE_INDEX};
@@ -12,7 +18,7 @@ pub enum Error {
     ParseTime(time::error::Parse),
     Poison(String),
 
-    // Errors from by IBAPI library
+    // Errors from IBAPI library
     NotImplemented,
     Parse(usize, String, String),
     ServerVersion(i32, i32, String),

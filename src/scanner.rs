@@ -1,3 +1,9 @@
+//! Market scanner functionality for discovering trading opportunities.
+//!
+//! This module provides access to Interactive Brokers' market scanner,
+//! allowing users to scan for stocks and other instruments based on
+//! various criteria and filters.
+
 use serde::{Deserialize, Serialize};
 
 use crate::{

@@ -2,6 +2,7 @@ use crate::Error;
 
 use super::*;
 
+/// Helper struct for decoding order messages from TWS.
 struct OrderDecoder {
     server_version: i32,
     message: ResponseMessage,

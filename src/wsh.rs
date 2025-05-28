@@ -1,4 +1,8 @@
-// Wall Street Horizon: Earnings Calendar & Event Data
+//! Wall Street Horizon: Earnings Calendar & Event Data.
+//!
+//! This module provides access to Wall Street Horizon data including
+//! earnings calendars, corporate events, and other fundamental data
+//! events that may impact trading decisions.
 
 use std::str;
 
@@ -14,8 +18,10 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
+/// Wall Street Horizon metadata containing configuration and setup information.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WshMetadata {
+    /// JSON string containing metadata information from Wall Street Horizon.
     pub data_json: String,
 }
 
@@ -48,8 +54,10 @@ pub(super) fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
     }
 }
 
+/// Wall Street Horizon event data containing earnings calendar and corporate events.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WshEventData {
+    /// JSON string containing event data from Wall Street Horizon.
     pub data_json: String,
 }
 

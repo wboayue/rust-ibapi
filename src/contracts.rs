@@ -1,3 +1,9 @@
+//! Contract definitions and related functionality for trading instruments.
+//!
+//! This module provides data structures for representing various financial instruments
+//! including stocks, options, futures, and complex securities. It includes contract
+//! creation helpers, validation, and conversion utilities.
+
 use std::convert::From;
 use std::fmt::Debug;
 use std::string::ToString;

@@ -1,3 +1,9 @@
+//! Market data functionality for real-time and historical data retrieval.
+//!
+//! This module provides APIs for accessing both real-time market data (ticks, bars)
+//! and historical market data. It includes support for various data types,
+//! subscription management, and market data type configuration.
+
 use crate::{messages::OutgoingMessages, server_versions, Client, Error};
 
 pub mod historical;

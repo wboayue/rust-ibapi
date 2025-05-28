@@ -1,3 +1,9 @@
+//! Order management and trading functionality.
+//!
+//! This module provides comprehensive order management capabilities including
+//! order creation, modification, cancellation, and execution tracking.
+//! It supports various order types and advanced trading features.
+
 use std::convert::From;
 use std::fmt::Debug;
 
@@ -637,16 +643,26 @@ impl Action {
     }
 }
 
+/// NYSE Rule 80A designations for institutional trading.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Rule80A {
+    /// Individual customer.
     Individual,
+    /// Agency transaction.
     Agency,
+    /// Agent for other member.
     AgentOtherMember,
+    /// Individual principal transaction in agency cross.
     IndividualPTIA,
+    /// Agency principal transaction in agency cross.
     AgencyPTIA,
+    /// Agent for other member principal transaction in agency cross.
     AgentOtherMemberPTIA,
+    /// Individual principal transaction.
     IndividualPT,
+    /// Agency principal transaction.
     AgencyPT,
+    /// Agent for other member principal transaction.
     AgentOtherMemberPT,
 }
 
@@ -697,24 +713,37 @@ impl Rule80A {
     }
 }
 
+/// Auction strategy for BOX orders.
 pub enum AuctionStrategy {
+    /// Match strategy.
     Match,
+    /// Improvement strategy.
     Improvement,
+    /// Transparent strategy.
     Transparent,
 }
 
+/// Represents the price component of a combo leg order.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct OrderComboLeg {
-    price: Option<f64>,
+    /// The price for this combo leg.
+    pub price: Option<f64>,
 }
 
+/// Order condition types for conditional orders.
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum OrderCondition {
+    /// Price-based condition.
     Price = 1,
+    /// Time-based condition.
     Time = 3,
+    /// Margin-based condition.
     Margin = 4,
+    /// Execution-based condition.
     Execution = 5,
+    /// Volume-based condition.
     Volume = 6,
+    /// Percent change condition.
     PercentChange = 7,
 }
 
@@ -752,6 +781,7 @@ pub struct SoftDollarTier {
     pub display_name: String,
 }
 
+/// Contains order information including the order, contract, and order state.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct OrderData {
     /// The order's unique id
@@ -861,12 +891,17 @@ pub struct CommissionReport {
     pub yield_redemption_date: String,
 }
 
+/// Liquidity types for executions.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum Liquidity {
+    /// No liquidity information.
     #[default]
     None = 0,
+    /// Added liquidity to the market.
     AddedLiquidity = 1,
+    /// Removed liquidity from the market.
     RemovedLiquidity = 2,
+    /// Liquidity was routed out.
     LiquidityRoutedOut = 3,
 }
 
@@ -929,20 +964,30 @@ pub struct Execution {
     pub last_liquidity: Liquidity,
 }
 
+/// Contains execution information including the request ID, contract, and execution details.
 #[derive(Clone, Debug, Default)]
 pub struct ExecutionData {
+    /// The request ID associated with this execution.
     pub request_id: i32,
+    /// The contract that was executed.
     pub contract: Contract,
+    /// The execution details.
     pub execution: Execution,
 }
 
+/// Responses from placing an order.
 #[derive(Clone, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum PlaceOrder {
+    /// Order status update.
     OrderStatus(OrderStatus),
+    /// Open order information.
     OpenOrder(OrderData),
+    /// Execution data.
     ExecutionData(ExecutionData),
+    /// Commission report.
     CommissionReport(CommissionReport),
+    /// Notice or error message.
     Message(Notice),
 }
 
@@ -1415,17 +1460,24 @@ impl DataStream<Executions> for Executions {
     }
 }
 
+/// Exercise action for options.
 #[derive(Debug)]
 pub enum ExerciseAction {
+    /// Exercise the option.
     Exercise = 1,
+    /// Let the option lapse.
     Lapse = 2,
 }
 
+/// Responses from exercising options.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[allow(clippy::large_enum_variant)]
 pub enum ExerciseOptions {
+    /// Open order information.
     OpenOrder(OrderData),
+    /// Order status update.
     OrderStatus(OrderStatus),
+    /// Notice or error message.
     Notice(Notice),
 }
 

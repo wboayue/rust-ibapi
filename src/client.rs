@@ -1,3 +1,9 @@
+//! Client implementation for connecting to and communicating with TWS and IB Gateway.
+//!
+//! The Client provides the main interface for establishing connections, sending requests,
+//! and receiving responses from the Interactive Brokers API. It manages message routing,
+//! subscriptions, and maintains the connection state.
+
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::net::TcpStream;
