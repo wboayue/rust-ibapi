@@ -26,12 +26,12 @@ pub use crate::contracts::{Contract, SecurityType};
 // Market data types - historical
 pub use crate::market_data::historical::{BarSize as HistoricalBarSize, ToDuration, WhatToShow as HistoricalWhatToShow};
 
-// Market data types - realtime  
+// Market data types - realtime
 pub use crate::market_data::realtime::{BarSize as RealtimeBarSize, TickTypes, WhatToShow as RealtimeWhatToShow};
 pub use crate::market_data::MarketDataType;
 
 // Order types
-pub use crate::orders::{Action, ExecutionFilter, Orders, PlaceOrder, order_builder};
+pub use crate::orders::{order_builder, Action, ExecutionFilter, Orders, PlaceOrder};
 
 // Account types
 pub use crate::accounts::{AccountSummaries, AccountSummaryTags, AccountUpdate, AccountUpdateMulti, PositionUpdate};
