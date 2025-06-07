@@ -322,6 +322,13 @@ impl<S: Stream> TcpMessageBus<S> {
                 match (message.order_id(), message.request_id()) {
                     // First check matching orders channel
                     (Some(order_id), _) if self.orders.contains(&order_id) => {
+                        // Store execution-to-order mapping for commission reports
+                        if let Some(sender) = self.orders.copy_sender(order_id) {
+                            if let Some(execution_id) = message.execution_id() {
+                                self.executions.insert(execution_id, sender);
+                            }
+                        }
+
                         if let Err(e) = self.orders.send(&order_id, Ok(message)) {
                             warn!("error routing message for order_id({order_id}): {e}");
                         }
