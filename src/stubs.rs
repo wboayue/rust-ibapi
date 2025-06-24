@@ -41,6 +41,11 @@ impl MessageBus for MessageBusStub {
         Ok(mock_request(self, Some(request_id), None, message))
     }
 
+    fn send_message(&self, message: &RequestMessage) -> Result<(), Error> {
+        self.request_messages.write().unwrap().push(message.clone());
+        Ok(())
+    }
+
     fn cancel_order_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
         mock_request(self, Some(request_id), None, packet);
         Ok(())

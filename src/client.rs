@@ -722,6 +722,54 @@ impl Client {
         orders::place_order(self, order_id, contract, order)
     }
 
+    /// Submits or modifies an [Order] without returning a subscription.
+    ///
+    /// This is a fire-and-forget method that submits an [Order] for the given [Contract]
+    /// but does not return a subscription for order updates. To receive order status updates,
+    /// fills, and commission reports, use the [`order_update_stream`](Client::order_update_stream) method
+    /// or use [`place_order`](Client::place_order) instead which returns a subscription.
+    ///
+    /// # Arguments
+    /// * `order_id` - ID for [Order]. Get next valid ID using [Client::next_order_id].
+    /// * `contract` - [Contract] to submit order for.
+    /// * `order` - [Order] to submit.
+    ///
+    /// # Returns
+    /// * `Ok(())` if the order was successfully sent
+    /// * `Err(Error)` if validation failed or sending failed
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::orders::{order_builder, Action};
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("MSFT");
+    /// let order = order_builder::market_order(Action::Buy, 100.0);
+    /// let order_id = client.next_order_id();
+    ///
+    /// // Submit order without waiting for confirmation
+    /// client.submit_order(order_id, &contract, &order).expect("submit failed");
+    ///
+    /// // Monitor all order updates via the order update stream
+    /// // This will receive updates for ALL orders, not just this one
+    /// use ibapi::orders::PlaceOrder;
+    /// for event in client.order_update_stream() {
+    ///     match event {
+    ///         PlaceOrder::OrderStatus(status) => println!("Order Status: {status:?}"),
+    ///         PlaceOrder::ExecutionData(exec) => println!("Execution: {exec:?}"),
+    ///         PlaceOrder::CommissionReport(report) => println!("Commission: {report:?}"),
+    ///         _ => {}
+    ///     }
+    /// }
+    /// ```
+    pub fn submit_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<(), Error> {
+        orders::submit_order(self, order_id, contract, order)
+    }
+
     /// Exercises an options contract.
     ///
     /// Note: this function is affected by a TWS setting which specifies if an exercise request must be finalized.
@@ -1778,6 +1826,11 @@ impl Client {
     pub(crate) fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<InternalSubscription, Error> {
         debug!("send_order({:?}, {:?})", order_id, message);
         self.message_bus.send_order_request(order_id, &message)
+    }
+
+    pub(crate) fn send_message(&self, message: RequestMessage) -> Result<(), Error> {
+        debug!("send_message({:?})", message);
+        self.message_bus.send_message(&message)
     }
 
     /// Sends request for the next valid order id.

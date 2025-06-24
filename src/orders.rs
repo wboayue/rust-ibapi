@@ -1027,6 +1027,33 @@ pub struct OrderStatus {
     pub market_cap_price: f64,
 }
 
+/// Submits an Order.
+///
+/// After the order is submitted correctly, events will be returned concerning the order's activity.
+/// This is a fire-and-forget method that does not wait for confirmation or return a subscription.
+///
+/// # Arguments
+/// * `client` - The client instance
+/// * `order_id` - Unique order identifier
+/// * `contract` - Contract to submit order for
+/// * `order` - Order details
+///
+/// # Returns
+/// * `Ok(())` if the order was successfully sent
+/// * `Err(Error)` if validation failed or sending failed
+///
+/// # See Also
+/// * [TWS API Documentation](https://interactivebrokers.github.io/tws-api/order_submission.html)
+pub(crate) fn submit_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<(), Error> {
+    verify_order(client, order, order_id)?;
+    verify_order_contract(client, contract, order_id)?;
+
+    let request = encoders::encode_place_order(client.server_version(), order_id, contract, order)?;
+    client.send_message(request)?;
+
+    Ok(())
+}
+
 // Submits an Order.
 // After the order is submitted correctly, events will be returned concerning the order's activity.
 // https://interactivebrokers.github.io/tws-api/order_submission.html

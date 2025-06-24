@@ -49,6 +49,20 @@ pub(crate) trait MessageBus: Send + Sync {
     // Sends formatted order specific message to TWS and creates a reply channel by order id.
     fn send_order_request(&self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
 
+    /// Sends a message to TWS without creating a unique reply channel.
+    ///
+    /// This method is used for fire-and-forget messages that don't require
+    /// tracking responses by request ID. The message is sent directly to TWS
+    /// without establishing a dedicated response channel.
+    ///
+    /// # Arguments
+    /// * `packet` - The formatted request message to send
+    ///
+    /// # Returns
+    /// * `Ok(())` if the message was successfully sent
+    /// * `Err(Error)` if sending failed
+    fn send_message(&self, packet: &RequestMessage) -> Result<(), Error>;
+
     fn cancel_order_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error>;
 
     fn ensure_shutdown(&self);
@@ -495,6 +509,11 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
             .build();
 
         Ok(subscription)
+    }
+
+    fn send_message(&self, message: &RequestMessage) -> Result<(), Error> {
+        self.connection.write_message(message)?;
+        Ok(())
     }
 
     fn cancel_order_subscription(&self, request_id: i32, message: &RequestMessage) -> Result<(), Error> {
