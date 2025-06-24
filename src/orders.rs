@@ -1027,6 +1027,14 @@ pub struct OrderStatus {
     pub market_cap_price: f64,
 }
 
+/// Subscribes to order update events. Only one subscription can be active at a time.
+///
+/// This function returns a subscription that will receive updates of activity for all orders placed by the client.
+pub(crate) fn order_update_stream<'a>(client: &'a Client) -> Result<Subscription<'a, PlaceOrder>, Error> {
+    let subscription = client.create_order_update_subscription()?;
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+}
+
 /// Submits an Order.
 ///
 /// After the order is submitted correctly, events will be returned concerning the order's activity.

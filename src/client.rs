@@ -745,19 +745,21 @@ impl Client {
     /// use ibapi::contracts::Contract;
     /// use ibapi::orders::{order_builder, Action};
     ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// # fn main() -> Result<(), ibapi::Error> {
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100)?;
     ///
     /// let contract = Contract::stock("MSFT");
     /// let order = order_builder::market_order(Action::Buy, 100.0);
     /// let order_id = client.next_order_id();
     ///
     /// // Submit order without waiting for confirmation
-    /// client.submit_order(order_id, &contract, &order).expect("submit failed");
+    /// client.submit_order(order_id, &contract, &order)?;
     ///
     /// // Monitor all order updates via the order update stream
     /// // This will receive updates for ALL orders, not just this one
     /// use ibapi::orders::PlaceOrder;
-    /// for event in client.order_update_stream() {
+    /// for event in client.order_update_stream()? {
     ///     match event {
     ///         PlaceOrder::OrderStatus(status) => println!("Order Status: {status:?}"),
     ///         PlaceOrder::ExecutionData(exec) => println!("Execution: {exec:?}"),
@@ -765,9 +767,89 @@ impl Client {
     ///         _ => {}
     ///     }
     /// }
+    ///
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn submit_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<(), Error> {
         orders::submit_order(self, order_id, contract, order)
+    }
+
+    /// Creates a subscription stream for receiving real-time order updates.
+    ///
+    /// This method establishes a stream that receives all order-related events including:
+    /// - Order status updates (e.g., submitted, filled, cancelled)
+    /// - Open order information
+    /// - Execution data for trades
+    /// - Commission reports
+    /// - Order-related messages and notices
+    ///
+    /// The stream will receive updates for all orders placed through this client connection,
+    /// including both new orders submitted after creating the stream and existing orders.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Subscription<PlaceOrder>` that yields `PlaceOrder` enum variants containing:
+    /// - `OrderStatus`: Current status of an order (filled amount, average price, etc.)
+    /// - `OpenOrder`: Complete order details including contract and order parameters
+    /// - `ExecutionData`: Details about individual trade executions
+    /// - `CommissionReport`: Commission information for executed trades
+    /// - `Message`: Notices or error messages related to orders
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the subscription cannot be created, typically due to
+    /// connection issues or internal errors.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::orders::PlaceOrder;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// // Create order update stream
+    /// let updates = client.order_update_stream().expect("failed to create stream");
+    ///
+    /// // Process order updates
+    /// for update in updates {
+    ///     match update {
+    ///         PlaceOrder::OrderStatus(status) => {
+    ///             println!("Order {} status: {} - filled: {}/{}",
+    ///                 status.order_id, status.status, status.filled, status.remaining);
+    ///         },
+    ///         PlaceOrder::OpenOrder(order_data) => {
+    ///             println!("Open order {}: {} {} @ {}",
+    ///                 order_data.order.order_id,
+    ///                 order_data.order.action,
+    ///                 order_data.order.total_quantity,
+    ///                 order_data.order.limit_price.unwrap_or(0.0));
+    ///         },
+    ///         PlaceOrder::ExecutionData(exec) => {
+    ///             println!("Execution: {} {} @ {} on {}",
+    ///                 exec.execution.side,
+    ///                 exec.execution.shares,
+    ///                 exec.execution.price,
+    ///                 exec.execution.exchange);
+    ///         },
+    ///         PlaceOrder::CommissionReport(report) => {
+    ///             println!("Commission: ${} for execution {}",
+    ///                 report.commission, report.execution_id);
+    ///         },
+    ///         PlaceOrder::Message(notice) => {
+    ///             println!("Order message: {}", notice.message);
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// # Note
+    ///
+    /// This stream provides updates for all orders, not just a specific order.
+    /// To track a specific order, filter the updates by order ID.
+    pub fn order_update_stream(&self) -> Result<Subscription<PlaceOrder>, Error> {
+        orders::order_update_stream(self)
     }
 
     /// Exercises an options contract.
@@ -1831,6 +1913,11 @@ impl Client {
     pub(crate) fn send_message(&self, message: RequestMessage) -> Result<(), Error> {
         debug!("send_message({:?})", message);
         self.message_bus.send_message(&message)
+    }
+
+    /// Creates a subscription for order updates if one is not already active.
+    pub(crate) fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error> {
+        self.message_bus.create_order_update_subscription()
     }
 
     /// Sends request for the next valid order id.

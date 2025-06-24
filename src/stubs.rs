@@ -46,6 +46,21 @@ impl MessageBus for MessageBusStub {
         Ok(())
     }
 
+    fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error> {
+        let (sender, receiver) = channel::unbounded();
+        let (signaler, _) = channel::unbounded();
+
+        // Send any pre-configured response messages
+        for message in &self.response_messages {
+            let message = ResponseMessage::from(&message.replace('|', "\0"));
+            sender.send(Ok(message)).unwrap();
+        }
+
+        let subscription = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).build();
+
+        Ok(subscription)
+    }
+
     fn cancel_order_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
         mock_request(self, Some(request_id), None, packet);
         Ok(())

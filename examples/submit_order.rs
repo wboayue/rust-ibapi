@@ -12,7 +12,7 @@
 
 use ibapi::{contracts::ContractBuilder, prelude::*};
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
     let symbol = "AAPL";
@@ -29,13 +29,17 @@ fn main() {
     client.submit_order(order_id, &contract, &order).expect("could not submit order");
 
     // Monitor the order update stream for all order-related events
-    // client.order_update_stream().for_each(|update| {
-    //     match update {
-    //         PlaceOrder::OrderStatus(status) => println!("Order Status: {status:?}"),
-    //         PlaceOrder::OpenOrder(open_order) => println!("Open Order: {open_order:?}"),
-    //         PlaceOrder::ExecutionData(execution) => println!("Execution Data: {execution:?}"),
-    //         PlaceOrder::CommissionReport(report) => println!("Commission Report: {report:?}"),
-    //         PlaceOrder::Message(message) => println!("Message: {message:?}"),
-    //     }
-    // });
+    // This will loop indefinitely, processing updates as they come in.
+    // You would typically run this in a separate thread or use a timeout mechanism to exit gracefully.
+    for update in client.order_update_stream()? {
+        match update {
+            PlaceOrder::OrderStatus(status) => println!("Order Status: {status:?}"),
+            PlaceOrder::OpenOrder(open_order) => println!("Open Order: {open_order:?}"),
+            PlaceOrder::ExecutionData(execution) => println!("Execution Data: {execution:?}"),
+            PlaceOrder::CommissionReport(report) => println!("Commission Report: {report:?}"),
+            PlaceOrder::Message(message) => println!("Message: {message:?}"),
+        }
+    }
+
+    Ok(())
 }

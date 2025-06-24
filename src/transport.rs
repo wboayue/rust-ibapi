@@ -63,6 +63,9 @@ pub(crate) trait MessageBus: Send + Sync {
     /// * `Err(Error)` if sending failed
     fn send_message(&self, packet: &RequestMessage) -> Result<(), Error>;
 
+    /// Creates a subscription to the order update stream.
+    fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error>;
+
     fn cancel_order_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error>;
 
     fn ensure_shutdown(&self);
@@ -160,6 +163,7 @@ impl SharedChannels {
 pub enum Signal {
     Request(i32),
     Order(i32),
+    OrderUpdateStream,
 }
 
 #[derive(Debug)]
@@ -173,6 +177,7 @@ pub struct TcpMessageBus<S: Stream> {
     signals_send: Sender<Signal>,
     signals_recv: Receiver<Signal>,
     shutdown_requested: AtomicBool,
+    order_update_stream: Mutex<Option<Sender<Response>>>, // Optional receiver for order updates
 }
 
 impl<S: Stream> TcpMessageBus<S> {
@@ -189,6 +194,7 @@ impl<S: Stream> TcpMessageBus<S> {
             signals_send,
             signals_recv,
             shutdown_requested: AtomicBool::new(false),
+            order_update_stream: Mutex::new(None),
         })
     }
 
@@ -230,6 +236,18 @@ impl<S: Stream> TcpMessageBus<S> {
     fn clean_order(&self, order_id: i32) {
         self.orders.remove(&order_id);
         debug!("released order_id {}, orders.len()={}", order_id, self.orders.len());
+    }
+
+    fn clear_order_update_stream(&self) {
+        let mut stream = if let Ok(stream) = self.order_update_stream.lock() {
+            stream
+        } else {
+            warn!("failed to lock order_update_stream");
+            return;
+        };
+
+        *stream = None;
+        debug!("released order_update_stream");
     }
 
     fn read_message(&self) -> Response {
@@ -423,6 +441,9 @@ impl<S: Stream> TcpMessageBus<S> {
                         Signal::Order(order_id) => {
                             message_bus.clean_order(order_id);
                         }
+                        Signal::OrderUpdateStream => {
+                            message_bus.clear_order_update_stream();
+                        }
                     }
                 }
 
@@ -514,6 +535,22 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     fn send_message(&self, message: &RequestMessage) -> Result<(), Error> {
         self.connection.write_message(message)?;
         Ok(())
+    }
+
+    fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error> {
+        let mut order_update_stream = self.order_update_stream.lock().unwrap();
+
+        if order_update_stream.is_some() {
+            return Err(Error::AlreadySubscribed);
+        }
+
+        let (sender, receiver) = channel::unbounded();
+
+        *order_update_stream = Some(sender);
+
+        let subscription = SubscriptionBuilder::new().receiver(receiver).signaler(self.signals_send.clone()).build();
+
+        Ok(subscription)
     }
 
     fn cancel_order_subscription(&self, request_id: i32, message: &RequestMessage) -> Result<(), Error> {
@@ -727,10 +764,15 @@ impl Drop for InternalSubscription {
             if let Err(e) = signaler.send(Signal::Request(request_id)) {
                 warn!("error sending drop signal: {e}");
             }
-        }
-
-        if let (Some(order_id), Some(signaler)) = (self.order_id, &self.signaler) {
-            signaler.send(Signal::Order(order_id)).unwrap();
+        } else if let (Some(order_id), Some(signaler)) = (self.order_id, &self.signaler) {
+            if let Err(e) = signaler.send(Signal::Order(order_id)) {
+                warn!("error sending drop signal: {e}");
+            }
+        } else if let Some(signaler) = &self.signaler {
+            // Currently is order update stream if no request or order id.
+            if let Err(e) = signaler.send(Signal::OrderUpdateStream) {
+                warn!("error sending drop signal: {e}");
+            }
         }
     }
 }
