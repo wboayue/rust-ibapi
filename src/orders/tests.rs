@@ -11,8 +11,7 @@ mod order_build_tests;
 
 #[test]
 fn place_order() {
-    let message_bus = Arc::new(MessageBusStub{
-        request_messages: RwLock::new(vec![]),
+    let message_bus = Arc::new(MessageBusStub {
         response_messages: vec![
             "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|1376327563|0|0|0||1376327563.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
             "3|13|PreSubmitted|0|100|0|1376327563|0|0|100||0||".to_owned(),
@@ -21,7 +20,8 @@ fn place_order() {
             "3|13|Filled|100|0|196.52|1376327563|0|196.52|100||0||".to_owned(),
             "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|1376327563|0|0|0||1376327563.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Filled|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.0|||USD||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
             "59|1|00025b46.63f8f39c.01.01|1.0|USD|1.7976931348623157E308|1.7976931348623157E308|||".to_owned(),
-        ]
+        ],
+        ..Default::default()
     });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -378,12 +378,12 @@ fn next_valid_order_id() {
 
 #[test]
 fn completed_orders() {
-    let message_bus = Arc::new(MessageBusStub{
-        request_messages: RwLock::new(vec![]),
+    let message_bus = Arc::new(MessageBusStub {
         response_messages: vec![
             "101|265598|AAPL|STK||0|?||SMART|USD|AAPL|NMS|BUY|0|MKT|0.0|0.0|DAY||DU1234567||0||1824933227|0|0|0|||||||||||0||-1||||||2147483647|0|0||3|0||0|None||0|0|0||0|0||||0|0|0|2147483647|2147483647||||IB|0|0||0|Filled|0|0|0|1.7976931348623157E308|1.7976931348623157E308|0|1|0||100|2147483647|0|Not an insider or substantial shareholder|0|0|9223372036854775807|20230306 12:28:30 America/Los_Angeles|Filled Size: 100|".to_owned(),
             "102|".to_owned(),
         ],
+        ..Default::default()
     });
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -646,4 +646,119 @@ fn encode_combo_market_order() {
     );
 
     assert!(results.is_ok(), "failed to place order: {}", results.err().unwrap());
+}
+
+#[test]
+fn submit_order() {
+    let message_bus = Arc::new(MessageBusStub {
+        request_messages: RwLock::new(vec![]),
+        response_messages: vec![],
+    });
+
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+
+    let contract = Contract {
+        symbol: "AAPL".to_owned(),
+        security_type: SecurityType::Stock,
+        exchange: "SMART".to_owned(),
+        currency: "USD".to_owned(),
+        ..Contract::default()
+    };
+
+    let order_id = 42;
+    let order = order_builder::market_order(super::Action::Buy, 200.0);
+
+    let result = client.submit_order(order_id, &contract, &order);
+
+    let request_messages = client.message_bus.request_messages();
+
+    assert_eq!(
+        request_messages[0].encode().replace('\0', "|"),
+        "3|42|0|AAPL|STK||0|||SMART||USD|||||BUY|200|MKT|||||||0||1|0|0|0|0|0|0|0||0||||||||0||-1|0|||0|||0|0||0||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
+    );
+
+    assert!(result.is_ok(), "failed to submit order: {}", result.err().unwrap());
+}
+
+#[test]
+fn order_update_stream() {
+    let message_bus = Arc::new(MessageBusStub{
+        request_messages: RwLock::new(vec![]),
+        response_messages: vec![
+            "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|1376327563|0|0|0||1376327563.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
+            "3|13|PreSubmitted|0|100|0|1376327563|0|0|100||0||".to_owned(),
+            "11|-1|13|76792991|TSLA|STK||0.0|||ISLAND|USD|TSLA|NMS|00025b46.63f8f39c.01.01|20230224  12:04:56|DU1234567|ISLAND|BOT|100|196.52|1376327563|100|0|100|196.52|||||2||".to_owned(),
+            "59|1|00025b46.63f8f39c.01.01|1.0|USD|1.7976931348623157E308|1.7976931348623157E308|||".to_owned(),
+        ]
+    });
+
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+
+    let stream = client.order_update_stream();
+    assert!(stream.is_ok(), "failed to create order update stream: {}", stream.err().unwrap());
+
+    let notifications = stream.unwrap();
+
+    // First event: OpenOrder
+    if let Some(PlaceOrder::OpenOrder(open_order)) = notifications.next() {
+        assert_eq!(open_order.order_id, 13, "open_order.order_id");
+        assert_eq!(open_order.contract.symbol, "TSLA", "contract.symbol");
+        assert_eq!(open_order.order.action, Action::Buy, "order.action");
+        assert_eq!(open_order.order.total_quantity, 100.0, "order.total_quantity");
+        assert_eq!(open_order.order_state.status, "PreSubmitted", "order_state.status");
+    } else {
+        assert!(false, "expected open order notification");
+    }
+
+    // Second event: OrderStatus
+    if let Some(PlaceOrder::OrderStatus(status)) = notifications.next() {
+        assert_eq!(status.order_id, 13, "order_status.order_id");
+        assert_eq!(status.status, "PreSubmitted", "order_status.status");
+        assert_eq!(status.filled, 0.0, "order_status.filled");
+        assert_eq!(status.remaining, 100.0, "order_status.remaining");
+    } else {
+        assert!(false, "expected order status notification");
+    }
+
+    // Third event: ExecutionData
+    if let Some(PlaceOrder::ExecutionData(exec_data)) = notifications.next() {
+        assert_eq!(exec_data.execution.order_id, 13, "execution.order_id");
+        assert_eq!(exec_data.execution.shares, 100.0, "execution.shares");
+        assert_eq!(exec_data.execution.price, 196.52, "execution.price");
+        assert_eq!(exec_data.execution.side, "BOT", "execution.side");
+    } else {
+        assert!(false, "expected execution data notification");
+    }
+
+    // Fourth event: CommissionReport
+    if let Some(PlaceOrder::CommissionReport(report)) = notifications.next() {
+        assert_eq!(report.execution_id, "00025b46.63f8f39c.01.01", "report.execution_id");
+        assert_eq!(report.commission, 1.0, "report.commission");
+        assert_eq!(report.currency, "USD", "report.currency");
+    } else {
+        assert!(false, "expected commission report notification");
+    }
+}
+
+#[test]
+fn order_update_stream_already_subscribed() {
+    let message_bus = Arc::new(MessageBusStub {
+        request_messages: RwLock::new(vec![]),
+        response_messages: vec![],
+    });
+
+    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+
+    // Create first subscription
+    let stream1 = client.order_update_stream();
+    assert!(stream1.is_ok(), "failed to create first order update stream");
+
+    // Try to create second subscription - should fail
+    let stream2 = client.order_update_stream();
+    assert!(stream2.is_err(), "second order update stream should fail");
+
+    match stream2.err().unwrap() {
+        Error::AlreadySubscribed => {}
+        other => assert!(false, "expected AlreadySubscribed error, got: {:?}", other),
+    }
 }
