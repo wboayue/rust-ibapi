@@ -2050,7 +2050,18 @@ impl<'a, T: DataStream<T> + 'static> Subscription<'a, T> {
                 error: Mutex::new(None),
             }
         } else {
-            panic!("unsupported internal subscription: {:?}", subscription)
+            Subscription {
+                client,
+                request_id: None,
+                order_id: None,
+                message_type: None,
+                subscription,
+                response_context: context,
+                phantom: PhantomData,
+                cancelled: AtomicBool::new(false),
+                snapshot_ended: AtomicBool::new(false),
+                error: Mutex::new(None),
+            }
         }
     }
 
