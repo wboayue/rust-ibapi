@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use crossbeam::channel;
 
@@ -13,6 +13,9 @@ pub(crate) struct MessageBusStub {
     // pub server_version: i32,
     // pub order_id: i32,
 }
+
+// Separate tracking for order update subscriptions to maintain backward compatibility
+static ORDER_UPDATE_SUBSCRIPTION_TRACKER: Mutex<Option<usize>> = Mutex::new(None);
 
 impl Default for MessageBusStub {
     fn default() -> Self {
@@ -39,6 +42,38 @@ impl MessageBus for MessageBusStub {
 
     fn send_order_request(&self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
         Ok(mock_request(self, Some(request_id), None, message))
+    }
+
+    fn send_message(&self, message: &RequestMessage) -> Result<(), Error> {
+        self.request_messages.write().unwrap().push(message.clone());
+        Ok(())
+    }
+
+    fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error> {
+        // Use pointer address as unique identifier for this stub instance
+        let stub_id = self as *const _ as usize;
+
+        let mut tracker = ORDER_UPDATE_SUBSCRIPTION_TRACKER.lock().unwrap();
+        if let Some(existing_id) = *tracker {
+            if existing_id == stub_id {
+                return Err(Error::AlreadySubscribed);
+            }
+        }
+        *tracker = Some(stub_id);
+        drop(tracker); // Release lock early
+
+        let (sender, receiver) = channel::unbounded();
+        let (signaler, _) = channel::unbounded();
+
+        // Send any pre-configured response messages
+        for message in &self.response_messages {
+            let message = ResponseMessage::from(&message.replace('|', "\0"));
+            sender.send(Ok(message)).unwrap();
+        }
+
+        let subscription = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).build();
+
+        Ok(subscription)
     }
 
     fn cancel_order_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {

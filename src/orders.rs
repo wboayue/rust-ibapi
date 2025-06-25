@@ -991,6 +991,23 @@ pub enum PlaceOrder {
     Message(Notice),
 }
 
+/// Updates received when monitoring order activity.
+/// This enum is used by `order_update_stream` to deliver real-time order updates.
+#[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
+pub enum OrderUpdate {
+    /// Order status update.
+    OrderStatus(OrderStatus),
+    /// Open order information.
+    OpenOrder(OrderData),
+    /// Execution data.
+    ExecutionData(ExecutionData),
+    /// Commission report.
+    CommissionReport(CommissionReport),
+    /// Notice or error message.
+    Message(Notice),
+}
+
 /// Contains all relevant information on the current status of the order execution-wise (i.e. amount filled and pending, filling price, etc.).
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct OrderStatus {
@@ -1027,6 +1044,41 @@ pub struct OrderStatus {
     pub market_cap_price: f64,
 }
 
+/// Subscribes to order update events. Only one subscription can be active at a time.
+///
+/// This function returns a subscription that will receive updates of activity for all orders placed by the client.
+pub(crate) fn order_update_stream<'a>(client: &'a Client) -> Result<Subscription<'a, OrderUpdate>, Error> {
+    let subscription = client.create_order_update_subscription()?;
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+}
+
+/// Submits an Order.
+///
+/// After the order is submitted correctly, events will be returned concerning the order's activity.
+/// This is a fire-and-forget method that does not wait for confirmation or return a subscription.
+///
+/// # Arguments
+/// * `client` - The client instance
+/// * `order_id` - Unique order identifier
+/// * `contract` - Contract to submit order for
+/// * `order` - Order details
+///
+/// # Returns
+/// * `Ok(())` if the order was successfully sent
+/// * `Err(Error)` if validation failed or sending failed
+///
+/// # See Also
+/// * [TWS API Documentation](https://interactivebrokers.github.io/tws-api/order_submission.html)
+pub(crate) fn submit_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<(), Error> {
+    verify_order(client, order, order_id)?;
+    verify_order_contract(client, contract, order_id)?;
+
+    let request = encoders::encode_place_order(client.server_version(), order_id, contract, order)?;
+    client.send_message(request)?;
+
+    Ok(())
+}
+
 // Submits an Order.
 // After the order is submitted correctly, events will be returned concerning the order's activity.
 // https://interactivebrokers.github.io/tws-api/order_submission.html
@@ -1057,6 +1109,28 @@ impl DataStream<PlaceOrder> for PlaceOrder {
                 message,
             )?)),
             IncomingMessages::Error => Ok(PlaceOrder::Message(Notice::from(message))),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
+        }
+    }
+}
+
+impl DataStream<OrderUpdate> for OrderUpdate {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<OrderUpdate, Error> {
+        match message.message_type() {
+            IncomingMessages::OpenOrder => Ok(OrderUpdate::OpenOrder(decoders::decode_open_order(
+                client.server_version,
+                message.clone(),
+            )?)),
+            IncomingMessages::OrderStatus => Ok(OrderUpdate::OrderStatus(decoders::decode_order_status(client.server_version, message)?)),
+            IncomingMessages::ExecutionData => Ok(OrderUpdate::ExecutionData(decoders::decode_execution_data(
+                client.server_version,
+                message,
+            )?)),
+            IncomingMessages::CommissionsReport => Ok(OrderUpdate::CommissionReport(decoders::decode_commission_report(
+                client.server_version,
+                message,
+            )?)),
+            IncomingMessages::Error => Ok(OrderUpdate::Message(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }

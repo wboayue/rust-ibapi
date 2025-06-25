@@ -32,6 +32,8 @@ pub enum Error {
     UnexpectedResponse(ResponseMessage),
     UnexpectedEndOfStream,
     Message(i32, String),
+    /// Returned when attempting to create a subscription that already exists.
+    AlreadySubscribed,
 }
 
 impl std::error::Error for Error {}
@@ -59,6 +61,7 @@ impl std::fmt::Display for Error {
             Error::Simple(ref err) => write!(f, "error occurred: {err}"),
             Error::InvalidArgument(ref err) => write!(f, "InvalidArgument: {err}"),
             Error::Message(code, message) => write!(f, "[{code}] {message}"),
+            Error::AlreadySubscribed => write!(f, "AlreadySubscribed"),
         }
     }
 }
