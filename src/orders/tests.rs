@@ -700,7 +700,7 @@ fn order_update_stream() {
     let notifications = stream.unwrap();
 
     // First event: OpenOrder
-    if let Some(PlaceOrder::OpenOrder(open_order)) = notifications.next() {
+    if let Some(OrderUpdate::OpenOrder(open_order)) = notifications.next() {
         assert_eq!(open_order.order_id, 13, "open_order.order_id");
         assert_eq!(open_order.contract.symbol, "TSLA", "contract.symbol");
         assert_eq!(open_order.order.action, Action::Buy, "order.action");
@@ -711,7 +711,7 @@ fn order_update_stream() {
     }
 
     // Second event: OrderStatus
-    if let Some(PlaceOrder::OrderStatus(status)) = notifications.next() {
+    if let Some(OrderUpdate::OrderStatus(status)) = notifications.next() {
         assert_eq!(status.order_id, 13, "order_status.order_id");
         assert_eq!(status.status, "PreSubmitted", "order_status.status");
         assert_eq!(status.filled, 0.0, "order_status.filled");
@@ -721,7 +721,7 @@ fn order_update_stream() {
     }
 
     // Third event: ExecutionData
-    if let Some(PlaceOrder::ExecutionData(exec_data)) = notifications.next() {
+    if let Some(OrderUpdate::ExecutionData(exec_data)) = notifications.next() {
         assert_eq!(exec_data.execution.order_id, 13, "execution.order_id");
         assert_eq!(exec_data.execution.shares, 100.0, "execution.shares");
         assert_eq!(exec_data.execution.price, 196.52, "execution.price");
@@ -731,7 +731,7 @@ fn order_update_stream() {
     }
 
     // Fourth event: CommissionReport
-    if let Some(PlaceOrder::CommissionReport(report)) = notifications.next() {
+    if let Some(OrderUpdate::CommissionReport(report)) = notifications.next() {
         assert_eq!(report.execution_id, "00025b46.63f8f39c.01.01", "report.execution_id");
         assert_eq!(report.commission, 1.0, "report.commission");
         assert_eq!(report.currency, "USD", "report.currency");

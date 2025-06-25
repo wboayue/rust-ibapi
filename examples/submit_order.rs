@@ -32,13 +32,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(stream) => {
                 for update in stream {
                     match update {
-                        PlaceOrder::OrderStatus(status) => {
+                        OrderUpdate::OrderStatus(status) => {
                             println!(
                                 "[Monitor] Order {} Status: {} - Filled: {}/{}",
                                 status.order_id, status.status, status.filled, status.remaining
                             );
                         }
-                        PlaceOrder::OpenOrder(open_order) => {
+                        OrderUpdate::OpenOrder(open_order) => {
                             println!(
                                 "[Monitor] Open Order {}: {} {} shares of {} @ {}",
                                 open_order.order_id,
@@ -48,16 +48,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 open_order.order.order_type
                             );
                         }
-                        PlaceOrder::ExecutionData(execution) => {
+                        OrderUpdate::ExecutionData(execution) => {
                             println!(
                                 "[Monitor] Execution: {} {} shares @ {} on {}",
                                 execution.execution.side, execution.execution.shares, execution.execution.price, execution.execution.exchange
                             );
                         }
-                        PlaceOrder::CommissionReport(report) => {
+                        OrderUpdate::CommissionReport(report) => {
                             println!("[Monitor] Commission: ${} for execution {}", report.commission, report.execution_id);
                         }
-                        PlaceOrder::Message(message) => {
+                        OrderUpdate::Message(message) => {
                             println!("[Monitor] Message: {}", message.message);
                         }
                     }

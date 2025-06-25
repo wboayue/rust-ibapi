@@ -24,7 +24,7 @@ use crate::market_data::MarketDataType;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::news::NewsArticle;
-use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, Orders, PlaceOrder};
+use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, OrderUpdate, Orders, PlaceOrder};
 use crate::scanner::ScannerData;
 use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus, TcpSocket};
 use crate::wsh::AutoFill;
@@ -758,12 +758,12 @@ impl Client {
     ///
     /// // Monitor all order updates via the order update stream
     /// // This will receive updates for ALL orders, not just this one
-    /// use ibapi::orders::PlaceOrder;
+    /// use ibapi::orders::OrderUpdate;
     /// for event in client.order_update_stream()? {
     ///     match event {
-    ///         PlaceOrder::OrderStatus(status) => println!("Order Status: {status:?}"),
-    ///         PlaceOrder::ExecutionData(exec) => println!("Execution: {exec:?}"),
-    ///         PlaceOrder::CommissionReport(report) => println!("Commission: {report:?}"),
+    ///         OrderUpdate::OrderStatus(status) => println!("Order Status: {status:?}"),
+    ///         OrderUpdate::ExecutionData(exec) => println!("Execution: {exec:?}"),
+    ///         OrderUpdate::CommissionReport(report) => println!("Commission: {report:?}"),
     ///         _ => {}
     ///     }
     /// }
@@ -789,7 +789,7 @@ impl Client {
     ///
     /// # Returns
     ///
-    /// Returns a `Subscription<PlaceOrder>` that yields `PlaceOrder` enum variants containing:
+    /// Returns a `Subscription<OrderUpdate>` that yields `OrderUpdate` enum variants containing:
     /// - `OrderStatus`: Current status of an order (filled amount, average price, etc.)
     /// - `OpenOrder`: Complete order details including contract and order parameters
     /// - `ExecutionData`: Details about individual trade executions
@@ -805,7 +805,7 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::Client;
-    /// use ibapi::orders::PlaceOrder;
+    /// use ibapi::orders::OrderUpdate;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -815,29 +815,29 @@ impl Client {
     /// // Process order updates
     /// for update in updates {
     ///     match update {
-    ///         PlaceOrder::OrderStatus(status) => {
+    ///         OrderUpdate::OrderStatus(status) => {
     ///             println!("Order {} status: {} - filled: {}/{}",
     ///                 status.order_id, status.status, status.filled, status.remaining);
     ///         },
-    ///         PlaceOrder::OpenOrder(order_data) => {
+    ///         OrderUpdate::OpenOrder(order_data) => {
     ///             println!("Open order {}: {} {} @ {}",
     ///                 order_data.order.order_id,
     ///                 order_data.order.action,
     ///                 order_data.order.total_quantity,
     ///                 order_data.order.limit_price.unwrap_or(0.0));
     ///         },
-    ///         PlaceOrder::ExecutionData(exec) => {
+    ///         OrderUpdate::ExecutionData(exec) => {
     ///             println!("Execution: {} {} @ {} on {}",
     ///                 exec.execution.side,
     ///                 exec.execution.shares,
     ///                 exec.execution.price,
     ///                 exec.execution.exchange);
     ///         },
-    ///         PlaceOrder::CommissionReport(report) => {
+    ///         OrderUpdate::CommissionReport(report) => {
     ///             println!("Commission: ${} for execution {}",
     ///                 report.commission, report.execution_id);
     ///         },
-    ///         PlaceOrder::Message(notice) => {
+    ///         OrderUpdate::Message(notice) => {
     ///             println!("Order message: {}", notice.message);
     ///         }
     ///     }
@@ -848,7 +848,7 @@ impl Client {
     ///
     /// This stream provides updates for all orders, not just a specific order.
     /// To track a specific order, filter the updates by order ID.
-    pub fn order_update_stream(&self) -> Result<Subscription<PlaceOrder>, Error> {
+    pub fn order_update_stream(&self) -> Result<Subscription<OrderUpdate>, Error> {
         orders::order_update_stream(self)
     }
 
