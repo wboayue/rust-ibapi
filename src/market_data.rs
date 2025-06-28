@@ -9,7 +9,7 @@ use crate::{messages::OutgoingMessages, server_versions, Client, Error};
 pub mod historical;
 pub mod realtime;
 
-/// By default only Realtime market data is enabled sending.
+/// By default, only real-time market data sending is enabled.
 #[derive(Debug, Clone, Copy)]
 pub enum MarketDataType {
     /// Disables frozen, delayed and delayed-frozen market data sending.

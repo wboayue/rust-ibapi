@@ -1,33 +1,58 @@
 #![allow(dead_code)]
-//! The known server versions.
+//! Server version constants for TWS API feature compatibility.
+//!
+//! These constants represent the minimum server version required for specific features.
+//! They are used internally to check if a feature is supported by the connected TWS/Gateway
+//! before sending requests that depend on that feature.
 
 // shouldn't these all be deprecated?
 // pub const HISTORICAL_DATA: i32 = 24;
 // pub const CURRENT_TIME: i32 = 33;
+/// Minimum server version for real-time bars functionality.
 pub const REAL_TIME_BARS: i32 = 34;
+/// Minimum server version for scale orders.
 pub const SCALE_ORDERS: i32 = 35;
+/// Minimum server version for snapshot market data.
 pub const SNAPSHOT_MKT_DATA: i32 = 35;
+/// Minimum server version for short sale combo legs.
 pub const SSHORT_COMBO_LEGS: i32 = 35;
+/// Minimum server version for what-if orders.
 pub const WHAT_IF_ORDERS: i32 = 36;
+/// Minimum server version for contract ID support.
 pub const CONTRACT_CONID: i32 = 37;
 
+/// Minimum server version for PTA (Principal Trading Adviser) orders.
 pub const PTA_ORDERS: i32 = 39;
+/// Minimum server version for fundamental data requests.
 pub const FUNDAMENTAL_DATA: i32 = 40;
+/// Minimum server version for delta neutral contracts.
 pub const DELTA_NEUTRAL: i32 = 40;
+/// Minimum server version for contract data chain.
 pub const CONTRACT_DATA_CHAIN: i32 = 40;
+/// Minimum server version for scale orders v2.
 pub const SCALE_ORDERS2: i32 = 40;
+/// Minimum server version for algorithmic orders.
 pub const ALGO_ORDERS: i32 = 41;
+/// Minimum server version for execution data chain.
 pub const EXECUTION_DATA_CHAIN: i32 = 42;
+/// Minimum server version for not-held orders.
 pub const NOT_HELD: i32 = 44;
+/// Minimum server version for security ID type.
 pub const SEC_ID_TYPE: i32 = 45;
+/// Minimum server version for placing orders with contract ID.
 pub const PLACE_ORDER_CONID: i32 = 46;
+/// Minimum server version for requesting market data with contract ID.
 pub const REQ_MKT_DATA_CONID: i32 = 47;
+/// Minimum server version for requesting implied volatility calculations.
 pub const REQ_CALC_IMPLIED_VOLAT: i32 = 49;
+/// Minimum server version for requesting option price calculations.
 pub const REQ_CALC_OPTION_PRICE: i32 = 50;
 pub const SSHORTX_OLD: i32 = 51;
 pub const SSHORTX: i32 = 52;
+/// Minimum server version for global cancel requests.
 pub const REQ_GLOBAL_CANCEL: i32 = 53;
 pub const HEDGE_ORDERS: i32 = 54;
+/// Minimum server version for market data type requests.
 pub const REQ_MARKET_DATA_TYPE: i32 = 55;
 pub const OPT_OUT_SMART_ROUTING: i32 = 56;
 pub const SMART_COMBO_ROUTING_PARAMS: i32 = 57;
@@ -36,10 +61,14 @@ pub const SCALE_ORDERS3: i32 = 60;
 pub const ORDER_COMBO_LEGS_PRICE: i32 = 61;
 pub const TRAILING_PERCENT: i32 = 62;
 pub const DELTA_NEUTRAL_OPEN_CLOSE: i32 = 66;
+/// Minimum server version for position requests.
 pub const POSITIONS: i32 = 67;
+/// Minimum server version for account summary requests.
 pub const ACCOUNT_SUMMARY: i32 = 67;
+/// Minimum server version for trading class support.
 pub const TRADING_CLASS: i32 = 68;
 pub const SCALE_TABLE: i32 = 69;
+/// Minimum server version for order linking.
 pub const LINKING: i32 = 70;
 pub const ALGO_ID: i32 = 71;
 pub const OPTIONAL_CAPABILITIES: i32 = 72;
@@ -73,13 +102,16 @@ pub const CANCEL_HEADTIMESTAMP: i32 = 123;
 pub const SYNT_REALTIME_BARS: i32 = 124;
 pub const CFD_REROUTE: i32 = 125;
 pub const MARKET_RULES: i32 = 126;
+/// Minimum server version for profit and loss (PnL) requests.
 pub const PNL: i32 = 127;
 pub const NEWS_QUERY_ORIGINS: i32 = 128;
+/// Minimum server version for unrealized PnL data.
 pub const UNREALIZED_PNL: i32 = 129;
 pub const HISTORICAL_TICKS: i32 = 130;
 pub const MARKET_CAP_PRICE: i32 = 131;
 pub const PRE_OPEN_BID_ASK: i32 = 132;
 pub const REAL_EXPIRATION_DATE: i32 = 134;
+/// Minimum server version for realized PnL data.
 pub const REALIZED_PNL: i32 = 135;
 pub const LAST_LIQUIDITY: i32 = 136;
 pub const TICK_BY_TICK: i32 = 137;
@@ -109,6 +141,7 @@ pub const POST_TO_ATS: i32 = 160;
 pub const WSHE_CALENDAR: i32 = 161;
 pub const AUTO_CANCEL_PARENT: i32 = 162;
 pub const FRACTIONAL_SIZE_SUPPORT: i32 = 163;
+/// Minimum server version for size rules support.
 pub const SIZE_RULES: i32 = 164;
 pub const HISTORICAL_SCHEDULE: i32 = 165;
 pub const ADVANCED_ORDER_REJECT: i32 = 166;

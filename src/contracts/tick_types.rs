@@ -1,31 +1,62 @@
+/// Market data tick types available from the TWS API.
+///
+/// These represent different types of market data that can be requested
+/// and received from Interactive Brokers. Each tick type corresponds to
+/// a specific piece of market information like bid, ask, last trade, volume, etc.
 #[derive(Debug, PartialEq, Default)]
 pub enum TickType {
+    /// Unknown or invalid tick type.
     #[default]
     Unknown = -1,
+    /// Number of contracts or shares offered at the bid price.
     BidSize = 0,
+    /// Highest price a buyer is willing to pay.
     Bid = 1,
+    /// Lowest price a seller is willing to accept.
     Ask = 2,
+    /// Number of contracts or shares offered at the ask price.
     AskSize = 3,
+    /// Price of the last trade.
     Last = 4,
+    /// Number of contracts or shares traded in the last trade.
     LastSize = 5,
+    /// Highest price of the day.
     High = 6,
+    /// Lowest price of the day.
     Low = 7,
+    /// Total trading volume for the day.
     Volume = 8,
+    /// Previous day's closing price.
     Close = 9,
+    /// Bid price for options.
     BidOption = 10,
+    /// Ask price for options.
     AskOption = 11,
+    /// Last traded price for options.
     LastOption = 12,
+    /// Model-based option price.
     ModelOption = 13,
+    /// Opening price of the day.
     Open = 14,
+    /// Lowest price in the last 13 weeks.
     Low13Week = 15,
+    /// Highest price in the last 13 weeks.
     High13Week = 16,
+    /// Lowest price in the last 26 weeks.
     Low26Week = 17,
+    /// Highest price in the last 26 weeks.
     High26Week = 18,
+    /// Lowest price in the last 52 weeks.
     Low52Week = 19,
+    /// Highest price in the last 52 weeks.
     High52Week = 20,
+    /// Average daily trading volume.
     AvgVolume = 21,
+    /// Total number of outstanding contracts.
     OpenInterest = 22,
+    /// Historical volatility for options.
     OptionHistoricalVol = 23,
+    /// Implied volatility for options.
     OptionImpliedVol = 24,
     OptionBidExch = 25,
     OptionAskExch = 26,
@@ -39,6 +70,7 @@ pub enum TickType {
     AuctionVolume = 34,
     AuctionPrice = 35,
     AuctionImbalance = 36,
+    /// Mark price (used for margining in futures).
     MarkPrice = 37,
     BidEfpComputation = 38,
     AskEfpComputation = 39,
@@ -48,9 +80,11 @@ pub enum TickType {
     LowEfpComputation = 43,
     CloseEfpComputation = 44,
     LastTimestamp = 45,
+    /// Number of shares available for shorting.
     Shortable = 46,
     FundamentalRatios = 47,
     RtVolume = 48,
+    /// Indicates if trading is halted (0 = not halted, 1 = halted).
     Halted = 49,
     BidYield = 50,
     AskYield = 51,

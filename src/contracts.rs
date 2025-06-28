@@ -177,8 +177,20 @@ pub struct Contract {
 }
 
 impl Contract {
-    /// Creates stock contract from specified symbol
-    /// currency defaults to USD and SMART exchange.
+    /// Creates a stock contract from the specified symbol.
+    ///
+    /// Currency defaults to USD and exchange defaults to SMART.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let aapl = Contract::stock("AAPL");
+    /// assert_eq!(aapl.symbol, "AAPL");
+    /// assert_eq!(aapl.currency, "USD");
+    /// assert_eq!(aapl.exchange, "SMART");
+    /// ```
     pub fn stock(symbol: &str) -> Contract {
         Contract {
             symbol: symbol.to_string(),
@@ -189,7 +201,19 @@ impl Contract {
         }
     }
 
-    /// Creates futures contract from specified symbol
+    /// Creates a futures contract from the specified symbol.
+    ///
+    /// Currency defaults to USD.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let es = Contract::futures("ES");
+    /// assert_eq!(es.symbol, "ES");
+    /// assert_eq!(es.currency, "USD");
+    /// ```
     pub fn futures(symbol: &str) -> Contract {
         Contract {
             symbol: symbol.to_string(),
@@ -199,7 +223,20 @@ impl Contract {
         }
     }
 
-    /// Creates Crypto contract from specified symbol
+    /// Creates a cryptocurrency contract from the specified symbol.
+    ///
+    /// Currency defaults to USD and exchange defaults to PAXOS.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let btc = Contract::crypto("BTC");
+    /// assert_eq!(btc.symbol, "BTC");
+    /// assert_eq!(btc.currency, "USD");
+    /// assert_eq!(btc.exchange, "PAXOS");
+    /// ```
     pub fn crypto(symbol: &str) -> Contract {
         Contract {
             symbol: symbol.to_string(),
@@ -210,7 +247,17 @@ impl Contract {
         }
     }
 
-    /// Creates News contract from specified provider code.
+    /// Creates a news contract from the specified provider code.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let news = Contract::news("BRFG");
+    /// assert_eq!(news.symbol, "BRFG:BRFG_ALL");
+    /// assert_eq!(news.exchange, "BRFG");
+    /// ```
     pub fn news(provider_code: &str) -> Contract {
         Contract {
             symbol: format!("{}:{}_ALL", provider_code, provider_code),
@@ -220,14 +267,26 @@ impl Contract {
         }
     }
 
-    /// Creates option contract from specified symbol, expiry date, strike price and option type.
-    /// Defaults currency to USD and exchange to SMART.
+    /// Creates an option contract from the specified parameters.
+    ///
+    /// Currency defaults to USD and exchange defaults to SMART.
     ///
     /// # Arguments
-    /// * `symbol` - Symbols of the underlying asset.
+    /// * `symbol` - Symbol of the underlying asset
     /// * `expiration_date` - Expiration date of option contract (YYYYMMDD)
-    /// * `strike` - Strike price of the option contract.
+    /// * `strike` - Strike price of the option contract
     /// * `right` - Option type: "C" for Call, "P" for Put
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let call = Contract::option("AAPL", "20240119", 150.0, "C");
+    /// assert_eq!(call.symbol, "AAPL");
+    /// assert_eq!(call.strike, 150.0);
+    /// assert_eq!(call.right, "C");
+    /// ```
     pub fn option(symbol: &str, expiration_date: &str, strike: f64, right: &str) -> Contract {
         Contract {
             symbol: symbol.into(),
@@ -241,7 +300,7 @@ impl Contract {
         }
     }
 
-    /// Is Bag request
+    /// Returns true if this contract represents a bag/combo order.
     pub fn is_bag(&self) -> bool {
         self.security_type == SecurityType::Spread
     }
