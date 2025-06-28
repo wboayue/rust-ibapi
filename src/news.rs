@@ -51,7 +51,12 @@ impl SharesChannel for Vec<NewsProvider> {}
 pub struct NewsBulletin {
     /// The unique identifier of the news bulletin.
     pub message_id: i32,
-    /// The type of the news bulletin. One of: 1 - Regular news bulletin 2 - Exchange no longer available for trading 3 - Exchange is available for trading.
+    /// The type of the news bulletin.
+    ///
+    /// Valid values are:
+    /// - `1` - Regular news bulletin
+    /// - `2` - Exchange no longer available for trading
+    /// - `3` - Exchange is available for trading
     pub message_type: i32,
     /// The text of the news bulletin.
     pub message: String,
