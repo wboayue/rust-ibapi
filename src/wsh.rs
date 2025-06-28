@@ -80,6 +80,11 @@ impl DataStream<WshEventData> for WshEventData {
     }
 }
 
+/// Configuration for automatic filling of Wall Street Horizon event data.
+///
+/// This struct controls which types of securities should be automatically
+/// included when requesting WSH event data. When enabled, the API will
+/// include related securities based on the specified criteria.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct AutoFill {
     /// Automatically fill in competitor values of existing positions.
@@ -91,6 +96,7 @@ pub struct AutoFill {
 }
 
 impl AutoFill {
+    /// Returns true if any auto-fill option is enabled.
     pub fn is_specified(&self) -> bool {
         self.competitors || self.portfolio || self.watchlist
     }

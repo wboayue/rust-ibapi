@@ -1,6 +1,4 @@
-use ibapi::contracts::Contract;
-use ibapi::market_data::realtime::{BarSize, WhatToShow};
-use ibapi::Client;
+use ibapi::prelude::*;
 
 fn main() {
     let connection_url = "127.0.0.1:4002";
@@ -11,14 +9,14 @@ fn main() {
     let contract_nvda = Contract::stock("NVDA");
 
     let subscription_aapl = client
-        .realtime_bars(&contract_aapl, BarSize::Sec5, WhatToShow::Trades, false)
+        .realtime_bars(&contract_aapl, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
         .expect("realtime bars request failed!");
     let subscription_nvda = client
-        .realtime_bars(&contract_nvda, BarSize::Sec5, WhatToShow::Trades, false)
+        .realtime_bars(&contract_nvda, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
         .expect("realtime bars request failed!");
 
     for (bar_aapl, bar_nvda) in subscription_aapl.iter().zip(subscription_nvda.iter()) {
         // Process each bar here (e.g., print or use in calculations)
-        println!("AAPL {}, NVDA {}", bar_nvda.close, bar_aapl.close);
+        println!("AAPL {}, NVDA {}", bar_aapl.close, bar_nvda.close);
     }
 }

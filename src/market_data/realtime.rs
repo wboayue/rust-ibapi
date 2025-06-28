@@ -18,9 +18,13 @@ mod tests;
 
 // === Models ===
 
+/// Bar size for real-time bars.
+///
+/// Note: Currently only 5-second bars are supported for real-time data.
 #[derive(Clone, Debug, Copy, Serialize, Deserialize, PartialEq)]
 pub enum BarSize {
     // Sec,
+    /// 5-second bars.
     Sec5,
     // Sec15,
     // Sec30,
@@ -68,9 +72,12 @@ impl DataStream<BidAsk> for BidAsk {
     }
 }
 
+/// Attributes for bid/ask tick data.
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct BidAskAttribute {
+    /// Indicates if the bid price is past the daily low.
     pub bid_past_low: bool,
+    /// Indicates if the ask price is past the daily high.
     pub ask_past_high: bool,
 }
 
@@ -170,17 +177,25 @@ impl DataStream<Trade> for Trade {
     }
 }
 
+/// Attributes for trade tick data.
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct TradeAttribute {
+    /// Indicates if the trade occurred past the limit price.
     pub past_limit: bool,
+    /// Indicates if the trade was unreported.
     pub unreported: bool,
 }
 
+/// Specifies the type of data to show for real-time bars.
 #[derive(Clone, Debug, Copy)]
 pub enum WhatToShow {
+    /// Trade data.
     Trades,
+    /// Midpoint between bid and ask.
     MidPoint,
+    /// Bid prices.
     Bid,
+    /// Ask prices.
     Ask,
 }
 
@@ -201,6 +216,7 @@ impl ToField for WhatToShow {
     }
 }
 
+/// Market depth data types.
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum MarketDepths {
     MarketDepth(MarketDepth),
@@ -285,6 +301,7 @@ pub struct DepthMarketDataDescription {
     pub aggregated_group: Option<String>,
 }
 
+/// Various types of market data ticks.
 #[derive(Debug)]
 pub enum TickTypes {
     Price(TickPrice),
@@ -340,63 +357,99 @@ impl DataStream<TickTypes> for TickTypes {
     }
 }
 
+/// Price tick data.
 #[derive(Debug, Default)]
 pub struct TickPrice {
+    /// Type of price tick (bid, ask, last, etc.).
     pub tick_type: TickType,
+    /// The price value.
     pub price: f64,
+    /// Additional attributes for the price tick.
     pub attributes: TickAttribute,
 }
 
+/// Attributes associated with price ticks.
 #[derive(Debug, PartialEq, Default)]
 pub struct TickAttribute {
+    /// Indicates if the order can be automatically executed.
     pub can_auto_execute: bool,
+    /// Indicates if the price is past the limit.
     pub past_limit: bool,
+    /// Indicates if this is a pre-market opening price.
     pub pre_open: bool,
 }
 
+/// Size tick data.
 #[derive(Debug, Default)]
 pub struct TickSize {
+    /// Type of size tick (bid size, ask size, etc.).
     pub tick_type: TickType,
+    /// The size value.
     pub size: f64,
 }
 
+/// Combined price and size tick data.
 #[derive(Debug, Default)]
 pub struct TickPriceSize {
+    /// Type of price tick.
     pub price_tick_type: TickType,
+    /// The price value.
     pub price: f64,
+    /// Price tick attributes.
     pub attributes: TickAttribute,
+    /// Type of size tick.
     pub size_tick_type: TickType,
+    /// The size value.
     pub size: f64,
 }
 
+/// String-based tick data.
 #[derive(Debug, Default)]
 pub struct TickString {
+    /// Type of string tick.
     pub tick_type: TickType,
+    /// The string value.
     pub value: String,
 }
 
+/// Exchange for Physical (EFP) tick data.
 #[derive(Debug, Default)]
 pub struct TickEFP {
+    /// Type of EFP tick.
     pub tick_type: TickType,
+    /// EFP basis points.
     pub basis_points: f64,
+    /// Formatted basis points string.
     pub formatted_basis_points: String,
+    /// Implied futures price.
     pub implied_futures_price: f64,
+    /// Number of hold days.
     pub hold_days: i32,
+    /// Future's last trade date.
     pub future_last_trade_date: String,
+    /// Dividend impact on the EFP.
     pub dividend_impact: f64,
+    /// Dividends to last trade date.
     pub dividends_to_last_trade_date: f64,
 }
 
+/// Generic tick data.
 #[derive(Debug, Default)]
 pub struct TickGeneric {
+    /// Type of generic tick.
     pub tick_type: TickType,
+    /// The numeric value.
     pub value: f64,
 }
 
+/// Parameters related to tick data requests.
 #[derive(Debug, Default)]
 pub struct TickRequestParameters {
+    /// Minimum tick increment.
     pub min_tick: f64,
+    /// Best Bid/Offer exchange.
     pub bbo_exchange: String,
+    /// Snapshot permissions code.
     pub snapshot_permissions: i32,
 }
 

@@ -37,7 +37,7 @@ mod tests;
 
 /// TWS API Client. Manages the connection to TWS or Gateway.
 /// Tracks some global information such as server version and server time.
-/// Supports generation of order ids
+/// Supports generation of order ids.
 pub struct Client {
     /// IB server version
     pub(crate) server_version: i32,

@@ -1,5 +1,5 @@
 /// Example of connecting to TWS.
-use ibapi::Client;
+use ibapi::prelude::*;
 
 fn main() {
     env_logger::init();

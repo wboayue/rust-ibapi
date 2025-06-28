@@ -62,26 +62,39 @@ pub struct Order {
     pub aux_price: Option<f64>,
     /// The time in force.
     /// Valid values are:
-    /// DAY - Valid for the day only.
-    /// GTC - Good until canceled. The order will continue to work within the system and in the marketplace until it executes or is canceled. GTC orders will be automatically be cancelled under the following conditions:
-    /// If a corporate action on a security results in a stock split (forward or reverse), exchange for shares, or distribution of shares. If you do not log into your IB account for 90 days.
-    /// At the end of the calendar quarter following the current quarter. For example, an order placed during the third quarter of 2011 will be canceled at the end of the first quarter of 2012. If the last day is a non-trading day, the cancellation will occur at the close of the final trading day of that quarter. For example, if the last day of the quarter is Sunday, the orders will be cancelled on the preceding Friday.
-    /// Orders that are modified will be assigned a new “Auto Expire” date consistent with the end of the calendar quarter following the current quarter.
-    /// Orders submitted to IB that remain in force for more than one day will not be reduced for dividends. To allow adjustment to your order price on ex-dividend date, consider using a Good-Til-Date/Time (GTD) or Good-after-Time/Date (GAT) order type, or a combination of the two.
-    /// IOC - Immediate or Cancel. Any portion that is not filled as soon as it becomes available in the market is canceled.
-    /// GTD - Good until Date. It will remain working within the system and in the marketplace until it executes or until the close of the market on the date specified
-    /// OPG - Use OPG to send a market-on-open (MOO) or limit-on-open (LOO) order.
-    /// FOK - If the entire Fill-or-Kill order does not execute as soon as it becomes available, the entire order is canceled.
-    /// DTC - Day until Canceled.
+    /// - `DAY` - Valid for the day only.
+    /// - `GTC` - Good until canceled. The order will continue to work within the system and in the marketplace
+    ///   until it executes or is canceled. GTC orders will be automatically cancelled under the following conditions:
+    ///   - If a corporate action on a security results in a stock split (forward or reverse), exchange for shares,
+    ///     or distribution of shares.
+    ///   - If you do not log into your IB account for 90 days.
+    ///   - At the end of the calendar quarter following the current quarter. For example, an order placed during
+    ///     the third quarter of 2011 will be canceled at the end of the first quarter of 2012. If the last day
+    ///     is a non-trading day, the cancellation will occur at the close of the final trading day of that quarter.
+    ///   - Orders that are modified will be assigned a new “Auto Expire” date consistent with the end of the calendar quarter following the current quarter.
+    ///   - Orders submitted to IB that remain in force for more than one day will not be reduced for dividends.
+    ///     To allow adjustment to your order price on ex-dividend date, consider using a Good-Til-Date/Time (GTD)
+    ///     or Good-after-Time/Date (GAT) order type, or a combination of the two.
+    /// - `IOC` - Immediate or Cancel. Any portion that is not filled as soon as it becomes available in the
+    ///   market is canceled.
+    /// - `GTD` - Good until Date. It will remain working within the system and in the marketplace until it
+    ///   executes or until the close of the market on the date specified.
+    /// - `OPG` - Use OPG to send a market-on-open (MOO) or limit-on-open (LOO) order.
+    /// - `FOK` - If the entire Fill-or-Kill order does not execute as soon as it becomes available, the entire
+    ///   order is canceled.
+    /// - `DTC` - Day until Canceled.
     pub tif: String, // FIXME create enum
     /// One-Cancels-All group identifier.
     pub oca_group: String,
     /// Tells how to handle remaining orders in an OCA group when one order or part of an order executes.
+    ///
     /// Valid values are:
-    /// 1 - Cancel all remaining orders with block.
-    /// 2 - Remaining orders are proportionately reduced in size with block.
-    /// 3 - Remaining orders are proportionately reduced in size with no block.
-    /// If you use a value "with block" it gives the order overfill protection. This means that only one order in the group will be routed at a time to remove the possibility of an overfill.
+    /// - `1` - Cancel all remaining orders with block.
+    /// - `2` - Remaining orders are proportionately reduced in size with block.
+    /// - `3` - Remaining orders are proportionately reduced in size with no block.
+    ///
+    /// If you use a value "with block" it gives the order overfill protection. This means that only one order
+    /// in the group will be routed at a time to remove the possibility of an overfill.
     pub oca_type: i32,
     /// The order reference.
     /// Intended for institutional customers only, although all customers may use it to identify the API client that sent the order when multiple API clients are running.
@@ -97,14 +110,16 @@ pub struct Order {
     /// The publicly disclosed order size, used when placing Iceberg orders.
     pub display_size: Option<i32>,
     /// Specifies how Simulated Stop, Stop-Limit and Trailing Stop orders are triggered.
+    ///
     /// Valid values are:
-    /// 0 - The default value. The "double bid/ask" function will be used for orders for OTC stocks and US options. All other orders will used the "last" function.
-    /// 1 - use "double bid/ask" function, where stop orders are triggered based on two consecutive bid or ask prices.
-    /// 2 - "last" function, where stop orders are triggered based on the last price.
-    /// 3 - double last function.
-    /// 4 - bid/ask function.
-    /// 7 - last or bid/ask function.
-    /// 8 - mid-point function.    
+    /// - `0` - The default value. The "double bid/ask" function will be used for orders for OTC stocks and US options.
+    ///   All other orders will used the "last" function.
+    /// - `1` - Use "double bid/ask" function, where stop orders are triggered based on two consecutive bid or ask prices.
+    /// - `2` - "last" function, where stop orders are triggered based on the last price.
+    /// - `3` - Double last function.
+    /// - `4` - Bid/ask function.
+    /// - `7` - Last or bid/ask function.
+    /// - `8` - Mid-point function.    
     pub trigger_method: i32,
     /// If set to true, allows orders to also trigger or fill outside of regular trading hours.
     pub outside_rth: bool,
@@ -117,9 +132,18 @@ pub struct Order {
     /// You must enter GTD as the time in force to use this string. The trade's "Good Till Date," format "yyyyMMdd HH:mm:ss (optional time zone)" or UTC "yyyyMMdd-HH:mm:ss".
     pub good_till_date: String,
     /// Overrides TWS constraints.
-    /// Precautionary constraints are defined on the TWS Presets page, and help ensure tha tyour price and size order values are reasonable. Orders sent from the API are also validated against these safety constraints, and may be rejected if any constraint is violated. To override validation, set this parameter’s value to True.
+    /// Precautionary constraints are defined on the TWS Presets page, and help ensure that your price and size order values are reasonable. Orders sent from the API are also validated against these safety constraints, and may be rejected if any constraint is violated. To override validation, set this parameter’s value to True.
     pub override_percentage_constraints: bool,
-    /// Individual = 'I', Agency = 'A', AgentOtherMember = 'W', IndividualPTIA = 'J', AgencyPTIA = 'U', AgentOtherMemberPTIA = 'M', IndividualPT = 'K', AgencyPT = 'Y', AgentOtherMemberPT = 'N'
+    /// NYSE Rule 80A designation values:
+    /// - Individual = `I`
+    /// - Agency = `A`
+    /// - AgentOtherMember = `W`
+    /// - IndividualPTIA = `J`
+    /// - AgencyPTIA = `U`
+    /// - AgentOtherMemberPTIA = `M`
+    /// - IndividualPT = `K`
+    /// - AgencyPT = `Y`
+    /// - AgentOtherMemberPT = `N`
     pub rule_80_a: Option<Rule80A>,
     /// Indicates whether or not all the order has to be filled on a single execution.
     pub all_or_none: bool,
@@ -130,11 +154,14 @@ pub struct Order {
     /// Trail stop price for TRAIL LIMIT orders.
     pub trail_stop_price: Option<f64>,
     /// Specifies the trailing amount of a trailing stop order as a percentage.
-    /// Observe the following guidelines when using the trailingPercent field:
     ///
-    /// This field is mutually exclusive with the existing trailing amount. That is, the API client can send one or the other but not both.
-    /// This field is read AFTER the stop price (barrier price) as follows: deltaNeutralAuxPrice stopPrice, trailingPercent, scale order attributes
-    /// The field will also be sent to the API in the openOrder message if the API client version is >= 56. It is sent after the stopPrice field as follows: stopPrice, trailingPct, basisPoint.    
+    /// Observe the following guidelines when using the trailingPercent field:
+    /// - This field is mutually exclusive with the existing trailing amount. That is, the API client can send one
+    ///   or the other but not both.
+    /// - This field is read AFTER the stop price (barrier price) as follows: deltaNeutralAuxPrice stopPrice,
+    ///   trailingPercent, scale order attributes.
+    /// - The field will also be sent to the API in the openOrder message if the API client version is >= 56.
+    ///   It is sent after the stopPrice field as follows: stopPrice, trailingPct, basisPoint.    
     pub trailing_percent: Option<f64>,
     /// The Financial Advisor group the trade will be allocated to. Use an empty string if not applicable.
     pub fa_group: String,
@@ -145,19 +172,22 @@ pub struct Order {
     /// The Financial Advisor percentage concerning the trade's allocation. Use an empty string if not applicable.
     pub fa_percentage: String,
     /// For institutional customers only. Valid values are O (open) and C (close).
+    ///
     /// Available for institutional clients to determine if this order is to open or close a position.
-    /// When Action = "BUY" and OpenClose = "O" this will open a new position.
-    /// When Action = "BUY" and OpenClose = "C" this will close and existing short position.    
+    /// - When Action = "BUY" and OpenClose = "O" this will open a new position.
+    /// - When Action = "BUY" and OpenClose = "C" this will close an existing short position.    
     pub open_close: Option<OrderOpenClose>,
     /// The order's origin. Same as TWS "Origin" column. Identifies the type of customer from which the order originated.
+    ///
     /// Valid values are:
-    /// 0 - Customer
-    /// 1 - Firm.
+    /// - `0` - Customer
+    /// - `1` - Firm
     pub origin: i32,
     /// For institutions only.
+    ///
     /// Valid values are:
-    /// 1 - Broker holds shares
-    /// 2 - Shares come from elsewhere.    
+    /// - `1` - Broker holds shares
+    /// - `2` - Shares come from elsewhere    
     pub short_sale_slot: i32,
     /// For institutions only. Indicates the location where the shares to short come from. Used only when short sale slot is set to 2 (which means that the shares to short are held elsewhere and not with IB).
     pub designated_location: String,
@@ -172,10 +202,11 @@ pub struct Order {
     /// When set to true, orders routed directly to ASX orders WILL use SmartRouting.
     pub opt_out_smart_routing: bool,
     /// For BOX orders only.
-    /// Values include:
-    /// 1 - Match
-    /// 2 - Improvement
-    /// 3 - Transparent.
+    ///
+    /// Valid values are:
+    /// - `1` - Match
+    /// - `2` - Improvement
+    /// - `3` - Transparent
     pub auction_strategy: Option<i32>, // FIXME enum
     /// The auction's starting price. For BOX orders only.
     pub starting_price: Option<f64>,
@@ -193,17 +224,18 @@ pub struct Order {
     /// The option price in volatility, as calculated by TWS' Option Analytics.
     /// This value is expressed as a percent and is used to calculate the limit price sent to the exchange.
     pub volatility: Option<f64>,
-    /// Values include:
-    /// 1 - Daily Volatility
-    /// 2 - Annual Volatility.
+    /// Valid values are:
+    /// - `1` - Daily Volatility
+    /// - `2` - Annual Volatility
     pub volatility_type: Option<i32>, // FIXM enum
     /// Specifies whether TWS will automatically update the limit price of the order as the underlying price moves. VOL orders only.
     pub continuous_update: bool,
     /// Specifies how you want TWS to calculate the limit price for options, and for stock range price monitoring.
     /// VOL orders only.
-    /// Valid values include:
-    /// 1 - Average of NBBO
-    /// 2 - NBB or the NBO depending on the action and right.
+    ///
+    /// Valid values are:
+    /// - `1` - Average of NBBO
+    /// - `2` - NBB or the NBO depending on the action and right
     pub reference_price_type: Option<i32>,
     /// Enter an order type to instruct TWS to submit a delta neutral trade on full or partial execution of the VOL order. VOL orders only. For no hedge delta order to be sent, specify NONE.
     pub delta_neutral_order_type: String,
@@ -216,8 +248,11 @@ pub struct Order {
     /// Specifies the beneficiary of the Delta Neutral order.
     pub delta_neutral_clearing_account: String,
     /// Specifies where the clients want their shares to be cleared at. Must be specified by execution-only clients.
+    ///
     /// Valid values are:
-    /// IB, Away, and PTA (post trade allocation).
+    /// - `IB`
+    /// - `Away`
+    /// - `PTA` (post trade allocation)
     pub delta_neutral_clearing_intent: String,
     /// Specifies whether the order is an Open or a Close order and is used when the hedge involves a CFD and and the order is clearing away.
     pub delta_neutral_open_close: String,
@@ -252,11 +287,12 @@ pub struct Order {
     /// Defines the random percent by which to adjust the position. For extended scale orders.
     pub scale_random_percent: bool,
     /// For hedge orders.
+    ///
     /// Possible values include:
-    /// D - Delta
-    /// B - Beta
-    /// F - FX
-    /// P - Pair
+    /// - `D` - Delta
+    /// - `B` - Beta
+    /// - `F` - FX
+    /// - `P` - Pair
     pub hedge_type: String,
     /// For hedge orders.
     /// Beta = x for Beta hedge orders, ratio = y for Pair hedge order
@@ -269,16 +305,21 @@ pub struct Order {
     /// For IBExecution customers. This value is required for FUT/FOP orders for reporting to the exchange.
     pub clearing_account: String,
     /// For execution-only clients to know where do they want their shares to be cleared at.
+    ///
     /// Valid values are:
-    /// IB, Away, and PTA (post trade allocation).
+    /// - `IB`
+    /// - `Away`
+    /// - `PTA` (post trade allocation)
     pub clearing_intent: String,
     /// The algorithm strategy.
+    ///
     /// As of API version 9.6, the following algorithms are supported:
-    /// ArrivalPx - Arrival Price
-    /// DarkIce - Dark Ice
-    /// PctVol - Percentage of Volume
-    /// Twap - TWAP (Time Weighted Average Price)
-    /// Vwap - VWAP (Volume Weighted Average Price)
+    /// - `ArrivalPx` - Arrival Price
+    /// - `DarkIce` - Dark Ice
+    /// - `PctVol` - Percentage of Volume
+    /// - `Twap` - TWAP (Time Weighted Average Price)
+    /// - `Vwap` - VWAP (Volume Weighted Average Price)
+    ///
     /// For more information about IB's API algorithms, refer to [https://www.interactivebrokers.com/en/software/api/apiguide/tables/ibalgo_parameters.htm](https://www.interactivebrokers.com/en/software/api/apiguide/tables/ibalgo_parameters.htm)
     pub algo_strategy: String,
     /// The list of parameters for the IB algorithm.
@@ -1014,15 +1055,15 @@ pub struct OrderStatus {
     /// The order's client id.
     pub order_id: i32,
     /// The current status of the order. Possible values:
-    ///     ApiPending - indicates order has not yet been sent to IB server, for instance if there is a delay in receiving the security definition. Uncommonly received.
-    ///     PendingSubmit - indicates that you have transmitted the order, but have not yet received confirmation that it has been accepted by the order destination.
-    ///     PendingCancel - indicates that you have sent a request to cancel the order but have not yet received cancel confirmation from the order destination. At this point, your order is not confirmed canceled. It is not guaranteed that the cancellation will be successful.
-    ///     PreSubmitted - indicates that a simulated order type has been accepted by the IB system and that this order has yet to be elected. The order is held in the IB system until the election criteria are met. At that time the order is transmitted to the order destination as specified .
-    ///     Submitted - indicates that your order has been accepted by the system.
-    ///     ApiCancelled - after an order has been submitted and before it has been acknowledged, an API client client can request its cancelation, producing this state.
-    ///     Cancelled - indicates that the balance of your order has been confirmed canceled by the IB system. This could occur unexpectedly when IB or the destination has rejected your order.
-    ///     Filled - indicates that the order has been completely filled. Market orders executions will not always trigger a Filled status.
-    ///     Inactive - indicates that the order was received by the system but is no longer active because it was rejected or canceled.    
+    /// * ApiPending - indicates order has not yet been sent to IB server, for instance if there is a delay in receiving the security definition. Uncommonly received.
+    /// * PendingSubmit - indicates that you have transmitted the order, but have not yet received confirmation that it has been accepted by the order destination.
+    /// * PendingCancel - indicates that you have sent a request to cancel the order but have not yet received cancel confirmation from the order destination. At this point, your order is not confirmed canceled. It is not guaranteed that the cancellation will be successful.
+    /// * PreSubmitted - indicates that a simulated order type has been accepted by the IB system and that this order has yet to be elected. The order is held in the IB system until the election criteria are met. At that time the order is transmitted to the order destination as specified .
+    /// * Submitted - indicates that your order has been accepted by the system.
+    /// * ApiCancelled - after an order has been submitted and before it has been acknowledged, an API client client can request its cancelation, producing this state.
+    /// * Cancelled - indicates that the balance of your order has been confirmed canceled by the IB system. This could occur unexpectedly when IB or the destination has rejected your order.
+    /// * Filled - indicates that the order has been completely filled. Market orders executions will not always trigger a Filled status.
+    /// * Inactive - indicates that the order was received by the system but is no longer active because it was rejected or canceled.
     pub status: String,
     /// Number of filled positions.
     pub filled: f64,
