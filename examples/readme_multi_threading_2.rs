@@ -1,8 +1,5 @@
 use std::thread;
-
-use ibapi::contracts::Contract;
-use ibapi::market_data::realtime::{BarSize, WhatToShow};
-use ibapi::Client;
+use ibapi::prelude::*;
 
 fn main() {
     env_logger::init();
@@ -17,7 +14,7 @@ fn main() {
 
             let contract = Contract::stock(symbol);
             let subscription = client
-                .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+                .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
                 .expect("realtime bars request failed!");
 
             for bar in subscription {
