@@ -45,9 +45,9 @@ pub struct Client {
     pub(crate) time_zone: Option<&'static Tz>,
     pub(crate) message_bus: Arc<dyn MessageBus>,
 
-    client_id: i32,                                             // ID of client.
-    next_request_id: AtomicI32,                                 // Next available request_id.
-    order_id: AtomicI32,                                        // Next available order_id. Starts with value returned on connection.
+    client_id: i32,             // ID of client.
+    next_request_id: AtomicI32, // Next available request_id.
+    order_id: AtomicI32,        // Next available order_id. Starts with value returned on connection.
 }
 
 impl Client {
