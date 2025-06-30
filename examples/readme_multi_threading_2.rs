@@ -1,5 +1,6 @@
-use ibapi::prelude::*;
 use std::thread;
+
+use ibapi::prelude::*;
 
 fn main() {
     env_logger::init();
