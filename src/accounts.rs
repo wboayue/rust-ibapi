@@ -22,6 +22,9 @@ mod encoders;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod test_single_summary;
+
 #[derive(Debug, Default, Serialize, Deserialize)]
 /// Account information as it appears in the TWS’ Account Summary Window
 pub struct AccountSummary {
@@ -473,11 +476,23 @@ pub(super) fn pnl_single<'a>(
 pub(super) fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support account summary requests.")?;
 
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_account_summary(request_id, group, tags)?;
-    let subscription = client.send_request(request_id, request)?;
+    // Check if there's already an active account_summary subscription
+    {
+        let mut active = client.active_account_summary.lock().unwrap();
+        if active.is_some() {
+            return Err(Error::Simple(
+                "Only one account_summary subscription is allowed at a time. Cancel the existing subscription before creating a new one.".to_string(),
+            ));
+        }
 
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+        let request_id = client.next_request_id();
+        *active = Some(request_id);
+
+        let request = encoders::encode_request_account_summary(request_id, group, tags)?;
+        let subscription = client.send_request(request_id, request)?;
+
+        Ok(Subscription::new(client, subscription, ResponseContext::default()))
+    }
 }
 
 pub(super) fn account_updates<'a>(client: &'a Client, account: &str) -> Result<Subscription<'a, AccountUpdate>, Error> {

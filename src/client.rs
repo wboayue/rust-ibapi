@@ -45,9 +45,10 @@ pub struct Client {
     pub(crate) time_zone: Option<&'static Tz>,
     pub(crate) message_bus: Arc<dyn MessageBus>,
 
-    client_id: i32,             // ID of client.
-    next_request_id: AtomicI32, // Next available request_id.
-    order_id: AtomicI32,        // Next available order_id. Starts with value returned on connection.
+    client_id: i32,                                             // ID of client.
+    next_request_id: AtomicI32,                                 // Next available request_id.
+    order_id: AtomicI32,                                        // Next available order_id. Starts with value returned on connection.
+    pub(crate) active_account_summary: Arc<Mutex<Option<i32>>>, // Track active account_summary subscription request_id
 }
 
 impl Client {
@@ -94,6 +95,7 @@ impl Client {
             client_id: connection_metadata.client_id,
             next_request_id: AtomicI32::new(9000),
             order_id: AtomicI32::new(connection_metadata.next_order_id),
+            active_account_summary: Arc::new(Mutex::new(None)),
         };
 
         Ok(client)
@@ -1897,6 +1899,7 @@ impl Client {
             client_id: 100,
             next_request_id: AtomicI32::new(9000),
             order_id: AtomicI32::new(-1),
+            active_account_summary: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -2261,11 +2264,13 @@ impl<'a, T: DataStream<T> + 'static> Subscription<'a, T> {
             return;
         }
 
-        if self.cancelled.load(Ordering::Relaxed) {
+        // Use compare_exchange to atomically check and set the cancelled flag
+        // This ensures that even if cancel() is called from multiple threads simultaneously,
+        // only one will proceed to send the cancel message
+        if self.cancelled.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+            // Already cancelled, nothing to do
             return;
         }
-
-        self.cancelled.store(true, Ordering::Relaxed);
 
         if let Some(request_id) = self.request_id {
             if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, &self.response_context) {
@@ -2273,6 +2278,15 @@ impl<'a, T: DataStream<T> + 'static> Subscription<'a, T> {
                     warn!("error cancelling subscription: {e}")
                 }
                 self.subscription.cancel();
+
+                // Clear active_account_summary if this is an AccountSummaries subscription
+                // We check if the cancel message is for CancelAccountSummary (message type 63)
+                if message.fields.get(0).map(|s| s.as_str()) == Some("63") {
+                    let mut active = self.client.active_account_summary.lock().unwrap();
+                    if *active == Some(request_id) {
+                        *active = None;
+                    }
+                }
             }
         } else if let Some(order_id) = self.order_id {
             if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, &self.response_context) {
