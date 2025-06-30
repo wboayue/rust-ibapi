@@ -2261,11 +2261,13 @@ impl<'a, T: DataStream<T> + 'static> Subscription<'a, T> {
             return;
         }
 
-        if self.cancelled.load(Ordering::Relaxed) {
+        // Use compare_exchange to atomically check and set the cancelled flag
+        // This ensures that even if cancel() is called from multiple threads simultaneously,
+        // only one will proceed to send the cancel message
+        if self.cancelled.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+            // Already cancelled, nothing to do
             return;
         }
-
-        self.cancelled.store(true, Ordering::Relaxed);
 
         if let Some(request_id) = self.request_id {
             if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, &self.response_context) {
