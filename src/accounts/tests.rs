@@ -170,7 +170,7 @@ fn test_account_summary() {
 
     assert_eq!(request_messages.len(), 2, "Expected subscribe and cancel messages for account_summary");
     assert_eq!(request_messages[0].encode_simple(), "62|1|9000|All|AccountType|");
-    assert_eq!(request_messages[1].encode_simple(), "63|1|"); // Verifying CancelAccountSummary
+    assert_eq!(request_messages[1].encode_simple(), "63|1|9000|"); // Verifying CancelAccountSummary
 }
 
 #[test]

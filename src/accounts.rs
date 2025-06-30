@@ -124,8 +124,12 @@ impl DataStream<AccountSummaries> for AccountSummaries {
         }
     }
 
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
-        encoders::encode_cancel_account_summary()
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
+        if let Some(request_id) = request_id {
+            encoders::encode_cancel_account_summary(request_id)
+        } else {
+            Err(Error::Simple("Request ID required to encode cancel account summary".to_string()))
+        }
     }
 }
 
