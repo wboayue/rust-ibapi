@@ -351,7 +351,7 @@ impl<S: Stream> TcpMessageBus<S> {
     fn process_orders(&self, message: ResponseMessage) {
         match message.message_type() {
             IncomingMessages::ExecutionData => {
-                self.send_order_update(&message);
+                let sent_to_update_stream = self.send_order_update(&message);
 
                 match (message.order_id(), message.request_id()) {
                     // First check matching orders channel
@@ -379,7 +379,9 @@ impl<S: Stream> TcpMessageBus<S> {
                         }
                     }
                     _ => {
-                        warn!("could not route message {message:?}");
+                        if !sent_to_update_stream {
+                            warn!("could not route message {message:?}");
+                        }
                     }
                 }
             }
@@ -402,7 +404,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 }
             }
             IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => {
-                self.send_order_update(&message);
+                let sent_to_update_stream = self.send_order_update(&message);
 
                 if let Some(order_id) = message.order_id() {
                     if self.orders.contains(&order_id) {
@@ -411,19 +413,25 @@ impl<S: Stream> TcpMessageBus<S> {
                         }
                     } else if self.shared_channels.contains_sender(IncomingMessages::OpenOrder) {
                         self.shared_channels.send_message(message.message_type(), &message);
+                    } else if !sent_to_update_stream {
+                        warn!("could not route message {message:?}");
                     }
+                } else if !sent_to_update_stream {
+                    warn!("could not route message {message:?}");
                 }
             }
             IncomingMessages::CompletedOrder | IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => {
                 self.shared_channels.send_message(message.message_type(), &message);
             }
             IncomingMessages::CommissionsReport => {
-                self.send_order_update(&message);
+                let sent_to_update_stream = self.send_order_update(&message);
 
                 if let Some(execution_id) = message.execution_id() {
                     if let Err(e) = self.executions.send(&execution_id, Ok(message)) {
                         warn!("error sending commission report for execution {}: {}", execution_id, e);
                     }
+                } else if !sent_to_update_stream {
+                    warn!("could not route commission report {message:?}");
                 }
             }
             _ => (),
@@ -431,14 +439,18 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     // Sends an order update message to the order update stream if it exists.
-    fn send_order_update(&self, message: &ResponseMessage) {
+    // Returns true if the message was sent to the order update stream.
+    fn send_order_update(&self, message: &ResponseMessage) -> bool {
         if let Ok(order_update_stream) = self.order_update_stream.lock() {
             if let Some(sender) = order_update_stream.as_ref() {
                 if let Err(e) = sender.send(Ok(message.clone())) {
                     warn!("error sending to order update stream: {e}");
+                    return false;
                 }
+                return true;
             }
         }
+        false
     }
 
     // The cleanup thread receives signals as subscribers are dropped and

@@ -1,6 +1,6 @@
+use ibapi::prelude::*;
 use std::sync::Arc;
 use std::thread;
-use ibapi::prelude::*;
 
 fn main() {
     env_logger::init();

@@ -1,5 +1,5 @@
-use time::macros::datetime;
 use ibapi::prelude::*;
+use time::macros::datetime;
 
 fn main() {
     env_logger::init();
