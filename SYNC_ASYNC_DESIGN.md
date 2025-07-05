@@ -447,7 +447,107 @@ This approach provides:
 - Feature protection with clear error messages
 - Easy comparison between sync and async implementations
 
-## 13. Conclusion
+## 13. Consolidated Error Handling
+
+A centralized error handling module (`client/error_handler.rs`) provides consistent error management:
+
+### Key Functions
+
+- **`is_connection_error()`** - Detects connection-related errors requiring reconnection
+- **`is_timeout_error()`** - Identifies timeouts that can be safely ignored  
+- **`should_retry_request()`** - Determines if an error is transient and should be retried
+- **`is_fatal_error()`** - Identifies unrecoverable errors
+- **`error_message()`** - Provides user-friendly error descriptions
+- **`categorize_error()`** - Groups errors for logging/metrics (Connection, Parsing, Timeout, etc.)
+
+### Benefits
+
+- Consistent error handling patterns across sync/async code
+- Centralized retry logic with configurable limits
+- Clear error categorization for appropriate handling
+- Simplified error checking in transport and client layers
+
+### Example Usage
+
+```rust
+// In transport layer
+match self.read_message() {
+    Err(ref err) if is_timeout_error(err) => Ok(()), // Ignore timeouts
+    Err(ref err) if is_connection_error(err) => self.attempt_reconnect(),
+    Err(err) => Err(err), // Fatal error
+    Ok(msg) => self.process_message(msg),
+}
+
+// In client methods with retry
+let mut retry_count = 0;
+loop {
+    match do_request() {
+        Ok(result) => return Ok(result),
+        Err(e) if should_retry_request(&e, retry_count) => {
+            retry_count += 1;
+            continue;
+        }
+        Err(e) => return Err(e),
+    }
+}
+```
+
+## 14. Request/Response Builder Pattern
+
+A fluent builder pattern (`client/request_builder.rs`) simplifies client method implementations by reducing boilerplate:
+
+### Builder Types
+
+- **`RequestBuilder`** - For requests with auto-generated request IDs
+- **`SharedRequestBuilder`** - For requests without IDs (shared channels)
+- **`OrderRequestBuilder`** - For order-specific requests
+- **`MessageBuilder`** - For simple messages without responses
+
+### Benefits
+
+- Reduces repetitive code for version checking and ID management
+- Provides chainable, fluent API
+- Integrates error handling into the builder flow
+- Maintains type safety and correct usage patterns
+
+### Example: Simplifying Client Methods
+
+```rust
+// Before: Manual version check, ID generation, and subscription creation
+pub fn pnl(client: &Client, account: &str) -> Result<Subscription<PnL>, Error> {
+    client.check_server_version(server_versions::PNL, "PnL not supported")?;
+    
+    let request_id = client.next_request_id();
+    let request = encode_request_pnl(request_id, account)?;
+    let subscription = client.send_request(request_id, request)?;
+    
+    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+}
+
+// After: Fluent builder pattern
+pub fn pnl(client: &Client, account: &str) -> Result<Subscription<PnL>, Error> {
+    let builder = client
+        .request()
+        .check_version(server_versions::PNL, "PnL not supported")?;
+    
+    let request = encode_request_pnl(builder.request_id(), account)?;
+    builder.send(request)
+}
+
+// For shared requests (no request ID)
+pub fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
+    let request = encode_request_positions()?;
+    
+    client
+        .shared_request(OutgoingMessages::RequestPositions)
+        .check_version(server_versions::ACCOUNT_SUMMARY, "Positions not supported")?
+        .send(request)
+}
+```
+
+This pattern works identically for both sync and async implementations, providing consistency across the API.
+
+## 15. Conclusion
 
 The proposed design with single struct and conditional compilation provides:
 - ✅ Full backward compatibility

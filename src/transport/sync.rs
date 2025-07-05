@@ -3,7 +3,7 @@
 //! and responses from TWS back to the Client.
 
 use std::collections::HashMap;
-use std::io::{prelude::*, Cursor, ErrorKind};
+use std::io::{prelude::*, Cursor};
 use std::net::TcpStream;
 use std::ops::RangeInclusive;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -196,22 +196,22 @@ impl<S: Stream> TcpMessageBus<S> {
         self.connection.read_message()
     }
     pub(crate) fn dispatch(&self, server_version: i32) -> Result<(), Error> {
-        const RECONNECT_CODES: &[ErrorKind] = &[ErrorKind::ConnectionReset, ErrorKind::ConnectionAborted, ErrorKind::UnexpectedEof];
-        const TIMEOUT_CODES: &[ErrorKind] = &[ErrorKind::WouldBlock, ErrorKind::TimedOut];
+        use crate::client::error_handler::{is_connection_error, is_timeout_error};
+        
         match self.read_message() {
             Ok(message) => {
                 self.dispatch_message(server_version, message);
                 Ok(())
             }
-            Err(Error::Io(e)) if TIMEOUT_CODES.contains(&e.kind()) => {
+            Err(ref err) if is_timeout_error(err) => {
                 if self.is_shutting_down() {
                     debug!("dispatcher thread exiting");
                     return Err(Error::Shutdown);
                 }
                 Ok(())
             }
-            Err(Error::Io(e)) if RECONNECT_CODES.contains(&e.kind()) => {
-                error!("error reading next message (will attempt reconnect): {:?}", e);
+            Err(ref err) if is_connection_error(err) => {
+                error!("error reading next message (will attempt reconnect): {:?}", err);
 
                 if let Err(reconnect_err) = self.connection.reconnect() {
                     error!("failed to reconnect to TWS/Gateway: {:?}", reconnect_err);
