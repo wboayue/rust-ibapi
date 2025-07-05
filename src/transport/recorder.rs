@@ -81,6 +81,7 @@ impl MessageRecorder {
 
 #[cfg(test)]
 mod tests {
+    use serial_test::serial;
 
     use crate::messages::OutgoingMessages;
     use crate::testdata::responses::{MANAGED_ACCOUNT, MARKET_RULE};
@@ -113,6 +114,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_record_request() {
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path().to_str().unwrap();
@@ -140,6 +142,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_record_response() {
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path().to_str().unwrap();
@@ -165,6 +168,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_multiple_records() {
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path().to_str().unwrap();
