@@ -52,6 +52,9 @@ pub mod wsh;
 /// A prelude module for convenient importing of commonly used types.
 pub mod prelude;
 
+/// Protocol version checking and constants for TWS API features.
+pub mod protocol;
+
 mod server_versions;
 
 #[doc(inline)]

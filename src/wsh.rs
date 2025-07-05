@@ -12,7 +12,8 @@ use time::Date;
 use crate::{
     client::{DataStream, ResponseContext, Subscription},
     messages::IncomingMessages,
-    server_versions, Client, Error,
+    protocol::{check_version, Features},
+    Client, Error,
 };
 
 #[cfg(test)]
@@ -40,7 +41,7 @@ impl DataStream<WshMetadata> for WshMetadata {
 }
 
 pub(super) fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
-    client.check_server_version(server_versions::WSHE_CALENDAR, "It does not support WSHE Calendar API.")?;
+    check_version(client.server_version, Features::WSHE_CALENDAR)?;
 
     let request_id = client.next_request_id();
     let request = encoders::encode_request_wsh_metadata(request_id)?;
@@ -110,24 +111,14 @@ pub(super) fn wsh_event_data_by_contract(
     limit: Option<i32>,
     auto_fill: Option<AutoFill>,
 ) -> Result<WshEventData, Error> {
-    client.check_server_version(server_versions::WSHE_CALENDAR, "It does not support WSHE Calendar API.")?;
+    check_version(client.server_version, Features::WSHE_CALENDAR)?;
 
-    if client.server_version < server_versions::WSH_EVENT_DATA_FILTERS && auto_fill.is_some() {
-        let message = "It does not support WSH event data filters.".to_string();
-        return Err(Error::ServerVersion(
-            server_versions::WSH_EVENT_DATA_FILTERS,
-            client.server_version,
-            message,
-        ));
+    if auto_fill.is_some() {
+        check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS)?;
     }
 
-    if client.server_version < server_versions::WSH_EVENT_DATA_FILTERS_DATE && (start_date.is_some() || end_date.is_some() || limit.is_some()) {
-        let message = "It does not support WSH event data date filters.".to_string();
-        return Err(Error::ServerVersion(
-            server_versions::WSH_EVENT_DATA_FILTERS_DATE,
-            client.server_version,
-            message,
-        ));
+    if start_date.is_some() || end_date.is_some() || limit.is_some() {
+        check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
     }
 
     let request_id = client.next_request_id();
@@ -157,15 +148,10 @@ pub(super) fn wsh_event_data_by_filter<'a>(
     limit: Option<i32>,
     auto_fill: Option<AutoFill>,
 ) -> Result<Subscription<'a, WshEventData>, Error> {
-    client.check_server_version(server_versions::WSH_EVENT_DATA_FILTERS, "It does not support WSH event data filters.")?;
+    check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS)?;
 
-    if client.server_version < server_versions::WSH_EVENT_DATA_FILTERS_DATE && limit.is_some() {
-        let message = "It does not support WSH event data date filters.".to_string();
-        return Err(Error::ServerVersion(
-            server_versions::WSH_EVENT_DATA_FILTERS_DATE,
-            client.server_version,
-            message,
-        ));
+    if limit.is_some() {
+        check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
     }
 
     let request_id = client.next_request_id();
@@ -178,11 +164,10 @@ pub(super) fn wsh_event_data_by_filter<'a>(
 mod encoders {
     use time::Date;
 
-    use super::{AutoFill, Error};
+    use super::{AutoFill, Error, Features};
 
     use crate::{
         messages::{OutgoingMessages, RequestMessage},
-        server_versions,
     };
 
     pub(super) fn encode_request_wsh_metadata(request_id: i32) -> Result<RequestMessage, Error> {
@@ -220,7 +205,7 @@ mod encoders {
         message.push_field(&request_id);
         message.push_field(&contract_id);
 
-        if server_version >= server_versions::WSH_EVENT_DATA_FILTERS {
+        if crate::protocol::is_supported(server_version, Features::WSH_EVENT_DATA_FILTERS) {
             message.push_field(&filter);
             if let Some(auto_fill) = auto_fill {
                 message.push_field(&auto_fill.watchlist);
@@ -233,7 +218,7 @@ mod encoders {
             }
         }
 
-        if server_version >= server_versions::WSH_EVENT_DATA_FILTERS_DATE {
+        if crate::protocol::is_supported(server_version, Features::WSH_EVENT_DATA_FILTERS_DATE) {
             message.push_field(&start_date);
             message.push_field(&end_date);
             message.push_field(&limit);

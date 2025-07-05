@@ -547,7 +547,60 @@ pub fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error>
 
 This pattern works identically for both sync and async implementations, providing consistency across the API.
 
-## 15. Conclusion
+## 15. Protocol Version Constants Module
+
+A centralized protocol module (`protocol.rs`) provides consistent version checking across the codebase:
+
+### Key Components
+
+- **`ProtocolFeature`** - Represents a feature requiring minimum server version
+- **`Features`** - Namespace containing all protocol features as constants
+- **`check_version()`** - Returns error if server version is too old for feature
+- **`is_supported()`** - Boolean check for feature support
+- **`include_if_supported()`** - Conditionally includes fields based on version
+
+### Benefits
+
+- Centralized version constants (no more scattered server_versions references)
+- Consistent error messages for unsupported features
+- Type-safe feature checking
+- Clear documentation of what each version enables
+
+### Example Usage
+
+```rust
+use crate::protocol::{check_version, Features, is_supported};
+
+// In client methods - fail if unsupported
+pub fn tick_by_tick_trades(&self, contract: &Contract) -> Result<Subscription<Trade>, Error> {
+    check_version(self.server_version, Features::TICK_BY_TICK)?;
+    // ... implementation
+}
+
+// In encoders - conditionally include fields
+pub fn encode_order(order: &Order, server_version: i32) -> RequestMessage {
+    let mut message = RequestMessage::new();
+    
+    // Always included fields
+    message.push_field(&order.order_id);
+    message.push_field(&order.action);
+    
+    // Conditionally included based on server version
+    if is_supported(server_version, Features::DECISION_MAKER) {
+        message.push_field(&order.decision_maker);
+    }
+    
+    if is_supported(server_version, Features::MIFID_EXECUTION) {
+        message.push_field(&order.mifid_execution);
+    }
+    
+    message
+}
+```
+
+This centralizes all version-related logic and makes it easier to understand feature requirements across the codebase.
+
+## 16. Conclusion
 
 The proposed design with single struct and conditional compilation provides:
 - ✅ Full backward compatibility

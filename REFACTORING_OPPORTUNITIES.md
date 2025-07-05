@@ -261,5 +261,5 @@ impl<'a, T: DataStream<T>> SubscriptionBuilder<'a, T> {
 - [x] Consolidate error handling (COMPLETED)
 - [x] Extract ID generation (COMPLETED)
 - [ ] Simplify client method organization
-- [ ] Create protocol version constants module
+- [x] Create protocol version constants module (COMPLETED)
 - [ ] Unified subscription creation

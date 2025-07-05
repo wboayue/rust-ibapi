@@ -24,5 +24,3 @@ pub use crate::subscriptions::{SharesChannel, Subscription};
 #[cfg(feature = "sync")]
 pub(crate) use crate::subscriptions::{DataStream, ResponseContext};
 
-// Re-export request builder traits
-pub(crate) use request_builder::ClientRequestBuilders;
