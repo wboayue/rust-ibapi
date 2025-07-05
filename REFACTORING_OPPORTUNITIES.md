@@ -28,7 +28,7 @@ pub trait MessageBus: Send + Sync {
 }
 ```
 
-### 2. **Simplify Transport Layer Structure**
+### 2. **Simplify Transport Layer Structure** ✅ COMPLETED
 
 The current structure has some redundancy. We could simplify:
 
@@ -241,8 +241,8 @@ impl<'a, T: DataStream<T>> SubscriptionBuilder<'a, T> {
 
 ## Priority Order
 
-1. **Extract MessageBus trait** (foundational) ✅ IN PROGRESS
-2. **Simplify transport structure** (reduces complexity)
+1. **Extract MessageBus trait** (foundational) ✅ COMPLETED
+2. **Simplify transport structure** (reduces complexity) ✅ COMPLETED
 3. **Extract common response processing** (immediate reuse)
 4. **Create request/response builders** (simplifies client methods)
 5. **Separate Connection logic**
@@ -254,7 +254,7 @@ impl<'a, T: DataStream<T>> SubscriptionBuilder<'a, T> {
 
 - [x] Extract Subscription to separate module
 - [x] Extract MessageBus trait to common module (COMPLETED)
-- [ ] Simplify transport layer structure
+- [x] Simplify transport layer structure (COMPLETED)
 - [ ] Extract common response processing logic
 - [ ] Create request/response builder pattern
 - [ ] Consolidate error handling
