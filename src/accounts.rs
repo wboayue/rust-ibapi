@@ -397,12 +397,15 @@ impl DataStream<AccountUpdateMulti> for AccountUpdateMulti {
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.
 pub(crate) fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
+    use crate::client::subscription_builder::SubscriptionBuilderExt;
+
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position requests.")?;
 
     let request = encoders::encode_request_positions()?;
-    let subscription = client.send_shared_request(OutgoingMessages::RequestPositions, request)?;
 
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+    client
+        .subscription::<PositionUpdate>()
+        .send_shared(OutgoingMessages::RequestPositions, request)
 }
 
 impl SharesChannel for Subscription<'_, PositionUpdate> {}
@@ -412,13 +415,14 @@ pub(super) fn positions_multi<'a>(
     account: Option<&str>,
     model_code: Option<&str>,
 ) -> Result<Subscription<'a, PositionUpdateMulti>, Error> {
+    use crate::client::subscription_builder::SubscriptionBuilderExt;
+
     client.check_server_version(server_versions::MODELS_SUPPORT, "It does not support positions multi requests.")?;
 
     let request_id = client.next_request_id();
     let request = encoders::encode_request_positions_multi(request_id, account, model_code)?;
-    let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+    client.subscription::<PositionUpdateMulti>().send_with_request_id(request_id, request)
 }
 
 // Determine whether an account exists under an account family and find the account family code.

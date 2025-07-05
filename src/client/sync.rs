@@ -46,8 +46,8 @@ pub struct Client {
     pub(crate) time_zone: Option<&'static Tz>,
     pub(crate) message_bus: Arc<dyn MessageBus>,
 
-    client_id: i32,                 // ID of client.
-    id_manager: ClientIdManager,    // Manages request and order ID generation
+    client_id: i32,              // ID of client.
+    id_manager: ClientIdManager, // Manages request and order ID generation
 }
 
 impl Client {

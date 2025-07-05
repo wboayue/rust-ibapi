@@ -197,7 +197,7 @@ impl<S: Stream> TcpMessageBus<S> {
     }
     pub(crate) fn dispatch(&self, server_version: i32) -> Result<(), Error> {
         use crate::client::error_handler::{is_connection_error, is_timeout_error};
-        
+
         match self.read_message() {
             Ok(message) => {
                 self.dispatch_message(server_version, message);

@@ -33,7 +33,7 @@ impl Features {
     pub const PNL: ProtocolFeature = ProtocolFeature::new("profit and loss", server_versions::PNL);
     pub const UNREALIZED_PNL: ProtocolFeature = ProtocolFeature::new("unrealized PnL", server_versions::UNREALIZED_PNL);
     pub const REALIZED_PNL: ProtocolFeature = ProtocolFeature::new("realized PnL", server_versions::REALIZED_PNL);
-    
+
     // Market data features
     pub const REAL_TIME_BARS: ProtocolFeature = ProtocolFeature::new("real-time bars", server_versions::REAL_TIME_BARS);
     pub const MARKET_DATA_TYPE: ProtocolFeature = ProtocolFeature::new("market data type", server_versions::REQ_MARKET_DATA_TYPE);
@@ -42,7 +42,7 @@ impl Features {
     pub const HISTORICAL_TICKS: ProtocolFeature = ProtocolFeature::new("historical ticks", server_versions::HISTORICAL_TICKS);
     pub const HEAD_TIMESTAMP: ProtocolFeature = ProtocolFeature::new("head timestamp", server_versions::REQ_HEAD_TIMESTAMP);
     pub const SYNT_REALTIME_BARS: ProtocolFeature = ProtocolFeature::new("synthetic real-time bars", server_versions::SYNT_REALTIME_BARS);
-    
+
     // Order features
     pub const WHAT_IF_ORDERS: ProtocolFeature = ProtocolFeature::new("what-if orders", server_versions::WHAT_IF_ORDERS);
     pub const ORDER_CONTAINER: ProtocolFeature = ProtocolFeature::new("order container", server_versions::ORDER_CONTAINER);
@@ -52,28 +52,29 @@ impl Features {
     pub const DECISION_MAKER: ProtocolFeature = ProtocolFeature::new("decision maker", server_versions::DECISION_MAKER);
     pub const MIFID_EXECUTION: ProtocolFeature = ProtocolFeature::new("MiFID execution", server_versions::MIFID_EXECUTION);
     pub const MANUAL_ORDER_TIME: ProtocolFeature = ProtocolFeature::new("manual order time", server_versions::MANUAL_ORDER_TIME);
-    
+
     // Contract features
     pub const TRADING_CLASS: ProtocolFeature = ProtocolFeature::new("trading class", server_versions::TRADING_CLASS);
     pub const SIZE_RULES: ProtocolFeature = ProtocolFeature::new("size rules", server_versions::SIZE_RULES);
     pub const BOND_ISSUERID: ProtocolFeature = ProtocolFeature::new("bond issuer ID", server_versions::BOND_ISSUERID);
     pub const SEC_ID_TYPE: ProtocolFeature = ProtocolFeature::new("security ID type", server_versions::SEC_ID_TYPE);
     pub const SMART_COMPONENTS: ProtocolFeature = ProtocolFeature::new("smart components", server_versions::REQ_SMART_COMPONENTS);
-    
+
     // News features
     pub const NEWS_PROVIDERS: ProtocolFeature = ProtocolFeature::new("news providers", server_versions::REQ_NEWS_PROVIDERS);
     pub const NEWS_ARTICLE: ProtocolFeature = ProtocolFeature::new("news article", server_versions::REQ_NEWS_ARTICLE);
     pub const HISTORICAL_NEWS: ProtocolFeature = ProtocolFeature::new("historical news", server_versions::REQ_HISTORICAL_NEWS);
     pub const NEWS_QUERY_ORIGINS: ProtocolFeature = ProtocolFeature::new("news query origins", server_versions::NEWS_QUERY_ORIGINS);
-    
+
     // Scanner features
     pub const SCANNER_GENERIC_OPTS: ProtocolFeature = ProtocolFeature::new("scanner generic options", server_versions::SCANNER_GENERIC_OPTS);
-    
+
     // WSH features
     pub const WSHE_CALENDAR: ProtocolFeature = ProtocolFeature::new("WSHE Calendar", server_versions::WSHE_CALENDAR);
     pub const WSH_EVENT_DATA_FILTERS: ProtocolFeature = ProtocolFeature::new("WSH event data filters", server_versions::WSH_EVENT_DATA_FILTERS);
-    pub const WSH_EVENT_DATA_FILTERS_DATE: ProtocolFeature = ProtocolFeature::new("WSH event data filters with date", server_versions::WSH_EVENT_DATA_FILTERS_DATE);
-    
+    pub const WSH_EVENT_DATA_FILTERS_DATE: ProtocolFeature =
+        ProtocolFeature::new("WSH event data filters with date", server_versions::WSH_EVENT_DATA_FILTERS_DATE);
+
     // Other features
     pub const FA_PROFILE_DESUPPORT: ProtocolFeature = ProtocolFeature::new("FA profile desupport", server_versions::FA_PROFILE_DESUPPORT);
     pub const MARKET_RULES: ProtocolFeature = ProtocolFeature::new("market rules", server_versions::MARKET_RULES);
@@ -92,9 +93,12 @@ impl Features {
 /// # Example
 /// ```no_run
 /// use ibapi::protocol::{check_version, Features};
-/// 
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let server_version = 156;
 /// check_version(server_version, Features::TICK_BY_TICK)?;
+/// # Ok(())
+/// # }
 /// ```
 pub fn check_version(server_version: i32, feature: ProtocolFeature) -> Result<(), Error> {
     if server_version < feature.min_version {
@@ -130,13 +134,13 @@ pub fn is_supported(server_version: i32, feature: ProtocolFeature) -> bool {
 /// # Example
 /// ```no_run
 /// use ibapi::protocol::{include_if_supported, Features};
-/// use ibapi::messages::RequestMessage;
-/// 
-/// let mut message = RequestMessage::default();
+///
 /// let server_version = 156;
-/// 
+/// let cash_qty = 1000.0;
+///
 /// include_if_supported(server_version, Features::CASH_QTY, || {
-///     message.push_field(&cash_qty);
+///     // Add cash_qty field to message only if server supports it
+///     println!("Server supports cash quantity: {}", cash_qty);
 /// });
 /// ```
 pub fn include_if_supported<F>(server_version: i32, feature: ProtocolFeature, include_fn: F)

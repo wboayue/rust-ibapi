@@ -600,7 +600,65 @@ pub fn encode_order(order: &Order, server_version: i32) -> RequestMessage {
 
 This centralizes all version-related logic and makes it easier to understand feature requirements across the codebase.
 
-## 16. Conclusion
+## 16. Unified Subscription Creation
+
+A subscription builder (`client/subscription_builder.rs`) provides a consistent pattern for creating subscriptions:
+
+### Key Components
+
+- **`SubscriptionBuilder`** - Fluent builder for creating subscriptions
+- **`SubscriptionBuilderExt`** - Extension trait adding `.subscription()` method to Client
+- Supports three types of requests:
+  - Request ID based: `send_with_request_id(request_id, message)`
+  - Shared channel: `send_shared(message_type, message)`
+  - Order based: `send_order(order_id, message)`
+
+### Benefits
+
+- Consistent subscription creation across all API methods
+- Reduces boilerplate code in client methods
+- Context configuration (smart depth, request type) is centralized
+- Same pattern works for both sync and async implementations
+
+### Example Usage
+
+```rust
+use crate::client::subscription_builder::SubscriptionBuilderExt;
+
+// Simple shared channel subscription
+pub fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
+    let request = encode_request_positions()?;
+    
+    client
+        .subscription::<PositionUpdate>()
+        .send_shared(OutgoingMessages::RequestPositions, request)
+}
+
+// Request ID based subscription
+pub fn pnl(client: &Client, account: &str) -> Result<Subscription<PnL>, Error> {
+    let request_id = client.next_request_id();
+    let request = encode_request_pnl(request_id, account)?;
+    
+    client
+        .subscription::<PnL>()
+        .send_with_request_id(request_id, request)
+}
+
+// Subscription with special context
+pub fn market_depth(client: &Client, contract: &Contract, num_rows: i32) -> Result<Subscription<MarketDepth>, Error> {
+    let request_id = client.next_request_id();
+    let request = encode_market_depth(request_id, contract, num_rows)?;
+    
+    client
+        .subscription::<MarketDepth>()
+        .with_smart_depth(true)
+        .send_with_request_id(request_id, request)
+}
+```
+
+This pattern eliminates the need to manually create subscriptions with `Subscription::new()` and ensures consistent handling of response contexts.
+
+## 17. Conclusion
 
 The proposed design with single struct and conditional compilation provides:
 - ✅ Full backward compatibility

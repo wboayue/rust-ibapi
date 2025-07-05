@@ -262,4 +262,4 @@ impl<'a, T: DataStream<T>> SubscriptionBuilder<'a, T> {
 - [x] Extract ID generation (COMPLETED)
 - [ ] Simplify client method organization
 - [x] Create protocol version constants module (COMPLETED)
-- [ ] Unified subscription creation
+- [x] Unified subscription creation (COMPLETED)

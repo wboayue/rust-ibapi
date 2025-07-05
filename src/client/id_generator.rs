@@ -169,17 +169,17 @@ mod tests {
     #[test]
     fn test_client_id_manager() {
         let manager = ClientIdManager::new(50);
-        
+
         // Test request IDs
         assert_eq!(manager.current_request_id(), INITIAL_REQUEST_ID);
         assert_eq!(manager.next_request_id(), INITIAL_REQUEST_ID);
         assert_eq!(manager.next_request_id(), INITIAL_REQUEST_ID + 1);
-        
+
         // Test order IDs
         assert_eq!(manager.current_order_id(), 50);
         assert_eq!(manager.next_order_id(), 50);
         assert_eq!(manager.next_order_id(), 51);
-        
+
         // Test order ID update
         manager.set_order_id(100);
         assert_eq!(manager.next_order_id(), 100);

@@ -258,10 +258,6 @@ pub use sync::TcpMessageBus;
 #[cfg(feature = "sync")]
 pub(crate) use sync::TcpSocket;
 
-// These are used in tests
-#[cfg(all(feature = "sync", test))]
-pub(crate) use sync::{read_message, Io, Reconnect, Stream, MAX_RETRIES};
-
 // Async exports (placeholder for now)
 #[cfg(feature = "async")]
 pub use r#async::{AsyncInternalSubscription, AsyncMessageBus};

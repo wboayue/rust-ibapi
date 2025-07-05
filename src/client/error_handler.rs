@@ -3,6 +3,9 @@
 //! This module provides common error handling functions used throughout
 //! the client implementation.
 
+// TODO: Remove this when async implementation is added and these functions are used
+#![allow(dead_code)]
+
 use std::io::ErrorKind;
 
 use crate::errors::Error;
@@ -39,10 +42,7 @@ pub(crate) fn should_retry_request(error: &Error, retry_count: u32) -> bool {
 pub(crate) fn is_transient_error(error: &Error) -> bool {
     match error {
         Error::UnexpectedResponse(_) => true,
-        Error::Io(io_err) => matches!(
-            io_err.kind(),
-            ErrorKind::Interrupted | ErrorKind::WouldBlock | ErrorKind::TimedOut
-        ),
+        Error::Io(io_err) => matches!(io_err.kind(), ErrorKind::Interrupted | ErrorKind::WouldBlock | ErrorKind::TimedOut),
         _ => false,
     }
 }
@@ -51,11 +51,7 @@ pub(crate) fn is_transient_error(error: &Error) -> bool {
 pub(crate) fn is_fatal_error(error: &Error) -> bool {
     matches!(
         error,
-        Error::Shutdown
-            | Error::InvalidArgument(_)
-            | Error::NotImplemented
-            | Error::ServerVersion(_, _, _)
-            | Error::AlreadySubscribed
+        Error::Shutdown | Error::InvalidArgument(_) | Error::NotImplemented | Error::ServerVersion(_, _, _) | Error::AlreadySubscribed
     )
 }
 
@@ -94,9 +90,7 @@ pub(crate) fn categorize_error(error: &Error) -> ErrorCategory {
         Error::ConnectionFailed | Error::ConnectionReset => ErrorCategory::Connection,
         Error::Io(io_err) if is_connection_io_error(io_err) => ErrorCategory::Connection,
         Error::Io(io_err) if is_timeout_io_error(io_err) => ErrorCategory::Timeout,
-        Error::Parse(_, _, _) | Error::ParseInt(_) | Error::FromUtf8(_) | Error::ParseTime(_) => {
-            ErrorCategory::Parsing
-        }
+        Error::Parse(_, _, _) | Error::ParseInt(_) | Error::FromUtf8(_) | Error::ParseTime(_) => ErrorCategory::Parsing,
         Error::InvalidArgument(_) | Error::ServerVersion(_, _, _) => ErrorCategory::Validation,
         Error::Message(_, _) => ErrorCategory::ServerError,
         Error::Cancelled => ErrorCategory::Cancelled,
@@ -109,11 +103,7 @@ pub(crate) fn categorize_error(error: &Error) -> ErrorCategory {
 fn is_connection_io_error(io_err: &std::io::Error) -> bool {
     matches!(
         io_err.kind(),
-        ErrorKind::ConnectionReset
-            | ErrorKind::ConnectionAborted
-            | ErrorKind::UnexpectedEof
-            | ErrorKind::BrokenPipe
-            | ErrorKind::ConnectionRefused
+        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted | ErrorKind::UnexpectedEof | ErrorKind::BrokenPipe | ErrorKind::ConnectionRefused
     )
 }
 
@@ -128,10 +118,7 @@ mod tests {
 
     #[test]
     fn test_is_connection_error() {
-        let io_err = Error::Io(std::sync::Arc::new(io::Error::new(
-            ErrorKind::ConnectionReset,
-            "reset",
-        )));
+        let io_err = Error::Io(std::sync::Arc::new(io::Error::new(ErrorKind::ConnectionReset, "reset")));
         assert!(is_connection_error(&io_err));
 
         assert!(is_connection_error(&Error::ConnectionReset));
@@ -141,16 +128,10 @@ mod tests {
 
     #[test]
     fn test_is_timeout_error() {
-        let timeout_err = Error::Io(std::sync::Arc::new(io::Error::new(
-            ErrorKind::WouldBlock,
-            "would block",
-        )));
+        let timeout_err = Error::Io(std::sync::Arc::new(io::Error::new(ErrorKind::WouldBlock, "would block")));
         assert!(is_timeout_error(&timeout_err));
 
-        let non_timeout = Error::Io(std::sync::Arc::new(io::Error::new(
-            ErrorKind::Other,
-            "other",
-        )));
+        let non_timeout = Error::Io(std::sync::Arc::new(io::Error::new(ErrorKind::Other, "other")));
         assert!(!is_timeout_error(&non_timeout));
     }
 
@@ -175,18 +156,12 @@ mod tests {
 
     #[test]
     fn test_error_categorization() {
-        assert_eq!(
-            categorize_error(&Error::ConnectionFailed),
-            ErrorCategory::Connection
-        );
+        assert_eq!(categorize_error(&Error::ConnectionFailed), ErrorCategory::Connection);
         assert_eq!(
             categorize_error(&Error::ParseInt("123x".parse::<i32>().unwrap_err())),
             ErrorCategory::Parsing
         );
         assert_eq!(categorize_error(&Error::Cancelled), ErrorCategory::Cancelled);
-        assert_eq!(
-            categorize_error(&Error::Message(200, "test".to_string())),
-            ErrorCategory::ServerError
-        );
+        assert_eq!(categorize_error(&Error::Message(200, "test".to_string())), ErrorCategory::ServerError);
     }
 }

@@ -3,6 +3,7 @@
 pub(crate) mod error_handler;
 pub(crate) mod id_generator;
 pub(crate) mod request_builder;
+pub(crate) mod subscription_builder;
 
 #[cfg(feature = "sync")]
 pub mod sync;
@@ -23,4 +24,3 @@ pub use crate::subscriptions::{SharesChannel, Subscription};
 
 #[cfg(feature = "sync")]
 pub(crate) use crate::subscriptions::{DataStream, ResponseContext};
-

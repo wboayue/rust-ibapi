@@ -3,6 +3,10 @@
 //! This module provides a builder pattern to reduce boilerplate in client methods
 //! that follow a common request/response pattern.
 
+// TODO: Remove this when more client methods are refactored to use the builder pattern
+#![allow(dead_code)]
+
+use crate::client::subscription_builder::SubscriptionBuilder;
 use crate::client::Client;
 use crate::errors::Error;
 use crate::messages::{OutgoingMessages, RequestMessage};
@@ -43,19 +47,19 @@ impl<'a> RequestBuilder<'a> {
     /// Send the request and create a subscription
     pub fn send<T>(self, message: RequestMessage) -> Result<Subscription<'a, T>, Error>
     where
-        T: crate::subscriptions::DataStream<T>,
+        T: crate::subscriptions::DataStream<T> + 'static,
     {
-        let subscription = self.client.send_request(self.request_id, message)?;
-        Ok(Subscription::new(self.client, subscription, ResponseContext::default()))
+        SubscriptionBuilder::new(self.client).send_with_request_id(self.request_id, message)
     }
 
     /// Send the request and create a subscription with context
     pub fn send_with_context<T>(self, message: RequestMessage, context: ResponseContext) -> Result<Subscription<'a, T>, Error>
     where
-        T: crate::subscriptions::DataStream<T>,
+        T: crate::subscriptions::DataStream<T> + 'static,
     {
-        let subscription = self.client.send_request(self.request_id, message)?;
-        Ok(Subscription::new(self.client, subscription, context))
+        SubscriptionBuilder::new(self.client)
+            .with_context(context)
+            .send_with_request_id(self.request_id, message)
     }
 
     /// Send the request without creating a subscription
@@ -85,19 +89,19 @@ impl<'a> SharedRequestBuilder<'a> {
     /// Send the request and create a subscription
     pub fn send<T>(self, message: RequestMessage) -> Result<Subscription<'a, T>, Error>
     where
-        T: crate::subscriptions::DataStream<T>,
+        T: crate::subscriptions::DataStream<T> + 'static,
     {
-        let subscription = self.client.send_shared_request(self.message_type, message)?;
-        Ok(Subscription::new(self.client, subscription, ResponseContext::default()))
+        SubscriptionBuilder::new(self.client).send_shared(self.message_type, message)
     }
 
     /// Send the request and create a subscription with context
     pub fn send_with_context<T>(self, message: RequestMessage, context: ResponseContext) -> Result<Subscription<'a, T>, Error>
     where
-        T: crate::subscriptions::DataStream<T>,
+        T: crate::subscriptions::DataStream<T> + 'static,
     {
-        let subscription = self.client.send_shared_request(self.message_type, message)?;
-        Ok(Subscription::new(self.client, subscription, context))
+        SubscriptionBuilder::new(self.client)
+            .with_context(context)
+            .send_shared(self.message_type, message)
     }
 
     /// Send the request without creating a subscription

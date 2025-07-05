@@ -166,9 +166,7 @@ mod encoders {
 
     use super::{AutoFill, Error, Features};
 
-    use crate::{
-        messages::{OutgoingMessages, RequestMessage},
-    };
+    use crate::messages::{OutgoingMessages, RequestMessage};
 
     pub(super) fn encode_request_wsh_metadata(request_id: i32) -> Result<RequestMessage, Error> {
         let mut message = RequestMessage::new();
