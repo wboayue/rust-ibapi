@@ -332,7 +332,122 @@ pub trait AsyncClient: ClientBase {
 - Harder to keep in sync
 - Splits the community
 
-## 12. Conclusion
+## 12. Example Structure
+
+To provide clear examples for both sync and async APIs, examples will be organized with a simple naming convention:
+
+```
+examples/
+├── sync_market_data.rs
+├── sync_realtime_bars.rs
+├── sync_positions.rs
+├── sync_orders.rs
+├── sync_account_summary.rs
+├── async_market_data.rs
+├── async_realtime_bars.rs
+├── async_positions.rs
+├── async_orders.rs
+└── async_account_summary.rs
+```
+
+### Running Examples
+
+Examples can be run with their respective features:
+
+```bash
+# Sync examples
+cargo run --example sync_market_data --features sync
+cargo run --example sync_positions --features sync
+
+# Async examples  
+cargo run --example async_market_data --features async
+cargo run --example async_positions --features async
+```
+
+### Example Template
+
+Each example will include:
+- Clear documentation indicating sync vs async version
+- Feature gate with helpful error message if run without correct feature
+- Consistent structure for easy comparison between sync and async versions
+
+**Sync Example (`sync_market_data.rs`):**
+```rust
+//! Market data subscription example (synchronous)
+//! 
+//! Run with: cargo run --example sync_market_data --features sync
+
+#[cfg(not(feature = "sync"))]
+fn main() {
+    eprintln!("This example requires the 'sync' feature. Run with: cargo run --example sync_market_data --features sync");
+}
+
+#[cfg(feature = "sync")]
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    use ibapi::Client;
+    use ibapi::contracts::Contract;
+    
+    env_logger::init();
+    
+    let client = Client::connect("127.0.0.1:4002", 100)?;
+    println!("Connected to TWS version {}", client.server_version());
+    
+    let contract = Contract::stock("AAPL");
+    let subscription = client.market_data(&contract, &["233"], false, false)?;
+    
+    for tick in subscription.iter().take(10) {
+        println!("Tick: {:?}", tick);
+    }
+    
+    Ok(())
+}
+```
+
+**Async Example (`async_market_data.rs`):**
+```rust
+//! Market data subscription example (asynchronous)
+//! 
+//! Run with: cargo run --example async_market_data --features async
+
+#[cfg(not(feature = "async"))]
+fn main() {
+    eprintln!("This example requires the 'async' feature. Run with: cargo run --example async_market_data --features async");
+}
+
+#[cfg(feature = "async")]
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    use ibapi::AsyncClient;
+    use ibapi::contracts::Contract;
+    use futures::StreamExt;
+    
+    env_logger::init();
+    
+    let client = AsyncClient::connect("127.0.0.1:4002", 100).await?;
+    println!("Connected to TWS version {}", client.server_version());
+    
+    let contract = Contract::stock("AAPL");
+    let mut subscription = client.market_data(&contract, &["233"], false, false).await?;
+    
+    while let Some(tick) = subscription.next().await {
+        match tick {
+            Ok(tick) => println!("Tick: {:?}", tick),
+            Err(e) => eprintln!("Error: {}", e),
+        }
+    }
+    
+    Ok(())
+}
+```
+
+This approach provides:
+- No Cargo.toml configuration needed for each example
+- Clear naming convention (`sync_*` vs `async_*` prefix)
+- Simple discovery with `cargo run --example`
+- Feature protection with clear error messages
+- Easy comparison between sync and async implementations
+
+## 13. Conclusion
 
 The proposed design with single struct and conditional compilation provides:
 - ✅ Full backward compatibility
