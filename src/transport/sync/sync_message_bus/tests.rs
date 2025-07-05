@@ -14,10 +14,10 @@ use crate::contracts::Contract;
 use crate::messages::{encode_length, RequestMessage};
 use crate::orders::encoders::encode_place_order;
 use crate::orders::{order_builder, Action};
-use std::io::ErrorKind;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use log::{debug, trace};
 use std::collections::VecDeque;
+use std::io::ErrorKind;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 #[test]
@@ -73,7 +73,6 @@ fn test_error_event_warning_handling() {
 }
 
 // Connection test helpers
-
 
 fn mock_socket_error(kind: ErrorKind) -> Error {
     let message = format!("Simulated {} error", kind);
@@ -528,4 +527,3 @@ fn test_request_encoding_roundtrip() {
     let encoded = req.encode();
     assert_eq!(encoded, expected);
 }
-

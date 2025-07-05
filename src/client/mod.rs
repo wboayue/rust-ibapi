@@ -6,13 +6,16 @@ pub mod sync;
 #[cfg(feature = "async")]
 pub mod r#async;
 
-
 // Re-export the appropriate Client based on feature
 #[cfg(feature = "sync")]
-pub use sync::{Client, Subscription, SharesChannel};
+pub use sync::Client;
+
+// Re-export subscription types from subscriptions module
+#[cfg(feature = "sync")]
+pub use crate::subscriptions::{SharesChannel, Subscription};
 
 #[cfg(feature = "sync")]
-pub(crate) use sync::{DataStream, ResponseContext};
+pub(crate) use crate::subscriptions::{DataStream, ResponseContext};
 
 #[cfg(feature = "async")]
 pub use r#async::Client;

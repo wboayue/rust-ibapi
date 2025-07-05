@@ -10,14 +10,14 @@ pub mod r#async;
 pub use sync::TcpMessageBus;
 
 #[cfg(feature = "sync")]
-pub(crate) use sync::{MessageBus, InternalSubscription, Response, Connection, ConnectionMetadata, TcpSocket};
+pub(crate) use sync::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, Response, TcpSocket};
 
 // These are used in tests
 #[cfg(all(feature = "sync", test))]
-pub(crate) use sync::{Stream, Io, Reconnect, SubscriptionBuilder, read_message, MAX_RETRIES};
+pub(crate) use sync::{read_message, Io, Reconnect, Stream, SubscriptionBuilder, MAX_RETRIES};
 
 #[cfg(feature = "async")]
-pub use r#async::{AsyncMessageBus, AsyncInternalSubscription};
+pub use r#async::{AsyncInternalSubscription, AsyncMessageBus};
 
 pub mod connection;
 pub mod recorder;
