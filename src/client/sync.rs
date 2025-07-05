@@ -6,7 +6,6 @@
 
 use std::fmt::Debug;
 use std::net::TcpStream;
-use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -30,6 +29,8 @@ use crate::transport::{InternalSubscription, MessageBus, TcpMessageBus, TcpSocke
 use crate::wsh::AutoFill;
 use crate::{accounts, contracts, market_data, news, orders, scanner, wsh};
 
+use super::id_generator::ClientIdManager;
+
 #[cfg(test)]
 mod tests;
 
@@ -45,9 +46,8 @@ pub struct Client {
     pub(crate) time_zone: Option<&'static Tz>,
     pub(crate) message_bus: Arc<dyn MessageBus>,
 
-    client_id: i32,             // ID of client.
-    next_request_id: AtomicI32, // Next available request_id.
-    order_id: AtomicI32,        // Next available order_id. Starts with value returned on connection.
+    client_id: i32,                 // ID of client.
+    id_manager: ClientIdManager,    // Manages request and order ID generation
 }
 
 impl Client {
@@ -92,8 +92,7 @@ impl Client {
             time_zone: connection_metadata.time_zone,
             message_bus,
             client_id: connection_metadata.client_id,
-            next_request_id: AtomicI32::new(9000),
-            order_id: AtomicI32::new(connection_metadata.next_order_id),
+            id_manager: ClientIdManager::new(connection_metadata.next_order_id),
         };
 
         Ok(client)
@@ -106,14 +105,14 @@ impl Client {
 
     /// Returns the next request ID.
     pub fn next_request_id(&self) -> i32 {
-        self.next_request_id.fetch_add(1, Ordering::Relaxed)
+        self.id_manager.next_request_id()
     }
 
     /// Returns and increments the order ID.
     ///
     /// The client maintains a sequence of order IDs. This function returns the next order ID in the sequence.
     pub fn next_order_id(&self) -> i32 {
-        self.order_id.fetch_add(1, Ordering::Relaxed)
+        self.id_manager.next_order_id()
     }
 
     /// Gets the next valid order ID from the TWS server.
@@ -141,7 +140,7 @@ impl Client {
 
     /// Sets the current value of order ID.
     pub(crate) fn set_next_order_id(&self, order_id: i32) {
-        self.order_id.store(order_id, Ordering::Relaxed)
+        self.id_manager.set_order_id(order_id);
     }
 
     /// Returns the version of the TWS API server to which the client is connected.
@@ -1895,8 +1894,7 @@ impl Client {
             time_zone: None,
             message_bus,
             client_id: 100,
-            next_request_id: AtomicI32::new(9000),
-            order_id: AtomicI32::new(-1),
+            id_manager: ClientIdManager::new(-1),
         }
     }
 

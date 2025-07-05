@@ -135,7 +135,7 @@ pub(crate) fn should_retry_request(error: &Error, retry_count: u32) -> bool {
 }
 ```
 
-### 7. **Extract ID Generation to Separate Module**
+### 7. **Extract ID Generation to Separate Module** ✅ COMPLETED
 
 The ID generation logic could be its own module:
 
@@ -259,7 +259,7 @@ impl<'a, T: DataStream<T>> SubscriptionBuilder<'a, T> {
 - [x] Separate Connection logic (COMPLETED)
 - [x] Create request/response builder pattern (COMPLETED)
 - [x] Consolidate error handling (COMPLETED)
-- [ ] Extract ID generation
+- [x] Extract ID generation (COMPLETED)
 - [ ] Simplify client method organization
 - [ ] Create protocol version constants module
 - [ ] Unified subscription creation
