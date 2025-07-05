@@ -18,7 +18,7 @@ use log::{debug, error, info, warn};
 use crate::connection::sync::Connection;
 
 use super::{InternalSubscription, MessageBus, Response, Signal, SubscriptionBuilder};
-use crate::messages::{encode_length, shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Error};
 
 pub(crate) const MIN_SERVER_VERSION: i32 = 100;
@@ -661,7 +661,6 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug + Clone> Send
     }
 }
 
-
 #[derive(Debug)]
 pub(crate) struct TcpSocket {
     reader: Mutex<TcpStream>,
@@ -745,7 +744,6 @@ pub(crate) trait Io {
     fn write_all(&self, buf: &[u8]) -> Result<(), Error>;
 }
 
-
 pub(crate) struct FibonacciBackoff {
     previous: u64,
     current: u64,
@@ -798,7 +796,6 @@ mod tests {
         assert_send_and_sync::<Connection<TcpSocket>>();
         assert_send_and_sync::<TcpMessageBus<TcpSocket>>();
     }
-
 
     #[test]
     fn test_fibonacci_backoff() {

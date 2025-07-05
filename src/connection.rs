@@ -26,6 +26,3 @@ pub mod sync;
 #[cfg(feature = "async")]
 pub mod r#async;
 
-// Re-export connection types
-#[cfg(feature = "sync")]
-pub use sync::Connection;

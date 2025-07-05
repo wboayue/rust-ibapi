@@ -7,7 +7,7 @@ use std::time::Duration;
 use crossbeam::channel::{Receiver, Sender};
 
 use crate::errors::Error;
-use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
 
 #[cfg(feature = "sync")]
 pub mod sync;

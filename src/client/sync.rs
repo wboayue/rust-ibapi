@@ -10,22 +10,22 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use log::{debug, error};
+use log::debug;
 use time::{Date, OffsetDateTime};
 use time_tz::Tz;
 
 use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
+use crate::connection::{sync::Connection, ConnectionMetadata};
 use crate::contracts::{Contract, OptionComputation, SecurityType};
 use crate::errors::Error;
 use crate::market_data::historical::{self, HistogramEntry};
 use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, WhatToShow};
 use crate::market_data::MarketDataType;
-use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{OutgoingMessages, RequestMessage};
 use crate::news::NewsArticle;
 use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, OrderUpdate, Orders, PlaceOrder};
 use crate::scanner::ScannerData;
-use crate::subscriptions::{ResponseContext, Subscription};
-use crate::connection::{sync::Connection, ConnectionMetadata};
+use crate::subscriptions::Subscription;
 use crate::transport::{InternalSubscription, MessageBus, TcpMessageBus, TcpSocket};
 use crate::wsh::AutoFill;
 use crate::{accounts, contracts, market_data, news, orders, scanner, wsh};
@@ -1982,6 +1982,5 @@ impl Debug for Client {
 ///
 /// Subscriptions can be explicitly canceled using the [cancel](Subscription::cancel) method.
 ///
-// Re-export DataStream and SharesChannel traits from subscriptions module
-pub(crate) use crate::subscriptions::DataStream;
+// Re-export SharesChannel trait from subscriptions module
 pub use crate::subscriptions::SharesChannel;

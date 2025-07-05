@@ -3,8 +3,8 @@
 use std::sync::Mutex;
 
 use log::{debug, error, info};
-use time::OffsetDateTime;
 use time::macros::format_description;
+use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
 use super::ConnectionMetadata;
