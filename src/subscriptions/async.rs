@@ -8,6 +8,9 @@ use tokio::sync::mpsc;
 
 use crate::Error;
 
+// TODO: When implementing async subscriptions, use the common utilities:
+// use super::common::{should_retry_error, should_store_error, process_decode_result, ProcessingResult};
+
 /// Asynchronous subscription for streaming data
 pub struct AsyncSubscription<T> {
     receiver: mpsc::UnboundedReceiver<Result<T, Error>>,

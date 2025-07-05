@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use log::{debug, error, warn};
 
+use super::common::{process_decode_result, should_retry_error, should_store_error, ProcessingResult};
 use crate::client::Client;
 use crate::errors::Error;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
@@ -130,8 +131,8 @@ impl<'a, T: DataStream<T> + 'static> Subscription<'a, T> {
         match self.process_response(self.subscription.next()) {
             Some(val) => Some(val),
             None => match self.error() {
-                Some(Error::UnexpectedResponse(m)) => {
-                    debug!("error in subscription: {m:?}");
+                Some(ref err) if should_retry_error(err) => {
+                    debug!("retrying after error: {err:?}");
                     self.next()
                 }
                 _ => None,
@@ -163,8 +164,10 @@ impl<'a, T: DataStream<T> + 'static> Subscription<'a, T> {
         match response {
             Some(Ok(message)) => self.process_message(message),
             Some(Err(e)) => {
-                let mut error = self.error.lock().unwrap();
-                *error = Some(e);
+                if should_store_error(&e) {
+                    let mut error = self.error.lock().unwrap();
+                    *error = Some(e);
+                }
                 None
             }
             None => None,
@@ -172,16 +175,21 @@ impl<'a, T: DataStream<T> + 'static> Subscription<'a, T> {
     }
 
     fn process_message(&self, mut message: ResponseMessage) -> Option<T> {
-        match T::decode(self.client, &mut message) {
-            Ok(val) => {
+        match process_decode_result(T::decode(self.client, &mut message)) {
+            ProcessingResult::Success(val) => {
                 // Check if this decoded value represents the end of a snapshot subscription
                 if val.is_snapshot_end() {
                     self.snapshot_ended.store(true, Ordering::Relaxed);
                 }
                 Some(val)
             }
-            Err(Error::EndOfStream) => None,
-            Err(err) => {
+            ProcessingResult::EndOfStream => None,
+            ProcessingResult::Retry => {
+                // This case shouldn't happen here since UnexpectedResponse is handled at the next() level
+                // but we handle it for completeness
+                None
+            }
+            ProcessingResult::Error(err) => {
                 error!("error decoding message: {err}");
                 let mut error = self.error.lock().unwrap();
                 *error = Some(err);

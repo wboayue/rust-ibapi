@@ -1,5 +1,7 @@
 //! Subscription types for sync/async streaming data
 
+mod common;
+
 #[cfg(feature = "sync")]
 pub mod sync;
 
