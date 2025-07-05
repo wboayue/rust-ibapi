@@ -20,14 +20,11 @@ use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
 
 use crate::messages::{encode_length, shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Error};
-use recorder::MessageRecorder;
-
-mod connection;
-mod recorder;
+use super::super::recorder::MessageRecorder;
 
 const MIN_SERVER_VERSION: i32 = 100;
 const MAX_SERVER_VERSION: i32 = server_versions::WSH_EVENT_DATA_FILTERS_DATE;
-const MAX_RETRIES: i32 = 20;
+pub(crate) const MAX_RETRIES: i32 = 20;
 const TWS_READ_TIMEOUT: Duration = Duration::from_secs(1);
 
 // Defines the range of warning codes (2100–2169) used by the TWS API.
@@ -253,7 +250,7 @@ impl<S: Stream> TcpMessageBus<S> {
     fn read_message(&self) -> Response {
         self.connection.read_message()
     }
-    fn dispatch(&self, server_version: i32) -> Result<(), Error> {
+    pub(crate) fn dispatch(&self, server_version: i32) -> Result<(), Error> {
         const RECONNECT_CODES: &[ErrorKind] = &[ErrorKind::ConnectionReset, ErrorKind::ConnectionAborted, ErrorKind::UnexpectedEof];
         const TIMEOUT_CODES: &[ErrorKind] = &[ErrorKind::WouldBlock, ErrorKind::TimedOut];
         match self.read_message() {
@@ -959,7 +956,7 @@ fn read_header(reader: &mut impl Read) -> Result<usize, Error> {
     Ok(count as usize)
 }
 
-fn read_message(reader: &mut impl Read) -> Result<Vec<u8>, Error> {
+pub(crate) fn read_message(reader: &mut impl Read) -> Result<Vec<u8>, Error> {
     let message_size = read_header(reader)?;
     let mut data = vec![0_u8; message_size];
     reader.read_exact(&mut data)?;
@@ -1057,7 +1054,7 @@ impl<S: Stream> Connection<S> {
         Ok(())
     }
 
-    fn read_message(&self) -> Response {
+    pub(crate) fn read_message(&self) -> Response {
         let data = self.socket.read_message()?;
         let raw_string = String::from_utf8(data)?;
         debug!("<- {:?}", raw_string);
@@ -1120,7 +1117,7 @@ impl<S: Stream> Connection<S> {
         Ok(())
     }
 
-    fn server_version(&self) -> i32 {
+    pub(crate) fn server_version(&self) -> i32 {
         let connection_metadata = self.connection_metadata.lock().unwrap();
         connection_metadata.server_version
     }

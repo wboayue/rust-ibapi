@@ -26,7 +26,7 @@ use crate::messages::{RequestMessage, ResponseMessage};
 use crate::news::NewsArticle;
 use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, OrderUpdate, Orders, PlaceOrder};
 use crate::scanner::ScannerData;
-use crate::transport::{Connection, ConnectionMetadata, InternalSubscription, MessageBus, TcpMessageBus, TcpSocket};
+use crate::transport::{MessageBus, InternalSubscription, TcpMessageBus, Connection, ConnectionMetadata, TcpSocket};
 use crate::wsh::AutoFill;
 use crate::{accounts, contracts, market_data, news, orders, scanner, wsh};
 

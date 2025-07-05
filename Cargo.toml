@@ -17,13 +17,23 @@ exclude = [
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["sync"]
+sync = ["dep:crossbeam"]
+async = ["dep:tokio", "dep:futures", "dep:async-trait"]
+
 [dependencies]
 byteorder = "1.5.0"
-crossbeam = "0.8.4"
+crossbeam = { version = "0.8.4", optional = true }
 log = "0.4.22"
 time = {version = "0.3.36", features = ["formatting", "macros", "local-offset", "parsing", "serde"]}
 time-tz = "2.0.0"
 serde = {version = "1.0.214" , features = ["derive"]}
+
+# Async dependencies
+tokio = { version = "1.41", features = ["net", "rt-multi-thread", "sync", "time", "macros", "io-util"], optional = true }
+futures = { version = "0.3.31", optional = true }
+async-trait = { version = "0.1.83", optional = true }
 
 [dev-dependencies]
 anyhow = "1.0.92"

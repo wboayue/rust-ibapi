@@ -1,17 +1,79 @@
+use crate::transport::TcpSocket;
+use time::macros::datetime;
+use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt};
+
+use crate::messages::ResponseMessage;
+use crate::tests::assert_send_and_sync;
+
+use super::*;
+
+// Additional imports for connection tests
 use crate::client::Client;
 use crate::contracts::encoders::encode_request_contract_data;
 use crate::contracts::Contract;
-use crate::errors::Error;
-use crate::messages::{encode_length, RequestMessage, ResponseMessage};
+use crate::messages::{encode_length, RequestMessage};
 use crate::orders::encoders::encode_place_order;
 use crate::orders::{order_builder, Action};
-use crate::transport::{read_message, Connection, Io, MessageBus, Reconnect, Stream, TcpMessageBus, MAX_RETRIES};
 use std::io::ErrorKind;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-
 use log::{debug, trace};
 use std::collections::VecDeque;
 use std::sync::Arc;
+
+#[test]
+fn test_thread_safe() {
+    assert_send_and_sync::<Connection<TcpSocket>>();
+    assert_send_and_sync::<TcpMessageBus<TcpSocket>>();
+}
+
+#[test]
+fn test_parse_connection_time() {
+    let example = "20230405 22:20:39 PST";
+    let (connection_time, _) = parse_connection_time(example);
+
+    let la = timezones::db::america::LOS_ANGELES;
+    if let OffsetResult::Some(other) = datetime!(2023-04-05 22:20:39).assume_timezone(la) {
+        assert_eq!(connection_time, Some(other));
+    }
+}
+
+#[test]
+fn test_fibonacci_backoff() {
+    let mut backoff = FibonacciBackoff::new(10);
+
+    assert_eq!(backoff.next_delay(), Duration::from_secs(1));
+    assert_eq!(backoff.next_delay(), Duration::from_secs(2));
+    assert_eq!(backoff.next_delay(), Duration::from_secs(3));
+    assert_eq!(backoff.next_delay(), Duration::from_secs(5));
+    assert_eq!(backoff.next_delay(), Duration::from_secs(8));
+    assert_eq!(backoff.next_delay(), Duration::from_secs(10));
+    assert_eq!(backoff.next_delay(), Duration::from_secs(10));
+}
+
+#[test]
+fn test_error_event_warning_handling() {
+    // Test that warning error codes (2100-2169) are handled correctly
+    let server_version = 100;
+
+    // Create a warning message (error code 2104 is a common warning)
+    // Format: "4|2|123|2104|Market data farm connection is OK:usfarm.nj"
+    let warning_message = ResponseMessage::from_simple("4|2|123|2104|Market data farm connection is OK:usfarm.nj");
+
+    // This should not panic and should handle as a warning
+    let result = error_event(server_version, warning_message);
+    assert!(result.is_ok());
+
+    // Test actual error (non-warning code)
+    // Format: "4|2|456|200|No security definition has been found"
+    let error_message = ResponseMessage::from_simple("4|2|456|200|No security definition has been found");
+
+    // This should also not panic and should handle as an error
+    let result = error_event(server_version, error_message);
+    assert!(result.is_ok());
+}
+
+// Connection test helpers
+
 
 fn mock_socket_error(kind: ErrorKind) -> Error {
     let message = format!("Simulated {} error", kind);
@@ -467,20 +529,3 @@ fn test_request_encoding_roundtrip() {
     assert_eq!(encoded, expected);
 }
 
-#[test]
-fn test_response_simple_encoding_roundtrip() {
-    let expected = "15|1|DU1234567|";
-    let req = RequestMessage::from_simple(expected);
-    assert_eq!(req.fields, vec!["15", "1", "DU1234567"]);
-    let simple_encoded = req.encode_simple();
-    assert_eq!(simple_encoded, expected);
-}
-
-#[test]
-fn test_response_encoding_roundtrip() {
-    let expected = "15\01\0DU1234567\0";
-    let req = RequestMessage::from(expected);
-    assert_eq!(req.fields, vec!["15", "1", "DU1234567"]);
-    let encoded = req.encode();
-    assert_eq!(encoded, expected);
-}
