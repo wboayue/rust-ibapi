@@ -256,7 +256,7 @@ impl SubscriptionBuilder {
 pub use sync::TcpMessageBus;
 
 #[cfg(feature = "sync")]
-pub(crate) use sync::{Connection, ConnectionMetadata, TcpSocket};
+pub(crate) use sync::TcpSocket;
 
 // These are used in tests
 #[cfg(all(feature = "sync", test))]

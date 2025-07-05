@@ -26,6 +26,9 @@ pub mod client;
 
 pub(crate) mod transport;
 
+/// Connection management
+pub(crate) mod connection;
+
 /// Subscription types for streaming data
 pub mod subscriptions;
 

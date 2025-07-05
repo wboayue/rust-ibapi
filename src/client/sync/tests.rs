@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use crate::{
+    connection::ConnectionMetadata,
     stubs::MessageBusStub,
-    transport::{ConnectionMetadata, MessageBus},
+    transport::MessageBus,
 };
 
 use super::Client;

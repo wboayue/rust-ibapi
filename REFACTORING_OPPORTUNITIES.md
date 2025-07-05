@@ -71,7 +71,7 @@ pub(crate) fn should_store_error(error: &Error) -> bool {
 }
 ```
 
-### 4. **Separate Connection Logic**
+### 4. **Separate Connection Logic** ✅ COMPLETED
 
 The `Connection` struct and logic could be better organized:
 
@@ -244,8 +244,8 @@ impl<'a, T: DataStream<T>> SubscriptionBuilder<'a, T> {
 1. **Extract MessageBus trait** (foundational) ✅ COMPLETED
 2. **Simplify transport structure** (reduces complexity) ✅ COMPLETED
 3. **Extract common response processing** (immediate reuse) ✅ COMPLETED
-4. **Create request/response builders** (simplifies client methods)
-5. **Separate Connection logic**
+4. **Separate Connection logic** ✅ COMPLETED
+5. **Create request/response builders** (simplifies client methods)
 6. **Extract ID generation**
 7. **Create protocol version module**
 8. **Other refactorings** as time permits
@@ -256,6 +256,7 @@ impl<'a, T: DataStream<T>> SubscriptionBuilder<'a, T> {
 - [x] Extract MessageBus trait to common module (COMPLETED)
 - [x] Simplify transport layer structure (COMPLETED)
 - [x] Extract common response processing logic (COMPLETED)
+- [x] Separate Connection logic (COMPLETED)
 - [ ] Create request/response builder pattern
 - [ ] Consolidate error handling
 - [ ] Extract ID generation
