@@ -77,9 +77,10 @@ impl AsyncConnection {
         self.recorder.record_request(message);
         let encoded = message.encode();
         debug!("-> {encoded:?}");
+        let length_encoded = crate::messages::encode_length(&encoded);
 
         let mut socket = self.socket.lock().await;
-        socket.write_all(encoded.as_bytes()).await?;
+        socket.write_all(&length_encoded).await?;
         Ok(())
     }
 
@@ -188,4 +189,3 @@ impl AsyncConnection {
         Ok(())
     }
 }
-

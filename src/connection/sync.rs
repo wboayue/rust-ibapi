@@ -95,7 +95,8 @@ impl<S: Stream> Connection<S> {
         self.recorder.record_request(message);
         let encoded = message.encode();
         debug!("-> {encoded:?}");
-        self.socket.write_all(encoded.as_bytes())?;
+        let length_encoded = crate::messages::encode_length(&encoded);
+        self.socket.write_all(&length_encoded)?;
         Ok(())
     }
 
@@ -201,4 +202,3 @@ impl<S: Stream> Connection<S> {
         }
     }
 }
-
