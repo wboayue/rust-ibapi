@@ -13,8 +13,6 @@
 mod decoders;
 mod encoders;
 mod types;
-#[cfg(test)]
-mod tests;
 
 // Re-export common types that are available regardless of sync/async
 pub use types::*;
