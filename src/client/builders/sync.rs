@@ -1,22 +1,16 @@
-//! Request builder pattern for simplifying client method implementations
-//!
-//! This module provides a builder pattern to reduce boilerplate in client methods
-//! that follow a common request/response pattern.
+//! Synchronous builder implementations
 
-// TODO: Remove this when more client methods are refactored to use the builder pattern
-#![allow(dead_code)]
-// TODO: Implement async version
-#![cfg(feature = "sync")]
+use std::marker::PhantomData;
 
-use crate::client::subscription_builder::SubscriptionBuilder;
-use crate::client::Client;
+use crate::client::sync::Client;
+use crate::client::{DataStream, ResponseContext};
+use crate::subscriptions::Subscription;
 use crate::errors::Error;
 use crate::messages::{OutgoingMessages, RequestMessage};
-use crate::subscriptions::{ResponseContext, Subscription};
 use crate::transport::InternalSubscription;
 
 /// Builder for creating requests with IDs
-pub struct RequestBuilder<'a> {
+pub(crate) struct RequestBuilder<'a> {
     client: &'a Client,
     request_id: i32,
 }
@@ -49,7 +43,7 @@ impl<'a> RequestBuilder<'a> {
     /// Send the request and create a subscription
     pub fn send<T>(self, message: RequestMessage) -> Result<Subscription<'a, T>, Error>
     where
-        T: crate::subscriptions::DataStream<T> + 'static,
+        T: DataStream<T> + 'static,
     {
         SubscriptionBuilder::new(self.client).send_with_request_id(self.request_id, message)
     }
@@ -57,7 +51,7 @@ impl<'a> RequestBuilder<'a> {
     /// Send the request and create a subscription with context
     pub fn send_with_context<T>(self, message: RequestMessage, context: ResponseContext) -> Result<Subscription<'a, T>, Error>
     where
-        T: crate::subscriptions::DataStream<T> + 'static,
+        T: DataStream<T> + 'static,
     {
         SubscriptionBuilder::new(self.client)
             .with_context(context)
@@ -71,7 +65,7 @@ impl<'a> RequestBuilder<'a> {
 }
 
 /// Builder for creating shared channel requests (without request IDs)
-pub struct SharedRequestBuilder<'a> {
+pub(crate) struct SharedRequestBuilder<'a> {
     client: &'a Client,
     message_type: OutgoingMessages,
 }
@@ -91,7 +85,7 @@ impl<'a> SharedRequestBuilder<'a> {
     /// Send the request and create a subscription
     pub fn send<T>(self, message: RequestMessage) -> Result<Subscription<'a, T>, Error>
     where
-        T: crate::subscriptions::DataStream<T> + 'static,
+        T: DataStream<T> + 'static,
     {
         SubscriptionBuilder::new(self.client).send_shared(self.message_type, message)
     }
@@ -99,7 +93,7 @@ impl<'a> SharedRequestBuilder<'a> {
     /// Send the request and create a subscription with context
     pub fn send_with_context<T>(self, message: RequestMessage, context: ResponseContext) -> Result<Subscription<'a, T>, Error>
     where
-        T: crate::subscriptions::DataStream<T> + 'static,
+        T: DataStream<T> + 'static,
     {
         SubscriptionBuilder::new(self.client)
             .with_context(context)
@@ -113,7 +107,7 @@ impl<'a> SharedRequestBuilder<'a> {
 }
 
 /// Builder for creating order requests
-pub struct OrderRequestBuilder<'a> {
+pub(crate) struct OrderRequestBuilder<'a> {
     client: &'a Client,
     order_id: i32,
 }
@@ -150,7 +144,7 @@ impl<'a> OrderRequestBuilder<'a> {
 }
 
 /// Builder for simple message sends (no response expected)
-pub struct MessageBuilder<'a> {
+pub(crate) struct MessageBuilder<'a> {
     client: &'a Client,
 }
 
@@ -169,6 +163,62 @@ impl<'a> MessageBuilder<'a> {
     /// Send the message
     pub fn send(self, message: RequestMessage) -> Result<(), Error> {
         self.client.send_message(message)
+    }
+}
+
+/// Builder for creating subscriptions with consistent patterns
+pub(crate) struct SubscriptionBuilder<'a, T> {
+    client: &'a Client,
+    context: ResponseContext,
+    _phantom: PhantomData<T>,
+}
+
+impl<'a, T> SubscriptionBuilder<'a, T>
+where
+    T: DataStream<T> + 'static,
+{
+    /// Creates a new subscription builder
+    pub fn new(client: &'a Client) -> Self {
+        Self {
+            client,
+            context: ResponseContext::default(),
+            _phantom: PhantomData,
+        }
+    }
+
+    /// Sets the response context for special handling
+    pub fn with_context(mut self, context: ResponseContext) -> Self {
+        self.context = context;
+        self
+    }
+
+    /// Sets smart depth flag in the context
+    pub fn with_smart_depth(mut self, is_smart_depth: bool) -> Self {
+        self.context.is_smart_depth = is_smart_depth;
+        self
+    }
+
+    /// Builds a subscription from an internal subscription (already sent)
+    pub fn build(self, subscription: InternalSubscription) -> Subscription<'a, T> {
+        Subscription::new(self.client, subscription, self.context)
+    }
+
+    /// Sends a request with a specific request ID and builds the subscription
+    pub fn send_with_request_id(self, request_id: i32, message: RequestMessage) -> Result<Subscription<'a, T>, Error> {
+        let subscription = self.client.send_request(request_id, message)?;
+        Ok(self.build(subscription))
+    }
+
+    /// Sends a shared request (no ID) and builds the subscription
+    pub fn send_shared(self, message_type: OutgoingMessages, message: RequestMessage) -> Result<Subscription<'a, T>, Error> {
+        let subscription = self.client.send_shared_request(message_type, message)?;
+        Ok(self.build(subscription))
+    }
+
+    /// Sends an order request and builds the subscription
+    pub fn send_order(self, order_id: i32, message: RequestMessage) -> Result<Subscription<'a, T>, Error> {
+        let subscription = self.client.send_order(order_id, message)?;
+        Ok(self.build(subscription))
     }
 }
 
@@ -216,5 +266,22 @@ impl ClientRequestBuilders for Client {
 
     fn message(&self) -> MessageBuilder {
         MessageBuilder::new(self)
+    }
+}
+
+/// Extension trait to add subscription builder to Client
+pub trait SubscriptionBuilderExt {
+    /// Creates a new subscription builder
+    fn subscription<T>(&self) -> SubscriptionBuilder<T>
+    where
+        T: DataStream<T> + 'static;
+}
+
+impl SubscriptionBuilderExt for Client {
+    fn subscription<T>(&self) -> SubscriptionBuilder<T>
+    where
+        T: DataStream<T> + 'static,
+    {
+        SubscriptionBuilder::new(self)
     }
 }

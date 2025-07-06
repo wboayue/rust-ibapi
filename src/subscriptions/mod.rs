@@ -12,8 +12,5 @@ pub mod r#async;
 #[cfg(feature = "sync")]
 pub use sync::{SharesChannel, Subscription, SubscriptionIter, SubscriptionOwnedIter, SubscriptionTimeoutIter, SubscriptionTryIter};
 
-#[cfg(feature = "sync")]
-pub(crate) use sync::{DataStream, ResponseContext};
-
 #[cfg(feature = "async")]
 pub use r#async::Subscription;

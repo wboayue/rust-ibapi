@@ -2,10 +2,7 @@
 
 pub(crate) mod error_handler;
 pub(crate) mod id_generator;
-#[cfg(feature = "sync")]
-pub(crate) mod request_builder;
-#[cfg(feature = "sync")]
-pub(crate) mod subscription_builder;
+pub(crate) mod builders;
 
 #[cfg(feature = "sync")]
 pub mod sync;
@@ -25,7 +22,10 @@ pub use r#async::Client;
 pub use crate::subscriptions::{SharesChannel, Subscription};
 
 #[cfg(feature = "sync")]
-pub(crate) use crate::subscriptions::{DataStream, ResponseContext};
+pub(crate) use crate::subscriptions::sync::{DataStream, ResponseContext};
 
 #[cfg(feature = "async")]
 pub use crate::subscriptions::Subscription;
+
+// Re-export builder traits (internal use only)
+pub(crate) use builders::{ClientRequestBuilders, SubscriptionBuilderExt};

@@ -369,7 +369,7 @@ pub fn encode_length(message: &str) -> Vec<u8> {
 }
 
 #[derive(Default, Debug, Clone)]
-pub(crate) struct RequestMessage {
+pub struct RequestMessage {
     pub(crate) fields: Vec<String>,
 }
 

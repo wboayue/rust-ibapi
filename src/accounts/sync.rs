@@ -142,7 +142,7 @@ impl DataStream<AccountUpdateMulti> for AccountUpdateMulti {
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.
 pub fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
-    use crate::client::subscription_builder::SubscriptionBuilderExt;
+    use crate::client::SubscriptionBuilderExt;
 
     client.check_server_version(server_versions::ACCOUNT_SUMMARY, "It does not support position requests.")?;
 
@@ -158,7 +158,7 @@ pub fn positions_multi<'a>(
     account: Option<&str>,
     model_code: Option<&str>,
 ) -> Result<Subscription<'a, PositionUpdateMulti>, Error> {
-    use crate::client::subscription_builder::SubscriptionBuilderExt;
+    use crate::client::SubscriptionBuilderExt;
 
     client.check_server_version(server_versions::MODELS_SUPPORT, "It does not support positions multi requests.")?;
 
