@@ -288,7 +288,7 @@ mod tests {
         assert_eq!(result.contract.symbol, "SYM", "contract.symbol");
         assert_eq!(
             result.contract.security_type,
-            super::super::super::contracts::SecurityType::Stock,
+            crate::contracts::SecurityType::Stock,
             "contract.security_type"
         );
         assert_eq!(
@@ -323,7 +323,7 @@ mod tests {
         assert_eq!(result.contract.symbol, "SYM", "contract.symbol");
         assert_eq!(
             result.contract.security_type,
-            super::super::super::contracts::SecurityType::Stock,
+            crate::contracts::SecurityType::Stock,
             "contract.security_type"
         );
         assert_eq!(
@@ -485,7 +485,7 @@ mod tests {
             expected_contract_id: i32,
             // Standard contract fields for verification
             expected_symbol: &'static str,
-            expected_sec_type: super::super::super::contracts::SecurityType,
+            expected_sec_type: crate::contracts::SecurityType,
             expected_expiry: &'static str,
             expected_strike: f64,
             expected_right: &'static str,
@@ -605,7 +605,7 @@ mod tests {
                 ),
                 expected_contract_id: 0,
                 expected_symbol: "SYM",
-                expected_sec_type: super::super::super::contracts::SecurityType::Stock,
+                expected_sec_type: crate::contracts::SecurityType::Stock,
                 expected_expiry: "251212",
                 expected_strike: 0.0,
                 expected_right: "P",
@@ -650,7 +650,7 @@ mod tests {
                 ),
                 expected_contract_id: 0,
                 expected_symbol: "SYM",
-                expected_sec_type: super::super::super::contracts::SecurityType::Stock,
+                expected_sec_type: crate::contracts::SecurityType::Stock,
                 expected_expiry: "251212",
                 expected_strike: 0.0,
                 expected_right: "P",
@@ -695,7 +695,7 @@ mod tests {
                 ),
                 expected_contract_id: 0,
                 expected_symbol: "SYM",
-                expected_sec_type: super::super::super::contracts::SecurityType::Stock,
+                expected_sec_type: crate::contracts::SecurityType::Stock,
                 expected_expiry: "251212",
                 expected_strike: 0.0,
                 expected_right: "P",
@@ -740,7 +740,7 @@ mod tests {
                 ),
                 expected_contract_id: 123,
                 expected_symbol: "SYM",
-                expected_sec_type: super::super::super::contracts::SecurityType::Stock,
+                expected_sec_type: crate::contracts::SecurityType::Stock,
                 expected_expiry: "251212",
                 expected_strike: 0.0,
                 expected_right: "P",
@@ -785,7 +785,7 @@ mod tests {
                 ),
                 expected_contract_id: 123,
                 expected_symbol: "SYM",
-                expected_sec_type: super::super::super::contracts::SecurityType::Stock,
+                expected_sec_type: crate::contracts::SecurityType::Stock,
                 expected_expiry: "251212",
                 expected_strike: 0.0,
                 expected_right: "P",
@@ -830,7 +830,7 @@ mod tests {
                 ),
                 expected_contract_id: 123,
                 expected_symbol: "SYM",
-                expected_sec_type: super::super::super::contracts::SecurityType::Stock,
+                expected_sec_type: crate::contracts::SecurityType::Stock,
                 expected_expiry: "251212",
                 expected_strike: 0.0,
                 expected_right: "P",
@@ -875,7 +875,7 @@ mod tests {
                 ),
                 expected_contract_id: 123,
                 expected_symbol: "SYM",
-                expected_sec_type: super::super::super::contracts::SecurityType::Stock,
+                expected_sec_type: crate::contracts::SecurityType::Stock,
                 expected_expiry: "251212",
                 expected_strike: 0.0,
                 expected_right: "P",
@@ -920,7 +920,7 @@ mod tests {
                 ),
                 expected_contract_id: 123,
                 expected_symbol: "SYM",
-                expected_sec_type: super::super::super::contracts::SecurityType::Stock,
+                expected_sec_type: crate::contracts::SecurityType::Stock,
                 expected_expiry: "251212",
                 expected_strike: 0.0,
                 expected_right: "P",
@@ -965,7 +965,7 @@ mod tests {
                 ),
                 expected_contract_id: 123,
                 expected_symbol: "SYM",
-                expected_sec_type: super::super::super::contracts::SecurityType::Stock,
+                expected_sec_type: crate::contracts::SecurityType::Stock,
                 expected_expiry: "251212",
                 expected_strike: 0.0,
                 expected_right: "P",
