@@ -10,7 +10,7 @@ use tokio::task;
 use tokio::time::{sleep, Duration};
 
 use crate::connection::r#async::AsyncConnection;
-use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::Error;
 
 /// Asynchronous message bus trait
@@ -48,16 +48,27 @@ pub struct AsyncTcpMessageBus {
     shared_channels: Arc<RwLock<HashMap<OutgoingMessages, ChannelSender>>>,
     /// Maps order IDs to their response channels
     order_channels: Arc<RwLock<HashMap<i32, ChannelSender>>>,
+    /// Maps incoming message types to their corresponding outgoing types
+    incoming_to_outgoing: HashMap<IncomingMessages, OutgoingMessages>,
 }
 
 impl AsyncTcpMessageBus {
     /// Create a new async TCP message bus
     pub fn new(connection: AsyncConnection) -> Result<Self, Error> {
+        // Build the incoming to outgoing message mapping
+        let mut incoming_to_outgoing = HashMap::new();
+        for mapping in shared_channel_configuration::CHANNEL_MAPPINGS {
+            for &response in mapping.responses {
+                incoming_to_outgoing.insert(response, mapping.request);
+            }
+        }
+
         Ok(Self {
             connection: Arc::new(connection),
             request_channels: Arc::new(RwLock::new(HashMap::new())),
             shared_channels: Arc::new(RwLock::new(HashMap::new())),
             order_channels: Arc::new(RwLock::new(HashMap::new())),
+            incoming_to_outgoing,
         })
     }
 
@@ -88,7 +99,7 @@ impl AsyncTcpMessageBus {
 
     /// Read a message and route it to the appropriate channel
     async fn read_and_route_message(&self) -> Result<(), Error> {
-        let mut message = self.connection.read_message().await?;
+        let message = self.connection.read_message().await?;
         let message_type = message.message_type();
 
         debug!("Received message type: {:?}", message_type);
@@ -101,27 +112,14 @@ impl AsyncTcpMessageBus {
             }
             IncomingMessages::Error => self.route_error_message(message).await,
             _ => {
-                // Try to route to request-specific channel first
-                if let Some(request_id) = self.extract_request_id(&mut message) {
+                // Try to route to request-specific channel first using the built-in request_id method
+                if let Some(request_id) = message.request_id() {
                     self.route_to_request_channel(request_id, message).await
                 } else {
                     // Route to shared channel based on message type
                     self.route_to_shared_channel(message_type, message).await
                 }
             }
-        }
-    }
-
-    /// Extract request ID from message if present
-    fn extract_request_id(&self, message: &mut ResponseMessage) -> Option<i32> {
-        // Many message types have request ID as the second field after message type
-        let mut temp = message.clone();
-        temp.skip(); // Skip message type
-
-        // Try to read request ID
-        match temp.next_int() {
-            Ok(id) if id >= 0 => Some(id),
-            _ => None,
         }
     }
 
@@ -157,17 +155,8 @@ impl AsyncTcpMessageBus {
 
     /// Route message to shared channel
     async fn route_to_shared_channel(&self, message_type: IncomingMessages, message: ResponseMessage) -> Result<(), Error> {
-        // Map incoming message types to their corresponding outgoing types for shared channels
-        let channel_type = match message_type {
-            IncomingMessages::TickPrice => Some(OutgoingMessages::RequestMarketData),
-            IncomingMessages::TickSize => Some(OutgoingMessages::RequestMarketData),
-            IncomingMessages::OrderStatus => Some(OutgoingMessages::PlaceOrder),
-            IncomingMessages::ExecutionData => Some(OutgoingMessages::RequestExecutions),
-            IncomingMessages::CommissionsReport => Some(OutgoingMessages::RequestExecutions),
-            _ => None,
-        };
-
-        if let Some(channel_type) = channel_type {
+        // Use the pre-built mapping to find the corresponding outgoing type
+        if let Some(&channel_type) = self.incoming_to_outgoing.get(&message_type) {
             let channels = self.shared_channels.read().await;
             if let Some(sender) = channels.get(&channel_type) {
                 let _ = sender.send(message);

@@ -7,7 +7,6 @@
 //!
 //! Make sure TWS or IB Gateway is running with API connections enabled
 
-use futures::StreamExt;
 use ibapi::accounts::pnl;
 use ibapi::Client;
 use std::env;
