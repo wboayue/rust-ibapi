@@ -57,7 +57,6 @@ pub mod orders;
 #[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod scanner;
 /// APIs for working with Wall Street Horizon: Earnings Calendar & Event Data.
-#[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod wsh;
 
 /// A prelude module for convenient importing of commonly used types.

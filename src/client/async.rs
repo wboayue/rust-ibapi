@@ -439,6 +439,122 @@ impl Client {
         accounts::family_codes(self).await
     }
 
+    // === Wall Street Horizon (WSH) Data ===
+
+    /// Requests Wall Street Horizon metadata information.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let metadata = client.wsh_metadata().await.expect("error requesting wsh metadata");
+    ///     println!("wsh metadata: {metadata:?}")
+    /// }
+    /// ```
+    pub async fn wsh_metadata(&self) -> Result<crate::wsh::WshMetadata, Error> {
+        crate::wsh::wsh_metadata(self).await
+    }
+
+    /// Requests event data for a specified contract from the Wall Street Horizons (WSH) calendar.
+    ///
+    /// # Arguments
+    ///
+    /// * `contract_id` - Contract identifier for the event request.
+    /// * `start_date`  - Start date of the event request.
+    /// * `end_date`    - End date of the event request.
+    /// * `limit`       - Number of events to return.
+    /// * `auto_fill`   - Autofill configuration for watchlist, portfolio, and position.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use time::macros::date;
+    /// use ibapi::wsh::AutoFill;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract_id = 12345;
+    ///     let start_date = Some(date!(2024-01-01));
+    ///     let end_date = Some(date!(2024-12-31));
+    ///     let limit = Some(100);
+    ///     let auto_fill = Some(AutoFill {
+    ///         competitors: true,
+    ///         portfolio: false,
+    ///         watchlist: false,
+    ///     });
+    ///
+    ///     let event_data = client
+    ///         .wsh_event_data_by_contract(contract_id, start_date, end_date, limit, auto_fill)
+    ///         .await
+    ///         .expect("error requesting wsh event data");
+    ///     println!("wsh event data: {event_data:?}")
+    /// }
+    /// ```
+    pub async fn wsh_event_data_by_contract(
+        &self,
+        contract_id: i32,
+        start_date: Option<time::Date>,
+        end_date: Option<time::Date>,
+        limit: Option<i32>,
+        auto_fill: Option<crate::wsh::AutoFill>,
+    ) -> Result<crate::wsh::WshEventData, Error> {
+        crate::wsh::wsh_event_data_by_contract(self, contract_id, start_date, end_date, limit, auto_fill).await
+    }
+
+    /// Requests event data using a filter from the Wall Street Horizons (WSH) calendar.
+    ///
+    /// # Arguments
+    ///
+    /// * `filter`    - Filter for the event request (e.g. JSON-encoded string).
+    /// * `limit`     - Number of events to return.
+    /// * `auto_fill` - Autofill configuration for watchlist, portfolio, and position.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::wsh::AutoFill;
+    /// use futures::StreamExt;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let filter = r#"{"country": "US"}"#;
+    ///     let limit = Some(100);
+    ///     let auto_fill = Some(AutoFill {
+    ///         competitors: true,
+    ///         portfolio: false,
+    ///         watchlist: false,
+    ///     });
+    ///
+    ///     let mut event_data_subscription = client
+    ///         .wsh_event_data_by_filter(filter, limit, auto_fill)
+    ///         .await
+    ///         .expect("error requesting wsh event data");
+    ///     
+    ///     while let Some(event_data) = event_data_subscription.next().await {
+    ///         println!("{event_data:?}")
+    ///     }
+    /// }
+    /// ```
+    pub async fn wsh_event_data_by_filter(
+        &self,
+        filter: &str,
+        limit: Option<i32>,
+        auto_fill: Option<crate::wsh::AutoFill>,
+    ) -> Result<Subscription<crate::wsh::WshEventData>, Error> {
+        crate::wsh::wsh_event_data_by_filter(self, filter, limit, auto_fill).await
+    }
+
     /// Creates a stubbed client for testing
     #[cfg(test)]
     pub fn stubbed(message_bus: Arc<dyn AsyncMessageBus>, server_version: i32) -> Self {
