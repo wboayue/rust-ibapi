@@ -8,9 +8,8 @@ use crate::protocol::{check_version, Features};
 use crate::subscriptions::{AsyncDataStream, Subscription};
 use crate::{Client, Error};
 
-use super::decoders;
-use super::encoders;
-use super::types::*;
+use super::common::{decoders, encoders};
+use super::*;
 
 // Implement AsyncDataStream traits for the account types
 impl AsyncDataStream<AccountSummaries> for AccountSummaries {

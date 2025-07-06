@@ -331,15 +331,15 @@ mod tests {
     }
 }
 
-pub(super) fn encode_request_positions() -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_request_positions() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::RequestPositions, 1)
 }
 
-pub(super) fn encode_cancel_positions() -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_cancel_positions() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::CancelPositions, 1)
 }
 
-pub(super) fn encode_cancel_account_summary(request_id: i32) -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_cancel_account_summary(request_id: i32) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 
     const VERSION: i32 = 1;
@@ -351,7 +351,7 @@ pub(super) fn encode_cancel_account_summary(request_id: i32) -> Result<RequestMe
     Ok(message)
 }
 
-pub(super) fn encode_request_positions_multi(request_id: i32, account: Option<&str>, model_code: Option<&str>) -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_request_positions_multi(request_id: i32, account: Option<&str>, model_code: Option<&str>) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 
     const VERSION: i32 = 1;
@@ -365,7 +365,7 @@ pub(super) fn encode_request_positions_multi(request_id: i32, account: Option<&s
     Ok(message)
 }
 
-pub(super) fn encode_cancel_positions_multi(request_id: i32) -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_cancel_positions_multi(request_id: i32) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 
     const VERSION: i32 = 1;
@@ -377,11 +377,11 @@ pub(super) fn encode_cancel_positions_multi(request_id: i32) -> Result<RequestMe
     Ok(message)
 }
 
-pub(super) fn encode_request_family_codes() -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_request_family_codes() -> Result<RequestMessage, Error> {
     encode_simple(OutgoingMessages::RequestFamilyCodes, 1)
 }
 
-pub(super) fn encode_request_pnl(request_id: i32, account: &str, model_code: Option<&str>) -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_request_pnl(request_id: i32, account: &str, model_code: Option<&str>) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 
     message.push_field(&OutgoingMessages::RequestPnL);
@@ -392,11 +392,11 @@ pub(super) fn encode_request_pnl(request_id: i32, account: &str, model_code: Opt
     Ok(message)
 }
 
-pub(super) fn encode_cancel_pnl(request_id: i32) -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_cancel_pnl(request_id: i32) -> Result<RequestMessage, Error> {
     encode_simple_with_request_id(OutgoingMessages::CancelPnL, request_id)
 }
 
-pub(super) fn encode_request_pnl_single(request_id: i32, account: &str, contract_id: i32, model_code: Option<&str>) -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_request_pnl_single(request_id: i32, account: &str, contract_id: i32, model_code: Option<&str>) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 
     message.push_field(&OutgoingMessages::RequestPnLSingle);
@@ -408,11 +408,11 @@ pub(super) fn encode_request_pnl_single(request_id: i32, account: &str, contract
     Ok(message)
 }
 
-pub(super) fn encode_cancel_pnl_single(request_id: i32) -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_cancel_pnl_single(request_id: i32) -> Result<RequestMessage, Error> {
     encode_simple_with_request_id(OutgoingMessages::CancelPnLSingle, request_id)
 }
 
-pub(super) fn encode_request_account_summary(request_id: i32, group: &str, tags: &[&str]) -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_request_account_summary(request_id: i32, group: &str, tags: &[&str]) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::new();
@@ -426,12 +426,12 @@ pub(super) fn encode_request_account_summary(request_id: i32, group: &str, tags:
     Ok(message)
 }
 
-pub(super) fn encode_request_managed_accounts() -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_request_managed_accounts() -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
     encode_simple(OutgoingMessages::RequestManagedAccounts, VERSION)
 }
 
-pub(super) fn encode_request_account_updates(server_version: i32, account: &str) -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_request_account_updates(server_version: i32, account: &str) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 2;
 
     let mut message = RequestMessage::new();
@@ -446,7 +446,7 @@ pub(super) fn encode_request_account_updates(server_version: i32, account: &str)
     Ok(message)
 }
 
-pub(super) fn encode_request_account_updates_multi(
+pub(in crate::accounts) fn encode_request_account_updates_multi(
     request_id: i32,
     account: Option<&str>,
     model_code: Option<&str>,
@@ -465,7 +465,7 @@ pub(super) fn encode_request_account_updates_multi(
     Ok(message)
 }
 
-pub(super) fn encode_cancel_account_updates(server_version: i32) -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_cancel_account_updates(server_version: i32) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 2;
 
     let mut message = RequestMessage::new();
@@ -480,7 +480,7 @@ pub(super) fn encode_cancel_account_updates(server_version: i32) -> Result<Reque
     Ok(message)
 }
 
-pub(super) fn encode_cancel_account_updates_multi(_server_version: i32, request_id: i32) -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_cancel_account_updates_multi(_server_version: i32, request_id: i32) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::new();
@@ -492,7 +492,7 @@ pub(super) fn encode_cancel_account_updates_multi(_server_version: i32, request_
     Ok(message)
 }
 
-pub(super) fn encode_request_server_time() -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_request_server_time() -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
     encode_simple(OutgoingMessages::RequestCurrentTime, VERSION)
 }

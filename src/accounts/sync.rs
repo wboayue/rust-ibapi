@@ -7,9 +7,8 @@ use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, Respon
 use crate::protocol::{check_version, Features};
 use crate::{Client, Error};
 
-use super::decoders;
-use super::encoders;
-use super::types::*;
+use super::common::{decoders, encoders};
+use super::*;
 
 // Implement SharesChannel for PositionUpdate subscription
 impl SharesChannel for Subscription<'_, PositionUpdate> {}
