@@ -18,6 +18,7 @@ use log::{debug, error, info, warn};
 use crate::connection::sync::Connection;
 
 use super::{InternalSubscription, MessageBus, Response, Signal, SubscriptionBuilder};
+use super::routing::{determine_routing, map_incoming_to_outgoing, RoutingDecision, is_warning_error, UNSPECIFIED_REQUEST_ID};
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Error};
 
@@ -251,30 +252,25 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     fn dispatch_message(&self, server_version: i32, message: ResponseMessage) {
-        match message.message_type() {
-            IncomingMessages::Error => {
-                let request_id = message.peek_int(2).unwrap_or(-1);
-                let error_code = message.peek_int(3).unwrap_or(0);
-
-                // Check if this is a warning (error codes 2100-2169)
-                let is_warning = WARNING_CODES.contains(&error_code);
-
-                if request_id == UNSPECIFIED_REQUEST_ID || is_warning {
+        // Use common routing logic
+        match determine_routing(&message) {
+            RoutingDecision::Error { request_id, error_code } => {
+                // Check if this is a warning or unspecified error
+                if request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(error_code) {
                     error_event(server_version, message).unwrap();
                 } else {
                     self.process_response(message);
                 }
             }
-            IncomingMessages::OrderStatus
-            | IncomingMessages::OpenOrder
-            | IncomingMessages::OpenOrderEnd
-            | IncomingMessages::CompletedOrder
-            | IncomingMessages::CompletedOrdersEnd
-            | IncomingMessages::ExecutionData
-            | IncomingMessages::ExecutionDataEnd
-            | IncomingMessages::CommissionsReport => self.process_orders(message),
-            _ => self.process_response(message),
-        };
+            RoutingDecision::ByOrderId(_) => {
+                // Order-related messages
+                self.process_orders(message);
+            }
+            _ => {
+                // All other messages
+                self.process_response(message);
+            }
+        }
     }
 
     fn process_response(&self, message: ResponseMessage) {
@@ -452,7 +448,6 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 }
 
-const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 impl<S: Stream> MessageBus for TcpMessageBus<S> {
     fn send_request(&self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {

@@ -13,6 +13,8 @@ use crate::connection::r#async::AsyncConnection;
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::Error;
 
+use super::routing::{determine_routing, map_incoming_to_outgoing, RoutingDecision};
+
 /// Asynchronous message bus trait
 #[async_trait]
 pub trait AsyncMessageBus: Send + Sync {
@@ -48,27 +50,16 @@ pub struct AsyncTcpMessageBus {
     shared_channels: Arc<RwLock<HashMap<OutgoingMessages, ChannelSender>>>,
     /// Maps order IDs to their response channels
     order_channels: Arc<RwLock<HashMap<i32, ChannelSender>>>,
-    /// Maps incoming message types to their corresponding outgoing types
-    incoming_to_outgoing: HashMap<IncomingMessages, OutgoingMessages>,
 }
 
 impl AsyncTcpMessageBus {
     /// Create a new async TCP message bus
     pub fn new(connection: AsyncConnection) -> Result<Self, Error> {
-        // Build the incoming to outgoing message mapping
-        let mut incoming_to_outgoing = HashMap::new();
-        for mapping in shared_channel_configuration::CHANNEL_MAPPINGS {
-            for &response in mapping.responses {
-                incoming_to_outgoing.insert(response, mapping.request);
-            }
-        }
-
         Ok(Self {
             connection: Arc::new(connection),
             request_channels: Arc::new(RwLock::new(HashMap::new())),
             shared_channels: Arc::new(RwLock::new(HashMap::new())),
             order_channels: Arc::new(RwLock::new(HashMap::new())),
-            incoming_to_outgoing,
         })
     }
 
@@ -100,25 +91,25 @@ impl AsyncTcpMessageBus {
     /// Read a message and route it to the appropriate channel
     async fn read_and_route_message(&self) -> Result<(), Error> {
         let message = self.connection.read_message().await?;
-        let message_type = message.message_type();
+        
+        debug!("Received message type: {:?}", message.message_type());
 
-        debug!("Received message type: {:?}", message_type);
-
-        // Route based on message type
-        match message_type {
-            IncomingMessages::NextValidId => {
-                // This is handled during connection establishment
-                Ok(())
+        // Use common routing logic
+        match determine_routing(&message) {
+            RoutingDecision::ByRequestId(request_id) => {
+                self.route_to_request_channel(request_id, message).await
             }
-            IncomingMessages::Error => self.route_error_message(message).await,
-            _ => {
-                // Try to route to request-specific channel first using the built-in request_id method
-                if let Some(request_id) = message.request_id() {
-                    self.route_to_request_channel(request_id, message).await
-                } else {
-                    // Route to shared channel based on message type
-                    self.route_to_shared_channel(message_type, message).await
-                }
+            RoutingDecision::ByOrderId(order_id) => {
+                self.route_to_order_channel(order_id, message).await
+            }
+            RoutingDecision::ByMessageType(message_type) => {
+                self.route_to_shared_channel(message_type, message).await
+            }
+            RoutingDecision::SharedMessage(message_type) => {
+                self.route_to_shared_channel(message_type, message).await
+            }
+            RoutingDecision::Error { request_id, error_code } => {
+                self.route_error_message_new(message, request_id, error_code).await
             }
         }
     }
@@ -144,6 +135,23 @@ impl AsyncTcpMessageBus {
         Ok(())
     }
 
+    /// Route error message using routing decision
+    async fn route_error_message_new(&self, message: ResponseMessage, request_id: i32, error_code: i32) -> Result<(), Error> {
+        // Log the error for visibility
+        let error_msg = message.peek_string(4).unwrap_or(String::from("Unknown error"));
+        info!("Error message - Request ID: {}, Code: {}, Message: {}", request_id, error_code, error_msg);
+
+        // Route to request-specific channel if exists and not a warning
+        if request_id >= 0 && !super::routing::is_warning_error(error_code) {
+            let channels = self.request_channels.read().await;
+            if let Some(sender) = channels.get(&request_id) {
+                let _ = sender.send(message);
+            }
+        }
+
+        Ok(())
+    }
+
     /// Route message to request-specific channel
     async fn route_to_request_channel(&self, request_id: i32, message: ResponseMessage) -> Result<(), Error> {
         let channels = self.request_channels.read().await;
@@ -153,10 +161,19 @@ impl AsyncTcpMessageBus {
         Ok(())
     }
 
+    /// Route message to order-specific channel
+    async fn route_to_order_channel(&self, order_id: i32, message: ResponseMessage) -> Result<(), Error> {
+        let channels = self.order_channels.read().await;
+        if let Some(sender) = channels.get(&order_id) {
+            let _ = sender.send(message);
+        }
+        Ok(())
+    }
+
     /// Route message to shared channel
     async fn route_to_shared_channel(&self, message_type: IncomingMessages, message: ResponseMessage) -> Result<(), Error> {
-        // Use the pre-built mapping to find the corresponding outgoing type
-        if let Some(&channel_type) = self.incoming_to_outgoing.get(&message_type) {
+        // Use the common mapping function
+        if let Some(channel_type) = map_incoming_to_outgoing(message_type) {
             let channels = self.shared_channels.read().await;
             if let Some(sender) = channels.get(&channel_type) {
                 let _ = sender.send(message);

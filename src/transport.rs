@@ -264,3 +264,4 @@ pub use r#async::{AsyncInternalSubscription, AsyncMessageBus};
 
 pub mod connection;
 pub mod recorder;
+pub mod routing;
