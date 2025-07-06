@@ -128,25 +128,16 @@ The `Client` can be shared between threads for concurrent operations:
 
 4. **Examples**: Numerous examples in the `/examples` directory demonstrate API usage.
 
-## Builder Patterns (Sync Mode Only)
+## Builder Patterns
 
-The library provides builder patterns to simplify common operations in sync mode:
+The library provides unified builder patterns to simplify common operations in both sync and async modes. The builders are located in `client/builders/` and provide a consistent API regardless of the feature flag used.
 
 ### Request Builder
 
-The request builder (`client/request_builder.rs`) reduces boilerplate for client methods:
+The request builder reduces boilerplate for client methods with request IDs:
 
 ```rust
-// Traditional approach
-pub fn pnl(client: &Client, account: &str) -> Result<Subscription<PnL>, Error> {
-    client.check_server_version(server_versions::PNL, "PnL not supported")?;
-    let request_id = client.next_request_id();
-    let request = encode_request_pnl(request_id, account)?;
-    let subscription = client.send_request(request_id, request)?;
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
-}
-
-// With request builder
+// Sync mode
 pub fn pnl(client: &Client, account: &str) -> Result<Subscription<PnL>, Error> {
     let builder = client
         .request()
@@ -155,23 +146,72 @@ pub fn pnl(client: &Client, account: &str) -> Result<Subscription<PnL>, Error> {
     let request = encode_request_pnl(builder.request_id(), account)?;
     builder.send(request)
 }
+
+// Async mode
+pub async fn pnl(client: &Client, account: &str) -> Result<Subscription<PnL>, Error> {
+    let builder = client
+        .request()
+        .check_version(server_versions::PNL, "PnL not supported")
+        .await?;
+    
+    let request = encode_request_pnl(builder.request_id(), account)?;
+    builder.send(request).await
+}
 ```
 
-### Subscription Builder
+### Shared Request Builder
 
-The subscription builder (`client/subscription_builder.rs`) provides a fluent API for creating subscriptions:
+For requests that use shared channels (no request ID):
 
 ```rust
-// Shared channel subscription
+// Sync mode
 pub fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
     let request = encode_request_positions()?;
     
     client
-        .subscription::<PositionUpdate>()
-        .send_shared(OutgoingMessages::RequestPositions, request)
+        .shared_request(OutgoingMessages::RequestPositions)
+        .send(request)
 }
 
-// Request ID based subscription with context
+// Async mode
+pub async fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
+    let request = encode_request_positions()?;
+    
+    client
+        .shared_request(OutgoingMessages::RequestPositions)
+        .send(request)
+        .await
+}
+```
+
+### Order Request Builder
+
+For order-specific operations:
+
+```rust
+// Sync mode
+pub fn place_order(client: &Client, contract: &Contract, order: &Order) -> Result<(), Error> {
+    let builder = client.order_request();
+    let request = encode_order(builder.order_id(), contract, order)?;
+    builder.send(request)?;
+    Ok(())
+}
+
+// Async mode
+pub async fn place_order(client: &Client, contract: &Contract, order: &Order) -> Result<(), Error> {
+    let builder = client.order_request();
+    let request = encode_order(builder.order_id(), contract, order)?;
+    builder.send(request).await?;
+    Ok(())
+}
+```
+
+### Subscription Builder
+
+The subscription builder provides a fluent API for creating subscriptions with additional context:
+
+```rust
+// Sync mode with smart depth context
 pub fn market_depth(client: &Client, contract: &Contract, num_rows: i32) -> Result<Subscription<MarketDepth>, Error> {
     let request_id = client.next_request_id();
     let request = encode_market_depth(request_id, contract, num_rows)?;
@@ -181,9 +221,28 @@ pub fn market_depth(client: &Client, contract: &Contract, num_rows: i32) -> Resu
         .with_smart_depth(true)
         .send_with_request_id(request_id, request)
 }
+
+// Async mode with smart depth context
+pub async fn market_depth(client: &Client, contract: &Contract, num_rows: i32) -> Result<Subscription<MarketDepth>, Error> {
+    let request_id = client.next_request_id();
+    let request = encode_market_depth(request_id, contract, num_rows)?;
+    
+    client
+        .subscription::<MarketDepth>()
+        .with_smart_depth(true)
+        .send_with_request_id(request_id, request)
+        .await
+}
 ```
 
-**Note**: These builder patterns are currently only available in sync mode. Async implementations use direct API calls.
+### Builder Types
+
+All builders are internal types (`pub(crate)`) and are accessed through extension traits:
+
+- **ClientRequestBuilders**: Provides `request()`, `shared_request()`, `order_request()`, and `message()` methods
+- **SubscriptionBuilderExt**: Provides `subscription<T>()` method
+
+The builders automatically adapt to sync or async mode based on the active feature flag, maintaining the same method names and patterns while changing the underlying implementation.
 
 ## Protocol Version Constants
 
