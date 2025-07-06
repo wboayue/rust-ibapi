@@ -7,7 +7,7 @@ async fn test_wsh_metadata_async() {
 
     // Note: This is a basic compile test to ensure the async implementation works
     // In real usage, you would connect to a live TWS instance
-    
+
     // This test just ensures the async code compiles and the API is usable
     let _ = async {
         // Example usage (would fail without real connection):

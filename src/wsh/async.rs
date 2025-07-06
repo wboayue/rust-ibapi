@@ -83,9 +83,7 @@ pub async fn wsh_event_data_by_contract(
 
     match subscription.next().await {
         Some(Ok(event_data)) => Ok(event_data),
-        Some(Err(Error::ConnectionReset)) => {
-            Box::pin(wsh_event_data_by_contract(client, contract_id, start_date, end_date, limit, auto_fill)).await
-        }
+        Some(Err(Error::ConnectionReset)) => Box::pin(wsh_event_data_by_contract(client, contract_id, start_date, end_date, limit, auto_fill)).await,
         Some(Err(e)) => Err(e),
         None => Err(Error::UnexpectedEndOfStream),
     }
@@ -109,12 +107,12 @@ pub async fn wsh_event_data_by_filter(
         builder.request_id(),
         None,
         Some(filter),
-        None,  // start_date  
-        None,  // end_date
+        None, // start_date
+        None, // end_date
         limit,
         auto_fill,
     )?;
-    
+
     builder.send::<WshEventData, WshEventData>(request).await
 }
 
@@ -247,7 +245,7 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, crate::server_versions::WSHE_CALENDAR);
-        
+
         // Test filter version requirement
         let result = wsh_event_data_by_filter(&client, "filter", None, None).await;
         assert!(result.is_err());
@@ -264,18 +262,10 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, crate::server_versions::WSH_EVENT_DATA_FILTERS);
-        
+
         // Test date filter version requirement
-        let result = wsh_event_data_by_contract(
-            &client,
-            12345,
-            Some(date!(2024 - 01 - 01)),
-            None,
-            None,
-            None,
-        )
-        .await;
-        
+        let result = wsh_event_data_by_contract(&client, 12345, Some(date!(2024 - 01 - 01)), None, None, None).await;
+
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::ServerVersion(_, _, _)));
     }

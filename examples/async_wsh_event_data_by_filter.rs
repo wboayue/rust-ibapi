@@ -1,5 +1,5 @@
 //! # WSH Event Data by Filter Example (Async)
-//! 
+//!
 //! This example demonstrates how to stream Wall Street Horizon event data
 //! using filters with the async API. This allows you to receive continuous
 //! updates for events matching specific criteria.
@@ -38,15 +38,15 @@ async fn main() {
         "eventType": "Earnings",
         "watchlist": true
     }"#;
-    
+
     // Limit number of events
     let limit = Some(50);
-    
+
     // Configure autofill options
     let auto_fill = Some(AutoFill {
         competitors: false,
-        portfolio: true,    // Include portfolio positions
-        watchlist: true,    // Include watchlist items
+        portfolio: true, // Include portfolio positions
+        watchlist: true, // Include watchlist items
     });
 
     // Request WSH event data stream
@@ -55,9 +55,9 @@ async fn main() {
             println!("\nStreaming WSH events with filter:");
             println!("Filter: {}", filter);
             println!("Waiting for events...\n");
-            
+
             let mut event_count = 0;
-            
+
             // Process events as they arrive
             while let Some(event_result) = event_stream.next().await {
                 match event_result {
@@ -65,7 +65,7 @@ async fn main() {
                         event_count += 1;
                         println!("\nEvent #{} received:", event_count);
                         println!("{}", event_data.data_json);
-                        
+
                         // Limit output for demo purposes
                         if event_count >= 10 {
                             println!("\nReceived {} events. Stopping demo.", event_count);
@@ -78,7 +78,7 @@ async fn main() {
                     }
                 }
             }
-            
+
             if event_count == 0 {
                 println!("No events received. Check your filter criteria.");
             }

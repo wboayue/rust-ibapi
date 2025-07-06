@@ -1,5 +1,5 @@
 //! # WSH Metadata Example (Async)
-//! 
+//!
 //! This example demonstrates how to retrieve Wall Street Horizon metadata
 //! using the async API. WSH metadata contains configuration and setup
 //! information for the Wall Street Horizon data service.
@@ -28,7 +28,7 @@ async fn main() {
 
     println!("Connected to TWS/Gateway");
     println!("Server Version: {}", client.server_version());
-    
+
     // Request WSH metadata
     match client.wsh_metadata().await {
         Ok(metadata) => {

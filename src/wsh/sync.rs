@@ -116,8 +116,8 @@ pub fn wsh_event_data_by_filter<'a>(
         request_id,
         None,
         Some(filter),
-        None,  // start_date  
-        None,  // end_date
+        None, // start_date
+        None, // end_date
         limit,
         auto_fill,
     )?;
@@ -195,7 +195,7 @@ mod tests {
         let client = Client::stubbed(message_bus, crate::server_versions::WSH_EVENT_DATA_FILTERS_DATE);
         let filter = "earnings";
         let result = wsh_event_data_by_filter(&client, filter, Some(50), None);
-        
+
         assert!(result.is_ok());
         let mut subscription = result.unwrap();
 
@@ -219,7 +219,7 @@ mod tests {
     #[test]
     fn test_data_stream_cancel_message() {
         let request_id = 9000;
-        
+
         // Test WshMetadata cancel
         let cancel_msg = WshMetadata::cancel_message(0, Some(request_id), &ResponseContext::default());
         assert!(cancel_msg.is_ok());

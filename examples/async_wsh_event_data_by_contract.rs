@@ -1,5 +1,5 @@
 //! # WSH Event Data by Contract Example (Async)
-//! 
+//!
 //! This example demonstrates how to retrieve Wall Street Horizon event data
 //! for a specific contract using the async API. This includes earnings
 //! calendars, corporate events, and other fundamental data events.
@@ -33,17 +33,17 @@ async fn main() {
 
     // Example: Get WSH events for AAPL (contract ID would be obtained from contract details)
     let contract_id = 265598; // AAPL contract ID (example - verify with contract details)
-    
+
     // Set date range for events
-    let start_date = Some(date!(2024-01-01));
-    let end_date = Some(date!(2024-12-31));
+    let start_date = Some(date!(2024 - 01 - 01));
+    let end_date = Some(date!(2024 - 12 - 31));
     let limit = Some(100);
-    
+
     // Configure autofill options
     let auto_fill = Some(AutoFill {
-        competitors: true,  // Include competitor events
-        portfolio: false,   // Don't include portfolio positions
-        watchlist: false,   // Don't include watchlist items
+        competitors: true, // Include competitor events
+        portfolio: false,  // Don't include portfolio positions
+        watchlist: false,  // Don't include watchlist items
     });
 
     // Request WSH event data

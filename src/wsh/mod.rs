@@ -58,10 +58,10 @@ impl AutoFill {
 
 // Re-export API functions based on active feature
 #[cfg(all(feature = "sync", not(feature = "async")))]
-pub use sync::{wsh_metadata, wsh_event_data_by_contract, wsh_event_data_by_filter};
+pub use sync::{wsh_event_data_by_contract, wsh_event_data_by_filter, wsh_metadata};
 
 #[cfg(feature = "async")]
-pub use r#async::{wsh_metadata, wsh_event_data_by_contract, wsh_event_data_by_filter};
+pub use r#async::{wsh_event_data_by_contract, wsh_event_data_by_filter, wsh_metadata};
 
 #[cfg(all(test, feature = "sync", not(feature = "async")))]
 mod tests {
@@ -372,16 +372,7 @@ mod tests {
         use super::encoders::encode_request_wsh_event_data;
 
         // Test with empty filter string
-        let result = encode_request_wsh_event_data(
-            server_versions::WSH_EVENT_DATA_FILTERS,
-            9000,
-            None,
-            Some(""),
-            None,
-            None,
-            None,
-            None,
-        );
+        let result = encode_request_wsh_event_data(server_versions::WSH_EVENT_DATA_FILTERS, 9000, None, Some(""), None, None, None, None);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().encode_simple(), "102|9000|||0|0|0|");
 
@@ -656,16 +647,7 @@ mod common_tests {
         use crate::server_versions;
 
         // Test with empty filter string
-        let result = encode_request_wsh_event_data(
-            server_versions::WSH_EVENT_DATA_FILTERS,
-            9000,
-            None,
-            Some(""),
-            None,
-            None,
-            None,
-            None,
-        );
+        let result = encode_request_wsh_event_data(server_versions::WSH_EVENT_DATA_FILTERS, 9000, None, Some(""), None, None, None, None);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().encode_simple(), "102|9000|||0|0|0|");
 
@@ -751,7 +733,8 @@ mod async_tests {
                 portfolio: true,
                 watchlist: true,
             }),
-        ).await;
+        )
+        .await;
 
         let request_messages = stub.request_messages();
         assert_eq!(request_messages[0].encode_simple(), "102|9000|12345||1|1|1|20240101|20241231|100|");
@@ -784,7 +767,8 @@ mod async_tests {
                 portfolio: false,
                 watchlist: true,
             }),
-        ).await;
+        )
+        .await;
 
         let request_messages = stub.request_messages();
         assert_eq!(request_messages[0].encode_simple(), "102|9000||filter=value|1|0|1|||100|");
