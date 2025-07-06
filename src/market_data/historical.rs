@@ -11,10 +11,10 @@ use time::{Date, OffsetDateTime};
 
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
-#[cfg(feature = "sync")]
-use crate::transport::{InternalSubscription, Response};
 #[cfg(feature = "async")]
 use crate::transport::{AsyncInternalSubscription as InternalSubscription, Response};
+#[cfg(feature = "sync")]
+use crate::transport::{InternalSubscription, Response};
 use crate::{server_versions, Client, Error, ToField, MAX_RETRIES};
 
 mod decoders;
@@ -415,219 +415,220 @@ pub(crate) use sync_api::*;
 mod sync_api {
     use super::*;
 
-// Returns the timestamp of earliest available historical data for a contract and data type.
-pub(crate) fn head_timestamp(client: &Client, contract: &Contract, what_to_show: WhatToShow, use_rth: bool) -> Result<OffsetDateTime, Error> {
-    client.check_server_version(server_versions::REQ_HEAD_TIMESTAMP, "It does not support head time stamp requests.")?;
+    // Returns the timestamp of earliest available historical data for a contract and data type.
+    pub(crate) fn head_timestamp(client: &Client, contract: &Contract, what_to_show: WhatToShow, use_rth: bool) -> Result<OffsetDateTime, Error> {
+        client.check_server_version(server_versions::REQ_HEAD_TIMESTAMP, "It does not support head time stamp requests.")?;
 
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_head_timestamp(request_id, contract, what_to_show, use_rth)?;
-    let subscription = client.send_request(request_id, request)?;
+        let request_id = client.next_request_id();
+        let request = encoders::encode_request_head_timestamp(request_id, contract, what_to_show, use_rth)?;
+        let subscription = client.send_request(request_id, request)?;
 
-    match subscription.next() {
-        Some(Ok(mut message)) if message.message_type() == IncomingMessages::HeadTimestamp => Ok(decoders::decode_head_timestamp(&mut message)?),
-        Some(Ok(message)) => Err(Error::UnexpectedResponse(message)),
-        Some(Err(Error::ConnectionReset)) => head_timestamp(client, contract, what_to_show, use_rth),
-        Some(Err(e)) => Err(e),
-        None => Err(Error::UnexpectedEndOfStream),
-    }
-}
-
-// https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
-pub(crate) fn historical_data(
-    client: &Client,
-    contract: &Contract,
-    end_date: Option<OffsetDateTime>,
-    duration: Duration,
-    bar_size: BarSize,
-    what_to_show: Option<WhatToShow>,
-    use_rth: bool,
-) -> Result<HistoricalData, Error> {
-    if !contract.trading_class.is_empty() || contract.contract_id > 0 {
-        client.check_server_version(
-            server_versions::TRADING_CLASS,
-            "It does not support contract_id nor trading class parameters when requesting historical data.",
-        )?;
+        match subscription.next() {
+            Some(Ok(mut message)) if message.message_type() == IncomingMessages::HeadTimestamp => Ok(decoders::decode_head_timestamp(&mut message)?),
+            Some(Ok(message)) => Err(Error::UnexpectedResponse(message)),
+            Some(Err(Error::ConnectionReset)) => head_timestamp(client, contract, what_to_show, use_rth),
+            Some(Err(e)) => Err(e),
+            None => Err(Error::UnexpectedEndOfStream),
+        }
     }
 
-    if what_to_show == Some(WhatToShow::Schedule) {
+    // https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
+    pub(crate) fn historical_data(
+        client: &Client,
+        contract: &Contract,
+        end_date: Option<OffsetDateTime>,
+        duration: Duration,
+        bar_size: BarSize,
+        what_to_show: Option<WhatToShow>,
+        use_rth: bool,
+    ) -> Result<HistoricalData, Error> {
+        if !contract.trading_class.is_empty() || contract.contract_id > 0 {
+            client.check_server_version(
+                server_versions::TRADING_CLASS,
+                "It does not support contract_id nor trading class parameters when requesting historical data.",
+            )?;
+        }
+
+        if what_to_show == Some(WhatToShow::Schedule) {
+            client.check_server_version(
+                server_versions::HISTORICAL_SCHEDULE,
+                "It does not support requesting of historical schedule.",
+            )?;
+        }
+
+        if end_date.is_some() && what_to_show == Some(WhatToShow::AdjustedLast) {
+            return Err(Error::InvalidArgument(
+                "end_date must be None when requesting WhatToShow::AdjustedLast.".into(),
+            ));
+        }
+
+        for _ in 0..MAX_RETRIES {
+            let request_id = client.next_request_id();
+            let request = encoders::encode_request_historical_data(
+                client.server_version(),
+                request_id,
+                contract,
+                end_date,
+                duration,
+                bar_size,
+                what_to_show,
+                use_rth,
+                false,
+                Vec::<crate::contracts::TagValue>::default(),
+            )?;
+
+            let subscription = client.send_request(request_id, request)?;
+
+            match subscription.next() {
+                Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalData => {
+                    return decoders::decode_historical_data(client.server_version, time_zone(client), &mut message)
+                }
+                Some(Ok(message)) if message.message_type() == IncomingMessages::Error => return Err(Error::from(message)),
+                Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
+                Some(Err(Error::ConnectionReset)) => continue,
+                Some(Err(e)) => return Err(e),
+                None => return Err(Error::UnexpectedEndOfStream),
+            }
+        }
+
+        Err(Error::ConnectionReset)
+    }
+
+    pub(crate) fn time_zone(client: &Client) -> &time_tz::Tz {
+        if let Some(tz) = client.time_zone {
+            tz
+        } else {
+            warn!("server timezone unknown. assuming UTC, but that may be incorrect!");
+            time_tz::timezones::db::UTC
+        }
+    }
+
+    pub(crate) fn historical_schedule(
+        client: &Client,
+        contract: &Contract,
+        end_date: Option<OffsetDateTime>,
+        duration: Duration,
+    ) -> Result<Schedule, Error> {
+        if !contract.trading_class.is_empty() || contract.contract_id > 0 {
+            client.check_server_version(
+                server_versions::TRADING_CLASS,
+                "It does not support contract_id nor trading class parameters when requesting historical data.",
+            )?;
+        }
+
         client.check_server_version(
             server_versions::HISTORICAL_SCHEDULE,
             "It does not support requesting of historical schedule.",
         )?;
+
+        loop {
+            let request_id = client.next_request_id();
+            let request = encoders::encode_request_historical_data(
+                client.server_version(),
+                request_id,
+                contract,
+                end_date,
+                duration,
+                BarSize::Day,
+                Some(WhatToShow::Schedule),
+                true,
+                false,
+                Vec::<crate::contracts::TagValue>::default(),
+            )?;
+
+            let subscription = client.send_request(request_id, request)?;
+
+            match subscription.next() {
+                Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalSchedule => {
+                    return decoders::decode_historical_schedule(&mut message)
+                }
+                Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
+                Some(Err(Error::ConnectionReset)) => continue,
+                Some(Err(e)) => return Err(e),
+                None => return Err(Error::UnexpectedEndOfStream),
+            }
+        }
     }
 
-    if end_date.is_some() && what_to_show == Some(WhatToShow::AdjustedLast) {
-        return Err(Error::InvalidArgument(
-            "end_date must be None when requesting WhatToShow::AdjustedLast.".into(),
-        ));
-    }
+    pub(crate) fn historical_ticks_bid_ask(
+        client: &Client,
+        contract: &Contract,
+        start: Option<OffsetDateTime>,
+        end: Option<OffsetDateTime>,
+        number_of_ticks: i32,
+        use_rth: bool,
+        ignore_size: bool,
+    ) -> Result<TickSubscription<TickBidAsk>, Error> {
+        client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
 
-    for _ in 0..MAX_RETRIES {
         let request_id = client.next_request_id();
-        let request = encoders::encode_request_historical_data(
-            client.server_version(),
+        let request = encoders::encode_request_historical_ticks(
             request_id,
             contract,
-            end_date,
-            duration,
-            bar_size,
-            what_to_show,
+            start,
+            end,
+            number_of_ticks,
+            WhatToShow::BidAsk,
             use_rth,
-            false,
-            Vec::<crate::contracts::TagValue>::default(),
+            ignore_size,
         )?;
-
         let subscription = client.send_request(request_id, request)?;
 
-        match subscription.next() {
-            Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalData => {
-                return decoders::decode_historical_data(client.server_version, time_zone(client), &mut message)
-            }
-            Some(Ok(message)) if message.message_type() == IncomingMessages::Error => return Err(Error::from(message)),
-            Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
-            Some(Err(Error::ConnectionReset)) => continue,
-            Some(Err(e)) => return Err(e),
-            None => return Err(Error::UnexpectedEndOfStream),
-        }
+        Ok(TickSubscription::new(subscription))
     }
 
-    Err(Error::ConnectionReset)
-}
+    pub(crate) fn historical_ticks_mid_point(
+        client: &Client,
+        contract: &Contract,
+        start: Option<OffsetDateTime>,
+        end: Option<OffsetDateTime>,
+        number_of_ticks: i32,
+        use_rth: bool,
+    ) -> Result<TickSubscription<TickMidpoint>, Error> {
+        client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
 
-pub(crate) fn time_zone(client: &Client) -> &time_tz::Tz {
-    if let Some(tz) = client.time_zone {
-        tz
-    } else {
-        warn!("server timezone unknown. assuming UTC, but that may be incorrect!");
-        time_tz::timezones::db::UTC
-    }
-}
-
-pub(crate) fn historical_schedule(
-    client: &Client,
-    contract: &Contract,
-    end_date: Option<OffsetDateTime>,
-    duration: Duration,
-) -> Result<Schedule, Error> {
-    if !contract.trading_class.is_empty() || contract.contract_id > 0 {
-        client.check_server_version(
-            server_versions::TRADING_CLASS,
-            "It does not support contract_id nor trading class parameters when requesting historical data.",
-        )?;
-    }
-
-    client.check_server_version(
-        server_versions::HISTORICAL_SCHEDULE,
-        "It does not support requesting of historical schedule.",
-    )?;
-
-    loop {
         let request_id = client.next_request_id();
-        let request = encoders::encode_request_historical_data(
-            client.server_version(),
-            request_id,
-            contract,
-            end_date,
-            duration,
-            BarSize::Day,
-            Some(WhatToShow::Schedule),
-            true,
-            false,
-            Vec::<crate::contracts::TagValue>::default(),
-        )?;
-
+        let request =
+            encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::MidPoint, use_rth, false)?;
         let subscription = client.send_request(request_id, request)?;
 
-        match subscription.next() {
-            Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalSchedule => {
-                return decoders::decode_historical_schedule(&mut message)
-            }
-            Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
-            Some(Err(Error::ConnectionReset)) => continue,
-            Some(Err(e)) => return Err(e),
-            None => return Err(Error::UnexpectedEndOfStream),
-        }
+        Ok(TickSubscription::new(subscription))
     }
-}
 
-pub(crate) fn historical_ticks_bid_ask(
-    client: &Client,
-    contract: &Contract,
-    start: Option<OffsetDateTime>,
-    end: Option<OffsetDateTime>,
-    number_of_ticks: i32,
-    use_rth: bool,
-    ignore_size: bool,
-) -> Result<TickSubscription<TickBidAsk>, Error> {
-    client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
+    pub(crate) fn historical_ticks_trade(
+        client: &Client,
+        contract: &Contract,
+        start: Option<OffsetDateTime>,
+        end: Option<OffsetDateTime>,
+        number_of_ticks: i32,
+        use_rth: bool,
+    ) -> Result<TickSubscription<TickLast>, Error> {
+        client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
 
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_historical_ticks(
-        request_id,
-        contract,
-        start,
-        end,
-        number_of_ticks,
-        WhatToShow::BidAsk,
-        use_rth,
-        ignore_size,
-    )?;
-    let subscription = client.send_request(request_id, request)?;
-
-    Ok(TickSubscription::new(subscription))
-}
-
-pub(crate) fn historical_ticks_mid_point(
-    client: &Client,
-    contract: &Contract,
-    start: Option<OffsetDateTime>,
-    end: Option<OffsetDateTime>,
-    number_of_ticks: i32,
-    use_rth: bool,
-) -> Result<TickSubscription<TickMidpoint>, Error> {
-    client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
-
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::MidPoint, use_rth, false)?;
-    let subscription = client.send_request(request_id, request)?;
-
-    Ok(TickSubscription::new(subscription))
-}
-
-pub(crate) fn historical_ticks_trade(
-    client: &Client,
-    contract: &Contract,
-    start: Option<OffsetDateTime>,
-    end: Option<OffsetDateTime>,
-    number_of_ticks: i32,
-    use_rth: bool,
-) -> Result<TickSubscription<TickLast>, Error> {
-    client.check_server_version(server_versions::HISTORICAL_TICKS, "It does not support historical ticks request.")?;
-
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::Trades, use_rth, false)?;
-    let subscription = client.send_request(request_id, request)?;
-
-    Ok(TickSubscription::new(subscription))
-}
-
-pub(crate) fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: BarSize) -> Result<Vec<HistogramEntry>, Error> {
-    client.check_server_version(server_versions::REQ_HISTOGRAM, "It does not support histogram data requests.")?;
-
-    loop {
         let request_id = client.next_request_id();
-        let request = encoders::encode_request_histogram_data(request_id, contract, use_rth, period)?;
+        let request =
+            encoders::encode_request_historical_ticks(request_id, contract, start, end, number_of_ticks, WhatToShow::Trades, use_rth, false)?;
         let subscription = client.send_request(request_id, request)?;
 
-        match subscription.next() {
-            Some(Ok(mut message)) => return decoders::decode_histogram_data(&mut message),
-            Some(Err(Error::ConnectionReset)) => continue,
-            Some(Err(e)) => return Err(e),
-            None => return Ok(Vec::new()),
+        Ok(TickSubscription::new(subscription))
+    }
+
+    pub(crate) fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: BarSize) -> Result<Vec<HistogramEntry>, Error> {
+        client.check_server_version(server_versions::REQ_HISTOGRAM, "It does not support histogram data requests.")?;
+
+        loop {
+            let request_id = client.next_request_id();
+            let request = encoders::encode_request_histogram_data(request_id, contract, use_rth, period)?;
+            let subscription = client.send_request(request_id, request)?;
+
+            match subscription.next() {
+                Some(Ok(mut message)) => return decoders::decode_histogram_data(&mut message),
+                Some(Err(Error::ConnectionReset)) => continue,
+                Some(Err(e)) => return Err(e),
+                None => return Ok(Vec::new()),
+            }
         }
     }
-}
-
 } // end of sync_api module
 
 pub trait TickDecoder<T> {
