@@ -50,9 +50,39 @@ The library supports two mutually exclusive features:
 - **sync** (default): Traditional synchronous API using threads
 - **async**: Asynchronous API using tokio
 
+When both features are enabled, async takes precedence. This allows users to simply add `--features async` without needing `--no-default-features`.
+
 To use async:
 ```bash
-cargo build --no-default-features --features async
+cargo build --features async
+```
+
+### Important: Feature Guard Pattern
+
+When adding new sync-specific code, ALWAYS use:
+```rust
+#[cfg(all(feature = "sync", not(feature = "async")))]
+```
+
+NOT just:
+```rust
+#[cfg(feature = "sync")]  // DON'T use this alone!
+```
+
+This ensures that async mode properly overrides sync mode when both features are enabled.
+
+For async-specific code, use:
+```rust
+#[cfg(feature = "async")]
+```
+
+### Examples
+
+For async examples, add to Cargo.toml:
+```toml
+[[example]]
+name = "your_async_example"
+required-features = ["async"]
 ```
 
 ## Environment Variables for Debugging
@@ -319,6 +349,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+To compile async code:
+```bash
+cargo build --features async
+```
+
 ## Running Examples
 
 Examples follow a naming convention to indicate their mode:
@@ -328,7 +363,7 @@ Examples follow a naming convention to indicate their mode:
 cargo run --example market_data
 cargo run --example positions
 
-# Async examples
-cargo run --no-default-features --features async --example async_connect
-cargo run --no-default-features --features async --example async_market_data
+# Async examples (note: no need for --no-default-features)
+cargo run --features async --example async_connect
+cargo run --features async --example async_market_data
 ```

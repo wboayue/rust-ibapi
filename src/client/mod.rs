@@ -4,24 +4,24 @@ pub(crate) mod builders;
 pub(crate) mod error_handler;
 pub(crate) mod id_generator;
 
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod sync;
 
 #[cfg(feature = "async")]
 pub mod r#async;
 
 // Re-export the appropriate Client based on feature
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub use sync::Client;
 
 #[cfg(feature = "async")]
 pub use r#async::Client;
 
 // Re-export subscription types from subscriptions module
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub use crate::subscriptions::{SharesChannel, Subscription};
 
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub(crate) use crate::subscriptions::sync::{DataStream, ResponseContext};
 
 #[cfg(feature = "async")]

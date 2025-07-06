@@ -20,7 +20,7 @@ pub struct ConnectionMetadata {
     pub time_zone: Option<&'static Tz>,
 }
 
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod sync;
 
 #[cfg(feature = "async")]

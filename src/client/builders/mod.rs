@@ -2,7 +2,7 @@
 //!
 //! This module provides unified builder patterns that work with both sync and async modes.
 
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod sync;
 
 #[cfg(feature = "async")]
@@ -11,7 +11,7 @@ pub mod r#async;
 mod common;
 
 // Re-export builders based on feature
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub use sync::{ClientRequestBuilders, SubscriptionBuilderExt};
 
 #[cfg(feature = "async")]

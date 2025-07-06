@@ -15,17 +15,11 @@
 //!
 //! For an overview of API usage, refer to the [README](https://github.com/wboayue/rust-ibapi/blob/main/README.md).
 
-// Feature guards to ensure exactly one mode is enabled
-#[cfg(all(feature = "sync", feature = "async"))]
-compile_error!(
-    "Features 'sync' and 'async' are mutually exclusive. Please enable only one. \
-     Use default features for sync mode, or use --no-default-features --features async for async mode."
-);
-
+// Feature guards - async takes precedence over sync
 #[cfg(not(any(feature = "sync", feature = "async")))]
 compile_error!(
     "Either 'sync' or 'async' feature must be enabled. \
-     Use default features for sync mode, or use --no-default-features --features async for async mode."
+     Use default features for sync mode, or use --features async for async mode."
 );
 
 /// Describes items present in an account.
@@ -54,16 +48,16 @@ pub mod errors;
 /// APIs for retrieving market data
 pub mod market_data;
 mod messages;
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod news;
 /// Data types for building and placing orders.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod orders;
 /// APIs for working with the market scanner.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod scanner;
 /// APIs for working with Wall Street Horizon: Earnings Calendar & Event Data.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod wsh;
 
 /// A prelude module for convenient importing of commonly used types.

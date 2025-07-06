@@ -13,7 +13,7 @@ use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 #[cfg(feature = "async")]
 use crate::transport::{AsyncInternalSubscription as InternalSubscription, Response};
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 use crate::transport::{InternalSubscription, Response};
 use crate::{server_versions, Client, Error, ToField, MAX_RETRIES};
 
@@ -408,10 +408,10 @@ impl ToField for Option<WhatToShow> {
 }
 
 // Sync-specific functions that use Client methods
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub(crate) use sync_api::*;
 
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 mod sync_api {
     use super::*;
 
@@ -660,7 +660,7 @@ impl TickDecoder<TickMidpoint> for TickMidpoint {
     }
 }
 
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub struct TickSubscription<T: TickDecoder<T>> {
     done: AtomicBool,
     messages: InternalSubscription,
@@ -668,7 +668,7 @@ pub struct TickSubscription<T: TickDecoder<T>> {
     error: Mutex<Option<Error>>,
 }
 
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 impl<T: TickDecoder<T>> TickSubscription<T> {
     fn new(messages: InternalSubscription) -> Self {
         Self {
@@ -769,12 +769,12 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
 }
 
 /// An iterator that yields items as they become available, blocking if necessary.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub struct TickSubscriptionIter<'a, T: TickDecoder<T>> {
     subscription: &'a TickSubscription<T>,
 }
 
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 impl<T: TickDecoder<T>> Iterator for TickSubscriptionIter<'_, T> {
     type Item = T;
 
@@ -783,7 +783,7 @@ impl<T: TickDecoder<T>> Iterator for TickSubscriptionIter<'_, T> {
     }
 }
 
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 impl<'a, T: TickDecoder<T>> IntoIterator for &'a TickSubscription<T> {
     type Item = T;
     type IntoIter = TickSubscriptionIter<'a, T>;
@@ -794,12 +794,12 @@ impl<'a, T: TickDecoder<T>> IntoIterator for &'a TickSubscription<T> {
 }
 
 /// An iterator that yields items as they become available, blocking if necessary.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub struct TickSubscriptionOwnedIter<T: TickDecoder<T>> {
     subscription: TickSubscription<T>,
 }
 
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 impl<T: TickDecoder<T>> Iterator for TickSubscriptionOwnedIter<T> {
     type Item = T;
 
@@ -808,7 +808,7 @@ impl<T: TickDecoder<T>> Iterator for TickSubscriptionOwnedIter<T> {
     }
 }
 
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 impl<T: TickDecoder<T>> IntoIterator for TickSubscription<T> {
     type Item = T;
     type IntoIter = TickSubscriptionOwnedIter<T>;
@@ -819,12 +819,12 @@ impl<T: TickDecoder<T>> IntoIterator for TickSubscription<T> {
 }
 
 /// An iterator that yields items if they are available, without waiting.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub struct TickSubscriptionTryIter<'a, T: TickDecoder<T>> {
     subscription: &'a TickSubscription<T>,
 }
 
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 impl<T: TickDecoder<T>> Iterator for TickSubscriptionTryIter<'_, T> {
     type Item = T;
 
@@ -834,13 +834,13 @@ impl<T: TickDecoder<T>> Iterator for TickSubscriptionTryIter<'_, T> {
 }
 
 /// An iterator that waits for the specified timeout duration for available data.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub struct TickSubscriptionTimeoutIter<'a, T: TickDecoder<T>> {
     subscription: &'a TickSubscription<T>,
     timeout: std::time::Duration,
 }
 
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 impl<T: TickDecoder<T>> Iterator for TickSubscriptionTimeoutIter<'_, T> {
     type Item = T;
 

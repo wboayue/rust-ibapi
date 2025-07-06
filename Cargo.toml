@@ -21,6 +21,7 @@ exclude = [
 default = ["sync"]
 sync = ["dep:crossbeam"]
 async = ["dep:tokio", "dep:futures", "dep:async-trait"]
+# Note: sync and async are mutually exclusive. When async is enabled, it takes precedence over sync.
 
 [dependencies]
 byteorder = "1.5.0"
@@ -43,3 +44,7 @@ pretty_assertions = "1.4.1"
 tempfile = "3.13"
 temp-env = "0.3.6"
 serial_test = "3.1.1"
+
+[[example]]
+name = "async_connect"
+required-features = ["async"]

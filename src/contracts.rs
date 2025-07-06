@@ -562,10 +562,10 @@ pub struct PriceIncrement {
 }
 
 // The following API functions require sync feature as they use Client with sync transport
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub(crate) use sync_api::*;
 
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 mod sync_api {
     use super::*;
     use crate::client::{DataStream, ResponseContext, Subscription};
