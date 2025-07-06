@@ -64,3 +64,15 @@ required-features = ["async"]
 [[example]]
 name = "async_managed_accounts"
 required-features = ["async"]
+
+[[example]]
+name = "async_wsh_metadata"
+required-features = ["async"]
+
+[[example]]
+name = "async_wsh_event_data_by_contract"
+required-features = ["async"]
+
+[[example]]
+name = "async_wsh_event_data_by_filter"
+required-features = ["async"]

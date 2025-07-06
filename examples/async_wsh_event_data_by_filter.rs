@@ -3,6 +3,13 @@
 //! This example demonstrates how to stream Wall Street Horizon event data
 //! using filters with the async API. This allows you to receive continuous
 //! updates for events matching specific criteria.
+//!
+//! To run this example:
+//! ```bash
+//! cargo run --features async --example async_wsh_event_data_by_filter
+//! ```
+//!
+//! Make sure TWS or IB Gateway is running with API connections enabled
 
 use ibapi::prelude::*;
 use ibapi::wsh::AutoFill;

@@ -37,6 +37,12 @@ impl Default for MessageBusStub {
     }
 }
 
+impl MessageBusStub {
+    pub fn request_messages(&self) -> Vec<RequestMessage> {
+        self.request_messages.read().unwrap().clone()
+    }
+}
+
 #[cfg(all(feature = "sync", not(feature = "async")))]
 impl MessageBus for MessageBusStub {
     fn request_messages(&self) -> Vec<RequestMessage> {

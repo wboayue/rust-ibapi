@@ -19,7 +19,7 @@ use crate::{server_versions, Client, Error, ToField, MAX_RETRIES};
 
 mod decoders;
 mod encoders;
-#[cfg(test)]
+#[cfg(all(test, feature = "sync", not(feature = "async")))]
 mod tests;
 
 /// Bar describes the historical data bar.

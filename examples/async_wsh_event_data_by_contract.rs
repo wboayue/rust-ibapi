@@ -3,6 +3,13 @@
 //! This example demonstrates how to retrieve Wall Street Horizon event data
 //! for a specific contract using the async API. This includes earnings
 //! calendars, corporate events, and other fundamental data events.
+//!
+//! To run this example:
+//! ```bash
+//! cargo run --features async --example async_wsh_event_data_by_contract
+//! ```
+//!
+//! Make sure TWS or IB Gateway is running with API connections enabled
 
 use ibapi::prelude::*;
 use ibapi::wsh::AutoFill;

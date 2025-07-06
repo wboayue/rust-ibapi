@@ -564,10 +564,17 @@ impl Client {
             client_id: 100,
             next_order_id: 9000,
             server_version,
+            managed_accounts: String::new(),
             connection_time: None,
             time_zone: None,
         };
 
         Client::new(connection_metadata, message_bus).expect("Failed to create stubbed client")
+    }
+
+    /// Get a reference to the message bus for testing
+    #[cfg(test)]
+    pub fn message_bus(&self) -> &Arc<dyn AsyncMessageBus> {
+        &self.message_bus
     }
 }
