@@ -13,7 +13,7 @@ use crate::connection::r#async::AsyncConnection;
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::Error;
 
-use super::routing::{determine_routing, map_incoming_to_outgoing, RoutingDecision};
+use super::routing::{determine_routing, is_warning_error, map_incoming_to_outgoing, RoutingDecision, UNSPECIFIED_REQUEST_ID};
 
 /// Asynchronous message bus trait
 #[async_trait]
@@ -91,26 +91,16 @@ impl AsyncTcpMessageBus {
     /// Read a message and route it to the appropriate channel
     async fn read_and_route_message(&self) -> Result<(), Error> {
         let message = self.connection.read_message().await?;
-        
+
         debug!("Received message type: {:?}", message.message_type());
 
         // Use common routing logic
         match determine_routing(&message) {
-            RoutingDecision::ByRequestId(request_id) => {
-                self.route_to_request_channel(request_id, message).await
-            }
-            RoutingDecision::ByOrderId(order_id) => {
-                self.route_to_order_channel(order_id, message).await
-            }
-            RoutingDecision::ByMessageType(message_type) => {
-                self.route_to_shared_channel(message_type, message).await
-            }
-            RoutingDecision::SharedMessage(message_type) => {
-                self.route_to_shared_channel(message_type, message).await
-            }
-            RoutingDecision::Error { request_id, error_code } => {
-                self.route_error_message_new(message, request_id, error_code).await
-            }
+            RoutingDecision::ByRequestId(request_id) => self.route_to_request_channel(request_id, message).await,
+            RoutingDecision::ByOrderId(order_id) => self.route_to_order_channel(order_id, message).await,
+            RoutingDecision::ByMessageType(message_type) => self.route_to_shared_channel(message_type, message).await,
+            RoutingDecision::SharedMessage(message_type) => self.route_to_shared_channel(message_type, message).await,
+            RoutingDecision::Error { request_id, error_code } => self.route_error_message_new(message, request_id, error_code).await,
         }
     }
 
@@ -139,10 +129,18 @@ impl AsyncTcpMessageBus {
     async fn route_error_message_new(&self, message: ResponseMessage, request_id: i32, error_code: i32) -> Result<(), Error> {
         // Log the error for visibility
         let error_msg = message.peek_string(4).unwrap_or(String::from("Unknown error"));
-        info!("Error message - Request ID: {}, Code: {}, Message: {}", request_id, error_code, error_msg);
 
-        // Route to request-specific channel if exists and not a warning
-        if request_id >= 0 && !super::routing::is_warning_error(error_code) {
+        // Check if this is a warning or unspecified error
+        if request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(error_code) {
+            // Log warnings differently
+            if is_warning_error(error_code) {
+                warn!("Warning - Request ID: {}, Code: {}, Message: {}", request_id, error_code, error_msg);
+            } else {
+                error!("Error - Request ID: {}, Code: {}, Message: {}", request_id, error_code, error_msg);
+            }
+        } else {
+            // Route to request-specific channel
+            info!("Error message - Request ID: {}, Code: {}, Message: {}", request_id, error_code, error_msg);
             let channels = self.request_channels.read().await;
             if let Some(sender) = channels.get(&request_id) {
                 let _ = sender.send(message);

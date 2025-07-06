@@ -17,8 +17,8 @@ use log::{debug, error, info, warn};
 
 use crate::connection::sync::Connection;
 
+use super::routing::{determine_routing, is_warning_error, RoutingDecision, UNSPECIFIED_REQUEST_ID};
 use super::{InternalSubscription, MessageBus, Response, Signal, SubscriptionBuilder};
-use super::routing::{determine_routing, map_incoming_to_outgoing, RoutingDecision, is_warning_error, UNSPECIFIED_REQUEST_ID};
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Error};
 
@@ -447,7 +447,6 @@ impl<S: Stream> TcpMessageBus<S> {
         }
     }
 }
-
 
 impl<S: Stream> MessageBus for TcpMessageBus<S> {
     fn send_request(&self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
