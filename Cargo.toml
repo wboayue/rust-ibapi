@@ -60,3 +60,7 @@ required-features = ["async"]
 [[example]]
 name = "async_pnl"
 required-features = ["async"]
+
+[[example]]
+name = "async_managed_accounts"
+required-features = ["async"]

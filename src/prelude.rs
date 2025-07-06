@@ -36,10 +36,14 @@ pub use crate::market_data::MarketDataType;
 pub use crate::orders::{order_builder, Action, ExecutionFilter, OrderUpdate, Orders, PlaceOrder};
 
 // Account types
-pub use crate::accounts::{AccountSummaries, AccountSummaryTags, AccountUpdate, AccountUpdateMulti, PositionUpdate};
+pub use crate::accounts::{AccountSummaries, AccountSummaryTags, AccountUpdate, AccountUpdateMulti, PositionUpdate, PositionUpdateMulti, PnL, PnLSingle, FamilyCode};
 
 // Client subscription type
 #[cfg(all(feature = "sync", not(feature = "async")))]
 pub use crate::client::Subscription;
 #[cfg(feature = "async")]
 pub use crate::subscriptions::Subscription;
+
+// Async-specific imports
+#[cfg(feature = "async")]
+pub use futures::StreamExt;

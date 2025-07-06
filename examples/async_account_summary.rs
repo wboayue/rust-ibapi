@@ -7,8 +7,7 @@
 //!
 //! Make sure TWS or IB Gateway is running with API connections enabled
 
-use ibapi::accounts::{account_summary, AccountSummaries, AccountSummaryTags};
-use ibapi::Client;
+use ibapi::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -29,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         AccountSummaryTags::BUYING_POWER,
     ];
 
-    let mut subscription = account_summary(&client, "All", tags).await?;
+    let mut subscription = client.account_summary("All", tags).await?;
 
     // Process account summary updates
     while let Some(result) = subscription.next().await {

@@ -7,8 +7,7 @@
 //!
 //! Make sure TWS or IB Gateway is running with API connections enabled
 
-use ibapi::accounts::{positions, PositionUpdate};
-use ibapi::Client;
+use ibapi::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -22,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Request positions for all accounts
     println!("\nRequesting positions...");
-    let mut subscription = positions(&client).await?;
+    let mut subscription = client.positions().await?;
 
     // Process position updates
     while let Some(result) = subscription.next().await {
