@@ -17,6 +17,7 @@ use crate::Error;
 use super::id_generator::ClientIdManager;
 
 /// Asynchronous TWS API Client
+#[derive(Clone)]
 pub struct Client {
     /// IB server version
     pub(crate) server_version: i32,
@@ -24,8 +25,8 @@ pub struct Client {
     pub(crate) time_zone: Option<&'static Tz>,
     pub(crate) message_bus: Arc<dyn AsyncMessageBus>,
 
-    client_id: i32,              // ID of client.
-    id_manager: ClientIdManager, // Manages request and order ID generation
+    client_id: i32,                   // ID of client.
+    id_manager: Arc<ClientIdManager>, // Manages request and order ID generation
 }
 
 impl Client {
@@ -72,7 +73,7 @@ impl Client {
             time_zone: connection_metadata.time_zone,
             message_bus,
             client_id: connection_metadata.client_id,
-            id_manager: ClientIdManager::new(connection_metadata.next_order_id),
+            id_manager: Arc::new(ClientIdManager::new(connection_metadata.next_order_id)),
         };
 
         Ok(client)
@@ -145,5 +146,21 @@ impl Client {
     /// Send a message without expecting a response
     pub async fn send_message(&self, message: RequestMessage) -> Result<(), Error> {
         self.message_bus.send_request(message).await
+    }
+
+    /// Creates a stubbed client for testing
+    #[cfg(test)]
+    pub fn stubbed(message_bus: Arc<dyn AsyncMessageBus>, server_version: i32) -> Self {
+        use crate::connection::ConnectionMetadata;
+
+        let connection_metadata = ConnectionMetadata {
+            client_id: 100,
+            next_order_id: 9000,
+            server_version,
+            connection_time: None,
+            time_zone: None,
+        };
+
+        Client::new(connection_metadata, message_bus).expect("Failed to create stubbed client")
     }
 }

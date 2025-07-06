@@ -1,10 +1,20 @@
 use std::sync::{Arc, Mutex, RwLock};
 
+#[cfg(all(feature = "sync", not(feature = "async")))]
 use crossbeam::channel;
 
 use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
-use crate::transport::{InternalSubscription, MessageBus, SubscriptionBuilder};
 use crate::Error;
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
+use crate::transport::{InternalSubscription, MessageBus, SubscriptionBuilder};
+
+#[cfg(feature = "async")]
+use {
+    crate::transport::{r#async::AsyncInternalSubscription, AsyncMessageBus},
+    async_trait::async_trait,
+    tokio::sync::mpsc,
+};
 
 pub(crate) struct MessageBusStub {
     pub request_messages: RwLock<Vec<RequestMessage>>,
@@ -15,6 +25,7 @@ pub(crate) struct MessageBusStub {
 }
 
 // Separate tracking for order update subscriptions to maintain backward compatibility
+#[cfg(all(feature = "sync", not(feature = "async")))]
 static ORDER_UPDATE_SUBSCRIPTION_TRACKER: Mutex<Option<usize>> = Mutex::new(None);
 
 impl Default for MessageBusStub {
@@ -26,6 +37,7 @@ impl Default for MessageBusStub {
     }
 }
 
+#[cfg(all(feature = "sync", not(feature = "async")))]
 impl MessageBus for MessageBusStub {
     fn request_messages(&self) -> Vec<RequestMessage> {
         self.request_messages.read().unwrap().clone()
@@ -97,6 +109,7 @@ impl MessageBus for MessageBusStub {
     // }
 }
 
+#[cfg(all(feature = "sync", not(feature = "async")))]
 fn mock_request(
     stub: &MessageBusStub,
     request_id: Option<i32>,
@@ -121,4 +134,49 @@ fn mock_request(
     }
 
     subscription.build()
+}
+
+#[cfg(feature = "async")]
+#[async_trait]
+impl AsyncMessageBus for MessageBusStub {
+    async fn send_request(&self, request: RequestMessage) -> Result<(), Error> {
+        self.request_messages.write().unwrap().push(request);
+        Ok(())
+    }
+
+    async fn subscribe(&self, _request_id: i32) -> AsyncInternalSubscription {
+        let (sender, receiver) = mpsc::unbounded_channel();
+
+        // Send pre-configured response messages
+        for message in &self.response_messages {
+            let message = ResponseMessage::from(&message.replace('|', "\0"));
+            sender.send(message).unwrap();
+        }
+
+        AsyncInternalSubscription::new(receiver)
+    }
+
+    async fn subscribe_shared(&self, _channel_type: OutgoingMessages) -> AsyncInternalSubscription {
+        let (sender, receiver) = mpsc::unbounded_channel();
+
+        // Send pre-configured response messages
+        for message in &self.response_messages {
+            let message = ResponseMessage::from(&message.replace('|', "\0"));
+            sender.send(message).unwrap();
+        }
+
+        AsyncInternalSubscription::new(receiver)
+    }
+
+    async fn subscribe_order(&self, _order_id: i32) -> AsyncInternalSubscription {
+        let (sender, receiver) = mpsc::unbounded_channel();
+
+        // Send pre-configured response messages
+        for message in &self.response_messages {
+            let message = ResponseMessage::from(&message.replace('|', "\0"));
+            sender.send(message).unwrap();
+        }
+
+        AsyncInternalSubscription::new(receiver)
+    }
 }

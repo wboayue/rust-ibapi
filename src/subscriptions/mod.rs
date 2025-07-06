@@ -13,4 +13,4 @@ pub mod r#async;
 pub use sync::{SharesChannel, Subscription, SubscriptionIter, SubscriptionOwnedIter, SubscriptionTimeoutIter, SubscriptionTryIter};
 
 #[cfg(feature = "async")]
-pub use r#async::Subscription;
+pub use r#async::{AsyncDataStream, Subscription};

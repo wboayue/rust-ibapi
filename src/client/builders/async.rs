@@ -42,11 +42,14 @@ impl<'a> RequestBuilder<'a> {
     }
 
     /// Send the request and create a subscription
-    pub async fn send<T>(self, message: RequestMessage) -> Result<Subscription<T>, Error>
+    pub async fn send<T, D>(self, message: RequestMessage) -> Result<Subscription<T>, Error>
     where
         T: Send + 'static,
+        D: crate::subscriptions::AsyncDataStream<T> + 'static,
     {
-        SubscriptionBuilder::new(self.client).send_with_request_id(self.request_id, message).await
+        SubscriptionBuilder::<T>::new(self.client)
+            .send_with_request_id::<D>(self.request_id, message)
+            .await
     }
 
     /// Send the request without creating a subscription
@@ -74,11 +77,14 @@ impl<'a> SharedRequestBuilder<'a> {
     }
 
     /// Send the request and create a subscription
-    pub async fn send<T>(self, message: RequestMessage) -> Result<Subscription<T>, Error>
+    pub async fn send<T, D>(self, message: RequestMessage) -> Result<Subscription<T>, Error>
     where
         T: Send + 'static,
+        D: crate::subscriptions::AsyncDataStream<T> + 'static,
     {
-        SubscriptionBuilder::new(self.client).send_shared(self.message_type, message).await
+        SubscriptionBuilder::<T>::new(self.client)
+            .send_shared::<D>(self.message_type, message)
+            .await
     }
 
     /// Send the request without creating a subscription
@@ -174,38 +180,46 @@ where
     }
 
     /// Sends a request with a specific request ID and builds the subscription
-    pub async fn send_with_request_id(self, request_id: i32, message: RequestMessage) -> Result<Subscription<T>, Error> {
+    pub async fn send_with_request_id<D>(self, request_id: i32, message: RequestMessage) -> Result<Subscription<T>, Error>
+    where
+        D: crate::subscriptions::AsyncDataStream<T> + 'static,
+    {
         // Send the request
         self.client.message_bus.send_request(message).await?;
 
         // Subscribe to the response channel
         let subscription = self.client.message_bus.subscribe(request_id).await;
 
-        // Create decoder function that will transform ResponseMessage -> T
-        // This would need to be provided by the T type or passed in
-        Ok(Subscription::new_from_internal(subscription))
+        // Create subscription with decoder
+        Ok(Subscription::new_from_internal::<D>(subscription, self.client.clone()))
     }
 
     /// Sends a shared request (no ID) and builds the subscription
-    pub async fn send_shared(self, message_type: OutgoingMessages, message: RequestMessage) -> Result<Subscription<T>, Error> {
+    pub async fn send_shared<D>(self, message_type: OutgoingMessages, message: RequestMessage) -> Result<Subscription<T>, Error>
+    where
+        D: crate::subscriptions::AsyncDataStream<T> + 'static,
+    {
         // Send the request
         self.client.message_bus.send_request(message).await?;
 
         // Subscribe to the shared channel
         let subscription = self.client.message_bus.subscribe_shared(message_type).await;
 
-        Ok(Subscription::new_from_internal(subscription))
+        Ok(Subscription::new_from_internal::<D>(subscription, self.client.clone()))
     }
 
     /// Sends an order request and builds the subscription
-    pub async fn send_order(self, order_id: i32, message: RequestMessage) -> Result<Subscription<T>, Error> {
+    pub async fn send_order<D>(self, order_id: i32, message: RequestMessage) -> Result<Subscription<T>, Error>
+    where
+        D: crate::subscriptions::AsyncDataStream<T> + 'static,
+    {
         // Send the request
         self.client.message_bus.send_request(message).await?;
 
         // Subscribe to the order channel
         let subscription = self.client.message_bus.subscribe_order(order_id).await;
 
-        Ok(Subscription::new_from_internal(subscription))
+        Ok(Subscription::new_from_internal::<D>(subscription, self.client.clone()))
     }
 }
 
