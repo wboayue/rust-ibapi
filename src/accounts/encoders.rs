@@ -3,6 +3,7 @@ use crate::messages::RequestMessage;
 use crate::Error;
 
 #[cfg(test)]
+#[path = "encoders_temp/tests.rs"]
 mod tests;
 
 pub(super) fn encode_request_positions() -> Result<RequestMessage, Error> {

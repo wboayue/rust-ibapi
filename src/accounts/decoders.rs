@@ -240,4 +240,5 @@ pub(crate) fn decode_account_multi_value(message: &mut ResponseMessage) -> Resul
 }
 
 #[cfg(test)]
+#[path = "decoders_temp/tests.rs"]
 mod tests;

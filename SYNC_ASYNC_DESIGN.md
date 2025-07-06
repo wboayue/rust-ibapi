@@ -79,37 +79,33 @@ impl Client {
 
 ## 4. Subscription/Stream Design
 
-### Sync Version (Current)
+### Sync Subscription (`subscriptions/sync.rs`)
 ```rust
-#[cfg(feature = "sync")]
 pub struct Subscription<T> {
     inner: InternalSubscription,
     _phantom: PhantomData<T>,
 }
 
-#[cfg(feature = "sync")]
 impl<T> Subscription<T> {
     pub fn next(&self) -> Option<Result<T>> { ... }
     pub fn try_next(&self) -> Option<Result<T>> { ... }
     pub fn next_timeout(&self, timeout: Duration) -> Option<Result<T>> { ... }
 }
 
-#[cfg(feature = "sync")]
 impl<T> Iterator for Subscription<T> {
     type Item = Result<T>;
     fn next(&mut self) -> Option<Self::Item> { ... }
 }
 ```
 
-### Async Version
+### Async Subscription (`subscriptions/async.rs`)
 ```rust
-#[cfg(feature = "async")]
-pub struct AsyncSubscription<T> {
+pub struct Subscription<T> {
     receiver: tokio::sync::mpsc::UnboundedReceiver<Result<T>>,
+    _phantom: PhantomData<T>,
 }
 
-#[cfg(feature = "async")]
-impl<T> Stream for AsyncSubscription<T> {
+impl<T> Stream for Subscription<T> {
     type Item = Result<T>;
     
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -118,28 +114,44 @@ impl<T> Stream for AsyncSubscription<T> {
 }
 ```
 
-## 5. MessageBus Architecture
-
-### Sync MessageBus
+### Crate Level Export
 ```rust
+// subscriptions/mod.rs
 #[cfg(feature = "sync")]
-pub trait MessageBus: Send + Sync {
-    fn send_request(&self, request: Request) -> Result<()>;
-    fn subscribe(&self, request_id: i32) -> InternalSubscription;
-    fn subscribe_shared(&self, channel_type: SharedChannel) -> InternalSubscription;
-    fn subscribe_order(&self, order_id: i32) -> InternalSubscription;
-}
+pub use self::sync::Subscription;
+
+#[cfg(feature = "async")]
+pub use self::async::Subscription;
 ```
 
-### Async MessageBus
+## 5. MessageBus Architecture
+
 ```rust
-#[cfg(feature = "async")]
-#[async_trait]
-pub trait AsyncMessageBus: Send + Sync {
+// Single trait definition with conditional compilation
+pub trait MessageBus: Send + Sync {
+    #[cfg(feature = "sync")]
+    fn send_request(&self, request: Request) -> Result<()>;
+    
+    #[cfg(feature = "async")]
     async fn send_request(&self, request: Request) -> Result<()>;
-    async fn subscribe(&self, request_id: i32) -> AsyncSubscription<Response>;
-    async fn subscribe_shared(&self, channel_type: SharedChannel) -> AsyncSubscription<Response>;
-    async fn subscribe_order(&self, order_id: i32) -> AsyncSubscription<Response>;
+    
+    #[cfg(feature = "sync")]
+    fn subscribe(&self, request_id: i32) -> InternalSubscription;
+    
+    #[cfg(feature = "async")]
+    async fn subscribe(&self, request_id: i32) -> InternalSubscription;
+    
+    #[cfg(feature = "sync")]
+    fn subscribe_shared(&self, channel_type: SharedChannel) -> InternalSubscription;
+    
+    #[cfg(feature = "async")]
+    async fn subscribe_shared(&self, channel_type: SharedChannel) -> InternalSubscription;
+    
+    #[cfg(feature = "sync")]
+    fn subscribe_order(&self, order_id: i32) -> InternalSubscription;
+    
+    #[cfg(feature = "async")]
+    async fn subscribe_order(&self, order_id: i32) -> InternalSubscription;
 }
 ```
 
@@ -177,23 +189,37 @@ pub trait AsyncMessageBus: Send + Sync {
 - `historical_news()` → `async fn historical_news()`
 - `scanner_parameters()` → `async fn scanner_parameters()`
 
-### Subscription Methods (return Stream instead of Iterator)
-- `positions()` → `async fn positions()` returns `AsyncSubscription<Position>`
-- `positions_multi()` → `async fn positions_multi()` returns `AsyncSubscription<Position>`
-- `pnl()` → `async fn pnl()` returns `AsyncSubscription<PnL>`
-- `pnl_single()` → `async fn pnl_single()` returns `AsyncSubscription<PnLSingle>`
-- `account_summary()` → `async fn account_summary()` returns `AsyncSubscription<AccountSummary>`
-- `account_update()` → `async fn account_update()` returns `AsyncSubscription<AccountUpdate>`
-- `market_data()` → `async fn market_data()` returns `AsyncSubscription<MarketData>`
-- `realtime_bars()` → `async fn realtime_bars()` returns `AsyncSubscription<Bar>`
-- `market_depth()` → `async fn market_depth()` returns `AsyncSubscription<MarketDepth>`
-- `tick_by_tick_*()` → `async fn tick_by_tick_*()` returns appropriate `AsyncSubscription<T>`
-- `news_bulletins()` → `async fn news_bulletins()` returns `AsyncSubscription<NewsBulletin>`
-- `scanner_subscription()` → `async fn scanner_subscription()` returns `AsyncSubscription<ScannerData>`
-- `submit_order()` → `async fn submit_order()` returns `AsyncSubscription<OrderUpdate>`
-- `order_update_stream()` → `async fn order_update_stream()` returns `AsyncSubscription<OrderUpdate>`
+### Subscription Methods (return unified Subscription<T> type)
+- `positions()` → `async fn positions()` returns `Subscription<Position>`
+- `positions_multi()` → `async fn positions_multi()` returns `Subscription<Position>`
+- `pnl()` → `async fn pnl()` returns `Subscription<PnL>`
+- `pnl_single()` → `async fn pnl_single()` returns `Subscription<PnLSingle>`
+- `account_summary()` → `async fn account_summary()` returns `Subscription<AccountSummary>`
+- `account_update()` → `async fn account_update()` returns `Subscription<AccountUpdate>`
+- `market_data()` → `async fn market_data()` returns `Subscription<MarketData>`
+- `realtime_bars()` → `async fn realtime_bars()` returns `Subscription<Bar>`
+- `market_depth()` → `async fn market_depth()` returns `Subscription<MarketDepth>`
+- `tick_by_tick_*()` → `async fn tick_by_tick_*()` returns appropriate `Subscription<T>`
+- `news_bulletins()` → `async fn news_bulletins()` returns `Subscription<NewsBulletin>`
+- `scanner_subscription()` → `async fn scanner_subscription()` returns `Subscription<ScannerData>`
+- `submit_order()` → `async fn submit_order()` returns `Subscription<OrderUpdate>`
+- `order_update_stream()` → `async fn order_update_stream()` returns `Subscription<OrderUpdate>`
 
-## 8. Usage Examples
+## 8. API Surface Consistency
+
+Both sync and async implementations expose the same types at the crate level:
+- `ibapi::Client` - The main client type (sync or async based on feature)
+- `ibapi::Subscription<T>` - The subscription type (Iterator or Stream based on feature)
+- All domain types remain the same: `Contract`, `Order`, `Position`, etc.
+
+This means users only need to:
+1. Change their `Cargo.toml` to select the desired feature
+2. Add `async`/`await` keywords where needed
+3. Use `StreamExt` trait for async subscriptions
+
+The import paths and type names remain identical, providing a smooth migration experience.
+
+## 9. Usage Examples
 
 ### Sync Usage (Current Behavior)
 ```rust
@@ -241,17 +267,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### Using Both APIs (with `full` feature)
+### Feature Guards
 ```rust
-// You would need to use different types or modules
-#[cfg(feature = "sync")]
-use ibapi::sync::Client as SyncClient;
+// lib.rs
+#[cfg(all(feature = "sync", feature = "async"))]
+compile_error!("Features 'sync' and 'async' are mutually exclusive. Please enable only one.");
 
-#[cfg(feature = "async")]
-use ibapi::async::Client as AsyncClient;
+#[cfg(not(any(feature = "sync", feature = "async")))]
+compile_error!("Either 'sync' or 'async' feature must be enabled.");
 ```
 
-## 9. Migration Strategy
+## 10. Migration Strategy
 
 ### Phase 1: Implementation (v0.x)
 - Implement async versions alongside sync
@@ -275,7 +301,7 @@ use ibapi::async::Client as AsyncClient;
 - Full async-first design
 - Remove dual implementation overhead
 
-## 10. Implementation Considerations
+## 11. Implementation Considerations
 
 ### Shared Code
 - Message encoding/decoding remains the same
@@ -299,7 +325,7 @@ use ibapi::async::Client as AsyncClient;
 - Benefits show in concurrent operations
 - Subscription streams more efficient than polling
 
-## 11. Alternative Approaches Considered
+## 12. Alternative Approaches Considered
 
 ### Option A: Trait-based Design
 ```rust
@@ -332,7 +358,7 @@ pub trait AsyncClient: ClientBase {
 - Harder to keep in sync
 - Splits the community
 
-## 12. Example Structure
+## 13. Example Structure
 
 To provide clear examples for both sync and async APIs, examples will be organized with a simple naming convention:
 
@@ -447,7 +473,7 @@ This approach provides:
 - Feature protection with clear error messages
 - Easy comparison between sync and async implementations
 
-## 13. Consolidated Error Handling
+## 14. Consolidated Error Handling
 
 A centralized error handling module (`client/error_handler.rs`) provides consistent error management:
 
@@ -492,7 +518,7 @@ loop {
 }
 ```
 
-## 14. Request/Response Builder Pattern
+## 15. Request/Response Builder Pattern
 
 A fluent builder pattern (`client/request_builder.rs`) simplifies client method implementations by reducing boilerplate:
 
@@ -547,7 +573,7 @@ pub fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error>
 
 This pattern works identically for both sync and async implementations, providing consistency across the API.
 
-## 15. Protocol Version Constants Module
+## 16. Protocol Version Constants Module
 
 A centralized protocol module (`protocol.rs`) provides consistent version checking across the codebase:
 
@@ -600,7 +626,7 @@ pub fn encode_order(order: &Order, server_version: i32) -> RequestMessage {
 
 This centralizes all version-related logic and makes it easier to understand feature requirements across the codebase.
 
-## 16. Unified Subscription Creation
+## 17. Unified Subscription Creation
 
 A subscription builder (`client/subscription_builder.rs`) provides a consistent pattern for creating subscriptions:
 
@@ -658,7 +684,7 @@ pub fn market_depth(client: &Client, contract: &Contract, num_rows: i32) -> Resu
 
 This pattern eliminates the need to manually create subscriptions with `Subscription::new()` and ensures consistent handling of response contexts.
 
-## 17. Conclusion
+## 18. Conclusion
 
 The proposed design with single struct and conditional compilation provides:
 - ✅ Full backward compatibility

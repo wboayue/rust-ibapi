@@ -15,6 +15,19 @@
 //!
 //! For an overview of API usage, refer to the [README](https://github.com/wboayue/rust-ibapi/blob/main/README.md).
 
+// Feature guards to ensure exactly one mode is enabled
+#[cfg(all(feature = "sync", feature = "async"))]
+compile_error!(
+    "Features 'sync' and 'async' are mutually exclusive. Please enable only one. \
+     Use default features for sync mode, or use --no-default-features --features async for async mode."
+);
+
+#[cfg(not(any(feature = "sync", feature = "async")))]
+compile_error!(
+    "Either 'sync' or 'async' feature must be enabled. \
+     Use default features for sync mode, or use --no-default-features --features async for async mode."
+);
+
 /// Describes items present in an account.
 pub mod accounts;
 

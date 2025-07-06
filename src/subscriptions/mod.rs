@@ -16,4 +16,4 @@ pub use sync::{SharesChannel, Subscription, SubscriptionIter, SubscriptionOwnedI
 pub(crate) use sync::{DataStream, ResponseContext};
 
 #[cfg(feature = "async")]
-pub use r#async::AsyncSubscription;
+pub use r#async::Subscription;
