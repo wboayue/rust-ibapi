@@ -136,6 +136,7 @@ The rust-ibapi crate is a Rust implementation of the Interactive Brokers TWS API
    - `market_data`: Real-time and historical market data
    - `orders`: Order management functionality
    - `news`: News-related functionality
+   - `wsh`: Wall Street Horizon event data
    - `transport`: Connection and message handling
    - `messages`: Message definitions and routing
    - `protocol`: Protocol version constants and feature checking
