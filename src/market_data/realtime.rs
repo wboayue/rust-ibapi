@@ -1,3 +1,6 @@
+// TODO: Implement async version of realtime market data
+#![cfg(feature = "sync")]
+
 use log::debug;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;

@@ -4,6 +4,9 @@
 //! order creation, modification, cancellation, and execution tracking.
 //! It supports various order types and advanced trading features.
 
+// TODO: Implement async version
+#![cfg(feature = "sync")]
+
 use std::convert::From;
 use std::fmt::Debug;
 

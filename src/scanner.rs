@@ -4,6 +4,9 @@
 //! allowing users to scan for stocks and other instruments based on
 //! various criteria and filters.
 
+// TODO: Implement async version
+#![cfg(feature = "sync")]
+
 use serde::{Deserialize, Serialize};
 
 use crate::{

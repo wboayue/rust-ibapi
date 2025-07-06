@@ -7,6 +7,7 @@
 use crate::{messages::OutgoingMessages, server_versions, Client, Error};
 
 pub mod historical;
+#[cfg(feature = "sync")]
 pub mod realtime;
 
 /// By default, only real-time market data sending is enabled.
@@ -22,6 +23,7 @@ pub enum MarketDataType {
     DelayedFrozen = 4,
 }
 
+#[cfg(feature = "sync")]
 pub(crate) fn switch_market_data_type(client: &Client, market_data_type: MarketDataType) -> Result<(), Error> {
     client.check_server_version(server_versions::REQ_MARKET_DATA_TYPE, "It does not support market data type requests.")?;
 

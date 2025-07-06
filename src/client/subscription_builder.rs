@@ -3,6 +3,9 @@
 //! This module provides a builder pattern for creating subscriptions in a consistent way
 //! across both sync and async implementations.
 
+// TODO: Implement async version
+#![cfg(feature = "sync")]
+
 use std::marker::PhantomData;
 
 use crate::client::{Client, DataStream, ResponseContext, Subscription};

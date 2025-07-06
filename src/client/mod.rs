@@ -2,7 +2,9 @@
 
 pub(crate) mod error_handler;
 pub(crate) mod id_generator;
+#[cfg(feature = "sync")]
 pub(crate) mod request_builder;
+#[cfg(feature = "sync")]
 pub(crate) mod subscription_builder;
 
 #[cfg(feature = "sync")]

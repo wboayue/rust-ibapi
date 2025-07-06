@@ -6,6 +6,9 @@
 // TODO: Remove this when more client methods are refactored to use the builder pattern
 #![allow(dead_code)]
 
+// TODO: Implement async version
+#![cfg(feature = "sync")]
+
 use crate::client::subscription_builder::SubscriptionBuilder;
 use crate::client::Client;
 use crate::errors::Error;

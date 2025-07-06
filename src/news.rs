@@ -4,6 +4,9 @@
 //! through the Interactive Brokers API. It supports real-time news feeds,
 //! historical news queries, and news article retrieval.
 
+// TODO: Implement async version
+#![cfg(feature = "sync")]
+
 use crate::market_data::realtime;
 use crate::{
     client::{DataStream, ResponseContext, SharesChannel, Subscription},

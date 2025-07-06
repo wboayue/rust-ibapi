@@ -54,12 +54,16 @@ pub mod errors;
 /// APIs for retrieving market data
 pub mod market_data;
 mod messages;
+#[cfg(feature = "sync")]
 pub mod news;
 /// Data types for building and placing orders.
+#[cfg(feature = "sync")]
 pub mod orders;
 /// APIs for working with the market scanner.
+#[cfg(feature = "sync")]
 pub mod scanner;
 /// APIs for working with Wall Street Horizon: Earnings Calendar & Event Data.
+#[cfg(feature = "sync")]
 pub mod wsh;
 
 /// A prelude module for convenient importing of commonly used types.

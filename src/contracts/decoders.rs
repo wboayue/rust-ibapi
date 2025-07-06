@@ -1,6 +1,6 @@
-use crate::{contracts::tick_types::TickType, contracts::SecurityType, messages::ResponseMessage, orders::TagValue, server_versions, Error};
+use crate::{contracts::tick_types::TickType, contracts::SecurityType, messages::ResponseMessage, server_versions, Error};
 
-use super::{Contract, ContractDescription, ContractDetails, MarketRule, OptionChain, OptionComputation, PriceIncrement};
+use super::{Contract, ContractDescription, ContractDetails, MarketRule, OptionChain, OptionComputation, PriceIncrement, TagValue};
 
 #[cfg(test)]
 mod tests;

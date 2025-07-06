@@ -4,6 +4,9 @@
 //! earnings calendars, corporate events, and other fundamental data
 //! events that may impact trading decisions.
 
+// TODO: Implement async version
+#![cfg(feature = "sync")]
+
 use std::str;
 
 use serde::{Deserialize, Serialize};
