@@ -1,13 +1,18 @@
 //! Transport layer for TWS communication with sync/async support
 
+#[cfg(all(feature = "sync", not(feature = "async")))]
 use std::sync::Arc;
+#[cfg(all(feature = "sync", not(feature = "async")))]
 use std::time::Duration;
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
 use crossbeam::channel::{Receiver, Sender};
 
 use crate::errors::Error;
-use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{RequestMessage, ResponseMessage};
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
+use crate::messages::OutgoingMessages;
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod sync;

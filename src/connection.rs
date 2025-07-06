@@ -3,6 +3,8 @@
 use time::OffsetDateTime;
 use time_tz::Tz;
 
+pub mod common;
+
 /// Metadata about the connection to TWS
 #[derive(Default, Clone, Debug)]
 pub struct ConnectionMetadata {

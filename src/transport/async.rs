@@ -4,13 +4,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use tokio::sync::{mpsc, RwLock};
 use tokio::task;
 use tokio::time::{sleep, Duration};
 
 use crate::connection::r#async::AsyncConnection;
-use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::Error;
 
 use super::routing::{determine_routing, is_warning_error, map_incoming_to_outgoing, RoutingDecision, UNSPECIFIED_REQUEST_ID};
@@ -64,7 +64,7 @@ impl AsyncTcpMessageBus {
     }
 
     /// Start processing messages from TWS
-    pub fn process_messages(self: Arc<Self>, server_version: i32, reconnect_delay: Duration) -> Result<(), Error> {
+    pub fn process_messages(self: Arc<Self>, _server_version: i32, reconnect_delay: Duration) -> Result<(), Error> {
         let message_bus = self.clone();
 
         task::spawn(async move {
@@ -128,7 +128,11 @@ impl AsyncTcpMessageBus {
     /// Route error message using routing decision
     async fn route_error_message_new(&self, message: ResponseMessage, request_id: i32, error_code: i32) -> Result<(), Error> {
         // Log the error for visibility
-        let error_msg = message.peek_string(4).unwrap_or(String::from("Unknown error"));
+        let error_msg = if message.len() > 4 {
+            message.peek_string(4)
+        } else {
+            String::from("Unknown error")
+        };
 
         // Check if this is a warning or unspecified error
         if request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(error_code) {
