@@ -1,7 +1,7 @@
 //! Common types shared between sync and async implementations
 
-use serde::{Deserialize, Serialize};
 use crate::contracts::Contract;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 /// Account information as it appears in the TWS' Account Summary Window
@@ -50,7 +50,7 @@ impl AccountSummaryTags {
     pub const HIGHEST_SEVERITY: &'static str = "HighestSeverity";
     pub const DAY_TRADES_REMAINING: &'static str = "DayTradesRemaining";
     pub const LEVERAGE: &'static str = "Leverage";
-    
+
     pub const ALL: &'static [&'static str] = &[
         Self::ACCOUNT_TYPE,
         Self::NET_LIQUIDATION,

@@ -23,7 +23,5 @@ mod sync;
 
 #[cfg(feature = "sync")]
 pub use sync::{
-    positions, positions_multi, family_codes, pnl, pnl_single,
-    account_summary, account_updates, account_updates_multi,
-    managed_accounts, server_time
+    account_summary, account_updates, account_updates_multi, family_codes, managed_accounts, pnl, pnl_single, positions, positions_multi, server_time,
 };

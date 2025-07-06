@@ -343,7 +343,8 @@ mod tests {
 
     #[test]
     fn test_decode_position_multi() {
-        let mut message = super::ResponseMessage::from("61\03\06\0DU1234567\076792991\0TSLA\0STK\0\00.0\0\0\0NASDAQ\0USD\0TSLA\0NMS\0500\0196.77\0\0");
+        let mut message =
+            super::ResponseMessage::from("61\03\06\0DU1234567\076792991\0TSLA\0STK\0\00.0\0\0\0NASDAQ\0USD\0TSLA\0NMS\0500\0196.77\0\0");
 
         let position = super::decode_position_multi(&mut message).expect("error decoding position multi");
 

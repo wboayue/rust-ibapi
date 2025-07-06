@@ -3,8 +3,8 @@
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
-use crate::Error;
 use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::Error;
 
 /// Asynchronous message bus trait
 #[async_trait]
@@ -24,7 +24,7 @@ impl AsyncInternalSubscription {
     pub fn new(receiver: mpsc::UnboundedReceiver<ResponseMessage>) -> Self {
         Self { receiver }
     }
-    
+
     pub async fn next(&mut self) -> Option<ResponseMessage> {
         self.receiver.recv().await
     }

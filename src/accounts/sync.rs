@@ -206,12 +206,7 @@ pub fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str>) -> R
 // * `account` - Account in which position exists
 // * `contract_id` - Contract ID of contract to receive daily PnL updates for. Note: does not return message if invalid conId is entered
 // * `model_code` - Model in which position exists
-pub fn pnl_single<'a>(
-    client: &'a Client,
-    account: &str,
-    contract_id: i32,
-    model_code: Option<&str>,
-) -> Result<Subscription<'a, PnLSingle>, Error> {
+pub fn pnl_single<'a>(client: &'a Client, account: &str, contract_id: i32, model_code: Option<&str>) -> Result<Subscription<'a, PnLSingle>, Error> {
     client.check_server_version(server_versions::REALIZED_PNL, "It does not support PnL requests.")?;
 
     let request_id = client.next_request_id();
