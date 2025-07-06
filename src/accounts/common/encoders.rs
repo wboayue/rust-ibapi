@@ -351,7 +351,11 @@ pub(in crate::accounts) fn encode_cancel_account_summary(request_id: i32) -> Res
     Ok(message)
 }
 
-pub(in crate::accounts) fn encode_request_positions_multi(request_id: i32, account: Option<&str>, model_code: Option<&str>) -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_request_positions_multi(
+    request_id: i32,
+    account: Option<&str>,
+    model_code: Option<&str>,
+) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 
     const VERSION: i32 = 1;
@@ -396,7 +400,12 @@ pub(in crate::accounts) fn encode_cancel_pnl(request_id: i32) -> Result<RequestM
     encode_simple_with_request_id(OutgoingMessages::CancelPnL, request_id)
 }
 
-pub(in crate::accounts) fn encode_request_pnl_single(request_id: i32, account: &str, contract_id: i32, model_code: Option<&str>) -> Result<RequestMessage, Error> {
+pub(in crate::accounts) fn encode_request_pnl_single(
+    request_id: i32,
+    account: &str,
+    contract_id: i32,
+    model_code: Option<&str>,
+) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 
     message.push_field(&OutgoingMessages::RequestPnLSingle);

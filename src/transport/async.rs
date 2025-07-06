@@ -24,7 +24,7 @@ pub trait AsyncMessageBus: Send + Sync {
 
 /// Internal subscription for async implementation
 pub struct AsyncInternalSubscription {
-    receiver: mpsc::UnboundedReceiver<ResponseMessage>,
+    pub(crate) receiver: mpsc::UnboundedReceiver<ResponseMessage>,
 }
 
 impl AsyncInternalSubscription {

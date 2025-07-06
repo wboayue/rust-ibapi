@@ -36,7 +36,9 @@ pub use crate::market_data::MarketDataType;
 pub use crate::orders::{order_builder, Action, ExecutionFilter, OrderUpdate, Orders, PlaceOrder};
 
 // Account types
-pub use crate::accounts::{AccountSummaries, AccountSummaryTags, AccountUpdate, AccountUpdateMulti, PositionUpdate, PositionUpdateMulti, PnL, PnLSingle, FamilyCode};
+pub use crate::accounts::{
+    AccountSummaries, AccountSummaryTags, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti,
+};
 
 // Client subscription type
 #[cfg(all(feature = "sync", not(feature = "async")))]

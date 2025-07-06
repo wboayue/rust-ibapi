@@ -1,6 +1,7 @@
 //! Asynchronous builder implementations
 
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 
@@ -191,7 +192,7 @@ where
         let subscription = self.client.message_bus.subscribe(request_id).await;
 
         // Create subscription with decoder
-        Ok(Subscription::new_from_internal::<D>(subscription, self.client.clone()))
+        Ok(Subscription::new_from_internal::<D>(subscription, Arc::new(self.client.clone())))
     }
 
     /// Sends a shared request (no ID) and builds the subscription
@@ -205,7 +206,7 @@ where
         // Subscribe to the shared channel
         let subscription = self.client.message_bus.subscribe_shared(message_type).await;
 
-        Ok(Subscription::new_from_internal::<D>(subscription, self.client.clone()))
+        Ok(Subscription::new_from_internal::<D>(subscription, Arc::new(self.client.clone())))
     }
 
     /// Sends an order request and builds the subscription
@@ -219,7 +220,7 @@ where
         // Subscribe to the order channel
         let subscription = self.client.message_bus.subscribe_order(order_id).await;
 
-        Ok(Subscription::new_from_internal::<D>(subscription, self.client.clone()))
+        Ok(Subscription::new_from_internal::<D>(subscription, Arc::new(self.client.clone())))
     }
 }
 

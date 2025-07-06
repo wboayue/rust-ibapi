@@ -15,11 +15,9 @@ use crate::transport::{
 use crate::Error;
 
 use super::id_generator::ClientIdManager;
-use crate::accounts::{
-    AccountSummaries, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti,
-};
-use crate::subscriptions::Subscription;
 use crate::accounts;
+use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
+use crate::subscriptions::Subscription;
 
 /// Asynchronous TWS API Client
 #[derive(Clone)]
@@ -400,11 +398,7 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub async fn account_updates_multi(
-        &self,
-        account: Option<&str>,
-        model_code: Option<&str>,
-    ) -> Result<Subscription<AccountUpdateMulti>, Error> {
+    pub async fn account_updates_multi(&self, account: Option<&str>, model_code: Option<&str>) -> Result<Subscription<AccountUpdateMulti>, Error> {
         accounts::account_updates_multi(self, account, model_code).await
     }
 
