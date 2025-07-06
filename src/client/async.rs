@@ -8,7 +8,10 @@ use time_tz::Tz;
 
 use crate::connection::{r#async::AsyncConnection, ConnectionMetadata};
 use crate::messages::{OutgoingMessages, RequestMessage};
-use crate::transport::{r#async::{AsyncInternalSubscription, AsyncTcpMessageBus}, AsyncMessageBus};
+use crate::transport::{
+    r#async::{AsyncInternalSubscription, AsyncTcpMessageBus},
+    AsyncMessageBus,
+};
 use crate::Error;
 
 use super::id_generator::ClientIdManager;
@@ -110,25 +113,21 @@ impl Client {
     pub async fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
         // First subscribe to the response channel
         let subscription = self.message_bus.subscribe(request_id).await;
-        
+
         // Then send the request
         self.message_bus.send_request(message).await?;
-        
+
         Ok(subscription)
     }
 
     /// Send a shared request (no ID)
-    pub async fn send_shared_request(
-        &self,
-        message_type: OutgoingMessages,
-        message: RequestMessage,
-    ) -> Result<AsyncInternalSubscription, Error> {
+    pub async fn send_shared_request(&self, message_type: OutgoingMessages, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
         // First subscribe to the shared channel
         let subscription = self.message_bus.subscribe_shared(message_type).await;
-        
+
         // Then send the request
         self.message_bus.send_request(message).await?;
-        
+
         Ok(subscription)
     }
 
@@ -136,10 +135,10 @@ impl Client {
     pub async fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
         // First subscribe to the order channel
         let subscription = self.message_bus.subscribe_order(order_id).await;
-        
+
         // Then send the request
         self.message_bus.send_request(message).await?;
-        
+
         Ok(subscription)
     }
 

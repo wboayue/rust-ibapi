@@ -4,9 +4,9 @@ use std::marker::PhantomData;
 
 use crate::client::sync::Client;
 use crate::client::{DataStream, ResponseContext};
-use crate::subscriptions::Subscription;
 use crate::errors::Error;
 use crate::messages::{OutgoingMessages, RequestMessage};
+use crate::subscriptions::Subscription;
 use crate::transport::InternalSubscription;
 
 /// Builder for creating requests with IDs

@@ -1,8 +1,8 @@
 //! Client implementation with sync/async support
 
+pub(crate) mod builders;
 pub(crate) mod error_handler;
 pub(crate) mod id_generator;
-pub(crate) mod builders;
 
 #[cfg(feature = "sync")]
 pub mod sync;

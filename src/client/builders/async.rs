@@ -46,9 +46,7 @@ impl<'a> RequestBuilder<'a> {
     where
         T: Send + 'static,
     {
-        SubscriptionBuilder::new(self.client)
-            .send_with_request_id(self.request_id, message)
-            .await
+        SubscriptionBuilder::new(self.client).send_with_request_id(self.request_id, message).await
     }
 
     /// Send the request without creating a subscription
@@ -80,16 +78,12 @@ impl<'a> SharedRequestBuilder<'a> {
     where
         T: Send + 'static,
     {
-        SubscriptionBuilder::new(self.client)
-            .send_shared(self.message_type, message)
-            .await
+        SubscriptionBuilder::new(self.client).send_shared(self.message_type, message).await
     }
 
     /// Send the request without creating a subscription
     pub async fn send_raw(self, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
-        self.client
-            .send_shared_request(self.message_type, message)
-            .await
+        self.client.send_shared_request(self.message_type, message).await
     }
 }
 
@@ -183,10 +177,10 @@ where
     pub async fn send_with_request_id(self, request_id: i32, message: RequestMessage) -> Result<Subscription<T>, Error> {
         // Send the request
         self.client.message_bus.send_request(message).await?;
-        
+
         // Subscribe to the response channel
         let subscription = self.client.message_bus.subscribe(request_id).await;
-        
+
         // Create decoder function that will transform ResponseMessage -> T
         // This would need to be provided by the T type or passed in
         Ok(Subscription::new_from_internal(subscription))
@@ -196,10 +190,10 @@ where
     pub async fn send_shared(self, message_type: OutgoingMessages, message: RequestMessage) -> Result<Subscription<T>, Error> {
         // Send the request
         self.client.message_bus.send_request(message).await?;
-        
+
         // Subscribe to the shared channel
         let subscription = self.client.message_bus.subscribe_shared(message_type).await;
-        
+
         Ok(Subscription::new_from_internal(subscription))
     }
 
@@ -207,10 +201,10 @@ where
     pub async fn send_order(self, order_id: i32, message: RequestMessage) -> Result<Subscription<T>, Error> {
         // Send the request
         self.client.message_bus.send_request(message).await?;
-        
+
         // Subscribe to the order channel
         let subscription = self.client.message_bus.subscribe_order(order_id).await;
-        
+
         Ok(Subscription::new_from_internal(subscription))
     }
 }

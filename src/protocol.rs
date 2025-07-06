@@ -33,6 +33,7 @@ impl Features {
     pub const PNL: ProtocolFeature = ProtocolFeature::new("profit and loss", server_versions::PNL);
     pub const UNREALIZED_PNL: ProtocolFeature = ProtocolFeature::new("unrealized PnL", server_versions::UNREALIZED_PNL);
     pub const REALIZED_PNL: ProtocolFeature = ProtocolFeature::new("realized PnL", server_versions::REALIZED_PNL);
+    pub const MODELS_SUPPORT: ProtocolFeature = ProtocolFeature::new("models support", server_versions::MODELS_SUPPORT);
 
     // Market data features
     pub const REAL_TIME_BARS: ProtocolFeature = ProtocolFeature::new("real-time bars", server_versions::REAL_TIME_BARS);
