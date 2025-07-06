@@ -5,8 +5,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build Commands
 
 ```bash
-# Build the library
+# Build the library (sync by default)
 cargo build
+
+# Build with async support
+cargo build --no-default-features --features async
 
 # Build with optimizations
 cargo build --release
@@ -16,6 +19,9 @@ cargo build --all-targets
 
 # Run tests
 cargo test
+
+# Run async tests
+cargo test --no-default-features --features async
 
 # Run a specific test
 cargo test <test_name>
@@ -38,6 +44,17 @@ cargo tarpaulin -o html
 just cover
 ```
 
+## Feature Flags
+
+The library supports two mutually exclusive features:
+- **sync** (default): Traditional synchronous API using threads
+- **async**: Asynchronous API using tokio
+
+To use async:
+```bash
+cargo build --no-default-features --features async
+```
+
 ## Environment Variables for Debugging
 
 ```bash
@@ -47,6 +64,14 @@ RUST_LOG=debug cargo run --example <example_name>
 # Log messages between library and TWS to a directory
 IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --example <example_name>
 ```
+
+## Connection Settings for Examples
+
+When running examples, use IB Gateway default ports:
+- **Live trading**: 4001
+- **Paper trading**: 4002
+
+TWS ports (7496/7497) can also be used but Gateway is preferred for automated trading and examples.
 
 ## Architecture Overview
 
