@@ -140,6 +140,124 @@ The rust-ibapi crate is a Rust implementation of the Interactive Brokers TWS API
    - `messages`: Message definitions and routing
    - `protocol`: Protocol version constants and feature checking
 
+### Module Organization
+
+Each API module follows a consistent structure to support both sync and async modes:
+
+```
+src/<module>/
+├── mod.rs         # Public types and module exports
+├── common/        # Shared implementation details
+│   ├── mod.rs     # Export encoders/decoders
+│   ├── encoders.rs # Message encoding functions
+│   └── decoders.rs # Message decoding functions
+├── sync.rs        # Synchronous implementation
+└── async.rs       # Asynchronous implementation
+```
+
+Example module structure:
+```rust
+// src/accounts/mod.rs
+//! Account management module with types and API
+
+// Common implementation modules
+mod common;
+
+// Feature-specific implementations
+#[cfg(all(feature = "sync", not(feature = "async")))]
+mod sync;
+
+#[cfg(feature = "async")]
+mod r#async;
+
+// Public types - always available regardless of feature flags
+#[derive(Debug)]
+pub enum AccountSummaries {
+    Summary(AccountSummary),
+    End,
+}
+
+#[derive(Debug)]
+pub struct AccountSummary {
+    pub account: String,
+    pub tag: String,
+    pub value: String,
+    pub currency: String,
+}
+
+#[derive(Debug)]
+pub struct PnL {
+    pub daily_pnl: f64,
+    pub unrealized_pnl: Option<f64>,
+    pub realized_pnl: Option<f64>,
+}
+
+// ... other types ...
+
+// Re-export API functions based on active feature
+#[cfg(all(feature = "sync", not(feature = "async")))]
+pub use sync::{positions, pnl, account_summary, managed_accounts, server_time};
+
+#[cfg(feature = "async")]
+pub use r#async::{positions, pnl, account_summary, managed_accounts, server_time};
+
+// src/accounts/common/mod.rs
+pub(super) mod decoders;
+pub(super) mod encoders;
+
+// src/accounts/common/encoders.rs
+use crate::messages::{OutgoingMessages, RequestMessage};
+use crate::Error;
+
+pub(in crate::accounts) fn encode_request_positions() -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+    message.push_field(&OutgoingMessages::RequestPositions);
+    message.push_field(&1); // version
+    Ok(message)
+}
+
+// src/accounts/sync.rs
+use super::common::{decoders, encoders};
+use super::{AccountSummaries, PnL, PositionUpdate};
+use crate::{Client, Error};
+
+impl DataStream<AccountSummaries> for AccountSummaries {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+        match message.message_type() {
+            IncomingMessages::AccountSummary => Ok(AccountSummaries::Summary(
+                decoders::decode_account_summary(client.server_version, message)?
+            )),
+            IncomingMessages::AccountSummaryEnd => Ok(AccountSummaries::End),
+            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+        }
+    }
+}
+
+// src/accounts/async.rs
+use super::common::{decoders, encoders};
+use super::{AccountSummaries, PnL, PositionUpdate};
+use crate::{Client, Error};
+
+impl AsyncDataStream<AccountSummaries> for AccountSummaries {
+    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+        match message.message_type() {
+            IncomingMessages::AccountSummary => Ok(AccountSummaries::Summary(
+                decoders::decode_account_summary(client.server_version(), message)?
+            )),
+            IncomingMessages::AccountSummaryEnd => Ok(AccountSummaries::End),
+            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+        }
+    }
+}
+```
+
+This structure ensures:
+- Public types are defined in mod.rs and always available
+- Shared business logic in common/encoders and common/decoders
+- Clear separation between public API (types) and implementation (common/)
+- No code duplication for encoding/decoding
+- Easy debugging and maintenance
+
 ## Multi-Threading Model
 
 The `Client` can be shared between threads for concurrent operations:
