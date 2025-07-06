@@ -16,6 +16,7 @@ use time::OffsetDateTime;
 use super::{RequestMessage, ResponseMessage};
 
 static RECORDING_SEQ: AtomicUsize = AtomicUsize::new(0);
+static RECORDER_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Clone, Debug)]
 pub(crate) struct MessageRecorder {
@@ -38,7 +39,8 @@ impl MessageRecorder {
                 } else {
                     let format = format_description!("[year]-[month]-[day]-[hour]-[minute]");
                     let now = OffsetDateTime::now_utc();
-                    let recording_dir = format!("{}/{}", dir, now.format(&format).unwrap());
+                    let instance_id = RECORDER_ID.fetch_add(1, Ordering::SeqCst);
+                    let recording_dir = format!("{}/{}-{}", dir, now.format(&format).unwrap(), instance_id);
 
                     fs::create_dir_all(&recording_dir).unwrap();
 
@@ -81,8 +83,6 @@ impl MessageRecorder {
 
 #[cfg(test)]
 mod tests {
-    use serial_test::serial;
-
     use crate::messages::OutgoingMessages;
     use crate::testdata::responses::{MANAGED_ACCOUNT, MARKET_RULE};
 
@@ -114,7 +114,6 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_record_request() {
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path().to_str().unwrap();
@@ -142,7 +141,6 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_record_response() {
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path().to_str().unwrap();
@@ -168,7 +166,6 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_multiple_records() {
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path().to_str().unwrap();
