@@ -13,9 +13,6 @@ pub(crate) mod common;
 #[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod sync;
 
-#[cfg(all(test, feature = "sync", not(feature = "async")))]
-mod tests;
-
 /// Bar describes the historical data bar.
 #[derive(Clone, Debug, PartialEq, Copy, Serialize, Deserialize)]
 pub struct Bar {
@@ -437,3 +434,132 @@ impl TickDecoder<TickMidpoint> for TickMidpoint {
 // Re-export TickSubscription and iterator types from sync module when sync feature is enabled
 #[cfg(all(feature = "sync", not(feature = "async")))]
 pub use sync::{TickSubscription, TickSubscriptionIter, TickSubscriptionOwnedIter, TickSubscriptionTimeoutIter, TickSubscriptionTryIter};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_bar_size_to_string() {
+        assert_eq!("1 secs", BarSize::Sec.to_string());
+        assert_eq!("5 secs", BarSize::Sec5.to_string());
+        assert_eq!("15 secs", BarSize::Sec15.to_string());
+        assert_eq!("30 secs", BarSize::Sec30.to_string());
+        assert_eq!("1 min", BarSize::Min.to_string());
+        assert_eq!("2 mins", BarSize::Min2.to_string());
+        assert_eq!("3 mins", BarSize::Min3.to_string());
+        assert_eq!("5 mins", BarSize::Min5.to_string());
+        assert_eq!("15 mins", BarSize::Min15.to_string());
+        assert_eq!("20 mins", BarSize::Min20.to_string());
+        assert_eq!("30 mins", BarSize::Min30.to_string());
+        assert_eq!("1 hour", BarSize::Hour.to_string());
+        assert_eq!("2 hours", BarSize::Hour2.to_string());
+        assert_eq!("3 hours", BarSize::Hour3.to_string());
+        assert_eq!("4 hours", BarSize::Hour4.to_string());
+        assert_eq!("8 hours", BarSize::Hour8.to_string());
+        assert_eq!("1 day", BarSize::Day.to_string());
+        assert_eq!("1 week", BarSize::Week.to_string());
+        assert_eq!("1 month", BarSize::Month.to_string());
+    }
+
+    #[test]
+    fn test_bar_size_from_string() {
+        assert_eq!(BarSize::Sec, BarSize::from("SEC"));
+        assert_eq!(BarSize::Sec5, BarSize::from("SEC5"));
+        assert_eq!(BarSize::Sec15, BarSize::from("SEC15"));
+        assert_eq!(BarSize::Sec30, BarSize::from("SEC30"));
+        assert_eq!(BarSize::Min, BarSize::from("MIN"));
+        assert_eq!(BarSize::Min2, BarSize::from("MIN2"));
+        assert_eq!(BarSize::Min3, BarSize::from("MIN3"));
+        assert_eq!(BarSize::Min5, BarSize::from("MIN5"));
+        assert_eq!(BarSize::Min15, BarSize::from("MIN15"));
+        assert_eq!(BarSize::Min20, BarSize::from("MIN20"));
+        assert_eq!(BarSize::Min30, BarSize::from("MIN30"));
+        assert_eq!(BarSize::Hour, BarSize::from("HOUR"));
+        assert_eq!(BarSize::Hour2, BarSize::from("HOUR2"));
+        assert_eq!(BarSize::Hour3, BarSize::from("HOUR3"));
+        assert_eq!(BarSize::Hour4, BarSize::from("HOUR4"));
+        assert_eq!(BarSize::Hour8, BarSize::from("HOUR8"));
+        assert_eq!(BarSize::Day, BarSize::from("DAY"));
+        assert_eq!(BarSize::Week, BarSize::from("WEEK"));
+        assert_eq!(BarSize::Month, BarSize::from("MONTH"));
+    }
+
+    #[test]
+    fn test_what_to_show_to_string() {
+        assert_eq!("TRADES", WhatToShow::Trades.to_string());
+        assert_eq!("MIDPOINT", WhatToShow::MidPoint.to_string());
+        assert_eq!("BID", WhatToShow::Bid.to_string());
+        assert_eq!("ASK", WhatToShow::Ask.to_string());
+        assert_eq!("BID_ASK", WhatToShow::BidAsk.to_string());
+        assert_eq!("HISTORICAL_VOLATILITY", WhatToShow::HistoricalVolatility.to_string());
+        assert_eq!("OPTION_IMPLIED_VOLATILITY", WhatToShow::OptionImpliedVolatility.to_string());
+        assert_eq!("FEE_RATE", WhatToShow::FeeRate.to_string());
+        assert_eq!("SCHEDULE", WhatToShow::Schedule.to_string());
+        assert_eq!("ADJUSTED_LAST", WhatToShow::AdjustedLast.to_string());
+    }
+
+    #[test]
+    fn test_what_to_show_from_string() {
+        assert_eq!(WhatToShow::Trades, WhatToShow::from("TRADES"));
+        assert_eq!(WhatToShow::MidPoint, WhatToShow::from("MIDPOINT"));
+        assert_eq!(WhatToShow::Bid, WhatToShow::from("BID"));
+        assert_eq!(WhatToShow::Ask, WhatToShow::from("ASK"));
+        assert_eq!(WhatToShow::BidAsk, WhatToShow::from("BID_ASK"));
+        assert_eq!(WhatToShow::HistoricalVolatility, WhatToShow::from("HISTORICAL_VOLATILITY"));
+        assert_eq!(WhatToShow::OptionImpliedVolatility, WhatToShow::from("OPTION_IMPLIED_VOLATILITY"));
+        assert_eq!(WhatToShow::FeeRate, WhatToShow::from("FEE_RATE"));
+        assert_eq!(WhatToShow::Schedule, WhatToShow::from("SCHEDULE"));
+        assert_eq!(WhatToShow::AdjustedLast, WhatToShow::from("ADJUSTED_LAST"));
+    }
+
+    #[test]
+    fn test_duration() {
+        assert_eq!(Duration::SECOND.to_field(), "1 S");
+        assert_eq!(Duration::DAY.to_field(), "1 D");
+        assert_eq!(Duration::WEEK.to_field(), "1 W");
+        assert_eq!(Duration::MONTH.to_field(), "1 M");
+        assert_eq!(Duration::YEAR.to_field(), "1 Y");
+
+        assert_eq!(2.seconds().to_field(), "2 S");
+        assert_eq!(3.days().to_field(), "3 D");
+        assert_eq!(4.weeks().to_field(), "4 W");
+        assert_eq!(5.months().to_field(), "5 M");
+        assert_eq!(6.years().to_field(), "6 Y");
+    }
+
+    #[test]
+    fn test_duration_parse() {
+        assert_eq!("1 S".parse(), Ok(Duration::seconds(1)));
+        assert_eq!("2 D".parse(), Ok(Duration::days(2)));
+        assert_eq!("3 W".parse(), Ok(Duration::weeks(3)));
+        assert_eq!("4 M".parse(), Ok(Duration::months(4)));
+        assert_eq!("5 Y".parse(), Ok(Duration::years(5)));
+
+        assert_eq!("".parse::<Duration>(), Err(DurationParseError::EmptyString));
+        assert_eq!("1S".parse::<Duration>(), Err(DurationParseError::MissingDelimiter("1S".to_string())));
+        assert!("abc S".parse::<Duration>().unwrap_err().to_string().contains("Parse integer error"));
+        assert_eq!("1 X".parse::<Duration>(), Err(DurationParseError::UnsupportedUnit("X".to_string())));
+
+        assert_eq!(DurationParseError::EmptyString.to_string(), "Empty duration string");
+        assert_eq!(
+            DurationParseError::MissingDelimiter("1S".to_string()).to_string(),
+            "Missing delimiter: 1S"
+        );
+        assert_eq!(
+            DurationParseError::UnsupportedUnit("X".to_string()).to_string(),
+            "Unsupported duration unit: X"
+        );
+
+        if let Err(err) = i32::from_str("abc") {
+            assert_eq!(
+                DurationParseError::ParseIntError(err).to_string(),
+                "Parse integer error: invalid digit found in string"
+            );
+        }
+
+        assert_eq!(Duration::seconds(1), Duration::from("1 S"));
+        assert_eq!(Duration::seconds(1), Duration::from(String::from("1 S")));
+    }
+}
