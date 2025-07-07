@@ -28,7 +28,7 @@ pub mod tick_types;
 
 #[cfg(test)]
 pub(crate) mod contract_samples;
-#[cfg(test)]
+#[cfg(all(test, feature = "sync", not(feature = "async")))]
 mod tests;
 
 // Models

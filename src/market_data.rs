@@ -78,7 +78,7 @@ mod encoders {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "sync", not(feature = "async")))]
 mod tests {
     use std::sync::{Arc, RwLock};
 
