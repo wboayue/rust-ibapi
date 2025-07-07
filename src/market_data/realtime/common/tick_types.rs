@@ -1,4 +1,4 @@
-/* 
+/*
 Description	Generic tick required	Delivery Method	Tick Id
 Disable Default Market Data	Disables standard market data stream and allows the TWS & API feed to prioritize other listed generic tick types.	mdoff	–	–
 Bid Size	Number of contracts or lots offered at the bid price.	–	IBApi.EWrapper.tickSize	0

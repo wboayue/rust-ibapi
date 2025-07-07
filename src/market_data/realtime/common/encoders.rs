@@ -1,6 +1,6 @@
 use crate::contracts::{Contract, SecurityType};
-use crate::messages::{OutgoingMessages, RequestMessage};
 use crate::market_data::realtime::{BarSize, WhatToShow};
+use crate::messages::{OutgoingMessages, RequestMessage};
 use crate::orders::TagValue;
 use crate::{server_versions, Error};
 

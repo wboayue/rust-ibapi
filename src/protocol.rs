@@ -39,10 +39,17 @@ impl Features {
     pub const REAL_TIME_BARS: ProtocolFeature = ProtocolFeature::new("real-time bars", server_versions::REAL_TIME_BARS);
     pub const MARKET_DATA_TYPE: ProtocolFeature = ProtocolFeature::new("market data type", server_versions::REQ_MARKET_DATA_TYPE);
     pub const TICK_BY_TICK: ProtocolFeature = ProtocolFeature::new("tick-by-tick data", server_versions::TICK_BY_TICK);
+    pub const TICK_BY_TICK_IGNORE_SIZE: ProtocolFeature =
+        ProtocolFeature::new("tick-by-tick ignore size parameter", server_versions::TICK_BY_TICK_IGNORE_SIZE);
     pub const HISTOGRAM: ProtocolFeature = ProtocolFeature::new("histogram data", server_versions::REQ_HISTOGRAM);
     pub const HISTORICAL_TICKS: ProtocolFeature = ProtocolFeature::new("historical ticks", server_versions::HISTORICAL_TICKS);
     pub const HEAD_TIMESTAMP: ProtocolFeature = ProtocolFeature::new("head timestamp", server_versions::REQ_HEAD_TIMESTAMP);
     pub const SYNT_REALTIME_BARS: ProtocolFeature = ProtocolFeature::new("synthetic real-time bars", server_versions::SYNT_REALTIME_BARS);
+    pub const HISTORICAL_SCHEDULE: ProtocolFeature = ProtocolFeature::new("historical schedule", server_versions::HISTORICAL_SCHEDULE);
+    pub const SMART_DEPTH: ProtocolFeature = ProtocolFeature::new("SMART depth", server_versions::SMART_DEPTH);
+    pub const MKT_DEPTH_PRIM_EXCHANGE: ProtocolFeature =
+        ProtocolFeature::new("market depth primary exchange", server_versions::MKT_DEPTH_PRIM_EXCHANGE);
+    pub const REQ_MKT_DEPTH_EXCHANGES: ProtocolFeature = ProtocolFeature::new("market depth exchanges", server_versions::REQ_MKT_DEPTH_EXCHANGES);
 
     // Order features
     pub const WHAT_IF_ORDERS: ProtocolFeature = ProtocolFeature::new("what-if orders", server_versions::WHAT_IF_ORDERS);

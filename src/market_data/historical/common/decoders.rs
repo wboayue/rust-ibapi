@@ -5,7 +5,9 @@ use time_tz::{timezones, OffsetDateTimeExt, PrimitiveDateTimeExt, Tz};
 use crate::messages::ResponseMessage;
 use crate::{server_versions, Error};
 
-use crate::market_data::historical::{Bar, HistogramEntry, HistoricalData, Schedule, Session, TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint};
+use crate::market_data::historical::{
+    Bar, HistogramEntry, HistoricalData, Schedule, Session, TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint,
+};
 
 pub(crate) fn decode_head_timestamp(message: &mut ResponseMessage) -> Result<OffsetDateTime, Error> {
     message.skip(); // message type

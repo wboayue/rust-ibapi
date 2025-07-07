@@ -1,14 +1,14 @@
 use log::debug;
 
-use crate::client::{ResponseContext, Subscription};
+use crate::client::{ClientRequestBuilders, ResponseContext, Subscription};
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::orders::TagValue;
-use crate::server_versions;
+use crate::protocol::{check_version, Features};
 use crate::{Client, Error};
 
 use super::common::{decoders, encoders};
-use super::{BarSize, BidAsk, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, Trade, WhatToShow, Bar};
+use super::{Bar, BarSize, BidAsk, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, Trade, WhatToShow};
 
 // Requests realtime bars.
 pub(crate) fn realtime_bars<'a>(
@@ -19,11 +19,18 @@ pub(crate) fn realtime_bars<'a>(
     use_rth: bool,
     options: Vec<TagValue>,
 ) -> Result<Subscription<'a, Bar>, Error> {
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_realtime_bars(client.server_version(), request_id, contract, bar_size, what_to_show, use_rth, options)?;
-    let subscription = client.send_request(request_id, request)?;
+    let builder = client.request();
+    let request = encoders::encode_request_realtime_bars(
+        client.server_version(),
+        builder.request_id(),
+        contract,
+        bar_size,
+        what_to_show,
+        use_rth,
+        options,
+    )?;
 
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+    builder.send(request)
 }
 
 // Requests tick by tick AllLast ticks.
@@ -36,23 +43,19 @@ pub(crate) fn tick_by_tick_all_last<'a>(
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
-    let request_id = client.next_request_id();
+    let builder = client.request();
 
-    let request = encoders::encode_tick_by_tick(server_version, request_id, contract, "AllLast", number_of_ticks, ignore_size)?;
-    let subscription = client.send_request(request_id, request)?;
+    let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "AllLast", number_of_ticks, ignore_size)?;
 
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+    builder.send(request)
 }
 
 // Validates that server supports the given request.
 pub(super) fn validate_tick_by_tick_request(client: &Client, _contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<(), Error> {
-    client.check_server_version(server_versions::TICK_BY_TICK, "It does not support tick-by-tick requests.")?;
+    check_version(client.server_version(), Features::TICK_BY_TICK)?;
 
     if number_of_ticks != 0 || ignore_size {
-        client.check_server_version(
-            server_versions::TICK_BY_TICK_IGNORE_SIZE,
-            "It does not support ignore_size and number_of_ticks parameters in tick-by-tick requests.",
-        )?;
+        check_version(client.server_version(), Features::TICK_BY_TICK_IGNORE_SIZE)?;
     }
 
     Ok(())
@@ -68,12 +71,11 @@ pub(crate) fn tick_by_tick_last<'a>(
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
-    let request_id = client.next_request_id();
+    let builder = client.request();
 
-    let request = encoders::encode_tick_by_tick(server_version, request_id, contract, "Last", number_of_ticks, ignore_size)?;
-    let subscription = client.send_request(request_id, request)?;
+    let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "Last", number_of_ticks, ignore_size)?;
 
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+    builder.send(request)
 }
 
 // Requests tick by tick BidAsk ticks.
@@ -86,12 +88,11 @@ pub(crate) fn tick_by_tick_bid_ask<'a>(
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
-    let request_id = client.next_request_id();
+    let builder = client.request();
 
-    let request = encoders::encode_tick_by_tick(server_version, request_id, contract, "BidAsk", number_of_ticks, ignore_size)?;
-    let subscription = client.send_request(request_id, request)?;
+    let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "BidAsk", number_of_ticks, ignore_size)?;
 
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+    builder.send(request)
 }
 
 // Requests tick by tick MidPoint ticks.
@@ -104,12 +105,11 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
-    let request_id = client.next_request_id();
+    let builder = client.request();
 
-    let request = encoders::encode_tick_by_tick(server_version, request_id, contract, "MidPoint", number_of_ticks, ignore_size)?;
-    let subscription = client.send_request(request_id, request)?;
+    let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "MidPoint", number_of_ticks, ignore_size)?;
 
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+    builder.send(request)
 }
 
 pub(crate) fn market_depth<'a>(
@@ -119,39 +119,31 @@ pub(crate) fn market_depth<'a>(
     is_smart_depth: bool,
 ) -> Result<Subscription<'a, MarketDepths>, Error> {
     if is_smart_depth {
-        client.check_server_version(server_versions::SMART_DEPTH, "It does not support SMART depth request.")?;
+        check_version(client.server_version(), Features::SMART_DEPTH)?;
     }
     if !contract.primary_exchange.is_empty() {
-        client.check_server_version(
-            server_versions::MKT_DEPTH_PRIM_EXCHANGE,
-            "It does not support primary_exchange parameter in request_market_depth",
-        )?;
+        check_version(client.server_version(), Features::MKT_DEPTH_PRIM_EXCHANGE)?;
     }
 
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_market_depth(client.server_version, request_id, contract, number_of_rows, is_smart_depth)?;
-    let subscription = client.send_request(request_id, request)?;
+    let builder = client.request();
+    let request = encoders::encode_request_market_depth(client.server_version(), builder.request_id(), contract, number_of_rows, is_smart_depth)?;
 
-    Ok(Subscription::new(
-        client,
-        subscription,
+    builder.send_with_context(
+        request,
         ResponseContext {
             is_smart_depth,
             ..Default::default()
         },
-    ))
+    )
 }
 
 // Requests venues for which market data is returned to market_depth (those with market makers)
 pub fn market_depth_exchanges(client: &Client) -> Result<Vec<DepthMarketDataDescription>, Error> {
-    client.check_server_version(
-        server_versions::REQ_MKT_DEPTH_EXCHANGES,
-        "It does not support market depth exchanges requests.",
-    )?;
+    check_version(client.server_version(), Features::REQ_MKT_DEPTH_EXCHANGES)?;
 
     loop {
         let request = encoders::encode_request_market_depth_exchanges()?;
-        let subscription = client.send_shared_request(OutgoingMessages::RequestMktDepthExchanges, request)?;
+        let subscription = client.shared_request(OutgoingMessages::RequestMktDepthExchanges).send_raw(request)?;
         let response = subscription.next();
 
         match response {
@@ -174,26 +166,26 @@ pub fn market_data<'a>(
     snapshot: bool,
     regulatory_snapshot: bool,
 ) -> Result<Subscription<'a, TickTypes>, Error> {
-    let request_id = client.next_request_id();
+    let builder = client.request();
     let request = encoders::encode_request_market_data(
         client.server_version(),
-        request_id,
+        builder.request_id(),
         contract,
         generic_ticks,
         snapshot,
         regulatory_snapshot,
     )?;
-    let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+    builder.send(request)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{ComboLeg, Contract, DeltaNeutralContract, SecurityType, contract_samples};
     use crate::contracts::tick_types::TickType;
+    use crate::contracts::{contract_samples, ComboLeg, Contract, DeltaNeutralContract, SecurityType};
     use crate::messages::OutgoingMessages;
+    use crate::server_versions;
     use crate::stubs::MessageBusStub;
     use crate::ToField;
     use std::sync::Arc;
@@ -326,10 +318,7 @@ mod tests {
     fn test_market_depth() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
-            response_messages: vec![
-                "12|1|9001|0|0|0|4028.75|100|".to_owned(),
-                "12|1|9001|1|1|1|4028.50|200|".to_owned(),
-            ],
+            response_messages: vec!["12|1|9001|0|0|0|4028.75|100|".to_owned(), "12|1|9001|1|1|1|4028.50|200|".to_owned()],
         });
 
         let client = Client::stubbed(message_bus, server_versions::SMART_DEPTH);
@@ -389,9 +378,7 @@ mod tests {
         let client = Client::stubbed(message_bus, server_versions::SERVICE_DATA_TYPE);
 
         // Test request execution
-        let exchanges = client
-            .market_depth_exchanges()
-            .expect("Failed to request market depth exchanges");
+        let exchanges = client.market_depth_exchanges().expect("Failed to request market depth exchanges");
 
         assert_eq!(exchanges.len(), 2, "Should receive 2 exchange descriptions");
 
@@ -403,7 +390,7 @@ mod tests {
         assert_eq!(first.service_data_type, "DEEP2", "Wrong service data type");
         assert_eq!(first.aggregated_group, Some("1".to_string()), "Wrong aggregated group");
 
-        // Verify second exchange  
+        // Verify second exchange
         let second = &exchanges[1];
         assert_eq!(second.exchange_name, "NYSE", "Wrong exchange name");
         assert_eq!(second.security_type, "STK", "Wrong security type");
@@ -416,11 +403,7 @@ mod tests {
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
         let request = &request_messages[0];
-        assert_eq!(
-            request[0],
-            OutgoingMessages::RequestMktDepthExchanges.to_field(),
-            "Wrong message type"
-        );
+        assert_eq!(request[0], OutgoingMessages::RequestMktDepthExchanges.to_field(), "Wrong message type");
     }
 
     #[test]
@@ -461,10 +444,7 @@ mod tests {
     fn test_tick_by_tick_midpoint() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
-            response_messages: vec![
-                "99|9001|4|1678740829|3895.375|".to_owned(),
-                "99|9001|4|1678740830|3895.425|".to_owned(),
-            ],
+            response_messages: vec!["99|9001|4|1678740829|3895.375|".to_owned(), "99|9001|4|1678740830|3895.425|".to_owned()],
         });
 
         let client = Client::stubbed(message_bus, server_versions::TICK_BY_TICK);
@@ -504,11 +484,7 @@ mod tests {
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
         let request = &request_messages[0];
-        assert_eq!(
-            request[0],
-            OutgoingMessages::RequestTickByTickData.to_field(),
-            "Wrong message type"
-        );
+        assert_eq!(request[0], OutgoingMessages::RequestTickByTickData.to_field(), "Wrong message type");
         assert_eq!(request[14], "MidPoint", "Wrong tick type");
     }
 

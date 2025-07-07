@@ -4,9 +4,8 @@ use crate::Error;
 use crate::{messages::ResponseMessage, server_versions};
 
 use crate::market_data::realtime::{
-    Bar, BidAsk, BidAskAttribute, DepthMarketDataDescription, MarketDepth, MarketDepthL2, MidPoint, 
-    TickEFP, TickGeneric, TickPrice, TickPriceSize, TickRequestParameters, TickSize, 
-    TickString, TickTypes, Trade, TradeAttribute, TickType
+    Bar, BidAsk, BidAskAttribute, DepthMarketDataDescription, MarketDepth, MarketDepthL2, MidPoint, TickEFP, TickGeneric, TickPrice, TickPriceSize,
+    TickRequestParameters, TickSize, TickString, TickType, TickTypes, Trade, TradeAttribute,
 };
 
 #[cfg(test)]
@@ -310,7 +309,9 @@ mod tests {
         fn test_decode_tick_price_size() {
             let mut message = ResponseMessage::from("1\02\09000\01\0185.50\0100\07\0");
 
-            if let TickTypes::PriceSize(tick) = decode_tick_price(server_versions::PRE_OPEN_BID_ASK, &mut message).expect("Failed to decode tick price") {
+            if let TickTypes::PriceSize(tick) =
+                decode_tick_price(server_versions::PRE_OPEN_BID_ASK, &mut message).expect("Failed to decode tick price")
+            {
                 assert_eq!(tick.price_tick_type, TickType::Bid, "Wrong price tick type");
                 assert_eq!(tick.size_tick_type, TickType::BidSize, "Wrong size tick type");
                 assert_eq!(tick.price, 185.50, "Wrong price");

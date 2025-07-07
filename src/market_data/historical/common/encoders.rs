@@ -167,11 +167,11 @@ pub(crate) fn encode_request_histogram_data(request_id: i32, contract: &Contract
 #[cfg(test)]
 mod tests {
     use super::*;
-    use time::macros::datetime;
-    use time_tz::{self, PrimitiveDateTimeExt};
+    use crate::market_data::historical::ToDuration;
     use crate::messages::OutgoingMessages;
     use crate::ToField;
-    use crate::market_data::historical::ToDuration;
+    use time::macros::datetime;
+    use time_tz::{self, PrimitiveDateTimeExt};
 
     #[test]
     fn test_encode_request_head_timestamp() {
