@@ -40,10 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 1: Get the earliest available data timestamp
     println!("=== Head Timestamp ===");
     let head_timestamp = client.head_timestamp(&contract, WhatToShow::Trades, true).await?;
-    println!(
-        "Earliest available historical data: {}",
-        head_timestamp.format("%Y-%m-%d %H:%M:%S").unwrap()
-    );
+    println!("Earliest available historical data: {}", head_timestamp);
 
     // Example 2: Get recent intraday data (5-minute bars for last day)
     println!("\n=== Recent Intraday Data (5-min bars) ===");
@@ -59,11 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await?;
 
-    println!(
-        "Period: {} to {}",
-        historical_data.start.format("%Y-%m-%d %H:%M:%S").unwrap(),
-        historical_data.end.format("%Y-%m-%d %H:%M:%S").unwrap()
-    );
+    println!("Period: {} to {}", historical_data.start, historical_data.end);
     println!("Total bars: {}", historical_data.bars.len());
 
     // Show first 5 and last 5 bars
@@ -71,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!(
             "Bar {}: {} - O: ${:.2}, H: ${:.2}, L: ${:.2}, C: ${:.2}, V: {:.0}",
             i + 1,
-            bar.date.format("%H:%M").unwrap(),
+            format!("{:02}:{:02}", bar.date.hour(), bar.date.minute()),
             bar.open,
             bar.high,
             bar.low,
@@ -86,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!(
                 "Bar {}: {} - O: ${:.2}, H: ${:.2}, L: ${:.2}, C: ${:.2}, V: {:.0}",
                 start_idx + i + 1,
-                bar.date.format("%H:%M").unwrap(),
+                format!("{:02}:{:02}", bar.date.hour(), bar.date.minute()),
                 bar.open,
                 bar.high,
                 bar.low,
@@ -113,7 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for bar in daily_data.bars.iter().take(5) {
         println!(
             "{}: O: ${:.2}, H: ${:.2}, L: ${:.2}, C: ${:.2}, V: {:.0}K",
-            bar.date.format("%Y-%m-%d").unwrap(),
+            format!("{:04}-{:02}-{:02}", bar.date.year(), bar.date.month() as u8, bar.date.day()),
             bar.open,
             bar.high,
             bar.low,
@@ -131,7 +124,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("Bid bars (1-min): {} bars", bid_data.bars.len());
     if let Some(bar) = bid_data.bars.first() {
-        println!("  First bar: {} - Bid: ${:.2}", bar.date.format("%H:%M:%S").unwrap(), bar.close);
+        println!(
+            "  First bar: {:02}:{:02}:{:02} - Bid: ${:.2}",
+            bar.date.hour(),
+            bar.date.minute(),
+            bar.date.second(),
+            bar.close
+        );
     }
 
     // Ask data
@@ -140,7 +139,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     println!("Ask bars (1-min): {} bars", ask_data.bars.len());
     if let Some(bar) = ask_data.bars.first() {
-        println!("  First bar: {} - Ask: ${:.2}", bar.date.format("%H:%M:%S").unwrap(), bar.close);
+        println!(
+            "  First bar: {:02}:{:02}:{:02} - Ask: ${:.2}",
+            bar.date.hour(),
+            bar.date.minute(),
+            bar.date.second(),
+            bar.close
+        );
     }
 
     // Example 5: Get histogram data

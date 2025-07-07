@@ -418,8 +418,8 @@ mod tests {
     async fn test_server_time() {
         use time::macros::datetime;
 
-        let valid_timestamp_str = "1678886400"; // 2023-03-15 12:00:00 UTC
-        let expected_datetime = datetime!(2023-03-15 12:00:00 UTC);
+        let valid_timestamp_str = "1678886400"; // 2023-03-15 13:20:00 UTC
+        let expected_datetime = datetime!(2023-03-15 13:20:00 UTC);
 
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),

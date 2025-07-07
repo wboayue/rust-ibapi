@@ -124,3 +124,80 @@ required-features = ["async"]
 [[example]]
 name = "async_histogram_data"
 required-features = ["async"]
+
+# Sync-only examples
+[[example]]
+name = "bracket_order"
+required-features = ["sync"]
+
+[[example]]
+name = "breakout"
+required-features = ["sync"]
+
+[[example]]
+name = "broad_tape_news"
+required-features = ["sync"]
+
+[[example]]
+name = "cancel_orders"
+required-features = ["sync"]
+
+[[example]]
+name = "completed_orders"
+required-features = ["sync"]
+
+[[example]]
+name = "contract_news"
+required-features = ["sync"]
+
+[[example]]
+name = "executions"
+required-features = ["sync"]
+
+[[example]]
+name = "historical_news"
+required-features = ["sync"]
+
+[[example]]
+name = "news_article"
+required-features = ["sync"]
+
+[[example]]
+name = "news_bulletins"
+required-features = ["sync"]
+
+[[example]]
+name = "news_providers"
+required-features = ["sync"]
+
+[[example]]
+name = "options_exercise"
+required-features = ["sync"]
+
+[[example]]
+name = "options_purchase"
+required-features = ["sync"]
+
+[[example]]
+name = "orders"
+required-features = ["sync"]
+
+[[example]]
+name = "place_order"
+required-features = ["sync"]
+
+[[example]]
+name = "scanner_parameters"
+required-features = ["sync"]
+
+[[example]]
+name = "scanner_subscription_active_stocks"
+required-features = ["sync"]
+
+[[example]]
+name = "scanner_subscription_complex_orders"
+required-features = ["sync"]
+
+[[example]]
+name = "submit_order"
+required-features = ["sync"]

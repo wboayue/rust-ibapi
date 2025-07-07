@@ -344,7 +344,10 @@ mod tests {
         assert_eq!(request.fields[2], contract.contract_id.to_field(), "message.contract_id");
         assert_eq!(request.fields[3], contract.symbol, "message.symbol");
         assert_eq!(request.fields[4], contract.security_type.to_field(), "message.security_type");
-        assert_eq!(request.fields[5], contract.last_trade_date_or_contract_month, "message.last_trade_date_or_contract_month");
+        assert_eq!(
+            request.fields[5], contract.last_trade_date_or_contract_month,
+            "message.last_trade_date_or_contract_month"
+        );
         assert_eq!(request.fields[6], contract.strike.to_field(), "message.strike");
         assert_eq!(request.fields[7], contract.right, "message.right");
         assert_eq!(request.fields[8], contract.multiplier, "message.multiplier");
@@ -394,12 +397,19 @@ mod tests {
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
         let request = &request_messages[0];
-        assert_eq!(request.fields[0], OutgoingMessages::RequestHistogramData.to_field(), "message.message_type");
+        assert_eq!(
+            request.fields[0],
+            OutgoingMessages::RequestHistogramData.to_field(),
+            "message.message_type"
+        );
         assert_eq!(request.fields[1], "9000", "message.request_id");
         assert_eq!(request.fields[2], contract.contract_id.to_field(), "message.contract_id");
         assert_eq!(request.fields[3], contract.symbol, "message.symbol");
         assert_eq!(request.fields[4], contract.security_type.to_field(), "message.security_type");
-        assert_eq!(request.fields[5], contract.last_trade_date_or_contract_month, "message.last_trade_date_or_contract_month");
+        assert_eq!(
+            request.fields[5], contract.last_trade_date_or_contract_month,
+            "message.last_trade_date_or_contract_month"
+        );
         assert_eq!(request.fields[6], contract.strike.to_field(), "message.strike");
         assert_eq!(request.fields[7], contract.right, "message.right");
         assert_eq!(request.fields[8], contract.multiplier, "message.multiplier");
@@ -469,7 +479,11 @@ mod tests {
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
         let request = &request_messages[0];
-        assert_eq!(request.fields[0], OutgoingMessages::RequestHistoricalData.to_field(), "Wrong message type");
+        assert_eq!(
+            request.fields[0],
+            OutgoingMessages::RequestHistoricalData.to_field(),
+            "Wrong message type"
+        );
     }
 
     #[tokio::test]
@@ -485,7 +499,8 @@ mod tests {
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("trading class"),
-            "Error should mention trading class feature: {}", err_msg
+            "Error should mention trading class feature: {}",
+            err_msg
         );
     }
 
@@ -578,7 +593,7 @@ mod tests {
         let request = &request_messages[0];
         assert_eq!(request.fields[0], OutgoingMessages::RequestHistoricalData.to_field(), "message.type");
         assert_eq!(request.fields[1], "9000", "message.request_id"); // request_id will be generated
-        // The rest of the fields follow the same pattern as historical data request
+                                                                     // The rest of the fields follow the same pattern as historical data request
     }
 
     #[tokio::test]
@@ -638,8 +653,7 @@ mod tests {
             response_messages: vec![
                 // HistoricalTickBidAsk = 97
                 // Response with 3 ticks at once, done = true
-                "97|9000|3|1678838400|8|185.50|186.00|100|200|1678838401|9|185.60|186.10|110|210|1678838402|10|185.70|186.20|120|220|1|"
-                    .to_owned(),
+                "97|9000|3|1678838400|8|185.50|186.00|100|200|1678838401|9|185.60|186.10|110|210|1678838402|10|185.70|186.20|120|220|1|".to_owned(),
             ],
         });
 
@@ -669,7 +683,7 @@ mod tests {
             response_messages: vec![
                 // HistoricalTickBidAsk = 97
                 // mask = 2 (binary 10) = bid_past_low = true, ask_past_high = false
-                "97|9000|1|1678838400|2|185.50|186.00|100|200|1|".to_owned()
+                "97|9000|1|1678838400|2|185.50|186.00|100|200|1|".to_owned(),
             ],
         });
 
@@ -704,7 +718,10 @@ mod tests {
         assert_eq!(request.fields[2], contract.contract_id.to_field(), "message.contract_id");
         assert_eq!(request.fields[3], contract.symbol, "message.symbol");
         assert_eq!(request.fields[4], contract.security_type.to_field(), "message.security_type");
-        assert_eq!(request.fields[5], contract.last_trade_date_or_contract_month, "message.last_trade_date_or_contract_month");
+        assert_eq!(
+            request.fields[5], contract.last_trade_date_or_contract_month,
+            "message.last_trade_date_or_contract_month"
+        );
         assert_eq!(request.fields[6], contract.strike.to_field(), "message.strike");
         assert_eq!(request.fields[7], contract.right, "message.right");
         assert_eq!(request.fields[8], contract.multiplier, "message.multiplier");
@@ -730,7 +747,7 @@ mod tests {
             response_messages: vec![
                 // HistoricalTick = 96 (for midpoint)
                 // Format: message_type|request_id|num_ticks|timestamp|skip|price|size|...|done
-                "96|9000|1|1678838400|0|185.75|100|1|".to_owned()
+                "96|9000|1|1678838400|0|185.75|100|1|".to_owned(),
             ],
         });
 
@@ -759,7 +776,7 @@ mod tests {
             response_messages: vec![
                 // HistoricalTickLast = 98
                 // Format: message_type|request_id|num_ticks|timestamp|mask|price|size|exchange|conditions|...|done
-                "98|9000|1|1678838400|0|185.50|100|ISLAND|APR|1|".to_owned()
+                "98|9000|1|1678838400|0|185.50|100|ISLAND|APR|1|".to_owned(),
             ],
         });
 
@@ -789,8 +806,9 @@ mod tests {
     async fn test_historical_data_time_zone_handling() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
-            response_messages: vec!["17|9000|20230315  09:30:00|20230315  10:30:00|1|1678886400|185.50|186.00|185.25|185.75|1000|185.70|100|"
-                .to_owned()],
+            response_messages: vec![
+                "17|9000|20230315  09:30:00|20230315  10:30:00|1|1678886400|185.50|186.00|185.25|185.75|1000|185.70|100|".to_owned(),
+            ],
         });
 
         let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
@@ -799,11 +817,11 @@ mod tests {
 
         let contract = contract_samples::simple_future();
         let result = historical_data(&client, &contract, None, Duration::seconds(3600), BarSize::Hour, None, true).await;
-        
+
         assert!(result.is_ok(), "historical_data should succeed with timezone");
         let data = result.unwrap();
         assert_eq!(data.bars.len(), 1, "Should receive 1 bar");
-        
+
         // The timestamp should be parsed in the client's timezone
         // 1678886400 = 2023-03-15 12:00:00 UTC = 2023-03-15 08:00:00 EDT
         let bar = &data.bars[0];

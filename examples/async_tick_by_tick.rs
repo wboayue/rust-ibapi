@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 use futures::StreamExt;
 use ibapi::{contracts::Contract, Client};
+use time::macros::format_description;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -65,7 +66,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let quote = quote?;
         println!(
             "Quote at {}: Bid ${:.2} x {} | Ask ${:.2} x {}",
-            quote.time.format("%H:%M:%S%.3f").unwrap(),
+            quote
+                .time
+                .format(format_description!("[hour]:[minute]:[second].[subsecond digits:3]"))
+                .unwrap(),
             quote.bid_price,
             quote.bid_size,
             quote.ask_price,
@@ -88,7 +92,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let midpoint = midpoint?;
         println!(
             "Midpoint at {}: ${:.2}",
-            midpoint.time.format("%H:%M:%S%.3f").unwrap(),
+            midpoint
+                .time
+                .format(format_description!("[hour]:[minute]:[second].[subsecond digits:3]"))
+                .unwrap(),
             midpoint.mid_point
         );
     }

@@ -419,7 +419,11 @@ mod tests {
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
         let request = &request_messages[0];
-        assert_eq!(request.fields[0], OutgoingMessages::RequestTickByTickData.to_field(), "Wrong message type");
+        assert_eq!(
+            request.fields[0],
+            OutgoingMessages::RequestTickByTickData.to_field(),
+            "Wrong message type"
+        );
         assert_eq!(request.fields[14], "AllLast", "Wrong tick type");
     }
 
@@ -548,7 +552,11 @@ mod tests {
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
         let request = &request_messages[0];
-        assert_eq!(request.fields[0], OutgoingMessages::RequestTickByTickData.to_field(), "Wrong message type");
+        assert_eq!(
+            request.fields[0],
+            OutgoingMessages::RequestTickByTickData.to_field(),
+            "Wrong message type"
+        );
         assert_eq!(request.fields[14], "MidPoint", "Wrong tick type");
     }
 
@@ -647,7 +655,11 @@ mod tests {
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
         let request = &request_messages[0];
-        assert_eq!(request.fields[0], OutgoingMessages::RequestMktDepthExchanges.to_field(), "Wrong message type");
+        assert_eq!(
+            request.fields[0],
+            OutgoingMessages::RequestMktDepthExchanges.to_field(),
+            "Wrong message type"
+        );
     }
 
     #[tokio::test]
