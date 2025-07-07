@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let trade = trade?;
         println!(
             "Trade at {}: ${:.2} x {} on {} [{}]",
-            trade.time.format("%H:%M:%S%.3f").unwrap(),
+            trade.time.format(format_description!("[hour]:[minute]:[second].[subsecond digits:3]")).unwrap(),
             trade.price,
             trade.size,
             trade.exchange,
