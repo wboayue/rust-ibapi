@@ -195,7 +195,7 @@ pub fn contract_news<'a>(client: &'a Client, contract: &Contract, provider_codes
 
     let request_id = client.next_request_id();
     let request =
-        realtime::encoders::encode_request_market_data(client.server_version(), request_id, contract, generic_ticks.as_slice(), false, false)?;
+        realtime::common::encoders::encode_request_market_data(client.server_version(), request_id, contract, generic_ticks.as_slice(), false, false)?;
     let subscription = client.send_request(request_id, request)?;
 
     Ok(Subscription::new(client, subscription, ResponseContext::default()))
@@ -206,7 +206,7 @@ pub fn broad_tape_news<'a>(client: &'a Client, provider_code: &str) -> Result<Su
     let generic_ticks = &["mdoff", "292"];
 
     let request_id = client.next_request_id();
-    let request = realtime::encoders::encode_request_market_data(client.server_version(), request_id, &contract, generic_ticks, false, false)?;
+    let request = realtime::common::encoders::encode_request_market_data(client.server_version(), request_id, &contract, generic_ticks, false, false)?;
     let subscription = client.send_request(request_id, request)?;
 
     Ok(Subscription::new(client, subscription, ResponseContext::default()))

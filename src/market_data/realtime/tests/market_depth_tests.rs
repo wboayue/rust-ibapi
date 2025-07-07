@@ -1,4 +1,6 @@
 use super::*;
+use crate::{server_versions, Client};
+use crate::contracts::Contract;
 
 #[test]
 fn test_market_depth() {

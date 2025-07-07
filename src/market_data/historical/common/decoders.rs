@@ -1,10 +1,13 @@
 use time::macros::{format_description, time};
-use time::{Date, PrimitiveDateTime};
+use time::{Date, OffsetDateTime, PrimitiveDateTime};
 use time_tz::{timezones, OffsetDateTimeExt, PrimitiveDateTimeExt, Tz};
 
-use super::*;
+use crate::messages::ResponseMessage;
+use crate::{server_versions, Error};
 
-pub(super) fn decode_head_timestamp(message: &mut ResponseMessage) -> Result<OffsetDateTime, Error> {
+use crate::market_data::historical::{Bar, HistogramEntry, HistoricalData, Schedule, Session, TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint};
+
+pub(crate) fn decode_head_timestamp(message: &mut ResponseMessage) -> Result<OffsetDateTime, Error> {
     message.skip(); // message type
     message.skip(); // request_id
 
@@ -13,7 +16,7 @@ pub(super) fn decode_head_timestamp(message: &mut ResponseMessage) -> Result<Off
     Ok(head_timestamp)
 }
 
-pub(super) fn decode_historical_data(server_version: i32, time_zone: &Tz, message: &mut ResponseMessage) -> Result<HistoricalData, Error> {
+pub(crate) fn decode_historical_data(server_version: i32, time_zone: &Tz, message: &mut ResponseMessage) -> Result<HistoricalData, Error> {
     message.skip(); // message type
 
     let mut message_version = i32::MAX;
@@ -73,7 +76,7 @@ pub(super) fn decode_historical_data(server_version: i32, time_zone: &Tz, messag
     Ok(HistoricalData { start, end, bars })
 }
 
-pub(super) fn decode_historical_schedule(message: &mut ResponseMessage) -> Result<Schedule, Error> {
+pub(crate) fn decode_historical_schedule(message: &mut ResponseMessage) -> Result<Schedule, Error> {
     message.skip(); // message type
     message.skip(); // request_id
 
@@ -105,7 +108,7 @@ pub(super) fn decode_historical_schedule(message: &mut ResponseMessage) -> Resul
     })
 }
 
-pub(super) fn decode_historical_ticks_bid_ask(message: &mut ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
+pub(crate) fn decode_historical_ticks_bid_ask(message: &mut ResponseMessage) -> Result<(Vec<TickBidAsk>, bool), Error> {
     message.skip(); // message type
     message.skip(); // request_id
 
@@ -141,7 +144,7 @@ pub(super) fn decode_historical_ticks_bid_ask(message: &mut ResponseMessage) -> 
     Ok((ticks, done))
 }
 
-pub(super) fn decode_historical_ticks_mid_point(message: &mut ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
+pub(crate) fn decode_historical_ticks_mid_point(message: &mut ResponseMessage) -> Result<(Vec<TickMidpoint>, bool), Error> {
     message.skip(); // message type
     message.skip(); // request_id
 
@@ -162,7 +165,7 @@ pub(super) fn decode_historical_ticks_mid_point(message: &mut ResponseMessage) -
     Ok((ticks, done))
 }
 
-pub(super) fn decode_historical_ticks_last(message: &mut ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
+pub(crate) fn decode_historical_ticks_last(message: &mut ResponseMessage) -> Result<(Vec<TickLast>, bool), Error> {
     message.skip(); // message type
     message.skip(); // request_id
 
@@ -198,7 +201,7 @@ pub(super) fn decode_historical_ticks_last(message: &mut ResponseMessage) -> Res
     Ok((ticks, done))
 }
 
-pub(super) fn decode_histogram_data(message: &mut ResponseMessage) -> Result<Vec<HistogramEntry>, Error> {
+pub(crate) fn decode_histogram_data(message: &mut ResponseMessage) -> Result<Vec<HistogramEntry>, Error> {
     message.skip(); // message type
     message.skip(); // request id
 

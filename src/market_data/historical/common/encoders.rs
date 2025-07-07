@@ -1,9 +1,11 @@
-use time::{format_description::FormatItem, macros::format_description};
+use time::{format_description::FormatItem, macros::format_description, OffsetDateTime};
 use time_tz::OffsetDateTimeExt;
 
-use crate::messages::OutgoingMessages;
+use crate::contracts::Contract;
+use crate::messages::{OutgoingMessages, RequestMessage};
+use crate::{server_versions, Error, ToField};
 
-use super::*;
+use crate::market_data::historical::{BarSize, Duration, WhatToShow};
 
 const DATE_FORMAT: i32 = 2; // 1 for yyyyMMdd HH:mm:ss, 2 for system time format in seconds.
 const END_DATE_FORMAT: &[FormatItem] = format_description!("[year][month][day] [hour]:[minute]:[second]");
@@ -26,7 +28,7 @@ impl ToField for Option<OffsetDateTime> {
 }
 
 // Encodes the head timestamp request
-pub(super) fn encode_request_head_timestamp(
+pub(crate) fn encode_request_head_timestamp(
     request_id: i32,
     contract: &Contract,
     what_to_show: WhatToShow,
@@ -46,7 +48,7 @@ pub(super) fn encode_request_head_timestamp(
 
 // Encodes the historical data request
 #[allow(clippy::too_many_arguments)]
-pub(super) fn encode_request_historical_data(
+pub(crate) fn encode_request_historical_data(
     server_version: i32,
     request_id: i32,
     contract: &Contract,
@@ -124,7 +126,7 @@ pub(super) fn encode_request_historical_data(
 
 // Encodes message to request historical ticks
 #[allow(clippy::too_many_arguments)]
-pub(super) fn encode_request_historical_ticks(
+pub(crate) fn encode_request_historical_ticks(
     request_id: i32,
     contract: &Contract,
     start: Option<OffsetDateTime>,
@@ -150,7 +152,7 @@ pub(super) fn encode_request_historical_ticks(
     Ok(message)
 }
 
-pub(super) fn encode_request_histogram_data(request_id: i32, contract: &Contract, use_rth: bool, period: BarSize) -> Result<RequestMessage, Error> {
+pub(crate) fn encode_request_histogram_data(request_id: i32, contract: &Contract, use_rth: bool, period: BarSize) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::RequestHistogramData);

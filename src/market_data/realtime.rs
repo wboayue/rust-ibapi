@@ -1,21 +1,21 @@
 // TODO: Implement async version of realtime market data
 #![cfg(feature = "sync")]
 
-use log::debug;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::client::{DataStream, ResponseContext, Subscription};
-use crate::contracts::tick_types::TickType;
-use crate::contracts::{Contract, OptionComputation};
-use crate::messages::{self, IncomingMessages, Notice, OutgoingMessages, RequestMessage, ResponseMessage};
-use crate::orders::TagValue;
-use crate::server_versions;
+use crate::client::{DataStream, ResponseContext};
+use crate::contracts::OptionComputation;
+use crate::messages::{self, IncomingMessages, Notice, RequestMessage, ResponseMessage};
 use crate::ToField;
 use crate::{Client, Error};
 
-mod decoders;
-pub(crate) mod encoders;
+pub(crate) mod common;
+pub mod sync;
+
+// Re-export tick types
+pub use crate::contracts::tick_types::TickType;
+
 #[cfg(test)]
 mod tests;
 
@@ -63,7 +63,7 @@ impl DataStream<BidAsk> for BidAsk {
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickByTick => decoders::decode_bid_ask_tick(message),
+            IncomingMessages::TickByTick => common::decoders::decode_bid_ask_tick(message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
@@ -71,7 +71,7 @@ impl DataStream<BidAsk> for BidAsk {
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
-        encoders::encode_cancel_tick_by_tick(request_id)
+        common::encoders::encode_cancel_tick_by_tick(request_id)
     }
 }
 
@@ -98,7 +98,7 @@ impl DataStream<MidPoint> for MidPoint {
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickByTick => decoders::decode_mid_point_tick(message),
+            IncomingMessages::TickByTick => common::decoders::decode_mid_point_tick(message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
@@ -106,7 +106,7 @@ impl DataStream<MidPoint> for MidPoint {
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel mid point ticks");
-        encoders::encode_cancel_tick_by_tick(request_id)
+        common::encoders::encode_cancel_tick_by_tick(request_id)
     }
 }
 
@@ -135,12 +135,12 @@ impl DataStream<Bar> for Bar {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::RealTimeBars];
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
-        decoders::decode_realtime_bar(message)
+        common::decoders::decode_realtime_bar(message)
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
-        encoders::encode_cancel_realtime_bars(request_id)
+        common::encoders::encode_cancel_realtime_bars(request_id)
     }
 }
 
@@ -168,7 +168,7 @@ impl DataStream<Trade> for Trade {
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickByTick => decoders::decode_trade_tick(message),
+            IncomingMessages::TickByTick => common::decoders::decode_trade_tick(message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
@@ -176,7 +176,7 @@ impl DataStream<Trade> for Trade {
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
-        encoders::encode_cancel_tick_by_tick(request_id)
+        common::encoders::encode_cancel_tick_by_tick(request_id)
     }
 }
 
@@ -266,8 +266,8 @@ impl DataStream<MarketDepths> for MarketDepths {
 
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::MarketDepth => Ok(MarketDepths::MarketDepth(decoders::decode_market_depth(message)?)),
-            IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(decoders::decode_market_depth_l2(
+            IncomingMessages::MarketDepth => Ok(MarketDepths::MarketDepth(common::decoders::decode_market_depth(message)?)),
+            IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(common::decoders::decode_market_depth_l2(
                 client.server_version,
                 message,
             )?)),
@@ -285,7 +285,7 @@ impl DataStream<MarketDepths> for MarketDepths {
 
     fn cancel_message(server_version: i32, request_id: Option<i32>, context: &ResponseContext) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
-        encoders::encode_cancel_market_depth(server_version, request_id, context.is_smart_depth)
+        common::encoders::encode_cancel_market_depth(server_version, request_id, context.is_smart_depth)
     }
 }
 
@@ -334,16 +334,16 @@ impl DataStream<TickTypes> for TickTypes {
 
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickPrice => Ok(decoders::decode_tick_price(client.server_version, message)?),
-            IncomingMessages::TickSize => Ok(TickTypes::Size(decoders::decode_tick_size(message)?)),
-            IncomingMessages::TickString => Ok(TickTypes::String(decoders::decode_tick_string(message)?)),
-            IncomingMessages::TickEFP => Ok(TickTypes::EFP(decoders::decode_tick_efp(message)?)),
-            IncomingMessages::TickGeneric => Ok(TickTypes::Generic(decoders::decode_tick_generic(message)?)),
-            IncomingMessages::TickOptionComputation => Ok(TickTypes::OptionComputation(decoders::decode_tick_option_computation(
+            IncomingMessages::TickPrice => Ok(common::decoders::decode_tick_price(client.server_version, message)?),
+            IncomingMessages::TickSize => Ok(TickTypes::Size(common::decoders::decode_tick_size(message)?)),
+            IncomingMessages::TickString => Ok(TickTypes::String(common::decoders::decode_tick_string(message)?)),
+            IncomingMessages::TickEFP => Ok(TickTypes::EFP(common::decoders::decode_tick_efp(message)?)),
+            IncomingMessages::TickGeneric => Ok(TickTypes::Generic(common::decoders::decode_tick_generic(message)?)),
+            IncomingMessages::TickOptionComputation => Ok(TickTypes::OptionComputation(common::decoders::decode_tick_option_computation(
                 client.server_version,
                 message,
             )?)),
-            IncomingMessages::TickReqParams => Ok(TickTypes::RequestParameters(decoders::decode_tick_request_parameters(message)?)),
+            IncomingMessages::TickReqParams => Ok(TickTypes::RequestParameters(common::decoders::decode_tick_request_parameters(message)?)),
             IncomingMessages::TickSnapshotEnd => Ok(TickTypes::SnapshotEnd),
             IncomingMessages::Error => Ok(TickTypes::Notice(Notice::from(message))),
             _ => Err(Error::NotImplemented),
@@ -352,7 +352,7 @@ impl DataStream<TickTypes> for TickTypes {
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
-        encoders::encode_cancel_market_data(request_id)
+        common::encoders::encode_cancel_market_data(request_id)
     }
 
     fn is_snapshot_end(&self) -> bool {
@@ -458,180 +458,5 @@ pub struct TickRequestParameters {
 
 // === Implementation ===
 
-// Requests realtime bars.
-pub(crate) fn realtime_bars<'a>(
-    client: &'a Client,
-    contract: &Contract,
-    bar_size: &BarSize,
-    what_to_show: &WhatToShow,
-    use_rth: bool,
-    options: Vec<TagValue>,
-) -> Result<Subscription<'a, Bar>, Error> {
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_realtime_bars(client.server_version(), request_id, contract, bar_size, what_to_show, use_rth, options)?;
-    let subscription = client.send_request(request_id, request)?;
-
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
-}
-
-// Requests tick by tick AllLast ticks.
-pub(crate) fn tick_by_tick_all_last<'a>(
-    client: &'a Client,
-    contract: &Contract,
-    number_of_ticks: i32,
-    ignore_size: bool,
-) -> Result<Subscription<'a, Trade>, Error> {
-    validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
-
-    let server_version = client.server_version();
-    let request_id = client.next_request_id();
-
-    let request = encoders::encode_tick_by_tick(server_version, request_id, contract, "AllLast", number_of_ticks, ignore_size)?;
-    let subscription = client.send_request(request_id, request)?;
-
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
-}
-
-// Validates that server supports the given request.
-fn validate_tick_by_tick_request(client: &Client, _contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<(), Error> {
-    client.check_server_version(server_versions::TICK_BY_TICK, "It does not support tick-by-tick requests.")?;
-
-    if number_of_ticks != 0 || ignore_size {
-        client.check_server_version(
-            server_versions::TICK_BY_TICK_IGNORE_SIZE,
-            "It does not support ignore_size and number_of_ticks parameters in tick-by-tick requests.",
-        )?;
-    }
-
-    Ok(())
-}
-
-// Requests tick by tick Last ticks.
-pub(crate) fn tick_by_tick_last<'a>(
-    client: &'a Client,
-    contract: &Contract,
-    number_of_ticks: i32,
-    ignore_size: bool,
-) -> Result<Subscription<'a, Trade>, Error> {
-    validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
-
-    let server_version = client.server_version();
-    let request_id = client.next_request_id();
-
-    let request = encoders::encode_tick_by_tick(server_version, request_id, contract, "Last", number_of_ticks, ignore_size)?;
-    let subscription = client.send_request(request_id, request)?;
-
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
-}
-
-// Requests tick by tick BidAsk ticks.
-pub(crate) fn tick_by_tick_bid_ask<'a>(
-    client: &'a Client,
-    contract: &Contract,
-    number_of_ticks: i32,
-    ignore_size: bool,
-) -> Result<Subscription<'a, BidAsk>, Error> {
-    validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
-
-    let server_version = client.server_version();
-    let request_id = client.next_request_id();
-
-    let request = encoders::encode_tick_by_tick(server_version, request_id, contract, "BidAsk", number_of_ticks, ignore_size)?;
-    let subscription = client.send_request(request_id, request)?;
-
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
-}
-
-// Requests tick by tick MidPoint ticks.
-pub(crate) fn tick_by_tick_midpoint<'a>(
-    client: &'a Client,
-    contract: &Contract,
-    number_of_ticks: i32,
-    ignore_size: bool,
-) -> Result<Subscription<'a, MidPoint>, Error> {
-    validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
-
-    let server_version = client.server_version();
-    let request_id = client.next_request_id();
-
-    let request = encoders::encode_tick_by_tick(server_version, request_id, contract, "MidPoint", number_of_ticks, ignore_size)?;
-    let subscription = client.send_request(request_id, request)?;
-
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
-}
-
-pub(crate) fn market_depth<'a>(
-    client: &'a Client,
-    contract: &Contract,
-    number_of_rows: i32,
-    is_smart_depth: bool,
-) -> Result<Subscription<'a, MarketDepths>, Error> {
-    if is_smart_depth {
-        client.check_server_version(server_versions::SMART_DEPTH, "It does not support SMART depth request.")?;
-    }
-    if !contract.primary_exchange.is_empty() {
-        client.check_server_version(
-            server_versions::MKT_DEPTH_PRIM_EXCHANGE,
-            "It does not support primary_exchange parameter in request_market_depth",
-        )?;
-    }
-
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_market_depth(client.server_version, request_id, contract, number_of_rows, is_smart_depth)?;
-    let subscription = client.send_request(request_id, request)?;
-
-    Ok(Subscription::new(
-        client,
-        subscription,
-        ResponseContext {
-            is_smart_depth,
-            ..Default::default()
-        },
-    ))
-}
-
-// Requests venues for which market data is returned to market_depth (those with market makers)
-pub fn market_depth_exchanges(client: &Client) -> Result<Vec<DepthMarketDataDescription>, Error> {
-    client.check_server_version(
-        server_versions::REQ_MKT_DEPTH_EXCHANGES,
-        "It does not support market depth exchanges requests.",
-    )?;
-
-    loop {
-        let request = encoders::encode_request_market_depth_exchanges()?;
-        let subscription = client.send_shared_request(OutgoingMessages::RequestMktDepthExchanges, request)?;
-        let response = subscription.next();
-
-        match response {
-            Some(Ok(mut message)) => return decoders::decode_market_depth_exchanges(client.server_version(), &mut message),
-            Some(Err(Error::ConnectionReset)) => {
-                debug!("connection reset. retrying market_depth_exchanges");
-                continue;
-            }
-            Some(Err(e)) => return Err(e),
-            None => return Ok(Vec::new()),
-        }
-    }
-}
-
-// Requests real time market data.
-pub fn market_data<'a>(
-    client: &'a Client,
-    contract: &Contract,
-    generic_ticks: &[&str],
-    snapshot: bool,
-    regulatory_snapshot: bool,
-) -> Result<Subscription<'a, TickTypes>, Error> {
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_market_data(
-        client.server_version(),
-        request_id,
-        contract,
-        generic_ticks,
-        snapshot,
-        regulatory_snapshot,
-    )?;
-    let subscription = client.send_request(request_id, request)?;
-
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
-}
+// Re-export sync functions when sync feature is enabled
+pub(crate) use sync::*;

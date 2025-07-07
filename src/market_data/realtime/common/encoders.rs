@@ -1,15 +1,13 @@
-use super::{BarSize, WhatToShow};
-use crate::contracts::Contract;
-use crate::contracts::SecurityType;
-use crate::messages::OutgoingMessages;
-use crate::messages::RequestMessage;
+use crate::contracts::{Contract, SecurityType};
+use crate::messages::{OutgoingMessages, RequestMessage};
+use crate::market_data::realtime::{BarSize, WhatToShow};
 use crate::orders::TagValue;
 use crate::{server_versions, Error};
 
 #[cfg(test)]
 mod tests;
 
-pub(super) fn encode_request_realtime_bars(
+pub(crate) fn encode_request_realtime_bars(
     server_version: i32,
     ticker_id: i32,
     contract: &Contract,
@@ -56,7 +54,7 @@ pub(super) fn encode_request_realtime_bars(
     Ok(packet)
 }
 
-pub(super) fn encode_cancel_realtime_bars(request_id: i32) -> Result<RequestMessage, Error> {
+pub(crate) fn encode_cancel_realtime_bars(request_id: i32) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::default();
@@ -68,7 +66,7 @@ pub(super) fn encode_cancel_realtime_bars(request_id: i32) -> Result<RequestMess
     Ok(message)
 }
 
-pub(super) fn encode_tick_by_tick(
+pub(crate) fn encode_tick_by_tick(
     server_version: i32,
     request_id: i32,
     contract: &Contract,
@@ -102,7 +100,7 @@ pub(super) fn encode_tick_by_tick(
     Ok(message)
 }
 
-pub(super) fn encode_cancel_tick_by_tick(request_id: i32) -> Result<RequestMessage, Error> {
+pub(crate) fn encode_cancel_tick_by_tick(request_id: i32) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::CancelTickByTickData);
@@ -111,7 +109,7 @@ pub(super) fn encode_cancel_tick_by_tick(request_id: i32) -> Result<RequestMessa
     Ok(message)
 }
 
-pub(super) fn encode_request_market_depth(
+pub(crate) fn encode_request_market_depth(
     server_version: i32,
     request_id: i32,
     contract: &Contract,
@@ -155,7 +153,7 @@ pub(super) fn encode_request_market_depth(
     Ok(message)
 }
 
-pub(super) fn encode_cancel_market_depth(server_version: i32, request_id: i32, is_smart_depth: bool) -> Result<RequestMessage, Error> {
+pub(crate) fn encode_cancel_market_depth(server_version: i32, request_id: i32, is_smart_depth: bool) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 
     const VERSION: i32 = 1;
@@ -171,7 +169,7 @@ pub(super) fn encode_cancel_market_depth(server_version: i32, request_id: i32, i
     Ok(message)
 }
 
-pub(super) fn encode_request_market_depth_exchanges() -> Result<RequestMessage, Error> {
+pub(crate) fn encode_request_market_depth_exchanges() -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 
     message.push_field(&OutgoingMessages::RequestMktDepthExchanges);
@@ -239,7 +237,7 @@ pub(crate) fn encode_request_market_data(
     Ok(message)
 }
 
-pub(super) fn encode_cancel_market_data(request_id: i32) -> Result<RequestMessage, Error> {
+pub(crate) fn encode_cancel_market_data(request_id: i32) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 
     const VERSION: i32 = 1;

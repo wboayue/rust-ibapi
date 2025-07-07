@@ -5,6 +5,7 @@ use crate::messages::OutgoingMessages;
 use crate::ToField;
 
 use super::*;
+use crate::market_data::historical::ToDuration;
 
 #[test]
 fn test_encode_request_head_timestamp() {

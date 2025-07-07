@@ -2,12 +2,12 @@
 
 use std::sync::Mutex;
 
-use log::{debug, error, info};
+use log::{debug, info};
 
 use super::common::{parse_connection_time, AccountInfo, ConnectionHandler, ConnectionProtocol};
 use super::ConnectionMetadata;
 use crate::errors::Error;
-use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{RequestMessage, ResponseMessage};
 use crate::transport::recorder::MessageRecorder;
 use crate::transport::sync::{FibonacciBackoff, Stream, MAX_RETRIES};
 

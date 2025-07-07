@@ -1,18 +1,18 @@
 use crate::contracts::decoders::decode_option_computation;
-use crate::contracts::tick_types::TickType;
 use crate::contracts::OptionComputation;
 use crate::Error;
 use crate::{messages::ResponseMessage, server_versions};
 
-use super::{
-    Bar, BidAsk, BidAskAttribute, DepthMarketDataDescription, MarketDepth, MarketDepthL2, MidPoint, TickEFP, TickGeneric, TickPrice, TickPriceSize,
-    TickRequestParameters, TickSize, TickString, TickTypes, Trade, TradeAttribute,
+use crate::market_data::realtime::{
+    Bar, BidAsk, BidAskAttribute, DepthMarketDataDescription, MarketDepth, MarketDepthL2, MidPoint, 
+    TickAttribute, TickEFP, TickGeneric, TickPrice, TickPriceSize, TickRequestParameters, TickSize, 
+    TickString, TickTypes, Trade, TradeAttribute, TickType
 };
 
 #[cfg(test)]
 mod tests;
 
-pub(super) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, Error> {
+pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, Error> {
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
@@ -29,7 +29,7 @@ pub(super) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, 
     })
 }
 
-pub(super) fn decode_trade_tick(message: &mut ResponseMessage) -> Result<Trade, Error> {
+pub(crate) fn decode_trade_tick(message: &mut ResponseMessage) -> Result<Trade, Error> {
     message.skip(); // message type
     message.skip(); // message request id
 
@@ -59,7 +59,7 @@ pub(super) fn decode_trade_tick(message: &mut ResponseMessage) -> Result<Trade, 
     })
 }
 
-pub(super) fn decode_bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk, Error> {
+pub(crate) fn decode_bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk, Error> {
     message.skip(); // message type
     message.skip(); // message request id
 
@@ -88,7 +88,7 @@ pub(super) fn decode_bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAs
     })
 }
 
-pub(super) fn decode_mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint, Error> {
+pub(crate) fn decode_mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint, Error> {
     message.skip(); // message type
     message.skip(); // message request id
 
@@ -103,7 +103,7 @@ pub(super) fn decode_mid_point_tick(message: &mut ResponseMessage) -> Result<Mid
     })
 }
 
-pub(super) fn decode_market_depth(message: &mut ResponseMessage) -> Result<MarketDepth, Error> {
+pub(crate) fn decode_market_depth(message: &mut ResponseMessage) -> Result<MarketDepth, Error> {
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
@@ -119,7 +119,7 @@ pub(super) fn decode_market_depth(message: &mut ResponseMessage) -> Result<Marke
     Ok(depth)
 }
 
-pub(super) fn decode_market_depth_l2(server_version: i32, message: &mut ResponseMessage) -> Result<MarketDepthL2, Error> {
+pub(crate) fn decode_market_depth_l2(server_version: i32, message: &mut ResponseMessage) -> Result<MarketDepthL2, Error> {
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
@@ -141,7 +141,7 @@ pub(super) fn decode_market_depth_l2(server_version: i32, message: &mut Response
     Ok(depth)
 }
 
-pub(super) fn decode_market_depth_exchanges(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<DepthMarketDataDescription>, Error> {
+pub(crate) fn decode_market_depth_exchanges(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<DepthMarketDataDescription>, Error> {
     message.skip(); // message type
 
     let count = message.next_int()?;
@@ -172,7 +172,7 @@ pub(super) fn decode_market_depth_exchanges(server_version: i32, message: &mut R
     Ok(descriptions)
 }
 
-pub(super) fn decode_tick_price(server_version: i32, message: &mut ResponseMessage) -> Result<TickTypes, Error> {
+pub(crate) fn decode_tick_price(server_version: i32, message: &mut ResponseMessage) -> Result<TickTypes, Error> {
     message.skip(); // message type
     let message_version = message.next_int()?;
     message.skip(); // message request id
@@ -221,7 +221,7 @@ pub(super) fn decode_tick_price(server_version: i32, message: &mut ResponseMessa
     }
 }
 
-pub(super) fn decode_tick_size(message: &mut ResponseMessage) -> Result<TickSize, Error> {
+pub(crate) fn decode_tick_size(message: &mut ResponseMessage) -> Result<TickSize, Error> {
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
@@ -232,7 +232,7 @@ pub(super) fn decode_tick_size(message: &mut ResponseMessage) -> Result<TickSize
     })
 }
 
-pub(super) fn decode_tick_string(message: &mut ResponseMessage) -> Result<TickString, Error> {
+pub(crate) fn decode_tick_string(message: &mut ResponseMessage) -> Result<TickString, Error> {
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
@@ -243,7 +243,7 @@ pub(super) fn decode_tick_string(message: &mut ResponseMessage) -> Result<TickSt
     })
 }
 
-pub(super) fn decode_tick_efp(message: &mut ResponseMessage) -> Result<TickEFP, Error> {
+pub(crate) fn decode_tick_efp(message: &mut ResponseMessage) -> Result<TickEFP, Error> {
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
@@ -260,7 +260,7 @@ pub(super) fn decode_tick_efp(message: &mut ResponseMessage) -> Result<TickEFP, 
     })
 }
 
-pub(super) fn decode_tick_generic(message: &mut ResponseMessage) -> Result<TickGeneric, Error> {
+pub(crate) fn decode_tick_generic(message: &mut ResponseMessage) -> Result<TickGeneric, Error> {
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
@@ -271,11 +271,11 @@ pub(super) fn decode_tick_generic(message: &mut ResponseMessage) -> Result<TickG
     })
 }
 
-pub(super) fn decode_tick_option_computation(server_version: i32, message: &mut ResponseMessage) -> Result<OptionComputation, Error> {
+pub(crate) fn decode_tick_option_computation(server_version: i32, message: &mut ResponseMessage) -> Result<OptionComputation, Error> {
     decode_option_computation(server_version, message)
 }
 
-pub(super) fn decode_tick_request_parameters(message: &mut ResponseMessage) -> Result<TickRequestParameters, Error> {
+pub(crate) fn decode_tick_request_parameters(message: &mut ResponseMessage) -> Result<TickRequestParameters, Error> {
     message.skip(); // message type
     message.skip(); // message request id
 
