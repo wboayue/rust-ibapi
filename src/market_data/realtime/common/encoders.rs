@@ -1,13 +1,12 @@
-use crate::contracts::{Contract, SecurityType};
+use crate::contracts::{Contract, SecurityType, TagValue};
 use crate::market_data::realtime::{BarSize, WhatToShow};
 use crate::messages::{OutgoingMessages, RequestMessage};
-use crate::orders::TagValue;
 use crate::{server_versions, Error};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{contracts::contract_samples, contracts::Contract, messages::OutgoingMessages, orders::TagValue, ToField};
+    use crate::{contracts::contract_samples, contracts::Contract, contracts::TagValue, messages::OutgoingMessages, ToField};
 
     /// Helper function to create a basic test contract
     fn create_test_contract() -> Contract {

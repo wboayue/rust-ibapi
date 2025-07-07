@@ -1,17 +1,26 @@
-// TODO: Implement async version of realtime market data
-#![cfg(feature = "sync")]
-
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
+use crate::ToField;
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
 use crate::client::{DataStream, ResponseContext};
 use crate::contracts::OptionComputation;
-use crate::messages::{self, IncomingMessages, Notice, RequestMessage, ResponseMessage};
-use crate::ToField;
+use crate::messages::Notice;
+#[cfg(all(feature = "sync", not(feature = "async")))]
+use crate::messages::{self, IncomingMessages, RequestMessage, ResponseMessage};
+#[cfg(all(feature = "sync", not(feature = "async")))]
 use crate::{Client, Error};
 
+// Common modules
 pub(crate) mod common;
+
+// Feature-specific implementations
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod sync;
+
+#[cfg(feature = "async")]
+pub mod r#async;
 
 // Re-export tick types
 pub use crate::contracts::tick_types::TickType;
@@ -55,6 +64,7 @@ pub struct BidAsk {
     pub bid_ask_attribute: BidAskAttribute,
 }
 
+#[cfg(all(feature = "sync", not(feature = "async")))]
 impl DataStream<BidAsk> for BidAsk {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
@@ -90,6 +100,7 @@ pub struct MidPoint {
     pub mid_point: f64,
 }
 
+#[cfg(all(feature = "sync", not(feature = "async")))]
 impl DataStream<MidPoint> for MidPoint {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
@@ -128,6 +139,7 @@ pub struct Bar {
     pub count: i32,
 }
 
+#[cfg(all(feature = "sync", not(feature = "async")))]
 impl DataStream<Bar> for Bar {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::RealTimeBars];
 
@@ -160,6 +172,7 @@ pub struct Trade {
     pub special_conditions: String,
 }
 
+#[cfg(all(feature = "sync", not(feature = "async")))]
 impl DataStream<Trade> for Trade {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
@@ -258,6 +271,7 @@ pub struct MarketDepthL2 {
     pub smart_depth: bool,
 }
 
+#[cfg(all(feature = "sync", not(feature = "async")))]
 impl DataStream<MarketDepths> for MarketDepths {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2, IncomingMessages::Error];
 
@@ -316,6 +330,7 @@ pub enum TickTypes {
     PriceSize(TickPriceSize),
 }
 
+#[cfg(all(feature = "sync", not(feature = "async")))]
 impl DataStream<TickTypes> for TickTypes {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[
         IncomingMessages::TickPrice,
@@ -455,8 +470,12 @@ pub struct TickRequestParameters {
 
 // === Implementation ===
 
-// Re-export sync functions when sync feature is enabled
-pub(crate) use sync::*;
+// Re-export functions based on active feature
+#[cfg(all(feature = "sync", not(feature = "async")))]
+pub use sync::*;
+
+#[cfg(feature = "async")]
+pub use r#async::*;
 
 #[cfg(test)]
 mod tests {

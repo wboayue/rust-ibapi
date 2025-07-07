@@ -120,7 +120,7 @@ pub async fn positions_multi(client: &Client, account: Option<&str>, model_code:
     let builder = client.request();
     let request = encoders::encode_request_positions_multi(builder.request_id(), account, model_code)?;
 
-    builder.send::<PositionUpdateMulti, PositionUpdateMulti>(request).await
+    builder.send::<PositionUpdateMulti>(request).await
 }
 
 // Determine whether an account exists under an account family and find the account family code.
@@ -150,7 +150,7 @@ pub async fn pnl(client: &Client, account: &str, model_code: Option<&str>) -> Re
     let builder = client.request();
     let request = encoders::encode_request_pnl(builder.request_id(), account, model_code)?;
 
-    builder.send::<PnL, PnL>(request).await
+    builder.send::<PnL>(request).await
 }
 
 // Requests real time updates for daily PnL of individual positions.
@@ -166,7 +166,7 @@ pub async fn pnl_single(client: &Client, account: &str, contract_id: i32, model_
     let builder = client.request();
     let request = encoders::encode_request_pnl_single(builder.request_id(), account, contract_id, model_code)?;
 
-    builder.send::<PnLSingle, PnLSingle>(request).await
+    builder.send::<PnLSingle>(request).await
 }
 
 pub async fn account_summary(client: &Client, group: &str, tags: &[&str]) -> Result<Subscription<AccountSummaries>, Error> {
@@ -175,7 +175,7 @@ pub async fn account_summary(client: &Client, group: &str, tags: &[&str]) -> Res
     let builder = client.request();
     let request = encoders::encode_request_account_summary(builder.request_id(), group, tags)?;
 
-    builder.send::<AccountSummaries, AccountSummaries>(request).await
+    builder.send::<AccountSummaries>(request).await
 }
 
 pub async fn account_updates(client: &Client, account: &str) -> Result<Subscription<AccountUpdate>, Error> {
@@ -183,7 +183,7 @@ pub async fn account_updates(client: &Client, account: &str) -> Result<Subscript
 
     client
         .shared_request(OutgoingMessages::RequestAccountData)
-        .send::<AccountUpdate, AccountUpdate>(request)
+        .send::<AccountUpdate>(request)
         .await
 }
 
@@ -197,7 +197,7 @@ pub async fn account_updates_multi(
     let builder = client.request();
     let request = encoders::encode_request_account_updates_multi(builder.request_id(), account, model_code)?;
 
-    builder.send::<AccountUpdateMulti, AccountUpdateMulti>(request).await
+    builder.send::<AccountUpdateMulti>(request).await
 }
 
 pub async fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {

@@ -13,6 +13,9 @@ pub(crate) mod common;
 #[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod sync;
 
+#[cfg(feature = "async")]
+pub mod r#async;
+
 /// Bar describes the historical data bar.
 #[derive(Clone, Debug, PartialEq, Copy, Serialize, Deserialize)]
 pub struct Bar {
@@ -398,9 +401,12 @@ impl ToField for Option<WhatToShow> {
     }
 }
 
-// Re-export sync functions when sync feature is enabled
+// Re-export functions based on active feature
 #[cfg(all(feature = "sync", not(feature = "async")))]
-pub(crate) use sync::*;
+pub use sync::*;
+
+#[cfg(feature = "async")]
+pub use r#async::*;
 
 pub trait TickDecoder<T> {
     const MESSAGE_TYPE: IncomingMessages;
@@ -431,9 +437,12 @@ impl TickDecoder<TickMidpoint> for TickMidpoint {
     }
 }
 
-// Re-export TickSubscription and iterator types from sync module when sync feature is enabled
+// Re-export TickSubscription and iterator types based on active feature
 #[cfg(all(feature = "sync", not(feature = "async")))]
 pub use sync::{TickSubscription, TickSubscriptionIter, TickSubscriptionOwnedIter, TickSubscriptionTimeoutIter, TickSubscriptionTryIter};
+
+#[cfg(feature = "async")]
+pub use r#async::TickSubscription;
 
 #[cfg(test)]
 mod tests {

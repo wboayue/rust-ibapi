@@ -7,7 +7,6 @@
 use crate::{messages::OutgoingMessages, server_versions, Client, Error};
 
 pub mod historical;
-#[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod realtime;
 
 /// By default, only real-time market data sending is enabled.

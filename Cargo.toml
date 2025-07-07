@@ -76,3 +76,51 @@ required-features = ["async"]
 [[example]]
 name = "async_wsh_event_data_by_filter"
 required-features = ["async"]
+
+[[example]]
+name = "async_market_data"
+required-features = ["async"]
+
+[[example]]
+name = "async_realtime_bars"
+required-features = ["async"]
+
+[[example]]
+name = "async_tick_by_tick"
+required-features = ["async"]
+
+[[example]]
+name = "async_market_depth"
+required-features = ["async"]
+
+[[example]]
+name = "async_historical_data"
+required-features = ["async"]
+
+[[example]]
+name = "async_historical_ticks"
+required-features = ["async"]
+
+[[example]]
+name = "async_head_timestamp"
+required-features = ["async"]
+
+[[example]]
+name = "async_historical_schedule"
+required-features = ["async"]
+
+[[example]]
+name = "async_tick_by_tick_last"
+required-features = ["async"]
+
+[[example]]
+name = "async_historical_ticks_midpoint"
+required-features = ["async"]
+
+[[example]]
+name = "async_historical_ticks_trade"
+required-features = ["async"]
+
+[[example]]
+name = "async_histogram_data"
+required-features = ["async"]

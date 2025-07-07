@@ -40,7 +40,7 @@ pub async fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
 
     let builder = client.request();
     let request = encoders::encode_request_wsh_metadata(builder.request_id())?;
-    let mut subscription = builder.send::<WshMetadata, WshMetadata>(request).await?;
+    let mut subscription = builder.send::<WshMetadata>(request).await?;
 
     match subscription.next().await {
         Some(Ok(metadata)) => Ok(metadata),
@@ -79,7 +79,7 @@ pub async fn wsh_event_data_by_contract(
         limit,
         auto_fill,
     )?;
-    let mut subscription = builder.send::<WshEventData, WshEventData>(request).await?;
+    let mut subscription = builder.send::<WshEventData>(request).await?;
 
     match subscription.next().await {
         Some(Ok(event_data)) => Ok(event_data),
@@ -113,7 +113,7 @@ pub async fn wsh_event_data_by_filter(
         auto_fill,
     )?;
 
-    builder.send::<WshEventData, WshEventData>(request).await
+    builder.send::<WshEventData>(request).await
 }
 
 #[cfg(test)]

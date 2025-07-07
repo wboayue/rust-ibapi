@@ -43,13 +43,12 @@ impl<'a> RequestBuilder<'a> {
     }
 
     /// Send the request and create a subscription
-    pub async fn send<T, D>(self, message: RequestMessage) -> Result<Subscription<T>, Error>
+    pub async fn send<T>(self, message: RequestMessage) -> Result<Subscription<T>, Error>
     where
-        T: Send + 'static,
-        D: crate::subscriptions::AsyncDataStream<T> + 'static,
+        T: crate::subscriptions::AsyncDataStream<T> + Send + 'static,
     {
         SubscriptionBuilder::<T>::new(self.client)
-            .send_with_request_id::<D>(self.request_id, message)
+            .send_with_request_id::<T>(self.request_id, message)
             .await
     }
 
@@ -78,13 +77,12 @@ impl<'a> SharedRequestBuilder<'a> {
     }
 
     /// Send the request and create a subscription
-    pub async fn send<T, D>(self, message: RequestMessage) -> Result<Subscription<T>, Error>
+    pub async fn send<T>(self, message: RequestMessage) -> Result<Subscription<T>, Error>
     where
-        T: Send + 'static,
-        D: crate::subscriptions::AsyncDataStream<T> + 'static,
+        T: crate::subscriptions::AsyncDataStream<T> + Send + 'static,
     {
         SubscriptionBuilder::<T>::new(self.client)
-            .send_shared::<D>(self.message_type, message)
+            .send_shared::<T>(self.message_type, message)
             .await
     }
 
@@ -157,7 +155,6 @@ impl<'a> MessageBuilder<'a> {
 /// Builder for creating subscriptions with consistent patterns
 pub(crate) struct SubscriptionBuilder<'a, T> {
     client: &'a Client,
-    is_smart_depth: bool,
     _phantom: PhantomData<T>,
 }
 
@@ -169,15 +166,8 @@ where
     pub fn new(client: &'a Client) -> Self {
         Self {
             client,
-            is_smart_depth: false,
             _phantom: PhantomData,
         }
-    }
-
-    /// Sets smart depth flag
-    pub fn with_smart_depth(mut self, is_smart_depth: bool) -> Self {
-        self.is_smart_depth = is_smart_depth;
-        self
     }
 
     /// Sends a request with a specific request ID and builds the subscription

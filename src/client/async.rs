@@ -439,6 +439,575 @@ impl Client {
         accounts::family_codes(self).await
     }
 
+    // === Market Data ===
+
+    /// Requests real time market data.
+    /// Returns market data for an instrument either in real time or 10-15 minutes delayed (depending on the market data type specified,
+    /// see `switch_market_data_type`).
+    ///
+    /// # Arguments
+    /// * `contract` - The Contract for which the data is being requested
+    /// * `generic_ticks` - comma separated ids of the available generic ticks: https://interactivebrokers.github.io/tws-api/tick_types.html
+    /// * `snapshot` - Check to return a single snapshot of Market data and have the market data subscription cancel.
+    /// * `regulatory_snapshot` - snapshot for US stocks requests NBBO snapshots for users which have "US Securities Snapshot Bundle" subscription but not corresponding Network A, B, or C subscription necessary for streaming market data. One-time snapshot of current market price that will incur a fee of 1 cent to the account per snapshot.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::{contracts::Contract, market_data::realtime::TickTypes, Client};
+    /// use futures::StreamExt;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("AAPL");
+    ///
+    ///     let generic_ticks = &["233", "293"];
+    ///     let snapshot = false;
+    ///     let regulatory_snapshot = false;
+    ///
+    ///     let mut subscription = client
+    ///         .market_data(&contract, generic_ticks, snapshot, regulatory_snapshot)
+    ///         .await
+    ///         .expect("error requesting market data");
+    ///
+    ///     while let Some(tick_result) = subscription.next().await {
+    ///         match tick_result {
+    ///             Ok(tick) => match tick {
+    ///                 TickTypes::Price(tick_price) => println!("{:?}", tick_price),
+    ///                 TickTypes::Size(tick_size) => println!("{:?}", tick_size),
+    ///                 TickTypes::String(tick_string) => println!("{:?}", tick_string),
+    ///                 TickTypes::SnapshotEnd => {
+    ///                     println!("Snapshot completed");
+    ///                     break;
+    ///                 }
+    ///                 _ => {}
+    ///             },
+    ///             Err(e) => eprintln!("Error: {}", e),
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn market_data(
+        &self,
+        contract: &crate::contracts::Contract,
+        generic_ticks: &[&str],
+        snapshot: bool,
+        regulatory_snapshot: bool,
+    ) -> Result<Subscription<crate::market_data::realtime::TickTypes>, Error> {
+        crate::market_data::realtime::market_data(self, contract, generic_ticks, snapshot, regulatory_snapshot).await
+    }
+
+    /// Requests real time bars
+    /// Currently, only 5 seconds bars are provided.
+    ///
+    /// # Arguments
+    /// * `contract` - The Contract for which the depth is being requested
+    /// * `bar_size` - Currently being ignored
+    /// * `what_to_show` - The nature of the data being retrieved (TRADES, MIDPOINT, BID, ASK)
+    /// * `use_rth` - Set to false to obtain the data which was also generated outside of the Regular Trading Hours, set to true to obtain only the RTH data
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::realtime::{BarSize, WhatToShow};
+    /// use futures::StreamExt;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("TSLA");
+    ///     let mut subscription = client
+    ///         .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+    ///         .await
+    ///         .expect("request failed");
+    ///
+    ///     while let Some(bar_result) = subscription.next().await {
+    ///         match bar_result {
+    ///             Ok(bar) => println!("{bar:?}"),
+    ///             Err(e) => eprintln!("Error: {}", e),
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn realtime_bars(
+        &self,
+        contract: &crate::contracts::Contract,
+        bar_size: crate::market_data::realtime::BarSize,
+        what_to_show: crate::market_data::realtime::WhatToShow,
+        use_rth: bool,
+    ) -> Result<Subscription<crate::market_data::realtime::Bar>, Error> {
+        crate::market_data::realtime::realtime_bars(self, contract, &bar_size, &what_to_show, use_rth, vec![]).await
+    }
+
+    /// Requests tick by tick AllLast ticks.
+    ///
+    /// # Arguments
+    /// * `contract` - The Contract for which tick-by-tick data is requested.
+    /// * `number_of_ticks` - Number of historical ticks to return from the TWS's historical database. Max value is 1000.
+    /// * `ignore_size` - Ignore size flag.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use futures::StreamExt;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("AAPL");
+    ///     let mut subscription = client
+    ///         .tick_by_tick_all_last(&contract, 0, false)
+    ///         .await
+    ///         .expect("request failed");
+    ///
+    ///     while let Some(trade_result) = subscription.next().await {
+    ///         match trade_result {
+    ///             Ok(trade) => println!("Trade: {} - ${} x {} on {}",
+    ///                 trade.time, trade.price, trade.size, trade.exchange),
+    ///             Err(e) => eprintln!("Error: {}", e),
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn tick_by_tick_all_last(
+        &self,
+        contract: &crate::contracts::Contract,
+        number_of_ticks: i32,
+        ignore_size: bool,
+    ) -> Result<Subscription<crate::market_data::realtime::Trade>, Error> {
+        crate::market_data::realtime::tick_by_tick_all_last(self, contract, number_of_ticks, ignore_size).await
+    }
+
+    /// Requests tick by tick Last ticks.
+    ///
+    /// # Arguments
+    /// * `contract` - The Contract for which tick-by-tick data is requested.
+    /// * `number_of_ticks` - Number of historical ticks to return from the TWS's historical database. Max value is 1000.
+    /// * `ignore_size` - Ignore size flag.
+    pub async fn tick_by_tick_last(
+        &self,
+        contract: &crate::contracts::Contract,
+        number_of_ticks: i32,
+        ignore_size: bool,
+    ) -> Result<Subscription<crate::market_data::realtime::Trade>, Error> {
+        crate::market_data::realtime::tick_by_tick_last(self, contract, number_of_ticks, ignore_size).await
+    }
+
+    /// Requests tick by tick BidAsk ticks.
+    ///
+    /// # Arguments
+    /// * `contract` - The Contract for which tick-by-tick data is requested.
+    /// * `number_of_ticks` - Number of historical ticks to return from the TWS's historical database. Max value is 1000.
+    /// * `ignore_size` - Ignore size flag.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use futures::StreamExt;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("AAPL");
+    ///     let mut subscription = client
+    ///         .tick_by_tick_bid_ask(&contract, 0, false)
+    ///         .await
+    ///         .expect("request failed");
+    ///
+    ///     while let Some(quote_result) = subscription.next().await {
+    ///         match quote_result {
+    ///             Ok(quote) => println!("Quote: {} - Bid: ${} x {} | Ask: ${} x {}",
+    ///                 quote.time, quote.bid_price, quote.bid_size,
+    ///                 quote.ask_price, quote.ask_size),
+    ///             Err(e) => eprintln!("Error: {}", e),
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn tick_by_tick_bid_ask(
+        &self,
+        contract: &crate::contracts::Contract,
+        number_of_ticks: i32,
+        ignore_size: bool,
+    ) -> Result<Subscription<crate::market_data::realtime::BidAsk>, Error> {
+        crate::market_data::realtime::tick_by_tick_bid_ask(self, contract, number_of_ticks, ignore_size).await
+    }
+
+    /// Requests tick by tick MidPoint ticks.
+    ///
+    /// # Arguments
+    /// * `contract` - The Contract for which tick-by-tick data is requested.
+    /// * `number_of_ticks` - Number of historical ticks to return from the TWS's historical database. Max value is 1000.
+    /// * `ignore_size` - Ignore size flag.
+    pub async fn tick_by_tick_midpoint(
+        &self,
+        contract: &crate::contracts::Contract,
+        number_of_ticks: i32,
+        ignore_size: bool,
+    ) -> Result<Subscription<crate::market_data::realtime::MidPoint>, Error> {
+        crate::market_data::realtime::tick_by_tick_midpoint(self, contract, number_of_ticks, ignore_size).await
+    }
+
+    /// Requests the contract's market depth (order book).
+    ///
+    /// This request returns the full available market depth and updates whenever there's a change in the order book.
+    /// Market depth data is not available for all instruments. Check the TWS Contract Details under "Market Data Availability" - "Deep Book" field
+    /// before requesting market depth.
+    ///
+    /// # Arguments
+    /// * `contract` - The Contract for which the depth is being requested
+    /// * `number_of_rows` - The number of rows on each side of the order book (max 50)
+    /// * `is_smart_depth` - Flag indicates that this is smart depth request
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::realtime::MarketDepths;
+    /// use futures::StreamExt;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("AAPL");
+    ///     let mut subscription = client
+    ///         .market_depth(&contract, 5, false)
+    ///         .await
+    ///         .expect("request failed");
+    ///
+    ///     while let Some(depth_result) = subscription.next().await {
+    ///         match depth_result {
+    ///             Ok(MarketDepths::MarketDepth(depth)) => {
+    ///                 let side = if depth.side == 1 { "Bid" } else { "Ask" };
+    ///                 let operation = match depth.operation {
+    ///                     0 => "Insert",
+    ///                     1 => "Update",
+    ///                     2 => "Delete",
+    ///                     _ => "Unknown",
+    ///                 };
+    ///                 println!("{} {} at position {} - Price: ${}, Size: {}",
+    ///                     operation, side, depth.position, depth.price, depth.size);
+    ///             }
+    ///             Ok(MarketDepths::Notice(notice)) => println!("Notice: {}", notice.message),
+    ///             _ => {}
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn market_depth(
+        &self,
+        contract: &crate::contracts::Contract,
+        number_of_rows: i32,
+        is_smart_depth: bool,
+    ) -> Result<Subscription<crate::market_data::realtime::MarketDepths>, Error> {
+        crate::market_data::realtime::market_depth(self, contract, number_of_rows, is_smart_depth).await
+    }
+
+    /// Requests venues for which market data is returned to market_depth (those with market makers)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let exchanges = client.market_depth_exchanges().await.expect("request failed");
+    ///     for exchange in exchanges {
+    ///         println!("{} - {} ({})",
+    ///             exchange.exchange_name, exchange.security_type, exchange.service_data_type);
+    ///     }
+    /// }
+    /// ```
+    pub async fn market_depth_exchanges(&self) -> Result<Vec<crate::market_data::realtime::DepthMarketDataDescription>, Error> {
+        crate::market_data::realtime::market_depth_exchanges(self).await
+    }
+
+    /// Returns the timestamp of earliest available historical data for a contract and data type.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::historical::WhatToShow;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("MSFT");
+    ///     let what_to_show = WhatToShow::Trades;
+    ///     let use_rth = true;
+    ///
+    ///     let timestamp = client
+    ///         .head_timestamp(&contract, what_to_show, use_rth)
+    ///         .await
+    ///         .expect("error requesting head timestamp");
+    ///     println!("Earliest data available: {}", timestamp);
+    /// }
+    /// ```
+    pub async fn head_timestamp(
+        &self,
+        contract: &crate::contracts::Contract,
+        what_to_show: crate::market_data::historical::WhatToShow,
+        use_rth: bool,
+    ) -> Result<OffsetDateTime, Error> {
+        crate::market_data::historical::head_timestamp(self, contract, what_to_show, use_rth).await
+    }
+
+    /// Requests historical bars data.
+    ///
+    /// When requesting historical data, a finishing time and date is required along with a duration string.
+    /// For example, having: end_date = 20130701 23:59:59 GMT and duration = 3 D
+    /// will return three days of data counting backwards from July 1st 2013 at 23:59:59 GMT resulting in all the
+    /// available bars of the last three days until the date and time specified.
+    ///
+    /// # Arguments
+    /// * `contract` - The contract for which we want to retrieve the data.
+    /// * `end_date` - Request's ending time. If None, current time is used.
+    /// * `duration` - The amount of time for which the data needs to be retrieved.
+    /// * `bar_size` - The bar size.
+    /// * `what_to_show` - The kind of information being retrieved.
+    /// * `use_rth` - Set to false to obtain the data which was also generated outside of the Regular Trading Hours, set to true to obtain only the RTH data.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    /// use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("TSLA");
+    ///
+    ///     let interval_end = Some(datetime!(2023-04-11 20:00 UTC));
+    ///     let duration = 5.days();
+    ///     let bar_size = BarSize::Hour;
+    ///     let what_to_show = Some(WhatToShow::Trades);
+    ///     let use_rth = true;
+    ///
+    ///     let historical_data = client
+    ///         .historical_data(&contract, interval_end, duration, bar_size, what_to_show, use_rth)
+    ///         .await
+    ///         .expect("historical bars request failed");
+    ///
+    ///     println!("start: {}, end: {}", historical_data.start, historical_data.end);
+    ///     for bar in &historical_data.bars {
+    ///         println!("{bar:?}")
+    ///     }
+    /// }
+    /// ```
+    pub async fn historical_data(
+        &self,
+        contract: &crate::contracts::Contract,
+        end_date: Option<OffsetDateTime>,
+        duration: crate::market_data::historical::Duration,
+        bar_size: crate::market_data::historical::BarSize,
+        what_to_show: Option<crate::market_data::historical::WhatToShow>,
+        use_rth: bool,
+    ) -> Result<crate::market_data::historical::HistoricalData, Error> {
+        crate::market_data::historical::historical_data(self, contract, end_date, duration, bar_size, what_to_show, use_rth).await
+    }
+
+    /// Requests historical schedule.
+    ///
+    /// # Arguments
+    /// * `contract` - Contract object for which trading schedule is requested.
+    /// * `end_date` - Request's ending date. If None, current time is used.
+    /// * `duration` - The amount of time for which the data needs to be retrieved.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    /// use ibapi::market_data::historical::ToDuration;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("GM");
+    ///
+    ///     let end_date = Some(datetime!(2022-11-21 00:00 UTC));
+    ///     let duration = 30.days();
+    ///
+    ///     let schedule = client
+    ///         .historical_schedule(&contract, end_date, duration)
+    ///         .await
+    ///         .expect("error requesting historical schedule");
+    ///     
+    ///     println!("Trading schedule from {} to {}", schedule.start, schedule.end);
+    ///     for session in &schedule.sessions {
+    ///         println!("  {} - Trading: {} to {}",
+    ///             session.reference, session.start, session.end);
+    ///     }
+    /// }
+    /// ```
+    pub async fn historical_schedule(
+        &self,
+        contract: &crate::contracts::Contract,
+        end_date: Option<OffsetDateTime>,
+        duration: crate::market_data::historical::Duration,
+    ) -> Result<crate::market_data::historical::Schedule, Error> {
+        crate::market_data::historical::historical_schedule(self, contract, end_date, duration).await
+    }
+
+    /// Requests historical bid/ask tick data.
+    ///
+    /// # Arguments
+    /// * `contract` - Contract object that is subject of query
+    /// * `start` - Start timestamp. Either start or end must be specified.
+    /// * `end` - End timestamp. Either start or end must be specified.
+    /// * `number_of_ticks` - Number of ticks to retrieve
+    /// * `use_rth` - Data from regular trading hours (true), or all available hours (false)
+    /// * `ignore_size` - Ignore size flag
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("GM");
+    ///
+    ///     let start = Some(datetime!(2022-11-07 16:00 UTC));
+    ///     let end = Some(datetime!(2022-11-07 17:00 UTC));
+    ///     let number_of_ticks = 1000;
+    ///     let use_rth = true;
+    ///     let ignore_size = false;
+    ///
+    ///     let mut subscription = client
+    ///         .historical_ticks_bid_ask(&contract, start, end, number_of_ticks, use_rth, ignore_size)
+    ///         .await
+    ///         .expect("error requesting historical ticks");
+    ///
+    ///     while let Some(tick) = subscription.next().await {
+    ///         println!("Bid/Ask tick: {} - Bid: ${} x {} | Ask: ${} x {}",
+    ///             tick.timestamp, tick.price_bid, tick.size_bid,
+    ///             tick.price_ask, tick.size_ask);
+    ///     }
+    /// }
+    /// ```
+    pub async fn historical_ticks_bid_ask(
+        &self,
+        contract: &crate::contracts::Contract,
+        start: Option<OffsetDateTime>,
+        end: Option<OffsetDateTime>,
+        number_of_ticks: i32,
+        use_rth: bool,
+        ignore_size: bool,
+    ) -> Result<crate::market_data::historical::TickSubscription<crate::market_data::historical::TickBidAsk>, Error> {
+        crate::market_data::historical::historical_ticks_bid_ask(self, contract, start, end, number_of_ticks, use_rth, ignore_size).await
+    }
+
+    /// Requests historical midpoint tick data.
+    ///
+    /// # Arguments
+    /// * `contract` - Contract object that is subject of query
+    /// * `start` - Start timestamp. Either start or end must be specified.
+    /// * `end` - End timestamp. Either start or end must be specified.
+    /// * `number_of_ticks` - Number of ticks to retrieve
+    /// * `use_rth` - Data from regular trading hours (true), or all available hours (false)
+    pub async fn historical_ticks_mid_point(
+        &self,
+        contract: &crate::contracts::Contract,
+        start: Option<OffsetDateTime>,
+        end: Option<OffsetDateTime>,
+        number_of_ticks: i32,
+        use_rth: bool,
+    ) -> Result<crate::market_data::historical::TickSubscription<crate::market_data::historical::TickMidpoint>, Error> {
+        crate::market_data::historical::historical_ticks_mid_point(self, contract, start, end, number_of_ticks, use_rth).await
+    }
+
+    /// Requests historical trade tick data.
+    ///
+    /// # Arguments
+    /// * `contract` - Contract object that is subject of query
+    /// * `start` - Start timestamp. Either start or end must be specified.
+    /// * `end` - End timestamp. Either start or end must be specified.
+    /// * `number_of_ticks` - Number of ticks to retrieve
+    /// * `use_rth` - Data from regular trading hours (true), or all available hours (false)
+    pub async fn historical_ticks_trade(
+        &self,
+        contract: &crate::contracts::Contract,
+        start: Option<OffsetDateTime>,
+        end: Option<OffsetDateTime>,
+        number_of_ticks: i32,
+        use_rth: bool,
+    ) -> Result<crate::market_data::historical::TickSubscription<crate::market_data::historical::TickLast>, Error> {
+        crate::market_data::historical::historical_ticks_trade(self, contract, start, end, number_of_ticks, use_rth).await
+    }
+
+    /// Returns histogram of market data for a contract.
+    ///
+    /// # Arguments
+    /// * `contract` - Contract object for which histogram is being requested
+    /// * `use_rth` - Data from regular trading hours (true), or all available hours (false)
+    /// * `period` - Period of which data is being requested
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::Client;
+    /// use ibapi::market_data::historical::BarSize;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("GM");
+    ///
+    ///     let use_rth = true;
+    ///     let period = BarSize::Week;
+    ///
+    ///     let histogram = client
+    ///         .histogram_data(&contract, use_rth, period)
+    ///         .await
+    ///         .expect("error requesting histogram");
+    ///
+    ///     for entry in &histogram {
+    ///         println!("Price: ${} - Count: {}", entry.price, entry.size);
+    ///     }
+    /// }
+    /// ```
+    pub async fn histogram_data(
+        &self,
+        contract: &crate::contracts::Contract,
+        use_rth: bool,
+        period: crate::market_data::historical::BarSize,
+    ) -> Result<Vec<crate::market_data::historical::HistogramEntry>, Error> {
+        crate::market_data::historical::histogram_data(self, contract, use_rth, period).await
+    }
+
     // === Wall Street Horizon (WSH) Data ===
 
     /// Requests Wall Street Horizon metadata information.
