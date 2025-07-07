@@ -118,9 +118,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 4: Get different data types
     println!("\n=== Different Data Types ===");
 
-    // Bid data
+    // Bid data (last 1 day)
     let bid_data = client
-        .historical_data(&contract, Some(end_date), 2.hours(), BarSize::Min, Some(WhatToShow::Bid), true)
+        .historical_data(&contract, Some(end_date), 1.days(), BarSize::Min, Some(WhatToShow::Bid), true)
         .await?;
     println!("Bid bars (1-min): {} bars", bid_data.bars.len());
     if let Some(bar) = bid_data.bars.first() {
@@ -133,9 +133,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    // Ask data
+    // Ask data (last 1 day)
     let ask_data = client
-        .historical_data(&contract, Some(end_date), 2.hours(), BarSize::Min, Some(WhatToShow::Ask), true)
+        .historical_data(&contract, Some(end_date), 1.days(), BarSize::Min, Some(WhatToShow::Ask), true)
         .await?;
     println!("Ask bars (1-min): {} bars", ask_data.bars.len());
     if let Some(bar) = ask_data.bars.first() {
