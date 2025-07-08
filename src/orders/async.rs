@@ -276,8 +276,7 @@ pub async fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
         let order_id_index = 2;
         let next_order_id = message.peek_int(order_id_index)?;
 
-        // TODO: Update the client's next order ID when async client supports it
-        // client.set_next_order_id(next_order_id);
+        client.set_next_order_id(next_order_id);
 
         Ok(next_order_id)
     } else {
@@ -691,12 +690,19 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        
+        // Check initial order ID
+        let initial_order_id = client.next_order_id();
 
         let order_id = next_valid_order_id(&client)
             .await
             .expect("failed to get next valid order id");
 
         assert_eq!(order_id, 123, "Expected order ID 123");
+        
+        // Verify that the client's order ID was updated
+        assert_eq!(client.next_order_id(), 123, "Client's order ID should be updated to 123");
+        assert_ne!(client.next_order_id(), initial_order_id, "Client's order ID should have changed");
 
         // Check request message
         let request_messages = message_bus.request_messages.read().unwrap();

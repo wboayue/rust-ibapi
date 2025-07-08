@@ -102,6 +102,11 @@ impl Client {
         self.id_manager.next_request_id()
     }
 
+    /// Sets the current value of order ID.
+    pub(crate) fn set_next_order_id(&self, order_id: i32) {
+        self.id_manager.set_order_id(order_id);
+    }
+
     /// Check server version requirement
     pub fn check_server_version(&self, required_version: i32, feature: &str) -> Result<(), Error> {
         if self.server_version < required_version {
