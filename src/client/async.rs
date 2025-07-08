@@ -1134,6 +1134,205 @@ impl Client {
         crate::wsh::wsh_event_data_by_filter(self, filter, limit, auto_fill).await
     }
 
+    // === Contract Management ===
+
+    /// Requests detailed contract information for matching contracts.
+    ///
+    /// This function returns all contracts that match the provided contract sample.
+    /// It can be used to retrieve complete options and futures chains.
+    ///
+    /// # Arguments
+    /// * `contract` - The Contract used as a sample to query available contracts
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let contract = Contract::stock("AAPL");
+    ///     let details = client.contract_details(&contract).await.expect("request failed");
+    ///     
+    ///     for detail in details {
+    ///         println!("Contract: {} - Exchange: {}", detail.contract.symbol, detail.contract.exchange);
+    ///     }
+    /// }
+    /// ```
+    pub async fn contract_details(&self, contract: &crate::contracts::Contract) -> Result<Vec<crate::contracts::ContractDetails>, Error> {
+        crate::contracts::contract_details(self, contract).await
+    }
+
+    /// Searches for stock contracts matching the provided pattern.
+    ///
+    /// # Arguments
+    /// * `pattern` - Either start of ticker symbol or (for larger strings) company name
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let symbols = client.matching_symbols("AAP").await.expect("request failed");
+    ///     for symbol in symbols {
+    ///         println!("{} - {} ({})", symbol.contract.symbol, 
+    ///                  symbol.contract.primary_exchange, symbol.contract.currency);
+    ///     }
+    /// }
+    /// ```
+    pub async fn matching_symbols(&self, pattern: &str) -> Result<Vec<crate::contracts::ContractDescription>, Error> {
+        crate::contracts::matching_symbols(self, pattern).await
+    }
+
+    /// Retrieves market rule details for a specific market rule ID.
+    ///
+    /// Market rules define how minimum price increments change with price.
+    /// Rule IDs can be obtained from contract details.
+    ///
+    /// # Arguments
+    /// * `market_rule_id` - The market rule ID to query
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let rule = client.market_rule(26).await.expect("request failed");
+    ///     for increment in rule.price_increments {
+    ///         println!("Above ${}: increment ${}", increment.low_edge, increment.increment);
+    ///     }
+    /// }
+    /// ```
+    pub async fn market_rule(&self, market_rule_id: i32) -> Result<crate::contracts::MarketRule, Error> {
+        crate::contracts::market_rule(self, market_rule_id).await
+    }
+
+    /// Calculates option price based on volatility and underlying price.
+    ///
+    /// # Arguments
+    /// * `contract` - The option contract
+    /// * `volatility` - Hypothetical volatility
+    /// * `underlying_price` - Hypothetical underlying price
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let option = Contract::option("AAPL", "20240119", 150.0, "C");
+    ///     let computation = client.calculate_option_price(&option, 0.3, 145.0).await
+    ///         .expect("calculation failed");
+    ///         
+    ///     if let Some(price) = computation.option_price {
+    ///         println!("Option price: ${:.2}", price);
+    ///     }
+    /// }
+    /// ```
+    pub async fn calculate_option_price(
+        &self,
+        contract: &crate::contracts::Contract,
+        volatility: f64,
+        underlying_price: f64,
+    ) -> Result<crate::contracts::OptionComputation, Error> {
+        crate::contracts::calculate_option_price(self, contract, volatility, underlying_price).await
+    }
+
+    /// Calculates implied volatility based on option and underlying prices.
+    ///
+    /// # Arguments
+    /// * `contract` - The option contract
+    /// * `option_price` - Hypothetical option price
+    /// * `underlying_price` - Hypothetical underlying price
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let option = Contract::option("AAPL", "20240119", 150.0, "C");
+    ///     let computation = client.calculate_implied_volatility(&option, 7.5, 148.0).await
+    ///         .expect("calculation failed");
+    ///         
+    ///     if let Some(iv) = computation.implied_volatility {
+    ///         println!("Implied volatility: {:.2}%", iv * 100.0);
+    ///     }
+    /// }
+    /// ```
+    pub async fn calculate_implied_volatility(
+        &self,
+        contract: &crate::contracts::Contract,
+        option_price: f64,
+        underlying_price: f64,
+    ) -> Result<crate::contracts::OptionComputation, Error> {
+        crate::contracts::calculate_implied_volatility(self, contract, option_price, underlying_price).await
+    }
+
+    /// Requests option chain data for an underlying instrument.
+    ///
+    /// Returns option expiration dates and strikes available for the specified underlying.
+    ///
+    /// # Arguments
+    /// * `symbol` - The underlying symbol
+    /// * `exchange` - The exchange
+    /// * `security_type` - The underlying security type
+    /// * `contract_id` - The underlying contract ID
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::SecurityType;
+    /// use futures::StreamExt;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let mut chain = client.option_chain("AAPL", "SMART", SecurityType::Stock, 265598).await
+    ///         .expect("request failed");
+    ///         
+    ///     while let Some(result) = chain.next().await {
+    ///         match result {
+    ///             Ok(data) => {
+    ///                 println!("Expirations: {:?}", data.expirations);
+    ///                 println!("Strikes: {:?}", data.strikes);
+    ///             }
+    ///             Err(e) => eprintln!("Error: {}", e),
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn option_chain(
+        &self,
+        symbol: &str,
+        exchange: &str,
+        security_type: crate::contracts::SecurityType,
+        contract_id: i32,
+    ) -> Result<Subscription<crate::contracts::OptionChain>, Error> {
+        crate::contracts::option_chain(self, symbol, exchange, security_type, contract_id).await
+    }
+
     // === Order Management ===
 
     /// Subscribes to order update events. Only one subscription can be active at a time.
