@@ -777,7 +777,7 @@ mod tests {
     use crate::contracts::encoders::encode_request_contract_data;
     use crate::contracts::Contract;
     use crate::messages::{encode_length, RequestMessage};
-    use crate::orders::encoders::encode_place_order;
+    use crate::orders::common::encoders::encode_place_order;
     use crate::orders::{order_builder, Action};
     use log::{debug, trace};
     use std::collections::VecDeque;

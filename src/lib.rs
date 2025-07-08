@@ -51,7 +51,6 @@ mod messages;
 #[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod news;
 /// Data types for building and placing orders.
-#[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod orders;
 /// APIs for working with the market scanner.
 #[cfg(all(feature = "sync", not(feature = "async")))]

@@ -1,4 +1,4 @@
-use super::{Action, Order, OrderComboLeg, TagValue};
+use crate::orders::{Action, Order, OrderComboLeg, TagValue, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
 
 /// An auction order is entered into the electronic trading system during the pre-market opening period for execution at the
 /// Calculated Opening Price (COP). If your order is not filled on the open, the order is re-submitted as a limit order with
@@ -937,7 +937,7 @@ pub fn peg_best_up_to_mid_order(
         not_held: true,
         min_trade_qty: Some(min_trade_qty),
         min_compete_size: Some(min_compete_size),
-        compete_against_best_offset: super::COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID,
+        compete_against_best_offset: COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID,
         mid_offset_at_whole: Some(mid_offset_at_whole),
         mid_offset_at_half: Some(mid_offset_at_half),
         ..Order::default()

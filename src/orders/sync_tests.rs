@@ -2,11 +2,13 @@ use std::sync::{Arc, RwLock};
 
 use crate::contracts::{contract_samples, Contract, SecurityType};
 use crate::stubs::MessageBusStub;
+use crate::orders::{Action, Liquidity, Order};
 
-use super::order_builder::*;
+use crate::orders::common::order_builder;
 use super::*;
 
 #[cfg(test)]
+#[path = "common/tests/order_build_tests.rs"]
 mod order_build_tests;
 
 #[test]
@@ -35,7 +37,7 @@ fn place_order() {
     };
 
     let order_id = 13;
-    let order = order_builder::market_order(super::Action::Buy, 100.0);
+    let order = order_builder::market_order(Action::Buy, 100.0);
 
     let result = client.place_order(order_id, &contract, &order);
 
@@ -609,7 +611,7 @@ fn encode_limit_order() {
 
     let order_id = 12;
     let contract = contract_samples::future_with_local_symbol();
-    let order = order_builder::limit_order(super::Action::Buy, 10.0, 500.00);
+    let order = order_builder::limit_order(Action::Buy, 10.0, 500.00);
 
     let results = client.place_order(order_id, &contract, &order);
 
@@ -666,7 +668,7 @@ fn submit_order() {
     };
 
     let order_id = 42;
-    let order = order_builder::market_order(super::Action::Buy, 200.0);
+    let order = order_builder::market_order(Action::Buy, 200.0);
 
     let result = client.submit_order(order_id, &contract, &order);
 
