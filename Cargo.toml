@@ -312,11 +312,6 @@ path = "examples/sync/historical_ticks_bid_ask.rs"
 required-features = ["sync"]
 
 [[example]]
-name = "historical_ticks_midpoint"
-path = "examples/sync/historical_ticks_midpoint.rs"
-required-features = ["sync"]
-
-[[example]]
 name = "historical_ticks_trade"
 path = "examples/sync/historical_ticks_trade.rs"
 required-features = ["sync"]
@@ -324,21 +319,6 @@ required-features = ["sync"]
 [[example]]
 name = "managed_accounts"
 path = "examples/sync/managed_accounts.rs"
-required-features = ["sync"]
-
-[[example]]
-name = "market_data_changing_generic_tick_list"
-path = "examples/sync/market_data_changing_generic_tick_list.rs"
-required-features = ["sync"]
-
-[[example]]
-name = "market_data_generic_ticks"
-path = "examples/sync/market_data_generic_ticks.rs"
-required-features = ["sync"]
-
-[[example]]
-name = "market_data_with_options"
-path = "examples/sync/market_data_with_options.rs"
 required-features = ["sync"]
 
 [[example]]
@@ -357,11 +337,6 @@ path = "examples/sync/matching_symbols.rs"
 required-features = ["sync"]
 
 [[example]]
-name = "orders_folder"
-path = "examples/sync/orders_folder.rs"
-required-features = ["sync"]
-
-[[example]]
 name = "pnl"
 path = "examples/sync/pnl.rs"
 required-features = ["sync"]
@@ -372,13 +347,8 @@ path = "examples/sync/positions.rs"
 required-features = ["sync"]
 
 [[example]]
-name = "realtime_bars"
-path = "examples/sync/realtime_bars.rs"
-required-features = ["sync"]
-
-[[example]]
-name = "readme_realtime_data"
-path = "examples/sync/readme_realtime_data.rs"
+name = "readme_realtime_data_1"
+path = "examples/sync/readme_realtime_data_1.rs"
 required-features = ["sync"]
 
 [[example]]
