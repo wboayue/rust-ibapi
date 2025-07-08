@@ -146,6 +146,11 @@ impl Client {
         Ok(subscription)
     }
 
+    /// Create order update subscription
+    pub async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
+        self.message_bus.create_order_update_subscription().await
+    }
+    
     /// Send a message without expecting a response
     pub async fn send_message(&self, message: RequestMessage) -> Result<(), Error> {
         self.message_bus.send_request(message).await
@@ -1122,6 +1127,208 @@ impl Client {
         auto_fill: Option<crate::wsh::AutoFill>,
     ) -> Result<Subscription<crate::wsh::WshEventData>, Error> {
         crate::wsh::wsh_event_data_by_filter(self, filter, limit, auto_fill).await
+    }
+
+    // === Order Management ===
+
+    /// Subscribes to order update events. Only one subscription can be active at a time.
+    ///
+    /// This function returns a subscription that will receive updates of activity for all orders placed by the client.
+    /// Use this when you need a global view of all order activity, especially with submit_order().
+    /// 
+    /// # Examples
+    /// 
+    /// ```no_run
+    /// use futures::StreamExt;
+    /// use ibapi::Client;
+    /// use ibapi::orders::OrderUpdate;
+    /// 
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let mut stream = client.order_update_stream().await.expect("failed to create stream");
+    ///     
+    ///     while let Some(update) = stream.next().await {
+    ///         match update {
+    ///             Ok(OrderUpdate::OrderStatus(status)) => {
+    ///                 println!("Order {} status: {}", status.order_id, status.status);
+    ///             }
+    ///             Ok(OrderUpdate::ExecutionData(exec)) => {
+    ///                 println!("Execution: {} shares @ {}", exec.shares, exec.price);
+    ///             }
+    ///             _ => {}
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn order_update_stream(&self) -> Result<Subscription<crate::orders::OrderUpdate>, Error> {
+        crate::orders::order_update_stream(self).await
+    }
+
+    /// Submits an Order (fire-and-forget).
+    ///
+    /// After the order is submitted correctly, events will be returned through the order_update_stream().
+    /// This is a fire-and-forget method that does not wait for confirmation or return a subscription.
+    ///
+    /// # Arguments
+    /// * `order_id` - Unique order identifier
+    /// * `contract` - Contract to submit order for
+    /// * `order` - Order details
+    ///
+    /// # Examples
+    /// 
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::{Contract, SecurityType};
+    /// use ibapi::orders::order_builder;
+    /// 
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let mut contract = Contract::default();
+    ///     contract.symbol = "AAPL".to_string();
+    ///     contract.security_type = SecurityType::Stock;
+    ///     contract.exchange = "SMART".to_string();
+    ///     contract.currency = "USD".to_string();
+    ///     
+    ///     let order = order_builder::limit_order("BUY", 100.0, 150.0);
+    ///     let order_id = client.next_order_id();
+    ///     
+    ///     client.submit_order(order_id, &contract, &order).await.expect("failed to submit order");
+    /// }
+    /// ```
+    pub async fn submit_order(&self, order_id: i32, contract: &crate::contracts::Contract, order: &crate::orders::Order) -> Result<(), Error> {
+        crate::orders::submit_order(self, order_id, contract, order).await
+    }
+
+    /// Submits an Order with a subscription for updates.
+    /// 
+    /// After the order is submitted correctly, events will be returned concerning the order's activity
+    /// through the returned subscription.
+    ///
+    /// # Arguments
+    /// * `order_id` - Unique order identifier
+    /// * `contract` - Contract to submit order for
+    /// * `order` - Order details
+    ///
+    /// # Examples
+    /// 
+    /// ```no_run
+    /// use futures::StreamExt;
+    /// use ibapi::Client;
+    /// use ibapi::contracts::{Contract, SecurityType};
+    /// use ibapi::orders::{order_builder, PlaceOrder};
+    /// 
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let mut contract = Contract::default();
+    ///     contract.symbol = "AAPL".to_string();
+    ///     contract.security_type = SecurityType::Stock;
+    ///     contract.exchange = "SMART".to_string();
+    ///     contract.currency = "USD".to_string();
+    ///     
+    ///     let order = order_builder::limit_order("BUY", 100.0, 150.0);
+    ///     let order_id = client.next_order_id();
+    ///     
+    ///     let mut subscription = client.place_order(order_id, &contract, &order).await
+    ///         .expect("failed to place order");
+    ///         
+    ///     while let Some(update) = subscription.next().await {
+    ///         match update {
+    ///             Ok(PlaceOrder::OrderStatus(status)) => {
+    ///                 println!("Status: {}", status.status);
+    ///                 if status.status == "Filled" { break; }
+    ///             }
+    ///             _ => {}
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn place_order(&self, order_id: i32, contract: &crate::contracts::Contract, order: &crate::orders::Order) -> Result<Subscription<crate::orders::PlaceOrder>, Error> {
+        crate::orders::place_order(self, order_id, contract, order).await
+    }
+
+    /// Cancels an open Order.
+    ///
+    /// # Arguments
+    /// * `order_id` - Order ID to cancel
+    /// * `manual_order_cancel_time` - Time of manual order cancellation (empty string for API cancellations)
+    pub async fn cancel_order(&self, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<crate::orders::CancelOrder>, Error> {
+        crate::orders::cancel_order(self, order_id, manual_order_cancel_time).await
+    }
+
+    /// Cancels all open Orders.
+    pub async fn global_cancel(&self) -> Result<(), Error> {
+        crate::orders::global_cancel(self).await
+    }
+
+    /// Gets next valid order id.
+    pub async fn next_valid_order_id(&self) -> Result<i32, Error> {
+        crate::orders::next_valid_order_id(self).await
+    }
+
+    /// Requests completed Orders.
+    ///
+    /// # Arguments
+    /// * `api_only` - If true, only orders placed through the API are returned
+    pub async fn completed_orders(&self, api_only: bool) -> Result<Subscription<crate::orders::Orders>, Error> {
+        crate::orders::completed_orders(self, api_only).await
+    }
+
+    /// Requests all open orders placed by this specific API client (identified by the API client id).
+    /// For client ID 0, this will bind previous manual TWS orders.
+    pub async fn open_orders(&self) -> Result<Subscription<crate::orders::Orders>, Error> {
+        crate::orders::open_orders(self).await
+    }
+
+    /// Requests all *current* open orders in associated accounts at the current moment.
+    /// Open orders are returned once; this function does not initiate a subscription.
+    pub async fn all_open_orders(&self) -> Result<Subscription<crate::orders::Orders>, Error> {
+        crate::orders::all_open_orders(self).await
+    }
+
+    /// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
+    ///
+    /// # Arguments
+    /// * `auto_bind` - If true, newly submitted orders will be implicitly associated with this client
+    pub async fn auto_open_orders(&self, auto_bind: bool) -> Result<Subscription<crate::orders::Orders>, Error> {
+        crate::orders::auto_open_orders(self, auto_bind).await
+    }
+
+    /// Requests current day's (since midnight) executions matching the filter.
+    ///
+    /// Only the current day's executions can be retrieved.
+    /// Along with the ExecutionData, the CommissionReport will also be returned.
+    ///
+    /// # Arguments
+    /// * `filter` - Filter criteria used to determine which execution reports are returned
+    pub async fn executions(&self, filter: crate::orders::ExecutionFilter) -> Result<Subscription<crate::orders::Executions>, Error> {
+        crate::orders::executions(self, filter).await
+    }
+
+    /// Exercises an options contract.
+    ///
+    /// # Arguments
+    /// * `contract` - Option contract to exercise
+    /// * `exercise_action` - Whether to exercise (1) or lapse (2)
+    /// * `exercise_quantity` - Number of contracts to exercise
+    /// * `account` - Account for which to exercise
+    /// * `ovrd` - Override default handling action
+    /// * `manual_order_time` - Time of manual order entry
+    pub async fn exercise_options(
+        &self,
+        contract: &crate::contracts::Contract,
+        exercise_action: crate::orders::ExerciseAction,
+        exercise_quantity: i32,
+        account: &str,
+        ovrd: bool,
+        manual_order_time: Option<OffsetDateTime>,
+    ) -> Result<Subscription<crate::orders::ExerciseOptions>, Error> {
+        crate::orders::exercise_options(self, contract, exercise_action, exercise_quantity, account, ovrd, manual_order_time).await
     }
 
     /// Creates a stubbed client for testing

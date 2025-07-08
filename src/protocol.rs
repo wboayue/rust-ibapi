@@ -60,6 +60,8 @@ impl Features {
     pub const DECISION_MAKER: ProtocolFeature = ProtocolFeature::new("decision maker", server_versions::DECISION_MAKER);
     pub const MIFID_EXECUTION: ProtocolFeature = ProtocolFeature::new("MiFID execution", server_versions::MIFID_EXECUTION);
     pub const MANUAL_ORDER_TIME: ProtocolFeature = ProtocolFeature::new("manual order time", server_versions::MANUAL_ORDER_TIME);
+    pub const COMPLETED_ORDERS: ProtocolFeature = ProtocolFeature::new("completed orders", server_versions::COMPLETED_ORDERS);
+    pub const REQ_GLOBAL_CANCEL: ProtocolFeature = ProtocolFeature::new("global cancel", server_versions::REQ_GLOBAL_CANCEL);
 
     // Contract features
     pub const TRADING_CLASS: ProtocolFeature = ProtocolFeature::new("trading class", server_versions::TRADING_CLASS);

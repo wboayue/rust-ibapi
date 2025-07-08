@@ -31,6 +31,7 @@ pub trait AsyncMessageBus: Send + Sync {
     async fn subscribe(&self, request_id: i32) -> AsyncInternalSubscription;
     async fn subscribe_shared(&self, channel_type: OutgoingMessages) -> AsyncInternalSubscription;
     async fn subscribe_order(&self, order_id: i32) -> AsyncInternalSubscription;
+    async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error>;
 }
 
 /// Internal subscription for async implementation
@@ -105,6 +106,8 @@ pub struct AsyncTcpMessageBus {
     shared_channels: Arc<RwLock<HashMap<OutgoingMessages, ChannelSender>>>,
     /// Maps order IDs to their response channels
     order_channels: Arc<RwLock<HashMap<i32, ChannelSender>>>,
+    /// Optional channel for order update stream
+    order_update_stream: Arc<RwLock<Option<ChannelSender>>>,
     /// Channel for cleanup signals
     cleanup_sender: mpsc::UnboundedSender<CleanupSignal>,
 }
@@ -119,6 +122,7 @@ impl AsyncTcpMessageBus {
             request_channels: Arc::new(RwLock::new(HashMap::new())),
             shared_channels: Arc::new(RwLock::new(HashMap::new())),
             order_channels: Arc::new(RwLock::new(HashMap::new())),
+            order_update_stream: Arc::new(RwLock::new(None)),
             cleanup_sender,
         };
         
@@ -255,6 +259,9 @@ impl AsyncTcpMessageBus {
 
     /// Route message to order-specific channel
     async fn route_to_order_channel(&self, order_id: i32, message: ResponseMessage) -> Result<(), Error> {
+        // Send to order update stream if it exists
+        self.send_order_update(&message).await;
+        
         let channels = self.order_channels.read().await;
         if let Some(sender) = channels.get(&order_id) {
             let _ = sender.send(message);
@@ -264,6 +271,16 @@ impl AsyncTcpMessageBus {
 
     /// Route message to shared channel
     async fn route_to_shared_channel(&self, message_type: IncomingMessages, message: ResponseMessage) -> Result<(), Error> {
+        // Send order-related messages to order update stream
+        match message_type {
+            IncomingMessages::OpenOrder | IncomingMessages::OrderStatus | 
+            IncomingMessages::ExecutionData | IncomingMessages::CommissionsReport |
+            IncomingMessages::CompletedOrder => {
+                self.send_order_update(&message).await;
+            }
+            _ => {}
+        }
+        
         // Use the common mapping function
         if let Some(channel_type) = map_incoming_to_outgoing(message_type) {
             let channels = self.shared_channels.read().await;
@@ -273,6 +290,19 @@ impl AsyncTcpMessageBus {
         }
 
         Ok(())
+    }
+    
+    /// Send message to order update stream if it exists
+    async fn send_order_update(&self, message: &ResponseMessage) -> bool {
+        let order_update_stream = self.order_update_stream.read().await;
+        if let Some(sender) = order_update_stream.as_ref() {
+            if let Err(e) = sender.send(message.clone()) {
+                warn!("error sending to order update stream: {e}");
+                return false;
+            }
+            return true;
+        }
+        false
     }
 
     /// Send a request to TWS
@@ -324,5 +354,19 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
             self.cleanup_sender.clone(),
             CleanupSignal::Order(order_id),
         )
+    }
+    
+    async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
+        let mut order_update_stream = self.order_update_stream.write().await;
+        
+        if order_update_stream.is_some() {
+            return Err(Error::AlreadySubscribed);
+        }
+        
+        let (sender, receiver) = mpsc::unbounded_channel();
+        
+        *order_update_stream = Some(sender);
+        
+        Ok(AsyncInternalSubscription::new(receiver))
     }
 }

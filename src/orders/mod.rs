@@ -1185,9 +1185,8 @@ pub use sync::{
     open_orders, order_update_stream, place_order, submit_order,
 };
 
-// TODO: Enable when async module is implemented
-// #[cfg(feature = "async")]
-// pub use r#async::{
-//     all_open_orders, auto_open_orders, cancel_order, completed_orders, executions, exercise_options, global_cancel, next_valid_order_id,
-//     open_orders, order_update_stream, place_order, submit_order,
-// };
+#[cfg(feature = "async")]
+pub use r#async::{
+    all_open_orders, auto_open_orders, cancel_order, completed_orders, executions, exercise_options, global_cancel, next_valid_order_id,
+    open_orders, order_update_stream, place_order, submit_order,
+};

@@ -185,4 +185,16 @@ impl AsyncMessageBus for MessageBusStub {
 
         AsyncInternalSubscription::new(receiver)
     }
+    
+    async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
+        let (sender, receiver) = mpsc::unbounded_channel();
+
+        // Send pre-configured response messages
+        for message in &self.response_messages {
+            let message = ResponseMessage::from(&message.replace('|', "\0"));
+            sender.send(message).unwrap();
+        }
+
+        Ok(AsyncInternalSubscription::new(receiver))
+    }
 }

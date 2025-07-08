@@ -91,6 +91,16 @@ path = "examples/async/market_data.rs"
 required-features = ["async"]
 
 [[example]]
+name = "async_order_update_stream"
+path = "examples/async/order_update_stream.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_place_order"
+path = "examples/async/place_order.rs"
+required-features = ["async"]
+
+[[example]]
 name = "async_realtime_bars"
 path = "examples/async/realtime_bars.rs"
 required-features = ["async"]
@@ -429,4 +439,24 @@ required-features = ["sync"]
 [[example]]
 name = "wsh_metadata"
 path = "examples/sync/wsh_metadata.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "capture_order_responses"
+required-features = ["sync"]
+
+[[example]]
+name = "capture_order_list_responses"
+required-features = ["sync"]
+
+[[example]]
+name = "parse_recorded_messages"
+required-features = ["sync"]
+
+[[example]]
+name = "capture_simple_responses"
+required-features = ["sync"]
+
+[[example]]
+name = "test_order_flow"
 required-features = ["sync"]
