@@ -1,14 +1,10 @@
 use super::common::{decoders, encoders, verify};
-use super::{
-    CancelOrder, ExerciseAction, ExerciseOptions, ExecutionFilter, Executions,
-    OrderUpdate, Orders, PlaceOrder,
-};
+use super::{CancelOrder, ExecutionFilter, Executions, ExerciseAction, ExerciseOptions, OrderUpdate, Orders, PlaceOrder};
 use crate::client::{DataStream, ResponseContext, Subscription};
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::{server_versions, Client, Error};
 use time::OffsetDateTime;
-
 
 impl DataStream<PlaceOrder> for PlaceOrder {
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<PlaceOrder, Error> {
@@ -297,12 +293,11 @@ mod tests {
     use std::sync::{Arc, RwLock};
 
     use crate::contracts::{contract_samples, Contract, SecurityType};
-    use crate::stubs::MessageBusStub;
     use crate::orders::{Action, Liquidity, Order};
+    use crate::stubs::MessageBusStub;
 
-    use crate::orders::common::order_builder;
     use super::*;
-
+    use crate::orders::common::order_builder;
 
     #[test]
     fn place_order() {

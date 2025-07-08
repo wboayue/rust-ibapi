@@ -155,7 +155,7 @@ impl Client {
     pub async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
         self.message_bus.create_order_update_subscription().await
     }
-    
+
     /// Send a message without expecting a response
     pub async fn send_message(&self, message: RequestMessage) -> Result<(), Error> {
         self.message_bus.send_request(message).await
@@ -1140,14 +1140,14 @@ impl Client {
     ///
     /// This function returns a subscription that will receive updates of activity for all orders placed by the client.
     /// Use this when you need a global view of all order activity, especially with submit_order().
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```no_run
     /// use futures::StreamExt;
     /// use ibapi::Client;
     /// use ibapi::orders::OrderUpdate;
-    /// 
+    ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
@@ -1182,12 +1182,12 @@ impl Client {
     /// * `order` - Order details
     ///
     /// # Examples
-    /// 
+    ///
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::contracts::{Contract, SecurityType};
     /// use ibapi::orders::order_builder;
-    /// 
+    ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
@@ -1209,7 +1209,7 @@ impl Client {
     }
 
     /// Submits an Order with a subscription for updates.
-    /// 
+    ///
     /// After the order is submitted correctly, events will be returned concerning the order's activity
     /// through the returned subscription.
     ///
@@ -1219,13 +1219,13 @@ impl Client {
     /// * `order` - Order details
     ///
     /// # Examples
-    /// 
+    ///
     /// ```no_run
     /// use futures::StreamExt;
     /// use ibapi::Client;
     /// use ibapi::contracts::{Contract, SecurityType};
     /// use ibapi::orders::{order_builder, PlaceOrder};
-    /// 
+    ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
@@ -1253,7 +1253,12 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub async fn place_order(&self, order_id: i32, contract: &crate::contracts::Contract, order: &crate::orders::Order) -> Result<Subscription<crate::orders::PlaceOrder>, Error> {
+    pub async fn place_order(
+        &self,
+        order_id: i32,
+        contract: &crate::contracts::Contract,
+        order: &crate::orders::Order,
+    ) -> Result<Subscription<crate::orders::PlaceOrder>, Error> {
         crate::orders::place_order(self, order_id, contract, order).await
     }
 

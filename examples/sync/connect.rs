@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Connect to Gateway at the default paper trading port
     let client = Client::connect("127.0.0.1:4002", 100)?;
-    
+
     println!("Connected successfully!");
     println!("Server version: {}", client.server_version());
     println!("Connection time: {:?}", client.connection_time());

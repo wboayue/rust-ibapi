@@ -1,6 +1,6 @@
 //! Captures raw responses for order listing operations (open orders, completed orders, executions)
 
-use ibapi::orders::{ExecutionFilter, Orders, Executions};
+use ibapi::orders::{ExecutionFilter, Executions, Orders};
 use ibapi::Client;
 use std::env;
 
@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test 1: Get open orders
     println!("\n=== Capturing Open Orders ===");
     let mut open_orders = client.open_orders()?;
-    
+
     let mut count = 0;
     for result in open_orders {
         match result {
@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    
+
     if count == 0 {
         println!("No open orders found");
     }
@@ -50,7 +50,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test 2: Get all open orders
     println!("\n\n=== Capturing All Open Orders ===");
     let mut all_orders = client.all_open_orders()?;
-    
+
     count = 0;
     for result in all_orders {
         match result {
@@ -65,7 +65,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Test 3: Get completed orders (if server version supports it)
-    if client.server_version() > 150 { // COMPLETED_ORDERS version
+    if client.server_version() > 150 {
+        // COMPLETED_ORDERS version
         println!("\n\n=== Capturing Completed Orders ===");
         match client.completed_orders(false) {
             Ok(mut completed) => {
@@ -90,7 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n\n=== Capturing Executions ===");
     let filter = ExecutionFilter::default();
     let mut executions = client.executions(filter)?;
-    
+
     count = 0;
     for result in executions {
         match result {
@@ -118,7 +119,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    
+
     if count == 0 {
         println!("No executions found");
     }

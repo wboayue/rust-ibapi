@@ -35,10 +35,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Parse the timestamp and message
         if let Some(pos) = line.find("] ") {
             let message = &line[pos + 2..];
-            
+
             // Convert null bytes to pipes for test format
             let formatted = message.replace('\0', "|");
-            
+
             // Try to identify the message type
             let parts: Vec<&str> = formatted.split('|').collect();
             if !parts.is_empty() {

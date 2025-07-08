@@ -185,7 +185,7 @@ impl AsyncMessageBus for MessageBusStub {
 
         AsyncInternalSubscription::new(receiver)
     }
-    
+
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
         let (sender, receiver) = mpsc::unbounded_channel();
 

@@ -1,5 +1,5 @@
 //! Example demonstrating how to use place_order() with per-order subscriptions
-//! 
+//!
 //! This example shows how to:
 //! 1. Place orders using place_order() which returns a subscription
 //! 2. Monitor order status through the individual order subscription
@@ -11,7 +11,7 @@ use ibapi::orders::{order_builder, place_order, PlaceOrder};
 use ibapi::Client;
 use std::error::Error;
 
-#[tokio::main] 
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
@@ -29,10 +29,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a limit order to buy 100 shares
     let order = order_builder::limit_order("BUY", 100.0, 150.0);
     let order_id = client.next_order_id();
-    
-    println!("Placing order {} for {} {} @ {}", 
-             order_id, order.total_quantity, contract.symbol, order.limit_price.unwrap());
-    
+
+    println!(
+        "Placing order {} for {} {} @ {}",
+        order_id,
+        order.total_quantity,
+        contract.symbol,
+        order.limit_price.unwrap()
+    );
+
     // Place the order and get a subscription for this specific order
     let mut order_subscription = place_order(&client, order_id, &contract, &order).await?;
     println!("Order placed successfully, monitoring updates...\n");
@@ -47,7 +52,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 println!("  Filled: {}", status.filled);
                 println!("  Remaining: {}", status.remaining);
                 println!("  Avg Fill Price: {}", status.average_fill_price);
-                
+
                 // Exit when order is filled or cancelled
                 if status.status == "Filled" || status.status == "Cancelled" {
                     println!("\nOrder completed with status: {}", status.status);
@@ -78,7 +83,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
             Ok(PlaceOrder::Message(notice)) => {
                 println!("Order Message: {} - {}", notice.code, notice.message);
-                
+
                 // Check for error messages that indicate order completion
                 if notice.code >= 200 && notice.code < 300 {
                     println!("Order rejected/cancelled");
@@ -92,27 +97,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
         println!("---");
     }
-    
+
     println!("\nExample demonstrating concurrent orders...\n");
-    
+
     // Example of handling multiple orders concurrently
     let order1 = order_builder::limit_order("BUY", 50.0, 149.0);
     let order_id1 = client.next_order_id();
-    
-    let order2 = order_builder::limit_order("SELL", 75.0, 151.0);  
+
+    let order2 = order_builder::limit_order("SELL", 75.0, 151.0);
     let order_id2 = client.next_order_id();
-    
+
     // Place both orders
     let subscription1 = place_order(&client, order_id1, &contract, &order1).await?;
     println!("Placed order {}", order_id1);
-    
+
     let subscription2 = place_order(&client, order_id2, &contract, &order2).await?;
     println!("Placed order {}", order_id2);
-    
+
     // Monitor both orders concurrently
     let handle1 = tokio::spawn(monitor_order(order_id1, subscription1));
     let handle2 = tokio::spawn(monitor_order(order_id2, subscription2));
-    
+
     // Wait for both to complete (or timeout after 30 seconds)
     tokio::select! {
         _ = handle1 => println!("Order {} monitoring complete", order_id1),
@@ -121,32 +126,35 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("Timeout waiting for orders");
         }
     }
-    
+
     println!("\nExample complete");
     Ok(())
 }
 
 async fn monitor_order(order_id: i32, mut subscription: ibapi::subscriptions::Subscription<PlaceOrder>) {
     println!("Starting monitor for order {}", order_id);
-    
+
     while let Some(update) = subscription.next().await {
         match update {
             Ok(PlaceOrder::OrderStatus(status)) => {
-                println!("[Order {}] Status: {} - Filled: {}/{}", 
-                         order_id, status.status, status.filled, 
-                         status.filled + status.remaining);
-                         
+                println!(
+                    "[Order {}] Status: {} - Filled: {}/{}",
+                    order_id,
+                    status.status,
+                    status.filled,
+                    status.filled + status.remaining
+                );
+
                 if status.status == "Filled" || status.status == "Cancelled" {
                     break;
                 }
             }
             Ok(PlaceOrder::ExecutionData(exec)) => {
-                println!("[Order {}] Executed: {} shares @ {}", 
-                         order_id, exec.shares, exec.price);
+                println!("[Order {}] Executed: {} shares @ {}", order_id, exec.shares, exec.price);
             }
             _ => {} // Ignore other updates for brevity
         }
     }
-    
+
     println!("Monitor for order {} complete", order_id);
 }

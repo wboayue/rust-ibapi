@@ -1,5 +1,5 @@
 //! Example demonstrating how to use order_update_stream() with submit_order()
-//! 
+//!
 //! This example shows how to:
 //! 1. Create a global order update stream that receives all order-related events
 //! 2. Submit orders using the fire-and-forget submit_order() method
@@ -7,11 +7,11 @@
 
 use futures::StreamExt;
 use ibapi::contracts::{Contract, SecurityType};
-use ibapi::orders::{order_builder, submit_order, order_update_stream, OrderUpdate};
+use ibapi::orders::{order_builder, order_update_stream, submit_order, OrderUpdate};
 use ibapi::Client;
 use std::error::Error;
 
-#[tokio::main] 
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Spawn a task to monitor all order updates
     let monitor_handle = tokio::spawn(async move {
         println!("Starting order update monitor...");
-        
+
         while let Some(update) = order_stream.next().await {
             match update {
                 Ok(OrderUpdate::OrderStatus(status)) => {
@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
             println!("---");
         }
-        
+
         println!("Order update monitor stopped");
     });
 
@@ -86,12 +86,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a limit order to buy 100 shares
     let order = order_builder::limit_order("BUY", 100.0, 150.0);
-    
+
     // Submit the order using fire-and-forget method
     let order_id = client.next_order_id();
-    println!("\nSubmitting order {} for {} {} @ {}", 
-             order_id, order.total_quantity, contract.symbol, order.limit_price.unwrap());
-    
+    println!(
+        "\nSubmitting order {} for {} {} @ {}",
+        order_id,
+        order.total_quantity,
+        contract.symbol,
+        order.limit_price.unwrap()
+    );
+
     submit_order(&client, order_id, &contract, &order).await?;
     println!("Order submitted successfully");
 
@@ -102,10 +107,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Submit another order
     let order_id2 = client.next_order_id();
     let order2 = order_builder::limit_order("SELL", 50.0, 160.0);
-    
-    println!("\nSubmitting order {} for {} {} @ {}", 
-             order_id2, order2.total_quantity, contract.symbol, order2.limit_price.unwrap());
-    
+
+    println!(
+        "\nSubmitting order {} for {} {} @ {}",
+        order_id2,
+        order2.total_quantity,
+        contract.symbol,
+        order2.limit_price.unwrap()
+    );
+
     submit_order(&client, order_id2, &contract, &order2).await?;
     println!("Order submitted successfully");
 
@@ -114,7 +124,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Cancel the monitoring task
     monitor_handle.abort();
-    
+
     println!("\nExample complete");
     Ok(())
 }

@@ -13,10 +13,10 @@ fn main() {
     env_logger::init();
 
     println!("Connecting to IB Gateway...");
-    
+
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     println!("Connected successfully!");
-    
+
     println!("\nRequesting account summary...");
     let tags = &[
         AccountSummaryTags::ACCOUNT_TYPE,
@@ -25,9 +25,7 @@ fn main() {
         AccountSummaryTags::BUYING_POWER,
     ];
 
-    let subscription = client
-        .account_summary("All", tags)
-        .expect("error requesting account summary");
+    let subscription = client.account_summary("All", tags).expect("error requesting account summary");
 
     for update in &subscription {
         match update {

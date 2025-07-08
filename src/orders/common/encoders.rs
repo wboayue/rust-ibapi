@@ -2,7 +2,7 @@ use time::OffsetDateTime;
 
 use crate::contracts::Contract;
 use crate::messages::{OutgoingMessages, RequestMessage};
-use crate::orders::{ExerciseAction, ExecutionFilter, Order, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
+use crate::orders::{ExecutionFilter, ExerciseAction, Order, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
 use crate::{server_versions, Error};
 
 pub(crate) fn encode_place_order(server_version: i32, order_id: i32, contract: &Contract, order: &Order) -> Result<RequestMessage, Error> {

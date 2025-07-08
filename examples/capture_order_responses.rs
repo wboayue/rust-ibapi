@@ -26,18 +26,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     contract.exchange = "CME".to_string();
     contract.currency = "USD".to_string();
     contract.local_symbol = "ESU5".to_string(); // September 2025 contract
-    
+
     let mut order = order_builder::limit_order(Action::Buy, 1.0, 5800.0); // 1 contract at $5800
     order.order_id = order_id;
 
     println!("\nPlacing order {} for 1 ESU5 contract at limit $5800...", order_id);
-    
+
     // Place the order and capture responses
     let subscription = client.place_order(order_id, &contract, &order)?;
-    
+
     println!("\nCapturing order responses:");
     let mut response_count = 0;
-    
+
     // Collect responses for a few seconds
     let start = std::time::Instant::now();
     while start.elapsed().as_secs() < 5 {
@@ -85,10 +85,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\n\nNow let's cancel the order and capture cancel responses:");
-    
+
     // Cancel the order
     let cancel_subscription = client.cancel_order(order_id, "")?;
-    
+
     let start = std::time::Instant::now();
     while start.elapsed().as_secs() < 3 {
         if let Some(msg) = cancel_subscription.try_next() {

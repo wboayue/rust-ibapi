@@ -1002,8 +1002,8 @@ pub fn peg_mid_order(
 
 #[cfg(test)]
 mod tests {
-    use crate::orders::{Action, Order, OrderComboLeg, TagValue, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
     use crate::orders::common::order_builder::*;
+    use crate::orders::{Action, Order, OrderComboLeg, TagValue, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
 
     /// Tests for basic order types like market, limit, and stop orders
     #[cfg(test)]

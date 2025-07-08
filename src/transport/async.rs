@@ -1,8 +1,8 @@
 //! Asynchronous transport implementation
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::mem;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use log::{debug, error, info, warn};
@@ -44,7 +44,7 @@ pub struct AsyncInternalSubscription {
 
 impl AsyncInternalSubscription {
     pub fn new(receiver: mpsc::UnboundedReceiver<ResponseMessage>) -> Self {
-        Self { 
+        Self {
             receiver,
             cleanup_sender: None,
             cleanup_signal: None,
@@ -52,7 +52,11 @@ impl AsyncInternalSubscription {
         }
     }
 
-    pub fn with_cleanup(receiver: mpsc::UnboundedReceiver<ResponseMessage>, cleanup_sender: mpsc::UnboundedSender<CleanupSignal>, cleanup_signal: CleanupSignal) -> Self {
+    pub fn with_cleanup(
+        receiver: mpsc::UnboundedReceiver<ResponseMessage>,
+        cleanup_sender: mpsc::UnboundedSender<CleanupSignal>,
+        cleanup_signal: CleanupSignal,
+    ) -> Self {
         Self {
             receiver,
             cleanup_sender: Some(cleanup_sender),
@@ -64,19 +68,19 @@ impl AsyncInternalSubscription {
     pub async fn next(&mut self) -> Option<ResponseMessage> {
         self.receiver.recv().await
     }
-    
+
     /// Extract the receiver for use in subscriptions (disables cleanup)
     pub fn take_receiver(mut self) -> mpsc::UnboundedReceiver<ResponseMessage> {
         // Disable cleanup by clearing the cleanup info - the subscription will now own the receiver
         self.cleanup_sender = None;
         self.cleanup_signal = None;
         self.cleanup_sent = true; // Mark as sent to prevent Drop from sending
-        
+
         // Create a dummy receiver to replace the original one
         let (_, dummy_receiver) = mpsc::unbounded_channel();
         mem::replace(&mut self.receiver, dummy_receiver)
     }
-    
+
     /// Manually send cleanup signal
     fn send_cleanup_signal(&mut self) {
         if !self.cleanup_sent {
@@ -116,7 +120,7 @@ impl AsyncTcpMessageBus {
     /// Create a new async TCP message bus
     pub fn new(connection: AsyncConnection) -> Result<Self, Error> {
         let (cleanup_sender, cleanup_receiver) = mpsc::unbounded_channel();
-        
+
         let message_bus = Self {
             connection: Arc::new(connection),
             request_channels: Arc::new(RwLock::new(HashMap::new())),
@@ -125,12 +129,12 @@ impl AsyncTcpMessageBus {
             order_update_stream: Arc::new(RwLock::new(None)),
             cleanup_sender,
         };
-        
+
         // Start cleanup task
         let request_channels = message_bus.request_channels.clone();
         let shared_channels = message_bus.shared_channels.clone();
         let order_channels = message_bus.order_channels.clone();
-        
+
         task::spawn(async move {
             let mut receiver = cleanup_receiver;
             while let Some(signal) = receiver.recv().await {
@@ -153,7 +157,7 @@ impl AsyncTcpMessageBus {
                 }
             }
         });
-        
+
         Ok(message_bus)
     }
 
@@ -261,7 +265,7 @@ impl AsyncTcpMessageBus {
     async fn route_to_order_channel(&self, order_id: i32, message: ResponseMessage) -> Result<(), Error> {
         // Send to order update stream if it exists
         self.send_order_update(&message).await;
-        
+
         let channels = self.order_channels.read().await;
         if let Some(sender) = channels.get(&order_id) {
             let _ = sender.send(message);
@@ -273,14 +277,16 @@ impl AsyncTcpMessageBus {
     async fn route_to_shared_channel(&self, message_type: IncomingMessages, message: ResponseMessage) -> Result<(), Error> {
         // Send order-related messages to order update stream
         match message_type {
-            IncomingMessages::OpenOrder | IncomingMessages::OrderStatus | 
-            IncomingMessages::ExecutionData | IncomingMessages::CommissionsReport |
-            IncomingMessages::CompletedOrder => {
+            IncomingMessages::OpenOrder
+            | IncomingMessages::OrderStatus
+            | IncomingMessages::ExecutionData
+            | IncomingMessages::CommissionsReport
+            | IncomingMessages::CompletedOrder => {
                 self.send_order_update(&message).await;
             }
             _ => {}
         }
-        
+
         // Use the common mapping function
         if let Some(channel_type) = map_incoming_to_outgoing(message_type) {
             let channels = self.shared_channels.read().await;
@@ -291,7 +297,7 @@ impl AsyncTcpMessageBus {
 
         Ok(())
     }
-    
+
     /// Send message to order update stream if it exists
     async fn send_order_update(&self, message: &ResponseMessage) -> bool {
         let order_update_stream = self.order_update_stream.read().await;
@@ -323,11 +329,7 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
         let mut channels = self.request_channels.write().await;
         channels.insert(request_id, sender);
 
-        AsyncInternalSubscription::with_cleanup(
-            receiver,
-            self.cleanup_sender.clone(),
-            CleanupSignal::Request(request_id),
-        )
+        AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), CleanupSignal::Request(request_id))
     }
 
     async fn subscribe_shared(&self, channel_type: OutgoingMessages) -> AsyncInternalSubscription {
@@ -336,11 +338,7 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
         let mut channels = self.shared_channels.write().await;
         channels.insert(channel_type, sender);
 
-        AsyncInternalSubscription::with_cleanup(
-            receiver,
-            self.cleanup_sender.clone(),
-            CleanupSignal::Shared(channel_type),
-        )
+        AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), CleanupSignal::Shared(channel_type))
     }
 
     async fn subscribe_order(&self, order_id: i32) -> AsyncInternalSubscription {
@@ -349,24 +347,20 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
         let mut channels = self.order_channels.write().await;
         channels.insert(order_id, sender);
 
-        AsyncInternalSubscription::with_cleanup(
-            receiver,
-            self.cleanup_sender.clone(),
-            CleanupSignal::Order(order_id),
-        )
+        AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), CleanupSignal::Order(order_id))
     }
-    
+
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
         let mut order_update_stream = self.order_update_stream.write().await;
-        
+
         if order_update_stream.is_some() {
             return Err(Error::AlreadySubscribed);
         }
-        
+
         let (sender, receiver) = mpsc::unbounded_channel();
-        
+
         *order_update_stream = Some(sender);
-        
+
         Ok(AsyncInternalSubscription::new(receiver))
     }
 }
