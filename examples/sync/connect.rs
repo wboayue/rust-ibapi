@@ -2,7 +2,7 @@
 //!
 //! To run this example:
 //! ```bash
-//! cargo run --example sync_connect
+//! cargo run --example connect
 //! ```
 //!
 //! Make sure TWS or IB Gateway is running with API connections enabled:
@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Next order ID: {}", client.next_order_id());
 
             // Keep the connection alive for a few seconds
-            std::thread::sleep(std::time::Duration::from_secs(5));
+            std::thread::sleep(std::time::Duration::from_secs(1));
 
             println!("Disconnecting...");
         }

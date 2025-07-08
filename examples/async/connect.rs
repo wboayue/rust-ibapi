@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Next order ID: {}", client.next_order_id());
 
             // Keep the connection alive for a few seconds
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
             println!("Disconnecting...");
         }
