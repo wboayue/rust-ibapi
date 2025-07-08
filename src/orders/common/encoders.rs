@@ -5,9 +5,6 @@ use crate::messages::{OutgoingMessages, RequestMessage};
 use crate::orders::{ExerciseAction, ExecutionFilter, Order, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
 use crate::{server_versions, Error};
 
-#[cfg(test)]
-mod tests;
-
 pub(crate) fn encode_place_order(server_version: i32, order_id: i32, contract: &Contract, order: &Order) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::default();
     let message_version = message_version_for(server_version);
@@ -551,4 +548,24 @@ pub(crate) fn encode_exercise_options(
     }
 
     Ok(message)
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+
+    #[test]
+    fn message_version_for() {
+        assert_eq!(super::message_version_for(server_versions::NOT_HELD), 45);
+        assert_eq!(super::message_version_for(server_versions::EXECUTION_DATA_CHAIN), 27);
+    }
+
+    #[test]
+    fn f64_max_to_zero() {
+        assert_eq!(super::f64_max_to_zero(Some(f64::MAX)), Some(0.0));
+        assert_eq!(super::f64_max_to_zero(Some(0.0)), Some(0.0));
+        assert_eq!(super::f64_max_to_zero(Some(50.0)), Some(50.0));
+    }
 }
