@@ -175,11 +175,11 @@ where
     where
         D: crate::subscriptions::AsyncDataStream<T> + 'static,
     {
-        // Send the request
-        self.client.message_bus.send_request(message).await?;
-
-        // Subscribe to the response channel
+        // Subscribe to the response channel first
         let subscription = self.client.message_bus.subscribe(request_id).await;
+
+        // Then send the request
+        self.client.message_bus.send_request(message).await?;
 
         // Create subscription with decoder
         Ok(Subscription::new_from_internal::<D>(subscription, Arc::new(self.client.clone())))
@@ -190,11 +190,11 @@ where
     where
         D: crate::subscriptions::AsyncDataStream<T> + 'static,
     {
-        // Send the request
-        self.client.message_bus.send_request(message).await?;
-
-        // Subscribe to the shared channel
+        // Subscribe to the shared channel first
         let subscription = self.client.message_bus.subscribe_shared(message_type).await;
+
+        // Then send the request
+        self.client.message_bus.send_request(message).await?;
 
         Ok(Subscription::new_from_internal::<D>(subscription, Arc::new(self.client.clone())))
     }

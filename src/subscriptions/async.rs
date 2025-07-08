@@ -44,7 +44,7 @@ impl<T> Subscription<T> {
     {
         Self {
             inner: SubscriptionInner::WithDecoder {
-                receiver: internal.receiver,
+                receiver: internal.take_receiver(),
                 decoder: Box::new(decoder),
                 client,
             },
