@@ -1,8 +1,8 @@
 use crate::{contracts::tick_types::TickType, contracts::SecurityType, messages::ResponseMessage, server_versions, Error};
 
-use super::{Contract, ContractDescription, ContractDetails, MarketRule, OptionChain, OptionComputation, PriceIncrement, TagValue};
+use super::super::{Contract, ContractDescription, ContractDetails, MarketRule, OptionChain, OptionComputation, PriceIncrement, TagValue};
 
-pub(super) fn decode_contract_details(server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails, Error> {
+pub(in crate::contracts) fn decode_contract_details(server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails, Error> {
     message.skip(); // message type
 
     let mut message_version = 8;
@@ -132,7 +132,7 @@ fn read_last_trade_date(contract: &mut ContractDetails, last_trade_date_or_contr
     Ok(())
 }
 
-pub(super) fn decode_contract_descriptions(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ContractDescription>, Error> {
+pub(in crate::contracts) fn decode_contract_descriptions(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ContractDescription>, Error> {
     message.skip(); // message type
 
     let _request_id = message.next_int()?;
@@ -174,7 +174,7 @@ pub(super) fn decode_contract_descriptions(server_version: i32, message: &mut Re
     Ok(contract_descriptions)
 }
 
-pub(super) fn decode_market_rule(message: &mut ResponseMessage) -> Result<MarketRule, Error> {
+pub(in crate::contracts) fn decode_market_rule(message: &mut ResponseMessage) -> Result<MarketRule, Error> {
     message.skip(); // message type
 
     let mut market_rule = MarketRule {
@@ -240,7 +240,7 @@ fn next_optional_double(message: &mut ResponseMessage, none_value: f64) -> Resul
     }
 }
 
-pub(super) fn decode_option_chain(message: &mut ResponseMessage) -> Result<OptionChain, Error> {
+pub(in crate::contracts) fn decode_option_chain(message: &mut ResponseMessage) -> Result<OptionChain, Error> {
     message.skip(); // message type
     message.skip(); // request id
 

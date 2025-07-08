@@ -1,5 +1,5 @@
-use super::Contract;
-use super::SecurityType;
+use super::super::Contract;
+use super::super::SecurityType;
 use crate::messages::OutgoingMessages;
 use crate::messages::RequestMessage;
 use crate::{server_versions, Error};
@@ -153,7 +153,7 @@ pub(crate) fn encode_cancel_option_computation(message_type: OutgoingMessages, r
     Ok(message)
 }
 
-pub(super) fn encode_request_option_chain(
+pub(in crate::contracts) fn encode_request_option_chain(
     request_id: i32,
     symbol: &str,
     exchange: &str,

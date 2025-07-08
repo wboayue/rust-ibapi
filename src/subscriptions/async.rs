@@ -18,6 +18,10 @@ pub trait AsyncDataStream<T> {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[];
 
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<T, Error>;
+    
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: &crate::client::builders::ResponseContext) -> Result<crate::messages::RequestMessage, Error> {
+        Err(Error::NotImplemented)
+    }
 }
 
 /// Asynchronous subscription for streaming data

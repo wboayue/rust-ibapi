@@ -1,4 +1,4 @@
-use crate::contracts::decoders::decode_option_computation;
+use crate::contracts::decode_option_computation;
 use crate::contracts::OptionComputation;
 use crate::Error;
 use crate::{messages::ResponseMessage, server_versions};
