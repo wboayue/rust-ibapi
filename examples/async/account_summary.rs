@@ -15,11 +15,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Connecting to IB Gateway...");
 
-    // Connect to Gateway
     let client = Client::connect("127.0.0.1:4002", 100).await?;
     println!("Connected successfully!");
 
-    // Request account summary for all accounts
     println!("\nRequesting account summary...");
     let tags = &[
         AccountSummaryTags::ACCOUNT_TYPE,
@@ -30,12 +28,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut subscription = client.account_summary("All", tags).await?;
 
-    // Process account summary updates
     while let Some(result) = subscription.next().await {
         match result {
             Ok(update) => match update {
                 AccountSummaries::Summary(summary) => {
-                    println!("Account {}: {} = {} {}", summary.account, summary.tag, summary.value, summary.currency);
+                    if summary.currency.is_empty() {
+                        println!("Account {}: {} = {}", summary.account, summary.tag, summary.value);
+                    } else {
+                        println!("Account {}: {} = {} {}", summary.account, summary.tag, summary.value, summary.currency);
+                    }
                 }
                 AccountSummaries::End => {
                     println!("Account summary complete.");

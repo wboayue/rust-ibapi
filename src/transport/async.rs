@@ -66,8 +66,11 @@ impl AsyncInternalSubscription {
     
     /// Extract the receiver for use in subscriptions (disables cleanup)
     pub fn take_receiver(mut self) -> mpsc::UnboundedReceiver<ResponseMessage> {
-        // Send cleanup signal now since we're taking ownership of the receiver
-        self.send_cleanup_signal();
+        // Disable cleanup by clearing the cleanup info - the subscription will now own the receiver
+        self.cleanup_sender = None;
+        self.cleanup_signal = None;
+        self.cleanup_sent = true; // Mark as sent to prevent Drop from sending
+        
         // Create a dummy receiver to replace the original one
         let (_, dummy_receiver) = mpsc::unbounded_channel();
         mem::replace(&mut self.receiver, dummy_receiver)

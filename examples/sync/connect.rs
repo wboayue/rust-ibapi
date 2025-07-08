@@ -16,40 +16,25 @@ use ibapi::Client;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
-    println!("Attempting to connect to IB Gateway...");
+    println!("Connecting to IB Gateway...");
 
     // Connect to Gateway at the default paper trading port
-    match Client::connect("127.0.0.1:4002", 100) {
-        Ok(client) => {
-            println!("Connected successfully!");
-            println!("Server version: {}", client.server_version());
-            println!("Connection time: {:?}", client.connection_time());
-            println!("Next order ID: {}", client.next_order_id());
+    let client = Client::connect("127.0.0.1:4002", 100)?;
+    
+    println!("Connected successfully!");
+    println!("Server version: {}", client.server_version());
+    println!("Connection time: {:?}", client.connection_time());
+    println!("Next order ID: {}", client.next_order_id());
 
-            // Keep the connection alive for a few seconds
-            std::thread::sleep(std::time::Duration::from_secs(1));
-
-            println!("Disconnecting...");
-        }
-        Err(e) => {
-            eprintln!("Failed to connect: {}", e);
-            eprintln!("Make sure IB Gateway is running and API connections are enabled.");
-            eprintln!("Check that the port (4002 for paper, 4001 for live) is correct.");
-            
-            // Try alternative port
-            println!("\nTrying alternative port 4001 (live trading)...");
-            match Client::connect("127.0.0.1:4001", 100) {
-                Ok(client) => {
-                    println!("Connected successfully to port 4001!");
-                    println!("Server version: {}", client.server_version());
-                }
-                Err(e2) => {
-                    eprintln!("Failed to connect to port 4001: {}", e2);
-                    eprintln!("Both ports failed. IB Gateway/TWS may not be running.");
-                }
-            }
-        }
+    // Get server time to verify connection is working
+    match client.server_time() {
+        Ok(time) => println!("Server time: {}", time),
+        Err(e) => eprintln!("Failed to get server time: {}", e),
     }
 
+    // Keep the connection alive for a moment
+    std::thread::sleep(std::time::Duration::from_secs(1));
+
+    println!("Disconnecting...");
     Ok(())
 }

@@ -9,7 +9,7 @@
 //! - For Gateway: Configure -> Settings -> API -> Settings
 //! - Enable "Enable ActiveX and Socket Clients"
 //! - Add "127.0.0.1" to "Trusted IPs"
-//! - Default ports: 4002 (live), 4004 (paper)
+//! - Default ports: 4001 (live), 4002 (paper)
 
 use ibapi::Client;
 
@@ -17,27 +17,25 @@ use ibapi::Client;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
-    println!("Attempting to connect to IB Gateway...");
+    println!("Connecting to IB Gateway...");
 
     // Connect to Gateway at the default paper trading port
-    match Client::connect("127.0.0.1:4002", 100).await {
-        Ok(client) => {
-            println!("Connected successfully!");
-            println!("Server version: {}", client.server_version());
-            println!("Connection time: {:?}", client.connection_time());
-            println!("Next order ID: {}", client.next_order_id());
+    let client = Client::connect("127.0.0.1:4002", 100).await?;
+    
+    println!("Connected successfully!");
+    println!("Server version: {}", client.server_version());
+    println!("Connection time: {:?}", client.connection_time());
+    println!("Next order ID: {}", client.next_order_id());
 
-            // Keep the connection alive for a few seconds
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-            println!("Disconnecting...");
-        }
-        Err(e) => {
-            eprintln!("Failed to connect: {}", e);
-            eprintln!("Make sure IB Gateway is running and API connections are enabled.");
-            eprintln!("Check that the port (4002 for live, 4004 for paper) is correct.");
-        }
+    // Get server time to verify connection is working
+    match client.server_time().await {
+        Ok(time) => println!("Server time: {}", time),
+        Err(e) => eprintln!("Failed to get server time: {}", e),
     }
 
+    // Keep the connection alive for a moment
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    println!("Disconnecting...");
     Ok(())
 }
