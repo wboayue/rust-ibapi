@@ -5,7 +5,7 @@ use crate::{
     server_versions, Error,
 };
 
-pub(super) fn encode_request_news_providers() -> Result<RequestMessage, Error> {
+pub(in crate::news) fn encode_request_news_providers() -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
 
     message.push_field(&OutgoingMessages::RequestNewsProviders);
@@ -13,7 +13,7 @@ pub(super) fn encode_request_news_providers() -> Result<RequestMessage, Error> {
     Ok(message)
 }
 
-pub(super) fn encode_request_news_bulletins(all_messages: bool) -> Result<RequestMessage, Error> {
+pub(in crate::news) fn encode_request_news_bulletins(all_messages: bool) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::new();
@@ -25,7 +25,7 @@ pub(super) fn encode_request_news_bulletins(all_messages: bool) -> Result<Reques
     Ok(message)
 }
 
-pub(super) fn encode_cancel_news_bulletin() -> Result<RequestMessage, Error> {
+pub(in crate::news) fn encode_cancel_news_bulletin() -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::new();
@@ -36,7 +36,7 @@ pub(super) fn encode_cancel_news_bulletin() -> Result<RequestMessage, Error> {
     Ok(message)
 }
 
-pub(super) fn encode_request_historical_news(
+pub(in crate::news) fn encode_request_historical_news(
     server_version: i32,
     request_id: i32,
     contract_id: i32,
@@ -61,7 +61,7 @@ pub(super) fn encode_request_historical_news(
     Ok(message)
 }
 
-pub(super) fn encode_request_news_article(
+pub(in crate::news) fn encode_request_news_article(
     server_version: i32,
     request_id: i32,
     provider_code: &str,

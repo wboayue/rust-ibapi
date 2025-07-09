@@ -48,12 +48,11 @@ pub mod errors;
 /// APIs for retrieving market data
 pub mod market_data;
 mod messages;
-#[cfg(all(feature = "sync", not(feature = "async")))]
+/// APIs for retrieving news data including articles, bulletins, and providers
 pub mod news;
 /// Data types for building and placing orders.
 pub mod orders;
 /// APIs for working with the market scanner.
-#[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod scanner;
 /// APIs for working with Wall Street Horizon: Earnings Calendar & Event Data.
 pub mod wsh;

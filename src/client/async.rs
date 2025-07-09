@@ -92,13 +92,18 @@ impl Client {
         self.connection_time
     }
 
+    /// Returns the ID assigned to the [Client].
+    pub fn client_id(&self) -> i32 {
+        self.client_id
+    }
+
     /// Returns the next order ID
     pub fn next_order_id(&self) -> i32 {
         self.id_manager.next_order_id()
     }
 
     /// Returns the next request ID
-    pub(crate) fn next_request_id(&self) -> i32 {
+    pub fn next_request_id(&self) -> i32 {
         self.id_manager.next_request_id()
     }
 
@@ -746,6 +751,30 @@ impl Client {
     /// ```
     pub async fn market_depth_exchanges(&self) -> Result<Vec<crate::market_data::realtime::DepthMarketDataDescription>, Error> {
         crate::market_data::realtime::market_depth_exchanges(self).await
+    }
+
+    /// Switches market data type returned from market data request.
+    ///
+    /// # Arguments
+    /// * `market_data_type` - Type of market data to retrieve.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::market_data::{MarketDataType};
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let market_data_type = MarketDataType::Live;
+    ///     client.switch_market_data_type(market_data_type).await.expect("request failed");
+    ///     println!("market data switched: {:?}", market_data_type);
+    /// }
+    /// ```
+    pub async fn switch_market_data_type(&self, market_data_type: crate::market_data::MarketDataType) -> Result<(), Error> {
+        crate::market_data::switch_market_data_type(self, market_data_type).await
     }
 
     /// Returns the timestamp of earliest available historical data for a contract and data type.
@@ -1538,6 +1567,272 @@ impl Client {
         manual_order_time: Option<OffsetDateTime>,
     ) -> Result<Subscription<crate::orders::ExerciseOptions>, Error> {
         crate::orders::exercise_options(self, contract, exercise_action, exercise_quantity, account, ovrd, manual_order_time).await
+    }
+
+    // === News Management ===
+
+    /// Requests available news providers.
+    ///
+    /// Returns a list of news providers that the user has subscribed to.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let providers = client.news_providers().await.expect("request failed");
+    ///     for provider in providers {
+    ///         println!("{} - {}", provider.code, provider.name);
+    ///     }
+    /// }
+    /// ```
+    pub async fn news_providers(&self) -> Result<Vec<crate::news::NewsProvider>, Error> {
+        crate::news::news_providers(self).await
+    }
+
+    /// Subscribes to IB News Bulletins.
+    ///
+    /// # Arguments
+    /// * `all_messages` - If true, returns all messages including exchange availability
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use futures::StreamExt;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let mut bulletins = client.news_bulletins(true).await.expect("request failed");
+    ///     while let Some(result) = bulletins.next().await {
+    ///         match result {
+    ///             Ok(bulletin) => println!("{}: {}", bulletin.exchange, bulletin.message),
+    ///             Err(e) => eprintln!("Error: {}", e),
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn news_bulletins(&self, all_messages: bool) -> Result<Subscription<crate::news::NewsBulletin>, Error> {
+        crate::news::news_bulletins(self, all_messages).await
+    }
+
+    /// Requests historical news headlines.
+    ///
+    /// # Arguments
+    /// * `contract_id` - Contract ID to get news for
+    /// * `provider_codes` - List of provider codes to filter by
+    /// * `start_time` - Start of the time period
+    /// * `end_time` - End of the time period
+    /// * `total_results` - Maximum number of headlines to return
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use futures::StreamExt;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let contract_id = 265598; // AAPL
+    ///     let providers = &["BRFG", "DJNL"];
+    ///     let end_time = time::OffsetDateTime::now_utc();
+    ///     let start_time = end_time - time::Duration::days(7);
+    ///     
+    ///     let mut news = client
+    ///         .historical_news(contract_id, providers, start_time, end_time, 100)
+    ///         .await
+    ///         .expect("request failed");
+    ///         
+    ///     while let Some(result) = news.next().await {
+    ///         match result {
+    ///             Ok(article) => println!("{}: {}", article.time, article.headline),
+    ///             Err(e) => eprintln!("Error: {}", e),
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn historical_news(
+        &self,
+        contract_id: i32,
+        provider_codes: &[&str],
+        start_time: OffsetDateTime,
+        end_time: OffsetDateTime,
+        total_results: u8,
+    ) -> Result<Subscription<crate::news::NewsArticle>, Error> {
+        crate::news::historical_news(self, contract_id, provider_codes, start_time, end_time, total_results).await
+    }
+
+    /// Requests the body of a news article.
+    ///
+    /// # Arguments
+    /// * `provider_code` - The news provider code
+    /// * `article_id` - The article ID
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let article = client.news_article("BRFG", "BRFG$12345").await.expect("request failed");
+    ///     println!("Article type: {:?}", article.article_type);
+    ///     println!("Content: {}", article.article_text);
+    /// }
+    /// ```
+    pub async fn news_article(&self, provider_code: &str, article_id: &str) -> Result<crate::news::NewsArticleBody, Error> {
+        crate::news::news_article(self, provider_code, article_id).await
+    }
+
+    /// Subscribes to real-time news for a specific contract.
+    ///
+    /// # Arguments
+    /// * `contract` - The contract to monitor
+    /// * `provider_codes` - List of provider codes to subscribe to
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    /// use futures::StreamExt;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let contract = Contract::stock("AAPL");
+    ///     let providers = &["BRFG", "DJNL"];
+    ///     
+    ///     let mut news = client.contract_news(&contract, providers).await.expect("request failed");
+    ///     while let Some(result) = news.next().await {
+    ///         match result {
+    ///             Ok(article) => println!("{}: {}", article.time, article.headline),
+    ///             Err(e) => eprintln!("Error: {}", e),
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn contract_news(
+        &self,
+        contract: &crate::contracts::Contract,
+        provider_codes: &[&str],
+    ) -> Result<Subscription<crate::news::NewsArticle>, Error> {
+        crate::news::contract_news(self, contract, provider_codes).await
+    }
+
+    /// Subscribes to broad tape news from a specific provider.
+    ///
+    /// # Arguments
+    /// * `provider_code` - The news provider code
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use futures::StreamExt;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let mut news = client.broad_tape_news("BRFG").await.expect("request failed");
+    ///     while let Some(result) = news.next().await {
+    ///         match result {
+    ///             Ok(article) => println!("{}: {}", article.time, article.headline),
+    ///             Err(e) => eprintln!("Error: {}", e),
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn broad_tape_news(&self, provider_code: &str) -> Result<Subscription<crate::news::NewsArticle>, Error> {
+        crate::news::broad_tape_news(self, provider_code).await
+    }
+
+    // === Scanner ===
+
+    /// Requests scanner parameters available in TWS.
+    ///
+    /// Returns an XML string containing all available scanner parameters including
+    /// scan types, locations, instruments, and filters.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let xml = client.scanner_parameters().await.expect("request failed");
+    ///     println!("Scanner parameters XML: {} bytes", xml.len());
+    /// }
+    /// ```
+    pub async fn scanner_parameters(&self) -> Result<String, Error> {
+        crate::scanner::scanner_parameters(self).await
+    }
+
+    /// Starts a subscription to market scanner results.
+    ///
+    /// Scans the market based on the specified criteria and returns matching contracts.
+    ///
+    /// # Arguments
+    /// * `subscription` - Scanner subscription parameters defining the scan criteria
+    /// * `filter` - Additional filters to apply to the scan
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::scanner::ScannerSubscription;
+    /// use futures::StreamExt;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     let subscription = ScannerSubscription {
+    ///         number_of_rows: 10,
+    ///         instrument: Some("STK".to_string()),
+    ///         location_code: Some("STK.US.MAJOR".to_string()),
+    ///         scan_code: Some("TOP_PERC_GAIN".to_string()),
+    ///         above_price: Some(5.0),
+    ///         ..Default::default()
+    ///     };
+    ///     
+    ///     let mut scanner = client.scanner_subscription(&subscription, &vec![]).await
+    ///         .expect("request failed");
+    ///         
+    ///     while let Some(result) = scanner.next().await {
+    ///         match result {
+    ///             Ok(data_list) => {
+    ///                 for data in data_list {
+    ///                     println!("Rank {}: {}", data.rank, 
+    ///                              data.contract_details.contract.symbol);
+    ///                 }
+    ///             }
+    ///             Err(e) => eprintln!("Error: {}", e),
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn scanner_subscription(
+        &self,
+        subscription: &crate::scanner::ScannerSubscription,
+        filter: &Vec<crate::orders::TagValue>,
+    ) -> Result<Subscription<Vec<crate::scanner::ScannerData>>, Error> {
+        crate::scanner::scanner_subscription(self, subscription, filter).await
     }
 
     /// Creates a stubbed client for testing

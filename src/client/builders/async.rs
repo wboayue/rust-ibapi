@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use super::common::ResponseContext;
 use crate::client::r#async::Client;
 use crate::errors::Error;
 use crate::messages::{OutgoingMessages, RequestMessage};
@@ -155,6 +156,7 @@ impl<'a> MessageBuilder<'a> {
 /// Builder for creating subscriptions with consistent patterns
 pub(crate) struct SubscriptionBuilder<'a, T> {
     client: &'a Client,
+    context: ResponseContext,
     _phantom: PhantomData<T>,
 }
 
@@ -166,8 +168,21 @@ where
     pub fn new(client: &'a Client) -> Self {
         Self {
             client,
+            context: ResponseContext::default(),
             _phantom: PhantomData,
         }
+    }
+
+    /// Sets the response context
+    pub fn with_context(mut self, context: ResponseContext) -> Self {
+        self.context = context;
+        self
+    }
+
+    /// Sets smart depth flag in the context
+    pub fn with_smart_depth(mut self, is_smart_depth: bool) -> Self {
+        self.context.is_smart_depth = is_smart_depth;
+        self
     }
 
     /// Sends a request with a specific request ID and builds the subscription
@@ -182,7 +197,14 @@ where
         self.client.message_bus.send_request(message).await?;
 
         // Create subscription with decoder
-        Ok(Subscription::new_from_internal::<D>(subscription, Arc::new(self.client.clone())))
+        Ok(Subscription::new_from_internal::<D>(
+            subscription,
+            Arc::new(self.client.clone()),
+            Some(request_id),
+            None,
+            None,
+            self.context,
+        ))
     }
 
     /// Sends a shared request (no ID) and builds the subscription
@@ -196,7 +218,14 @@ where
         // Then send the request
         self.client.message_bus.send_request(message).await?;
 
-        Ok(Subscription::new_from_internal::<D>(subscription, Arc::new(self.client.clone())))
+        Ok(Subscription::new_from_internal::<D>(
+            subscription,
+            Arc::new(self.client.clone()),
+            None,
+            None,
+            Some(message_type),
+            self.context,
+        ))
     }
 
     /// Sends an order request and builds the subscription
@@ -210,7 +239,14 @@ where
         // Subscribe to the order channel
         let subscription = self.client.message_bus.subscribe_order(order_id).await;
 
-        Ok(Subscription::new_from_internal::<D>(subscription, Arc::new(self.client.clone())))
+        Ok(Subscription::new_from_internal::<D>(
+            subscription,
+            Arc::new(self.client.clone()),
+            None,
+            Some(order_id),
+            None,
+            self.context,
+        ))
     }
 }
 

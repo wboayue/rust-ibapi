@@ -2,19 +2,16 @@ use crate::contracts::SecurityType;
 use crate::messages::ResponseMessage;
 use crate::Error;
 
-use super::ScannerData;
+use super::super::ScannerData;
 
-#[cfg(test)]
-mod tests;
-
-pub(super) fn decode_scanner_parameters(mut message: ResponseMessage) -> Result<String, Error> {
+pub(in crate::scanner) fn decode_scanner_parameters(mut message: ResponseMessage) -> Result<String, Error> {
     message.skip(); // skip message type
     message.skip(); // skip message version
 
     message.next_string()
 }
 
-pub(super) fn decode_scanner_data(mut message: ResponseMessage) -> Result<Vec<ScannerData>, Error> {
+pub(in crate::scanner) fn decode_scanner_data(mut message: ResponseMessage) -> Result<Vec<ScannerData>, Error> {
     message.skip(); // skip message type
     message.skip(); // skip message version
     message.skip(); // request id

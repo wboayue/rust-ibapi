@@ -160,7 +160,7 @@ impl AsyncDataStream<ExerciseOptions> for ExerciseOptions {
 /// This function returns a subscription that will receive updates of activity for all orders placed by the client.
 pub async fn order_update_stream(client: &Client) -> Result<Subscription<OrderUpdate>, Error> {
     let internal_subscription = client.create_order_update_subscription().await?;
-    Ok(Subscription::new_from_internal::<OrderUpdate>(
+    Ok(Subscription::new_from_internal_simple::<OrderUpdate>(
         internal_subscription,
         Arc::new(client.clone()),
     ))
@@ -203,7 +203,7 @@ pub async fn place_order(client: &Client, order_id: i32, contract: &Contract, or
     let request = encoders::encode_place_order(client.server_version(), order_id, contract, order)?;
     let internal_subscription = client.send_order(order_id, request).await?;
 
-    Ok(Subscription::new_from_internal::<PlaceOrder>(
+    Ok(Subscription::new_from_internal_simple::<PlaceOrder>(
         internal_subscription,
         Arc::new(client.clone()),
     ))
@@ -218,7 +218,7 @@ pub async fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_ti
     let request = encoders::encode_cancel_order(client.server_version(), order_id, manual_order_cancel_time)?;
     let internal_subscription = client.send_order(order_id, request).await?;
 
-    Ok(Subscription::new_from_internal::<CancelOrder>(
+    Ok(Subscription::new_from_internal_simple::<CancelOrder>(
         internal_subscription,
         Arc::new(client.clone()),
     ))
@@ -260,7 +260,7 @@ pub async fn completed_orders(client: &Client, api_only: bool) -> Result<Subscri
     let request = encoders::encode_completed_orders(api_only)?;
 
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestCompletedOrders, request).await?;
-    Ok(Subscription::new_from_internal::<Orders>(internal_subscription, Arc::new(client.clone())))
+    Ok(Subscription::new_from_internal_simple::<Orders>(internal_subscription, Arc::new(client.clone())))
 }
 
 /// Requests all open orders places by this specific API client (identified by the API client id).
@@ -272,7 +272,7 @@ pub async fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error>
     let request = encoders::encode_open_orders()?;
 
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestOpenOrders, request).await?;
-    Ok(Subscription::new_from_internal::<Orders>(internal_subscription, Arc::new(client.clone())))
+    Ok(Subscription::new_from_internal_simple::<Orders>(internal_subscription, Arc::new(client.clone())))
 }
 
 /// Requests all *current* open orders in associated accounts at the current moment.
@@ -281,7 +281,7 @@ pub async fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Er
     let request = encoders::encode_all_open_orders()?;
 
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestAllOpenOrders, request).await?;
-    Ok(Subscription::new_from_internal::<Orders>(internal_subscription, Arc::new(client.clone())))
+    Ok(Subscription::new_from_internal_simple::<Orders>(internal_subscription, Arc::new(client.clone())))
 }
 
 /// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
@@ -289,7 +289,7 @@ pub async fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscr
     let request = encoders::encode_auto_open_orders(auto_bind)?;
 
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request).await?;
-    Ok(Subscription::new_from_internal::<Orders>(internal_subscription, Arc::new(client.clone())))
+    Ok(Subscription::new_from_internal_simple::<Orders>(internal_subscription, Arc::new(client.clone())))
 }
 
 /// Requests current day's (since midnight) executions matching the filter.
@@ -304,7 +304,7 @@ pub async fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subs
     let request_id = client.next_request_id();
     let request = encoders::encode_executions(client.server_version(), request_id, &filter)?;
     let internal_subscription = client.send_request(request_id, request).await?;
-    Ok(Subscription::new_from_internal::<Executions>(
+    Ok(Subscription::new_from_internal_simple::<Executions>(
         internal_subscription,
         Arc::new(client.clone()),
     ))
@@ -331,7 +331,7 @@ pub async fn exercise_options(
         manual_order_time,
     )?;
     let internal_subscription = client.send_request(request_id, request).await?;
-    Ok(Subscription::new_from_internal::<ExerciseOptions>(
+    Ok(Subscription::new_from_internal_simple::<ExerciseOptions>(
         internal_subscription,
         Arc::new(client.clone()),
     ))

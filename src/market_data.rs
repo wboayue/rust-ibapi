@@ -32,6 +32,16 @@ pub(crate) fn switch_market_data_type(client: &Client, market_data_type: MarketD
     Ok(())
 }
 
+#[cfg(feature = "async")]
+pub(crate) async fn switch_market_data_type(client: &crate::client::r#async::Client, market_data_type: MarketDataType) -> Result<(), Error> {
+    client.check_server_version(server_versions::REQ_MARKET_DATA_TYPE, "It does not support market data type requests.")?;
+
+    let message = encoders::encode_request_market_data_type(market_data_type)?;
+    client.send_message(message).await?;
+
+    Ok(())
+}
+
 mod encoders {
     use crate::messages::{OutgoingMessages, RequestMessage};
     use crate::Error;

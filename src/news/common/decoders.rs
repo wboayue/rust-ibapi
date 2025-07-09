@@ -4,10 +4,11 @@ use time::macros::format_description;
 use time::{OffsetDateTime, PrimitiveDateTime};
 use time_tz::{timezones, PrimitiveDateTimeExt, Tz};
 
-use super::{ArticleType, Error, NewsArticle, NewsArticleBody, NewsBulletin, NewsProvider};
+use super::super::{ArticleType, NewsArticle, NewsArticleBody, NewsBulletin, NewsProvider};
 use crate::messages::ResponseMessage;
+use crate::Error;
 
-pub(super) fn decode_news_providers(mut message: ResponseMessage) -> Result<Vec<NewsProvider>, Error> {
+pub(in crate::news) fn decode_news_providers(mut message: ResponseMessage) -> Result<Vec<NewsProvider>, Error> {
     message.skip(); // message type
 
     let num_providers = message.next_int()?;
@@ -23,7 +24,7 @@ pub(super) fn decode_news_providers(mut message: ResponseMessage) -> Result<Vec<
     Ok(news_providers)
 }
 
-pub(super) fn decode_news_bulletin(mut message: ResponseMessage) -> Result<NewsBulletin, Error> {
+pub(in crate::news) fn decode_news_bulletin(mut message: ResponseMessage) -> Result<NewsBulletin, Error> {
     message.skip(); // message type
     message.skip(); // message version
 
@@ -35,7 +36,7 @@ pub(super) fn decode_news_bulletin(mut message: ResponseMessage) -> Result<NewsB
     })
 }
 
-pub(super) fn decode_historical_news(_time_zone: Option<&'static Tz>, mut message: ResponseMessage) -> Result<NewsArticle, Error> {
+pub(in crate::news) fn decode_historical_news(_time_zone: Option<&'static Tz>, mut message: ResponseMessage) -> Result<NewsArticle, Error> {
     message.skip(); // message type
     message.skip(); // request id
 
@@ -58,7 +59,7 @@ fn parse_time_as_utc(time: &str) -> OffsetDateTime {
     time.assume_timezone(timezones::db::UTC).unwrap()
 }
 
-pub(super) fn decode_news_article(mut message: ResponseMessage) -> Result<NewsArticleBody, Error> {
+pub(in crate::news) fn decode_news_article(mut message: ResponseMessage) -> Result<NewsArticleBody, Error> {
     message.skip(); // message type
     message.skip(); // request id
 
@@ -68,7 +69,7 @@ pub(super) fn decode_news_article(mut message: ResponseMessage) -> Result<NewsAr
     })
 }
 
-pub(super) fn decode_tick_news(mut message: ResponseMessage) -> Result<NewsArticle, Error> {
+pub(in crate::news) fn decode_tick_news(mut message: ResponseMessage) -> Result<NewsArticle, Error> {
     message.skip(); // message type
     message.skip(); // request id
 

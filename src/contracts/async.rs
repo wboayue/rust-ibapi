@@ -247,7 +247,7 @@ pub async fn option_chain(
     let request = encoders::encode_request_option_chain(request_id, symbol, exchange, security_type, contract_id)?;
     let internal_subscription = client.send_request(request_id, request).await?;
 
-    Ok(Subscription::new_from_internal::<OptionChain>(
+    Ok(Subscription::new_from_internal_simple::<OptionChain>(
         internal_subscription,
         Arc::new(client.clone()),
     ))
