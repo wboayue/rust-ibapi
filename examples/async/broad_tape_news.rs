@@ -9,17 +9,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::connect("127.0.0.1:4002", 100).await?;
 
     println!("=== Subscribing to Broad Tape News ===");
-    
+
     // Subscribe to a specific news provider's broad tape
     let provider_code = "BRFG"; // Briefing.com example
-    
+
     println!("Subscribing to broad tape news from provider: {}", provider_code);
-    
+
     let mut news_stream = client.broad_tape_news(provider_code).await?;
-    
+
     println!("Waiting for broad tape news... (Press Ctrl+C to stop)");
     println!("Note: This will show all news from the provider, not limited to specific contracts");
-    
+
     while let Some(result) = news_stream.next().await {
         match result {
             Ok(article) => {

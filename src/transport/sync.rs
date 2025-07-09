@@ -785,7 +785,7 @@ mod tests {
     use std::sync::Arc;
 
     // Test helper function for encoding contract data requests
-    fn encode_request_contract_data(server_version: i32, request_id: i32, contract: &Contract) -> Result<RequestMessage, Error> {
+    fn encode_request_contract_data(_server_version: i32, request_id: i32, contract: &Contract) -> Result<RequestMessage, Error> {
         const VERSION: i32 = 8;
 
         let mut packet = RequestMessage::default();
@@ -805,6 +805,10 @@ mod tests {
         packet.push_field(&contract.local_symbol);
         packet.push_field(&contract.trading_class);
         packet.push_field(&contract.include_expired);
+
+        // Server version 173 includes security_id fields (>= 45)
+        packet.push_field(&contract.security_id_type);
+        packet.push_field(&contract.security_id);
 
         Ok(packet)
     }

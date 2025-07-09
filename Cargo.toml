@@ -1,6 +1,6 @@
 [package]
 name = "ibapi"
-version = "1.2.2"
+version = "2.0.0"
 edition = "2021"
 authors = ["Wil Boayue <wil@wsbsolutions.com>"]
 description = "A Rust implementation of the Interactive Brokers TWS API, providing a reliable and user friendly interface for TWS and IB Gateway. Designed with a focus on simplicity and performance."
@@ -158,6 +158,82 @@ required-features = ["async"]
 [[example]]
 name = "async_test_multiple_calls"
 path = "examples/async/test_multiple_calls.rs"
+required-features = ["async"]
+
+# Additional async examples
+[[example]]
+name = "async_broad_tape_news"
+path = "examples/async/broad_tape_news.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_calculate_implied_volatility"
+path = "examples/async/calculate_implied_volatility.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_calculate_option_price"
+path = "examples/async/calculate_option_price.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_contract_details"
+path = "examples/async/contract_details.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_contract_news"
+path = "examples/async/contract_news.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_historical_news"
+path = "examples/async/historical_news.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_market_rule"
+path = "examples/async/market_rule.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_matching_symbols"
+path = "examples/async/matching_symbols.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_news_article"
+path = "examples/async/news_article.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_news_bulletins"
+path = "examples/async/news_bulletins.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_news_providers"
+path = "examples/async/news_providers.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_option_chain"
+path = "examples/async/option_chain.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_scanner_parameters"
+path = "examples/async/scanner_parameters.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_scanner_subscription"
+path = "examples/async/scanner_subscription.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_scanner_subscription_complex"
+path = "examples/async/scanner_subscription_complex.rs"
 required-features = ["async"]
 
 # Sync-only examples
@@ -439,6 +515,67 @@ required-features = ["sync"]
 [[example]]
 name = "wsh_metadata"
 path = "examples/sync/wsh_metadata.rs"
+required-features = ["sync"]
+
+# Additional sync examples
+[[example]]
+name = "historical_ticks_mid_point"
+path = "examples/sync/historical_ticks_mid_point.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "market_depth_exchanges"
+path = "examples/sync/market_depth_exchanges.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "market_rule"
+path = "examples/sync/market_rule.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "next_order_id"
+path = "examples/sync/next_order_id.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "option_chain"
+path = "examples/sync/option_chain.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "pnl_single"
+path = "examples/sync/pnl_single.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "positions_multi"
+path = "examples/sync/positions_multi.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "readme_connection"
+path = "examples/sync/readme_connection.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "readme_historical_data"
+path = "examples/sync/readme_historical_data.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "readme_multi_threading_1"
+path = "examples/sync/readme_multi_threading_1.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "readme_multi_threading_2"
+path = "examples/sync/readme_multi_threading_2.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "readme_place_order"
+path = "examples/sync/readme_place_order.rs"
 required-features = ["sync"]
 
 [[example]]

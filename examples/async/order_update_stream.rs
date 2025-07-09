@@ -7,7 +7,7 @@
 
 use futures::StreamExt;
 use ibapi::contracts::{Contract, SecurityType};
-use ibapi::orders::{order_builder, order_update_stream, submit_order, OrderUpdate};
+use ibapi::orders::{order_builder, order_update_stream, submit_order, Action, OrderUpdate};
 use ibapi::Client;
 use std::error::Error;
 
@@ -46,18 +46,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     println!("  Order Type: {}", order_data.order.order_type);
                     println!("  Status: {}", order_data.order_state.status);
                 }
-                Ok(OrderUpdate::ExecutionData(exec)) => {
+                Ok(OrderUpdate::ExecutionData(exec_data)) => {
                     println!("Execution:");
-                    println!("  Order ID: {}", exec.order_id);
-                    println!("  Symbol: {}", exec.contract.symbol);
-                    println!("  Side: {}", exec.side);
-                    println!("  Shares: {}", exec.shares);
-                    println!("  Price: {}", exec.price);
-                    println!("  Time: {}", exec.time);
+                    println!("  Order ID: {}", exec_data.execution.order_id);
+                    println!("  Symbol: {}", exec_data.contract.symbol);
+                    println!("  Side: {}", exec_data.execution.side);
+                    println!("  Shares: {}", exec_data.execution.shares);
+                    println!("  Price: {}", exec_data.execution.price);
+                    println!("  Time: {}", exec_data.execution.time);
                 }
                 Ok(OrderUpdate::CommissionReport(report)) => {
                     println!("Commission Report:");
-                    println!("  Execution ID: {}", report.exec_id);
+                    println!("  Execution ID: {}", report.execution_id);
                     println!("  Commission: {} {}", report.commission, report.currency);
                 }
                 Ok(OrderUpdate::Message(notice)) => {
@@ -85,7 +85,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     contract.currency = "USD".to_string();
 
     // Create a limit order to buy 100 shares
-    let order = order_builder::limit_order("BUY", 100.0, 150.0);
+    let order = order_builder::limit_order(Action::Buy, 100.0, 150.0);
 
     // Submit the order using fire-and-forget method
     let order_id = client.next_order_id();
@@ -106,7 +106,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Submit another order
     let order_id2 = client.next_order_id();
-    let order2 = order_builder::limit_order("SELL", 50.0, 160.0);
+    let order2 = order_builder::limit_order(Action::Sell, 50.0, 160.0);
 
     println!(
         "\nSubmitting order {} for {} {} @ {}",

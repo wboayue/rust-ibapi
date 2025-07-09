@@ -423,7 +423,7 @@ impl ContractBuilder {
         // Validate option-specific requirements
         if security_type == SecurityType::Option || security_type == SecurityType::FuturesOption {
             if self.strike.is_none() {
-                return Err(Error::Simple("Strike price is required for option contracts".into()));
+                return Err(Error::Simple("Strike price is required for options".into()));
             }
 
             if let Some(strike) = self.strike {
@@ -433,25 +433,25 @@ impl ContractBuilder {
             }
 
             if self.right.is_none() {
-                return Err(Error::Simple("Right (Put/Call) is required for option contracts".into()));
+                return Err(Error::Simple("Right (P for PUT or C for CALL) is required for options".into()));
             }
 
             if let Some(ref right) = self.right {
                 let right_upper = right.to_uppercase();
                 if right_upper != "P" && right_upper != "C" {
-                    return Err(Error::Simple("Right must be 'P' for Put or 'C' for Call".into()));
+                    return Err(Error::Simple("Option right must be P for PUT or C for CALL".into()));
                 }
             }
 
             if self.last_trade_date_or_contract_month.is_none() {
-                return Err(Error::Simple("Expiration date is required for option contracts".into()));
+                return Err(Error::Simple("Expiration date is required for options".into()));
             }
         }
 
         // Validate futures-specific requirements
         if security_type == SecurityType::Future || security_type == SecurityType::FuturesOption {
             if self.last_trade_date_or_contract_month.is_none() {
-                return Err(Error::Simple("Contract month is required for futures contracts".into()));
+                return Err(Error::Simple("Contract month is required for futures".into()));
             }
         }
 
@@ -683,7 +683,8 @@ mod tests {
             .build();
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "error occurred: Contract month is required for futures");
+        // FuturesOption is checked as an option first, so it fails on missing strike price
+        assert_eq!(result.unwrap_err().to_string(), "error occurred: Strike price is required for options");
     }
 
     #[test]

@@ -16,13 +16,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let contract_id = 0; // 0 for underlying
 
     println!("=== Requesting Option Chain for {} ===", symbol);
-    
-    let mut option_chain_stream = client
-        .option_chain(symbol, exchange, security_type, contract_id)
-        .await?;
+
+    let mut option_chain_stream = client.option_chain(symbol, exchange, security_type, contract_id).await?;
 
     let mut chain_count = 0;
-    
+
     while let Some(result) = option_chain_stream.next().await {
         match result {
             Ok(chain) => {
@@ -32,19 +30,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Underlying Contract ID: {}", chain.underlying_contract_id);
                 println!("Trading Class: {}", chain.trading_class);
                 println!("Multiplier: {}", chain.multiplier);
-                
+
                 if !chain.expirations.is_empty() {
                     println!("Expirations: {}", chain.expirations.join(", "));
                 }
-                
+
                 if !chain.strikes.is_empty() {
                     println!("Number of strikes: {}", chain.strikes.len());
                     // Show first few strikes
-                    let preview_strikes: Vec<String> = chain.strikes
-                        .iter()
-                        .take(5)
-                        .map(|s| format!("{:.2}", s))
-                        .collect();
+                    let preview_strikes: Vec<String> = chain.strikes.iter().take(5).map(|s| format!("{:.2}", s)).collect();
                     println!("Sample strikes: {}", preview_strikes.join(", "));
                     if chain.strikes.len() > 5 {
                         println!("  ... and {} more", chain.strikes.len() - 5);

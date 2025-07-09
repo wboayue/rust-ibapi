@@ -21,6 +21,7 @@ use std::sync::Arc;
 
 use futures::StreamExt;
 use ibapi::{contracts::Contract, Client};
+use time::format_description::well_known::Rfc3339;
 use time::{Duration, OffsetDateTime};
 
 #[tokio::main]
@@ -54,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!(
                 "Trade {}: {} - ${:.2} x {} on {} [{}]",
                 trade_count,
-                tick.timestamp.format("%H:%M:%S").unwrap(),
+                tick.timestamp.format(&Rfc3339).unwrap(),
                 tick.price,
                 tick.size,
                 tick.exchange,
@@ -93,8 +94,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!(
         "Period: {} to {}",
-        start_time.format("%H:%M:%S").unwrap(),
-        end_time.format("%H:%M:%S").unwrap()
+        start_time.format(&Rfc3339).unwrap(),
+        end_time.format(&Rfc3339).unwrap()
     );
     println!("Trades in period: {}", period_trades);
     println!("Total volume: {}", total_volume);
@@ -126,7 +127,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!(
                 "Quote {}: {} - Bid: ${:.2} x {} | Ask: ${:.2} x {} | Spread: ${:.2}",
                 quote_count,
-                tick.timestamp.format("%H:%M:%S").unwrap(),
+                tick.timestamp.format(&Rfc3339).unwrap(),
                 tick.price_bid,
                 tick.size_bid,
                 tick.price_ask,
@@ -159,7 +160,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!(
                 "Midpoint {}: {} - ${:.2}",
                 midpoint_count,
-                tick.timestamp.format("%H:%M:%S").unwrap(),
+                tick.timestamp.format(&Rfc3339).unwrap(),
                 tick.price
             );
         }

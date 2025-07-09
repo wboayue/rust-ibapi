@@ -8,14 +8,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::connect("127.0.0.1:4002", 100).await?;
 
     println!("=== Requesting News Article ===");
-    
+
     // You need a valid provider code and article ID
     // These would typically come from historical_news or contract_news
     let provider_code = "BRFG"; // Example provider
     let article_id = "BRFG$12345"; // Example article ID
-    
+
     println!("Requesting article: {} from provider: {}", article_id, provider_code);
-    
+
     match client.news_article(provider_code, article_id).await {
         Ok(article_body) => {
             println!("\n--- Article Content ---");

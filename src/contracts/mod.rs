@@ -1681,7 +1681,8 @@ mod tests {
             .build();
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "error occurred: Contract month is required for futures");
+        // FuturesOption is checked as an option first, so it fails on missing strike price
+        assert_eq!(result.unwrap_err().to_string(), "error occurred: Strike price is required for options");
     }
 
     #[test]

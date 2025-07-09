@@ -10,19 +10,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::connect("127.0.0.1:4002", 100).await?;
 
     println!("=== Subscribing to Contract News ===");
-    
+
     // Create a contract to monitor news for
     let contract = Contract::stock("AAPL");
-    
+
     // Specify news providers to subscribe to (empty means all)
     let provider_codes = &["BRFG", "DJNL"];
-    
+
     println!("Subscribing to news for {} from providers: {:?}", contract.symbol, provider_codes);
-    
+
     let mut news_stream = client.contract_news(&contract, provider_codes).await?;
-    
+
     println!("Waiting for news... (Press Ctrl+C to stop)");
-    
+
     while let Some(result) = news_stream.next().await {
         match result {
             Ok(article) => {

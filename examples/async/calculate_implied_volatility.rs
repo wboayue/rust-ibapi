@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         exchange: "SMART".to_string(),
         currency: "USD".to_string(),
         strike: 150.0,
-        right: "C".to_string(), // Call option
+        right: "C".to_string(),                                    // Call option
         last_trade_date_or_contract_month: "20250117".to_string(), // January 17, 2025
         ..Default::default()
     };
@@ -25,11 +25,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let underlying_price = 155.0; // Current underlying stock price
 
     println!("=== Calculating Implied Volatility ===");
-    println!("Contract: {} {} {} @ {}", 
-        contract.symbol, 
-        contract.last_trade_date_or_contract_month,
-        contract.right,
-        contract.strike
+    println!(
+        "Contract: {} {} {} @ {}",
+        contract.symbol, contract.last_trade_date_or_contract_month, contract.right, contract.strike
     );
     println!("Option Price: ${:.2}", option_price);
     println!("Underlying Price: ${:.2}", underlying_price);
@@ -55,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(option_price_calc) = computation.option_price {
                 println!("Calculated Option Price: ${:.2}", option_price_calc);
             }
-            if let Some(pv_dividend) = computation.pv_dividend {
+            if let Some(pv_dividend) = computation.present_value_dividend {
                 println!("PV Dividend: ${:.2}", pv_dividend);
             }
         }

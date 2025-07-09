@@ -7,7 +7,7 @@
 
 use futures::StreamExt;
 use ibapi::contracts::{Contract, SecurityType};
-use ibapi::orders::{order_builder, place_order, PlaceOrder};
+use ibapi::orders::{order_builder, place_order, Action, PlaceOrder};
 use ibapi::Client;
 use std::error::Error;
 
@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     contract.currency = "USD".to_string();
 
     // Create a limit order to buy 100 shares
-    let order = order_builder::limit_order("BUY", 100.0, 150.0);
+    let order = order_builder::limit_order(Action::Buy, 100.0, 150.0);
     let order_id = client.next_order_id();
 
     println!(
@@ -67,18 +67,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 println!("  Quantity: {}", order_data.order.total_quantity);
                 println!("  Status: {}", order_data.order_state.status);
             }
-            Ok(PlaceOrder::ExecutionData(exec)) => {
+            Ok(PlaceOrder::ExecutionData(exec_data)) => {
                 println!("Execution:");
-                println!("  Order ID: {}", exec.order_id);
-                println!("  Symbol: {}", exec.contract.symbol);
-                println!("  Side: {}", exec.side);
-                println!("  Shares: {}", exec.shares);
-                println!("  Price: {}", exec.price);
-                println!("  Time: {}", exec.time);
+                println!("  Order ID: {}", exec_data.execution.order_id);
+                println!("  Symbol: {}", exec_data.contract.symbol);
+                println!("  Side: {}", exec_data.execution.side);
+                println!("  Shares: {}", exec_data.execution.shares);
+                println!("  Price: {}", exec_data.execution.price);
+                println!("  Time: {}", exec_data.execution.time);
             }
             Ok(PlaceOrder::CommissionReport(report)) => {
                 println!("Commission Report:");
-                println!("  Execution ID: {}", report.exec_id);
+                println!("  Execution ID: {}", report.execution_id);
                 println!("  Commission: {} {}", report.commission, report.currency);
             }
             Ok(PlaceOrder::Message(notice)) => {
@@ -101,10 +101,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("\nExample demonstrating concurrent orders...\n");
 
     // Example of handling multiple orders concurrently
-    let order1 = order_builder::limit_order("BUY", 50.0, 149.0);
+    let order1 = order_builder::limit_order(Action::Buy, 50.0, 149.0);
     let order_id1 = client.next_order_id();
 
-    let order2 = order_builder::limit_order("SELL", 75.0, 151.0);
+    let order2 = order_builder::limit_order(Action::Sell, 75.0, 151.0);
     let order_id2 = client.next_order_id();
 
     // Place both orders
@@ -149,8 +149,11 @@ async fn monitor_order(order_id: i32, mut subscription: ibapi::subscriptions::Su
                     break;
                 }
             }
-            Ok(PlaceOrder::ExecutionData(exec)) => {
-                println!("[Order {}] Executed: {} shares @ {}", order_id, exec.shares, exec.price);
+            Ok(PlaceOrder::ExecutionData(exec_data)) => {
+                println!(
+                    "[Order {}] Executed: {} shares @ {}",
+                    order_id, exec_data.execution.shares, exec_data.execution.price
+                );
             }
             _ => {} // Ignore other updates for brevity
         }
