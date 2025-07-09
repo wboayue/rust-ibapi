@@ -21,8 +21,12 @@ pub trait AsyncDataStream<T> {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[];
 
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<T, Error>;
-    
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: &crate::client::builders::ResponseContext) -> Result<crate::messages::RequestMessage, Error> {
+
+    fn cancel_message(
+        _server_version: i32,
+        _request_id: Option<i32>,
+        _context: &crate::client::builders::ResponseContext,
+    ) -> Result<crate::messages::RequestMessage, Error> {
         Err(Error::NotImplemented)
     }
 }
@@ -149,7 +153,11 @@ impl<T> Subscription<T> {
         T: 'static,
     {
         match &mut self.inner {
-            SubscriptionInner::WithDecoder { subscription, decoder, client } => loop {
+            SubscriptionInner::WithDecoder {
+                subscription,
+                decoder,
+                client,
+            } => loop {
                 match subscription.next().await {
                     Some(mut message) => {
                         let result = decoder(client, &mut message);
@@ -193,21 +201,21 @@ impl<T> Subscription<T> {
 impl<T> Drop for Subscription<T> {
     fn drop(&mut self) {
         debug!("dropping async subscription");
-        
+
         // Check if already cancelled
         if self.cancelled.load(Ordering::Relaxed) {
             return;
         }
-        
+
         self.cancelled.store(true, Ordering::Relaxed);
-        
+
         // Try to send cancel message if we have the necessary components
         if let (Some(client), Some(cancel_fn)) = (&self.client, &self.cancel_fn) {
             let client = client.clone();
             let id = self.request_id.or(self.order_id);
             let response_context = self.response_context.clone();
             let server_version = client.server_version();
-            
+
             // Clone the cancel function for use in the spawned task
             if let Ok(message) = cancel_fn(server_version, id, &response_context) {
                 // Spawn a task to send the cancel message since drop can't be async
@@ -218,7 +226,7 @@ impl<T> Drop for Subscription<T> {
                 });
             }
         }
-        
+
         // The AsyncInternalSubscription's Drop will handle channel cleanup
     }
 }
@@ -229,7 +237,11 @@ impl<T: Unpin + 'static> Stream for Subscription<T> {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
         match &mut this.inner {
-            SubscriptionInner::WithDecoder { subscription, decoder, client } => {
+            SubscriptionInner::WithDecoder {
+                subscription,
+                decoder,
+                client,
+            } => {
                 // Create a Pin for the subscription's receiver
                 match Pin::new(&mut subscription.receiver).poll_recv(cx) {
                     Poll::Ready(Some(mut message)) => {

@@ -19,7 +19,11 @@ impl AsyncDataStream<NewsBulletin> for NewsBulletin {
         }
     }
 
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: &crate::client::builders::ResponseContext) -> Result<RequestMessage, Error> {
+    fn cancel_message(
+        _server_version: i32,
+        _request_id: Option<i32>,
+        _context: &crate::client::builders::ResponseContext,
+    ) -> Result<RequestMessage, Error> {
         encoders::encode_cancel_news_bulletin()
     }
 }
@@ -40,7 +44,11 @@ impl AsyncDataStream<NewsArticle> for NewsArticle {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: &crate::client::builders::ResponseContext) -> Result<RequestMessage, Error> {
+    fn cancel_message(
+        _server_version: i32,
+        request_id: Option<i32>,
+        context: &crate::client::builders::ResponseContext,
+    ) -> Result<RequestMessage, Error> {
         // News articles can come from market data subscriptions, so use the appropriate cancel
         if context.request_type == Some(OutgoingMessages::RequestMarketData) {
             let request_id = request_id.expect("Request ID required to encode cancel market data");
@@ -122,7 +130,7 @@ pub(crate) async fn news_article(client: &Client, provider_code: &str, article_i
     let request = encoders::encode_request_news_article(client.server_version(), request_id, provider_code, article_id)?;
 
     let mut subscription = client.send_request(request_id, request).await?;
-    
+
     use futures::StreamExt;
     match subscription.next().await {
         Some(message) => decoders::decode_news_article(message),
@@ -378,7 +386,7 @@ mod tests {
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
         let mut subscription = client.news_bulletins(true).await.unwrap();
-        
+
         // Read one message to ensure subscription is active
         use futures::StreamExt;
         let _ = subscription.next().await;
@@ -409,7 +417,7 @@ mod tests {
 
         let contract = Contract::stock("TSLA");
         let mut subscription = client.contract_news(&contract, &["BZ"]).await.unwrap();
-        
+
         // Read one message to ensure subscription is active
         use futures::StreamExt;
         let _ = subscription.next().await;

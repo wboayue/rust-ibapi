@@ -18,15 +18,17 @@ impl AsyncDataStream<OptionComputation> for OptionComputation {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: &crate::client::builders::ResponseContext) -> Result<RequestMessage, Error> {
+    fn cancel_message(
+        _server_version: i32,
+        request_id: Option<i32>,
+        context: &crate::client::builders::ResponseContext,
+    ) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("request id required to cancel option calculations");
         match context.request_type {
             Some(OutgoingMessages::ReqCalcImpliedVolat) => {
                 encoders::encode_cancel_option_computation(OutgoingMessages::CancelImpliedVolatility, request_id)
             }
-            Some(OutgoingMessages::ReqCalcOptionPrice) => {
-                encoders::encode_cancel_option_computation(OutgoingMessages::CancelOptionPrice, request_id)
-            }
+            Some(OutgoingMessages::ReqCalcOptionPrice) => encoders::encode_cancel_option_computation(OutgoingMessages::CancelOptionPrice, request_id),
             _ => panic!("Unsupported request message type option computation cancel: {:?}", context.request_type),
         }
     }
@@ -83,36 +85,31 @@ pub async fn contract_details(client: &Client, contract: &Contract) -> Result<Ve
 
 pub async fn verify_contract(client: &Client, contract: &Contract) -> Result<(), Error> {
     if !contract.security_id_type.is_empty() || !contract.security_id.is_empty() {
-        client
-            .check_server_version(server_versions::SEC_ID_TYPE, "It does not support security_id_type or security_id attributes")
-?;
+        client.check_server_version(
+            server_versions::SEC_ID_TYPE,
+            "It does not support security_id_type or security_id attributes",
+        )?;
     }
 
     if !contract.trading_class.is_empty() {
-        client
-            .check_server_version(
-                server_versions::TRADING_CLASS,
-                "It does not support the trading_class parameter when requesting contract details.",
-            )
-?;
+        client.check_server_version(
+            server_versions::TRADING_CLASS,
+            "It does not support the trading_class parameter when requesting contract details.",
+        )?;
     }
 
     if !contract.primary_exchange.is_empty() {
-        client
-            .check_server_version(
-                server_versions::LINKING,
-                "It does not support primary_exchange parameter when requesting contract details.",
-            )
-?;
+        client.check_server_version(
+            server_versions::LINKING,
+            "It does not support primary_exchange parameter when requesting contract details.",
+        )?;
     }
 
     if !contract.issuer_id.is_empty() {
-        client
-            .check_server_version(
-                server_versions::BOND_ISSUERID,
-                "It does not support issuer_id parameter when requesting contract details.",
-            )
-?;
+        client.check_server_version(
+            server_versions::BOND_ISSUERID,
+            "It does not support issuer_id parameter when requesting contract details.",
+        )?;
     }
 
     Ok(())
@@ -124,9 +121,7 @@ pub async fn verify_contract(client: &Client, contract: &Contract) -> Result<(),
 /// * `client` - [Client] with an active connection to gateway.
 /// * `pattern` - Either start of ticker symbol or (for larger strings) company name.
 pub async fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<ContractDescription>, Error> {
-    client
-        .check_server_version(server_versions::REQ_MATCHING_SYMBOLS, "It does not support matching symbols requests.")
-?;
+    client.check_server_version(server_versions::REQ_MATCHING_SYMBOLS, "It does not support matching symbols requests.")?;
 
     let request_id = client.next_request_id();
     let request = encoders::encode_request_matching_symbols(request_id, pattern)?;
@@ -158,9 +153,7 @@ pub async fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<Cont
 /// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
 /// A list of market rule ids can be obtained by invoking [request_contract_details] on a particular contract. The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [ContractDetails].
 pub async fn market_rule(client: &Client, market_rule_id: i32) -> Result<MarketRule, Error> {
-    client
-        .check_server_version(server_versions::MARKET_RULES, "It does not support market rule requests.")
-?;
+    client.check_server_version(server_versions::MARKET_RULES, "It does not support market rule requests.")?;
 
     let request = encoders::encode_request_market_rule(market_rule_id)?;
     let mut subscription = client.send_shared_request(OutgoingMessages::RequestMarketRule, request).await?;
@@ -184,9 +177,7 @@ pub async fn calculate_option_price(
     volatility: f64,
     underlying_price: f64,
 ) -> Result<OptionComputation, Error> {
-    client
-        .check_server_version(server_versions::REQ_CALC_OPTION_PRICE, "It does not support calculation price requests.")
-?;
+    client.check_server_version(server_versions::REQ_CALC_OPTION_PRICE, "It does not support calculation price requests.")?;
 
     let request_id = client.next_request_id();
     let message = encoders::encode_calculate_option_price(client.server_version(), request_id, contract, volatility, underlying_price)?;
@@ -211,12 +202,10 @@ pub async fn calculate_implied_volatility(
     option_price: f64,
     underlying_price: f64,
 ) -> Result<OptionComputation, Error> {
-    client
-        .check_server_version(
-            server_versions::REQ_CALC_IMPLIED_VOLAT,
-            "It does not support calculate implied volatility.",
-        )
-?;
+    client.check_server_version(
+        server_versions::REQ_CALC_IMPLIED_VOLAT,
+        "It does not support calculate implied volatility.",
+    )?;
 
     let request_id = client.next_request_id();
     let message = encoders::encode_calculate_implied_volatility(client.server_version(), request_id, contract, option_price, underlying_price)?;
@@ -236,12 +225,10 @@ pub async fn option_chain(
     security_type: SecurityType,
     contract_id: i32,
 ) -> Result<Subscription<OptionChain>, Error> {
-    client
-        .check_server_version(
-            server_versions::SEC_DEF_OPT_PARAMS_REQ,
-            "It does not support security definition option parameters.",
-        )
-?;
+    client.check_server_version(
+        server_versions::SEC_DEF_OPT_PARAMS_REQ,
+        "It does not support security definition option parameters.",
+    )?;
 
     let request_id = client.next_request_id();
     let request = encoders::encode_request_option_chain(request_id, symbol, exchange, security_type, contract_id)?;
@@ -252,4 +239,3 @@ pub async fn option_chain(
         Arc::new(client.clone()),
     ))
 }
-

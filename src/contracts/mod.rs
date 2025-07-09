@@ -569,10 +569,14 @@ pub struct PriceIncrement {
 
 // Re-export API functions based on active feature
 #[cfg(all(feature = "sync", not(feature = "async")))]
-pub(crate) use sync::{calculate_implied_volatility, calculate_option_price, contract_details, market_rule, matching_symbols, option_chain, verify_contract};
+pub(crate) use sync::{
+    calculate_implied_volatility, calculate_option_price, contract_details, market_rule, matching_symbols, option_chain, verify_contract,
+};
 
 #[cfg(feature = "async")]
-pub(crate) use r#async::{calculate_implied_volatility, calculate_option_price, contract_details, market_rule, matching_symbols, option_chain, verify_contract};
+pub(crate) use r#async::{
+    calculate_implied_volatility, calculate_option_price, contract_details, market_rule, matching_symbols, option_chain, verify_contract,
+};
 
 // Public function for decoding option computation (used by market_data module)
 pub(crate) fn decode_option_computation(server_version: i32, message: &mut ResponseMessage) -> Result<OptionComputation, Error> {
@@ -581,8 +585,6 @@ pub(crate) fn decode_option_computation(server_version: i32, message: &mut Respo
 
 // Re-export ContractBuilder
 pub use common::contract_builder::ContractBuilder;
-
-
 
 #[cfg(all(test, feature = "sync", not(feature = "async")))]
 mod tests {

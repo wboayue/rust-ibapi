@@ -18,7 +18,11 @@ impl AsyncDataStream<Vec<ScannerData>> for Vec<ScannerData> {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &crate::client::builders::ResponseContext) -> Result<RequestMessage, Error> {
+    fn cancel_message(
+        _server_version: i32,
+        request_id: Option<i32>,
+        _context: &crate::client::builders::ResponseContext,
+    ) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel scanner subscription.");
         encoders::encode_cancel_scanner_subscription(request_id)
     }
@@ -28,7 +32,7 @@ impl AsyncDataStream<Vec<ScannerData>> for Vec<ScannerData> {
 pub(crate) async fn scanner_parameters(client: &Client) -> Result<String, Error> {
     let request = encoders::encode_scanner_parameters()?;
     let mut subscription = client.send_shared_request(OutgoingMessages::RequestScannerParameters, request).await?;
-    
+
     use futures::StreamExt;
     match subscription.next().await {
         Some(message) => decoders::decode_scanner_parameters(message),
@@ -197,9 +201,7 @@ mod tests {
     async fn test_scanner_subscription_drop_sends_cancel() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
-            response_messages: vec![
-                "20\03\09000\01\00\0670777621\0SVMH\0STK\0\00\0\0SMART\0USD\0SVMH\0NMS\0NMS\0\0\0\0\0".to_owned(),
-            ],
+            response_messages: vec!["20\03\09000\01\00\0670777621\0SVMH\0STK\0\00\0\0SMART\0USD\0SVMH\0NMS\0NMS\0\0\0\0\0".to_owned()],
         });
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SCANNER_GENERIC_OPTS);
@@ -214,7 +216,7 @@ mod tests {
         assert!(result.is_ok(), "failed to request scanner subscription: {}", result.err().unwrap());
 
         let mut subscription = result.unwrap();
-        
+
         // Read one message to ensure subscription is active
         use futures::StreamExt;
         let _ = subscription.next().await;
@@ -240,9 +242,7 @@ mod tests {
     async fn test_scanner_subscription_no_double_cancel() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
-            response_messages: vec![
-                "20\03\09000\01\00\0670777621\0SVMH\0STK\0\00\0\0SMART\0USD\0SVMH\0NMS\0NMS\0\0\0\0\0".to_owned(),
-            ],
+            response_messages: vec!["20\03\09000\01\00\0670777621\0SVMH\0STK\0\00\0\0SMART\0USD\0SVMH\0NMS\0NMS\0\0\0\0\0".to_owned()],
         });
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SCANNER_GENERIC_OPTS);

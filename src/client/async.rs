@@ -1211,7 +1211,7 @@ impl Client {
     ///     
     ///     let symbols = client.matching_symbols("AAP").await.expect("request failed");
     ///     for symbol in symbols {
-    ///         println!("{} - {} ({})", symbol.contract.symbol, 
+    ///         println!("{} - {} ({})", symbol.contract.symbol,
     ///                  symbol.contract.primary_exchange, symbol.contract.currency);
     ///     }
     /// }
@@ -1818,7 +1818,7 @@ impl Client {
     ///         match result {
     ///             Ok(data_list) => {
     ///                 for data in data_list {
-    ///                     println!("Rank {}: {}", data.rank, 
+    ///                     println!("Rank {}: {}", data.rank,
     ///                              data.contract_details.contract.symbol);
     ///                 }
     ///             }

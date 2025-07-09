@@ -132,7 +132,10 @@ fn read_last_trade_date(contract: &mut ContractDetails, last_trade_date_or_contr
     Ok(())
 }
 
-pub(in crate::contracts) fn decode_contract_descriptions(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ContractDescription>, Error> {
+pub(in crate::contracts) fn decode_contract_descriptions(
+    server_version: i32,
+    message: &mut ResponseMessage,
+) -> Result<Vec<ContractDescription>, Error> {
     message.skip(); // message type
 
     let _request_id = message.next_int()?;

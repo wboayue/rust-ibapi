@@ -260,7 +260,10 @@ pub async fn completed_orders(client: &Client, api_only: bool) -> Result<Subscri
     let request = encoders::encode_completed_orders(api_only)?;
 
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestCompletedOrders, request).await?;
-    Ok(Subscription::new_from_internal_simple::<Orders>(internal_subscription, Arc::new(client.clone())))
+    Ok(Subscription::new_from_internal_simple::<Orders>(
+        internal_subscription,
+        Arc::new(client.clone()),
+    ))
 }
 
 /// Requests all open orders places by this specific API client (identified by the API client id).
@@ -272,7 +275,10 @@ pub async fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error>
     let request = encoders::encode_open_orders()?;
 
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestOpenOrders, request).await?;
-    Ok(Subscription::new_from_internal_simple::<Orders>(internal_subscription, Arc::new(client.clone())))
+    Ok(Subscription::new_from_internal_simple::<Orders>(
+        internal_subscription,
+        Arc::new(client.clone()),
+    ))
 }
 
 /// Requests all *current* open orders in associated accounts at the current moment.
@@ -281,7 +287,10 @@ pub async fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Er
     let request = encoders::encode_all_open_orders()?;
 
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestAllOpenOrders, request).await?;
-    Ok(Subscription::new_from_internal_simple::<Orders>(internal_subscription, Arc::new(client.clone())))
+    Ok(Subscription::new_from_internal_simple::<Orders>(
+        internal_subscription,
+        Arc::new(client.clone()),
+    ))
 }
 
 /// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
@@ -289,7 +298,10 @@ pub async fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscr
     let request = encoders::encode_auto_open_orders(auto_bind)?;
 
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request).await?;
-    Ok(Subscription::new_from_internal_simple::<Orders>(internal_subscription, Arc::new(client.clone())))
+    Ok(Subscription::new_from_internal_simple::<Orders>(
+        internal_subscription,
+        Arc::new(client.clone()),
+    ))
 }
 
 /// Requests current day's (since midnight) executions matching the filter.

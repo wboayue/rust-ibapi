@@ -20,9 +20,7 @@ impl DataStream<OptionComputation> for OptionComputation {
             Some(OutgoingMessages::ReqCalcImpliedVolat) => {
                 encoders::encode_cancel_option_computation(OutgoingMessages::CancelImpliedVolatility, request_id)
             }
-            Some(OutgoingMessages::ReqCalcOptionPrice) => {
-                encoders::encode_cancel_option_computation(OutgoingMessages::CancelOptionPrice, request_id)
-            }
+            Some(OutgoingMessages::ReqCalcOptionPrice) => encoders::encode_cancel_option_computation(OutgoingMessages::CancelOptionPrice, request_id),
             _ => panic!("Unsupported request message type option computation cancel: {:?}", context.request_type),
         }
     }
@@ -224,4 +222,3 @@ pub(crate) fn option_chain<'a>(
 
     Ok(Subscription::new(client, subscription, ResponseContext::default()))
 }
-
