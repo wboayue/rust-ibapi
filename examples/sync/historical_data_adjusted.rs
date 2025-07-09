@@ -15,8 +15,8 @@ use ibapi::Client;
 fn main() {
     env_logger::init();
 
-    let matches = Command::new("historical_data_ending_now")
-        .about("Gets last 7 days of daily data for given stock")
+    let matches = Command::new("historical_data_adjusted")
+        .about("Gets last 7 days of adjusted historical data for given stock")
         .arg(arg!(<STOCK_SYMBOL>).required(true))
         .arg(arg!(--connection_string <VALUE>).default_value("127.0.0.1:4002"))
         .get_matches();
@@ -28,9 +28,9 @@ fn main() {
 
     let contract = Contract::stock(stock_symbol);
 
-    // to use WhatToShow::AdjustedLast, historical_data_ending_now() must be used, as the API will return an error if historical_data() is used to specify an interval_end
+    // to use WhatToShow::AdjustedLast, use historical_data() with None for interval_end
     let historical_data = client
-        .historical_data_ending_now(&contract, 7.days(), BarSize::Day, WhatToShow::AdjustedLast, true)
+        .historical_data(&contract, None, 7.days(), BarSize::Day, WhatToShow::AdjustedLast, true)
         .expect("historical data request failed");
 
     println!("start_date: {}, end_date: {}", historical_data.start, historical_data.end);

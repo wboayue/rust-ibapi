@@ -51,7 +51,7 @@ cargo run --example server_time
 
 - **historical_data** - Historical bar data
 - **historical_data_adjusted** - Adjusted historical data
-- **historical_data_ending_now** - Historical data up to current time
+- **historical_data_recent** - Recent historical data (last 7 days)
 - **historical_data_options** - Historical options data
 - **historical_ticks_trade** - Historical trade ticks
 - **historical_ticks_bid_ask** - Historical bid/ask ticks

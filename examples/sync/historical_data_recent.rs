@@ -1,9 +1,11 @@
-//! Historical Data Ending Now example
+//! Historical Data Recent example
+//!
+//! Gets recent historical data (last 7 days) for a given stock
 //!
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example historical_data_ending_now
+//! cargo run --example historical_data_recent
 //! ```
 
 use clap::{arg, Command};
@@ -15,7 +17,7 @@ use ibapi::Client;
 fn main() {
     env_logger::init();
 
-    let matches = Command::new("historical_data_ending_now")
+    let matches = Command::new("historical_data_recent")
         .about("Gets last 7 days of daily data for given stock")
         .arg(arg!(<STOCK_SYMBOL>).required(true))
         .arg(arg!(--connection_string <VALUE>).default_value("127.0.0.1:4002"))
@@ -29,7 +31,7 @@ fn main() {
     let contract = Contract::stock(stock_symbol);
 
     let historical_data = client
-        .historical_data_ending_now(&contract, 7.days(), BarSize::Day, WhatToShow::Trades, true)
+        .historical_data(&contract, None, 7.days(), BarSize::Day, WhatToShow::Trades, true)
         .expect("historical data request failed");
 
     println!("start_date: {}, end_date: {}", historical_data.start, historical_data.end);

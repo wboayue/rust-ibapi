@@ -942,48 +942,6 @@ impl Client {
         historical::historical_data(self, contract, interval_end, duration, bar_size, Some(what_to_show), use_rth)
     }
 
-    /// Requests interval of historical data ending now for [Contract].
-    ///
-    /// # Arguments
-    /// * `contract`     - [Contract] to retrieve [historical::HistoricalData] for.
-    /// * `duration`     - duration of interval to retrieve [historical::HistoricalData] for.
-    /// * `bar_size`     - [historical::BarSize] to return.
-    /// * `what_to_show` - requested bar type: [historical::WhatToShow].
-    /// * `use_rth`      - use regular trading hours.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use ibapi::contracts::Contract;
-    /// use ibapi::Client;
-    /// use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
-    /// let contract = Contract::stock("TSLA");
-    ///
-    /// let historical_data = client
-    ///     .historical_data_ending_now(&contract, 7.days(), BarSize::Day, WhatToShow::Trades, true)
-    ///     .expect("historical data request failed");
-    ///
-    /// println!("start_date: {}, end_date: {}", historical_data.start, historical_data.end);
-    ///
-    /// for bar in &historical_data.bars {
-    ///     println!("{bar:?}");
-    /// }
-    /// ```
-    #[deprecated(since = "1.1.0", note = "use `historical_data` instead")]
-    pub fn historical_data_ending_now(
-        &self,
-        contract: &Contract,
-        duration: historical::Duration,
-        bar_size: historical::BarSize,
-        what_to_show: historical::WhatToShow,
-        use_rth: bool,
-    ) -> Result<historical::HistoricalData, Error> {
-        historical::historical_data(self, contract, None, duration, bar_size, Some(what_to_show), use_rth)
-    }
-
     /// Requests [Schedule](historical::Schedule) for an interval of given duration
     /// ending at specified date.
     ///

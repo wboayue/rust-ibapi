@@ -62,7 +62,6 @@ This document lists all public methods available on the sync and async `Client` 
 |--------|------|-------|-------------|
 | `head_timestamp` | ✓ | ✓ | Returns timestamp of earliest available historical data |
 | `historical_data` | ✓ | ✓ | Requests interval of historical data |
-| `historical_data_ending_now` | ✓ | ✗ | Deprecated - use historical_data instead |
 | `historical_schedules` | ✓ | ✗ | Requests Schedule for an interval |
 | `historical_schedules_ending_now` | ✓ | ✗ | Requests Schedule for interval ending at current time |
 | `historical_schedule` | ✗ | ✓ | Requests historical schedule |
@@ -124,7 +123,7 @@ This document lists all public methods available on the sync and async `Client` 
 ### Methods Only in Sync
 - Connection: `client_id`, `next_request_id`
 - Contract: All methods
-- Historical Market Data: `historical_data_ending_now`, `historical_schedules`, `historical_schedules_ending_now`
+- Historical Market Data: `historical_schedules`, `historical_schedules_ending_now`
 - Realtime Market Data: `switch_market_data_type`
 - News: All methods
 - Scanner: All methods

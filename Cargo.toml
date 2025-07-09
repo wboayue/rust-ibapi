@@ -373,8 +373,8 @@ path = "examples/sync/historical_data_adjusted.rs"
 required-features = ["sync"]
 
 [[example]]
-name = "historical_data_ending_now"
-path = "examples/sync/historical_data_ending_now.rs"
+name = "historical_data_recent"
+path = "examples/sync/historical_data_recent.rs"
 required-features = ["sync"]
 
 [[example]]
