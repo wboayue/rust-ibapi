@@ -33,7 +33,6 @@ pub(crate) async fn scanner_parameters(client: &Client) -> Result<String, Error>
     let request = encoders::encode_scanner_parameters()?;
     let mut subscription = client.send_shared_request(OutgoingMessages::RequestScannerParameters, request).await?;
 
-    use futures::StreamExt;
     match subscription.next().await {
         Some(message) => decoders::decode_scanner_parameters(message),
         None => Err(Error::UnexpectedEndOfStream),
@@ -149,7 +148,6 @@ mod tests {
         assert!(result.is_ok(), "failed to request scanner subscription: {}", result.err().unwrap());
 
         // Now verify we can parse the scanner data responses
-        use futures::StreamExt;
         let mut subscription = result.unwrap();
         let scanner_data = match subscription.next().await {
             Some(Ok(data)) => data,
@@ -218,7 +216,6 @@ mod tests {
         let mut subscription = result.unwrap();
 
         // Read one message to ensure subscription is active
-        use futures::StreamExt;
         let _ = subscription.next().await;
 
         // Verify initial request was sent

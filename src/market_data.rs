@@ -4,7 +4,10 @@
 //! and historical market data. It includes support for various data types,
 //! subscription management, and market data type configuration.
 
-use crate::{messages::OutgoingMessages, server_versions, Client, Error};
+use crate::{server_versions, Error};
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
+use crate::{messages::OutgoingMessages, Client};
 
 pub mod historical;
 pub mod realtime;

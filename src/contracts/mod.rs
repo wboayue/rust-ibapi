@@ -9,18 +9,14 @@ use std::fmt::Debug;
 use std::string::ToString;
 
 use log::warn;
-use log::{error, info};
 use serde::Deserialize;
 use serde::Serialize;
 use tick_types::TickType;
 
 use crate::encode_option_field;
-use crate::messages::IncomingMessages;
-use crate::messages::OutgoingMessages;
 use crate::messages::RequestMessage;
 use crate::messages::ResponseMessage;
-use crate::Client;
-use crate::{server_versions, Error, ToField};
+use crate::{Error, ToField};
 
 // Common implementation modules
 mod common;
@@ -569,14 +565,10 @@ pub struct PriceIncrement {
 
 // Re-export API functions based on active feature
 #[cfg(all(feature = "sync", not(feature = "async")))]
-pub(crate) use sync::{
-    calculate_implied_volatility, calculate_option_price, contract_details, market_rule, matching_symbols, option_chain, verify_contract,
-};
+pub(crate) use sync::{calculate_implied_volatility, calculate_option_price, contract_details, market_rule, matching_symbols, option_chain};
 
 #[cfg(feature = "async")]
-pub(crate) use r#async::{
-    calculate_implied_volatility, calculate_option_price, contract_details, market_rule, matching_symbols, option_chain, verify_contract,
-};
+pub(crate) use r#async::{calculate_implied_volatility, calculate_option_price, contract_details, market_rule, matching_symbols, option_chain};
 
 // Public function for decoding option computation (used by market_data module)
 pub(crate) fn decode_option_computation(server_version: i32, message: &mut ResponseMessage) -> Result<OptionComputation, Error> {

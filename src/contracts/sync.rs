@@ -1,8 +1,9 @@
 use super::common::{decoders, encoders};
 use super::*;
 use crate::client::{DataStream, ResponseContext, Subscription};
+use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Client, Error};
-use log::info;
+use log::{error, info};
 
 impl DataStream<OptionComputation> for OptionComputation {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickOptionComputation];

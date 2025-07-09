@@ -16,6 +16,7 @@ env:
 jobs:
   coverage:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -25,10 +26,48 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo
-          key: cargo-${{ hashFiles('**/Cargo.toml') }}
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-coverage-
+            ${{ runner.os }}-cargo-
 
-      - name: install tarpaulin
+      - name: Install tarpaulin
         run: cargo install cargo-tarpaulin
-      - name: coverage
-        run: cargo tarpaulin --engine llvm --follow-exec --post-test-delay 10 --coveralls ${{ secrets.COVERALLS_TOKEN }}
+
+      # Run coverage for sync features
+      - name: Coverage for sync
+        run: |
+          cargo tarpaulin --engine llvm --follow-exec --post-test-delay 10 \
+            --out xml --output-dir target/coverage/sync \
+            -- --test-threads 1
+
+      # Run coverage for async features
+      - name: Coverage for async
+        run: |
+          cargo tarpaulin --engine llvm --follow-exec --post-test-delay 10 \
+            --no-default-features --features async \
+            --out xml --output-dir target/coverage/async \
+            -- --test-threads 1
+
+      # Merge coverage reports and upload to Coveralls
+      - name: Upload coverage to Coveralls
+        uses: coverallsapp/github-action@v2
+        with:
+          files: target/coverage/sync/cobertura.xml target/coverage/async/cobertura.xml
+          format: cobertura
+          flag-name: run-${{ matrix.feature }}
+          parallel: true
+
+  # Finish the parallel coverage upload
+  finish:
+    needs: coverage
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Coveralls Finished
+        uses: coverallsapp/github-action@v2
+        with:
+          parallel-finished: true
