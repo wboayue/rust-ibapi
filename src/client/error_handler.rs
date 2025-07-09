@@ -3,7 +3,8 @@
 //! This module provides common error handling functions used throughout
 //! the client implementation.
 
-// TODO: Remove this when async implementation is added and these functions are used
+// TODO: Remove this when async reconnection/retry logic is implemented (see transport/async.rs:175)
+// Currently only is_connection_error and is_timeout_error are used by sync transport
 #![allow(dead_code)]
 
 use std::io::ErrorKind;
