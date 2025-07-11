@@ -284,7 +284,6 @@ mod tests {
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
     use crate::ToField;
-    use futures::StreamExt;
     use std::sync::Arc;
     use std::sync::RwLock;
     use time::OffsetDateTime;

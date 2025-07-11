@@ -66,7 +66,6 @@ pub async fn contract_details(client: &Client, contract: &Contract) -> Result<Ve
 
     let mut contract_details: Vec<ContractDetails> = Vec::default();
 
-    use futures::StreamExt;
     while let Some(mut response) = responses.next().await {
         log::debug!("response: {:#?}", response);
         match response.message_type() {
@@ -127,7 +126,6 @@ pub async fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<Cont
     let request = encoders::encode_request_matching_symbols(request_id, pattern)?;
     let mut subscription = client.send_request(request_id, request).await?;
 
-    use futures::StreamExt;
     if let Some(mut message) = subscription.next().await {
         match message.message_type() {
             IncomingMessages::SymbolSamples => {
@@ -158,7 +156,6 @@ pub async fn market_rule(client: &Client, market_rule_id: i32) -> Result<MarketR
     let request = encoders::encode_request_market_rule(market_rule_id)?;
     let mut subscription = client.send_shared_request(OutgoingMessages::RequestMarketRule, request).await?;
 
-    use futures::StreamExt;
     match subscription.next().await {
         Some(mut message) => Ok(decoders::decode_market_rule(&mut message)?),
         None => Err(Error::Simple("no market rule found".into())),
@@ -183,7 +180,6 @@ pub async fn calculate_option_price(
     let message = encoders::encode_calculate_option_price(client.server_version(), request_id, contract, volatility, underlying_price)?;
     let mut subscription = client.send_request(request_id, message).await?;
 
-    use futures::StreamExt;
     match subscription.next().await {
         Some(mut message) => OptionComputation::decode(client, &mut message),
         None => Err(Error::Simple("no data for option calculation".into())),
@@ -211,7 +207,6 @@ pub async fn calculate_implied_volatility(
     let message = encoders::encode_calculate_implied_volatility(client.server_version(), request_id, contract, option_price, underlying_price)?;
     let mut subscription = client.send_request(request_id, message).await?;
 
-    use futures::StreamExt;
     match subscription.next().await {
         Some(mut message) => OptionComputation::decode(client, &mut message),
         None => Err(Error::Simple("no data for option calculation".into())),

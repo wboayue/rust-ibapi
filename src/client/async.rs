@@ -1388,7 +1388,7 @@ impl Client {
     ///                 println!("Order {} status: {}", status.order_id, status.status);
     ///             }
     ///             Ok(OrderUpdate::ExecutionData(exec)) => {
-    ///                 println!("Execution: {} shares @ {}", exec.shares, exec.price);
+    ///                 println!("Execution: {} shares @ {}", exec.execution.shares, exec.execution.price);
     ///             }
     ///             _ => {}
     ///         }
@@ -1414,7 +1414,7 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::contracts::{Contract, SecurityType};
-    /// use ibapi::orders::order_builder;
+    /// use ibapi::orders::{order_builder, Action};
     ///
     /// #[tokio::main]
     /// async fn main() {
@@ -1426,7 +1426,7 @@ impl Client {
     ///     contract.exchange = "SMART".to_string();
     ///     contract.currency = "USD".to_string();
     ///     
-    ///     let order = order_builder::limit_order("BUY", 100.0, 150.0);
+    ///     let order = order_builder::limit_order(Action::Buy, 100.0, 150.0);
     ///     let order_id = client.next_order_id();
     ///     
     ///     client.submit_order(order_id, &contract, &order).await.expect("failed to submit order");
@@ -1452,7 +1452,7 @@ impl Client {
     /// use futures::StreamExt;
     /// use ibapi::Client;
     /// use ibapi::contracts::{Contract, SecurityType};
-    /// use ibapi::orders::{order_builder, PlaceOrder};
+    /// use ibapi::orders::{order_builder, PlaceOrder, Action};
     ///
     /// #[tokio::main]
     /// async fn main() {
@@ -1464,7 +1464,7 @@ impl Client {
     ///     contract.exchange = "SMART".to_string();
     ///     contract.currency = "USD".to_string();
     ///     
-    ///     let order = order_builder::limit_order("BUY", 100.0, 150.0);
+    ///     let order = order_builder::limit_order(Action::Buy, 100.0, 150.0);
     ///     let order_id = client.next_order_id();
     ///     
     ///     let mut subscription = client.place_order(order_id, &contract, &order).await
