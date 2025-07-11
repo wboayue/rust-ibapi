@@ -12,9 +12,13 @@ use tokio::sync::mpsc;
 use super::common::{process_decode_result, ProcessingResult};
 use crate::client::builders::ResponseContext;
 use crate::client::r#async::Client;
-use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
+use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::transport::AsyncInternalSubscription;
 use crate::Error;
+
+// Type aliases to reduce complexity
+type CancelFn = Box<dyn Fn(i32, Option<i32>, &ResponseContext) -> Result<RequestMessage, Error> + Send + Sync>;
+type DecoderFn<T> = Box<dyn Fn(&Client, &mut ResponseMessage) -> Result<T, Error> + Send>;
 
 /// Trait for types that can be decoded from response messages
 pub trait AsyncDataStream<T> {
@@ -42,14 +46,14 @@ pub struct Subscription<T> {
     cancelled: Arc<AtomicBool>,
     client: Option<Arc<Client>>,
     /// Cancel message generator
-    cancel_fn: Option<Box<dyn Fn(i32, Option<i32>, &ResponseContext) -> Result<crate::messages::RequestMessage, Error> + Send + Sync>>,
+    cancel_fn: Option<CancelFn>,
 }
 
 enum SubscriptionInner<T> {
     /// Subscription with decoder - receives ResponseMessage and decodes to T
     WithDecoder {
         subscription: AsyncInternalSubscription,
-        decoder: Box<dyn Fn(&Client, &mut ResponseMessage) -> Result<T, Error> + Send>,
+        decoder: DecoderFn<T>,
         client: Arc<Client>,
     },
     /// Pre-decoded subscription - receives T directly

@@ -11,6 +11,7 @@ use crate::server_versions;
 
 /// Data exchanged during the connection handshake
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct HandshakeData {
     pub min_version: i32,
     pub max_version: i32,

@@ -10,11 +10,13 @@ use crate::subscriptions::Subscription;
 use crate::transport::InternalSubscription;
 
 /// Builder for creating requests with IDs
+#[allow(dead_code)]
 pub(crate) struct RequestBuilder<'a> {
     client: &'a Client,
     request_id: i32,
 }
 
+#[allow(dead_code)]
 impl<'a> RequestBuilder<'a> {
     /// Create a new request builder with an auto-generated request ID
     pub fn new(client: &'a Client) -> Self {
@@ -65,11 +67,13 @@ impl<'a> RequestBuilder<'a> {
 }
 
 /// Builder for creating shared channel requests (without request IDs)
+#[allow(dead_code)]
 pub(crate) struct SharedRequestBuilder<'a> {
     client: &'a Client,
     message_type: OutgoingMessages,
 }
 
+#[allow(dead_code)]
 impl<'a> SharedRequestBuilder<'a> {
     /// Create a new shared request builder
     pub fn new(client: &'a Client, message_type: OutgoingMessages) -> Self {
@@ -107,11 +111,13 @@ impl<'a> SharedRequestBuilder<'a> {
 }
 
 /// Builder for creating order requests
+#[allow(dead_code)]
 pub(crate) struct OrderRequestBuilder<'a> {
     client: &'a Client,
     order_id: i32,
 }
 
+#[allow(dead_code)]
 impl<'a> OrderRequestBuilder<'a> {
     /// Create a new order request builder with an auto-generated order ID
     pub fn new(client: &'a Client) -> Self {
@@ -144,10 +150,12 @@ impl<'a> OrderRequestBuilder<'a> {
 }
 
 /// Builder for simple message sends (no response expected)
+#[allow(dead_code)]
 pub(crate) struct MessageBuilder<'a> {
     client: &'a Client,
 }
 
+#[allow(dead_code)]
 impl<'a> MessageBuilder<'a> {
     /// Create a new message builder
     pub fn new(client: &'a Client) -> Self {
@@ -167,12 +175,14 @@ impl<'a> MessageBuilder<'a> {
 }
 
 /// Builder for creating subscriptions with consistent patterns
+#[allow(dead_code)]
 pub(crate) struct SubscriptionBuilder<'a, T> {
     client: &'a Client,
     context: ResponseContext,
     _phantom: PhantomData<T>,
 }
 
+#[allow(dead_code)]
 impl<'a, T> SubscriptionBuilder<'a, T>
 where
     T: DataStream<T> + 'static,
@@ -223,6 +233,7 @@ where
 }
 
 /// Extension trait to add builder methods to Client
+#[allow(dead_code)]
 pub trait ClientRequestBuilders {
     /// Create a request builder with an auto-generated request ID
     fn request(&self) -> RequestBuilder;
@@ -243,6 +254,7 @@ pub trait ClientRequestBuilders {
     fn message(&self) -> MessageBuilder;
 }
 
+#[allow(dead_code)]
 impl ClientRequestBuilders for Client {
     fn request(&self) -> RequestBuilder {
         RequestBuilder::new(self)

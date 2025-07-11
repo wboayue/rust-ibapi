@@ -38,6 +38,7 @@ impl IdGenerator {
     }
 
     /// Gets the current ID without incrementing
+    #[allow(dead_code)]
     pub fn current(&self) -> i32 {
         self.next_id.load(Ordering::Relaxed)
     }
@@ -48,6 +49,7 @@ impl IdGenerator {
     }
 
     /// Resets the generator to a new starting value
+    #[allow(dead_code)]
     pub fn reset(&self, start: i32) {
         self.set(start);
     }
@@ -91,11 +93,13 @@ impl ClientIdManager {
     }
 
     /// Gets the current order ID without incrementing
+    #[allow(dead_code)]
     pub fn current_order_id(&self) -> i32 {
         self.order_ids.current()
     }
 
     /// Gets the current request ID without incrementing
+    #[allow(dead_code)]
     pub fn current_request_id(&self) -> i32 {
         self.request_ids.current()
     }

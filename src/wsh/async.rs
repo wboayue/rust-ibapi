@@ -19,11 +19,27 @@ impl AsyncDataStream<WshMetadata> for WshMetadata {
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
+
+    fn cancel_message(
+        _server_version: i32,
+        request_id: Option<i32>,
+        _context: &crate::client::builders::ResponseContext,
+    ) -> Result<crate::messages::RequestMessage, Error> {
+        encoders::encode_cancel_wsh_metadata(request_id.ok_or(Error::Simple("request_id required".into()))?)
+    }
 }
 
 impl AsyncDataStream<WshEventData> for WshEventData {
     fn decode(_client: &Client, message: &mut crate::messages::ResponseMessage) -> Result<WshEventData, Error> {
         decode_event_data_message(message.clone())
+    }
+
+    fn cancel_message(
+        _server_version: i32,
+        request_id: Option<i32>,
+        _context: &crate::client::builders::ResponseContext,
+    ) -> Result<crate::messages::RequestMessage, Error> {
+        encoders::encode_cancel_wsh_event_data(request_id.ok_or(Error::Simple("request_id required".into()))?)
     }
 }
 

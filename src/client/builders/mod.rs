@@ -18,4 +18,5 @@ pub use sync::{ClientRequestBuilders, SubscriptionBuilderExt};
 pub use r#async::{ClientRequestBuilders, SubscriptionBuilderExt};
 
 // Re-export ResponseContext from common module
+#[cfg(feature = "async")]
 pub use common::ResponseContext;

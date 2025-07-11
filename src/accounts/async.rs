@@ -33,6 +33,14 @@ impl AsyncDataStream<PnL> for PnL {
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_pnl(client.server_version(), message)
     }
+
+    fn cancel_message(
+        _server_version: i32,
+        request_id: Option<i32>,
+        _context: &crate::client::builders::ResponseContext,
+    ) -> Result<crate::messages::RequestMessage, Error> {
+        encoders::encode_cancel_pnl(request_id.ok_or(Error::Simple("request_id required".into()))?)
+    }
 }
 
 impl AsyncDataStream<PnLSingle> for PnLSingle {
@@ -40,6 +48,14 @@ impl AsyncDataStream<PnLSingle> for PnLSingle {
 
     fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_pnl_single(client.server_version(), message)
+    }
+
+    fn cancel_message(
+        _server_version: i32,
+        request_id: Option<i32>,
+        _context: &crate::client::builders::ResponseContext,
+    ) -> Result<crate::messages::RequestMessage, Error> {
+        encoders::encode_cancel_pnl_single(request_id.ok_or(Error::Simple("request_id required".into()))?)
     }
 }
 
@@ -53,6 +69,14 @@ impl AsyncDataStream<PositionUpdate> for PositionUpdate {
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
     }
+
+    fn cancel_message(
+        _server_version: i32,
+        _request_id: Option<i32>,
+        _context: &crate::client::builders::ResponseContext,
+    ) -> Result<crate::messages::RequestMessage, Error> {
+        encoders::encode_cancel_positions()
+    }
 }
 
 impl AsyncDataStream<PositionUpdateMulti> for PositionUpdateMulti {
@@ -64,6 +88,14 @@ impl AsyncDataStream<PositionUpdateMulti> for PositionUpdateMulti {
             IncomingMessages::PositionMultiEnd => Ok(PositionUpdateMulti::PositionEnd),
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
+    }
+
+    fn cancel_message(
+        _server_version: i32,
+        request_id: Option<i32>,
+        _context: &crate::client::builders::ResponseContext,
+    ) -> Result<crate::messages::RequestMessage, Error> {
+        encoders::encode_cancel_positions_multi(request_id.ok_or(Error::Simple("request_id required".into()))?)
     }
 }
 

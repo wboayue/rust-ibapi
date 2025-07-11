@@ -22,6 +22,15 @@ impl AsyncDataStream<BidAsk> for BidAsk {
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
+
+    fn cancel_message(
+        _server_version: i32,
+        request_id: Option<i32>,
+        _context: &crate::client::builders::ResponseContext,
+    ) -> Result<crate::messages::RequestMessage, Error> {
+        let request_id = request_id.expect("Request ID required to encode cancel tick by tick");
+        encoders::encode_cancel_tick_by_tick(request_id)
+    }
 }
 
 impl AsyncDataStream<MidPoint> for MidPoint {
@@ -34,6 +43,15 @@ impl AsyncDataStream<MidPoint> for MidPoint {
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
+
+    fn cancel_message(
+        _server_version: i32,
+        request_id: Option<i32>,
+        _context: &crate::client::builders::ResponseContext,
+    ) -> Result<crate::messages::RequestMessage, Error> {
+        let request_id = request_id.expect("Request ID required to encode cancel tick by tick");
+        encoders::encode_cancel_tick_by_tick(request_id)
+    }
 }
 
 impl AsyncDataStream<Bar> for Bar {
@@ -41,6 +59,15 @@ impl AsyncDataStream<Bar> for Bar {
 
     fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_realtime_bar(message)
+    }
+
+    fn cancel_message(
+        _server_version: i32,
+        request_id: Option<i32>,
+        _context: &crate::client::builders::ResponseContext,
+    ) -> Result<crate::messages::RequestMessage, Error> {
+        let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
+        encoders::encode_cancel_realtime_bars(request_id)
     }
 }
 
@@ -53,6 +80,15 @@ impl AsyncDataStream<Trade> for Trade {
             IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
+    }
+
+    fn cancel_message(
+        _server_version: i32,
+        request_id: Option<i32>,
+        _context: &crate::client::builders::ResponseContext,
+    ) -> Result<crate::messages::RequestMessage, Error> {
+        let request_id = request_id.expect("Request ID required to encode cancel tick by tick");
+        encoders::encode_cancel_tick_by_tick(request_id)
     }
 }
 
@@ -78,6 +114,15 @@ impl AsyncDataStream<MarketDepths> for MarketDepths {
             }
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
+    }
+
+    fn cancel_message(
+        _server_version: i32,
+        request_id: Option<i32>,
+        _context: &crate::client::builders::ResponseContext,
+    ) -> Result<crate::messages::RequestMessage, Error> {
+        let request_id = request_id.expect("Request ID required to encode cancel market depth");
+        encoders::encode_cancel_market_depth(request_id)
     }
 }
 
