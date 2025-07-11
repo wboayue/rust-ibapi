@@ -117,12 +117,12 @@ impl AsyncDataStream<MarketDepths> for MarketDepths {
     }
 
     fn cancel_message(
-        _server_version: i32,
+        server_version: i32,
         request_id: Option<i32>,
-        _context: &crate::client::builders::ResponseContext,
+        context: &crate::client::builders::ResponseContext,
     ) -> Result<crate::messages::RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel market depth");
-        encoders::encode_cancel_market_depth(request_id)
+        encoders::encode_cancel_market_depth(server_version, request_id, context.is_smart_depth)
     }
 }
 
