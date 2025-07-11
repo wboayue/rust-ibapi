@@ -347,7 +347,7 @@ mod tests {
         let (ticks, done) = decode_historical_ticks_bid_ask(&mut message).unwrap();
 
         assert_eq!(ticks.len(), 4, "ticks.len()");
-        assert_eq!(done, true, "done");
+        assert!(done, "done");
 
         assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:29:59 UTC), "ticks[0].timestamp");
         assert_eq!(
@@ -386,7 +386,7 @@ mod tests {
         let (ticks, done) = decode_historical_ticks_last(&mut message).unwrap();
 
         assert_eq!(ticks.len(), 7, "ticks.len()");
-        assert_eq!(done, true, "done");
+        assert!(done, "done");
 
         assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:30:0 UTC), "ticks[0].timestamp");
         assert_eq!(
@@ -425,7 +425,7 @@ mod tests {
         let (ticks, done) = decode_historical_ticks_mid_point(&mut message).unwrap();
 
         assert_eq!(ticks.len(), 24, "ticks.len()");
-        assert_eq!(done, true, "done");
+        assert!(done, "done");
 
         assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:29:58 UTC), "ticks[0].timestamp");
         assert_eq!(ticks[0].price, 91.36, "ticks[0].price");

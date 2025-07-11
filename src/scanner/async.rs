@@ -256,9 +256,10 @@ mod tests {
         // Explicitly cancel
         subscription.cancel().await;
 
-        let request_messages = message_bus.request_messages.read().unwrap();
-        assert_eq!(request_messages.len(), 2, "Expected 2 messages after cancel");
-        drop(request_messages);
+        {
+            let request_messages = message_bus.request_messages.read().unwrap();
+            assert_eq!(request_messages.len(), 2, "Expected 2 messages after cancel");
+        }
 
         // Drop the already-cancelled subscription
         drop(subscription);

@@ -157,9 +157,8 @@ mod tests {
         let account_with_model = "DU456";
         let contract_id_with_model = 1002;
         let model_code_some = Some("MyModelPnlSingle");
-        let request_with_model =
-            super::encode_request_pnl_single(request_id_with_model, &account_with_model, contract_id_with_model, model_code_some)
-                .expect("encode request pnl_single failed (with model)");
+        let request_with_model = super::encode_request_pnl_single(request_id_with_model, account_with_model, contract_id_with_model, model_code_some)
+            .expect("encode request pnl_single failed (with model)");
 
         assert_eq!(request_with_model[0], OutgoingMessages::RequestPnLSingle.to_field(), "type (with model)");
         assert_eq!(request_with_model[1], request_id_with_model.to_field(), "request_id (with model)");
@@ -212,7 +211,7 @@ mod tests {
         let version = 2;
         let account = "DU1234567";
 
-        let request = super::encode_request_account_updates(server_version, &account).expect("encode request account updates");
+        let request = super::encode_request_account_updates(server_version, account).expect("encode request account updates");
 
         assert_eq!(request[0], OutgoingMessages::RequestAccountData.to_field());
         assert_eq!(request[1], version.to_field());
@@ -222,7 +221,7 @@ mod tests {
         let server_version_ge10 = 10;
 
         let request_sv_ge10 =
-            super::encode_request_account_updates(server_version_ge10, &account).expect("encode request account updates for sv >= 10");
+            super::encode_request_account_updates(server_version_ge10, account).expect("encode request account updates for sv >= 10");
 
         assert_eq!(request_sv_ge10[0], OutgoingMessages::RequestAccountData.to_field());
         assert_eq!(request_sv_ge10[1], version.to_field());

@@ -625,8 +625,8 @@ mod tests {
         assert_eq!(tick1.price_ask, 186.00, "Wrong ask price for first tick");
         assert_eq!(tick1.size_bid, 100, "Wrong bid size for first tick");
         assert_eq!(tick1.size_ask, 200, "Wrong ask size for first tick");
-        assert_eq!(tick1.tick_attribute_bid_ask.bid_past_low, true, "Wrong bid past low for first tick");
-        assert_eq!(tick1.tick_attribute_bid_ask.ask_past_high, false, "Wrong ask past high for first tick");
+        assert!(tick1.tick_attribute_bid_ask.bid_past_low, "Wrong bid past low for first tick");
+        assert!(!tick1.tick_attribute_bid_ask.ask_past_high, "Wrong ask past high for first tick");
 
         // Get second tick
         let tick2 = subscription.next().await;
@@ -705,8 +705,8 @@ mod tests {
         assert_eq!(tick.price_ask, 186.00, "Wrong ask price");
         assert_eq!(tick.size_bid, 100, "Wrong bid size");
         assert_eq!(tick.size_ask, 200, "Wrong ask size");
-        assert_eq!(tick.tick_attribute_bid_ask.bid_past_low, true, "Wrong bid past low");
-        assert_eq!(tick.tick_attribute_bid_ask.ask_past_high, false, "Wrong ask past high");
+        assert!(tick.tick_attribute_bid_ask.bid_past_low, "Wrong bid past low");
+        assert!(!tick.tick_attribute_bid_ask.ask_past_high, "Wrong ask past high");
 
         // Verify request message
         let request_messages = message_bus.request_messages.read().unwrap();
@@ -793,8 +793,8 @@ mod tests {
         assert_eq!(tick.size, 100, "Wrong trade size");
         assert_eq!(tick.exchange, "ISLAND", "Wrong exchange");
         assert_eq!(tick.special_conditions, "APR", "Wrong special conditions");
-        assert_eq!(tick.tick_attribute_last.past_limit, false, "Wrong past limit");
-        assert_eq!(tick.tick_attribute_last.unreported, false, "Wrong unreported");
+        assert!(!tick.tick_attribute_last.past_limit, "Wrong past limit");
+        assert!(!tick.tick_attribute_last.unreported, "Wrong unreported");
 
         // Verify request message
         let request_messages = message_bus.request_messages.read().unwrap();

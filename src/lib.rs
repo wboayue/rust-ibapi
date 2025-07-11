@@ -15,6 +15,9 @@
 //!
 //! For an overview of API usage, refer to the [README](https://github.com/wboayue/rust-ibapi/blob/main/README.md).
 
+// Allow octal-looking escapes in string literals (used in test data)
+#![allow(clippy::octal_escapes)]
+
 // Feature guards - async takes precedence over sync
 #[cfg(not(any(feature = "sync", feature = "async")))]
 compile_error!(

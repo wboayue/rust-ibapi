@@ -64,8 +64,8 @@ mod tests {
             assert_eq!(trade.time, OffsetDateTime::from_unix_timestamp(1678740829).unwrap(), "Wrong timestamp");
             assert_eq!(trade.price, 3895.25, "Wrong price");
             assert_eq!(trade.size, 7.0, "Wrong size");
-            assert_eq!(trade.trade_attribute.past_limit, false, "Wrong past limit flag");
-            assert_eq!(trade.trade_attribute.unreported, true, "Wrong unreported flag");
+            assert!(!trade.trade_attribute.past_limit, "Wrong past limit flag");
+            assert!(trade.trade_attribute.unreported, "Wrong unreported flag");
             assert_eq!(trade.exchange, "NASDAQ", "Wrong exchange");
             assert_eq!(trade.special_conditions, "Regular", "Wrong special conditions");
         }
@@ -105,8 +105,8 @@ mod tests {
             assert_eq!(bid_ask.ask_price, 3896.00, "Wrong ask price");
             assert_eq!(bid_ask.bid_size, 9.0, "Wrong bid size");
             assert_eq!(bid_ask.ask_size, 11.0, "Wrong ask size");
-            assert_eq!(bid_ask.bid_ask_attribute.bid_past_low, true, "Wrong bid past low flag");
-            assert_eq!(bid_ask.bid_ask_attribute.ask_past_high, true, "Wrong ask past high flag");
+            assert!(bid_ask.bid_ask_attribute.bid_past_low, "Wrong bid past low flag");
+            assert!(bid_ask.bid_ask_attribute.ask_past_high, "Wrong ask past high flag");
         }
 
         #[test]
@@ -202,7 +202,7 @@ mod tests {
             assert_eq!(depth.side, 1, "Wrong side");
             assert_eq!(depth.price, 185.50, "Wrong price");
             assert_eq!(depth.size, 100.0, "Wrong size");
-            assert_eq!(depth.smart_depth, true, "Wrong smart depth flag");
+            assert!(depth.smart_depth, "Wrong smart depth flag");
         }
 
         #[test]
@@ -211,12 +211,12 @@ mod tests {
             let mut message = ResponseMessage::from("13\0\09000\00\0ISLAND\01\01\0185.50\0100\0");
 
             let depth = decode_market_depth_l2(server_versions::SMART_DEPTH - 1, &mut message).expect("Failed to decode market depth L2");
-            assert_eq!(depth.smart_depth, false, "Should default to false for old server version");
+            assert!(!depth.smart_depth, "Should default to false for old server version");
 
             // Test with SMART_DEPTH version
             let mut message = ResponseMessage::from("13\0\09000\00\0ISLAND\01\01\0185.50\0100\01\0");
             let depth = decode_market_depth_l2(server_versions::SMART_DEPTH, &mut message).expect("Failed to decode market depth L2");
-            assert_eq!(depth.smart_depth, true, "Should read smart_depth flag for new server version");
+            assert!(depth.smart_depth, "Should read smart_depth flag for new server version");
         }
 
         #[test]
@@ -274,9 +274,9 @@ mod tests {
             if let TickTypes::Price(tick) = decode_tick_price(server_versions::PRE_OPEN_BID_ASK, &mut message).expect("Failed to decode tick price") {
                 assert_eq!(tick.tick_type, TickType::Bid, "Wrong tick type");
                 assert_eq!(tick.price, 185.50, "Wrong price");
-                assert_eq!(tick.attributes.can_auto_execute, false, "Wrong can auto execute flag");
-                assert_eq!(tick.attributes.past_limit, false, "Wrong past limit flag");
-                assert_eq!(tick.attributes.pre_open, false, "Wrong pre open flag");
+                assert!(!tick.attributes.can_auto_execute, "Wrong can auto execute flag");
+                assert!(!tick.attributes.past_limit, "Wrong past limit flag");
+                assert!(!tick.attributes.pre_open, "Wrong pre open flag");
             } else {
                 panic!("Expected TickTypes::Price variant");
             }

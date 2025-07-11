@@ -704,7 +704,7 @@ mod tests {
                 TickTypes::Price(tick) => {
                     assert_eq!(tick.tick_type, TickType::Bid, "Wrong tick type");
                     assert_eq!(tick.price, 185.50, "Wrong price");
-                    assert_eq!(tick.attributes.can_auto_execute, true, "Wrong can auto execute flag");
+                    assert!(tick.attributes.can_auto_execute, "Wrong can auto execute flag");
                 }
                 TickTypes::Size(tick) => {
                     assert_eq!(tick.tick_type, TickType::BidSize, "Wrong tick type");
@@ -713,7 +713,7 @@ mod tests {
                 TickTypes::PriceSize(tick) => {
                     assert_eq!(tick.price_tick_type, TickType::Bid, "Wrong tick type");
                     assert_eq!(tick.price, 185.50, "Wrong price");
-                    assert_eq!(tick.attributes.can_auto_execute, false, "Wrong can auto execute flag");
+                    assert!(!tick.attributes.can_auto_execute, "Wrong can auto execute flag");
                     assert_eq!(tick.size_tick_type, TickType::BidSize, "Wrong tick type");
                     assert_eq!(tick.size, 100.0, "Wrong size");
                 }

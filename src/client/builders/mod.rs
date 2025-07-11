@@ -10,12 +10,12 @@ pub mod r#async;
 
 mod common;
 
-// Re-export ResponseContext for use in trait implementations
-pub use common::ResponseContext;
-
 // Re-export builders based on feature
 #[cfg(all(feature = "sync", not(feature = "async")))]
 pub use sync::{ClientRequestBuilders, SubscriptionBuilderExt};
 
 #[cfg(feature = "async")]
 pub use r#async::{ClientRequestBuilders, SubscriptionBuilderExt};
+
+// Re-export ResponseContext from common module
+pub use common::ResponseContext;

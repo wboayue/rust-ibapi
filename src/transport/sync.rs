@@ -22,8 +22,8 @@ use super::{InternalSubscription, MessageBus, Response, Signal, SubscriptionBuil
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Error};
 
-pub(crate) const MIN_SERVER_VERSION: i32 = 100;
-pub(crate) const MAX_SERVER_VERSION: i32 = server_versions::WSH_EVENT_DATA_FILTERS_DATE;
+// pub(crate) const MIN_SERVER_VERSION: i32 = 100;
+// pub(crate) const MAX_SERVER_VERSION: i32 = server_versions::WSH_EVENT_DATA_FILTERS_DATE;
 pub(crate) const MAX_RETRIES: i32 = 20;
 const TWS_READ_TIMEOUT: Duration = Duration::from_secs(1);
 

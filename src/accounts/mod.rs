@@ -142,6 +142,7 @@ pub struct Position {
     pub average_cost: f64,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum PositionUpdate {
     /// Update for a position in the account
@@ -150,6 +151,7 @@ pub enum PositionUpdate {
     PositionEnd,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum PositionUpdateMulti {
     Position(PositionMulti),
@@ -178,6 +180,7 @@ pub struct FamilyCode {
     pub family_code: String,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum AccountUpdate {
     AccountValue(AccountValue),

@@ -1,6 +1,8 @@
 //! Common message routing logic for sync and async implementations
 
-use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
+#[cfg(test)]
+use crate::messages::OutgoingMessages;
+use crate::messages::{IncomingMessages, ResponseMessage};
 
 /// Represents how a message should be routed
 #[derive(Debug, Clone, PartialEq)]
@@ -68,6 +70,7 @@ pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
 
 /// Maps incoming message types to their corresponding outgoing request types
 /// This is used for shared channel routing
+#[cfg(test)]
 pub fn map_incoming_to_outgoing(message_type: IncomingMessages) -> Option<OutgoingMessages> {
     match message_type {
         IncomingMessages::ManagedAccounts => Some(OutgoingMessages::RequestManagedAccounts),

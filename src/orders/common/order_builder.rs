@@ -1408,7 +1408,7 @@ mod tests {
             assert_eq!(order.order_type, "PEG BENCH");
             assert_eq!(order.total_quantity, 100.0);
             assert_eq!(order.starting_price, Some(50.0));
-            assert_eq!(order.is_pegged_change_amount_decrease, false);
+            assert!(!order.is_pegged_change_amount_decrease);
             assert_eq!(order.pegged_change_amount, Some(0.02));
             assert_eq!(order.reference_change_amount, Some(0.01));
             assert_eq!(order.reference_contract_id, 12345);

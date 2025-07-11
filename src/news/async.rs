@@ -241,8 +241,10 @@ mod tests {
         let results = news_bulletins(&client, true).await;
         assert!(results.is_ok(), "failed to request news bulletins: {}", results.err().unwrap());
 
-        let request_messages = message_bus.request_messages.read().unwrap();
-        assert_eq!(request_messages[0].encode_simple(), "12|1|1|");
+        {
+            let request_messages = message_bus.request_messages.read().unwrap();
+            assert_eq!(request_messages[0].encode_simple(), "12|1|1|");
+        }
 
         let mut subscription = results.unwrap();
         if let Some(bulletin) = subscription.next().await {
@@ -274,11 +276,13 @@ mod tests {
         let results = historical_news(&client, 8314, &["BZ", "DJ"], start_time, end_time, 10).await;
         assert!(results.is_ok(), "failed to request historical news: {}", results.err().unwrap());
 
-        let request_messages = message_bus.request_messages.read().unwrap();
-        assert_eq!(
-            request_messages[0].encode(),
-            "86\09000\08314\0BZ+DJ\020230101 00:00:00 UTC\020230102 00:00:00 UTC\010\0\0"
-        );
+        {
+            let request_messages = message_bus.request_messages.read().unwrap();
+            assert_eq!(
+                request_messages[0].encode(),
+                "86\09000\08314\0BZ+DJ\020230101 00:00:00 UTC\020230102 00:00:00 UTC\010\0\0"
+            );
+        }
 
         let mut subscription = results.unwrap();
         if let Some(article) = subscription.next().await {
@@ -326,8 +330,10 @@ mod tests {
         let results = contract_news(&client, &contract, &["BZ", "DJ"]).await;
         assert!(results.is_ok(), "failed to request contract news: {}", results.err().unwrap());
 
-        let request_messages = message_bus.request_messages.read().unwrap();
-        assert!(request_messages[0].encode().contains("mdoff,292:BZ,292:DJ"));
+        {
+            let request_messages = message_bus.request_messages.read().unwrap();
+            assert!(request_messages[0].encode().contains("mdoff,292:BZ,292:DJ"));
+        }
 
         let mut subscription = results.unwrap();
         if let Some(article) = subscription.next().await {
@@ -354,8 +360,10 @@ mod tests {
         let results = broad_tape_news(&client, "BZ").await;
         assert!(results.is_ok(), "failed to request broad tape news: {}", results.err().unwrap());
 
-        let request_messages = message_bus.request_messages.read().unwrap();
-        assert!(request_messages[0].encode().contains("mdoff,292"));
+        {
+            let request_messages = message_bus.request_messages.read().unwrap();
+            assert!(request_messages[0].encode().contains("mdoff,292"));
+        }
 
         let mut subscription = results.unwrap();
         if let Some(article) = subscription.next().await {
@@ -385,10 +393,11 @@ mod tests {
         let _ = subscription.next().await;
 
         // Verify initial request was sent
-        let request_messages = message_bus.request_messages.read().unwrap();
-        assert_eq!(request_messages.len(), 1, "Expected 1 request message");
-        assert_eq!(request_messages[0].encode_simple(), "12|1|1|");
-        drop(request_messages);
+        {
+            let request_messages = message_bus.request_messages.read().unwrap();
+            assert_eq!(request_messages.len(), 1, "Expected 1 request message");
+            assert_eq!(request_messages[0].encode_simple(), "12|1|1|");
+        }
 
         // Explicitly cancel the subscription
         subscription.cancel().await;
@@ -415,9 +424,10 @@ mod tests {
         let _ = subscription.next().await;
 
         // Verify initial request was sent
-        let request_messages = message_bus.request_messages.read().unwrap();
-        assert_eq!(request_messages.len(), 1, "Expected 1 request message");
-        drop(request_messages);
+        {
+            let request_messages = message_bus.request_messages.read().unwrap();
+            assert_eq!(request_messages.len(), 1, "Expected 1 request message");
+        }
 
         // Explicitly cancel the subscription
         subscription.cancel().await;
