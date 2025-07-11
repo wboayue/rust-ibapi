@@ -9,4 +9,3 @@ pub struct ResponseContext {
     pub is_smart_depth: bool,
     pub request_type: Option<OutgoingMessages>,
 }
-
