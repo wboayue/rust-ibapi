@@ -1,8 +1,8 @@
 //! Common message routing logic for sync and async implementations
 
-use crate::messages::{IncomingMessages, ResponseMessage};
 #[allow(unused_imports)]
 use crate::messages::OutgoingMessages;
+use crate::messages::{IncomingMessages, ResponseMessage};
 
 /// Represents how a message should be routed
 #[derive(Debug, Clone, PartialEq)]
