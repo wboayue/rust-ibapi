@@ -565,7 +565,7 @@ pub struct PriceIncrement {
 
 // Re-export API functions based on active feature
 #[cfg(all(feature = "sync", not(feature = "async")))]
-pub(crate) use sync::{calculate_implied_volatility, calculate_option_price, contract_details, market_rule, matching_symbols, option_chain};
+pub(crate) use sync::{calculate_implied_volatility, calculate_option_price, contract_details, market_rule, matching_symbols, option_chain, verify_contract};
 
 #[cfg(feature = "async")]
 pub(crate) use r#async::{calculate_implied_volatility, calculate_option_price, contract_details, market_rule, matching_symbols, option_chain, verify_contract};

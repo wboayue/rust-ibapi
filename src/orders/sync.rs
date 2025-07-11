@@ -293,7 +293,7 @@ mod tests {
     use std::sync::{Arc, RwLock};
 
     use crate::contracts::{contract_samples, Contract, SecurityType};
-    use crate::orders::{Action, Liquidity, Order};
+    use crate::orders::{Action, Liquidity};
     use crate::stubs::MessageBusStub;
 
     use super::*;
