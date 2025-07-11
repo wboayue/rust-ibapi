@@ -449,7 +449,8 @@ impl ContractBuilder {
         }
 
         // Validate futures-specific requirements
-        if (security_type == SecurityType::Future || security_type == SecurityType::FuturesOption) && self.last_trade_date_or_contract_month.is_none() {
+        if (security_type == SecurityType::Future || security_type == SecurityType::FuturesOption) && self.last_trade_date_or_contract_month.is_none()
+        {
             return Err(Error::Simple("Contract month is required for futures".into()));
         }
 

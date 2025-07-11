@@ -244,7 +244,7 @@ mod tests {
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages[0].encode_simple(), "12|1|1|");
 
-            let mut subscription = results.unwrap();
+        let mut subscription = results.unwrap();
         if let Some(bulletin) = subscription.next().await {
             let bulletin = bulletin.unwrap();
             assert_eq!(bulletin.message_id, 1);
@@ -280,7 +280,7 @@ mod tests {
             "86\09000\08314\0BZ+DJ\020230101 00:00:00 UTC\020230102 00:00:00 UTC\010\0\0"
         );
 
-            let mut subscription = results.unwrap();
+        let mut subscription = results.unwrap();
         if let Some(article) = subscription.next().await {
             let article = article.unwrap();
             assert_eq!(article.provider_code, "DJ-N");
@@ -329,7 +329,7 @@ mod tests {
         let request_messages = message_bus.request_messages.read().unwrap();
         assert!(request_messages[0].encode().contains("mdoff,292:BZ,292:DJ"));
 
-            let mut subscription = results.unwrap();
+        let mut subscription = results.unwrap();
         if let Some(article) = subscription.next().await {
             let article = article.unwrap();
             assert_eq!(article.provider_code, "BZ");
@@ -357,7 +357,7 @@ mod tests {
         let request_messages = message_bus.request_messages.read().unwrap();
         assert!(request_messages[0].encode().contains("mdoff,292"));
 
-            let mut subscription = results.unwrap();
+        let mut subscription = results.unwrap();
         if let Some(article) = subscription.next().await {
             let article = article.unwrap();
             assert_eq!(article.provider_code, "BZ");
@@ -382,7 +382,7 @@ mod tests {
         let mut subscription = client.news_bulletins(true).await.unwrap();
 
         // Read one message to ensure subscription is active
-            let _ = subscription.next().await;
+        let _ = subscription.next().await;
 
         // Verify initial request was sent
         let request_messages = message_bus.request_messages.read().unwrap();
@@ -412,7 +412,7 @@ mod tests {
         let mut subscription = client.contract_news(&contract, &["BZ"]).await.unwrap();
 
         // Read one message to ensure subscription is active
-            let _ = subscription.next().await;
+        let _ = subscription.next().await;
 
         // Verify initial request was sent
         let request_messages = message_bus.request_messages.read().unwrap();
