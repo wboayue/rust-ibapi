@@ -3,19 +3,19 @@
 use crate::errors::Error;
 
 /// Checks if an error indicates the subscription should retry processing
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[allow(dead_code)]
 pub(crate) fn should_retry_error(error: &Error) -> bool {
     matches!(error, Error::UnexpectedResponse(_))
 }
 
 /// Checks if an error indicates the end of a stream
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[allow(dead_code)]
 pub(crate) fn is_stream_end(error: &Error) -> bool {
     matches!(error, Error::EndOfStream)
 }
 
 /// Checks if an error should be stored for later retrieval
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[allow(dead_code)]
 pub(crate) fn should_store_error(error: &Error) -> bool {
     !is_stream_end(error)
 }

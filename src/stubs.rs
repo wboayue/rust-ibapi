@@ -1,6 +1,9 @@
 use std::sync::RwLock;
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
+use std::sync::{Arc, Mutex};
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
 use crossbeam::channel;
 
 use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
