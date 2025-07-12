@@ -1,4 +1,4 @@
-use futures::StreamExt;
+#![allow(clippy::uninlined_format_args)]
 use ibapi::orders::TagValue;
 use ibapi::scanner::ScannerSubscription;
 use ibapi::Client;

@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! Async real-time market data example
 //!
 //! This example demonstrates how to subscribe to real-time market data using the async API.
@@ -18,7 +19,6 @@
 
 use std::sync::Arc;
 
-use futures::StreamExt;
 use ibapi::{contracts::Contract, market_data::realtime::TickTypes, Client};
 
 #[tokio::main]
@@ -42,11 +42,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Market data subscription created");
 
     // Process market data stream
-    let mut stream = market_data.take(20); // Take first 20 ticks for demo
+    let mut market_data = market_data;
     let mut tick_count = 0;
 
-    while let Some(tick) = stream.next().await {
+    while let Some(tick) = market_data.next().await {
         tick_count += 1;
+        if tick_count > 20 {
+            break;
+        } // Take first 20 ticks for demo
         match tick? {
             TickTypes::Price(tick) => {
                 println!("[{}] Price - {}: ${:.2}", tick_count, tick.tick_type, tick.price);

@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! Example demonstrating how to use order_update_stream() with submit_order()
 //!
 //! This example shows how to:
@@ -5,7 +6,6 @@
 //! 2. Submit orders using the fire-and-forget submit_order() method
 //! 3. Monitor order status through the update stream
 
-use futures::StreamExt;
 use ibapi::contracts::{Contract, SecurityType};
 use ibapi::orders::{order_builder, order_update_stream, submit_order, Action, OrderUpdate};
 use ibapi::Client;
@@ -78,11 +78,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     // Create a contract for Apple stock
-    let mut contract = Contract::default();
-    contract.symbol = "AAPL".to_string();
-    contract.security_type = SecurityType::Stock;
-    contract.exchange = "SMART".to_string();
-    contract.currency = "USD".to_string();
+    let contract = Contract {
+        symbol: "AAPL".to_string(),
+        security_type: SecurityType::Stock,
+        exchange: "SMART".to_string(),
+        currency: "USD".to_string(),
+        ..Default::default()
+    };
 
     // Create a limit order to buy 100 shares
     let order = order_builder::limit_order(Action::Buy, 100.0, 150.0);

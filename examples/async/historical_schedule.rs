@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! Async historical schedule example
 //!
 //! This example demonstrates how to retrieve trading schedule information
@@ -39,14 +40,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("SPY", Contract::stock("SPY"), "NYSE"),
         (
             "GC",
-            {
-                let mut future = Contract::default();
-                future.symbol = "GC".to_string();
-                future.security_type = SecurityType::Future;
-                future.exchange = "COMEX".to_string();
-                future.currency = "USD".to_string();
-                future.last_trade_date_or_contract_month = "202502".to_string();
-                future
+            Contract {
+                symbol: "GC".to_string(),
+                security_type: SecurityType::Future,
+                exchange: "COMEX".to_string(),
+                currency: "USD".to_string(),
+                last_trade_date_or_contract_month: "202502".to_string(),
+                ..Default::default()
             },
             "COMEX",
         ),
@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Request trading schedule for each contract
     for (name, contract, exchange) in contracts {
-        println!("\n{} Trading Schedule ({}):", name, exchange);
+        println!("\n{name} Trading Schedule ({exchange}):");
 
         // Get last 30 days of trading schedule
         let end_date = None; // Use current time
@@ -69,12 +69,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let session_count = schedule.sessions.len();
                 let sessions_to_show = session_count.min(5);
 
-                println!("\n  Last {} trading sessions:", sessions_to_show);
+                println!("\n  Last {sessions_to_show} trading sessions:");
                 for session in schedule.sessions.iter().rev().take(sessions_to_show).rev() {
                     println!("    {} - Trading: {} to {}", session.reference, session.start, session.end);
                 }
 
-                println!("  Total sessions in period: {session_count:?}");
+                println!("  Total sessions in period: {session_count}");
             }
             Err(e) => {
                 println!("  Error: {e:?}");

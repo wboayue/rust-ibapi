@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! Async historical trade ticks example
 //!
 //! This example demonstrates how to retrieve historical trade tick data
@@ -34,14 +35,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nRetrieving historical trade ticks for {}", contract.symbol);
 
     // Request historical trade ticks from a specific time range
-    let start = Some(datetime!(2024-01-05 15:55 UTC));
-    let end = Some(datetime!(2024-01-05 16:00 UTC));
+    let start_time = datetime!(2024-01-05 15:55 UTC);
+    let end_time = datetime!(2024-01-05 16:00 UTC);
+    let start = Some(start_time);
+    let end = Some(end_time);
     let number_of_ticks = 1000; // Max 1000 ticks per request
     let use_rth = true; // Only regular trading hours
 
     let mut tick_subscription = client.historical_ticks_trade(&contract, start, end, number_of_ticks, use_rth).await?;
 
-    println!("Time range: {} to {}", start.unwrap(), end.unwrap());
+    println!("Time range: {} to {}", start_time, end_time);
     println!("\nTime                     | Price    | Size   | Exchange | Conditions");
     println!("-------------------------|----------|--------|----------|------------");
 

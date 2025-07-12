@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! Async market depth (Level II) example
 //!
 //! This example demonstrates how to subscribe to market depth data using the async API.
@@ -19,7 +20,6 @@
 
 use std::sync::Arc;
 
-use futures::StreamExt;
 use ibapi::{contracts::Contract, market_data::realtime::MarketDepths, Client};
 
 #[tokio::main]
@@ -59,11 +59,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut ask_book = [None; 5];
 
     // Process market depth stream
-    let mut stream = market_depth.take(30); // Take first 30 updates for demo
+    let mut market_depth = market_depth;
     let mut update_count = 0;
 
-    while let Some(depth_update) = stream.next().await {
+    while let Some(depth_update) = market_depth.next().await {
         update_count += 1;
+        if update_count > 30 {
+            break;
+        } // Take first 30 updates for demo
 
         match depth_update? {
             MarketDepths::MarketDepth(depth) => {

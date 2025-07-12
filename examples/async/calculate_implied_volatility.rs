@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 use ibapi::contracts::{Contract, SecurityType};
 use ibapi::Client;
 
@@ -29,8 +30,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Contract: {} {} {} @ {}",
         contract.symbol, contract.last_trade_date_or_contract_month, contract.right, contract.strike
     );
-    println!("Option Price: ${:.2}", option_price);
-    println!("Underlying Price: ${:.2}", underlying_price);
+    println!("Option Price: ${option_price:.2}");
+    println!("Underlying Price: ${underlying_price:.2}");
 
     match client.calculate_implied_volatility(&contract, option_price, underlying_price).await {
         Ok(computation) => {
@@ -39,22 +40,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Implied Volatility: {:.1}%", iv * 100.0);
             }
             if let Some(delta) = computation.delta {
-                println!("Delta: {:.4}", delta);
+                println!("Delta: {delta:.4}");
             }
             if let Some(gamma) = computation.gamma {
-                println!("Gamma: {:.4}", gamma);
+                println!("Gamma: {gamma:.4}");
             }
             if let Some(vega) = computation.vega {
-                println!("Vega: {:.4}", vega);
+                println!("Vega: {vega:.4}");
             }
             if let Some(theta) = computation.theta {
-                println!("Theta: {:.4}", theta);
+                println!("Theta: {theta:.4}");
             }
             if let Some(option_price_calc) = computation.option_price {
-                println!("Calculated Option Price: ${:.2}", option_price_calc);
+                println!("Calculated Option Price: ${option_price_calc:.2}");
             }
             if let Some(pv_dividend) = computation.present_value_dividend {
-                println!("PV Dividend: ${:.2}", pv_dividend);
+                println!("PV Dividend: ${pv_dividend:.2}");
             }
         }
         Err(e) => eprintln!("Error calculating implied volatility: {e:?}"),

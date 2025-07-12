@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! Async histogram data example
 //!
 //! This example demonstrates how to retrieve histogram data (price distribution)

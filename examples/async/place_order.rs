@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! Example demonstrating how to use place_order() with per-order subscriptions
 //!
 //! This example shows how to:
@@ -5,7 +6,6 @@
 //! 2. Monitor order status through the individual order subscription
 //! 3. Handle multiple concurrent orders with separate subscriptions
 
-use futures::StreamExt;
 use ibapi::contracts::{Contract, SecurityType};
 use ibapi::orders::{order_builder, place_order, Action, PlaceOrder};
 use ibapi::Client;
@@ -20,11 +20,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Connected to server version {}", client.server_version());
 
     // Create a contract for Apple stock
-    let mut contract = Contract::default();
-    contract.symbol = "AAPL".to_string();
-    contract.security_type = SecurityType::Stock;
-    contract.exchange = "SMART".to_string();
-    contract.currency = "USD".to_string();
+    let contract = Contract {
+        symbol: "AAPL".to_string(),
+        security_type: SecurityType::Stock,
+        exchange: "SMART".to_string(),
+        currency: "USD".to_string(),
+        ..Default::default()
+    };
 
     // Create a limit order to buy 100 shares
     let order = order_builder::limit_order(Action::Buy, 100.0, 150.0);

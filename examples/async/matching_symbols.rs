@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 use ibapi::Client;
 
 #[tokio::main]
@@ -11,12 +12,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let patterns = vec!["AAPL", "MICRO", "EUR"];
 
     for pattern in patterns {
-        println!("\n=== Searching for symbols matching '{}' ===", pattern);
+        println!("\n=== Searching for symbols matching '{pattern}' ===");
 
         let matches = client.matching_symbols(pattern).await?;
 
         if matches.is_empty() {
-            println!("No matches found for '{}'", pattern);
+            println!("No matches found for '{pattern}'");
         } else {
             println!("Found {} matches:", matches.len());
 

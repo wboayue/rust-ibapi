@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! Example of establishing an async connection to TWS/Gateway
 //!
 //! To run this example:

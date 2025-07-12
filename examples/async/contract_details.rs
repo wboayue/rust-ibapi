@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 use ibapi::contracts::{Contract, SecurityType};
 use ibapi::Client;
 
@@ -18,7 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Request contract details
-    let contract_details = client.contract_details(contract).await?;
+    let contract_details = client.contract_details(&contract).await?;
 
     println!("Found {} contracts matching the criteria", contract_details.len());
 

@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 use ibapi::contracts::{Contract, SecurityType};
 use ibapi::Client;
 
@@ -19,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     println!("Getting contract details for ES futures...");
-    let contract_details = client.contract_details(contract).await?;
+    let contract_details = client.contract_details(&contract).await?;
 
     if let Some(details) = contract_details.first() {
         println!("Contract: {} on {}", details.contract.local_symbol, details.contract.exchange);

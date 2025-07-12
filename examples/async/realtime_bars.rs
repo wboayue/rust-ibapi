@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! Async real-time bars example
 //!
 //! This example demonstrates how to subscribe to 5-second real-time bars using the async API.
@@ -18,7 +19,6 @@
 
 use std::sync::Arc;
 
-use futures::StreamExt;
 use ibapi::{
     contracts::Contract,
     market_data::realtime::{BarSize, WhatToShow},

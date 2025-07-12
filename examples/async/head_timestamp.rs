@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! Async head timestamp example
 //!
 //! This example demonstrates how to get the earliest available historical data timestamp

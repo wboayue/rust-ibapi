@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! Async historical tick data example
 //!
 //! This example demonstrates how to request historical tick-level data using the async API.
@@ -19,7 +20,6 @@
 
 use std::sync::Arc;
 
-use futures::StreamExt;
 use ibapi::{contracts::Contract, Client};
 use time::format_description::well_known::Rfc3339;
 use time::{Duration, OffsetDateTime};

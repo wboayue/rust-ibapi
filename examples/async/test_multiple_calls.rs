@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! Test multiple async calls example
 //!
 //! This example tests making multiple sequential async calls to verify
@@ -27,10 +28,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Making call {i:?}");
         match client.head_timestamp(&contract, WhatToShow::Trades, true).await {
             Ok(timestamp) => {
-                println!("Call {} - Success: {}", i, timestamp);
+                println!("Call {i} - Success: {timestamp}");
             }
             Err(e) => {
-                println!("Call {} - Error: {}", i, e);
+                println!("Call {i} - Error: {e}");
             }
         }
 

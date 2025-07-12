@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! Example of getting managed accounts asynchronously
 //!
 //! To run this example:

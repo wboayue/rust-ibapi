@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! Example of getting account summary asynchronously
 //!
 //! To run this example:

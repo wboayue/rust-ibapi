@@ -584,7 +584,7 @@ mod tests {
         let schedule = result.unwrap();
         assert_eq!(schedule.time_zone, "UTC", "Wrong time zone");
         // Check that we have sessions
-        assert!(schedule.sessions.len() >= 1, "Should have at least 1 session");
+        assert!(!schedule.sessions.is_empty(), "Should have at least 1 session");
 
         // Verify request message
         let request_messages = message_bus.request_messages.read().unwrap();

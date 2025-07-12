@@ -1,6 +1,5 @@
-use futures::StreamExt;
+#![allow(clippy::uninlined_format_args)]
 use ibapi::Client;
-use time::macros::datetime;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -29,15 +28,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .historical_news(contract_id, provider_codes, start_time, end_time, total_results)
         .await?;
 
-    println!("Fetching historical news from {} to {}", start_time, end_time);
-    println!("Contract ID: {}, Providers: {:?}", contract_id, provider_codes);
+    println!("Fetching historical news from {start_time} to {end_time}");
+    println!("Contract ID: {contract_id}, Providers: {provider_codes:?}");
 
     let mut count = 0;
     while let Some(result) = news_stream.next().await {
         match result {
             Ok(article) => {
                 count += 1;
-                println!("\n--- Article {} ---", count);
+                println!("\n--- Article {count} ---");
                 println!("Time: {}", article.time);
                 println!("Provider: {}", article.provider_code);
                 println!("Article ID: {}", article.article_id);

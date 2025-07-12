@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! # WSH Event Data by Filter Example (Async)
 //!
 //! This example demonstrates how to stream Wall Street Horizon event data
@@ -63,12 +64,12 @@ async fn main() {
                 match event_result {
                     Ok(event_data) => {
                         event_count += 1;
-                        println!("\nEvent #{} received:", event_count);
+                        println!("\nEvent #{event_count} received:");
                         println!("{}", event_data.data_json);
 
                         // Limit output for demo purposes
                         if event_count >= 10 {
-                            println!("\nReceived {} events. Stopping demo.", event_count);
+                            println!("\nReceived {event_count} events. Stopping demo.");
                             break;
                         }
                     }

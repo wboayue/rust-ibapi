@@ -376,12 +376,14 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-        let mut contract = Contract::default();
-        contract.symbol = "ES".to_string();
-        contract.security_type = SecurityType::Future;
-        contract.exchange = "CME".to_string();
-        contract.currency = "USD".to_string();
-        contract.local_symbol = "ESU5".to_string();
+        let contract = Contract {
+            symbol: "ES".to_string(),
+            security_type: SecurityType::Future,
+            exchange: "CME".to_string(),
+            currency: "USD".to_string(),
+            local_symbol: "ESU5".to_string(),
+            ..Default::default()
+        };
         let mut order = order_builder::limit_order(Action::Buy, 1.0, 5800.0);
         order.order_id = 1;
 
@@ -487,7 +489,7 @@ mod tests {
 
         // Test end of stream
         let end_response = subscription.next().await;
-        assert!(matches!(end_response, None), "Expected None (end of stream), got {:?}", end_response);
+        assert!(end_response.is_none(), "Expected None (end of stream), got {:?}", end_response);
 
         // Check request message
         let request_messages = message_bus.request_messages.read().unwrap();
@@ -521,7 +523,7 @@ mod tests {
 
         // Test end of stream
         let end_response = subscription.next().await;
-        assert!(matches!(end_response, None), "Expected None (end of stream), got {:?}", end_response);
+        assert!(end_response.is_none(), "Expected None (end of stream), got {:?}", end_response);
 
         // Check request message
         let request_messages = message_bus.request_messages.read().unwrap();
@@ -566,7 +568,7 @@ mod tests {
 
         // Test end of stream
         let end_response = subscription.next().await;
-        assert!(matches!(end_response, None), "Expected None (end of stream), got {:?}", end_response);
+        assert!(end_response.is_none(), "Expected None (end of stream), got {:?}", end_response);
 
         // Check request message
         let request_messages = message_bus.request_messages.read().unwrap();
@@ -583,12 +585,14 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-        let mut contract = Contract::default();
-        contract.symbol = "ES".to_string();
-        contract.security_type = SecurityType::Future;
-        contract.exchange = "CME".to_string();
-        contract.currency = "USD".to_string();
-        contract.local_symbol = "ESU5".to_string();
+        let contract = Contract {
+            symbol: "ES".to_string(),
+            security_type: SecurityType::Future,
+            exchange: "CME".to_string(),
+            currency: "USD".to_string(),
+            local_symbol: "ESU5".to_string(),
+            ..Default::default()
+        };
         let mut order = order_builder::limit_order(Action::Buy, 1.0, 5800.0);
         order.order_id = 2;
 
@@ -611,14 +615,16 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-        let mut contract = Contract::default();
-        contract.symbol = "ES".to_string();
-        contract.security_type = SecurityType::FuturesOption;
-        contract.exchange = "CME".to_string();
-        contract.currency = "USD".to_string();
-        contract.last_trade_date_or_contract_month = "20250919".to_string();
-        contract.strike = 5800.0;
-        contract.right = "C".to_string();
+        let contract = Contract {
+            symbol: "ES".to_string(),
+            security_type: SecurityType::FuturesOption,
+            exchange: "CME".to_string(),
+            currency: "USD".to_string(),
+            last_trade_date_or_contract_month: "20250919".to_string(),
+            strike: 5800.0,
+            right: "C".to_string(),
+            ..Default::default()
+        };
 
         let mut subscription = exercise_options(&client, &contract, ExerciseAction::Exercise, 1, "", false, None)
             .await

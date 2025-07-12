@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! Async tick-by-tick Last trades example
 //!
 //! This example demonstrates how to receive tick-by-tick Last trade data (trades only)
@@ -18,7 +19,6 @@
 
 use std::sync::Arc;
 
-use futures::StreamExt;
 use ibapi::{contracts::Contract, Client};
 
 #[tokio::main]
@@ -50,10 +50,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut total_value = 0.0;
 
     // Process first 20 trades for demo
-    let mut trades = trades.take(20);
+    let mut count = 0;
     while let Some(trade_result) = trades.next().await {
+        if count >= 20 {
+            break;
+        }
         match trade_result {
             Ok(trade) => {
+                count += 1;
                 trade_count += 1;
                 total_volume += trade.size;
                 total_value += trade.price * trade.size;
@@ -76,10 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Show running statistics every 5 trades
                 if trade_count % 5 == 0 {
                     let vwap = if total_volume > 0.0 { total_value / total_volume } else { 0.0 };
-                    println!(
-                        "\n--- Stats: {} trades, Volume: {:.0}, VWAP: ${:.2} ---\n",
-                        trade_count, total_volume, vwap
-                    );
+                    println!("\n--- Stats: {trade_count} trades, Volume: {total_volume:.0}, VWAP: ${vwap:.2} ---\n");
                 }
             }
             Err(e) => {
@@ -91,9 +92,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Final statistics
     println!("\n========== Summary ==========");
-    println!("Total trades received: {trade_count:?}");
-    println!("Total volume: {:.0} shares", total_volume);
-    println!("Total value: ${:.2}", total_value);
+    println!("Total trades received: {trade_count}");
+    println!("Total volume: {total_volume:.0} shares");
+    println!("Total value: ${total_value:.2}");
     if total_volume > 0.0 {
         println!("VWAP: ${:.2}", total_value / total_volume);
     }

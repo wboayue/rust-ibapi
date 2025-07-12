@@ -1,4 +1,4 @@
-use futures::StreamExt;
+#![allow(clippy::uninlined_format_args)]
 use ibapi::contracts::SecurityType;
 use ibapi::Client;
 

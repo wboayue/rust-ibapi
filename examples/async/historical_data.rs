@@ -1,3 +1,5 @@
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::format_in_format_args)]
 //! Async historical data example
 //!
 //! This example demonstrates how to request historical bar data using the async API.

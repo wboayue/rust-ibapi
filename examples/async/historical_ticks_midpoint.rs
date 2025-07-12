@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! Async historical midpoint ticks example
 //!
 //! This example demonstrates how to retrieve historical midpoint tick data
@@ -33,23 +34,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Connected to IB Gateway");
 
     // Create contract for highly liquid forex pair
-    let mut contract = Contract::default();
-    contract.symbol = "EUR".to_string();
-    contract.security_type = SecurityType::ForexPair;
-    contract.currency = "USD".to_string();
-    contract.exchange = "IDEALPRO".to_string();
+    let contract = Contract {
+        symbol: "EUR".to_string(),
+        security_type: SecurityType::ForexPair,
+        currency: "USD".to_string(),
+        exchange: "IDEALPRO".to_string(),
+        ..Default::default()
+    };
 
     println!("\nRetrieving historical midpoint ticks for EUR/USD");
 
     // Request historical midpoint ticks from a specific time range
-    let start = Some(datetime!(2024-01-05 15:00 UTC));
-    let end = Some(datetime!(2024-01-05 15:05 UTC));
+    let start = datetime!(2024-01-05 15:00 UTC);
+    let end = datetime!(2024-01-05 15:05 UTC);
     let number_of_ticks = 1000; // Max 1000 ticks per request
     let use_rth = false; // Include all hours for forex
 
-    let mut tick_subscription = client.historical_ticks_mid_point(&contract, start, end, number_of_ticks, use_rth).await?;
+    let mut tick_subscription = client
+        .historical_ticks_mid_point(&contract, Some(start), Some(end), number_of_ticks, use_rth)
+        .await?;
 
-    println!("Time range: {} to {}", start.unwrap(), end.unwrap());
+    println!("Time range: {} to {}", start, end);
     println!("\nTime                     | Midpoint Price");
     println!("-------------------------|---------------");
 

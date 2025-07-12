@@ -27,6 +27,7 @@ pub fn future_with_local_symbol() -> Contract {
     }
 }
 
+#[allow(dead_code)]
 pub fn smart_future_combo_contract() -> Contract {
     let leg_1 = ComboLeg {
         contract_id: 55928698, //WTI future June 2017

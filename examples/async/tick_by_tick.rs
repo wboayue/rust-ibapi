@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! Async tick-by-tick data example
 //!
 //! This example demonstrates how to subscribe to tick-by-tick data using the async API.
@@ -18,7 +19,6 @@
 
 use std::sync::Arc;
 
-use futures::StreamExt;
 use ibapi::{contracts::Contract, Client};
 use time::macros::format_description;
 
@@ -38,8 +38,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== All Last Trades ===");
     let all_last_ticks = client.tick_by_tick_all_last(&contract, 0, false).await?;
 
-    let mut stream = all_last_ticks.take(5);
-    while let Some(trade) = stream.next().await {
+    let mut all_last_ticks = all_last_ticks;
+    let mut count = 0;
+    while let Some(trade) = all_last_ticks.next().await {
+        if count >= 5 {
+            break;
+        }
+        count += 1;
         let trade = trade?;
         println!(
             "Trade at {}: ${:.2} x {} on {} [{}]",
@@ -64,8 +69,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n=== Bid/Ask Quotes ===");
     let bid_ask_ticks = client.tick_by_tick_bid_ask(&contract, 0, false).await?;
 
-    let mut stream = bid_ask_ticks.take(5);
-    while let Some(quote) = stream.next().await {
+    let mut bid_ask_ticks = bid_ask_ticks;
+    let mut count = 0;
+    while let Some(quote) = bid_ask_ticks.next().await {
+        if count >= 5 {
+            break;
+        }
+        count += 1;
         let quote = quote?;
         println!(
             "Quote at {}: Bid ${:.2} x {} | Ask ${:.2} x {}",
@@ -76,7 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             quote.bid_price,
             quote.bid_size,
             quote.ask_price,
-            quote.ask_size
+            quote.ask_size,
         );
         if quote.bid_ask_attribute.bid_past_low {
             println!("  -> Bid past low");
@@ -90,8 +100,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n=== Midpoint Ticks ===");
     let midpoint_ticks = client.tick_by_tick_midpoint(&contract, 0, false).await?;
 
-    let mut stream = midpoint_ticks.take(5);
-    while let Some(midpoint) = stream.next().await {
+    let mut midpoint_ticks = midpoint_ticks;
+    let mut count = 0;
+    while let Some(midpoint) = midpoint_ticks.next().await {
+        if count >= 5 {
+            break;
+        }
+        count += 1;
         let midpoint = midpoint?;
         println!(
             "Midpoint at {}: ${:.2}",

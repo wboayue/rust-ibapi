@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 use ibapi::contracts::{Contract, SecurityType};
 use ibapi::Client;
 

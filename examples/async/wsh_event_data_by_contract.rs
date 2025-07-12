@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 //! # WSH Event Data by Contract Example (Async)
 //!
 //! This example demonstrates how to retrieve Wall Street Horizon event data

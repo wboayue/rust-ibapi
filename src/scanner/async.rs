@@ -179,12 +179,13 @@ mod tests {
         assert_eq!(third.contract_details.contract.exchange, "SMART");
 
         // Verify request parameters were encoded correctly
-        let request_messages = message_bus.request_messages.read().unwrap();
-        let scanner_request = format!(
-            "22|9000|10|FUT|FUT.US|TOP_PERC_GAIN|50|100|1000|1000000|10000000|A|AAA|A|AAA|20230101|20231231|2|5|1|100|Annual,true|CORP|scannerType=TOP_PERC_GAIN;numberOfRows=10;||",
-        );
-        assert_eq!(request_messages[0].encode_simple(), scanner_request);
-        drop(request_messages); // Release the lock
+        {
+            let request_messages = message_bus.request_messages.read().unwrap();
+            let scanner_request = format!(
+                "22|9000|10|FUT|FUT.US|TOP_PERC_GAIN|50|100|1000|1000000|10000000|A|AAA|A|AAA|20230101|20231231|2|5|1|100|Annual,true|CORP|scannerType=TOP_PERC_GAIN;numberOfRows=10;||",
+            );
+            assert_eq!(request_messages[0].encode_simple(), scanner_request);
+        } // Lock is released here
 
         // Explicitly cancel the subscription
         subscription.cancel().await;
@@ -219,9 +220,10 @@ mod tests {
         let _ = subscription.next().await;
 
         // Verify initial request was sent
-        let request_messages = message_bus.request_messages.read().unwrap();
-        assert_eq!(request_messages.len(), 1, "Expected 1 request message");
-        drop(request_messages); // Release the lock
+        {
+            let request_messages = message_bus.request_messages.read().unwrap();
+            assert_eq!(request_messages.len(), 1, "Expected 1 request message");
+        } // Lock is released here
 
         // Drop the subscription without calling cancel()
         drop(subscription);
