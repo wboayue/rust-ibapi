@@ -423,7 +423,7 @@ mod tests {
     }
 
     #[test]
-    fn test_managed_accounts_retry_connection_reset() {
+    fn test_managed_accounts_retry() {
         // Test that managed_accounts retries on connection reset
         // Since our stub doesn't simulate actual connection resets, we'll test with valid responses
         let (client, message_bus) = create_test_client_with_responses(vec![
@@ -438,7 +438,7 @@ mod tests {
     }
 
     #[test]
-    fn test_server_time_integration() {
+    fn test_server_time() {
         use time::macros::datetime;
 
         // Scenario 1: Success
@@ -471,7 +471,7 @@ mod tests {
     }
 
     #[test]
-    fn test_account_updates_flow() {
+    fn test_account_updates() {
         use crate::accounts::AccountUpdate;
 
         let account_name = TEST_ACCOUNT;
@@ -519,7 +519,7 @@ mod tests {
     }
 
     #[test]
-    fn test_family_codes_integration() {
+    fn test_family_codes() {
         use crate::accounts::FamilyCode;
 
         // Scenario 1: Success with multiple codes
