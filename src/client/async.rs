@@ -16,6 +16,7 @@ use crate::Error;
 
 use super::id_generator::ClientIdManager;
 use crate::accounts;
+use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::subscriptions::Subscription;
 
@@ -239,7 +240,11 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub async fn positions_multi(&self, account: Option<&str>, model_code: Option<&str>) -> Result<Subscription<PositionUpdateMulti>, Error> {
+    pub async fn positions_multi(
+        &self,
+        account: Option<&AccountId>,
+        model_code: Option<&ModelCode>,
+    ) -> Result<Subscription<PositionUpdateMulti>, Error> {
         accounts::positions_multi(self, account, model_code).await
     }
 
@@ -266,7 +271,7 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub async fn pnl(&self, account: &str, model_code: Option<&str>) -> Result<Subscription<PnL>, Error> {
+    pub async fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
         accounts::pnl(self, account, model_code).await
     }
 
@@ -297,7 +302,12 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub async fn pnl_single(&self, account: &str, contract_id: i32, model_code: Option<&str>) -> Result<Subscription<PnLSingle>, Error> {
+    pub async fn pnl_single(
+        &self,
+        account: &AccountId,
+        contract_id: ContractId,
+        model_code: Option<&ModelCode>,
+    ) -> Result<Subscription<PnLSingle>, Error> {
         accounts::pnl_single(self, account, contract_id, model_code).await
     }
 
@@ -328,7 +338,7 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub async fn account_summary(&self, group: &str, tags: &[&str]) -> Result<Subscription<AccountSummaries>, Error> {
+    pub async fn account_summary(&self, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaries>, Error> {
         accounts::account_summary(self, group, tags).await
     }
 
@@ -370,7 +380,7 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub async fn account_updates(&self, account: &str) -> Result<Subscription<AccountUpdate>, Error> {
+    pub async fn account_updates(&self, account: &AccountId) -> Result<Subscription<AccountUpdate>, Error> {
         accounts::account_updates(self, account).await
     }
 
@@ -413,7 +423,11 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub async fn account_updates_multi(&self, account: Option<&str>, model_code: Option<&str>) -> Result<Subscription<AccountUpdateMulti>, Error> {
+    pub async fn account_updates_multi(
+        &self,
+        account: Option<&AccountId>,
+        model_code: Option<&ModelCode>,
+    ) -> Result<Subscription<AccountUpdateMulti>, Error> {
         accounts::account_updates_multi(self, account, model_code).await
     }
 

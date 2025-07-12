@@ -8,6 +8,7 @@
 //!
 //! Make sure TWS or IB Gateway is running with API connections enabled
 
+use ibapi::accounts::types::AccountId;
 use ibapi::prelude::*;
 use std::env;
 
@@ -30,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Request PnL updates
     println!("\nRequesting PnL updates for account {account}...");
-    let mut subscription = client.pnl(&account, None).await?;
+    let mut subscription = client.pnl(&AccountId(account.clone()), None).await?;
 
     // Process PnL updates
     println!("Waiting for PnL updates (press Ctrl+C to stop)...");

@@ -12,6 +12,9 @@
 // Common implementation modules
 mod common;
 
+// Domain types
+pub mod types;
+
 use crate::contracts::Contract;
 use serde::{Deserialize, Serialize};
 
