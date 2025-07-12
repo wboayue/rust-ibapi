@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let incoming_file = Path::new(recording_dir).join("incoming.log");
 
     if !incoming_file.exists() {
-        eprintln!("No incoming.log file found in {}", recording_dir);
+        eprintln!("No incoming.log file found in {recording_dir:?}");
         return Ok(());
     }
 

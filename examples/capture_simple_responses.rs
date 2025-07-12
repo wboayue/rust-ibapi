@@ -17,12 +17,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Simple request - get next valid order ID
     println!("\nRequesting next valid order ID...");
     let order_id = client.next_valid_order_id()?;
-    println!("Next valid order ID: {}", order_id);
+    println!("Next valid order ID: {order_id:?}");
 
     // Get server time
     println!("\nRequesting server time...");
     let time = client.server_time()?;
-    println!("Server time: {}", time);
+    println!("Server time: {time:?}");
 
     println!("\n\nRaw messages saved to: /tmp/simple-responses/");
     println!("Check the incoming.log and outgoing.log files for exact message formats");

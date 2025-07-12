@@ -18,5 +18,5 @@ fn main() {
     let article_id = "DJ-N$1915168d";
 
     let article = client.news_article(provider_code, article_id).expect("request news article failed");
-    println!("{:?}", article);
+    println!("{article:?}");
 }

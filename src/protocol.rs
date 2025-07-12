@@ -150,7 +150,7 @@ pub fn is_supported(server_version: i32, feature: ProtocolFeature) -> bool {
 ///
 /// include_if_supported(server_version, Features::CASH_QTY, || {
 ///     // Add cash_qty field to message only if server supports it
-///     println!("Server supports cash quantity: {}", cash_qty);
+///     println!("Server supports cash quantity: {cash_qty:?}");
 /// });
 /// ```
 pub fn include_if_supported<F>(server_version: i32, feature: ProtocolFeature, include_fn: F)

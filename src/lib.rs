@@ -18,6 +18,7 @@
 // Allow octal-looking escapes in string literals (used in test data)
 #![allow(clippy::octal_escapes)]
 #![allow(clippy::bool_assert_comparison)]
+#![allow(clippy::uninlined_format_args)]
 
 // Feature guards - async takes precedence over sync
 #[cfg(not(any(feature = "sync", feature = "async")))]

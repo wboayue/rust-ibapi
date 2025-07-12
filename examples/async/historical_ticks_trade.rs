@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Final statistics
     println!("\n========== Summary ==========");
-    println!("Total trade ticks: {}", tick_count);
+    println!("Total trade ticks: {tick_count:?}");
     println!("Total volume: {:.0} shares", total_volume);
     println!("Total value: ${:.2}", total_value);
     if total_volume > 0.0 {

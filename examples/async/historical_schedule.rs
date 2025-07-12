@@ -74,10 +74,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("    {} - Trading: {} to {}", session.reference, session.start, session.end);
                 }
 
-                println!("  Total sessions in period: {}", session_count);
+                println!("  Total sessions in period: {session_count:?}");
             }
             Err(e) => {
-                println!("  Error: {}", e);
+                println!("  Error: {e:?}");
             }
         }
 
@@ -99,7 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            println!("Error: {}", e);
+            println!("Error: {e:?}");
         }
     }
 

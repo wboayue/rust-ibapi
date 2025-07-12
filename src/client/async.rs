@@ -499,7 +499,7 @@ impl Client {
     ///                 }
     ///                 _ => {}
     ///             },
-    ///             Err(e) => eprintln!("Error: {}", e),
+    ///             Err(e) => eprintln!("Error: {e:?}"),
     ///         }
     ///     }
     /// }
@@ -544,7 +544,7 @@ impl Client {
     ///     while let Some(bar_result) = subscription.next().await {
     ///         match bar_result {
     ///             Ok(bar) => println!("{bar:?}"),
-    ///             Err(e) => eprintln!("Error: {}", e),
+    ///             Err(e) => eprintln!("Error: {e:?}"),
     ///         }
     ///     }
     /// }
@@ -587,7 +587,7 @@ impl Client {
     ///         match trade_result {
     ///             Ok(trade) => println!("Trade: {} - ${} x {} on {}",
     ///                 trade.time, trade.price, trade.size, trade.exchange),
-    ///             Err(e) => eprintln!("Error: {}", e),
+    ///             Err(e) => eprintln!("Error: {e:?}"),
     ///         }
     ///     }
     /// }
@@ -645,7 +645,7 @@ impl Client {
     ///             Ok(quote) => println!("Quote: {} - Bid: ${} x {} | Ask: ${} x {}",
     ///                 quote.time, quote.bid_price, quote.bid_size,
     ///                 quote.ask_price, quote.ask_size),
-    ///             Err(e) => eprintln!("Error: {}", e),
+    ///             Err(e) => eprintln!("Error: {e:?}"),
     ///         }
     ///     }
     /// }
@@ -798,7 +798,7 @@ impl Client {
     ///         .head_timestamp(&contract, what_to_show, use_rth)
     ///         .await
     ///         .expect("error requesting head timestamp");
-    ///     println!("Earliest data available: {}", timestamp);
+    ///     println!("Earliest data available: {timestamp:?}");
     /// }
     /// ```
     pub async fn head_timestamp(
@@ -1347,7 +1347,7 @@ impl Client {
     ///                 println!("Expirations: {:?}", data.expirations);
     ///                 println!("Strikes: {:?}", data.strikes);
     ///             }
-    ///             Err(e) => eprintln!("Error: {}", e),
+    ///             Err(e) => eprintln!("Error: {e:?}"),
     ///         }
     ///     }
     /// }
@@ -1613,7 +1613,7 @@ impl Client {
     ///     while let Some(result) = bulletins.next().await {
     ///         match result {
     ///             Ok(bulletin) => println!("{}: {}", bulletin.exchange, bulletin.message),
-    ///             Err(e) => eprintln!("Error: {}", e),
+    ///             Err(e) => eprintln!("Error: {e:?}"),
     ///         }
     ///     }
     /// }
@@ -1654,7 +1654,7 @@ impl Client {
     ///     while let Some(result) = news.next().await {
     ///         match result {
     ///             Ok(article) => println!("{}: {}", article.time, article.headline),
-    ///             Err(e) => eprintln!("Error: {}", e),
+    ///             Err(e) => eprintln!("Error: {e:?}"),
     ///         }
     ///     }
     /// }
@@ -1718,7 +1718,7 @@ impl Client {
     ///     while let Some(result) = news.next().await {
     ///         match result {
     ///             Ok(article) => println!("{}: {}", article.time, article.headline),
-    ///             Err(e) => eprintln!("Error: {}", e),
+    ///             Err(e) => eprintln!("Error: {e:?}"),
     ///         }
     ///     }
     /// }
@@ -1750,7 +1750,7 @@ impl Client {
     ///     while let Some(result) = news.next().await {
     ///         match result {
     ///             Ok(article) => println!("{}: {}", article.time, article.headline),
-    ///             Err(e) => eprintln!("Error: {}", e),
+    ///             Err(e) => eprintln!("Error: {e:?}"),
     ///         }
     ///     }
     /// }
@@ -1822,7 +1822,7 @@ impl Client {
     ///                              data.contract_details.contract.symbol);
     ///                 }
     ///             }
-    ///             Err(e) => eprintln!("Error: {}", e),
+    ///             Err(e) => eprintln!("Error: {e:?}"),
     ///         }
     ///     }
     /// }

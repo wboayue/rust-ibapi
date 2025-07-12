@@ -83,7 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             Err(e) => {
-                eprintln!("Error receiving trade: {}", e);
+                eprintln!("Error receiving trade: {e:?}");
                 break;
             }
         }
@@ -91,7 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Final statistics
     println!("\n========== Summary ==========");
-    println!("Total trades received: {}", trade_count);
+    println!("Total trades received: {trade_count:?}");
     println!("Total volume: {:.0} shares", total_volume);
     println!("Total value: ${:.2}", total_value);
     if total_volume > 0.0 {

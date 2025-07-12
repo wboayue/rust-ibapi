@@ -29,8 +29,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Get server time to verify connection is working
     match client.server_time().await {
-        Ok(time) => println!("Server time: {}", time),
-        Err(e) => eprintln!("Failed to get server time: {}", e),
+        Ok(time) => println!("Server time: {time:?}"),
+        Err(e) => eprintln!("Failed to get server time: {e:?}"),
     }
 
     // Keep the connection alive for a moment

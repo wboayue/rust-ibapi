@@ -21,7 +21,7 @@ async fn main() {
     let client = match Client::connect("127.0.0.1:4002", 100).await {
         Ok(client) => client,
         Err(e) => {
-            eprintln!("Failed to connect: {}", e);
+            eprintln!("Failed to connect: {e:?}");
             return;
         }
     };
@@ -36,7 +36,7 @@ async fn main() {
             println!("{}", metadata.data_json);
         }
         Err(e) => {
-            eprintln!("Error requesting WSH metadata: {}", e);
+            eprintln!("Error requesting WSH metadata: {e:?}");
         }
     }
 }

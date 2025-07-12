@@ -153,7 +153,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let server_version = client.server_version();
-    /// println!("Connected to TWS server version: {}", server_version);
+    /// println!("Connected to TWS server version: {server_version:?}");
     /// ```
     pub fn server_version(&self) -> i32 {
         self.server_version
@@ -1699,7 +1699,7 @@ impl Client {
     ///         // subscription.cancel();
     ///     }
     ///     Err(e) => {
-    ///         eprintln!("Failed to start scanner subscription: {}", e);
+    ///         eprintln!("Failed to start scanner subscription: {e:?}");
     ///     }
     /// };
     /// ```
@@ -1752,7 +1752,7 @@ impl Client {
     ///         // subscription.cancel();
     ///     }
     ///     Err(e) => {
-    ///         eprintln!("Failed to start scanner subscription: {}", e);
+    ///         eprintln!("Failed to start scanner subscription: {e:?}");
     ///     }
     /// };
     /// ```

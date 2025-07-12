@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Get next valid order ID
     let order_id = client.next_valid_order_id()?;
-    println!("Next valid order ID: {}", order_id);
+    println!("Next valid order ID: {order_id:?}");
 
     // Create an ES futures order (trades 24/7)
     let mut contract = Contract::default();

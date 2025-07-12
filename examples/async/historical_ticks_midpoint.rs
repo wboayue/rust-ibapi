@@ -89,7 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let std_dev = variance.sqrt();
 
         println!("\n========== Summary ==========");
-        println!("Total midpoint ticks: {}", tick_count);
+        println!("Total midpoint ticks: {tick_count:?}");
         println!("Price range: {:.5} - {:.5}", min_price, max_price);
         println!("Average price: {:.5}", avg_price);
         println!("Range in pips: {:.1}", (max_price - min_price) * 10000.0);

@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             },
             Err(e) => {
-                eprintln!("Error receiving position: {}", e);
+                eprintln!("Error receiving position: {e:?}");
                 break;
             }
         }

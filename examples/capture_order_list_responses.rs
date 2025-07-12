@@ -83,7 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
-            Err(e) => println!("Completed orders not supported: {}", e),
+            Err(e) => println!("Completed orders not supported: {e:?}"),
         }
     }
 

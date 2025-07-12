@@ -23,7 +23,7 @@ async fn main() {
     let client = match Client::connect("127.0.0.1:4002", 100).await {
         Ok(client) => client,
         Err(e) => {
-            eprintln!("Failed to connect: {}", e);
+            eprintln!("Failed to connect: {e:?}");
             return;
         }
     };
@@ -56,7 +56,7 @@ async fn main() {
             println!("{}", event_data.data_json);
         }
         Err(e) => {
-            eprintln!("Error requesting WSH event data: {}", e);
+            eprintln!("Error requesting WSH event data: {e:?}");
         }
     }
 }

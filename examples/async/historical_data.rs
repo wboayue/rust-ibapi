@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 1: Get the earliest available data timestamp
     println!("=== Head Timestamp ===");
     let head_timestamp = client.head_timestamp(&contract, WhatToShow::Trades, true).await?;
-    println!("Earliest available historical data: {}", head_timestamp);
+    println!("Earliest available historical data: {head_timestamp:?}");
 
     // Example 2: Get recent intraday data (5-minute bars for last day)
     println!("\n=== Recent Intraday Data (5-min bars) ===");

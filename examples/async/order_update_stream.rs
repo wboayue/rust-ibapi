@@ -64,7 +64,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     println!("Order Message: {} - {}", notice.code, notice.message);
                 }
                 Err(e) => {
-                    eprintln!("Error in order stream: {}", e);
+                    eprintln!("Error in order stream: {e:?}");
                     break;
                 }
             }

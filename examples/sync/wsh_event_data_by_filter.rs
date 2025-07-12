@@ -39,6 +39,6 @@ fn main() {
 
     // check for errors
     if let Some(error) = subscription.error() {
-        println!("error: {}", error);
+        println!("error: {error:?}");
     }
 }

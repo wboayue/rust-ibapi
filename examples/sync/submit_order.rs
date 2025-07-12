@@ -64,7 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             Err(e) => {
-                eprintln!("Error creating order update stream: {}", e);
+                eprintln!("Error creating order update stream: {e:?}");
             }
         }
     });

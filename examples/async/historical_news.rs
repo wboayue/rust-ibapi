@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if count == 0 {
         println!("No historical news found for the specified criteria.");
     } else {
-        println!("\nTotal articles received: {}", count);
+        println!("\nTotal articles received: {count:?}");
     }
 
     Ok(())

@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Make 3 sequential calls to head_timestamp
     for i in 1..=3 {
-        println!("Making call {}", i);
+        println!("Making call {i:?}");
         match client.head_timestamp(&contract, WhatToShow::Trades, true).await {
             Ok(timestamp) => {
                 println!("Call {} - Success: {}", i, timestamp);

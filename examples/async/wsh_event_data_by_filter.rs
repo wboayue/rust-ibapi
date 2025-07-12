@@ -22,7 +22,7 @@ async fn main() {
     let client = match Client::connect("127.0.0.1:4002", 100).await {
         Ok(client) => client,
         Err(e) => {
-            eprintln!("Failed to connect: {}", e);
+            eprintln!("Failed to connect: {e:?}");
             return;
         }
     };
@@ -53,7 +53,7 @@ async fn main() {
     match client.wsh_event_data_by_filter(filter, limit, auto_fill).await {
         Ok(mut event_stream) => {
             println!("\nStreaming WSH events with filter:");
-            println!("Filter: {}", filter);
+            println!("Filter: {filter:?}");
             println!("Waiting for events...\n");
 
             let mut event_count = 0;
@@ -73,7 +73,7 @@ async fn main() {
                         }
                     }
                     Err(e) => {
-                        eprintln!("Error receiving event: {}", e);
+                        eprintln!("Error receiving event: {e:?}");
                         break;
                     }
                 }
@@ -84,7 +84,7 @@ async fn main() {
             }
         }
         Err(e) => {
-            eprintln!("Error requesting WSH event stream: {}", e);
+            eprintln!("Error requesting WSH event stream: {e:?}");
         }
     }
 }

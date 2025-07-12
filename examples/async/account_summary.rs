@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             },
             Err(e) => {
-                eprintln!("Error receiving account summary: {}", e);
+                eprintln!("Error receiving account summary: {e:?}");
                 break;
             }
         }

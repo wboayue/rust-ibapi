@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("... (truncated)");
     } else {
         println!("\nFull XML:");
-        println!("{}", xml_parameters);
+        println!("{xml_parameters:?}");
     }
 
     Ok(())
