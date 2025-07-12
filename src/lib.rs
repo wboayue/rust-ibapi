@@ -15,6 +15,20 @@
 //!
 //! For an overview of API usage, refer to the [README](https://github.com/wboayue/rust-ibapi/blob/main/README.md).
 
+// Allow octal-looking escapes in string literals (used in test data)
+#![allow(clippy::octal_escapes)]
+#![allow(clippy::bool_assert_comparison)]
+#![allow(clippy::useless_format)]
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::assertions_on_constants)]
+
+// Feature guards - async takes precedence over sync
+#[cfg(not(any(feature = "sync", feature = "async")))]
+compile_error!(
+    "Either 'sync' or 'async' feature must be enabled. \
+     Use default features for sync mode, or use --features async for async mode."
+);
+
 /// Describes items present in an account.
 pub mod accounts;
 
@@ -26,6 +40,12 @@ pub mod client;
 
 pub(crate) mod transport;
 
+/// Connection management
+pub(crate) mod connection;
+
+/// Subscription types for streaming data
+pub mod subscriptions;
+
 /// A [Contract](crate::contracts::Contract) object represents trading instruments such as a stocks, futures or options.
 ///
 /// Every time a new request that requires a contract (i.e. market data, order placing, etc.) is sent to the API, the system will try to match the provided contract object with a single candidate. If there is more than one contract matching the same description, the API will return an error notifying you there is an ambiguity. In these cases the API needs further information to narrow down the list of contracts matching the provided description to a single element.
@@ -35,6 +55,7 @@ pub mod errors;
 /// APIs for retrieving market data
 pub mod market_data;
 mod messages;
+/// APIs for retrieving news data including articles, bulletins, and providers
 pub mod news;
 /// Data types for building and placing orders.
 pub mod orders;
@@ -45,6 +66,9 @@ pub mod wsh;
 
 /// A prelude module for convenient importing of commonly used types.
 pub mod prelude;
+
+/// Protocol version checking and constants for TWS API features.
+pub mod protocol;
 
 mod server_versions;
 

@@ -10,6 +10,7 @@ pub const ACCOUNT_UPDATE_MULTI_END: &str = "74|1|9000||";
 pub const ACCOUNT_SUMMARY: &str = "63|1|9000|DU1234567|AccountType|FA||";
 pub const ACCOUNT_SUMMARY_END: &str = "64|1|9000||";
 
+#[allow(dead_code)]
 pub const ACCOUNT_VALUE: &str = "6|1|CashBalance|1000.00|USD";
 
 // contracts

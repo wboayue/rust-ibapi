@@ -4,7 +4,10 @@
 //! and historical market data. It includes support for various data types,
 //! subscription management, and market data type configuration.
 
-use crate::{messages::OutgoingMessages, server_versions, Client, Error};
+use crate::{server_versions, Error};
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
+use crate::{messages::OutgoingMessages, Client};
 
 pub mod historical;
 pub mod realtime;
@@ -22,11 +25,22 @@ pub enum MarketDataType {
     DelayedFrozen = 4,
 }
 
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub(crate) fn switch_market_data_type(client: &Client, market_data_type: MarketDataType) -> Result<(), Error> {
     client.check_server_version(server_versions::REQ_MARKET_DATA_TYPE, "It does not support market data type requests.")?;
 
     let message = encoders::encode_request_market_data_type(market_data_type)?;
     let _ = client.send_shared_request(OutgoingMessages::RequestMarketDataType, message)?;
+
+    Ok(())
+}
+
+#[cfg(feature = "async")]
+pub(crate) async fn switch_market_data_type(client: &crate::client::r#async::Client, market_data_type: MarketDataType) -> Result<(), Error> {
+    client.check_server_version(server_versions::REQ_MARKET_DATA_TYPE, "It does not support market data type requests.")?;
+
+    let message = encoders::encode_request_market_data_type(market_data_type)?;
+    client.send_message(message).await?;
 
     Ok(())
 }
@@ -77,7 +91,7 @@ mod encoders {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "sync", not(feature = "async")))]
 mod tests {
     use std::sync::{Arc, RwLock};
 

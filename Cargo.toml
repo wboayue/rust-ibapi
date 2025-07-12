@@ -1,6 +1,6 @@
 [package]
 name = "ibapi"
-version = "1.2.2"
+version = "2.0.0"
 edition = "2021"
 authors = ["Wil Boayue <wil@wsbsolutions.com>"]
 description = "A Rust implementation of the Interactive Brokers TWS API, providing a reliable and user friendly interface for TWS and IB Gateway. Designed with a focus on simplicity and performance."
@@ -17,13 +17,24 @@ exclude = [
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["sync"]
+sync = ["dep:crossbeam"]
+async = ["dep:tokio", "dep:futures", "dep:async-trait"]
+# Note: sync and async are mutually exclusive. When async is enabled, it takes precedence over sync.
+
 [dependencies]
 byteorder = "1.5.0"
-crossbeam = "0.8.4"
+crossbeam = { version = "0.8.4", optional = true }
 log = "0.4.22"
 time = {version = "0.3.36", features = ["formatting", "macros", "local-offset", "parsing", "serde"]}
 time-tz = "2.0.0"
 serde = {version = "1.0.214" , features = ["derive"]}
+
+# Async dependencies
+tokio = { version = "1.41", features = ["net", "rt-multi-thread", "sync", "time", "macros", "io-util"], optional = true }
+futures = { version = "0.3.31", optional = true }
+async-trait = { version = "0.1.83", optional = true }
 
 [dev-dependencies]
 anyhow = "1.0.92"
@@ -32,3 +43,567 @@ env_logger = "0.11.5"
 pretty_assertions = "1.4.1"
 tempfile = "3.13"
 temp-env = "0.3.6"
+serial_test = "3.1.1"
+
+[[example]]
+name = "async_connect"
+path = "examples/async/connect.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_positions"
+path = "examples/async/positions.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_account_summary"
+path = "examples/async/account_summary.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_pnl"
+path = "examples/async/pnl.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_managed_accounts"
+path = "examples/async/managed_accounts.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_wsh_metadata"
+path = "examples/async/wsh_metadata.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_wsh_event_data_by_contract"
+path = "examples/async/wsh_event_data_by_contract.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_wsh_event_data_by_filter"
+path = "examples/async/wsh_event_data_by_filter.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_market_data"
+path = "examples/async/market_data.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_order_update_stream"
+path = "examples/async/order_update_stream.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_place_order"
+path = "examples/async/place_order.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_realtime_bars"
+path = "examples/async/realtime_bars.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_tick_by_tick"
+path = "examples/async/tick_by_tick.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_market_depth"
+path = "examples/async/market_depth.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_historical_data"
+path = "examples/async/historical_data.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_historical_ticks"
+path = "examples/async/historical_ticks.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_head_timestamp"
+path = "examples/async/head_timestamp.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_historical_schedule"
+path = "examples/async/historical_schedule.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_tick_by_tick_last"
+path = "examples/async/tick_by_tick_last.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_historical_ticks_midpoint"
+path = "examples/async/historical_ticks_midpoint.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_historical_ticks_trade"
+path = "examples/async/historical_ticks_trade.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_histogram_data"
+path = "examples/async/histogram_data.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_test_multiple_calls"
+path = "examples/async/test_multiple_calls.rs"
+required-features = ["async"]
+
+# Additional async examples
+[[example]]
+name = "async_broad_tape_news"
+path = "examples/async/broad_tape_news.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_calculate_implied_volatility"
+path = "examples/async/calculate_implied_volatility.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_calculate_option_price"
+path = "examples/async/calculate_option_price.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_contract_details"
+path = "examples/async/contract_details.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_contract_news"
+path = "examples/async/contract_news.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_historical_news"
+path = "examples/async/historical_news.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_market_rule"
+path = "examples/async/market_rule.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_matching_symbols"
+path = "examples/async/matching_symbols.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_news_article"
+path = "examples/async/news_article.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_news_bulletins"
+path = "examples/async/news_bulletins.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_news_providers"
+path = "examples/async/news_providers.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_option_chain"
+path = "examples/async/option_chain.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_scanner_parameters"
+path = "examples/async/scanner_parameters.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_scanner_subscription"
+path = "examples/async/scanner_subscription.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_scanner_subscription_complex"
+path = "examples/async/scanner_subscription_complex.rs"
+required-features = ["async"]
+
+# Sync-only examples
+[[example]]
+name = "bracket_order"
+path = "examples/sync/bracket_order.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "breakout"
+path = "examples/sync/breakout.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "broad_tape_news"
+path = "examples/sync/broad_tape_news.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "cancel_orders"
+path = "examples/sync/cancel_orders.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "completed_orders"
+path = "examples/sync/completed_orders.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "contract_news"
+path = "examples/sync/contract_news.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "executions"
+path = "examples/sync/executions.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "historical_news"
+path = "examples/sync/historical_news.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "news_article"
+path = "examples/sync/news_article.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "news_bulletins"
+path = "examples/sync/news_bulletins.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "news_providers"
+path = "examples/sync/news_providers.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "options_exercise"
+path = "examples/sync/options_exercise.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "options_purchase"
+path = "examples/sync/options_purchase.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "orders"
+path = "examples/sync/orders.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "place_order"
+path = "examples/sync/place_order.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "scanner_parameters"
+path = "examples/sync/scanner_parameters.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "scanner_subscription_active_stocks"
+path = "examples/sync/scanner_subscription_active_stocks.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "scanner_subscription_complex_orders"
+path = "examples/sync/scanner_subscription_complex_orders.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "submit_order"
+path = "examples/sync/submit_order.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "calculate_implied_volatility"
+path = "examples/sync/calculate_implied_volatility.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "calculate_option_price"
+path = "examples/sync/calculate_option_price.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "contract_details"
+path = "examples/sync/contract_details.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "family_codes"
+path = "examples/sync/family_codes.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "head_timestamp"
+path = "examples/sync/head_timestamp.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "histogram_data"
+path = "examples/sync/histogram_data.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "historical_data"
+path = "examples/sync/historical_data.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "historical_data_adjusted"
+path = "examples/sync/historical_data_adjusted.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "historical_data_recent"
+path = "examples/sync/historical_data_recent.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "historical_data_options"
+path = "examples/sync/historical_data_options.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "historical_schedules"
+path = "examples/sync/historical_schedules.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "historical_schedules_ending_now"
+path = "examples/sync/historical_schedules_ending_now.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "historical_ticks_bid_ask"
+path = "examples/sync/historical_ticks_bid_ask.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "historical_ticks_trade"
+path = "examples/sync/historical_ticks_trade.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "managed_accounts"
+path = "examples/sync/managed_accounts.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "market_data"
+path = "examples/sync/market_data.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "market_depth"
+path = "examples/sync/market_depth.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "matching_symbols"
+path = "examples/sync/matching_symbols.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "pnl"
+path = "examples/sync/pnl.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "positions"
+path = "examples/sync/positions.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "readme_realtime_data_1"
+path = "examples/sync/readme_realtime_data_1.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "readme_realtime_data_2"
+path = "examples/sync/readme_realtime_data_2.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "server_time"
+path = "examples/sync/server_time.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "stream_bars"
+path = "examples/sync/stream_bars.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "stream_retry"
+path = "examples/sync/stream_retry.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "switch_market_data_type"
+path = "examples/sync/switch_market_data_type.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "account_summary"
+path = "examples/sync/account_summary.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "account_updates"
+path = "examples/sync/account_updates.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "account_updates_multi"
+path = "examples/sync/account_updates_multi.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "connect"
+path = "examples/sync/connect.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "tick_by_tick_all_last"
+path = "examples/sync/tick_by_tick_all_last.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "tick_by_tick_bid_ask"
+path = "examples/sync/tick_by_tick_bid_ask.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "tick_by_tick_last"
+path = "examples/sync/tick_by_tick_last.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "tick_by_tick_midpoint"
+path = "examples/sync/tick_by_tick_midpoint.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "wsh_event_data_by_contract"
+path = "examples/sync/wsh_event_data_by_contract.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "wsh_event_data_by_filter"
+path = "examples/sync/wsh_event_data_by_filter.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "wsh_metadata"
+path = "examples/sync/wsh_metadata.rs"
+required-features = ["sync"]
+
+# Additional sync examples
+[[example]]
+name = "historical_ticks_mid_point"
+path = "examples/sync/historical_ticks_mid_point.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "market_depth_exchanges"
+path = "examples/sync/market_depth_exchanges.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "market_rule"
+path = "examples/sync/market_rule.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "next_order_id"
+path = "examples/sync/next_order_id.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "option_chain"
+path = "examples/sync/option_chain.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "pnl_single"
+path = "examples/sync/pnl_single.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "positions_multi"
+path = "examples/sync/positions_multi.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "readme_connection"
+path = "examples/sync/readme_connection.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "readme_historical_data"
+path = "examples/sync/readme_historical_data.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "readme_multi_threading_1"
+path = "examples/sync/readme_multi_threading_1.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "readme_multi_threading_2"
+path = "examples/sync/readme_multi_threading_2.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "readme_place_order"
+path = "examples/sync/readme_place_order.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "capture_order_responses"
+path = "examples/capture_order_responses.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "capture_order_list_responses"
+path = "examples/capture_order_list_responses.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "parse_recorded_messages"
+path = "examples/parse_recorded_messages.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "capture_simple_responses"
+path = "examples/capture_simple_responses.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "test_order_flow"
+path = "examples/test_order_flow.rs"
+required-features = ["sync"]
+[[example]]
+name = "contract_builder"
+path = "examples/contract_builder.rs"
+
+

@@ -1,3 +1,5 @@
+use std::fmt;
+
 /// Market data tick types available from the TWS API.
 ///
 /// These represent different types of market data that can be requested
@@ -370,6 +372,119 @@ impl From<&str> for TickType {
     }
 }
 
+impl fmt::Display for TickType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Unknown => write!(f, "Unknown"),
+            Self::BidSize => write!(f, "Bid Size"),
+            Self::Bid => write!(f, "Bid"),
+            Self::Ask => write!(f, "Ask"),
+            Self::AskSize => write!(f, "Ask Size"),
+            Self::Last => write!(f, "Last"),
+            Self::LastSize => write!(f, "Last Size"),
+            Self::High => write!(f, "High"),
+            Self::Low => write!(f, "Low"),
+            Self::Volume => write!(f, "Volume"),
+            Self::Close => write!(f, "Close"),
+            Self::BidOption => write!(f, "Bid Option"),
+            Self::AskOption => write!(f, "Ask Option"),
+            Self::LastOption => write!(f, "Last Option"),
+            Self::ModelOption => write!(f, "Model Option"),
+            Self::Open => write!(f, "Open"),
+            Self::Low13Week => write!(f, "13 Week Low"),
+            Self::High13Week => write!(f, "13 Week High"),
+            Self::Low26Week => write!(f, "26 Week Low"),
+            Self::High26Week => write!(f, "26 Week High"),
+            Self::Low52Week => write!(f, "52 Week Low"),
+            Self::High52Week => write!(f, "52 Week High"),
+            Self::AvgVolume => write!(f, "Average Volume"),
+            Self::OpenInterest => write!(f, "Open Interest"),
+            Self::OptionHistoricalVol => write!(f, "Option Historical Volatility"),
+            Self::OptionImpliedVol => write!(f, "Option Implied Volatility"),
+            Self::OptionBidExch => write!(f, "Option Bid Exchange"),
+            Self::OptionAskExch => write!(f, "Option Ask Exchange"),
+            Self::OptionCallOpenInterest => write!(f, "Option Call Open Interest"),
+            Self::OptionPutOpenInterest => write!(f, "Option Put Open Interest"),
+            Self::OptionCallVolume => write!(f, "Option Call Volume"),
+            Self::OptionPutVolume => write!(f, "Option Put Volume"),
+            Self::IndexFuturePremium => write!(f, "Index Future Premium"),
+            Self::BidExch => write!(f, "Bid Exchange"),
+            Self::AskExch => write!(f, "Ask Exchange"),
+            Self::AuctionVolume => write!(f, "Auction Volume"),
+            Self::AuctionPrice => write!(f, "Auction Price"),
+            Self::AuctionImbalance => write!(f, "Auction Imbalance"),
+            Self::MarkPrice => write!(f, "Mark Price"),
+            Self::BidEfpComputation => write!(f, "Bid EFP Computation"),
+            Self::AskEfpComputation => write!(f, "Ask EFP Computation"),
+            Self::LastEfpComputation => write!(f, "Last EFP Computation"),
+            Self::OpenEfpComputation => write!(f, "Open EFP Computation"),
+            Self::HighEfpComputation => write!(f, "High EFP Computation"),
+            Self::LowEfpComputation => write!(f, "Low EFP Computation"),
+            Self::CloseEfpComputation => write!(f, "Close EFP Computation"),
+            Self::LastTimestamp => write!(f, "Last Timestamp"),
+            Self::Shortable => write!(f, "Shortable"),
+            Self::FundamentalRatios => write!(f, "Fundamental Ratios"),
+            Self::RtVolume => write!(f, "RT Volume"),
+            Self::Halted => write!(f, "Halted"),
+            Self::BidYield => write!(f, "Bid Yield"),
+            Self::AskYield => write!(f, "Ask Yield"),
+            Self::LastYield => write!(f, "Last Yield"),
+            Self::CustOptionComputation => write!(f, "Custom Option Computation"),
+            Self::TradeCount => write!(f, "Trade Count"),
+            Self::TradeRate => write!(f, "Trade Rate"),
+            Self::VolumeRate => write!(f, "Volume Rate"),
+            Self::LastRthTrade => write!(f, "Last RTH Trade"),
+            Self::RtHistoricalVol => write!(f, "RT Historical Volatility"),
+            Self::IbDividends => write!(f, "IB Dividends"),
+            Self::BondFactorMultiplier => write!(f, "Bond Factor Multiplier"),
+            Self::RegulatoryImbalance => write!(f, "Regulatory Imbalance"),
+            Self::NewsTick => write!(f, "News Tick"),
+            Self::ShortTermVolume3Min => write!(f, "Short Term Volume 3 Min"),
+            Self::ShortTermVolume5Min => write!(f, "Short Term Volume 5 Min"),
+            Self::ShortTermVolume10Min => write!(f, "Short Term Volume 10 Min"),
+            Self::DelayedBid => write!(f, "Delayed Bid"),
+            Self::DelayedAsk => write!(f, "Delayed Ask"),
+            Self::DelayedLast => write!(f, "Delayed Last"),
+            Self::DelayedBidSize => write!(f, "Delayed Bid Size"),
+            Self::DelayedAskSize => write!(f, "Delayed Ask Size"),
+            Self::DelayedLastSize => write!(f, "Delayed Last Size"),
+            Self::DelayedHigh => write!(f, "Delayed High"),
+            Self::DelayedLow => write!(f, "Delayed Low"),
+            Self::DelayedVolume => write!(f, "Delayed Volume"),
+            Self::DelayedClose => write!(f, "Delayed Close"),
+            Self::DelayedOpen => write!(f, "Delayed Open"),
+            Self::RtTrdVolume => write!(f, "RT Trade Volume"),
+            Self::CreditmanMarkPrice => write!(f, "Creditman Mark Price"),
+            Self::CreditmanSlowMarkPrice => write!(f, "Creditman Slow Mark Price"),
+            Self::DelayedBidOption => write!(f, "Delayed Bid Option"),
+            Self::DelayedAskOption => write!(f, "Delayed Ask Option"),
+            Self::DelayedLastOption => write!(f, "Delayed Last Option"),
+            Self::DelayedModelOption => write!(f, "Delayed Model Option"),
+            Self::LastExch => write!(f, "Last Exchange"),
+            Self::LastRegTime => write!(f, "Last Reg Time"),
+            Self::FuturesOpenInterest => write!(f, "Futures Open Interest"),
+            Self::AvgOptVolume => write!(f, "Average Option Volume"),
+            Self::DelayedLastTimestamp => write!(f, "Delayed Last Timestamp"),
+            Self::ShortableShares => write!(f, "Shortable Shares"),
+            Self::DelayedHalted => write!(f, "Delayed Halted"),
+            Self::Reuters2MutualFunds => write!(f, "Reuters2 Mutual Funds"),
+            Self::EtfNavClose => write!(f, "ETF NAV Close"),
+            Self::EtfNavPriorClose => write!(f, "ETF NAV Prior Close"),
+            Self::EtfNavBid => write!(f, "ETF NAV Bid"),
+            Self::EtfNavAsk => write!(f, "ETF NAV Ask"),
+            Self::EtfNavLast => write!(f, "ETF NAV Last"),
+            Self::EtfFrozenNavLast => write!(f, "ETF Frozen NAV Last"),
+            Self::EtfNavHigh => write!(f, "ETF NAV High"),
+            Self::EtfNavLow => write!(f, "ETF NAV Low"),
+            Self::SocialMarketAnalytics => write!(f, "Social Market Analytics"),
+            Self::EstimatedIpoMidpoint => write!(f, "Estimated IPO Midpoint"),
+            Self::FinalIpoLast => write!(f, "Final IPO Last"),
+            Self::DelayedYieldBid => write!(f, "Delayed Yield Bid"),
+            Self::DelayedYieldAsk => write!(f, "Delayed Yield Ask"),
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     #[cfg(test)]
@@ -652,5 +767,17 @@ mod test {
         assert_eq!(TickType::from("BIDSIZE"), TickType::Unknown);
         assert_eq!(TickType::from("bidSize"), TickType::BidSize);
         assert_eq!(TickType::from("BidSize"), TickType::Unknown);
+    }
+
+    #[test]
+    fn test_display_output() {
+        assert_eq!(format!("{}", TickType::Bid), "Bid");
+        assert_eq!(format!("{}", TickType::AskSize), "Ask Size");
+        assert_eq!(format!("{}", TickType::Last), "Last");
+        assert_eq!(format!("{}", TickType::Volume), "Volume");
+        assert_eq!(format!("{}", TickType::DelayedYieldAsk), "Delayed Yield Ask");
+        assert_eq!(format!("{}", TickType::Unknown), "Unknown");
+        assert_eq!(format!("{}", TickType::OptionImpliedVol), "Option Implied Volatility");
+        assert_eq!(format!("{}", TickType::ShortableShares), "Shortable Shares");
     }
 }
