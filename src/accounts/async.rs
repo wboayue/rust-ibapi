@@ -8,7 +8,7 @@ use crate::protocol::{check_version, Features};
 use crate::subscriptions::{AsyncDataStream, Subscription};
 use crate::{Client, Error};
 
-use super::common::{decoders, encoders};
+use super::common::{decoders, encoders, errors, retry};
 use super::*;
 
 // Implement AsyncDataStream traits for the account types
@@ -31,11 +31,8 @@ impl AsyncDataStream<AccountSummaries> for AccountSummaries {
         request_id: Option<i32>,
         _context: &crate::client::builders::ResponseContext,
     ) -> Result<crate::messages::RequestMessage, Error> {
-        if let Some(request_id) = request_id {
-            encoders::encode_cancel_account_summary(request_id)
-        } else {
-            Err(Error::Simple("request_id required".into()))
-        }
+        let request_id = errors::require_request_id(request_id)?;
+        encoders::encode_cancel_account_summary(request_id)
     }
 }
 
@@ -51,7 +48,8 @@ impl AsyncDataStream<PnL> for PnL {
         request_id: Option<i32>,
         _context: &crate::client::builders::ResponseContext,
     ) -> Result<crate::messages::RequestMessage, Error> {
-        encoders::encode_cancel_pnl(request_id.ok_or(Error::Simple("request_id required".into()))?)
+        let request_id = errors::require_request_id(request_id)?;
+        encoders::encode_cancel_pnl(request_id)
     }
 }
 
@@ -67,7 +65,8 @@ impl AsyncDataStream<PnLSingle> for PnLSingle {
         request_id: Option<i32>,
         _context: &crate::client::builders::ResponseContext,
     ) -> Result<crate::messages::RequestMessage, Error> {
-        encoders::encode_cancel_pnl_single(request_id.ok_or(Error::Simple("request_id required".into()))?)
+        let request_id = errors::require_request_id(request_id)?;
+        encoders::encode_cancel_pnl_single(request_id)
     }
 }
 
@@ -107,7 +106,8 @@ impl AsyncDataStream<PositionUpdateMulti> for PositionUpdateMulti {
         request_id: Option<i32>,
         _context: &crate::client::builders::ResponseContext,
     ) -> Result<crate::messages::RequestMessage, Error> {
-        encoders::encode_cancel_positions_multi(request_id.ok_or(Error::Simple("request_id required".into()))?)
+        let request_id = errors::require_request_id(request_id)?;
+        encoders::encode_cancel_positions_multi(request_id)
     }
 }
 
@@ -157,7 +157,7 @@ impl AsyncDataStream<AccountUpdateMulti> for AccountUpdateMulti {
         request_id: Option<i32>,
         _context: &crate::client::builders::ResponseContext,
     ) -> Result<crate::messages::RequestMessage, Error> {
-        let request_id = request_id.expect("Request ID required to encode cancel account updates multi");
+        let request_id = errors::require_request_id_for(request_id, "encode cancel account updates multi")?;
         encoders::encode_cancel_account_updates_multi(server_version, request_id)
     }
 }
@@ -262,38 +262,42 @@ pub async fn account_updates_multi(
 }
 
 pub async fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
-    let request = encoders::encode_request_managed_accounts()?;
-    let mut subscription = client.shared_request(OutgoingMessages::RequestManagedAccounts).send_raw(request).await?;
+    retry::retry_on_connection_reset_async(|| async {
+        let request = encoders::encode_request_managed_accounts()?;
+        let mut subscription = client.shared_request(OutgoingMessages::RequestManagedAccounts).send_raw(request).await?;
 
-    match subscription.next().await {
-        Some(mut message) => {
-            message.skip(); // message type
-            message.skip(); // message version
+        match subscription.next().await {
+            Some(mut message) => {
+                message.skip(); // message type
+                message.skip(); // message version
 
-            let accounts = message.next_string()?;
-            Ok(accounts.split(",").map(String::from).collect())
+                let accounts = message.next_string()?;
+                Ok(accounts.split(",").map(String::from).collect())
+            }
+            None => Ok(Vec::default()),
         }
-        None => Ok(Vec::default()),
-    }
+    }).await
 }
 
 pub async fn server_time(client: &Client) -> Result<OffsetDateTime, Error> {
-    let request = encoders::encode_request_server_time()?;
-    let mut subscription = client.shared_request(OutgoingMessages::RequestCurrentTime).send_raw(request).await?;
+    retry::retry_on_connection_reset_async(|| async {
+        let request = encoders::encode_request_server_time()?;
+        let mut subscription = client.shared_request(OutgoingMessages::RequestCurrentTime).send_raw(request).await?;
 
-    match subscription.next().await {
-        Some(mut message) => {
-            message.skip(); // message type
-            message.skip(); // message version
+        match subscription.next().await {
+            Some(mut message) => {
+                message.skip(); // message type
+                message.skip(); // message version
 
-            let timestamp = message.next_long()?;
-            match OffsetDateTime::from_unix_timestamp(timestamp) {
-                Ok(date) => Ok(date),
-                Err(e) => Err(Error::Simple(format!("Error parsing date: {e}"))),
+                let timestamp = message.next_long()?;
+                match OffsetDateTime::from_unix_timestamp(timestamp) {
+                    Ok(date) => Ok(date),
+                    Err(e) => Err(Error::Simple(format!("Error parsing date: {e}"))),
+                }
             }
+            None => Err(Error::Simple("No response from server".to_string())),
         }
-        None => Err(Error::Simple("No response from server".to_string())),
-    }
+    }).await
 }
 
 #[cfg(test)]
