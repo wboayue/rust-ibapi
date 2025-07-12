@@ -10,6 +10,8 @@ This library provides a comprehensive Rust implementation of the Interactive Bro
 
 With this fully featured API, you can retrieve account information, access real-time and historical market data, manage orders, perform market scans, and access news and Wall Street Horizons (WSH) event data. Future updates will focus on bug fixes, maintaining parity with the official API, and enhancing usability.
 
+> **🚧 Work in Progress**: Version 2.0 is currently under active development and includes significant architectural improvements, async/await support, and enhanced features. The current release (1.x) remains stable and production-ready.
+
 If you encounter any issues or require a missing feature, please review the [issues list](https://github.com/wboayue/rust-ibapi/issues) before submitting a new one.
 
 ## Available APIs
