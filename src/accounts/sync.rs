@@ -2,12 +2,12 @@
 
 use time::OffsetDateTime;
 
-use crate::client::{ClientRequestBuilders, DataStream, ResponseContext, SharesChannel, Subscription, SubscriptionBuilderExt};
+use crate::client::{ClientRequestBuilders, DataStream, ResponseContext, SharesChannel, Subscription};
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::protocol::{check_version, Features};
 use crate::{Client, Error};
 
-use super::common::{decoders, encoders, errors, retry};
+use super::common::{decoders, encoders, errors, helpers};
 use super::*;
 
 // Implement SharesChannel for PositionUpdate subscription
@@ -139,13 +139,12 @@ impl DataStream<AccountUpdateMulti> for AccountUpdateMulti {
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.
 pub fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
-    check_version(client.server_version(), Features::POSITIONS)?;
-
-    let request = encoders::encode_request_positions()?;
-
-    client
-        .subscription::<PositionUpdate>()
-        .send_shared(OutgoingMessages::RequestPositions, request)
+    helpers::shared_subscription(
+        client,
+        Features::POSITIONS,
+        OutgoingMessages::RequestPositions,
+        encoders::encode_request_positions,
+    )
 }
 
 pub fn positions_multi<'a>(
@@ -163,17 +162,14 @@ pub fn positions_multi<'a>(
 
 // Determine whether an account exists under an account family and find the account family code.
 pub fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
-    check_version(client.server_version(), Features::FAMILY_CODES)?;
-
-    let request = encoders::encode_request_family_codes()?;
-    let subscription = client.shared_request(OutgoingMessages::RequestFamilyCodes).send_raw(request)?;
-
-    // TODO: enumerate
-    if let Some(Ok(mut message)) = subscription.next() {
-        decoders::decode_family_codes(&mut message)
-    } else {
-        Ok(Vec::default())
-    }
+    helpers::one_shot_request(
+        client,
+        Features::FAMILY_CODES,
+        OutgoingMessages::RequestFamilyCodes,
+        encoders::encode_request_family_codes,
+        decoders::decode_family_codes,
+        Vec::default,
+    )
 }
 
 // Creates subscription for real time daily PnL and unrealized PnL updates
@@ -183,12 +179,7 @@ pub fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
 // * `account`    - account for which to receive PnL updates
 // * `model_code` - specify to request PnL updates for a specific model
 pub fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str>) -> Result<Subscription<'a, PnL>, Error> {
-    check_version(client.server_version(), Features::PNL)?;
-
-    let builder = client.request();
-    let request = encoders::encode_request_pnl(builder.request_id(), account, model_code)?;
-
-    builder.send(request)
+    helpers::request_with_id(client, Features::PNL, |id| encoders::encode_request_pnl(id, account, model_code))
 }
 
 // Requests real time updates for daily PnL of individual positions.
@@ -199,27 +190,21 @@ pub fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str>) -> R
 // * `contract_id` - Contract ID of contract to receive daily PnL updates for. Note: does not return message if invalid conId is entered
 // * `model_code` - Model in which position exists
 pub fn pnl_single<'a>(client: &'a Client, account: &str, contract_id: i32, model_code: Option<&str>) -> Result<Subscription<'a, PnLSingle>, Error> {
-    check_version(client.server_version(), Features::REALIZED_PNL)?;
-
-    let builder = client.request();
-    let request = encoders::encode_request_pnl_single(builder.request_id(), account, contract_id, model_code)?;
-
-    builder.send(request)
+    helpers::request_with_id(client, Features::REALIZED_PNL, |id| {
+        encoders::encode_request_pnl_single(id, account, contract_id, model_code)
+    })
 }
 
 pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
-    check_version(client.server_version(), Features::ACCOUNT_SUMMARY)?;
-
-    let builder = client.request();
-    let request = encoders::encode_request_account_summary(builder.request_id(), group, tags)?;
-
-    builder.send(request)
+    helpers::request_with_id(client, Features::ACCOUNT_SUMMARY, |id| {
+        encoders::encode_request_account_summary(id, group, tags)
+    })
 }
 
 pub fn account_updates<'a>(client: &'a Client, account: &str) -> Result<Subscription<'a, AccountUpdate>, Error> {
-    let request = encoders::encode_request_account_updates(client.server_version(), account)?;
-
-    client.shared_request(OutgoingMessages::RequestAccountData).send(request)
+    helpers::shared_request(client, OutgoingMessages::RequestAccountData, || {
+        encoders::encode_request_account_updates(client.server_version(), account)
+    })
 }
 
 pub fn account_updates_multi<'a>(
@@ -236,44 +221,36 @@ pub fn account_updates_multi<'a>(
 }
 
 pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
-    retry::retry_on_connection_reset(|| {
-        let request = encoders::encode_request_managed_accounts()?;
-        let subscription = client.shared_request(OutgoingMessages::RequestManagedAccounts).send_raw(request)?;
-
-        match subscription.next() {
-            Some(Ok(mut message)) => {
-                message.skip(); // message type
-                message.skip(); // message version
-
-                let accounts = message.next_string()?;
-                Ok(accounts.split(",").map(String::from).collect())
-            }
-            Some(Err(e)) => Err(e),
-            None => Ok(Vec::default()),
-        }
-    })
+    helpers::one_shot_with_retry(
+        client,
+        OutgoingMessages::RequestManagedAccounts,
+        encoders::encode_request_managed_accounts,
+        |message| {
+            message.skip(); // message type
+            message.skip(); // message version
+            let accounts = message.next_string()?;
+            Ok(accounts.split(",").map(String::from).collect())
+        },
+        || Ok(Vec::default()),
+    )
 }
 
 pub fn server_time(client: &Client) -> Result<OffsetDateTime, Error> {
-    retry::retry_on_connection_reset(|| {
-        let request = encoders::encode_request_server_time()?;
-        let subscription = client.shared_request(OutgoingMessages::RequestCurrentTime).send_raw(request)?;
-
-        match subscription.next() {
-            Some(Ok(mut message)) => {
-                message.skip(); // message type
-                message.skip(); // message version
-
-                let timestamp = message.next_long()?;
-                match OffsetDateTime::from_unix_timestamp(timestamp) {
-                    Ok(date) => Ok(date),
-                    Err(e) => Err(Error::Simple(format!("Error parsing date: {e}"))),
-                }
+    helpers::one_shot_with_retry(
+        client,
+        OutgoingMessages::RequestCurrentTime,
+        encoders::encode_request_server_time,
+        |message| {
+            message.skip(); // message type
+            message.skip(); // message version
+            let timestamp = message.next_long()?;
+            match OffsetDateTime::from_unix_timestamp(timestamp) {
+                Ok(date) => Ok(date),
+                Err(e) => Err(Error::Simple(format!("Error parsing date: {e}"))),
             }
-            Some(Err(e)) => Err(e),
-            None => Err(Error::Simple("No response from server".to_string())),
-        }
-    })
+        },
+        || Err(Error::Simple("No response from server".to_string())),
+    )
 }
 
 #[cfg(test)]

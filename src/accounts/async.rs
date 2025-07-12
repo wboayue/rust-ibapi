@@ -2,13 +2,13 @@
 
 use time::OffsetDateTime;
 
-use crate::client::{ClientRequestBuilders, SubscriptionBuilderExt};
+use crate::client::ClientRequestBuilders;
 use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::{AsyncDataStream, Subscription};
 use crate::{Client, Error};
 
-use super::common::{decoders, encoders, errors, retry};
+use super::common::{decoders, encoders, errors, helpers::async_helpers};
 use super::*;
 
 // Implement AsyncDataStream traits for the account types
@@ -165,14 +165,13 @@ impl AsyncDataStream<AccountUpdateMulti> for AccountUpdateMulti {
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.
 pub async fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
-    check_version(client.server_version(), Features::POSITIONS)?;
-
-    let request = encoders::encode_request_positions()?;
-
-    client
-        .subscription::<PositionUpdate>()
-        .send_shared::<PositionUpdate>(OutgoingMessages::RequestPositions, request)
-        .await
+    async_helpers::shared_subscription(
+        client,
+        Features::POSITIONS,
+        OutgoingMessages::RequestPositions,
+        encoders::encode_request_positions,
+    )
+    .await
 }
 
 pub async fn positions_multi(client: &Client, account: Option<&str>, model_code: Option<&str>) -> Result<Subscription<PositionUpdateMulti>, Error> {
@@ -186,17 +185,15 @@ pub async fn positions_multi(client: &Client, account: Option<&str>, model_code:
 
 // Determine whether an account exists under an account family and find the account family code.
 pub async fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
-    check_version(client.server_version(), Features::FAMILY_CODES)?;
-
-    let request = encoders::encode_request_family_codes()?;
-    let mut subscription = client.shared_request(OutgoingMessages::RequestFamilyCodes).send_raw(request).await?;
-
-    // TODO: enumerate - for now just get the first message
-    if let Some(mut message) = subscription.next().await {
-        decoders::decode_family_codes(&mut message)
-    } else {
-        Ok(Vec::default())
-    }
+    async_helpers::one_shot_request(
+        client,
+        Features::FAMILY_CODES,
+        OutgoingMessages::RequestFamilyCodes,
+        encoders::encode_request_family_codes,
+        decoders::decode_family_codes,
+        Vec::default,
+    )
+    .await
 }
 
 // Creates subscription for real time daily PnL and unrealized PnL updates
@@ -206,12 +203,7 @@ pub async fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
 // * `account`    - account for which to receive PnL updates
 // * `model_code` - specify to request PnL updates for a specific model
 pub async fn pnl(client: &Client, account: &str, model_code: Option<&str>) -> Result<Subscription<PnL>, Error> {
-    check_version(client.server_version(), Features::PNL)?;
-
-    let builder = client.request();
-    let request = encoders::encode_request_pnl(builder.request_id(), account, model_code)?;
-
-    builder.send::<PnL>(request).await
+    async_helpers::request_with_id(client, Features::PNL, |id| encoders::encode_request_pnl(id, account, model_code)).await
 }
 
 // Requests real time updates for daily PnL of individual positions.
@@ -222,30 +214,24 @@ pub async fn pnl(client: &Client, account: &str, model_code: Option<&str>) -> Re
 // * `contract_id` - Contract ID of contract to receive daily PnL updates for. Note: does not return message if invalid conId is entered
 // * `model_code` - Model in which position exists
 pub async fn pnl_single(client: &Client, account: &str, contract_id: i32, model_code: Option<&str>) -> Result<Subscription<PnLSingle>, Error> {
-    check_version(client.server_version(), Features::REALIZED_PNL)?;
-
-    let builder = client.request();
-    let request = encoders::encode_request_pnl_single(builder.request_id(), account, contract_id, model_code)?;
-
-    builder.send::<PnLSingle>(request).await
+    async_helpers::request_with_id(client, Features::REALIZED_PNL, |id| {
+        encoders::encode_request_pnl_single(id, account, contract_id, model_code)
+    })
+    .await
 }
 
 pub async fn account_summary(client: &Client, group: &str, tags: &[&str]) -> Result<Subscription<AccountSummaries>, Error> {
-    check_version(client.server_version(), Features::ACCOUNT_SUMMARY)?;
-
-    let builder = client.request();
-    let request = encoders::encode_request_account_summary(builder.request_id(), group, tags)?;
-
-    builder.send::<AccountSummaries>(request).await
+    async_helpers::request_with_id(client, Features::ACCOUNT_SUMMARY, |id| {
+        encoders::encode_request_account_summary(id, group, tags)
+    })
+    .await
 }
 
 pub async fn account_updates(client: &Client, account: &str) -> Result<Subscription<AccountUpdate>, Error> {
-    let request = encoders::encode_request_account_updates(client.server_version(), account)?;
-
-    client
-        .shared_request(OutgoingMessages::RequestAccountData)
-        .send::<AccountUpdate>(request)
-        .await
+    async_helpers::shared_request(client, OutgoingMessages::RequestAccountData, || {
+        encoders::encode_request_account_updates(client.server_version(), account)
+    })
+    .await
 }
 
 pub async fn account_updates_multi(
@@ -262,42 +248,38 @@ pub async fn account_updates_multi(
 }
 
 pub async fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
-    retry::retry_on_connection_reset_async(|| async {
-        let request = encoders::encode_request_managed_accounts()?;
-        let mut subscription = client.shared_request(OutgoingMessages::RequestManagedAccounts).send_raw(request).await?;
-
-        match subscription.next().await {
-            Some(mut message) => {
-                message.skip(); // message type
-                message.skip(); // message version
-
-                let accounts = message.next_string()?;
-                Ok(accounts.split(",").map(String::from).collect())
-            }
-            None => Ok(Vec::default()),
-        }
-    }).await
+    async_helpers::one_shot_with_retry(
+        client,
+        OutgoingMessages::RequestManagedAccounts,
+        encoders::encode_request_managed_accounts,
+        |message| {
+            message.skip(); // message type
+            message.skip(); // message version
+            let accounts = message.next_string()?;
+            Ok(accounts.split(",").map(String::from).collect())
+        },
+        || Ok(Vec::default()),
+    )
+    .await
 }
 
 pub async fn server_time(client: &Client) -> Result<OffsetDateTime, Error> {
-    retry::retry_on_connection_reset_async(|| async {
-        let request = encoders::encode_request_server_time()?;
-        let mut subscription = client.shared_request(OutgoingMessages::RequestCurrentTime).send_raw(request).await?;
-
-        match subscription.next().await {
-            Some(mut message) => {
-                message.skip(); // message type
-                message.skip(); // message version
-
-                let timestamp = message.next_long()?;
-                match OffsetDateTime::from_unix_timestamp(timestamp) {
-                    Ok(date) => Ok(date),
-                    Err(e) => Err(Error::Simple(format!("Error parsing date: {e}"))),
-                }
+    async_helpers::one_shot_with_retry(
+        client,
+        OutgoingMessages::RequestCurrentTime,
+        encoders::encode_request_server_time,
+        |message| {
+            message.skip(); // message type
+            message.skip(); // message version
+            let timestamp = message.next_long()?;
+            match OffsetDateTime::from_unix_timestamp(timestamp) {
+                Ok(date) => Ok(date),
+                Err(e) => Err(Error::Simple(format!("Error parsing date: {e}"))),
             }
-            None => Err(Error::Simple("No response from server".to_string())),
-        }
-    }).await
+        },
+        || Err(Error::Simple("No response from server".to_string())),
+    )
+    .await
 }
 
 #[cfg(test)]
