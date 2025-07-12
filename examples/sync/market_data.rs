@@ -28,16 +28,16 @@ fn main() {
 
     for tick in &subscription {
         match tick {
-            TickTypes::Price(tick_price) => println!("{:?}", tick_price),
-            TickTypes::Size(tick_size) => println!("{:?}", tick_size),
-            TickTypes::PriceSize(tick_price_size) => println!("{:?}", tick_price_size),
-            TickTypes::Generic(tick_generic) => println!("{:?}", tick_generic),
-            TickTypes::String(tick_string) => println!("{:?}", tick_string),
-            TickTypes::EFP(tick_efp) => println!("{:?}", tick_efp),
-            TickTypes::OptionComputation(option_computation) => println!("{:?}", option_computation),
-            TickTypes::RequestParameters(tick_request_parameters) => println!("{:?}", tick_request_parameters),
+            TickTypes::Price(tick_price) => println!("{tick_price:?}"),
+            TickTypes::Size(tick_size) => println!("{tick_size:?}"),
+            TickTypes::PriceSize(tick_price_size) => println!("{tick_price_size:?}"),
+            TickTypes::Generic(tick_generic) => println!("{tick_generic:?}"),
+            TickTypes::String(tick_string) => println!("{tick_string:?}"),
+            TickTypes::EFP(tick_efp) => println!("{tick_efp:?}"),
+            TickTypes::OptionComputation(option_computation) => println!("{option_computation:?}"),
+            TickTypes::RequestParameters(tick_request_parameters) => println!("{tick_request_parameters:?}"),
             TickTypes::SnapshotEnd => subscription.cancel(),
-            TickTypes::Notice(notice) => println!("{:?}", notice),
+            TickTypes::Notice(notice) => println!("{notice:?}"),
         }
     }
 }

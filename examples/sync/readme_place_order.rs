@@ -26,7 +26,7 @@ pub fn main() {
         if let PlaceOrder::ExecutionData(data) = event {
             println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
         } else {
-            println!("{:?}", event);
+            println!("{event:?}");
         }
     }
 }

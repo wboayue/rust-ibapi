@@ -395,7 +395,7 @@ mod tests {
                 assert_eq!(summary.tag, AccountSummaryTags::ACCOUNT_TYPE);
                 assert_eq!(summary.value, "FA");
             }
-            _ => panic!("Expected AccountSummaries::Summary, got {:?}", first_update),
+            _ => panic!("Expected AccountSummaries::Summary, got {first_update:?}"),
         }
 
         // Second update should be end

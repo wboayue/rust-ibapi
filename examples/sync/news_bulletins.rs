@@ -15,6 +15,6 @@ fn main() {
 
     let news_bulletins = client.news_bulletins(true).expect("request news providers failed");
     for news_bulletin in &news_bulletins {
-        println!("news bulletin {:?}", news_bulletin);
+        println!("news bulletin {news_bulletin:?}");
     }
 }

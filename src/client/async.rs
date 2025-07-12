@@ -490,9 +490,9 @@ impl Client {
     ///     while let Some(tick_result) = subscription.next().await {
     ///         match tick_result {
     ///             Ok(tick) => match tick {
-    ///                 TickTypes::Price(tick_price) => println!("{:?}", tick_price),
-    ///                 TickTypes::Size(tick_size) => println!("{:?}", tick_size),
-    ///                 TickTypes::String(tick_string) => println!("{:?}", tick_string),
+    ///                 TickTypes::Price(tick_price) => println!("{tick_price:?}"),
+    ///                 TickTypes::Size(tick_size) => println!("{tick_size:?}"),
+    ///                 TickTypes::String(tick_string) => println!("{tick_string:?}"),
     ///                 TickTypes::SnapshotEnd => {
     ///                     println!("Snapshot completed");
     ///                     break;
@@ -770,7 +770,7 @@ impl Client {
     ///
     ///     let market_data_type = MarketDataType::Live;
     ///     client.switch_market_data_type(market_data_type).await.expect("request failed");
-    ///     println!("market data switched: {:?}", market_data_type);
+    ///     println!("market data switched: {market_data_type:?}");
     /// }
     /// ```
     pub async fn switch_market_data_type(&self, market_data_type: crate::market_data::MarketDataType) -> Result<(), Error> {

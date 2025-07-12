@@ -26,5 +26,5 @@ fn main() {
     };
 
     let calculation = client.calculate_option_price(&contract, 100.0, 235.0).expect("request failed");
-    println!("calculation: {:?}", calculation);
+    println!("calculation: {calculation:?}");
 }

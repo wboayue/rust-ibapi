@@ -44,7 +44,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if !parts.is_empty() {
                 let msg_type = identify_message_type(parts[0]);
                 println!("// {} - Line {}", msg_type, i + 1);
-                println!("\"{}\".to_string(),", formatted);
+                println!("\"{formatted}\".to_string(),");
                 println!();
             }
         }

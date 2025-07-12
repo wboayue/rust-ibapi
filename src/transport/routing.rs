@@ -121,7 +121,7 @@ mod tests {
 
         match determine_routing(&message) {
             RoutingDecision::ByRequestId(id) => assert_eq!(id, 123),
-            routing => panic!("Expected ByRequestId routing, got {:?}", routing),
+            routing => panic!("Expected ByRequestId routing, got {routing:?}"),
         }
     }
 
@@ -136,7 +136,7 @@ mod tests {
                 assert_eq!(request_id, 123);
                 assert_eq!(error_code, 200);
             }
-            routing => panic!("Expected Error routing, got {:?}", routing),
+            routing => panic!("Expected Error routing, got {routing:?}"),
         }
     }
 
@@ -150,7 +150,7 @@ mod tests {
             RoutingDecision::SharedMessage(msg_type) => {
                 assert_eq!(msg_type, IncomingMessages::ManagedAccounts);
             }
-            routing => panic!("Expected SharedMessage routing, got {:?}", routing),
+            routing => panic!("Expected SharedMessage routing, got {routing:?}"),
         }
     }
 
@@ -178,7 +178,7 @@ mod tests {
         let message = ResponseMessage::from(message_str);
         match determine_routing(&message) {
             RoutingDecision::ByOrderId(id) => assert_eq!(id, 123),
-            routing => panic!("Expected ByOrderId routing, got {:?}", routing),
+            routing => panic!("Expected ByOrderId routing, got {routing:?}"),
         }
 
         // Test CompletedOrdersEnd (no order ID)
@@ -186,7 +186,7 @@ mod tests {
         let message = ResponseMessage::from(message_str);
         match determine_routing(&message) {
             RoutingDecision::ByOrderId(id) => assert_eq!(id, -1),
-            routing => panic!("Expected ByOrderId(-1) routing, got {:?}", routing),
+            routing => panic!("Expected ByOrderId(-1) routing, got {routing:?}"),
         }
 
         // Test ExecutionData with order ID at position 2
@@ -194,7 +194,7 @@ mod tests {
         let message = ResponseMessage::from(message_str);
         match determine_routing(&message) {
             RoutingDecision::ByOrderId(id) => assert_eq!(id, 123),
-            routing => panic!("Expected ByOrderId routing, got {:?}", routing),
+            routing => panic!("Expected ByOrderId routing, got {routing:?}"),
         }
 
         // Test CommissionsReport (no order ID but still an order message)
@@ -202,7 +202,7 @@ mod tests {
         let message = ResponseMessage::from(message_str);
         match determine_routing(&message) {
             RoutingDecision::ByOrderId(id) => assert_eq!(id, -1),
-            routing => panic!("Expected ByOrderId(-1) routing, got {:?}", routing),
+            routing => panic!("Expected ByOrderId(-1) routing, got {routing:?}"),
         }
     }
 

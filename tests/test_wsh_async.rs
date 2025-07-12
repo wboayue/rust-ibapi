@@ -13,7 +13,7 @@ async fn test_wsh_metadata_async() {
         // Example usage (would fail without real connection):
         // let client = Client::connect("127.0.0.1:4002", 100).await?;
         // let metadata = wsh_metadata(&client).await?;
-        // println!("WSH Metadata: {:?}", metadata);
+        // println!("WSH Metadata: {metadata:?}");
         Ok::<(), ibapi::Error>(())
     };
 }
@@ -41,7 +41,7 @@ async fn test_wsh_event_data_async() {
         //         watchlist: false,
         //     })
         // ).await?;
-        // println!("WSH Event Data: {:?}", event_data);
+        // println!("WSH Event Data: {event_data:?}");
         Ok::<(), ibapi::Error>(())
     };
 }

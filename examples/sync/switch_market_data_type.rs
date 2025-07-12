@@ -17,5 +17,5 @@ fn main() {
     let market_data_type = MarketDataType::Live;
 
     client.switch_market_data_type(market_data_type).expect("request failed");
-    println!("market data switched: {:?}", market_data_type);
+    println!("market data switched: {market_data_type:?}");
 }

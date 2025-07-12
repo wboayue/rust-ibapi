@@ -35,7 +35,7 @@ fn main() {
 
     println!("connection_string: {connection_string}, stock_symbol: {stock_symbol}");
 
-    let client = Client::connect(&connection_string, 100).expect("connection failed");
+    let client = Client::connect(connection_string, 100).expect("connection failed");
 
     info!("Connected {client:?}");
 

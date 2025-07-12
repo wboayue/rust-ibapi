@@ -197,7 +197,7 @@ mod tests {
         let result = wsh_event_data_by_filter(&client, filter, Some(50), None);
 
         assert!(result.is_ok());
-        let mut subscription = result.unwrap();
+        let subscription = result.unwrap();
 
         // First event
         let first = subscription.next();

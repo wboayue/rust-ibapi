@@ -22,14 +22,13 @@ fn main() {
         .scanner_subscription(&scanner_subscription, &filter)
         .expect("request scanner parameters failed");
 
-    for scan_results in subscription {
+    if let Some(scan_results) = subscription.next() {
         for scan_data in scan_results.iter() {
             println!(
                 "rank: {}, contract_id: {}, symbol: {}",
                 scan_data.rank, scan_data.contract_details.contract.contract_id, scan_data.contract_details.contract.symbol
             );
         }
-        break;
     }
 }
 

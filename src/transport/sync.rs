@@ -905,7 +905,7 @@ mod tests {
             }
 
             self.reconnect_call_count.fetch_add(1, Ordering::SeqCst);
-            return Err(mock_socket_error(ErrorKind::ConnectionRefused));
+            Err(mock_socket_error(ErrorKind::ConnectionRefused))
         }
         fn sleep(&self, _duration: std::time::Duration) {}
     }
@@ -962,7 +962,7 @@ mod tests {
             let encoded = response.encode();
             debug!("mock read {:?}", &encoded);
             let expected = encode_length(&encoded);
-            Ok(read_message(&mut expected.as_slice())?)
+            read_message(&mut expected.as_slice())
         }
 
         fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
@@ -979,7 +979,7 @@ mod tests {
             let buf = if is_handshake {
                 &buf[4..] // strip prefix
             } else {
-                &buf
+                buf
             };
 
             // the handshake does not include the trailing null byte
@@ -1025,14 +1025,14 @@ mod tests {
         }
         fn simple(request: &str, responses: &[&str]) -> Self {
             let responses = responses
-                .into_iter()
+                .iter()
                 .map(|s| ResponseMessage::from_simple(s))
                 .collect::<Vec<ResponseMessage>>();
             Self::new(RequestMessage::from_simple(request), responses)
         }
         fn request(request: RequestMessage, responses: &[&str]) -> Self {
             let responses = responses
-                .into_iter()
+                .iter()
                 .map(|s| ResponseMessage::from_simple(s))
                 .collect::<Vec<ResponseMessage>>();
             Self::new(request, responses)
@@ -1113,7 +1113,7 @@ mod tests {
         let _ = connection.read_message();
 
         match connection.reconnect() {
-            Err(Error::ConnectionFailed) => return Ok(()),
+            Err(Error::ConnectionFailed) => Ok(()),
             _ => panic!(""),
         }
     }
@@ -1134,7 +1134,7 @@ mod tests {
         // simulated dispatcher thread read to trigger disconnection
         let _ = connection.read_message();
 
-        Ok(connection.reconnect()?)
+        connection.reconnect()
     }
 
     #[test]
@@ -1166,7 +1166,7 @@ mod tests {
     fn test_send_request_after_disconnect() -> Result<(), Error> {
         let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL"))?;
 
-        let expected_response = &format!("10|9000|{}", AAPL_CONTRACT_RESPONSE);
+        let expected_response = &format!("10|9000|{AAPL_CONTRACT_RESPONSE}");
 
         let events = vec![
             Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
@@ -1282,7 +1282,7 @@ mod tests {
         bus.process_messages(server_version, std::time::Duration::from_secs(0))?;
         let client = Client::stubbed(bus.clone(), server_version);
 
-        match client.contract_details(&contract) {
+        match client.contract_details(contract) {
             Err(Error::ConnectionReset) => {}
             _ => panic!(),
         }

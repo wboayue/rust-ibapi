@@ -34,7 +34,7 @@ fn main() {
         .expect("request wsh event data failed");
 
     for event_data in &subscription {
-        println!("{:?}", event_data);
+        println!("{event_data:?}");
     }
 
     // check for errors

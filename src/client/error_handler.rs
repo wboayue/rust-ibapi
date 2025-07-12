@@ -132,7 +132,7 @@ mod tests {
         let timeout_err = Error::Io(std::sync::Arc::new(io::Error::new(ErrorKind::WouldBlock, "would block")));
         assert!(is_timeout_error(&timeout_err));
 
-        let non_timeout = Error::Io(std::sync::Arc::new(io::Error::new(ErrorKind::Other, "other")));
+        let non_timeout = Error::Io(std::sync::Arc::new(io::Error::other("other")));
         assert!(!is_timeout_error(&non_timeout));
     }
 

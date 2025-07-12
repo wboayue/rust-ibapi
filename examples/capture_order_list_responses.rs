@@ -16,27 +16,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test 1: Get open orders
     println!("\n=== Capturing Open Orders ===");
-    let mut open_orders = client.open_orders()?;
+    let open_orders = client.open_orders()?;
 
     let mut count = 0;
     for result in open_orders {
         match result {
             Orders::OrderData(data) => {
                 count += 1;
-                println!("\n[{}] OrderData:", count);
+                println!("\n[{count}] OrderData:");
                 println!("  Order ID: {}", data.order.order_id);
                 println!("  Symbol: {}", data.contract.symbol);
                 println!("  Status: {}", data.order_state.status);
             }
             Orders::OrderStatus(status) => {
                 count += 1;
-                println!("\n[{}] OrderStatus:", count);
+                println!("\n[{count}] OrderStatus:");
                 println!("  Order ID: {}", status.order_id);
                 println!("  Status: {}", status.status);
             }
             Orders::Notice(notice) => {
                 count += 1;
-                println!("\n[{}] Notice:", count);
+                println!("\n[{count}] Notice:");
                 println!("  Code: {}", notice.code);
                 println!("  Message: {}", notice.message);
             }
@@ -49,18 +49,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test 2: Get all open orders
     println!("\n\n=== Capturing All Open Orders ===");
-    let mut all_orders = client.all_open_orders()?;
+    let all_orders = client.all_open_orders()?;
 
     count = 0;
     for result in all_orders {
-        match result {
-            Orders::OrderData(data) => {
-                count += 1;
-                println!("\n[{}] OrderData:", count);
-                println!("  Order ID: {}", data.order.order_id);
-                println!("  Symbol: {}", data.contract.symbol);
-            }
-            _ => {}
+        if let Orders::OrderData(data) = result {
+            count += 1;
+            println!("\n[{count}] OrderData:");
+            println!("  Order ID: {}", data.order.order_id);
+            println!("  Symbol: {}", data.contract.symbol);
         }
     }
 
@@ -69,17 +66,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // COMPLETED_ORDERS version
         println!("\n\n=== Capturing Completed Orders ===");
         match client.completed_orders(false) {
-            Ok(mut completed) => {
+            Ok(completed) => {
                 count = 0;
                 for result in completed {
-                    match result {
-                        Orders::OrderData(data) => {
-                            count += 1;
-                            println!("\n[{}] Completed OrderData:", count);
-                            println!("  Order ID: {}", data.order.order_id);
-                            println!("  Symbol: {}", data.contract.symbol);
-                        }
-                        _ => {}
+                    if let Orders::OrderData(data) = result {
+                        count += 1;
+                        println!("\n[{count}] Completed OrderData:");
+                        println!("  Order ID: {}", data.order.order_id);
+                        println!("  Symbol: {}", data.contract.symbol);
                     }
                 }
             }
@@ -90,14 +84,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test 4: Get executions
     println!("\n\n=== Capturing Executions ===");
     let filter = ExecutionFilter::default();
-    let mut executions = client.executions(filter)?;
+    let executions = client.executions(filter)?;
 
     count = 0;
     for result in executions {
         match result {
             Executions::ExecutionData(exec) => {
                 count += 1;
-                println!("\n[{}] ExecutionData:", count);
+                println!("\n[{count}] ExecutionData:");
                 println!("  Exec ID: {}", exec.execution.execution_id);
                 println!("  Order ID: {}", exec.execution.order_id);
                 println!("  Symbol: {}", exec.contract.symbol);
@@ -107,13 +101,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Executions::CommissionReport(comm) => {
                 count += 1;
-                println!("\n[{}] CommissionReport:", count);
+                println!("\n[{count}] CommissionReport:");
                 println!("  Exec ID: {}", comm.execution_id);
                 println!("  Commission: {}", comm.commission);
             }
             Executions::Notice(notice) => {
                 count += 1;
-                println!("\n[{}] Notice:", count);
+                println!("\n[{count}] Notice:");
                 println!("  Code: {}", notice.code);
                 println!("  Message: {}", notice.message);
             }

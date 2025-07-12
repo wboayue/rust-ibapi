@@ -34,7 +34,7 @@ fn main() {
     let stock_symbol = matches.get_one::<String>("STOCK_SYMBOL").expect("stock symbol is required");
     let number_of_ticks = 10;
 
-    let client = Client::connect(&connection_string, 100).expect("connection failed");
+    let client = Client::connect(connection_string, 100).expect("connection failed");
 
     let interval_start = parse_interval(interval_raw);
     let contract = Contract::stock(stock_symbol);

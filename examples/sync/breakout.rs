@@ -49,7 +49,7 @@ fn main() {
             if let PlaceOrder::ExecutionData(data) = notice {
                 println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
             } else {
-                println!("{:?}", notice);
+                println!("{notice:?}");
             }
         }
     }

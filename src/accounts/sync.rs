@@ -435,7 +435,7 @@ mod tests {
                 assert_eq!(summary_data.tag, AccountSummaryTags::ACCOUNT_TYPE);
                 assert_eq!(summary_data.value, "FA");
             }
-            _ => panic!("Expected AccountSummaries::Summary, got {:?}", first_update),
+            _ => panic!("Expected AccountSummaries::Summary, got {first_update:?}"),
         }
 
         let second_update = subscription.next();
@@ -501,7 +501,7 @@ mod tests {
         assert!(result_err.is_err(), "Expected error for error response scenario");
         match result_err.err().unwrap() {
             Error::Simple(msg) => assert_eq!(msg, "Test Managed Account Error", "Error message mismatch for managed accounts"),
-            other_err => panic!("Unexpected error type for managed accounts: {:?}", other_err),
+            other_err => panic!("Unexpected error type for managed accounts: {other_err:?}"),
         }
     }
 
@@ -548,7 +548,7 @@ mod tests {
         let expected_datetime = datetime!(2023-03-15 12:00:00 UTC);
         let message_bus_s1 = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
-            response_messages: vec![format!("4\x001\x00{}\x00", valid_timestamp_str).into()],
+            response_messages: vec![format!("4\x001\x00{}\x00", valid_timestamp_str)],
         });
         let client_s1 = Client::stubbed(message_bus_s1, server_versions::SIZE_RULES);
         let result_s1 = client_s1.server_time();
@@ -565,7 +565,7 @@ mod tests {
         assert!(result_s2.is_err(), "S2: Expected Err, got Ok: {:?}", result_s2.ok());
         match result_s2.err().unwrap() {
             Error::Simple(msg) => assert_eq!(msg, "No response from server", "S2: Error message mismatch"),
-            other => panic!("S2: Unexpected error type: {:?}", other),
+            other => panic!("S2: Unexpected error type: {other:?}"),
         }
 
         // Scenario 3: Error response from TWS
@@ -578,7 +578,7 @@ mod tests {
         assert!(result_s3.is_err(), "S3: Expected Err, got Ok: {:?}", result_s3.ok());
         match result_s3.err().unwrap() {
             Error::Simple(msg) => assert_eq!(msg, "Test TWS Error", "S3: Error message mismatch"),
-            other => panic!("S3: Unexpected error type: {:?}", other),
+            other => panic!("S3: Unexpected error type: {other:?}"),
         }
 
         // Scenario 4: Retry on ConnectionReset
@@ -612,7 +612,7 @@ mod tests {
         // For now, let's check if it's an Error::Decode.
         match result_s5_unparsable.err().unwrap() {
             Error::Simple(field) => assert_eq!(field, "server_time", "S5 Unparsable: Error field mismatch"),
-            other => panic!("S5 Unparsable: Unexpected error type: {:?}", other),
+            other => panic!("S5 Unparsable: Unexpected error type: {other:?}"),
         }
 
         // Scenario 5b: Invalid timestamp (out of range for OffsetDateTime, e.g., year 10000)
@@ -628,7 +628,7 @@ mod tests {
         assert!(result_s5_range.is_err(), "S5 Range: Expected Err, got Ok: {:?}", result_s5_range.ok());
         match result_s5_range.err().unwrap() {
             Error::Simple(field) => assert_eq!(field, "server_time", "S5 Range: Error field mismatch (likely time conversion)"),
-            other => panic!("S5 Range: Unexpected error type: {:?}", other),
+            other => panic!("S5 Range: Unexpected error type: {other:?}"),
         }
     }
 
@@ -675,7 +675,7 @@ mod tests {
                 assert_eq!(av.currency, "USD", "AccountValue.currency");
                 assert_eq!(av.account.as_deref(), Some("TestAccount"), "AccountValue.account_name");
             }
-            other => panic!("First update was not AccountValue: {:?}", other),
+            other => panic!("First update was not AccountValue: {other:?}"),
         }
 
         // 2. PortfolioValue
@@ -684,7 +684,7 @@ mod tests {
                 assert_eq!(pv.contract.symbol, "AAPL", "PortfolioValue.contract.symbol");
                 assert_eq!(pv.position, 100.0, "PortfolioValue.position");
             }
-            other => panic!("Second update was not PortfolioValue: {:?}", other),
+            other => panic!("Second update was not PortfolioValue: {other:?}"),
         }
 
         // 3. UpdateTime
@@ -692,13 +692,13 @@ mod tests {
             AccountUpdate::UpdateTime(ut) => {
                 assert_eq!(ut.timestamp, "10:20:30", "UpdateTime.timestamp");
             }
-            other => panic!("Third update was not UpdateTime: {:?}", other),
+            other => panic!("Third update was not UpdateTime: {other:?}"),
         }
 
         // 4. End
         match &updates_received[3] {
             AccountUpdate::End => { /* Correct */ }
-            other => panic!("Fourth update was not End: {:?}", other),
+            other => panic!("Fourth update was not End: {other:?}"),
         }
 
         // Verify cancellation message
@@ -725,13 +725,13 @@ mod tests {
                 } else {
                     "2"
                 };
-                let correct_version = version_field == expected_version_for_cancel.to_string();
+                let correct_version = version_field == expected_version_for_cancel;
                 let correct_subscribe_flag = subscribe_field == "0";
 
                 let correct_account_field = if client.server_version() >= server_versions::ACCOUNT_SUMMARY {
                     account_field_for_cancel == account_name_to_subscribe
                 } else {
-                    account_field_for_cancel == "".to_string() // No account field for older server versions on cancel
+                    account_field_for_cancel.is_empty() // No account field for older server versions on cancel
                 };
 
                 correct_version && correct_subscribe_flag && correct_account_field

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{connection::ConnectionMetadata, stubs::MessageBusStub, transport::MessageBus};
+use crate::{connection::ConnectionMetadata, stubs::MessageBusStub};
 
 use super::Client;
 

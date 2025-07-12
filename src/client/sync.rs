@@ -403,7 +403,7 @@ impl Client {
     /// let contract = Contract::stock("TSLA");
     /// let results = client.contract_details(&contract).expect("request failed");
     /// for contract_detail in results {
-    ///     println!("contract: {:?}", contract_detail);
+    ///     println!("contract: {contract_detail:?}");
     /// }
     /// ```
     pub fn contract_details(&self, contract: &Contract) -> Result<Vec<contracts::ContractDetails>, Error> {
@@ -438,7 +438,7 @@ impl Client {
     ///
     /// let contracts = client.matching_symbols("IB").expect("request failed");
     /// for contract in contracts {
-    ///     println!("contract: {:?}", contract);
+    ///     println!("contract: {contract:?}");
     /// }
     /// ```
     pub fn matching_symbols(&self, pattern: &str) -> Result<impl Iterator<Item = contracts::ContractDescription>, Error> {
@@ -462,7 +462,7 @@ impl Client {
     ///
     /// let contract = Contract::option("AAPL", "20251219", 150.0, "C");
     /// let calculation = client.calculate_option_price(&contract, 100.0, 235.0).expect("request failed");
-    /// println!("calculation: {:?}", calculation);
+    /// println!("calculation: {calculation:?}");
     /// ```
     pub fn calculate_option_price(&self, contract: &Contract, volatility: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
         contracts::calculate_option_price(self, contract, volatility, underlying_price)
@@ -485,7 +485,7 @@ impl Client {
     ///
     /// let contract = Contract::option("AAPL", "20230519", 150.0, "C");
     /// let calculation = client.calculate_implied_volatility(&contract, 25.0, 235.0).expect("request failed");
-    /// println!("calculation: {:?}", calculation);
+    /// println!("calculation: {calculation:?}");
     /// ```
     pub fn calculate_implied_volatility(&self, contract: &Contract, option_price: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
         contracts::calculate_implied_volatility(self, contract, option_price, underlying_price)
@@ -1222,7 +1222,7 @@ impl Client {
     ///     .expect("tick-by-tick all last data request failed");
     ///
     /// for tick in subscription.iter().take(number_of_ticks as usize) { // Take to limit example output
-    ///     println!("All Last Tick: {:?}", tick);
+    ///     println!("All Last Tick: {tick:?}");
     /// }
     /// ```
     pub fn tick_by_tick_all_last<'a>(
@@ -1257,7 +1257,7 @@ impl Client {
     ///     .expect("tick-by-tick bid/ask data request failed");
     ///
     /// for tick in subscription.iter().take(number_of_ticks as usize) { // Take to limit example output
-    ///     println!("BidAsk Tick: {:?}", tick);
+    ///     println!("BidAsk Tick: {tick:?}");
     /// }
     /// ```
     pub fn tick_by_tick_bid_ask<'a>(
@@ -1292,7 +1292,7 @@ impl Client {
     ///     .expect("tick-by-tick last data request failed");
     ///
     /// for tick in subscription.iter().take(number_of_ticks as usize) { // Take to limit example output
-    ///     println!("Last Tick: {:?}", tick);
+    ///     println!("Last Tick: {tick:?}");
     /// }
     /// ```
     pub fn tick_by_tick_last<'a>(
@@ -1327,7 +1327,7 @@ impl Client {
     ///     .expect("tick-by-tick mid-point data request failed");
     ///
     /// for tick in subscription.iter().take(number_of_ticks as usize) { // Take to limit example output
-    ///     println!("MidPoint Tick: {:?}", tick);
+    ///     println!("MidPoint Tick: {tick:?}");
     /// }
     /// ```
     pub fn tick_by_tick_midpoint<'a>(
@@ -1354,7 +1354,7 @@ impl Client {
     ///
     /// let market_data_type = MarketDataType::Live;
     /// client.switch_market_data_type(market_data_type).expect("request failed");
-    /// println!("market data switched: {:?}", market_data_type);
+    /// println!("market data switched: {market_data_type:?}");
     /// ```
     pub fn switch_market_data_type(&self, market_data_type: MarketDataType) -> Result<(), Error> {
         market_data::switch_market_data_type(self, market_data_type)
@@ -1384,7 +1384,7 @@ impl Client {
     /// }
     ///
     /// if let Some(error) = subscription.error() {
-    ///     println!("error: {:?}", error);
+    ///     println!("error: {error:?}");
     /// }
     /// ```
     pub fn market_depth<'a>(
@@ -1459,15 +1459,15 @@ impl Client {
     ///
     /// for tick in &subscription {
     ///     match tick {
-    ///         TickTypes::Price(tick_price) => println!("{:?}", tick_price),
-    ///         TickTypes::Size(tick_size) => println!("{:?}", tick_size),
-    ///         TickTypes::PriceSize(tick_price_size) => println!("{:?}", tick_price_size),
-    ///         TickTypes::Generic(tick_generic) => println!("{:?}", tick_generic),
-    ///         TickTypes::String(tick_string) => println!("{:?}", tick_string),
-    ///         TickTypes::EFP(tick_efp) => println!("{:?}", tick_efp),
-    ///         TickTypes::OptionComputation(option_computation) => println!("{:?}", option_computation),
-    ///         TickTypes::RequestParameters(tick_request_parameters) => println!("{:?}", tick_request_parameters),
-    ///         TickTypes::Notice(notice) => println!("{:?}", notice),
+    ///         TickTypes::Price(tick_price) => println!("{tick_price:?}"),
+    ///         TickTypes::Size(tick_size) => println!("{tick_size:?}"),
+    ///         TickTypes::PriceSize(tick_price_size) => println!("{tick_price_size:?}"),
+    ///         TickTypes::Generic(tick_generic) => println!("{tick_generic:?}"),
+    ///         TickTypes::String(tick_string) => println!("{tick_string:?}"),
+    ///         TickTypes::EFP(tick_efp) => println!("{tick_efp:?}"),
+    ///         TickTypes::OptionComputation(option_computation) => println!("{option_computation:?}"),
+    ///         TickTypes::RequestParameters(tick_request_parameters) => println!("{tick_request_parameters:?}"),
+    ///         TickTypes::Notice(notice) => println!("{notice:?}"),
     ///         TickTypes::SnapshotEnd => subscription.cancel(),
     ///     }
     /// }
@@ -1495,7 +1495,7 @@ impl Client {
     ///
     /// let news_providers = client.news_providers().expect("request news providers failed");
     /// for news_provider in &news_providers {
-    ///   println!("news provider {:?}", news_provider);
+    ///   println!("news provider {news_provider:?}");
     /// }
     /// ```
     pub fn news_providers(&self) -> Result<Vec<news::NewsProvider>, Error> {
@@ -1517,7 +1517,7 @@ impl Client {
     ///
     /// let news_bulletins = client.news_bulletins(true).expect("request news providers failed");
     /// for news_bulletin in &news_bulletins {
-    ///   println!("news bulletin {:?}", news_bulletin);
+    ///   println!("news bulletin {news_bulletin:?}");
     /// }
     /// ```
     pub fn news_bulletins(&self, all_messages: bool) -> Result<Subscription<news::NewsBulletin>, Error> {
@@ -1595,7 +1595,7 @@ impl Client {
     /// let article_id = "DJ-N$1915168d";
     ///
     /// let article = client.news_article(provider_code, article_id).expect("request news article failed");
-    /// println!("{:?}", article);
+    /// println!("{article:?}");
     /// ```
     pub fn news_article(&self, provider_code: &str, article_id: &str) -> Result<news::NewsArticleBody, Error> {
         news::news_article(self, provider_code, article_id)
@@ -1621,7 +1621,7 @@ impl Client {
     ///
     /// let subscription = client.contract_news(&contract, &provider_codes).expect("request contract news failed");
     /// for article in &subscription {
-    ///     println!("{:?}", article);
+    ///     println!("{article:?}");
     /// }
     /// ```
     pub fn contract_news(&self, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<NewsArticle>, Error> {
@@ -1645,7 +1645,7 @@ impl Client {
     ///
     /// let subscription = client.broad_tape_news(provider_code).expect("request broad tape news failed");
     /// for article in &subscription {
-    ///     println!("{:?}", article);
+    ///     println!("{article:?}");
     /// }
     /// ```
     pub fn broad_tape_news(&self, provider_code: &str) -> Result<Subscription<NewsArticle>, Error> {
@@ -1776,7 +1776,7 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let metadata = client.wsh_metadata().expect("request wsh metadata failed");
-    /// println!("{:?}", metadata);
+    /// println!("{metadata:?}");
     /// ```
     pub fn wsh_metadata(&self) -> Result<wsh::WshMetadata, Error> {
         wsh::wsh_metadata(self)
@@ -1801,7 +1801,7 @@ impl Client {
     ///
     /// let contract_id = 76792991; // TSLA
     /// let event_data = client.wsh_event_data_by_contract(contract_id, None, None, None, None).expect("request wsh event data failed");
-    /// println!("{:?}", event_data);
+    /// println!("{event_data:?}");
     /// ```
     pub fn wsh_event_data_by_contract(
         &self,
@@ -1831,7 +1831,7 @@ impl Client {
     ///
     /// let filter = ""; // see https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#wsheventdata-object
     /// let event_data = client.wsh_event_data_by_filter(filter, None, None).expect("request wsh event data failed");
-    /// println!("{:?}", event_data);
+    /// println!("{event_data:?}");
     /// ```
     pub fn wsh_event_data_by_filter(
         &self,
@@ -1847,7 +1847,7 @@ impl Client {
     #[cfg(test)]
     pub(crate) fn stubbed(message_bus: Arc<dyn MessageBus>, server_version: i32) -> Client {
         Client {
-            server_version: server_version,
+            server_version,
             connection_time: None,
             time_zone: None,
             message_bus,

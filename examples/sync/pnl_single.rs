@@ -24,21 +24,20 @@ fn main() {
     let contract_id = matches.get_one::<String>("contract_id").expect("contract_id is required");
     let contract_id = contract_id.parse::<i32>().expect("invalid number");
 
-    let client = Client::connect(&gateway_url, 919).expect("connection failed");
+    let client = Client::connect(gateway_url, 919).expect("connection failed");
 
-    let subscription = client.pnl_single(&account, contract_id, None).expect("pnl single request failed");
+    let subscription = client.pnl_single(account, contract_id, None).expect("pnl single request failed");
 
     // Get next item non-blocking
     if let Some(pnl) = subscription.try_next() {
-        println!("non-blocking PnL single: {:?}", pnl);
+        println!("non-blocking PnL single: {pnl:?}");
     }
 
     // Consume items blocking for next
-    while let Some(pnl) = subscription.next() {
-        println!("PnL single: {:?}", pnl);
+    if let Some(pnl) = subscription.next() {
+        println!("PnL single: {pnl:?}");
 
         // After processing items subscription could be cancelled.
         subscription.cancel();
-        break;
     }
 }

@@ -12,9 +12,10 @@ use ibapi::Client;
 fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    let mut filter = ExecutionFilter::default();
-
-    filter.client_id = Some(32);
+    let filter = ExecutionFilter {
+        client_id: Some(32),
+        ..Default::default()
+    };
     // filter.account_code = account_code.to_owned();
     // filter.time = time.to_owned();
     // filter.symbol = symbol.to_owned();

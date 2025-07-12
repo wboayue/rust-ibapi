@@ -24,7 +24,7 @@ fn main() {
     let connection_string = matches.get_one::<String>("connection_string").expect("connection_string is required");
     let stock_symbol = matches.get_one::<String>("STOCK_SYMBOL").expect("stock symbol is required");
 
-    let client = Client::connect(&connection_string, 100).expect("connection failed");
+    let client = Client::connect(connection_string, 100).expect("connection failed");
 
     let contract = Contract::stock(stock_symbol);
 

@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("PV Dividend: ${:.2}", pv_dividend);
             }
         }
-        Err(e) => eprintln!("Error calculating implied volatility: {:?}", e),
+        Err(e) => eprintln!("Error calculating implied volatility: {e:?}"),
     }
 
     Ok(())

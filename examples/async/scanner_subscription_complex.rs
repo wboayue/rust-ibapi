@@ -73,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("\nScanner batch complete. Waiting for updates...");
             }
             Err(e) => {
-                eprintln!("Error: {:?}", e);
+                eprintln!("Error: {e:?}");
                 break;
             }
         }

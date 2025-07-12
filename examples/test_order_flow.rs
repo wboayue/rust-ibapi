@@ -1,7 +1,7 @@
 //! Test complete order flow to capture exact message formats
 
 use ibapi::contracts::Contract;
-use ibapi::orders::{order_builder, Action, PlaceOrder};
+use ibapi::orders::{order_builder, Action};
 use ibapi::Client;
 use std::env;
 
@@ -20,18 +20,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Next valid order ID: {order_id:?}");
 
     // Create an ES futures order
-    let mut contract = Contract::default();
-    contract.symbol = "ES".to_string();
-    contract.security_type = ibapi::contracts::SecurityType::Future;
-    contract.exchange = "CME".to_string();
-    contract.currency = "USD".to_string();
-    contract.local_symbol = "ESU5".to_string();
+    let contract = Contract {
+        symbol: "ES".to_string(),
+        security_type: ibapi::contracts::SecurityType::Future,
+        exchange: "CME".to_string(),
+        currency: "USD".to_string(),
+        local_symbol: "ESU5".to_string(),
+        ..Default::default()
+    };
 
     // Use a market order that might fill immediately
     let mut order = order_builder::market_order(Action::Buy, 1.0);
     order.order_id = order_id;
 
-    println!("\nPlacing MARKET order {} for 1 ESU5 contract...", order_id);
+    println!("\nPlacing MARKET order {order_id} for 1 ESU5 contract...");
 
     // Place the order and capture responses
     let subscription = client.place_order(order_id, &contract, &order)?;
@@ -44,7 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     while start.elapsed().as_secs() < 10 {
         if let Some(msg) = subscription.try_next() {
             count += 1;
-            println!("[{}] {:?}", count, msg);
+            println!("[{count}] {msg:?}");
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }

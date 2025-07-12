@@ -637,9 +637,9 @@ mod tests {
             response_messages: vec![],
         });
 
-        let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+        let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
-        let results = super::global_cancel(&mut client);
+        let results = super::global_cancel(&client);
 
         let request_messages = client.message_bus.request_messages();
 
@@ -654,9 +654,9 @@ mod tests {
             response_messages: vec!["9|1|43||".to_owned()],
         });
 
-        let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+        let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
-        let results = super::next_valid_order_id(&mut client);
+        let results = super::next_valid_order_id(&client);
 
         let request_messages = client.message_bus.request_messages();
 

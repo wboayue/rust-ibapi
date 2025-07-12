@@ -17,6 +17,6 @@ fn main() {
 
     let subscription = client.completed_orders(false).expect("get completed orders failed");
     for order in subscription {
-        println!("{:?}", order);
+        println!("{order:?}");
     }
 }

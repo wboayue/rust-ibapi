@@ -75,7 +75,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let contract = ContractBuilder::stock(symbol, "SMART", "USD").build().expect("invalid contract");
 
     // Place a series of buy and sell orders
-    let order_quantities = vec![
+    let order_quantities = [
         (Action::Buy, 100.0),
         (Action::Sell, 50.0),
         (Action::Buy, 75.0),
@@ -85,7 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for (i, (action, quantity)) in order_quantities.iter().enumerate() {
         let order_id = client.next_order_id();
-        let order = order_builder::market_order(action.clone(), *quantity);
+        let order = order_builder::market_order(*action, *quantity);
 
         println!(
             "\n[Main] Placing order #{} (ID: {}) - {} {} shares of {}",
@@ -97,8 +97,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
 
         match client.submit_order(order_id, &contract, &order) {
-            Ok(_) => println!("[Main] Order {} submitted successfully", order_id),
-            Err(e) => eprintln!("[Main] Failed to submit order {}: {}", order_id, e),
+            Ok(_) => println!("[Main] Order {order_id} submitted successfully"),
+            Err(e) => eprintln!("[Main] Failed to submit order {order_id}: {e}"),
         }
 
         // Wait 1 second between orders

@@ -151,7 +151,7 @@ mod tests {
         let mut subscription = result.unwrap();
         let scanner_data = match subscription.next().await {
             Some(Ok(data)) => data,
-            Some(Err(e)) => panic!("Error getting scanner results: {}", e),
+            Some(Err(e)) => panic!("Error getting scanner results: {e}"),
             None => panic!("Unexpected end of stream"),
         };
 

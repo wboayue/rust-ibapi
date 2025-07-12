@@ -2,6 +2,149 @@ use crate::messages::OutgoingMessages;
 use crate::messages::RequestMessage;
 use crate::Error;
 
+pub(in crate::accounts) fn encode_request_positions() -> Result<RequestMessage, Error> {
+    encode_simple(OutgoingMessages::RequestPositions, 1)
+}
+pub(in crate::accounts) fn encode_cancel_positions() -> Result<RequestMessage, Error> {
+    encode_simple(OutgoingMessages::CancelPositions, 1)
+}
+pub(in crate::accounts) fn encode_cancel_account_summary(request_id: i32) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+    const VERSION: i32 = 1;
+    message.push_field(&OutgoingMessages::CancelAccountSummary);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    Ok(message)
+}
+pub(in crate::accounts) fn encode_request_positions_multi(
+    request_id: i32,
+    account: Option<&str>,
+    model_code: Option<&str>,
+) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+    const VERSION: i32 = 1;
+    message.push_field(&OutgoingMessages::RequestPositionsMulti);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    message.push_field(&account);
+    message.push_field(&model_code);
+    Ok(message)
+}
+pub(in crate::accounts) fn encode_cancel_positions_multi(request_id: i32) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+    const VERSION: i32 = 1;
+    message.push_field(&OutgoingMessages::CancelPositionsMulti);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    Ok(message)
+}
+pub(in crate::accounts) fn encode_request_family_codes() -> Result<RequestMessage, Error> {
+    encode_simple(OutgoingMessages::RequestFamilyCodes, 1)
+}
+pub(in crate::accounts) fn encode_request_pnl(request_id: i32, account: &str, model_code: Option<&str>) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+    message.push_field(&OutgoingMessages::RequestPnL);
+    message.push_field(&request_id);
+    message.push_field(&account);
+    message.push_field(&model_code);
+    Ok(message)
+}
+pub(in crate::accounts) fn encode_cancel_pnl(request_id: i32) -> Result<RequestMessage, Error> {
+    encode_simple_with_request_id(OutgoingMessages::CancelPnL, request_id)
+}
+pub(in crate::accounts) fn encode_request_pnl_single(
+    request_id: i32,
+    account: &str,
+    contract_id: i32,
+    model_code: Option<&str>,
+) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+    message.push_field(&OutgoingMessages::RequestPnLSingle);
+    message.push_field(&request_id);
+    message.push_field(&account);
+    message.push_field(&model_code);
+    message.push_field(&contract_id);
+    Ok(message)
+}
+pub(in crate::accounts) fn encode_cancel_pnl_single(request_id: i32) -> Result<RequestMessage, Error> {
+    encode_simple_with_request_id(OutgoingMessages::CancelPnLSingle, request_id)
+}
+pub(in crate::accounts) fn encode_request_account_summary(request_id: i32, group: &str, tags: &[&str]) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 1;
+    let mut message = RequestMessage::new();
+    message.push_field(&OutgoingMessages::RequestAccountSummary);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    message.push_field(&group);
+    message.push_field(&tags.join(","));
+    Ok(message)
+}
+pub(in crate::accounts) fn encode_request_managed_accounts() -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 1;
+    encode_simple(OutgoingMessages::RequestManagedAccounts, VERSION)
+}
+pub(in crate::accounts) fn encode_request_account_updates(server_version: i32, account: &str) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 2;
+    let mut message = RequestMessage::new();
+    message.push_field(&OutgoingMessages::RequestAccountData);
+    message.push_field(&VERSION);
+    message.push_field(&true); // subscribe
+    if server_version > 9 {
+        message.push_field(&account);
+    }
+    Ok(message)
+}
+pub(in crate::accounts) fn encode_request_account_updates_multi(
+    request_id: i32,
+    account: Option<&str>,
+    model_code: Option<&str>,
+) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 1;
+    let mut message = RequestMessage::new();
+    message.push_field(&OutgoingMessages::RequestAccountUpdatesMulti);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    message.push_field(&account);
+    message.push_field(&model_code);
+    message.push_field(&true); // subscribe
+    Ok(message)
+}
+pub(in crate::accounts) fn encode_cancel_account_updates(server_version: i32) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 2;
+    let mut message = RequestMessage::new();
+    message.push_field(&OutgoingMessages::RequestAccountData);
+    message.push_field(&VERSION);
+    message.push_field(&false); // subscribe
+    if server_version > 9 {
+        message.push_field(&"");
+    }
+    Ok(message)
+}
+pub(in crate::accounts) fn encode_cancel_account_updates_multi(_server_version: i32, request_id: i32) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 1;
+    let mut message = RequestMessage::new();
+    message.push_field(&OutgoingMessages::CancelAccountUpdatesMulti);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    Ok(message)
+}
+pub(in crate::accounts) fn encode_request_server_time() -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 1;
+    encode_simple(OutgoingMessages::RequestCurrentTime, VERSION)
+}
+fn encode_simple(message_type: OutgoingMessages, version: i32) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+    message.push_field(&message_type);
+    message.push_field(&version);
+    Ok(message)
+}
+fn encode_simple_with_request_id(message_type: OutgoingMessages, request_id: i32) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+    message.push_field(&message_type);
+    message.push_field(&request_id);
+    Ok(message)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{messages::OutgoingMessages, ToField};
@@ -111,7 +254,7 @@ mod tests {
         let account = "DU1234567";
         let model_code_none: Option<&str> = None;
 
-        let request_no_model = super::encode_request_pnl(request_id, &account, model_code_none).expect("encode request pnl failed (no model)");
+        let request_no_model = super::encode_request_pnl(request_id, account, model_code_none).expect("encode request pnl failed (no model)");
 
         assert_eq!(request_no_model[0], OutgoingMessages::RequestPnL.to_field(), "type (no model)");
         assert_eq!(request_no_model[1], request_id.to_field(), "request_id (no model)");
@@ -119,14 +262,14 @@ mod tests {
         assert_eq!(request_no_model[3], "", "model_code (no model)");
 
         let request_id_with_model = 3001;
-        let model_code_some = Some("TestModelPnl");
+        let model_code_some = "TestModelPnl";
         let request_with_model =
-            super::encode_request_pnl(request_id_with_model, &account, model_code_some).expect("encode request pnl failed (with model)");
+            super::encode_request_pnl(request_id_with_model, account, Some(model_code_some)).expect("encode request pnl failed (with model)");
 
         assert_eq!(request_with_model[0], OutgoingMessages::RequestPnL.to_field(), "type (with model)");
         assert_eq!(request_with_model[1], request_id_with_model.to_field(), "request_id (with model)");
         assert_eq!(request_with_model[2], account, "account (with model)");
-        assert_eq!(request_with_model[3], model_code_some.unwrap(), "model_code (with model)");
+        assert_eq!(request_with_model[3], model_code_some, "model_code (with model)");
     }
 
     #[test]
@@ -144,8 +287,8 @@ mod tests {
         let model_code_none: Option<&str> = None;
         let contract_id = 1001;
 
-        let request_no_model = super::encode_request_pnl_single(request_id, &account, contract_id, model_code_none)
-            .expect("encode request pnl_single failed (no model)");
+        let request_no_model =
+            super::encode_request_pnl_single(request_id, account, contract_id, model_code_none).expect("encode request pnl_single failed (no model)");
 
         assert_eq!(request_no_model[0], OutgoingMessages::RequestPnLSingle.to_field(), "type (no model)");
         assert_eq!(request_no_model[1], request_id.to_field(), "request_id (no model)");
@@ -156,14 +299,15 @@ mod tests {
         let request_id_with_model = 3002;
         let account_with_model = "DU456";
         let contract_id_with_model = 1002;
-        let model_code_some = Some("MyModelPnlSingle");
-        let request_with_model = super::encode_request_pnl_single(request_id_with_model, account_with_model, contract_id_with_model, model_code_some)
-            .expect("encode request pnl_single failed (with model)");
+        let model_code_some = "MyModelPnlSingle";
+        let request_with_model =
+            super::encode_request_pnl_single(request_id_with_model, account_with_model, contract_id_with_model, Some(model_code_some))
+                .expect("encode request pnl_single failed (with model)");
 
         assert_eq!(request_with_model[0], OutgoingMessages::RequestPnLSingle.to_field(), "type (with model)");
         assert_eq!(request_with_model[1], request_id_with_model.to_field(), "request_id (with model)");
         assert_eq!(request_with_model[2], account_with_model, "account (with model)");
-        assert_eq!(request_with_model[3], model_code_some.unwrap(), "model_code (with model)");
+        assert_eq!(request_with_model[3], model_code_some, "model_code (with model)");
         assert_eq!(request_with_model[4], contract_id_with_model.to_field(), "contract_id (with model)");
     }
 
@@ -259,7 +403,7 @@ mod tests {
         let model_code = None;
         let subscribe = true;
 
-        let request = super::encode_request_account_updates_multi(request_id, Some(&account), model_code).expect("encode request account updates");
+        let request = super::encode_request_account_updates_multi(request_id, Some(account), model_code).expect("encode request account updates");
 
         assert_eq!(request[0], OutgoingMessages::RequestAccountUpdatesMulti.to_field());
         assert_eq!(request[1], version.to_field());
@@ -328,197 +472,4 @@ mod tests {
             assert_eq!(message[5], subscribe.to_field(), "Case: {} - subscribe", tc.name);
         }
     }
-}
-
-pub(in crate::accounts) fn encode_request_positions() -> Result<RequestMessage, Error> {
-    encode_simple(OutgoingMessages::RequestPositions, 1)
-}
-
-pub(in crate::accounts) fn encode_cancel_positions() -> Result<RequestMessage, Error> {
-    encode_simple(OutgoingMessages::CancelPositions, 1)
-}
-
-pub(in crate::accounts) fn encode_cancel_account_summary(request_id: i32) -> Result<RequestMessage, Error> {
-    let mut message = RequestMessage::new();
-
-    const VERSION: i32 = 1;
-
-    message.push_field(&OutgoingMessages::CancelAccountSummary);
-    message.push_field(&VERSION);
-    message.push_field(&request_id);
-
-    Ok(message)
-}
-
-pub(in crate::accounts) fn encode_request_positions_multi(
-    request_id: i32,
-    account: Option<&str>,
-    model_code: Option<&str>,
-) -> Result<RequestMessage, Error> {
-    let mut message = RequestMessage::new();
-
-    const VERSION: i32 = 1;
-
-    message.push_field(&OutgoingMessages::RequestPositionsMulti);
-    message.push_field(&VERSION);
-    message.push_field(&request_id);
-    message.push_field(&account);
-    message.push_field(&model_code);
-
-    Ok(message)
-}
-
-pub(in crate::accounts) fn encode_cancel_positions_multi(request_id: i32) -> Result<RequestMessage, Error> {
-    let mut message = RequestMessage::new();
-
-    const VERSION: i32 = 1;
-
-    message.push_field(&OutgoingMessages::CancelPositionsMulti);
-    message.push_field(&VERSION);
-    message.push_field(&request_id);
-
-    Ok(message)
-}
-
-pub(in crate::accounts) fn encode_request_family_codes() -> Result<RequestMessage, Error> {
-    encode_simple(OutgoingMessages::RequestFamilyCodes, 1)
-}
-
-pub(in crate::accounts) fn encode_request_pnl(request_id: i32, account: &str, model_code: Option<&str>) -> Result<RequestMessage, Error> {
-    let mut message = RequestMessage::new();
-
-    message.push_field(&OutgoingMessages::RequestPnL);
-    message.push_field(&request_id);
-    message.push_field(&account);
-    message.push_field(&model_code);
-
-    Ok(message)
-}
-
-pub(in crate::accounts) fn encode_cancel_pnl(request_id: i32) -> Result<RequestMessage, Error> {
-    encode_simple_with_request_id(OutgoingMessages::CancelPnL, request_id)
-}
-
-pub(in crate::accounts) fn encode_request_pnl_single(
-    request_id: i32,
-    account: &str,
-    contract_id: i32,
-    model_code: Option<&str>,
-) -> Result<RequestMessage, Error> {
-    let mut message = RequestMessage::new();
-
-    message.push_field(&OutgoingMessages::RequestPnLSingle);
-    message.push_field(&request_id);
-    message.push_field(&account);
-    message.push_field(&model_code);
-    message.push_field(&contract_id);
-
-    Ok(message)
-}
-
-pub(in crate::accounts) fn encode_cancel_pnl_single(request_id: i32) -> Result<RequestMessage, Error> {
-    encode_simple_with_request_id(OutgoingMessages::CancelPnLSingle, request_id)
-}
-
-pub(in crate::accounts) fn encode_request_account_summary(request_id: i32, group: &str, tags: &[&str]) -> Result<RequestMessage, Error> {
-    const VERSION: i32 = 1;
-
-    let mut message = RequestMessage::new();
-
-    message.push_field(&OutgoingMessages::RequestAccountSummary);
-    message.push_field(&VERSION);
-    message.push_field(&request_id);
-    message.push_field(&group);
-    message.push_field(&tags.join(","));
-
-    Ok(message)
-}
-
-pub(in crate::accounts) fn encode_request_managed_accounts() -> Result<RequestMessage, Error> {
-    const VERSION: i32 = 1;
-    encode_simple(OutgoingMessages::RequestManagedAccounts, VERSION)
-}
-
-pub(in crate::accounts) fn encode_request_account_updates(server_version: i32, account: &str) -> Result<RequestMessage, Error> {
-    const VERSION: i32 = 2;
-
-    let mut message = RequestMessage::new();
-
-    message.push_field(&OutgoingMessages::RequestAccountData);
-    message.push_field(&VERSION);
-    message.push_field(&true); // subscribe
-    if server_version > 9 {
-        message.push_field(&account);
-    }
-
-    Ok(message)
-}
-
-pub(in crate::accounts) fn encode_request_account_updates_multi(
-    request_id: i32,
-    account: Option<&str>,
-    model_code: Option<&str>,
-) -> Result<RequestMessage, Error> {
-    const VERSION: i32 = 1;
-
-    let mut message = RequestMessage::new();
-
-    message.push_field(&OutgoingMessages::RequestAccountUpdatesMulti);
-    message.push_field(&VERSION);
-    message.push_field(&request_id);
-    message.push_field(&account);
-    message.push_field(&model_code);
-    message.push_field(&true); // subscribe
-
-    Ok(message)
-}
-
-pub(in crate::accounts) fn encode_cancel_account_updates(server_version: i32) -> Result<RequestMessage, Error> {
-    const VERSION: i32 = 2;
-
-    let mut message = RequestMessage::new();
-
-    message.push_field(&OutgoingMessages::RequestAccountData);
-    message.push_field(&VERSION);
-    message.push_field(&false); // subscribe
-    if server_version > 9 {
-        message.push_field(&"");
-    }
-
-    Ok(message)
-}
-
-pub(in crate::accounts) fn encode_cancel_account_updates_multi(_server_version: i32, request_id: i32) -> Result<RequestMessage, Error> {
-    const VERSION: i32 = 1;
-
-    let mut message = RequestMessage::new();
-
-    message.push_field(&OutgoingMessages::CancelAccountUpdatesMulti);
-    message.push_field(&VERSION);
-    message.push_field(&request_id);
-
-    Ok(message)
-}
-
-pub(in crate::accounts) fn encode_request_server_time() -> Result<RequestMessage, Error> {
-    const VERSION: i32 = 1;
-    encode_simple(OutgoingMessages::RequestCurrentTime, VERSION)
-}
-
-fn encode_simple(message_type: OutgoingMessages, version: i32) -> Result<RequestMessage, Error> {
-    let mut message = RequestMessage::new();
-
-    message.push_field(&message_type);
-    message.push_field(&version);
-
-    Ok(message)
-}
-
-fn encode_simple_with_request_id(message_type: OutgoingMessages, request_id: i32) -> Result<RequestMessage, Error> {
-    let mut message = RequestMessage::new();
-
-    message.push_field(&message_type);
-    message.push_field(&request_id);
-
-    Ok(message)
 }

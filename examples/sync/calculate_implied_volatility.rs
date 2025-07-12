@@ -17,5 +17,5 @@ fn main() {
     let contract = Contract::option("AAPL", "20250620", 240.0, "C");
 
     let calculation = client.calculate_implied_volatility(&contract, 25.0, 235.0).expect("request failed");
-    println!("calculation: {:?}", calculation);
+    println!("calculation: {calculation:?}");
 }

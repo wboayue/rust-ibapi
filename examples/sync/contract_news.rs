@@ -20,6 +20,6 @@ fn main() {
 
     let subscription = client.contract_news(&contract, &provider_codes).expect("request contract news failed");
     for article in subscription {
-        println!("{:?}", article);
+        println!("{article:?}");
     }
 }

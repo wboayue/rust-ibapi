@@ -451,7 +451,7 @@ mod tests {
         let result = wsh_event_data_by_filter(&client, "test_filter", None, None);
 
         assert!(result.is_ok());
-        let mut subscription = result.unwrap();
+        let subscription = result.unwrap();
 
         // Collect all events
         let mut events = vec![];
@@ -824,7 +824,7 @@ mod async_tests {
         while let Some(event_result) = subscription.next().await {
             match event_result {
                 Ok(event) => events.push(event),
-                Err(e) => panic!("Unexpected error: {:?}", e),
+                Err(e) => panic!("Unexpected error: {e:?}"),
             }
         }
 

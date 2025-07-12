@@ -116,7 +116,7 @@ mod tests {
     #[test]
     fn test_error_debug() {
         let error = Error::Simple("test error".to_string());
-        assert_eq!(format!("{:?}", error), "Simple(\"test error\")");
+        assert_eq!(format!("{error:?}"), "Simple(\"test error\")");
     }
 
     #[test]
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn test_from_io_error() {
-        let io_error = io::Error::new(io::ErrorKind::Other, "io error");
+        let io_error = io::Error::other("io error");
         let error: Error = io_error.into();
         assert!(matches!(error, Error::Io(_)));
     }

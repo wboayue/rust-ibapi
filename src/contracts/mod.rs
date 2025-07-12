@@ -768,11 +768,13 @@ mod tests {
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
         // Create a bond contract
-        let mut contract = Contract::default();
-        contract.symbol = "TLT".to_string();
-        contract.security_type = SecurityType::Bond;
-        contract.exchange = "SMART".to_string();
-        contract.currency = "USD".to_string();
+        let contract = Contract {
+            symbol: "TLT".to_string(),
+            security_type: SecurityType::Bond,
+            exchange: "SMART".to_string(),
+            currency: "USD".to_string(),
+            ..Default::default()
+        };
 
         let results = client.contract_details(&contract);
 
@@ -817,12 +819,14 @@ mod tests {
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
         // Create a future contract
-        let mut contract = Contract::default();
-        contract.symbol = "ES".to_string();
-        contract.security_type = SecurityType::Future;
-        contract.last_trade_date_or_contract_month = "202506".to_string();
-        contract.exchange = "GLOBEX".to_string();
-        contract.currency = "USD".to_string();
+        let contract = Contract {
+            symbol: "ES".to_string(),
+            security_type: SecurityType::Future,
+            last_trade_date_or_contract_month: "202506".to_string(),
+            exchange: "GLOBEX".to_string(),
+            currency: "USD".to_string(),
+            ..Default::default()
+        };
 
         let results = client.contract_details(&contract);
 
@@ -1323,7 +1327,7 @@ mod tests {
         }
 
         if let Some(err) = subscription.error() {
-            panic!("Expected no error in subscription: {:?}", err);
+            panic!("Expected no error in subscription: {err:?}");
         }
 
         // We should have received one option chain
@@ -1381,7 +1385,7 @@ mod tests {
         assert!(result.is_err(), "Expected error for invalid symbol");
         if let Err(err) = result {
             assert!(
-                format!("{:?}", err).contains("No security definition"),
+                format!("{err:?}").contains("No security definition"),
                 "Error message should contain 'No security definition'"
             );
         }
@@ -1404,7 +1408,7 @@ mod tests {
         assert!(result.is_err(), "Expected error for unexpected end of stream");
         if let Err(err) = result {
             assert!(
-                format!("{:?}", err).contains("UnexpectedEndOfStream"),
+                format!("{err:?}").contains("UnexpectedEndOfStream"),
                 "Error should be UnexpectedEndOfStream"
             );
         }
@@ -1426,7 +1430,7 @@ mod tests {
         // Verify that the unexpected response error is correctly propagated
         assert!(result.is_err(), "Expected error for unexpected response");
         if let Err(err) = result {
-            assert!(format!("{:?}", err).contains("UnexpectedResponse"), "Error should be UnexpectedResponse");
+            assert!(format!("{err:?}").contains("UnexpectedResponse"), "Error should be UnexpectedResponse");
         }
     }
 
@@ -1445,34 +1449,40 @@ mod tests {
         assert!(!futures_contract.is_bag(), "Futures contract should not be a bag");
 
         // Test with a contract that is a bag/spread
-        let mut spread_contract = Contract::default();
-        spread_contract.security_type = SecurityType::Spread;
+        let spread_contract = Contract {
+            security_type: SecurityType::Spread,
+            ..Default::default()
+        };
         assert!(spread_contract.is_bag(), "Spread contract should be a bag");
 
         // Test with an explicitly set BAG security type
-        let mut bag_contract = Contract::default();
-        bag_contract.security_type = SecurityType::from("BAG");
+        let bag_contract = Contract {
+            security_type: SecurityType::from("BAG"),
+            ..Default::default()
+        };
         assert!(bag_contract.is_bag(), "BAG contract should be a bag");
 
         // Test with combo legs
-        let mut combo_contract = Contract::default();
-        combo_contract.security_type = SecurityType::Spread;
-        combo_contract.combo_legs = vec![
-            ComboLeg {
-                contract_id: 12345,
-                ratio: 1,
-                action: "BUY".to_string(),
-                exchange: "SMART".to_string(),
-                ..Default::default()
-            },
-            ComboLeg {
-                contract_id: 67890,
-                ratio: 1,
-                action: "SELL".to_string(),
-                exchange: "SMART".to_string(),
-                ..Default::default()
-            },
-        ];
+        let combo_contract = Contract {
+            security_type: SecurityType::Spread,
+            combo_legs: vec![
+                ComboLeg {
+                    contract_id: 12345,
+                    ratio: 1,
+                    action: "BUY".to_string(),
+                    exchange: "SMART".to_string(),
+                    ..Default::default()
+                },
+                ComboLeg {
+                    contract_id: 67890,
+                    ratio: 1,
+                    action: "SELL".to_string(),
+                    exchange: "SMART".to_string(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
         assert!(combo_contract.is_bag(), "Contract with combo legs should be a bag");
     }
 

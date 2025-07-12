@@ -505,6 +505,7 @@ mod tests {
         }
 
         // Helper to construct message string based on version and fields
+        #[allow(clippy::too_many_arguments)]
         fn construct_portfolio_message(
             msg_ver: i32,
             sv_ver: i32,

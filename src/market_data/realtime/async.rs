@@ -770,7 +770,7 @@ mod tests {
                     assert_eq!(tick.tick_type, TickType::OptionHistoricalVol, "Wrong tick type");
                     assert_eq!(tick.value, 20.5, "Wrong value");
                 }
-                _ => panic!("Unexpected tick type received: {:?}", tick),
+                _ => panic!("Unexpected tick type received: {tick:?}"),
             }
         }
     }
@@ -892,7 +892,7 @@ mod tests {
                 assert_eq!(notice.code, 2104, "Wrong notice code");
                 assert!(notice.message.contains("Market data farm connection is OK"), "Wrong notice message");
             }
-            other => panic!("Expected Notice, got {:?}", other),
+            other => panic!("Expected Notice, got {other:?}"),
         }
 
         // Second should be a Notice (since it's an error in the 2100-2200 range)
@@ -901,7 +901,7 @@ mod tests {
                 assert_eq!(notice.code, 321, "Wrong error code");
                 assert!(notice.message.contains("Error validating request"), "Wrong error message");
             }
-            other => panic!("Expected Notice for error, got {:?}", other),
+            other => panic!("Expected Notice for error, got {other:?}"),
         }
     }
 }

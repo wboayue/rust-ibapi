@@ -19,6 +19,6 @@ fn main() {
 
     let subscription = client.broad_tape_news(news_source).expect("request broad tape news failed");
     for article in subscription {
-        println!("{:?}", article);
+        println!("{article:?}");
     }
 }

@@ -20,17 +20,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Next valid order ID: {order_id:?}");
 
     // Create an ES futures order (trades 24/7)
-    let mut contract = Contract::default();
-    contract.symbol = "ES".to_string();
-    contract.security_type = ibapi::contracts::SecurityType::Future;
-    contract.exchange = "CME".to_string();
-    contract.currency = "USD".to_string();
-    contract.local_symbol = "ESU5".to_string(); // September 2025 contract
+    let contract = Contract {
+        symbol: "ES".to_string(),
+        security_type: ibapi::contracts::SecurityType::Future,
+        exchange: "CME".to_string(),
+        currency: "USD".to_string(),
+        local_symbol: "ESU5".to_string(), // September 2025 contract
+        ..Default::default()
+    };
 
     let mut order = order_builder::limit_order(Action::Buy, 1.0, 5800.0); // 1 contract at $5800
     order.order_id = order_id;
 
-    println!("\nPlacing order {} for 1 ESU5 contract at limit $5800...", order_id);
+    println!("\nPlacing order {order_id} for 1 ESU5 contract at limit $5800...");
 
     // Place the order and capture responses
     let subscription = client.place_order(order_id, &contract, &order)?;
@@ -45,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             response_count += 1;
             match msg {
                 PlaceOrder::OpenOrder(ref data) => {
-                    println!("\n[{}] OpenOrder:", response_count);
+                    println!("\n[{response_count}] OpenOrder:");
                     println!("  Order ID: {}", data.order.order_id);
                     println!("  Symbol: {}", data.contract.symbol);
                     println!("  Action: {:?}", data.order.action);
@@ -53,14 +55,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("  Order Type: {}", data.order.order_type);
                 }
                 PlaceOrder::OrderStatus(ref status) => {
-                    println!("\n[{}] OrderStatus:", response_count);
+                    println!("\n[{response_count}] OrderStatus:");
                     println!("  Order ID: {}", status.order_id);
                     println!("  Status: {}", status.status);
                     println!("  Filled: {}", status.filled);
                     println!("  Remaining: {}", status.remaining);
                 }
                 PlaceOrder::ExecutionData(ref exec) => {
-                    println!("\n[{}] ExecutionData:", response_count);
+                    println!("\n[{response_count}] ExecutionData:");
                     println!("  Exec ID: {}", exec.execution.execution_id);
                     println!("  Order ID: {}", exec.execution.order_id);
                     println!("  Symbol: {}", exec.contract.symbol);
@@ -69,13 +71,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("  Price: {}", exec.execution.price);
                 }
                 PlaceOrder::CommissionReport(ref comm) => {
-                    println!("\n[{}] CommissionReport:", response_count);
+                    println!("\n[{response_count}] CommissionReport:");
                     println!("  Exec ID: {}", comm.execution_id);
                     println!("  Commission: {}", comm.commission);
                     println!("  Currency: {}", comm.currency);
                 }
                 PlaceOrder::Message(ref notice) => {
-                    println!("\n[{}] Notice/Error:", response_count);
+                    println!("\n[{response_count}] Notice/Error:");
                     println!("  Code: {}", notice.code);
                     println!("  Message: {}", notice.message);
                 }
@@ -95,12 +97,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             response_count += 1;
             match msg {
                 ibapi::orders::CancelOrder::OrderStatus(ref status) => {
-                    println!("\n[{}] Cancel OrderStatus:", response_count);
+                    println!("\n[{response_count}] Cancel OrderStatus:");
                     println!("  Order ID: {}", status.order_id);
                     println!("  Status: {}", status.status);
                 }
                 ibapi::orders::CancelOrder::Notice(ref notice) => {
-                    println!("\n[{}] Cancel Notice:", response_count);
+                    println!("\n[{response_count}] Cancel Notice:");
                     println!("  Code: {}", notice.code);
                     println!("  Message: {}", notice.message);
                 }
