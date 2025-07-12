@@ -283,7 +283,7 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
                 Ok(())
             }
             Some(message) => {
-                debug!("unexpected message: {:?}", message);
+                debug!("unexpected message: {message:?}");
                 Ok(())
             }
             None => Err(()),
@@ -294,6 +294,7 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
         self.buffer.pop_front()
     }
 
+    #[allow(dead_code)]
     fn set_error(&mut self, e: Error) {
         self.error = Some(e);
     }

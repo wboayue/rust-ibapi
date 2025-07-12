@@ -104,7 +104,7 @@ impl<S: Stream> Connection<S> {
     pub(crate) fn read_message(&self) -> Response {
         let data = self.socket.read_message()?;
         let raw_string = String::from_utf8(data)?;
-        debug!("<- {:?}", raw_string);
+        debug!("<- {raw_string:?}");
 
         let message = ResponseMessage::from(&raw_string);
 
@@ -116,7 +116,7 @@ impl<S: Stream> Connection<S> {
     // sends server handshake
     pub(crate) fn handshake(&self) -> Result<(), Error> {
         let handshake = self.connection_handler.format_handshake();
-        debug!("-> handshake: {:?}", handshake);
+        debug!("-> handshake: {handshake:?}");
 
         self.socket.write_all(&handshake)?;
 

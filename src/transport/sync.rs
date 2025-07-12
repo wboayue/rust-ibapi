@@ -212,10 +212,10 @@ impl<S: Stream> TcpMessageBus<S> {
                 Ok(())
             }
             Err(ref err) if is_connection_error(err) => {
-                error!("error reading next message (will attempt reconnect): {:?}", err);
+                error!("error reading next message (will attempt reconnect): {err:?}");
 
                 if let Err(reconnect_err) = self.connection.reconnect() {
-                    error!("failed to reconnect to TWS/Gateway: {:?}", reconnect_err);
+                    error!("failed to reconnect to TWS/Gateway: {reconnect_err:?}");
                     self.request_shutdown();
                     return Err(Error::ConnectionFailed);
                 }
@@ -225,7 +225,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 Ok(())
             }
             Err(err) => {
-                error!("error reading next message (shutting down): {:?}", err);
+                error!("error reading next message (shutting down): {err:?}");
                 self.request_shutdown();
                 Err(err)
             }
@@ -242,7 +242,7 @@ impl<S: Stream> TcpMessageBus<S> {
                     Ok(_) => continue,
                     Err(Error::Shutdown) | Err(Error::ConnectionFailed) => break,
                     Err(e) => {
-                        error!("Dispatcher encountered an error: {:?}", e);
+                        error!("Dispatcher encountered an error: {e:?}");
                         break;
                     }
                 }
@@ -282,7 +282,7 @@ impl<S: Stream> TcpMessageBus<S> {
         } else if self.shared_channels.contains_sender(message.message_type()) {
             self.shared_channels.send_message(message.message_type(), &message);
         } else {
-            info!("no recipient found for: {:?}", message)
+            info!("no recipient found for: {message:?}")
         }
     }
 
@@ -366,7 +366,7 @@ impl<S: Stream> TcpMessageBus<S> {
 
                 if let Some(execution_id) = message.execution_id() {
                     if let Err(e) = self.executions.send(&execution_id, Ok(message)) {
-                        warn!("error sending commission report for execution {}: {}", execution_id, e);
+                        warn!("error sending commission report for execution {execution_id}: {e}");
                     }
                 } else if !sent_to_update_stream {
                     warn!("could not route commission report {message:?}");
@@ -562,7 +562,7 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), E
 
     if version < 2 {
         let message = packet.next_string()?;
-        error!("version 2 error: {}", message);
+        error!("version 2 error: {message}");
         Ok(())
     } else {
         let request_id = packet.next_int()?;
@@ -577,13 +577,11 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), E
         let is_warning = WARNING_CODES.contains(&error_code);
         if is_warning {
             warn!(
-                "request_id: {}, warning_code: {}, warning_message: {}, advanced_order_reject_json: {}",
-                request_id, error_code, error_message, advanced_order_reject_json
+                "request_id: {request_id}, warning_code: {error_code}, warning_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}"
             );
         } else {
             error!(
-                "request_id: {}, error_code: {}, error_message: {}, advanced_order_reject_json: {}",
-                request_id, error_code, error_message, advanced_order_reject_json
+                "request_id: {request_id}, error_code: {error_code}, error_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}"
             );
         }
         Ok(())

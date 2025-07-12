@@ -142,17 +142,17 @@ impl AsyncTcpMessageBus {
                     CleanupSignal::Request(request_id) => {
                         let mut channels = request_channels.write().await;
                         channels.remove(&request_id);
-                        debug!("Cleaned up request channel for ID: {}", request_id);
+                        debug!("Cleaned up request channel for ID: {request_id}");
                     }
                     CleanupSignal::Order(order_id) => {
                         let mut channels = order_channels.write().await;
                         channels.remove(&order_id);
-                        debug!("Cleaned up order channel for ID: {}", order_id);
+                        debug!("Cleaned up order channel for ID: {order_id}");
                     }
                     CleanupSignal::Shared(message_type) => {
                         let mut channels = shared_channels.write().await;
                         channels.remove(&message_type);
-                        debug!("Cleaned up shared channel for type: {:?}", message_type);
+                        debug!("Cleaned up shared channel for type: {message_type:?}");
                     }
                 }
             }
@@ -176,7 +176,7 @@ impl AsyncTcpMessageBus {
                         continue;
                     }
                     Err(e) => {
-                        error!("Error processing message: {}", e);
+                        error!("Error processing message: {e}");
                         continue;
                     }
                 }
@@ -203,6 +203,7 @@ impl AsyncTcpMessageBus {
     }
 
     /// Route error message to appropriate channel
+    #[allow(dead_code)]
     async fn route_error_message(&self, mut message: ResponseMessage) -> Result<(), Error> {
         message.skip(); // Skip message type
         message.skip(); // Skip version
@@ -210,7 +211,7 @@ impl AsyncTcpMessageBus {
         let error_code = message.next_int()?;
         let error_msg = message.next_string()?;
 
-        info!("Error message - Request ID: {}, Code: {}, Message: {}", request_id, error_code, error_msg);
+        info!("Error message - Request ID: {request_id}, Code: {error_code}, Message: {error_msg}");
 
         // Route to request-specific channel if exists
         if request_id >= 0 {
@@ -236,13 +237,13 @@ impl AsyncTcpMessageBus {
         if request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(error_code) {
             // Log warnings differently
             if is_warning_error(error_code) {
-                warn!("Warning - Request ID: {}, Code: {}, Message: {}", request_id, error_code, error_msg);
+                warn!("Warning - Request ID: {request_id}, Code: {error_code}, Message: {error_msg}");
             } else {
-                error!("Error - Request ID: {}, Code: {}, Message: {}", request_id, error_code, error_msg);
+                error!("Error - Request ID: {request_id}, Code: {error_code}, Message: {error_msg}");
             }
         } else {
             // Route to request-specific channel
-            info!("Error message - Request ID: {}, Code: {}, Message: {}", request_id, error_code, error_msg);
+            info!("Error message - Request ID: {request_id}, Code: {error_code}, Message: {error_msg}");
             let channels = self.request_channels.read().await;
             if let Some(sender) = channels.get(&request_id) {
                 let _ = sender.send(message);

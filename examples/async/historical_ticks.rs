@@ -63,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
     }
-    println!("Total trades received: {}", trade_count);
+    println!("Total trades received: {trade_count}");
 
     // Example 2: Get trades from specific time period
     println!("\n=== Historical Trades (time range) ===");
@@ -97,10 +97,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         start_time.format(&Rfc3339).unwrap(),
         end_time.format(&Rfc3339).unwrap()
     );
-    println!("Trades in period: {}", period_trades);
-    println!("Total volume: {}", total_volume);
+    println!("Trades in period: {period_trades}");
+    println!("Total volume: {total_volume}");
     if period_trades > 0 {
-        println!("Price range: ${:.2} - ${:.2}", min_price, max_price);
+        println!("Price range: ${min_price:.2} - ${max_price:.2}");
     }
 
     // Example 3: Get historical bid/ask quotes
@@ -137,7 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    println!("Total quotes received: {}", quote_count);
+    println!("Total quotes received: {quote_count}");
     if quote_count > 0 {
         println!("Average spread: ${:.3}", total_spread / quote_count as f64);
     }
@@ -165,7 +165,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
     }
-    println!("Total midpoints received: {}", midpoint_count);
+    println!("Total midpoints received: {midpoint_count}");
 
     println!("\nHistorical ticks example completed!");
     Ok(())

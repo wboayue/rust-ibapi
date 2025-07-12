@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Exchange: {}", bulletin.exchange);
                 println!("Message: {}", bulletin.message);
             }
-            Err(e) => eprintln!("Error: {:?}", e),
+            Err(e) => eprintln!("Error: {e:?}"),
         }
     }
 

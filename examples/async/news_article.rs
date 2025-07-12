@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let provider_code = "BRFG"; // Example provider
     let article_id = "BRFG$12345"; // Example article ID
 
-    println!("Requesting article: {} from provider: {}", article_id, provider_code);
+    println!("Requesting article: {article_id} from provider: {provider_code}");
 
     match client.news_article(provider_code, article_id).await {
         Ok(article_body) => {
@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Err(e) => {
-            eprintln!("Error fetching article: {:?}", e);
+            eprintln!("Error fetching article: {e:?}");
             eprintln!("Note: You need a valid article ID from historical_news or contract_news");
         }
     }

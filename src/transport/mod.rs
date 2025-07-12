@@ -21,6 +21,7 @@ pub mod sync;
 pub mod r#async;
 
 // Common types
+#[allow(dead_code)]
 pub(crate) type Response = Result<ResponseMessage, Error>;
 
 // MessageBus trait - defines the interface for message handling

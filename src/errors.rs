@@ -45,7 +45,7 @@ impl std::fmt::Display for Error {
             Error::ParseInt(ref err) => err.fmt(f),
             Error::FromUtf8(ref err) => err.fmt(f),
             Error::ParseTime(ref err) => err.fmt(f),
-            Error::Poison(ref err) => write!(f, "{}", err),
+            Error::Poison(ref err) => write!(f, "{err}"),
 
             Error::NotImplemented => write!(f, "not implemented"),
             Error::Parse(i, value, message) => write!(f, "parse error: {i} - {value} - {message}"),
@@ -55,7 +55,7 @@ impl std::fmt::Display for Error {
             Error::Cancelled => write!(f, "Cancelled"),
             Error::Shutdown => write!(f, "Shutdown"),
             Error::EndOfStream => write!(f, "EndOfStream"),
-            Error::UnexpectedResponse(message) => write!(f, "UnexpectedResponse: {:?}", message),
+            Error::UnexpectedResponse(message) => write!(f, "UnexpectedResponse: {message:?}"),
             Error::UnexpectedEndOfStream => write!(f, "UnexpectedEndOfStream"),
 
             Error::Simple(ref err) => write!(f, "error occurred: {err}"),
@@ -100,7 +100,7 @@ impl From<ResponseMessage> for Error {
 
 impl<T> From<std::sync::PoisonError<T>> for Error {
     fn from(err: std::sync::PoisonError<T>) -> Error {
-        Error::Poison(format!("Mutex poison error: {}", err))
+        Error::Poison(format!("Mutex poison error: {err}"))
     }
 }
 

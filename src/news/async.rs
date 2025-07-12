@@ -140,7 +140,7 @@ pub(crate) async fn news_article(client: &Client, provider_code: &str, article_i
 pub(crate) async fn contract_news(client: &Client, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<NewsArticle>, Error> {
     let mut generic_ticks = vec!["mdoff".to_string()];
     for provider in provider_codes {
-        generic_ticks.push(format!("292:{}", provider));
+        generic_ticks.push(format!("292:{provider}"));
     }
     let generic_ticks: Vec<_> = generic_ticks.iter().map(|s| s.as_str()).collect();
 

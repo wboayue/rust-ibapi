@@ -25,6 +25,18 @@ impl AsyncDataStream<AccountSummaries> for AccountSummaries {
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
     }
+
+    fn cancel_message(
+        _server_version: i32,
+        request_id: Option<i32>,
+        _context: &crate::client::builders::ResponseContext,
+    ) -> Result<crate::messages::RequestMessage, Error> {
+        if let Some(request_id) = request_id {
+            encoders::encode_cancel_account_summary(request_id)
+        } else {
+            Err(Error::Simple("request_id required".into()))
+        }
+    }
 }
 
 impl AsyncDataStream<PnL> for PnL {
@@ -119,6 +131,14 @@ impl AsyncDataStream<AccountUpdate> for AccountUpdate {
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
     }
+
+    fn cancel_message(
+        server_version: i32,
+        _request_id: Option<i32>,
+        _context: &crate::client::builders::ResponseContext,
+    ) -> Result<crate::messages::RequestMessage, Error> {
+        encoders::encode_cancel_account_updates(server_version)
+    }
 }
 
 impl AsyncDataStream<AccountUpdateMulti> for AccountUpdateMulti {
@@ -130,6 +150,15 @@ impl AsyncDataStream<AccountUpdateMulti> for AccountUpdateMulti {
             IncomingMessages::AccountUpdateMultiEnd => Ok(AccountUpdateMulti::End),
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
+    }
+
+    fn cancel_message(
+        server_version: i32,
+        request_id: Option<i32>,
+        _context: &crate::client::builders::ResponseContext,
+    ) -> Result<crate::messages::RequestMessage, Error> {
+        let request_id = request_id.expect("Request ID required to encode cancel account updates multi");
+        encoders::encode_cancel_account_updates_multi(server_version, request_id)
     }
 }
 

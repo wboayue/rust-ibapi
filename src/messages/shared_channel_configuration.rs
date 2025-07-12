@@ -1,11 +1,13 @@
 use super::{IncomingMessages, OutgoingMessages};
 
+#[allow(dead_code)]
 pub struct ChannelMapping<'a> {
     pub request: OutgoingMessages,
     pub responses: &'a [IncomingMessages],
 }
 
 // For shared channels configures mapping of request message id to response message ids.
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub(crate) const CHANNEL_MAPPINGS: &[ChannelMapping] = &[
     ChannelMapping {
         request: OutgoingMessages::RequestIds,

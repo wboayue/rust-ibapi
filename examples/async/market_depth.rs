@@ -55,8 +55,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Showing order book updates...\n");
 
     // Track the order book
-    let mut bid_book = vec![None; 5];
-    let mut ask_book = vec![None; 5];
+    let mut bid_book = [None; 5];
+    let mut ask_book = [None; 5];
 
     // Process market depth stream
     let mut stream = market_depth.take(30); // Take first 30 updates for demo
@@ -124,7 +124,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     match (bid, ask) {
                         (Some((bid_price, bid_size)), Some((ask_price, ask_size))) => {
-                            println!("  {:>10.0} {:>10.2} | {:>10.2} {:>10.0}", bid_size, bid_price, ask_price, ask_size);
+                            println!("  {bid_size:>10.0} {bid_price:>10.2} | {ask_price:>10.2} {ask_size:>10.0}");
                         }
                         (Some((bid_price, bid_size)), None) => {
                             println!("  {:>10.0} {:>10.2} | {:>10} {:>10}", bid_size, bid_price, "", "");
@@ -155,6 +155,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    println!("\nReceived {} updates. Example completed!", update_count);
+    println!("\nReceived {update_count} updates. Example completed!");
     Ok(())
 }

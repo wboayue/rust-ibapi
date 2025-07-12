@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Connected successfully!");
 
     // Request PnL updates
-    println!("\nRequesting PnL updates for account {}...", account);
+    println!("\nRequesting PnL updates for account {account}...");
     let mut subscription = client.pnl(&account, None).await?;
 
     // Process PnL updates
@@ -39,17 +39,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 print!("PnL Update - Daily: ${:.2}", pnl_update.daily_pnl);
 
                 if let Some(unrealized) = pnl_update.unrealized_pnl {
-                    print!(", Unrealized: ${:.2}", unrealized);
+                    print!(", Unrealized: ${unrealized:.2}");
                 }
 
                 if let Some(realized) = pnl_update.realized_pnl {
-                    print!(", Realized: ${:.2}", realized);
+                    print!(", Realized: ${realized:.2}");
                 }
 
                 println!();
             }
             Err(e) => {
-                eprintln!("Error receiving PnL: {}", e);
+                eprintln!("Error receiving PnL: {e}");
                 break;
             }
         }

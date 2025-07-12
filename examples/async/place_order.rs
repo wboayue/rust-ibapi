@@ -91,7 +91,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
             Err(e) => {
-                eprintln!("Error in order subscription: {}", e);
+                eprintln!("Error in order subscription: {e}");
                 break;
             }
         }
@@ -109,10 +109,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Place both orders
     let subscription1 = place_order(&client, order_id1, &contract, &order1).await?;
-    println!("Placed order {}", order_id1);
+    println!("Placed order {order_id1}");
 
     let subscription2 = place_order(&client, order_id2, &contract, &order2).await?;
-    println!("Placed order {}", order_id2);
+    println!("Placed order {order_id2}");
 
     // Monitor both orders concurrently
     let handle1 = tokio::spawn(monitor_order(order_id1, subscription1));
@@ -132,7 +132,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn monitor_order(order_id: i32, mut subscription: ibapi::subscriptions::Subscription<PlaceOrder>) {
-    println!("Starting monitor for order {}", order_id);
+    println!("Starting monitor for order {order_id}");
 
     while let Some(update) = subscription.next().await {
         match update {
@@ -159,5 +159,5 @@ async fn monitor_order(order_id: i32, mut subscription: ibapi::subscriptions::Su
         }
     }
 
-    println!("Monitor for order {} complete", order_id);
+    println!("Monitor for order {order_id} complete");
 }

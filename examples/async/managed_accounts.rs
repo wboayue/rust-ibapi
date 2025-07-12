@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         println!("Managed accounts:");
         for account in accounts {
-            println!("  - {}", account);
+            println!("  - {account}");
         }
     }
 

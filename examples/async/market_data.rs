@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
             TickTypes::SnapshotEnd => {
-                println!("[{}] Snapshot completed", tick_count);
+                println!("[{tick_count}] Snapshot completed");
                 break;
             }
             TickTypes::Notice(notice) => {
@@ -82,6 +82,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    println!("\nReceived {} ticks. Example completed!", tick_count);
+    println!("\nReceived {tick_count} ticks. Example completed!");
     Ok(())
 }

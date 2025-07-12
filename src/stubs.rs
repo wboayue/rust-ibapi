@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::RwLock;
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
 use crossbeam::channel;

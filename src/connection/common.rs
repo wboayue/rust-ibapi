@@ -64,7 +64,7 @@ impl ConnectionProtocol for ConnectionHandler {
 
     fn format_handshake(&self) -> Vec<u8> {
         let version_string = format!("v{}..{}", self.min_version, self.max_version);
-        debug!("Handshake version: {}", version_string);
+        debug!("Handshake version: {version_string}");
 
         let mut handshake = Vec::from(b"API\0");
         handshake.extend_from_slice(&encode_length(&version_string));
@@ -113,7 +113,7 @@ impl ConnectionProtocol for ConnectionHandler {
                 info.managed_accounts = Some(message.next_string()?);
             }
             IncomingMessages::Error => {
-                error!("Error during account info: {:?}", message);
+                error!("Error during account info: {message:?}");
             }
             _ => {
                 // Other messages during connection are logged but not processed
@@ -131,7 +131,7 @@ pub fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, 
     let parts: Vec<&str> = connection_time.split(' ').collect();
 
     if parts.len() < 3 {
-        error!("Invalid connection time format: {}", connection_time);
+        error!("Invalid connection time format: {connection_time}");
         return (None, None);
     }
 
@@ -157,7 +157,7 @@ pub fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, 
             }
         },
         Err(err) => {
-            log::warn!("Could not parse connection time from {}: {}", date_str, err);
+            log::warn!("Could not parse connection time from {date_str}: {err}");
             (None, Some(timezone))
         }
     }

@@ -259,7 +259,7 @@ impl Contract {
     /// ```
     pub fn news(provider_code: &str) -> Contract {
         Contract {
-            symbol: format!("{}:{}_ALL", provider_code, provider_code),
+            symbol: format!("{provider_code}:{provider_code}_ALL"),
             security_type: SecurityType::News,
             exchange: provider_code.to_string(),
             ..Default::default()

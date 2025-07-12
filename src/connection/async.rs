@@ -103,7 +103,7 @@ impl AsyncConnection {
         }
 
         let raw_string = String::from_utf8(data)?;
-        debug!("<- {:?}", raw_string);
+        debug!("<- {raw_string:?}");
 
         let message = ResponseMessage::from(&raw_string);
 
@@ -115,7 +115,7 @@ impl AsyncConnection {
     // sends server handshake
     pub(crate) async fn handshake(&self) -> Result<(), Error> {
         let handshake = self.connection_handler.format_handshake();
-        debug!("-> handshake: {:?}", handshake);
+        debug!("-> handshake: {handshake:?}");
 
         {
             let mut socket = self.socket.lock().await;

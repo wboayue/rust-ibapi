@@ -378,7 +378,7 @@ impl RequestMessage {
         Self::default()
     }
 
-    pub fn push_field<T: ToField>(&mut self, val: &T) -> &RequestMessage {
+    pub(crate) fn push_field<T: ToField>(&mut self, val: &T) -> &RequestMessage {
         let field = val.to_field();
         self.fields.push(field);
         self

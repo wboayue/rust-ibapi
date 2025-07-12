@@ -30,31 +30,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         contract.symbol, contract.last_trade_date_or_contract_month, contract.right, contract.strike
     );
     println!("Volatility: {:.1}%", volatility * 100.0);
-    println!("Underlying Price: ${:.2}", underlying_price);
+    println!("Underlying Price: ${underlying_price:.2}");
 
     match client.calculate_option_price(&contract, volatility, underlying_price).await {
         Ok(computation) => {
             println!("\n=== Results ===");
             if let Some(price) = computation.option_price {
-                println!("Option Price: ${:.2}", price);
+                println!("Option Price: ${price:.2}");
             }
             if let Some(delta) = computation.delta {
-                println!("Delta: {:.4}", delta);
+                println!("Delta: {delta:.4}");
             }
             if let Some(gamma) = computation.gamma {
-                println!("Gamma: {:.4}", gamma);
+                println!("Gamma: {gamma:.4}");
             }
             if let Some(vega) = computation.vega {
-                println!("Vega: {:.4}", vega);
+                println!("Vega: {vega:.4}");
             }
             if let Some(theta) = computation.theta {
-                println!("Theta: {:.4}", theta);
+                println!("Theta: {theta:.4}");
             }
             if let Some(pv_dividend) = computation.present_value_dividend {
-                println!("PV Dividend: ${:.2}", pv_dividend);
+                println!("PV Dividend: ${pv_dividend:.2}");
             }
         }
-        Err(e) => eprintln!("Error calculating option price: {:?}", e),
+        Err(e) => eprintln!("Error calculating option price: {e:?}"),
     }
 
     Ok(())

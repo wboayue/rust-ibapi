@@ -36,8 +36,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for (symbol, contract, period, use_rth, description) in test_cases {
-        println!("\n{} Histogram ({}):", symbol, description);
-        println!("Period: {:?}, RTH only: {}", period, use_rth);
+        println!("\n{symbol} Histogram ({description}):");
+        println!("Period: {period:?}, RTH only: {use_rth}");
 
         match client.histogram_data(&contract, use_rth, period).await {
             Ok(histogram) => {
@@ -77,14 +77,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 } else {
                     // Show top and bottom entries with separator
-                    println!("Top {} price levels:", display_count);
+                    println!("Top {display_count} price levels:");
                     for entry in sorted_histogram.iter().rev().take(display_count).rev() {
                         print_histogram_entry(entry, total_count, max_count);
                     }
 
                     println!("... ({} entries omitted) ...", total_entries - display_count * 2);
 
-                    println!("Bottom {} price levels:", display_count);
+                    println!("Bottom {display_count} price levels:");
                     for entry in sorted_histogram.iter().take(display_count) {
                         print_histogram_entry(entry, total_count, max_count);
                     }
@@ -92,10 +92,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Display statistics
                 println!("\nStatistics:");
-                println!("  Total observations: {}", total_count);
-                println!("  Price range: ${:.2} - ${:.2}", min_price, max_price);
+                println!("  Total observations: {total_count}");
+                println!("  Price range: ${min_price:.2} - ${max_price:.2}");
                 println!("  Price levels: {}", histogram.len());
-                println!("  Weighted average: ${:.2}", weighted_avg);
+                println!("  Weighted average: ${weighted_avg:.2}");
 
                 // Find mode (most frequent price)
                 if let Some(mode_entry) = histogram.iter().max_by_key(|e| e.size) {
@@ -104,7 +104,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             Err(e) => {
-                println!("Error: {}", e);
+                println!("Error: {e}");
             }
         }
 

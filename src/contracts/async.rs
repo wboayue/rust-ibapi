@@ -67,7 +67,7 @@ pub async fn contract_details(client: &Client, contract: &Contract) -> Result<Ve
     let mut contract_details: Vec<ContractDetails> = Vec::default();
 
     while let Some(mut response) = responses.next().await {
-        log::debug!("response: {:#?}", response);
+        log::debug!("response: {response:#?}");
         match response.message_type() {
             IncomingMessages::ContractData => {
                 let decoded = decoders::decode_contract_details(client.server_version(), &mut response)?;
@@ -133,11 +133,11 @@ pub async fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<Cont
             }
             IncomingMessages::Error => {
                 // TODO custom error
-                error!("unexpected error: {:?}", message);
+                error!("unexpected error: {message:?}");
                 return Err(Error::Simple(format!("unexpected error: {message:?}")));
             }
             _ => {
-                info!("unexpected message: {:?}", message);
+                info!("unexpected message: {message:?}");
                 return Err(Error::Simple(format!("unexpected message: {message:?}")));
             }
         }

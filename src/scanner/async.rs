@@ -251,7 +251,7 @@ mod tests {
         };
 
         let result = client.scanner_subscription(&subscription, &vec![]).await;
-        let mut subscription = result.unwrap();
+        let subscription = result.unwrap();
 
         // Explicitly cancel
         subscription.cancel().await;

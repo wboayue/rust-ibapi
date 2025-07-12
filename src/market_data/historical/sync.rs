@@ -315,7 +315,7 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
                 Ok(())
             }
             Some(Ok(message)) => {
-                debug!("unexpected message: {:?}", message);
+                debug!("unexpected message: {message:?}");
                 Ok(())
             }
             Some(Err(e)) => {

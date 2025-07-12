@@ -223,7 +223,7 @@ pub(crate) fn decode_histogram_data(message: &mut ResponseMessage) -> Result<Vec
 fn parse_time_zone(name: &str) -> &Tz {
     let zones = timezones::find_by_name(name);
     if zones.is_empty() {
-        panic!("timezone not found for: {}", name)
+        panic!("timezone not found for: {name}")
     }
     zones[0]
 }

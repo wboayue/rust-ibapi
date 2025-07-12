@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Missing symbol
     match ContractBuilder::new().build() {
-        Err(e) => println!("   ✓ Expected error for missing symbol: {}", e),
+        Err(e) => println!("   ✓ Expected error for missing symbol: {e}"),
         Ok(_) => println!("   ✗ Unexpected success"),
     }
 
@@ -82,7 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .last_trade_date_or_contract_month("20250117")
         .build()
     {
-        Err(e) => println!("   ✓ Expected error for missing strike: {}", e),
+        Err(e) => println!("   ✓ Expected error for missing strike: {e}"),
         Ok(_) => println!("   ✗ Unexpected success"),
     }
 
@@ -92,7 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .last_trade_date_or_contract_month("20250117")
         .build()
     {
-        Err(e) => println!("   ✓ Expected error for missing right: {}", e),
+        Err(e) => println!("   ✓ Expected error for missing right: {e}"),
         Ok(_) => println!("   ✗ Unexpected success"),
     }
 
@@ -103,7 +103,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .last_trade_date_or_contract_month("20250117")
         .build()
     {
-        Err(e) => println!("   ✓ Expected error for invalid right: {}", e),
+        Err(e) => println!("   ✓ Expected error for invalid right: {e}"),
         Ok(_) => println!("   ✗ Unexpected success"),
     }
 
@@ -114,13 +114,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .last_trade_date_or_contract_month("20250117")
         .build()
     {
-        Err(e) => println!("   ✓ Expected error for negative strike: {}", e),
+        Err(e) => println!("   ✓ Expected error for negative strike: {e}"),
         Ok(_) => println!("   ✗ Unexpected success"),
     }
 
     // Futures missing contract month
     match ContractBuilder::futures("ES", "CME", "USD").build() {
-        Err(e) => println!("   ✓ Expected error for missing contract month: {}", e),
+        Err(e) => println!("   ✓ Expected error for missing contract month: {e}"),
         Ok(_) => println!("   ✗ Unexpected success"),
     }
 

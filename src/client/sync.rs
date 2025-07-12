@@ -1857,17 +1857,17 @@ impl Client {
     }
 
     pub(crate) fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<InternalSubscription, Error> {
-        debug!("send_message({:?}, {:?})", request_id, message);
+        debug!("send_message({request_id:?}, {message:?})");
         self.message_bus.send_request(request_id, &message)
     }
 
     pub(crate) fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<InternalSubscription, Error> {
-        debug!("send_order({:?}, {:?})", order_id, message);
+        debug!("send_order({order_id:?}, {message:?})");
         self.message_bus.send_order_request(order_id, &message)
     }
 
     pub(crate) fn send_message(&self, message: RequestMessage) -> Result<(), Error> {
-        debug!("send_message({:?})", message);
+        debug!("send_message({message:?})");
         self.message_bus.send_message(&message)
     }
 

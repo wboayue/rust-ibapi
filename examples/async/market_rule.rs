@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Parse the first market rule ID
             if let Some(rule_id_str) = details.market_rule_ids.first() {
                 if let Ok(market_rule_id) = rule_id_str.trim().parse::<i32>() {
-                    println!("\n=== Fetching Market Rule {} ===", market_rule_id);
+                    println!("\n=== Fetching Market Rule {market_rule_id} ===");
 
                     match client.market_rule(market_rule_id).await {
                         Ok(rule) => {
@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             }
                         }
-                        Err(e) => eprintln!("Error fetching market rule: {:?}", e),
+                        Err(e) => eprintln!("Error fetching market rule: {e:?}"),
                     }
                 }
             }

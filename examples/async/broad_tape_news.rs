@@ -13,7 +13,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Subscribe to a specific news provider's broad tape
     let provider_code = "BRFG"; // Briefing.com example
 
-    println!("Subscribing to broad tape news from provider: {}", provider_code);
+    println!("Subscribing to broad tape news from provider: {provider_code}");
 
     let mut news_stream = client.broad_tape_news(provider_code).await?;
 
@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             Err(e) => {
-                eprintln!("Error: {:?}", e);
+                eprintln!("Error: {e:?}");
                 break;
             }
         }
