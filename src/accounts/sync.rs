@@ -494,4 +494,332 @@ mod tests {
         assert_eq!(request_messages[0].encode_simple(), "76|1|9000|DU1234567||1|");
         assert_eq!(request_messages[1].encode_simple(), "77|1|9000|"); // Cancel request
     }
+
+    // Additional comprehensive tests for sync module
+
+    #[test]
+    fn test_server_version_errors() {
+        use crate::server_versions;
+
+        // Test PnL version check
+        let (client_old, _) = create_test_client_with_version(server_versions::PNL - 1);
+        let account = AccountId(TEST_ACCOUNT.to_string());
+        let result = client_old.pnl(&account, None);
+        assert!(result.is_err(), "Expected version error for PnL");
+        if let Err(error) = result {
+            assert!(matches!(error, Error::ServerVersion(_, _, _)));
+        }
+
+        // Test PnL Single version check
+        let (client_pnl_single, _) = create_test_client_with_version(server_versions::REALIZED_PNL - 1);
+        let result = client_pnl_single.pnl_single(&account, ContractId(1001), None);
+        assert!(result.is_err(), "Expected version error for PnL Single");
+        if let Err(error) = result {
+            assert!(matches!(error, Error::ServerVersion(_, _, _)));
+        }
+
+        // Test Account Summary version check
+        let (client_summary, _) = create_test_client_with_version(server_versions::ACCOUNT_SUMMARY - 1);
+        let group = AccountGroup("All".to_string());
+        let result = client_summary.account_summary(&group, &[AccountSummaryTags::ACCOUNT_TYPE]);
+        assert!(result.is_err(), "Expected version error for Account Summary");
+        if let Err(error) = result {
+            assert!(matches!(error, Error::ServerVersion(_, _, _)));
+        }
+
+        // Test Positions Multi version check
+        let (client_multi, _) = create_test_client_with_version(server_versions::MODELS_SUPPORT - 1);
+        let result = client_multi.positions_multi(Some(&account), None);
+        assert!(result.is_err(), "Expected version error for Positions Multi");
+        if let Err(error) = result {
+            assert!(matches!(error, Error::ServerVersion(_, _, _)));
+        }
+
+        // Test Account Updates Multi version check
+        let result = client_multi.account_updates_multi(Some(&account), None);
+        assert!(result.is_err(), "Expected version error for Account Updates Multi");
+        if let Err(error) = result {
+            assert!(matches!(error, Error::ServerVersion(_, _, _)));
+        }
+
+        // Test Family Codes version check
+        let (client_family, _) = create_test_client_with_version(server_versions::REQ_FAMILY_CODES - 1);
+        let result = client_family.family_codes();
+        assert!(result.is_err(), "Expected version error for Family Codes");
+        if let Err(error) = result {
+            assert!(matches!(error, Error::ServerVersion(_, _, _)));
+        }
+
+        // Test Positions version check
+        let (client_positions, _) = create_test_client_with_version(server_versions::POSITIONS - 1);
+        let result = client_positions.positions();
+        assert!(result.is_err(), "Expected version error for Positions");
+        if let Err(error) = result {
+            assert!(matches!(error, Error::ServerVersion(_, _, _)));
+        }
+    }
+
+    #[test]
+    fn test_managed_accounts_additional_scenarios() {
+        // Test single account response
+        let (client_single, message_bus) = create_test_client_with_responses(vec!["15|1|SINGLE_ACCOUNT|".into()]);
+        let accounts = client_single.managed_accounts().expect("managed_accounts failed");
+        assert_eq!(accounts, vec!["SINGLE_ACCOUNT"], "Single account mismatch");
+        assert_request_messages(&message_bus, &["17|1|"]);
+
+        // Test multiple accounts with extra commas
+        let (client_extra, message_bus_extra) = create_test_client_with_responses(vec!["15|1|ACC1,ACC2,|".into()]);
+        let accounts_extra = client_extra.managed_accounts().expect("managed_accounts failed");
+        assert_eq!(accounts_extra, vec!["ACC1", "ACC2", ""], "Extra comma handling failed");
+        assert_request_messages(&message_bus_extra, &["17|1|"]);
+    }
+
+    #[test]
+    fn test_server_time_comprehensive() {
+        use time::macros::datetime;
+
+        // Test edge case timestamps
+        let edge_cases = vec![
+            ("0", datetime!(1970-01-01 0:00 UTC)),         // Unix epoch
+            ("946684800", datetime!(2000-01-01 0:00 UTC)), // Y2K
+        ];
+
+        for (timestamp_str, expected) in edge_cases {
+            let (client, message_bus) = create_test_client_with_responses(vec![format!("49|1|{}|", timestamp_str)]);
+
+            let result = client.server_time();
+            assert!(result.is_ok(), "Expected Ok for timestamp {}", timestamp_str);
+            assert_eq!(result.unwrap(), expected, "Timestamp {} mismatch", timestamp_str);
+            assert_request_messages(&message_bus, &["49|1|"]);
+        }
+
+        // Test overflow timestamp
+        let (client_overflow, message_bus_overflow) = create_test_client_with_responses(vec!["49|1|99999999999999999999|".into()]);
+        let result_overflow = client_overflow.server_time();
+        assert!(result_overflow.is_err(), "Expected error for overflow timestamp");
+        assert_request_messages(&message_bus_overflow, &["49|1|"]);
+    }
+
+    #[test]
+    fn test_account_summary_comprehensive() {
+        use crate::accounts::AccountSummaryResult;
+
+        // Test multiple tags
+        let (client, message_bus) = create_test_client_with_responses(vec![responses::ACCOUNT_SUMMARY.into(), responses::ACCOUNT_SUMMARY_END.into()]);
+
+        let group = AccountGroup("All".to_string());
+        let tags = &[
+            AccountSummaryTags::ACCOUNT_TYPE,
+            AccountSummaryTags::NET_LIQUIDATION,
+            AccountSummaryTags::TOTAL_CASH_VALUE,
+        ];
+
+        let subscription = client.account_summary(&group, tags).expect("account_summary failed");
+
+        // Should get at least one summary
+        let first_update = subscription.next();
+        assert!(matches!(first_update, Some(AccountSummaryResult::Summary(_))));
+
+        // Should get end marker
+        let second_update = subscription.next();
+        assert!(matches!(second_update, Some(AccountSummaryResult::End)));
+
+        drop(subscription);
+
+        // Verify the encoded tags are sent correctly
+        let request_messages = get_request_messages(&message_bus);
+        assert!(
+            request_messages[0].contains("AccountType,NetLiquidation,TotalCashValue"),
+            "Request should contain all tags"
+        );
+
+        // Test empty tags
+        let (client_empty, _) = create_test_client();
+        let group_empty = AccountGroup("All".to_string());
+        let tags_empty: &[&str] = &[];
+
+        let result = client_empty.account_summary(&group_empty, tags_empty);
+        assert!(result.is_ok(), "Empty tags should be allowed");
+    }
+
+    #[test]
+    fn test_pnl_comprehensive() {
+        // Test different model codes and parameter combinations
+        let (client, message_bus) = create_test_client();
+
+        let account = AccountId(TEST_ACCOUNT.to_string());
+        let model1 = ModelCode("MODEL1".to_string());
+        let model2 = ModelCode("MODEL2".to_string());
+
+        // Request PnL with different model codes
+        let sub1 = client.pnl(&account, Some(&model1)).expect("PnL request 1 failed");
+        let sub2 = client.pnl(&account, Some(&model2)).expect("PnL request 2 failed");
+        let sub3 = client.pnl(&account, None).expect("PnL request 3 failed");
+
+        // Drop subscriptions to trigger cancellation messages in sync mode
+        drop(sub1);
+        drop(sub2);
+        drop(sub3);
+
+        let request_messages = get_request_messages(&message_bus);
+        assert!(
+            request_messages.len() >= 6,
+            "Expected at least 6 messages, got {}",
+            request_messages.len()
+        );
+
+        // Verify model codes are encoded correctly
+        let pnl_requests: Vec<_> = request_messages.iter().filter(|msg| msg.starts_with("92|")).collect();
+        assert!(pnl_requests.len() >= 3, "Expected at least 3 PnL subscription messages");
+        assert!(pnl_requests[0].contains("MODEL1"), "First request should contain MODEL1");
+        assert!(pnl_requests[1].contains("MODEL2"), "Second request should contain MODEL2");
+        assert!(pnl_requests[2].ends_with("||"), "Third request should have empty model code");
+    }
+
+    #[test]
+    fn test_pnl_single_edge_cases() {
+        // Test edge case contract IDs
+        let (client, message_bus) = create_test_client();
+
+        let account = AccountId(TEST_ACCOUNT.to_string());
+
+        // Test with zero contract ID
+        let sub1 = client
+            .pnl_single(&account, ContractId(0), None)
+            .expect("PnL single with contract ID 0 failed");
+
+        // Test with very large contract ID
+        let sub2 = client
+            .pnl_single(&account, ContractId(i32::MAX), None)
+            .expect("PnL single with large contract ID failed");
+
+        // Drop subscriptions to trigger cancellation in sync mode
+        drop(sub1);
+        drop(sub2);
+
+        let request_messages = get_request_messages(&message_bus);
+        assert!(
+            request_messages.len() >= 4,
+            "Expected subscribe and cancel messages, got {}",
+            request_messages.len()
+        );
+
+        // Verify contract IDs are encoded correctly
+        assert!(request_messages[0].contains("|0|"), "First request should contain contract ID 0");
+
+        // Find the second subscription message (not cancel message)
+        let subscription_messages: Vec<_> = request_messages.iter().filter(|msg| msg.starts_with("94|")).collect();
+        assert!(subscription_messages.len() >= 2, "Expected at least 2 subscription messages");
+        assert!(
+            subscription_messages[1].contains(&format!("|{}|", i32::MAX)),
+            "Second request should contain max contract ID"
+        );
+    }
+
+    #[test]
+    fn test_positions_multi_parameter_combinations() {
+        // Test all parameter combinations
+        let (client, _) = create_test_client_with_responses(vec![responses::POSITION_MULTI.into(), responses::POSITION_MULTI_END.into()]);
+
+        let account = AccountId(TEST_ACCOUNT.to_string());
+        let model = ModelCode(TEST_MODEL_CODE.to_string());
+
+        // Test all parameter combinations
+        let _sub1 = client
+            .positions_multi(Some(&account), Some(&model))
+            .expect("positions_multi with both params failed");
+
+        let _sub2 = client
+            .positions_multi(Some(&account), None)
+            .expect("positions_multi with account only failed");
+
+        let _sub3 = client
+            .positions_multi(None, Some(&model))
+            .expect("positions_multi with model only failed");
+
+        let _sub4 = client.positions_multi(None, None).expect("positions_multi with no params failed");
+    }
+
+    #[test]
+    fn test_subscription_lifecycle() {
+        // Test that subscriptions are properly cleaned up when dropped
+        let (client, message_bus) = create_test_client();
+
+        let account = AccountId(TEST_ACCOUNT.to_string());
+
+        // Create and immediately drop subscriptions
+        {
+            let _sub1 = client.pnl(&account, None).expect("PnL subscription failed");
+            let _sub2 = client.positions().expect("Positions subscription failed");
+            // Subscriptions dropped here
+        }
+
+        let request_messages = get_request_messages(&message_bus);
+        assert!(
+            request_messages.len() >= 4,
+            "Expected subscribe and cancel messages for both subscriptions"
+        );
+
+        // Should have cancel messages
+        let cancel_count = request_messages
+            .iter()
+            .filter(|msg| msg.starts_with("93|") || msg.starts_with("64|"))
+            .count();
+        assert!(cancel_count >= 2, "Expected at least 2 cancel messages");
+    }
+
+    #[test]
+    fn test_account_updates_stream_handling() {
+        use crate::accounts::AccountUpdate;
+
+        // Test continuous account updates stream
+        let (client, message_bus) = create_test_client_with_responses(vec![
+            format!("{}|", responses::ACCOUNT_VALUE),
+            format!("{}|", responses::ACCOUNT_VALUE),
+            format!("{}|", responses::ACCOUNT_VALUE),
+            format!("54|1|{}|", TEST_ACCOUNT), // End marker
+        ]);
+
+        let account = AccountId(TEST_ACCOUNT.to_string());
+        let subscription = client.account_updates(&account).expect("account_updates failed");
+
+        let mut update_count = 0;
+        for update_result in subscription {
+            match update_result {
+                AccountUpdate::AccountValue(_) => {
+                    update_count += 1;
+                }
+                AccountUpdate::End => {
+                    break;
+                }
+                _ => {} // Ignore other update types
+            }
+        }
+
+        assert_eq!(update_count, 3, "Expected 3 account value updates");
+
+        // In sync mode, account_updates sends subscribe and unsubscribe messages
+        let request_messages = get_request_messages(&message_bus);
+        assert!(request_messages.len() >= 1, "Expected at least subscribe message");
+        assert!(request_messages[0].starts_with("6|"), "First message should be RequestAccountData");
+    }
+
+    #[test]
+    fn test_error_propagation() {
+        // Test that encoding errors are properly propagated
+        let (_client, _) = create_test_client();
+
+        // These tests verify that version checks catch incompatible requests
+        // The actual encoding shouldn't fail in normal circumstances since
+        // we're using well-formed domain types, but version checks will prevent
+        // sending requests to incompatible servers
+
+        let account = AccountId(TEST_ACCOUNT.to_string());
+        let old_version_client = create_test_client_with_version(50).0; // Very old version
+
+        // All modern features should fail on old servers
+        assert!(old_version_client.pnl(&account, None).is_err());
+        assert!(old_version_client.positions().is_err());
+        assert!(old_version_client.account_summary(&AccountGroup("All".to_string()), &[]).is_err());
+    }
 }
