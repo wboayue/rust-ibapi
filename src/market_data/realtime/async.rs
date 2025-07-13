@@ -4,18 +4,18 @@ use crate::client::ClientRequestBuilders;
 use crate::contracts::{Contract, TagValue};
 use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::{AsyncDataStream, Subscription};
+use crate::subscriptions::{ResponseContext, StreamDecoder, Subscription};
 use crate::{Client, Error};
 
 use super::common::{decoders, encoders};
 use super::{Bar, BarSize, BidAsk, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, Trade, WhatToShow};
 
-// === AsyncDataStream implementations ===
+// === DataStream implementations ===
 
-impl AsyncDataStream<BidAsk> for BidAsk {
+impl StreamDecoder<BidAsk> for BidAsk {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::TickByTick => decoders::decode_bid_ask_tick(message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
@@ -26,17 +26,17 @@ impl AsyncDataStream<BidAsk> for BidAsk {
     fn cancel_message(
         _server_version: i32,
         request_id: Option<i32>,
-        _context: &crate::client::builders::ResponseContext,
+        _context: Option<&ResponseContext>,
     ) -> Result<crate::messages::RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel tick by tick");
         encoders::encode_cancel_tick_by_tick(request_id)
     }
 }
 
-impl AsyncDataStream<MidPoint> for MidPoint {
+impl StreamDecoder<MidPoint> for MidPoint {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::TickByTick => decoders::decode_mid_point_tick(message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
@@ -47,34 +47,34 @@ impl AsyncDataStream<MidPoint> for MidPoint {
     fn cancel_message(
         _server_version: i32,
         request_id: Option<i32>,
-        _context: &crate::client::builders::ResponseContext,
+        _context: Option<&ResponseContext>,
     ) -> Result<crate::messages::RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel tick by tick");
         encoders::encode_cancel_tick_by_tick(request_id)
     }
 }
 
-impl AsyncDataStream<Bar> for Bar {
+impl StreamDecoder<Bar> for Bar {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::RealTimeBars];
 
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         decoders::decode_realtime_bar(message)
     }
 
     fn cancel_message(
         _server_version: i32,
         request_id: Option<i32>,
-        _context: &crate::client::builders::ResponseContext,
+        _context: Option<&ResponseContext>,
     ) -> Result<crate::messages::RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
         encoders::encode_cancel_realtime_bars(request_id)
     }
 }
 
-impl AsyncDataStream<Trade> for Trade {
+impl StreamDecoder<Trade> for Trade {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::TickByTick => decoders::decode_trade_tick(message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
@@ -85,25 +85,22 @@ impl AsyncDataStream<Trade> for Trade {
     fn cancel_message(
         _server_version: i32,
         request_id: Option<i32>,
-        _context: &crate::client::builders::ResponseContext,
+        _context: Option<&ResponseContext>,
     ) -> Result<crate::messages::RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel tick by tick");
         encoders::encode_cancel_tick_by_tick(request_id)
     }
 }
 
-impl AsyncDataStream<MarketDepths> for MarketDepths {
+impl StreamDecoder<MarketDepths> for MarketDepths {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] =
         &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2, IncomingMessages::Error];
 
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         use crate::messages;
         match message.message_type() {
             IncomingMessages::MarketDepth => Ok(MarketDepths::MarketDepth(decoders::decode_market_depth(message)?)),
-            IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(decoders::decode_market_depth_l2(
-                client.server_version(),
-                message,
-            )?)),
+            IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(decoders::decode_market_depth_l2(server_version, message)?)),
             IncomingMessages::Error => {
                 let code = message.peek_int(messages::CODE_INDEX).unwrap();
                 if (2100..2200).contains(&code) {
@@ -119,14 +116,14 @@ impl AsyncDataStream<MarketDepths> for MarketDepths {
     fn cancel_message(
         server_version: i32,
         request_id: Option<i32>,
-        context: &crate::client::builders::ResponseContext,
+        context: Option<&ResponseContext>,
     ) -> Result<crate::messages::RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel market depth");
-        encoders::encode_cancel_market_depth(server_version, request_id, context.is_smart_depth)
+        encoders::encode_cancel_market_depth(server_version, request_id, context.map(|c| c.is_smart_depth).unwrap_or(false))
     }
 }
 
-impl AsyncDataStream<TickTypes> for TickTypes {
+impl StreamDecoder<TickTypes> for TickTypes {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::TickPrice,
         IncomingMessages::TickSize,
@@ -139,15 +136,15 @@ impl AsyncDataStream<TickTypes> for TickTypes {
         IncomingMessages::TickReqParams,
     ];
 
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickPrice => Ok(decoders::decode_tick_price(client.server_version(), message)?),
+            IncomingMessages::TickPrice => Ok(decoders::decode_tick_price(server_version, message)?),
             IncomingMessages::TickSize => Ok(TickTypes::Size(decoders::decode_tick_size(message)?)),
             IncomingMessages::TickString => Ok(TickTypes::String(decoders::decode_tick_string(message)?)),
             IncomingMessages::TickEFP => Ok(TickTypes::EFP(decoders::decode_tick_efp(message)?)),
             IncomingMessages::TickGeneric => Ok(TickTypes::Generic(decoders::decode_tick_generic(message)?)),
             IncomingMessages::TickOptionComputation => Ok(TickTypes::OptionComputation(decoders::decode_tick_option_computation(
-                client.server_version(),
+                server_version,
                 message,
             )?)),
             IncomingMessages::TickReqParams => Ok(TickTypes::RequestParameters(decoders::decode_tick_request_parameters(message)?)),

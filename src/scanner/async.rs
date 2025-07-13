@@ -4,25 +4,21 @@ use super::common::{decoders, encoders};
 use super::*;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::orders::TagValue;
-use crate::subscriptions::{AsyncDataStream, Subscription};
+use crate::subscriptions::{ResponseContext, StreamDecoder, Subscription};
 use crate::{server_versions, Client, Error};
 use std::sync::Arc;
 
-impl AsyncDataStream<Vec<ScannerData>> for Vec<ScannerData> {
+impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::ScannerData];
 
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Vec<ScannerData>, Error> {
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ScannerData>, Error> {
         match message.message_type() {
             IncomingMessages::ScannerData => Ok(decoders::decode_scanner_data(message.clone())?),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 
-    fn cancel_message(
-        _server_version: i32,
-        request_id: Option<i32>,
-        _context: &crate::client::builders::ResponseContext,
-    ) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel scanner subscription.");
         encoders::encode_cancel_scanner_subscription(request_id)
     }

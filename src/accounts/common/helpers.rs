@@ -1,7 +1,7 @@
 //! Helper functions to reduce boilerplate in request/response patterns
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
-use crate::client::{Client, ClientRequestBuilders, DataStream, SharesChannel, Subscription, SubscriptionBuilderExt};
+use crate::client::{Client, ClientRequestBuilders, SharesChannel, StreamDecoder, Subscription, SubscriptionBuilderExt};
 #[cfg(all(feature = "sync", not(feature = "async")))]
 use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
 #[cfg(all(feature = "sync", not(feature = "async")))]
@@ -17,7 +17,7 @@ pub(in crate::accounts) fn request_with_id<'a, T>(
     encoder: impl FnOnce(i32) -> Result<RequestMessage, Error>,
 ) -> Result<Subscription<'a, T>, Error>
 where
-    T: DataStream<T>,
+    T: StreamDecoder<T>,
 {
     check_version(client.server_version(), feature)?;
     let builder = client.request();
@@ -34,7 +34,7 @@ pub(in crate::accounts) fn shared_subscription<'a, T>(
     encoder: impl FnOnce() -> Result<RequestMessage, Error>,
 ) -> Result<Subscription<'a, T>, Error>
 where
-    T: DataStream<T>,
+    T: StreamDecoder<T>,
     Subscription<'a, T>: SharesChannel,
 {
     check_version(client.server_version(), feature)?;
@@ -50,7 +50,7 @@ pub(in crate::accounts) fn shared_request<'a, T>(
     encoder: impl FnOnce() -> Result<RequestMessage, Error>,
 ) -> Result<Subscription<'a, T>, Error>
 where
-    T: DataStream<T>,
+    T: StreamDecoder<T>,
 {
     let request = encoder()?;
     client.shared_request(message_type).send(request)
@@ -104,7 +104,7 @@ pub(in crate::accounts) mod async_helpers {
     use crate::client::{Client, ClientRequestBuilders, SubscriptionBuilderExt};
     use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
     use crate::protocol::{check_version, ProtocolFeature};
-    use crate::subscriptions::{AsyncDataStream, Subscription};
+    use crate::subscriptions::{StreamDecoder, Subscription};
     use crate::Error;
     #[allow(unused_imports)] // Used in one_shot_request
     use futures::StreamExt;
@@ -116,7 +116,7 @@ pub(in crate::accounts) mod async_helpers {
         encoder: impl FnOnce(i32) -> Result<RequestMessage, Error>,
     ) -> Result<Subscription<T>, Error>
     where
-        T: AsyncDataStream<T> + Send + 'static,
+        T: StreamDecoder<T> + Send + 'static,
     {
         check_version(client.server_version(), feature)?;
         let builder = client.request();
@@ -132,7 +132,7 @@ pub(in crate::accounts) mod async_helpers {
         encoder: impl FnOnce() -> Result<RequestMessage, Error>,
     ) -> Result<Subscription<T>, Error>
     where
-        T: AsyncDataStream<T> + Send + 'static,
+        T: StreamDecoder<T> + Send + 'static,
     {
         check_version(client.server_version(), feature)?;
         let request = encoder()?;
@@ -146,7 +146,7 @@ pub(in crate::accounts) mod async_helpers {
         encoder: impl FnOnce() -> Result<RequestMessage, Error>,
     ) -> Result<Subscription<T>, Error>
     where
-        T: AsyncDataStream<T> + Send + 'static,
+        T: StreamDecoder<T> + Send + 'static,
     {
         let request = encoder()?;
         client.shared_request(message_type).send::<T>(request).await

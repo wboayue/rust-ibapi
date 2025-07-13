@@ -2,139 +2,17 @@
 
 use time::OffsetDateTime;
 
-use crate::client::{ClientRequestBuilders, DataStream, ResponseContext, SharesChannel, Subscription};
-use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::client::{ClientRequestBuilders, SharesChannel, Subscription};
+use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
 use crate::{Client, Error};
 
-use super::common::{decoders, encoders, errors, helpers};
+use super::common::{decoders, encoders, helpers};
+use super::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use super::*;
 
 // Implement SharesChannel for PositionUpdate subscription
 impl SharesChannel for Subscription<'_, PositionUpdate> {}
-
-// Implement DataStream traits for the account types
-impl DataStream<AccountSummaries> for AccountSummaries {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::AccountSummary, IncomingMessages::AccountSummaryEnd];
-
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::AccountSummary => Ok(AccountSummaries::Summary(decoders::decode_account_summary(
-                client.server_version,
-                message,
-            )?)),
-            IncomingMessages::AccountSummaryEnd => Ok(AccountSummaries::End),
-            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
-        }
-    }
-
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
-        let request_id = errors::require_request_id_for(request_id, "encode cancel account summary")?;
-        encoders::encode_cancel_account_summary(request_id)
-    }
-}
-
-impl DataStream<PnL> for PnL {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::PnL];
-
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
-        decoders::decode_pnl(client.server_version, message)
-    }
-
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
-        let request_id = errors::require_request_id_for(request_id, "encode cancel pnl")?;
-        encoders::encode_cancel_pnl(request_id)
-    }
-}
-
-impl DataStream<PnLSingle> for PnLSingle {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::PnLSingle];
-
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
-        decoders::decode_pnl_single(client.server_version, message)
-    }
-
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
-        let request_id = errors::require_request_id_for(request_id, "encode cancel pnl single")?;
-        encoders::encode_cancel_pnl_single(request_id)
-    }
-}
-
-impl DataStream<PositionUpdate> for PositionUpdate {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
-
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::Position => Ok(PositionUpdate::Position(decoders::decode_position(message)?)),
-            IncomingMessages::PositionEnd => Ok(PositionUpdate::PositionEnd),
-            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
-        }
-    }
-
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
-        encoders::encode_cancel_positions()
-    }
-}
-
-impl DataStream<PositionUpdateMulti> for PositionUpdateMulti {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::PositionMulti, IncomingMessages::PositionMultiEnd];
-
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::PositionMulti => Ok(PositionUpdateMulti::Position(decoders::decode_position_multi(message)?)),
-            IncomingMessages::PositionMultiEnd => Ok(PositionUpdateMulti::PositionEnd),
-            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
-        }
-    }
-
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
-        let request_id = errors::require_request_id_for(request_id, "encode cancel positions multi")?;
-        encoders::encode_cancel_positions_multi(request_id)
-    }
-}
-
-impl DataStream<AccountUpdate> for AccountUpdate {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
-        IncomingMessages::AccountValue,
-        IncomingMessages::PortfolioValue,
-        IncomingMessages::AccountUpdateTime,
-        IncomingMessages::AccountDownloadEnd,
-    ];
-
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::AccountValue => Ok(AccountUpdate::AccountValue(decoders::decode_account_value(message)?)),
-            IncomingMessages::PortfolioValue => Ok(AccountUpdate::PortfolioValue(decoders::decode_account_portfolio_value(
-                client.server_version,
-                message,
-            )?)),
-            IncomingMessages::AccountUpdateTime => Ok(AccountUpdate::UpdateTime(decoders::decode_account_update_time(message)?)),
-            IncomingMessages::AccountDownloadEnd => Ok(AccountUpdate::End),
-            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
-        }
-    }
-
-    fn cancel_message(server_version: i32, _request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
-        encoders::encode_cancel_account_updates(server_version)
-    }
-}
-
-impl DataStream<AccountUpdateMulti> for AccountUpdateMulti {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::AccountUpdateMulti, IncomingMessages::AccountUpdateMultiEnd];
-
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::AccountUpdateMulti => Ok(AccountUpdateMulti::AccountMultiValue(decoders::decode_account_multi_value(message)?)),
-            IncomingMessages::AccountUpdateMultiEnd => Ok(AccountUpdateMulti::End),
-            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
-        }
-    }
-
-    fn cancel_message(server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
-        let request_id = errors::require_request_id_for(request_id, "encode cancel account updates multi")?;
-        encoders::encode_cancel_account_updates_multi(server_version, request_id)
-    }
-}
 
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.
@@ -149,8 +27,8 @@ pub fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error>
 
 pub fn positions_multi<'a>(
     client: &'a Client,
-    account: Option<&str>,
-    model_code: Option<&str>,
+    account: Option<&AccountId>,
+    model_code: Option<&ModelCode>,
 ) -> Result<Subscription<'a, PositionUpdateMulti>, Error> {
     check_version(client.server_version(), Features::MODELS_SUPPORT)?;
 
@@ -178,7 +56,7 @@ pub fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
 // * `client`     - client
 // * `account`    - account for which to receive PnL updates
 // * `model_code` - specify to request PnL updates for a specific model
-pub fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str>) -> Result<Subscription<'a, PnL>, Error> {
+pub fn pnl<'a>(client: &'a Client, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<'a, PnL>, Error> {
     helpers::request_with_id(client, Features::PNL, |id| encoders::encode_request_pnl(id, account, model_code))
 }
 
@@ -189,19 +67,24 @@ pub fn pnl<'a>(client: &'a Client, account: &str, model_code: Option<&str>) -> R
 // * `account` - Account in which position exists
 // * `contract_id` - Contract ID of contract to receive daily PnL updates for. Note: does not return message if invalid conId is entered
 // * `model_code` - Model in which position exists
-pub fn pnl_single<'a>(client: &'a Client, account: &str, contract_id: i32, model_code: Option<&str>) -> Result<Subscription<'a, PnLSingle>, Error> {
+pub fn pnl_single<'a>(
+    client: &'a Client,
+    account: &AccountId,
+    contract_id: ContractId,
+    model_code: Option<&ModelCode>,
+) -> Result<Subscription<'a, PnLSingle>, Error> {
     helpers::request_with_id(client, Features::REALIZED_PNL, |id| {
         encoders::encode_request_pnl_single(id, account, contract_id, model_code)
     })
 }
 
-pub fn account_summary<'a>(client: &'a Client, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
+pub fn account_summary<'a>(client: &'a Client, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<'a, AccountSummaryResult>, Error> {
     helpers::request_with_id(client, Features::ACCOUNT_SUMMARY, |id| {
         encoders::encode_request_account_summary(id, group, tags)
     })
 }
 
-pub fn account_updates<'a>(client: &'a Client, account: &str) -> Result<Subscription<'a, AccountUpdate>, Error> {
+pub fn account_updates<'a>(client: &'a Client, account: &AccountId) -> Result<Subscription<'a, AccountUpdate>, Error> {
     helpers::shared_request(client, OutgoingMessages::RequestAccountData, || {
         encoders::encode_request_account_updates(client.server_version(), account)
     })
@@ -209,8 +92,8 @@ pub fn account_updates<'a>(client: &'a Client, account: &str) -> Result<Subscrip
 
 pub fn account_updates_multi<'a>(
     client: &'a Client,
-    account: Option<&str>,
-    model_code: Option<&str>,
+    account: Option<&AccountId>,
+    model_code: Option<&ModelCode>,
 ) -> Result<Subscription<'a, AccountUpdateMulti>, Error> {
     check_version(client.server_version(), Features::MODELS_SUPPORT)?;
 
@@ -255,6 +138,7 @@ pub fn server_time(client: &Client) -> Result<OffsetDateTime, Error> {
 
 #[cfg(test)]
 mod tests {
+    use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
     use crate::accounts::{AccountSummaryTags, AccountUpdateMulti};
     use crate::testdata::responses;
     use crate::{server_versions, stubs::MessageBusStub, Client, Error};
@@ -266,8 +150,10 @@ mod tests {
     fn test_pnl() {
         let (client, message_bus) = create_test_client();
 
-        let _ = client.pnl(TEST_ACCOUNT, Some(TEST_MODEL_CODE)).expect("request pnl failed");
-        let _ = client.pnl(TEST_ACCOUNT, None).expect("request pnl failed");
+        let account = AccountId(TEST_ACCOUNT.to_string());
+        let model_code = Some(ModelCode(TEST_MODEL_CODE.to_string()));
+        let _ = client.pnl(&account, model_code.as_ref()).expect("request pnl failed");
+        let _ = client.pnl(&account, None).expect("request pnl failed");
 
         assert_request_messages(
             &message_bus,
@@ -279,10 +165,11 @@ mod tests {
     fn test_pnl_single() {
         let (client, message_bus) = create_test_client();
 
-        let _ = client
-            .pnl_single(TEST_ACCOUNT, TEST_CONTRACT_ID, Some(TEST_MODEL_CODE))
-            .expect("request pnl failed");
-        let _ = client.pnl_single(TEST_ACCOUNT, TEST_CONTRACT_ID, None).expect("request pnl failed");
+        let account = AccountId(TEST_ACCOUNT.to_string());
+        let contract_id = ContractId(TEST_CONTRACT_ID);
+        let model_code = Some(ModelCode(TEST_MODEL_CODE.to_string()));
+        let _ = client.pnl_single(&account, contract_id, model_code.as_ref()).expect("request pnl failed");
+        let _ = client.pnl_single(&account, contract_id, None).expect("request pnl failed");
 
         assert_request_messages(
             &message_bus,
@@ -334,10 +221,12 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-        let account = Some("DU1234567");
-        let model_code = Some("TARGET2024");
+        let account = Some(AccountId("DU1234567".to_string()));
+        let model_code = Some(ModelCode("TARGET2024".to_string()));
 
-        let subscription = client.positions_multi(account, model_code).expect("request positions_multi failed");
+        let subscription = client
+            .positions_multi(account.as_ref(), model_code.as_ref())
+            .expect("request positions_multi failed");
 
         let first_update = subscription.next();
         assert!(
@@ -361,18 +250,18 @@ mod tests {
 
     #[test]
     fn test_account_summary() {
-        use crate::accounts::AccountSummaries;
+        use crate::accounts::AccountSummaryResult;
 
         let (client, message_bus) = create_test_client_with_responses(vec![responses::ACCOUNT_SUMMARY.into(), responses::ACCOUNT_SUMMARY_END.into()]);
 
-        let group = "All";
+        let group = AccountGroup("All".to_string());
         let tags = &[AccountSummaryTags::ACCOUNT_TYPE];
 
-        let subscription = client.account_summary(group, tags).expect("request account_summary failed");
+        let subscription = client.account_summary(&group, tags).expect("request account_summary failed");
 
         let first_update = subscription.next();
         match first_update {
-            Some(AccountSummaries::Summary(summary_data)) => {
+            Some(AccountSummaryResult::Summary(summary_data)) => {
                 assert_eq!(summary_data.account, TEST_ACCOUNT); // From responses::ACCOUNT_SUMMARY
                 assert_eq!(summary_data.tag, AccountSummaryTags::ACCOUNT_TYPE);
                 assert_eq!(summary_data.value, "FA");
@@ -382,7 +271,7 @@ mod tests {
 
         let second_update = subscription.next();
         assert!(
-            matches!(second_update, Some(AccountSummaries::End)),
+            matches!(second_update, Some(AccountSummaryResult::End)),
             "Expected AccountSummaries::End, got {:?}",
             second_update
         );
@@ -474,16 +363,16 @@ mod tests {
     fn test_account_updates() {
         use crate::accounts::AccountUpdate;
 
-        let account_name = TEST_ACCOUNT;
+        let account_name = AccountId(TEST_ACCOUNT.to_string());
 
         // Create client with account update responses
         let (client, message_bus) = create_test_client_with_responses(vec![
             format!("{}|", responses::ACCOUNT_VALUE), // AccountValue with trailing delimiter
-            format!("54|1|{}|", account_name),        // AccountDownloadEnd
+            format!("54|1|{}|", TEST_ACCOUNT),        // AccountDownloadEnd
         ]);
 
         // Subscribe to account updates
-        let subscription = client.account_updates(account_name).expect("subscribe failed");
+        let subscription = client.account_updates(&account_name).expect("subscribe failed");
 
         // First update should be AccountValue
         let first_update = subscription.next();
@@ -576,8 +465,10 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
-        let account = Some("DU1234567");
-        let subscription = client.account_updates_multi(account, None).expect("request managed accounts failed");
+        let account = Some(AccountId("DU1234567".to_string()));
+        let subscription = client
+            .account_updates_multi(account.as_ref(), None)
+            .expect("request managed accounts failed");
 
         let expected_keys = &["CashBalance", "Currency", "StockMarketValue"];
 

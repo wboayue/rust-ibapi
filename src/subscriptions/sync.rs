@@ -8,9 +8,10 @@ use std::time::Duration;
 use log::{debug, error, warn};
 
 use super::common::{process_decode_result, should_retry_error, should_store_error, ProcessingResult};
+use super::{ResponseContext, StreamDecoder};
 use crate::client::Client;
 use crate::errors::Error;
-use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{OutgoingMessages, ResponseMessage};
 use crate::transport::InternalSubscription;
 
 /// A [Subscription] is a stream of responses returned from TWS. A [Subscription] is normally returned when invoking an API that can return more than one value.
@@ -20,7 +21,7 @@ use crate::transport::InternalSubscription;
 /// Alternatively, you may poll subscriptions in a blocking or non-blocking manner using the [next](Subscription::next), [try_next](Subscription::try_next) or [next_timeout](Subscription::next_timeout) methods.
 #[allow(private_bounds)]
 #[derive(Debug)]
-pub struct Subscription<'a, T: DataStream<T> + 'static> {
+pub struct Subscription<'a, T: StreamDecoder<T> + 'static> {
     client: &'a Client,
     request_id: Option<i32>,
     order_id: Option<i32>,
@@ -29,20 +30,13 @@ pub struct Subscription<'a, T: DataStream<T> + 'static> {
     cancelled: AtomicBool,
     snapshot_ended: AtomicBool,
     subscription: InternalSubscription,
-    response_context: ResponseContext,
+    response_context: Option<ResponseContext>,
     error: Mutex<Option<Error>>,
 }
 
-// Extra metadata that might be need
-#[derive(Debug, Default)]
-pub(crate) struct ResponseContext {
-    pub(crate) request_type: Option<OutgoingMessages>,
-    pub(crate) is_smart_depth: bool,
-}
-
 #[allow(private_bounds)]
-impl<'a, T: DataStream<T> + 'static> Subscription<'a, T> {
-    pub(crate) fn new(client: &'a Client, subscription: InternalSubscription, context: ResponseContext) -> Self {
+impl<'a, T: StreamDecoder<T> + 'static> Subscription<'a, T> {
+    pub(crate) fn new(client: &'a Client, subscription: InternalSubscription, context: Option<ResponseContext>) -> Self {
         let request_id = subscription.request_id;
         let order_id = subscription.order_id;
         let message_type = subscription.message_type;
@@ -76,21 +70,21 @@ impl<'a, T: DataStream<T> + 'static> Subscription<'a, T> {
         self.cancelled.store(true, Ordering::Relaxed);
 
         if let Some(request_id) = self.request_id {
-            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, &self.response_context) {
+            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, self.response_context.as_ref()) {
                 if let Err(e) = self.client.message_bus.cancel_subscription(request_id, &message) {
                     warn!("error cancelling subscription: {e}")
                 }
                 self.subscription.cancel();
             }
         } else if let Some(order_id) = self.order_id {
-            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, &self.response_context) {
+            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, self.response_context.as_ref()) {
                 if let Err(e) = self.client.message_bus.cancel_order_subscription(order_id, &message) {
                     warn!("error cancelling order subscription: {e}")
                 }
                 self.subscription.cancel();
             }
         } else if let Some(message_type) = self.message_type {
-            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, &self.response_context) {
+            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, self.response_context.as_ref()) {
                 if let Err(e) = self.client.message_bus.cancel_shared_subscription(message_type, &message) {
                     warn!("error cancelling shared subscription: {e}")
                 }
@@ -175,7 +169,7 @@ impl<'a, T: DataStream<T> + 'static> Subscription<'a, T> {
     }
 
     fn process_message(&self, mut message: ResponseMessage) -> Option<T> {
-        match process_decode_result(T::decode(self.client, &mut message)) {
+        match process_decode_result(T::decode(self.client.server_version, &mut message)) {
             ProcessingResult::Success(val) => {
                 // Check if this decoded value represents the end of a snapshot subscription
                 if val.is_snapshot_end() {
@@ -368,7 +362,7 @@ impl<'a, T: DataStream<T> + 'static> Subscription<'a, T> {
     }
 }
 
-impl<T: DataStream<T> + 'static> Drop for Subscription<'_, T> {
+impl<T: StreamDecoder<T> + 'static> Drop for Subscription<'_, T> {
     /// Cancel subscription on drop
     fn drop(&mut self) {
         debug!("dropping subscription");
@@ -376,37 +370,14 @@ impl<T: DataStream<T> + 'static> Drop for Subscription<'_, T> {
     }
 }
 
-/// DataStream trait defines how to decode messages for a specific subscription type.
-///
-/// This trait provides:
-/// - The message IDs this stream is interested in
-/// - How to decode messages into the target type
-/// - Optionally, a cancel message generator for cleaning up subscriptions
-///
-/// This trait is used internally by the Subscription system to handle
-/// different types of streaming data from IB.
-pub(crate) trait DataStream<T> {
-    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[];
-
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<T, Error>;
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
-        Err(Error::NotImplemented)
-    }
-
-    /// Returns true if this decoded value represents the end of a snapshot subscription
-    fn is_snapshot_end(&self) -> bool {
-        false
-    }
-}
-
 /// An iterator that yields items as they become available, blocking if necessary.
 #[allow(private_bounds)]
 #[derive(Debug)]
-pub struct SubscriptionIter<'a, T: DataStream<T> + 'static> {
+pub struct SubscriptionIter<'a, T: StreamDecoder<T> + 'static> {
     subscription: &'a Subscription<'a, T>,
 }
 
-impl<T: DataStream<T> + 'static> Iterator for SubscriptionIter<'_, T> {
+impl<T: StreamDecoder<T> + 'static> Iterator for SubscriptionIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -414,7 +385,7 @@ impl<T: DataStream<T> + 'static> Iterator for SubscriptionIter<'_, T> {
     }
 }
 
-impl<'a, T: DataStream<T> + 'static> IntoIterator for &'a Subscription<'a, T> {
+impl<'a, T: StreamDecoder<T> + 'static> IntoIterator for &'a Subscription<'a, T> {
     type Item = T;
     type IntoIter = SubscriptionIter<'a, T>;
 
@@ -426,11 +397,11 @@ impl<'a, T: DataStream<T> + 'static> IntoIterator for &'a Subscription<'a, T> {
 /// An iterator that takes ownership and yields items as they become available, blocking if necessary.
 #[allow(private_bounds)]
 #[derive(Debug)]
-pub struct SubscriptionOwnedIter<'a, T: DataStream<T> + 'static> {
+pub struct SubscriptionOwnedIter<'a, T: StreamDecoder<T> + 'static> {
     subscription: Subscription<'a, T>,
 }
 
-impl<T: DataStream<T> + 'static> Iterator for SubscriptionOwnedIter<'_, T> {
+impl<T: StreamDecoder<T> + 'static> Iterator for SubscriptionOwnedIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -438,7 +409,7 @@ impl<T: DataStream<T> + 'static> Iterator for SubscriptionOwnedIter<'_, T> {
     }
 }
 
-impl<'a, T: DataStream<T> + 'static> IntoIterator for Subscription<'a, T> {
+impl<'a, T: StreamDecoder<T> + 'static> IntoIterator for Subscription<'a, T> {
     type Item = T;
     type IntoIter = SubscriptionOwnedIter<'a, T>;
 
@@ -450,11 +421,11 @@ impl<'a, T: DataStream<T> + 'static> IntoIterator for Subscription<'a, T> {
 /// An iterator that yields items as they become available without blocking.
 #[allow(private_bounds)]
 #[derive(Debug)]
-pub struct SubscriptionTryIter<'a, T: DataStream<T> + 'static> {
+pub struct SubscriptionTryIter<'a, T: StreamDecoder<T> + 'static> {
     subscription: &'a Subscription<'a, T>,
 }
 
-impl<T: DataStream<T> + 'static> Iterator for SubscriptionTryIter<'_, T> {
+impl<T: StreamDecoder<T> + 'static> Iterator for SubscriptionTryIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -465,12 +436,12 @@ impl<T: DataStream<T> + 'static> Iterator for SubscriptionTryIter<'_, T> {
 /// An iterator that yields items with a timeout.
 #[allow(private_bounds)]
 #[derive(Debug)]
-pub struct SubscriptionTimeoutIter<'a, T: DataStream<T> + 'static> {
+pub struct SubscriptionTimeoutIter<'a, T: StreamDecoder<T> + 'static> {
     subscription: &'a Subscription<'a, T>,
     timeout: Duration,
 }
 
-impl<T: DataStream<T> + 'static> Iterator for SubscriptionTimeoutIter<'_, T> {
+impl<T: StreamDecoder<T> + 'static> Iterator for SubscriptionTimeoutIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -1,6 +1,7 @@
 //! Subscription types for sync/async streaming data
 
 mod common;
+pub(crate) use common::{ResponseContext, StreamDecoder};
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
 pub mod sync;
@@ -13,4 +14,4 @@ pub mod r#async;
 pub use sync::{SharesChannel, Subscription, SubscriptionIter, SubscriptionOwnedIter, SubscriptionTimeoutIter, SubscriptionTryIter};
 
 #[cfg(feature = "async")]
-pub use r#async::{AsyncDataStream, Subscription};
+pub use r#async::Subscription;

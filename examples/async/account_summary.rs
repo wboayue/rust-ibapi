@@ -8,6 +8,7 @@
 //!
 //! Make sure TWS or IB Gateway is running with API connections enabled
 
+use ibapi::accounts::types::AccountGroup;
 use ibapi::prelude::*;
 
 #[tokio::main]
@@ -27,19 +28,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         AccountSummaryTags::BUYING_POWER,
     ];
 
-    let mut subscription = client.account_summary("All", tags).await?;
+    let mut subscription = client.account_summary(&AccountGroup("All".to_string()), tags).await?;
 
     while let Some(result) = subscription.next().await {
         match result {
             Ok(update) => match update {
-                AccountSummaries::Summary(summary) => {
+                AccountSummaryResult::Summary(summary) => {
                     if summary.currency.is_empty() {
                         println!("Account {}: {} = {}", summary.account, summary.tag, summary.value);
                     } else {
                         println!("Account {}: {} = {} {}", summary.account, summary.tag, summary.value, summary.currency);
                     }
                 }
-                AccountSummaries::End => {
+                AccountSummaryResult::End => {
                     println!("Account summary complete.");
                     break;
                 }

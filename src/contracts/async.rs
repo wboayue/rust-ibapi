@@ -3,44 +3,43 @@
 use super::common::{decoders, encoders};
 use super::*;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
-use crate::subscriptions::{AsyncDataStream, Subscription};
+use crate::subscriptions::{ResponseContext, StreamDecoder, Subscription};
 use crate::{server_versions, Client, Error};
 use log::{error, info};
 use std::sync::Arc;
 
-impl AsyncDataStream<OptionComputation> for OptionComputation {
+impl StreamDecoder<OptionComputation> for OptionComputation {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickOptionComputation];
 
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickOptionComputation => Ok(decoders::decode_option_computation(client.server_version(), message)?),
+            IncomingMessages::TickOptionComputation => Ok(decoders::decode_option_computation(server_version, message)?),
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
     }
 
-    fn cancel_message(
-        _server_version: i32,
-        request_id: Option<i32>,
-        context: &crate::client::builders::ResponseContext,
-    ) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("request id required to cancel option calculations");
-        match context.request_type {
+        match context.and_then(|c| c.request_type) {
             Some(OutgoingMessages::ReqCalcImpliedVolat) => {
                 encoders::encode_cancel_option_computation(OutgoingMessages::CancelImpliedVolatility, request_id)
             }
             Some(OutgoingMessages::ReqCalcOptionPrice) => encoders::encode_cancel_option_computation(OutgoingMessages::CancelOptionPrice, request_id),
-            _ => panic!("Unsupported request message type option computation cancel: {:?}", context.request_type),
+            _ => panic!(
+                "Unsupported request message type option computation cancel: {:?}",
+                context.and_then(|c| c.request_type)
+            ),
         }
     }
 }
 
-impl AsyncDataStream<OptionChain> for OptionChain {
+impl StreamDecoder<OptionChain> for OptionChain {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::SecurityDefinitionOptionParameter,
         IncomingMessages::SecurityDefinitionOptionParameterEnd,
     ];
 
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<OptionChain, Error> {
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<OptionChain, Error> {
         match message.message_type() {
             IncomingMessages::SecurityDefinitionOptionParameter => Ok(decoders::decode_option_chain(message)?),
             IncomingMessages::SecurityDefinitionOptionParameterEnd => Err(Error::EndOfStream),
@@ -181,7 +180,7 @@ pub async fn calculate_option_price(
     let mut subscription = client.send_request(request_id, message).await?;
 
     match subscription.next().await {
-        Some(mut message) => OptionComputation::decode(client, &mut message),
+        Some(mut message) => OptionComputation::decode(client.server_version(), &mut message),
         None => Err(Error::Simple("no data for option calculation".into())),
     }
 }
@@ -208,7 +207,7 @@ pub async fn calculate_implied_volatility(
     let mut subscription = client.send_request(request_id, message).await?;
 
     match subscription.next().await {
-        Some(mut message) => OptionComputation::decode(client, &mut message),
+        Some(mut message) => OptionComputation::decode(client.server_version(), &mut message),
         None => Err(Error::Simple("no data for option calculation".into())),
     }
 }

@@ -6,14 +6,14 @@ use crate::{
     client::ClientRequestBuilders,
     messages::IncomingMessages,
     protocol::{check_version, Features},
-    subscriptions::{r#async::AsyncDataStream, Subscription},
+    subscriptions::{ResponseContext, StreamDecoder, Subscription},
     Client, Error,
 };
 
 use super::{decoders, encoders, AutoFill, WshEventData, WshMetadata};
 
-impl AsyncDataStream<WshMetadata> for WshMetadata {
-    fn decode(_client: &Client, message: &mut crate::messages::ResponseMessage) -> Result<WshMetadata, Error> {
+impl StreamDecoder<WshMetadata> for WshMetadata {
+    fn decode(_server_version: i32, message: &mut crate::messages::ResponseMessage) -> Result<WshMetadata, Error> {
         match message.message_type() {
             IncomingMessages::WshMetaData => Ok(decoders::decode_wsh_metadata(message.clone())?),
             _ => Err(Error::UnexpectedResponse(message.clone())),
@@ -23,21 +23,21 @@ impl AsyncDataStream<WshMetadata> for WshMetadata {
     fn cancel_message(
         _server_version: i32,
         request_id: Option<i32>,
-        _context: &crate::client::builders::ResponseContext,
+        _context: Option<&ResponseContext>,
     ) -> Result<crate::messages::RequestMessage, Error> {
         encoders::encode_cancel_wsh_metadata(request_id.ok_or(Error::Simple("request_id required".into()))?)
     }
 }
 
-impl AsyncDataStream<WshEventData> for WshEventData {
-    fn decode(_client: &Client, message: &mut crate::messages::ResponseMessage) -> Result<WshEventData, Error> {
+impl StreamDecoder<WshEventData> for WshEventData {
+    fn decode(_server_version: i32, message: &mut crate::messages::ResponseMessage) -> Result<WshEventData, Error> {
         decode_event_data_message(message.clone())
     }
 
     fn cancel_message(
         _server_version: i32,
         request_id: Option<i32>,
-        _context: &crate::client::builders::ResponseContext,
+        _context: Option<&ResponseContext>,
     ) -> Result<crate::messages::RequestMessage, Error> {
         encoders::encode_cancel_wsh_event_data(request_id.ok_or(Error::Simple("request_id required".into()))?)
     }

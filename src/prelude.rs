@@ -37,7 +37,7 @@ pub use crate::orders::{order_builder, Action, ExecutionFilter, OrderUpdate, Ord
 
 // Account types
 pub use crate::accounts::{
-    AccountSummaries, AccountSummaryTags, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti,
+    AccountSummaryResult, AccountSummaryTags, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti,
 };
 
 // Client subscription type

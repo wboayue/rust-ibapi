@@ -3,7 +3,7 @@
 use std::marker::PhantomData;
 
 use crate::client::sync::Client;
-use crate::client::{DataStream, ResponseContext};
+use crate::client::{ResponseContext, StreamDecoder};
 use crate::errors::Error;
 use crate::messages::{OutgoingMessages, RequestMessage};
 use crate::subscriptions::Subscription;
@@ -45,7 +45,7 @@ impl<'a> RequestBuilder<'a> {
     /// Send the request and create a subscription
     pub fn send<T>(self, message: RequestMessage) -> Result<Subscription<'a, T>, Error>
     where
-        T: DataStream<T> + 'static,
+        T: StreamDecoder<T> + 'static,
     {
         SubscriptionBuilder::new(self.client).send_with_request_id(self.request_id, message)
     }
@@ -53,7 +53,7 @@ impl<'a> RequestBuilder<'a> {
     /// Send the request and create a subscription with context
     pub fn send_with_context<T>(self, message: RequestMessage, context: ResponseContext) -> Result<Subscription<'a, T>, Error>
     where
-        T: DataStream<T> + 'static,
+        T: StreamDecoder<T> + 'static,
     {
         SubscriptionBuilder::new(self.client)
             .with_context(context)
@@ -89,7 +89,7 @@ impl<'a> SharedRequestBuilder<'a> {
     /// Send the request and create a subscription
     pub fn send<T>(self, message: RequestMessage) -> Result<Subscription<'a, T>, Error>
     where
-        T: DataStream<T> + 'static,
+        T: StreamDecoder<T> + 'static,
     {
         SubscriptionBuilder::new(self.client).send_shared(self.message_type, message)
     }
@@ -97,7 +97,7 @@ impl<'a> SharedRequestBuilder<'a> {
     /// Send the request and create a subscription with context
     pub fn send_with_context<T>(self, message: RequestMessage, context: ResponseContext) -> Result<Subscription<'a, T>, Error>
     where
-        T: DataStream<T> + 'static,
+        T: StreamDecoder<T> + 'static,
     {
         SubscriptionBuilder::new(self.client)
             .with_context(context)
@@ -185,7 +185,7 @@ pub(crate) struct SubscriptionBuilder<'a, T> {
 #[allow(dead_code)]
 impl<'a, T> SubscriptionBuilder<'a, T>
 where
-    T: DataStream<T> + 'static,
+    T: StreamDecoder<T> + 'static,
 {
     /// Creates a new subscription builder
     pub fn new(client: &'a Client) -> Self {
@@ -210,7 +210,7 @@ where
 
     /// Builds a subscription from an internal subscription (already sent)
     pub fn build(self, subscription: InternalSubscription) -> Subscription<'a, T> {
-        Subscription::new(self.client, subscription, self.context)
+        Subscription::new(self.client, subscription, Some(self.context))
     }
 
     /// Sends a request with a specific request ID and builds the subscription
@@ -286,13 +286,13 @@ pub trait SubscriptionBuilderExt {
     /// Creates a new subscription builder
     fn subscription<T>(&self) -> SubscriptionBuilder<T>
     where
-        T: DataStream<T> + 'static;
+        T: StreamDecoder<T> + 'static;
 }
 
 impl SubscriptionBuilderExt for Client {
     fn subscription<T>(&self) -> SubscriptionBuilder<T>
     where
-        T: DataStream<T> + 'static,
+        T: StreamDecoder<T> + 'static,
     {
         SubscriptionBuilder::new(self)
     }

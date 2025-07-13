@@ -22,7 +22,7 @@ pub use r#async::Client;
 pub use crate::subscriptions::{SharesChannel, Subscription};
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
-pub(crate) use crate::subscriptions::sync::{DataStream, ResponseContext};
+pub(crate) use crate::subscriptions::{ResponseContext, StreamDecoder};
 
 #[cfg(feature = "async")]
 pub use crate::subscriptions::Subscription;

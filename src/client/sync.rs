@@ -13,7 +13,8 @@ use log::debug;
 use time::{Date, OffsetDateTime};
 use time_tz::Tz;
 
-use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
+use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
+use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::connection::{sync::Connection, ConnectionMetadata};
 use crate::contracts::{Contract, OptionComputation, SecurityType};
 use crate::errors::Error;
@@ -217,13 +218,15 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let account = "U1234567";
-    /// let subscription = client.positions_multi(Some(account), None).expect("error requesting positions by model");
+    /// use ibapi::accounts::types::AccountId;
+    ///
+    /// let account = AccountId("U1234567".to_string());
+    /// let subscription = client.positions_multi(Some(&account), None).expect("error requesting positions by model");
     /// for position in subscription.iter() {
     ///     println!("{position:?}")
     /// }
     /// ```
-    pub fn positions_multi(&self, account: Option<&str>, model_code: Option<&str>) -> Result<Subscription<PositionUpdateMulti>, Error> {
+    pub fn positions_multi(&self, account: Option<&AccountId>, model_code: Option<&ModelCode>) -> Result<Subscription<PositionUpdateMulti>, Error> {
         accounts::positions_multi(self, account, model_code)
     }
 
@@ -239,13 +242,15 @@ impl Client {
     /// use ibapi::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    /// let account = "account id";
-    /// let subscription = client.pnl(account, None).expect("error requesting pnl");
+    /// use ibapi::accounts::types::AccountId;
+    ///
+    /// let account = AccountId("account id".to_string());
+    /// let subscription = client.pnl(&account, None).expect("error requesting pnl");
     /// for pnl in subscription.iter() {
     ///     println!("{pnl:?}")
     /// }
     /// ```
-    pub fn pnl(&self, account: &str, model_code: Option<&str>) -> Result<Subscription<PnL>, Error> {
+    pub fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
         accounts::pnl(self, account, model_code)
     }
 
@@ -263,15 +268,22 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let account = "<account id>";
-    /// let contract_id = 1001;
+    /// use ibapi::accounts::types::{AccountId, ContractId};
     ///
-    /// let subscription = client.pnl_single(account, contract_id, None).expect("error requesting pnl");
+    /// let account = AccountId("<account id>".to_string());
+    /// let contract_id = ContractId(1001);
+    ///
+    /// let subscription = client.pnl_single(&account, contract_id, None).expect("error requesting pnl");
     /// for pnl in &subscription {
     ///     println!("{pnl:?}")
     /// }
     /// ```
-    pub fn pnl_single<'a>(&'a self, account: &str, contract_id: i32, model_code: Option<&str>) -> Result<Subscription<'a, PnLSingle>, Error> {
+    pub fn pnl_single<'a>(
+        &'a self,
+        account: &AccountId,
+        contract_id: ContractId,
+        model_code: Option<&ModelCode>,
+    ) -> Result<Subscription<'a, PnLSingle>, Error> {
         accounts::pnl_single(self, account, contract_id, model_code)
     }
 
@@ -286,17 +298,18 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::accounts::AccountSummaryTags;
+    /// use ibapi::accounts::types::AccountGroup;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let group = "All";
+    /// let group = AccountGroup("All".to_string());
     ///
-    /// let subscription = client.account_summary(group, AccountSummaryTags::ALL).expect("error requesting account summary");
+    /// let subscription = client.account_summary(&group, &[AccountSummaryTags::ACCOUNT_TYPE]).expect("error requesting account summary");
     /// for summary in &subscription {
     ///     println!("{summary:?}")
     /// }
     /// ```
-    pub fn account_summary<'a>(&'a self, group: &str, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
+    pub fn account_summary<'a>(&'a self, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<'a, AccountSummaryResult>, Error> {
         accounts::account_summary(self, group, tags)
     }
 
@@ -315,9 +328,11 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let account = "U1234567";
+    /// use ibapi::accounts::types::AccountId;
     ///
-    /// let subscription = client.account_updates(account).expect("error requesting account updates");
+    /// let account = AccountId("U1234567".to_string());
+    ///
+    /// let subscription = client.account_updates(&account).expect("error requesting account updates");
     /// for update in &subscription {
     ///     println!("{update:?}");
     ///
@@ -327,7 +342,7 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub fn account_updates<'a>(&'a self, account: &str) -> Result<Subscription<'a, AccountUpdate>, Error> {
+    pub fn account_updates<'a>(&'a self, account: &AccountId) -> Result<Subscription<'a, AccountUpdate>, Error> {
         accounts::account_updates(self, account)
     }
 
@@ -347,9 +362,11 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let account = Some("U1234567");
+    /// use ibapi::accounts::types::AccountId;
     ///
-    /// let subscription = client.account_updates_multi(account, None).expect("error requesting account updates multi");
+    /// let account = AccountId("U1234567".to_string());
+    ///
+    /// let subscription = client.account_updates_multi(Some(&account), None).expect("error requesting account updates multi");
     /// for update in &subscription {
     ///     println!("{update:?}");
     ///
@@ -361,8 +378,8 @@ impl Client {
     /// ```
     pub fn account_updates_multi<'a>(
         &'a self,
-        account: Option<&str>,
-        model_code: Option<&str>,
+        account: Option<&AccountId>,
+        model_code: Option<&ModelCode>,
     ) -> Result<Subscription<'a, AccountUpdateMulti>, Error> {
         accounts::account_updates_multi(self, account, model_code)
     }

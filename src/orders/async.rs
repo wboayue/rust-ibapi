@@ -4,15 +4,15 @@ use time::OffsetDateTime;
 
 use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::{AsyncDataStream, Subscription};
+use crate::subscriptions::{StreamDecoder, Subscription};
 use crate::{Client, Error};
 use std::sync::Arc;
 
 use super::common::{decoders, encoders, verify};
 use super::*;
 
-// Implement AsyncDataStream traits for the order types
-impl AsyncDataStream<PlaceOrder> for PlaceOrder {
+// Implement DataStream traits for the order types
+impl StreamDecoder<PlaceOrder> for PlaceOrder {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::OpenOrder,
         IncomingMessages::OrderStatus,
@@ -21,28 +21,19 @@ impl AsyncDataStream<PlaceOrder> for PlaceOrder {
         IncomingMessages::Error,
     ];
 
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(PlaceOrder::OpenOrder(decoders::decode_open_order(
-                client.server_version(),
-                message.clone(),
-            )?)),
-            IncomingMessages::OrderStatus => Ok(PlaceOrder::OrderStatus(decoders::decode_order_status(client.server_version(), message)?)),
-            IncomingMessages::ExecutionData => Ok(PlaceOrder::ExecutionData(decoders::decode_execution_data(
-                client.server_version(),
-                message,
-            )?)),
-            IncomingMessages::CommissionsReport => Ok(PlaceOrder::CommissionReport(decoders::decode_commission_report(
-                client.server_version(),
-                message,
-            )?)),
+            IncomingMessages::OpenOrder => Ok(PlaceOrder::OpenOrder(decoders::decode_open_order(server_version, message.clone())?)),
+            IncomingMessages::OrderStatus => Ok(PlaceOrder::OrderStatus(decoders::decode_order_status(server_version, message)?)),
+            IncomingMessages::ExecutionData => Ok(PlaceOrder::ExecutionData(decoders::decode_execution_data(server_version, message)?)),
+            IncomingMessages::CommissionsReport => Ok(PlaceOrder::CommissionReport(decoders::decode_commission_report(server_version, message)?)),
             IncomingMessages::Error => Ok(PlaceOrder::Message(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 }
 
-impl AsyncDataStream<OrderUpdate> for OrderUpdate {
+impl StreamDecoder<OrderUpdate> for OrderUpdate {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::OpenOrder,
         IncomingMessages::OrderStatus,
@@ -51,19 +42,13 @@ impl AsyncDataStream<OrderUpdate> for OrderUpdate {
         IncomingMessages::Error,
     ];
 
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(OrderUpdate::OpenOrder(decoders::decode_open_order(
-                client.server_version(),
-                message.clone(),
-            )?)),
-            IncomingMessages::OrderStatus => Ok(OrderUpdate::OrderStatus(decoders::decode_order_status(client.server_version(), message)?)),
-            IncomingMessages::ExecutionData => Ok(OrderUpdate::ExecutionData(decoders::decode_execution_data(
-                client.server_version(),
-                message,
-            )?)),
+            IncomingMessages::OpenOrder => Ok(OrderUpdate::OpenOrder(decoders::decode_open_order(server_version, message.clone())?)),
+            IncomingMessages::OrderStatus => Ok(OrderUpdate::OrderStatus(decoders::decode_order_status(server_version, message)?)),
+            IncomingMessages::ExecutionData => Ok(OrderUpdate::ExecutionData(decoders::decode_execution_data(server_version, message)?)),
             IncomingMessages::CommissionsReport => Ok(OrderUpdate::CommissionReport(decoders::decode_commission_report(
-                client.server_version(),
+                server_version,
                 message,
             )?)),
             IncomingMessages::Error => Ok(OrderUpdate::Message(Notice::from(message))),
@@ -72,19 +57,19 @@ impl AsyncDataStream<OrderUpdate> for OrderUpdate {
     }
 }
 
-impl AsyncDataStream<CancelOrder> for CancelOrder {
+impl StreamDecoder<CancelOrder> for CancelOrder {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::OrderStatus, IncomingMessages::Error];
 
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::OrderStatus => Ok(CancelOrder::OrderStatus(decoders::decode_order_status(client.server_version(), message)?)),
+            IncomingMessages::OrderStatus => Ok(CancelOrder::OrderStatus(decoders::decode_order_status(server_version, message)?)),
             IncomingMessages::Error => Ok(CancelOrder::Notice(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 }
 
-impl AsyncDataStream<Orders> for Orders {
+impl StreamDecoder<Orders> for Orders {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::CompletedOrder,
         IncomingMessages::CommissionsReport,
@@ -95,15 +80,12 @@ impl AsyncDataStream<Orders> for Orders {
         IncomingMessages::Error,
     ];
 
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::CompletedOrder => Ok(Orders::OrderData(decoders::decode_completed_order(
-                client.server_version(),
-                message.clone(),
-            )?)),
-            IncomingMessages::CommissionsReport => Ok(Orders::OrderData(decoders::decode_open_order(client.server_version(), message.clone())?)),
-            IncomingMessages::OpenOrder => Ok(Orders::OrderData(decoders::decode_open_order(client.server_version(), message.clone())?)),
-            IncomingMessages::OrderStatus => Ok(Orders::OrderStatus(decoders::decode_order_status(client.server_version(), message)?)),
+            IncomingMessages::CompletedOrder => Ok(Orders::OrderData(decoders::decode_completed_order(server_version, message.clone())?)),
+            IncomingMessages::CommissionsReport => Ok(Orders::OrderData(decoders::decode_open_order(server_version, message.clone())?)),
+            IncomingMessages::OpenOrder => Ok(Orders::OrderData(decoders::decode_open_order(server_version, message.clone())?)),
+            IncomingMessages::OrderStatus => Ok(Orders::OrderStatus(decoders::decode_order_status(server_version, message)?)),
             IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => Err(Error::EndOfStream),
             IncomingMessages::Error => Ok(Orders::Notice(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
@@ -111,7 +93,7 @@ impl AsyncDataStream<Orders> for Orders {
     }
 }
 
-impl AsyncDataStream<Executions> for Executions {
+impl StreamDecoder<Executions> for Executions {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::ExecutionData,
         IncomingMessages::CommissionsReport,
@@ -119,16 +101,10 @@ impl AsyncDataStream<Executions> for Executions {
         IncomingMessages::Error,
     ];
 
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::ExecutionData => Ok(Executions::ExecutionData(decoders::decode_execution_data(
-                client.server_version(),
-                message,
-            )?)),
-            IncomingMessages::CommissionsReport => Ok(Executions::CommissionReport(decoders::decode_commission_report(
-                client.server_version(),
-                message,
-            )?)),
+            IncomingMessages::ExecutionData => Ok(Executions::ExecutionData(decoders::decode_execution_data(server_version, message)?)),
+            IncomingMessages::CommissionsReport => Ok(Executions::CommissionReport(decoders::decode_commission_report(server_version, message)?)),
             IncomingMessages::ExecutionDataEnd => Err(Error::EndOfStream),
             IncomingMessages::Error => Ok(Executions::Notice(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
@@ -136,19 +112,13 @@ impl AsyncDataStream<Executions> for Executions {
     }
 }
 
-impl AsyncDataStream<ExerciseOptions> for ExerciseOptions {
+impl StreamDecoder<ExerciseOptions> for ExerciseOptions {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus, IncomingMessages::Error];
 
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(ExerciseOptions::OpenOrder(decoders::decode_open_order(
-                client.server_version(),
-                message.clone(),
-            )?)),
-            IncomingMessages::OrderStatus => Ok(ExerciseOptions::OrderStatus(decoders::decode_order_status(
-                client.server_version(),
-                message,
-            )?)),
+            IncomingMessages::OpenOrder => Ok(ExerciseOptions::OpenOrder(decoders::decode_open_order(server_version, message.clone())?)),
+            IncomingMessages::OrderStatus => Ok(ExerciseOptions::OrderStatus(decoders::decode_order_status(server_version, message)?)),
             IncomingMessages::Error => Ok(ExerciseOptions::Notice(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }

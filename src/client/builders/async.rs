@@ -5,11 +5,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use super::common::ResponseContext;
 use crate::client::r#async::Client;
 use crate::errors::Error;
 use crate::messages::{OutgoingMessages, RequestMessage};
-use crate::subscriptions::Subscription;
+use crate::subscriptions::{ResponseContext, StreamDecoder, Subscription};
 use crate::transport::AsyncInternalSubscription;
 
 /// Builder for creating requests with IDs
@@ -48,7 +47,7 @@ impl<'a> RequestBuilder<'a> {
     /// Send the request and create a subscription
     pub async fn send<T>(self, message: RequestMessage) -> Result<Subscription<T>, Error>
     where
-        T: crate::subscriptions::AsyncDataStream<T> + Send + 'static,
+        T: StreamDecoder<T> + Send + 'static,
     {
         SubscriptionBuilder::<T>::new(self.client)
             .send_with_request_id::<T>(self.request_id, message)
@@ -84,7 +83,7 @@ impl<'a> SharedRequestBuilder<'a> {
     /// Send the request and create a subscription
     pub async fn send<T>(self, message: RequestMessage) -> Result<Subscription<T>, Error>
     where
-        T: crate::subscriptions::AsyncDataStream<T> + Send + 'static,
+        T: StreamDecoder<T> + Send + 'static,
     {
         SubscriptionBuilder::<T>::new(self.client)
             .send_shared::<T>(self.message_type, message)
@@ -198,7 +197,7 @@ where
     /// Sends a request with a specific request ID and builds the subscription
     pub async fn send_with_request_id<D>(self, request_id: i32, message: RequestMessage) -> Result<Subscription<T>, Error>
     where
-        D: crate::subscriptions::AsyncDataStream<T> + 'static,
+        D: StreamDecoder<T> + 'static,
     {
         // Subscribe to the response channel first
         let subscription = self.client.message_bus.subscribe(request_id).await;
@@ -220,7 +219,7 @@ where
     /// Sends a shared request (no ID) and builds the subscription
     pub async fn send_shared<D>(self, message_type: OutgoingMessages, message: RequestMessage) -> Result<Subscription<T>, Error>
     where
-        D: crate::subscriptions::AsyncDataStream<T> + 'static,
+        D: StreamDecoder<T> + 'static,
     {
         // Subscribe to the shared channel first
         let subscription = self.client.message_bus.subscribe_shared(message_type).await;
@@ -241,7 +240,7 @@ where
     /// Sends an order request and builds the subscription
     pub async fn send_order<D>(self, order_id: i32, message: RequestMessage) -> Result<Subscription<T>, Error>
     where
-        D: crate::subscriptions::AsyncDataStream<T> + 'static,
+        D: StreamDecoder<T> + 'static,
     {
         // Send the request
         self.client.message_bus.send_request(message).await?;

@@ -7,7 +7,7 @@
 //! ```
 
 use clap::{arg, Command};
-use ibapi::Client;
+use ibapi::{accounts::types::AccountId, Client};
 
 fn main() {
     env_logger::init();
@@ -23,7 +23,7 @@ fn main() {
 
     let client = Client::connect(gateway_url, 919).expect("connection failed");
 
-    let subscription = client.pnl(account, None).expect("pnl request failed");
+    let subscription = client.pnl(&AccountId(account.clone()), None).expect("pnl request failed");
 
     // Get next item non-blocking
     if let Some(pnl) = subscription.try_next() {

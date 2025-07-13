@@ -6,7 +6,7 @@
 //! cargo run --example account_summary
 //! ```
 
-use ibapi::accounts::{AccountSummaries, AccountSummaryTags};
+use ibapi::accounts::{types::AccountGroup, AccountSummaryResult, AccountSummaryTags};
 use ibapi::Client;
 
 fn main() {
@@ -25,18 +25,20 @@ fn main() {
         AccountSummaryTags::BUYING_POWER,
     ];
 
-    let subscription = client.account_summary("All", tags).expect("error requesting account summary");
+    let subscription = client
+        .account_summary(&AccountGroup("All".to_string()), tags)
+        .expect("error requesting account summary");
 
     for update in &subscription {
         match update {
-            AccountSummaries::Summary(summary) => {
+            AccountSummaryResult::Summary(summary) => {
                 if summary.currency.is_empty() {
                     println!("Account {}: {} = {}", summary.account, summary.tag, summary.value);
                 } else {
                     println!("Account {}: {} = {} {}", summary.account, summary.tag, summary.value, summary.currency);
                 }
             }
-            AccountSummaries::End => {
+            AccountSummaryResult::End => {
                 println!("Account summary complete.");
                 subscription.cancel();
             }

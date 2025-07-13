@@ -3,7 +3,7 @@
 use time::Date;
 
 use crate::{
-    client::{DataStream, ResponseContext, Subscription},
+    client::{ResponseContext, StreamDecoder, Subscription},
     messages::IncomingMessages,
     protocol::{check_version, Features},
     Client, Error,
@@ -11,26 +11,34 @@ use crate::{
 
 use super::{decoders, encoders, AutoFill, WshEventData, WshMetadata};
 
-impl DataStream<WshMetadata> for WshMetadata {
-    fn decode(_client: &Client, message: &mut crate::messages::ResponseMessage) -> Result<WshMetadata, Error> {
+impl StreamDecoder<WshMetadata> for WshMetadata {
+    fn decode(_server_version: i32, message: &mut crate::messages::ResponseMessage) -> Result<WshMetadata, Error> {
         match message.message_type() {
             IncomingMessages::WshMetaData => Ok(decoders::decode_wsh_metadata(message.clone())?),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<crate::messages::RequestMessage, Error> {
+    fn cancel_message(
+        _server_version: i32,
+        request_id: Option<i32>,
+        _context: Option<&ResponseContext>,
+    ) -> Result<crate::messages::RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel wsh metadata message.");
         encoders::encode_cancel_wsh_metadata(request_id)
     }
 }
 
-impl DataStream<WshEventData> for WshEventData {
-    fn decode(_client: &Client, message: &mut crate::messages::ResponseMessage) -> Result<WshEventData, Error> {
+impl StreamDecoder<WshEventData> for WshEventData {
+    fn decode(_server_version: i32, message: &mut crate::messages::ResponseMessage) -> Result<WshEventData, Error> {
         decode_event_data_message(message.clone())
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<crate::messages::RequestMessage, Error> {
+    fn cancel_message(
+        _server_version: i32,
+        request_id: Option<i32>,
+        _context: Option<&ResponseContext>,
+    ) -> Result<crate::messages::RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel wsh metadata message.");
         encoders::encode_cancel_wsh_event_data(request_id)
     }
@@ -122,7 +130,7 @@ pub fn wsh_event_data_by_filter<'a>(
         auto_fill,
     )?;
     let subscription = client.send_request(request_id, request)?;
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+    Ok(Subscription::new(client, subscription, None))
 }
 
 #[cfg(test)]
@@ -221,12 +229,12 @@ mod tests {
         let request_id = 9000;
 
         // Test WshMetadata cancel
-        let cancel_msg = WshMetadata::cancel_message(0, Some(request_id), &ResponseContext::default());
+        let cancel_msg = WshMetadata::cancel_message(0, Some(request_id), None);
         assert!(cancel_msg.is_ok());
         assert_eq!(cancel_msg.unwrap().encode_simple(), "101|9000|");
 
         // Test WshEventData cancel
-        let cancel_msg = WshEventData::cancel_message(0, Some(request_id), &ResponseContext::default());
+        let cancel_msg = WshEventData::cancel_message(0, Some(request_id), None);
         assert!(cancel_msg.is_ok());
         assert_eq!(cancel_msg.unwrap().encode_simple(), "103|9000|");
     }
@@ -235,19 +243,19 @@ mod tests {
     fn test_data_stream_decode() {
         // Test WshMetadata decode
         let mut message = ResponseMessage::from("104\09000\0{\"test\":\"metadata\"}\0");
-        let result = WshMetadata::decode(&Client::stubbed(Arc::new(MessageBusStub::default()), 0), &mut message);
+        let result = WshMetadata::decode(0, &mut message);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().data_json, "{\"test\":\"metadata\"}");
 
         // Test WshEventData decode - success case
         let mut message = ResponseMessage::from("105\09000\0{\"test\":\"event\"}\0");
-        let result = WshEventData::decode(&Client::stubbed(Arc::new(MessageBusStub::default()), 0), &mut message);
+        let result = WshEventData::decode(0, &mut message);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().data_json, "{\"test\":\"event\"}");
 
         // Test WshEventData decode - error case
         let mut error_message = ResponseMessage::from("4\02\09000\0321\0Test error message\0");
-        let result = WshEventData::decode(&Client::stubbed(Arc::new(MessageBusStub::default()), 0), &mut error_message);
+        let result = WshEventData::decode(0, &mut error_message);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::Message(321, _)));
     }
@@ -256,13 +264,13 @@ mod tests {
     fn test_decode_unexpected_message_type() {
         // Test unexpected message type for WshMetadata
         let mut message = ResponseMessage::from("1\09000\0unexpected\0");
-        let result = WshMetadata::decode(&Client::stubbed(Arc::new(MessageBusStub::default()), 0), &mut message);
+        let result = WshMetadata::decode(0, &mut message);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::UnexpectedResponse(_)));
 
         // Test unexpected message type for WshEventData
         let mut message = ResponseMessage::from("1\09000\0unexpected\0");
-        let result = WshEventData::decode(&Client::stubbed(Arc::new(MessageBusStub::default()), 0), &mut message);
+        let result = WshEventData::decode(0, &mut message);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::UnexpectedResponse(_)));
     }

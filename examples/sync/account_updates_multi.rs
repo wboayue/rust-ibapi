@@ -6,7 +6,7 @@
 //! cargo run --example account_updates_multi
 //! ```
 
-use ibapi::accounts::AccountUpdateMulti;
+use ibapi::accounts::{types::AccountId, AccountUpdateMulti};
 use ibapi::Client;
 
 fn main() {
@@ -14,10 +14,10 @@ fn main() {
 
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
-    let account = Some("DU1234567");
+    let account = Some(AccountId("DU1234567".to_string()));
 
     let subscription = client
-        .account_updates_multi(account, None)
+        .account_updates_multi(account.as_ref(), None)
         .expect("error requesting account updates multi");
     for update in &subscription {
         println!("{update:?}");
