@@ -200,4 +200,9 @@ impl AsyncMessageBus for MessageBusStub {
 
         Ok(AsyncInternalSubscription::new(receiver))
     }
+
+    #[cfg(test)]
+    fn request_messages(&self) -> Vec<RequestMessage> {
+        self.request_messages.read().unwrap().clone()
+    }
 }

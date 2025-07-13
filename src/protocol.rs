@@ -69,6 +69,7 @@ impl Features {
     pub const BOND_ISSUERID: ProtocolFeature = ProtocolFeature::new("bond issuer ID", server_versions::BOND_ISSUERID);
     pub const SEC_ID_TYPE: ProtocolFeature = ProtocolFeature::new("security ID type", server_versions::SEC_ID_TYPE);
     pub const SMART_COMPONENTS: ProtocolFeature = ProtocolFeature::new("smart components", server_versions::REQ_SMART_COMPONENTS);
+    pub const LINKING: ProtocolFeature = ProtocolFeature::new("linking", server_versions::LINKING);
 
     // News features
     pub const NEWS_PROVIDERS: ProtocolFeature = ProtocolFeature::new("news providers", server_versions::REQ_NEWS_PROVIDERS);
@@ -88,6 +89,11 @@ impl Features {
     // Other features
     pub const FA_PROFILE_DESUPPORT: ProtocolFeature = ProtocolFeature::new("FA profile desupport", server_versions::FA_PROFILE_DESUPPORT);
     pub const MARKET_RULES: ProtocolFeature = ProtocolFeature::new("market rules", server_versions::MARKET_RULES);
+    pub const REQ_MATCHING_SYMBOLS: ProtocolFeature = ProtocolFeature::new("matching symbols", server_versions::REQ_MATCHING_SYMBOLS);
+    pub const REQ_CALC_IMPLIED_VOLAT: ProtocolFeature = ProtocolFeature::new("calculate implied volatility", server_versions::REQ_CALC_IMPLIED_VOLAT);
+    pub const REQ_CALC_OPTION_PRICE: ProtocolFeature = ProtocolFeature::new("calculate option price", server_versions::REQ_CALC_OPTION_PRICE);
+    pub const SEC_DEF_OPT_PARAMS_REQ: ProtocolFeature =
+        ProtocolFeature::new("security definition option parameters", server_versions::SEC_DEF_OPT_PARAMS_REQ);
 }
 
 /// Checks if the server version supports a given feature.
