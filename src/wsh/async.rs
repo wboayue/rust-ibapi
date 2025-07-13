@@ -262,109 +262,149 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_wsh_event_data_by_filter_integration() {
-        let stub = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec!["105|9000|{\"validated\":true,\"data\":{\"events\":[]}}|".to_owned()],
-        });
-        let message_bus = stub.clone();
+    async fn test_wsh_event_data_by_filter_integration_table() {
+        use crate::wsh::common::test_tables::{event_data_by_filter_integration_test_cases, IntegrationExpectedResult};
 
-        let client = Client::stubbed(message_bus, crate::server_versions::WSH_EVENT_DATA_FILTERS_DATE);
-        let filter = "filter=value";
-        let result = wsh_event_data_by_filter(
-            &client,
-            filter,
-            Some(100),
-            Some(AutoFill {
-                competitors: true,
-                portfolio: false,
-                watchlist: true,
-            }),
-        )
-        .await;
+        for test_case in event_data_by_filter_integration_test_cases() {
+            let stub = Arc::new(MessageBusStub {
+                request_messages: RwLock::new(vec![]),
+                response_messages: test_case.response_messages,
+            });
+            let message_bus = stub.clone();
 
-        let request_messages = stub.request_messages();
-        assert_eq!(request_messages[0].encode_simple(), "102|9000||filter=value|1|0|1|||100|");
+            let client = Client::stubbed(message_bus, test_case.server_version);
 
-        assert!(result.is_ok(), "failed to request wsh event data by filter: {}", result.err().unwrap());
-    }
+            let result = match test_case.name {
+                "successful filter request with autofill" => {
+                    let filter = "filter=value";
+                    let result = wsh_event_data_by_filter(
+                        &client,
+                        filter,
+                        Some(100),
+                        Some(AutoFill {
+                            competitors: true,
+                            portfolio: false,
+                            watchlist: true,
+                        }),
+                    )
+                    .await;
 
-    #[tokio::test]
-    async fn test_wsh_event_data_by_filter_no_autofill() {
-        let stub = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec!["105|9000|{\"validated\":true,\"data\":{\"events\":[]}}|".to_owned()],
-        });
-        let message_bus = stub.clone();
+                    if result.is_ok() {
+                        let request_messages = stub.request_messages();
+                        assert_eq!(request_messages[0].encode_simple(), "102|9000||filter=value|1|0|1|||100|");
+                    }
+                    result
+                }
+                "successful filter request without autofill" => {
+                    let filter = "filter=value";
+                    let result = wsh_event_data_by_filter(&client, filter, None, None).await;
 
-        let client = Client::stubbed(message_bus, crate::server_versions::WSH_EVENT_DATA_FILTERS);
-        let filter = "filter=value";
-        let result = wsh_event_data_by_filter(&client, filter, None, None).await;
+                    if result.is_ok() {
+                        let request_messages = stub.request_messages();
+                        assert_eq!(request_messages[0].encode_simple(), "102|9000||filter=value|0|0|0|");
+                    }
+                    result
+                }
+                _ => wsh_event_data_by_filter(&client, "filter", None, None).await,
+            };
 
-        let request_messages = stub.request_messages();
-        assert_eq!(request_messages[0].encode_simple(), "102|9000||filter=value|0|0|0|");
-
-        assert!(result.is_ok(), "failed to request wsh event data by filter: {}", result.err().unwrap());
-    }
-
-    #[tokio::test]
-    async fn test_invalid_server_version_wsh_event_data_filters() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-        });
-
-        let client = Client::stubbed(message_bus, crate::server_versions::WSHE_CALENDAR);
-        let result = wsh_event_data_by_filter(&client, "filter", None, None).await;
-
-        assert!(matches!(result, Err(Error::ServerVersion(_, _, _))));
-    }
-
-    #[tokio::test]
-    async fn test_invalid_server_version_wsh_event_data_date_filters() {
-        use time::macros::date;
-
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-        });
-
-        let client = Client::stubbed(message_bus, crate::server_versions::WSH_EVENT_DATA_FILTERS);
-        let result = wsh_event_data_by_contract(&client, 12345, Some(date!(2024 - 01 - 01)), Some(date!(2024 - 12 - 31)), Some(100), None).await;
-
-        assert!(matches!(result, Err(Error::ServerVersion(_, _, _))));
-    }
-
-    #[tokio::test]
-    async fn test_wsh_event_data_by_filter_subscription_integration() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![
-                "105|9000|{\"event\":1}|".to_owned(),
-                "105|9000|{\"event\":2}|".to_owned(),
-                "105|9000|{\"event\":3}|".to_owned(),
-            ],
-        });
-
-        let client = Client::stubbed(message_bus, crate::server_versions::WSH_EVENT_DATA_FILTERS);
-        let result = wsh_event_data_by_filter(&client, "test_filter", None, None).await;
-
-        assert!(result.is_ok());
-        let mut subscription = result.unwrap();
-
-        // Collect all events
-        let mut events = vec![];
-        while let Some(event_result) = subscription.next().await {
-            match event_result {
-                Ok(event) => events.push(event),
-                Err(e) => panic!("Unexpected error: {e:?}"),
+            match test_case.expected_result {
+                IntegrationExpectedResult::Success => {
+                    assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
+                }
+                IntegrationExpectedResult::ServerVersionError => {
+                    assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
+                    if let Err(error) = result {
+                        assert!(
+                            matches!(error, Error::ServerVersion(_, _, _)),
+                            "Test '{}' wrong error type",
+                            test_case.name
+                        );
+                    }
+                }
             }
         }
+    }
 
-        assert_eq!(events.len(), 3);
-        assert_eq!(events[0].data_json, "{\"event\":1}");
-        assert_eq!(events[1].data_json, "{\"event\":2}");
-        assert_eq!(events[2].data_json, "{\"event\":3}");
+    #[tokio::test]
+    async fn test_server_version_validation_table() {
+        use crate::wsh::common::test_tables::server_version_test_cases;
+
+        for test_case in server_version_test_cases() {
+            let message_bus = Arc::new(MessageBusStub {
+                request_messages: RwLock::new(vec![]),
+                response_messages: vec![],
+            });
+
+            let client = Client::stubbed(message_bus, test_case.server_version);
+
+            let result = if let Some(contract_id) = test_case.contract_id {
+                wsh_event_data_by_contract(
+                    &client,
+                    contract_id,
+                    test_case.start_date,
+                    test_case.end_date,
+                    test_case.limit,
+                    test_case.auto_fill,
+                )
+                .await
+            } else {
+                wsh_event_data_by_filter(&client, "filter", test_case.limit, test_case.auto_fill)
+                    .await
+                    .map(|_| WshEventData { data_json: "".to_string() })
+            };
+
+            if test_case.expected_error {
+                assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
+                if let Err(error) = result {
+                    assert!(
+                        matches!(error, Error::ServerVersion(_, _, _)),
+                        "Test '{}' wrong error type",
+                        test_case.name
+                    );
+                }
+            } else {
+                assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_subscription_integration_table() {
+        use crate::wsh::common::test_tables::subscription_integration_test_cases;
+
+        for test_case in subscription_integration_test_cases() {
+            let message_bus = Arc::new(MessageBusStub {
+                request_messages: RwLock::new(vec![]),
+                response_messages: test_case.response_messages,
+            });
+
+            let client = Client::stubbed(message_bus, test_case.server_version);
+            let result = wsh_event_data_by_filter(&client, "test_filter", None, None).await;
+
+            assert!(result.is_ok(), "Test '{}' failed to create subscription", test_case.name);
+            let mut subscription = result.unwrap();
+
+            // Collect all events
+            let mut events = vec![];
+            while let Some(event_result) = subscription.next().await {
+                match event_result {
+                    Ok(event) => events.push(event.data_json),
+                    Err(e) => panic!("Test '{}' unexpected error: {e:?}", test_case.name),
+                }
+            }
+
+            assert_eq!(
+                events.len(),
+                test_case.expected_events.len(),
+                "Test '{}' event count mismatch",
+                test_case.name
+            );
+
+            for (i, (received, expected)) in events.iter().zip(test_case.expected_events.iter()).enumerate() {
+                assert_eq!(received, expected, "Test '{}' event {} mismatch", test_case.name, i);
+            }
+        }
     }
 
     #[tokio::test]
