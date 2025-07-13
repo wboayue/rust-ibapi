@@ -499,105 +499,94 @@ mod tests {
 
     #[test]
     fn test_server_version_errors() {
-        use crate::server_versions;
+        use super::common::test_data::tables::VERSION_TEST_CASES;
 
-        // Test PnL version check
-        let (client_old, _) = create_test_client_with_version(server_versions::PNL - 1);
         let account = AccountId(TEST_ACCOUNT.to_string());
-        let result = client_old.pnl(&account, None);
-        assert!(result.is_err(), "Expected version error for PnL");
-        if let Err(error) = result {
-            assert!(matches!(error, Error::ServerVersion(_, _, _)));
-        }
-
-        // Test PnL Single version check
-        let (client_pnl_single, _) = create_test_client_with_version(server_versions::REALIZED_PNL - 1);
-        let result = client_pnl_single.pnl_single(&account, ContractId(1001), None);
-        assert!(result.is_err(), "Expected version error for PnL Single");
-        if let Err(error) = result {
-            assert!(matches!(error, Error::ServerVersion(_, _, _)));
-        }
-
-        // Test Account Summary version check
-        let (client_summary, _) = create_test_client_with_version(server_versions::ACCOUNT_SUMMARY - 1);
         let group = AccountGroup("All".to_string());
-        let result = client_summary.account_summary(&group, &[AccountSummaryTags::ACCOUNT_TYPE]);
-        assert!(result.is_err(), "Expected version error for Account Summary");
-        if let Err(error) = result {
-            assert!(matches!(error, Error::ServerVersion(_, _, _)));
-        }
 
-        // Test Positions Multi version check
-        let (client_multi, _) = create_test_client_with_version(server_versions::MODELS_SUPPORT - 1);
-        let result = client_multi.positions_multi(Some(&account), None);
-        assert!(result.is_err(), "Expected version error for Positions Multi");
-        if let Err(error) = result {
-            assert!(matches!(error, Error::ServerVersion(_, _, _)));
-        }
+        for test_case in VERSION_TEST_CASES {
+            let (client, _) = create_test_client_with_version(test_case.required_version - 1);
 
-        // Test Account Updates Multi version check
-        let result = client_multi.account_updates_multi(Some(&account), None);
-        assert!(result.is_err(), "Expected version error for Account Updates Multi");
-        if let Err(error) = result {
-            assert!(matches!(error, Error::ServerVersion(_, _, _)));
-        }
+            let result = match test_case.function_name {
+                "PnL" => client.pnl(&account, None).map(|_| ()),
+                "PnL Single" => client.pnl_single(&account, ContractId(1001), None).map(|_| ()),
+                "Account Summary" => client.account_summary(&group, &[AccountSummaryTags::ACCOUNT_TYPE]).map(|_| ()),
+                "Positions Multi" => client.positions_multi(Some(&account), None).map(|_| ()),
+                "Account Updates Multi" => client.account_updates_multi(Some(&account), None).map(|_| ()),
+                "Family Codes" => client.family_codes().map(|_| ()),
+                "Positions" => client.positions().map(|_| ()),
+                _ => panic!("Unknown function: {}", test_case.function_name),
+            };
 
-        // Test Family Codes version check
-        let (client_family, _) = create_test_client_with_version(server_versions::REQ_FAMILY_CODES - 1);
-        let result = client_family.family_codes();
-        assert!(result.is_err(), "Expected version error for Family Codes");
-        if let Err(error) = result {
-            assert!(matches!(error, Error::ServerVersion(_, _, _)));
-        }
-
-        // Test Positions version check
-        let (client_positions, _) = create_test_client_with_version(server_versions::POSITIONS - 1);
-        let result = client_positions.positions();
-        assert!(result.is_err(), "Expected version error for Positions");
-        if let Err(error) = result {
-            assert!(matches!(error, Error::ServerVersion(_, _, _)));
+            assert!(result.is_err(), "Expected version error for {}", test_case.function_name);
+            if let Err(error) = result {
+                assert!(
+                    matches!(error, Error::ServerVersion(_, _, _)),
+                    "Expected ServerVersion error for {}, got: {:?}",
+                    test_case.function_name,
+                    error
+                );
+            }
         }
     }
 
     #[test]
     fn test_managed_accounts_additional_scenarios() {
-        // Test single account response
-        let (client_single, message_bus) = create_test_client_with_responses(vec!["15|1|SINGLE_ACCOUNT|".into()]);
-        let accounts = client_single.managed_accounts().expect("managed_accounts failed");
-        assert_eq!(accounts, vec!["SINGLE_ACCOUNT"], "Single account mismatch");
-        assert_request_messages(&message_bus, &["17|1|"]);
+        use super::common::test_data::tables::managed_accounts_test_cases;
 
-        // Test multiple accounts with extra commas
-        let (client_extra, message_bus_extra) = create_test_client_with_responses(vec!["15|1|ACC1,ACC2,|".into()]);
-        let accounts_extra = client_extra.managed_accounts().expect("managed_accounts failed");
-        assert_eq!(accounts_extra, vec!["ACC1", "ACC2", ""], "Extra comma handling failed");
-        assert_request_messages(&message_bus_extra, &["17|1|"]);
+        for test_case in managed_accounts_test_cases() {
+            let (client, message_bus) = if test_case.responses.is_empty() {
+                create_test_client()
+            } else {
+                create_test_client_with_responses(test_case.responses)
+            };
+
+            let accounts = client
+                .managed_accounts()
+                .expect(&format!("managed_accounts failed for {}", test_case.scenario));
+            assert_eq!(accounts, test_case.expected, "{}: {}", test_case.scenario, test_case.description);
+            assert_request_messages(&message_bus, &["17|1|"]);
+        }
     }
 
     #[test]
     fn test_server_time_comprehensive() {
-        use time::macros::datetime;
+        use super::common::test_data::tables::server_time_test_cases;
 
-        // Test edge case timestamps
-        let edge_cases = vec![
-            ("0", datetime!(1970-01-01 0:00 UTC)),         // Unix epoch
-            ("946684800", datetime!(2000-01-01 0:00 UTC)), // Y2K
-        ];
-
-        for (timestamp_str, expected) in edge_cases {
-            let (client, message_bus) = create_test_client_with_responses(vec![format!("49|1|{}|", timestamp_str)]);
+        for test_case in server_time_test_cases() {
+            let (client, message_bus) = if test_case.responses.is_empty() {
+                create_test_client()
+            } else {
+                create_test_client_with_responses(test_case.responses)
+            };
 
             let result = client.server_time();
-            assert!(result.is_ok(), "Expected Ok for timestamp {}", timestamp_str);
-            assert_eq!(result.unwrap(), expected, "Timestamp {} mismatch", timestamp_str);
-            assert_request_messages(&message_bus, &["49|1|"]);
-        }
 
-        // Test overflow timestamp
-        let (client_overflow, message_bus_overflow) = create_test_client_with_responses(vec!["49|1|99999999999999999999|".into()]);
-        let result_overflow = client_overflow.server_time();
-        assert!(result_overflow.is_err(), "Expected error for overflow timestamp");
-        assert_request_messages(&message_bus_overflow, &["49|1|"]);
+            match test_case.expected_result {
+                Ok(expected_time) => {
+                    assert!(result.is_ok(), "Expected Ok for {}, got: {:?}", test_case.scenario, result.err());
+                    assert_eq!(result.unwrap(), expected_time, "Timestamp mismatch for {}", test_case.scenario);
+                }
+                Err("No response from server") => {
+                    assert!(result.is_err(), "Expected error for {}", test_case.scenario);
+                    if let Err(Error::Simple(msg)) = result {
+                        assert_eq!(msg, "No response from server", "Error message mismatch for {}", test_case.scenario);
+                    } else {
+                        panic!("Expected Simple error with 'No response from server' for {}", test_case.scenario);
+                    }
+                }
+                Err(_) => {
+                    assert!(result.is_err(), "Expected error for {}", test_case.scenario);
+                    // Accept Parse, ParseInt, or Simple errors for invalid timestamps
+                    match result.unwrap_err() {
+                        Error::Parse(_, _, _) | Error::ParseInt(_) | Error::Simple(_) => {}
+                        other => panic!("Expected Parse, ParseInt, or Simple error for {}, got: {:?}", test_case.scenario, other),
+                    }
+                }
+            }
+
+            assert_request_messages(&message_bus, &[test_case.expected_request]);
+        }
     }
 
     #[test]
@@ -678,42 +667,50 @@ mod tests {
 
     #[test]
     fn test_pnl_single_edge_cases() {
-        // Test edge case contract IDs
+        use super::common::test_data::tables::contract_id_test_cases;
+
+        let test_cases = contract_id_test_cases();
         let (client, message_bus) = create_test_client();
-
         let account = AccountId(TEST_ACCOUNT.to_string());
+        let mut subscriptions = Vec::new();
 
-        // Test with zero contract ID
-        let sub1 = client
-            .pnl_single(&account, ContractId(0), None)
-            .expect("PnL single with contract ID 0 failed");
+        // Create all subscriptions
+        for test_case in &test_cases {
+            let sub = client
+                .pnl_single(&account, test_case.contract_id, None)
+                .expect(&format!("PnL single failed for {}", test_case.description));
+            subscriptions.push(sub);
+        }
 
-        // Test with very large contract ID
-        let sub2 = client
-            .pnl_single(&account, ContractId(i32::MAX), None)
-            .expect("PnL single with large contract ID failed");
-
-        // Drop subscriptions to trigger cancellation in sync mode
-        drop(sub1);
-        drop(sub2);
+        // Drop all subscriptions to trigger cancellation
+        drop(subscriptions);
 
         let request_messages = get_request_messages(&message_bus);
         assert!(
-            request_messages.len() >= 4,
-            "Expected subscribe and cancel messages, got {}",
-            request_messages.len()
+            request_messages.len() >= test_cases.len() * 2,
+            "Expected at least {} messages (subscribe + cancel for each)",
+            test_cases.len() * 2
         );
 
         // Verify contract IDs are encoded correctly
-        assert!(request_messages[0].contains("|0|"), "First request should contain contract ID 0");
-
-        // Find the second subscription message (not cancel message)
         let subscription_messages: Vec<_> = request_messages.iter().filter(|msg| msg.starts_with("94|")).collect();
-        assert!(subscription_messages.len() >= 2, "Expected at least 2 subscription messages");
-        assert!(
-            subscription_messages[1].contains(&format!("|{}|", i32::MAX)),
-            "Second request should contain max contract ID"
+
+        assert_eq!(
+            subscription_messages.len(),
+            test_cases.len(),
+            "Expected {} subscription messages",
+            test_cases.len()
         );
+
+        for (i, test_case) in test_cases.iter().enumerate() {
+            assert!(
+                subscription_messages[i].contains(&test_case.expected_pattern),
+                "Request {} should contain {} for {}",
+                i,
+                test_case.expected_pattern,
+                test_case.description
+            );
+        }
     }
 
     #[test]

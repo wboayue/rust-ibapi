@@ -8,3 +8,6 @@ pub(super) mod stream_decoders;
 
 #[cfg(test)]
 pub(super) mod test_utils;
+
+#[cfg(test)]
+pub(super) mod test_data;
