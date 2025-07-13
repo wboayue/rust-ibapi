@@ -463,4 +463,91 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_client_methods() {
+        for test_case in client_method_test_cases() {
+            let message_bus = Arc::new(MessageBusStub {
+                request_messages: RwLock::new(vec![]),
+                response_messages: test_case.response_messages.clone(),
+            });
+
+            let client = Client::stubbed(
+                message_bus,
+                match &test_case.test_type {
+                    ClientMethodTest::CalculateOptionPrice { .. } => server_versions::REQ_CALC_OPTION_PRICE,
+                    ClientMethodTest::CalculateImpliedVolatility { .. } => server_versions::REQ_CALC_IMPLIED_VOLAT,
+                },
+            );
+
+            let result = match &test_case.test_type {
+                ClientMethodTest::CalculateOptionPrice {
+                    contract,
+                    volatility,
+                    underlying_price,
+                } => client.calculate_option_price(contract, *volatility, *underlying_price),
+                ClientMethodTest::CalculateImpliedVolatility {
+                    contract,
+                    option_price,
+                    underlying_price,
+                } => client.calculate_implied_volatility(contract, *option_price, *underlying_price),
+            };
+
+            assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
+
+            let request_messages = client.message_bus.request_messages();
+            assert_eq!(
+                request_messages[0].encode_simple(),
+                test_case.expected_request,
+                "Test '{}' request mismatch",
+                test_case.name
+            );
+
+            let computation = result.unwrap();
+            match &test_case.expected_result {
+                ClientMethodResult::OptionComputation {
+                    option_price,
+                    implied_volatility,
+                } => {
+                    assert_eq!(computation.option_price, *option_price, "Test '{}' option price mismatch", test_case.name);
+                    assert_eq!(
+                        computation.implied_volatility, *implied_volatility,
+                        "Test '{}' implied volatility mismatch",
+                        test_case.name
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_contract_details_errors() {
+        for test_case in contract_details_error_test_cases() {
+            let message_bus = Arc::new(MessageBusStub {
+                request_messages: RwLock::new(vec![]),
+                response_messages: test_case.response_messages.clone(),
+            });
+
+            let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+            let result = contract_details(&client, &test_case.contract);
+
+            if test_case.should_error {
+                assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
+                if let Some(expected_error) = test_case.error_contains {
+                    let error_msg = result.unwrap_err().to_string();
+                    assert!(
+                        error_msg.contains(expected_error),
+                        "Test '{}' error should contain '{}', got '{}'",
+                        test_case.name,
+                        expected_error,
+                        error_msg
+                    );
+                }
+            } else {
+                assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
+                let contracts = result.unwrap();
+                assert_eq!(contracts.len(), test_case.expected_count, "Test '{}' count mismatch", test_case.name);
+            }
+        }
+    }
 }
