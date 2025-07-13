@@ -114,3 +114,100 @@ pub mod helpers {
     /// Re-export constants at module level for easier access
     pub use constants::*;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::helpers::*;
+    use crate::messages::RequestMessage;
+    use crate::server_versions;
+
+    #[test]
+    fn test_create_test_client() {
+        let (client, message_bus) = create_test_client();
+        assert_eq!(client.server_version(), server_versions::SIZE_RULES);
+        assert!(message_bus.request_messages.read().unwrap().is_empty());
+        assert!(message_bus.response_messages.is_empty());
+    }
+
+    #[test]
+    fn test_create_test_client_with_version() {
+        let custom_version = 150;
+        let (client, message_bus) = create_test_client_with_version(custom_version);
+        assert_eq!(client.server_version(), custom_version);
+        assert!(message_bus.request_messages.read().unwrap().is_empty());
+        assert!(message_bus.response_messages.is_empty());
+    }
+
+    #[test]
+    fn test_create_test_client_with_responses() {
+        let responses = vec!["1|2|123|".to_string(), "2|2|456|".to_string()];
+        let (client, message_bus) = create_test_client_with_responses(responses.clone());
+        assert_eq!(client.server_version(), server_versions::SIZE_RULES);
+        assert_eq!(message_bus.response_messages, responses);
+    }
+
+    #[test]
+    fn test_assert_request_messages() {
+        let (_client, message_bus) = create_test_client();
+
+        // Add some test messages
+        {
+            let mut request_messages = message_bus.request_messages.write().unwrap();
+            let mut msg1 = RequestMessage::new();
+            msg1.push_field(&1);
+            msg1.push_field(&"test1");
+            request_messages.push(msg1);
+
+            let mut msg2 = RequestMessage::new();
+            msg2.push_field(&2);
+            msg2.push_field(&"test2");
+            request_messages.push(msg2);
+        }
+
+        assert_request_messages(&message_bus, &["1|test1|", "2|test2|"]);
+    }
+
+    #[test]
+    fn test_get_request_messages() {
+        let (_client, message_bus) = create_test_client();
+
+        {
+            let mut request_messages = message_bus.request_messages.write().unwrap();
+            let mut msg1 = RequestMessage::new();
+            msg1.push_field(&10);
+            msg1.push_field(&"hello");
+            request_messages.push(msg1);
+        }
+
+        let messages = get_request_messages(&message_bus);
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0], "10|hello|");
+    }
+
+    #[test]
+    fn test_assert_request_contains() {
+        let (_client, message_bus) = create_test_client();
+
+        {
+            let mut request_messages = message_bus.request_messages.write().unwrap();
+            let mut msg = RequestMessage::new();
+            msg.push_field(&1);
+            msg.push_field(&"hello world");
+            msg.push_field(&42);
+            request_messages.push(msg);
+        }
+
+        assert_request_contains(&message_bus, 0, "hello");
+        assert_request_contains(&message_bus, 0, "world");
+        assert_request_contains(&message_bus, 0, "42");
+    }
+
+    #[test]
+    fn test_constants() {
+        // Test that constants are accessible and have expected values
+        assert_eq!(TEST_ACCOUNT, "DU1234567");
+        assert_eq!(TEST_CONTRACT_ID, 1001);
+        assert_eq!(TEST_ORDER_ID, 5001);
+        assert_eq!(TEST_TICKER_ID, 100);
+    }
+}
