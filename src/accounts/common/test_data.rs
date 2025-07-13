@@ -169,4 +169,221 @@ pub(in crate::accounts) mod tables {
             },
         ]
     }
+
+    /// Test case for PnL parameter combinations
+    #[derive(Debug, Clone)]
+    pub struct PnLTestCase {
+        pub description: &'static str,
+        pub model_code: Option<String>,
+        pub expected_pattern: &'static str,
+    }
+
+    /// Test case for positions multi parameter combinations
+    #[derive(Debug, Clone)]
+    pub struct PositionsMultiTestCase {
+        pub description: &'static str,
+        pub account: Option<String>,
+        pub model_code: Option<String>,
+    }
+
+    /// Test case for account summary tag combinations
+    #[derive(Debug, Clone)]
+    pub struct AccountSummaryTagTestCase {
+        pub description: &'static str,
+        pub group: String,
+        pub tags: Vec<&'static str>,
+        pub expected_tag_encoding: Option<&'static str>,
+        pub should_succeed: bool,
+        pub expect_responses: bool,
+    }
+
+    /// Test case for subscription lifecycle testing
+    #[derive(Debug, Clone)]
+    pub struct SubscriptionLifecycleTestCase {
+        pub description: &'static str,
+        pub subscription_type: SubscriptionType,
+        pub expected_subscribe_pattern: &'static str,
+        pub expected_cancel_pattern: &'static str,
+    }
+
+    /// Types of subscriptions for lifecycle testing
+    #[derive(Debug, Clone)]
+    pub enum SubscriptionType {
+        PnL {
+            account: String,
+            model_code: Option<String>,
+        },
+        PnLSingle {
+            account: String,
+            contract_id: i32,
+            model_code: Option<String>,
+        },
+        Positions,
+        PositionsMulti {
+            account: Option<String>,
+            model_code: Option<String>,
+        },
+        AccountSummary {
+            group: String,
+            tags: Vec<String>,
+        },
+    }
+
+    /// PnL parameter combination test cases
+    pub fn pnl_parameter_test_cases() -> Vec<PnLTestCase> {
+        vec![
+            PnLTestCase {
+                description: "PnL with MODEL1",
+                model_code: Some("MODEL1".to_string()),
+                expected_pattern: "MODEL1",
+            },
+            PnLTestCase {
+                description: "PnL with MODEL2",
+                model_code: Some("MODEL2".to_string()),
+                expected_pattern: "MODEL2",
+            },
+            PnLTestCase {
+                description: "PnL with no model code",
+                model_code: None,
+                expected_pattern: "||",
+            },
+        ]
+    }
+
+    /// Positions multi parameter combination test cases
+    pub fn positions_multi_parameter_test_cases() -> Vec<PositionsMultiTestCase> {
+        vec![
+            PositionsMultiTestCase {
+                description: "both account and model",
+                account: Some("DU1234567".to_string()),
+                model_code: Some("TARGET2024".to_string()),
+            },
+            PositionsMultiTestCase {
+                description: "account only",
+                account: Some("DU1234567".to_string()),
+                model_code: None,
+            },
+            PositionsMultiTestCase {
+                description: "model only",
+                account: None,
+                model_code: Some("TARGET2024".to_string()),
+            },
+            PositionsMultiTestCase {
+                description: "neither account nor model",
+                account: None,
+                model_code: None,
+            },
+        ]
+    }
+
+    /// Account summary tag combination test cases
+    pub fn account_summary_tag_test_cases() -> Vec<AccountSummaryTagTestCase> {
+        vec![
+            AccountSummaryTagTestCase {
+                description: "multiple standard tags",
+                group: "All".to_string(),
+                tags: vec!["AccountType", "NetLiquidation", "TotalCashValue"],
+                expected_tag_encoding: Some("AccountType,NetLiquidation,TotalCashValue"),
+                should_succeed: true,
+                expect_responses: true,
+            },
+            AccountSummaryTagTestCase {
+                description: "single tag",
+                group: "All".to_string(),
+                tags: vec!["AccountType"],
+                expected_tag_encoding: Some("AccountType"),
+                should_succeed: true,
+                expect_responses: true,
+            },
+            AccountSummaryTagTestCase {
+                description: "empty tags list",
+                group: "All".to_string(),
+                tags: vec![],
+                expected_tag_encoding: Some(""),
+                should_succeed: true,
+                expect_responses: false,
+            },
+            AccountSummaryTagTestCase {
+                description: "many tags",
+                group: "All".to_string(),
+                tags: vec![
+                    "AccountType",
+                    "NetLiquidation",
+                    "TotalCashValue",
+                    "SettledCash",
+                    "AccruedCash",
+                    "BuyingPower",
+                ],
+                expected_tag_encoding: Some("AccountType,NetLiquidation,TotalCashValue,SettledCash,AccruedCash,BuyingPower"),
+                should_succeed: true,
+                expect_responses: true,
+            },
+            AccountSummaryTagTestCase {
+                description: "different group",
+                group: "Family".to_string(),
+                tags: vec!["AccountType", "NetLiquidation"],
+                expected_tag_encoding: Some("AccountType,NetLiquidation"),
+                should_succeed: true,
+                expect_responses: true,
+            },
+        ]
+    }
+
+    /// Subscription lifecycle test cases
+    pub fn subscription_lifecycle_test_cases() -> Vec<SubscriptionLifecycleTestCase> {
+        vec![
+            SubscriptionLifecycleTestCase {
+                description: "PnL subscription with model code",
+                subscription_type: SubscriptionType::PnL {
+                    account: "DU1234567".to_string(),
+                    model_code: Some("TARGET2024".to_string()),
+                },
+                expected_subscribe_pattern: "92|",
+                expected_cancel_pattern: "93|",
+            },
+            SubscriptionLifecycleTestCase {
+                description: "PnL subscription without model code",
+                subscription_type: SubscriptionType::PnL {
+                    account: "DU1234567".to_string(),
+                    model_code: None,
+                },
+                expected_subscribe_pattern: "92|",
+                expected_cancel_pattern: "93|",
+            },
+            SubscriptionLifecycleTestCase {
+                description: "Positions subscription",
+                subscription_type: SubscriptionType::Positions,
+                expected_subscribe_pattern: "61|",
+                expected_cancel_pattern: "64|",
+            },
+            SubscriptionLifecycleTestCase {
+                description: "Account Summary subscription",
+                subscription_type: SubscriptionType::AccountSummary {
+                    group: "All".to_string(),
+                    tags: vec!["AccountType".to_string()],
+                },
+                expected_subscribe_pattern: "62|",
+                expected_cancel_pattern: "63|",
+            },
+            SubscriptionLifecycleTestCase {
+                description: "Positions Multi subscription",
+                subscription_type: SubscriptionType::PositionsMulti {
+                    account: Some("DU1234567".to_string()),
+                    model_code: Some("TARGET2024".to_string()),
+                },
+                expected_subscribe_pattern: "74|",
+                expected_cancel_pattern: "75|",
+            },
+            SubscriptionLifecycleTestCase {
+                description: "PnL Single subscription",
+                subscription_type: SubscriptionType::PnLSingle {
+                    account: "DU1234567".to_string(),
+                    contract_id: 1001,
+                    model_code: Some("TARGET2024".to_string()),
+                },
+                expected_subscribe_pattern: "94|",
+                expected_cancel_pattern: "95|",
+            },
+        ]
+    }
 }

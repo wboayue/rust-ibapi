@@ -628,141 +628,290 @@ mod tests {
 
     #[tokio::test]
     async fn test_account_summary_multiple_tags() {
-        // Test account summary with multiple tags
-        let (client, message_bus) = create_test_client_with_responses(vec![responses::ACCOUNT_SUMMARY.into(), responses::ACCOUNT_SUMMARY_END.into()]);
+        use super::common::test_data::tables::account_summary_tag_test_cases;
 
-        let group = AccountGroup("All".to_string());
-        let tags = &[
-            AccountSummaryTags::ACCOUNT_TYPE,
-            AccountSummaryTags::NET_LIQUIDATION,
-            AccountSummaryTags::TOTAL_CASH_VALUE,
-        ];
+        let test_cases = account_summary_tag_test_cases();
 
-        let mut subscription = account_summary(&client, &group, tags).await.expect("account_summary failed");
+        for test_case in test_cases {
+            let group = AccountGroup(test_case.group.clone());
 
-        // Should get at least one summary
-        let first_update = subscription.next().await;
-        assert!(matches!(first_update, Some(Ok(AccountSummaryResult::Summary(_)))));
+            if test_case.expect_responses {
+                // Create client with mock responses for tests that expect data
+                let (client, message_bus) =
+                    create_test_client_with_responses(vec![responses::ACCOUNT_SUMMARY.into(), responses::ACCOUNT_SUMMARY_END.into()]);
 
-        // Should get end marker
-        let second_update = subscription.next().await;
-        assert!(matches!(second_update, Some(Ok(AccountSummaryResult::End))));
+                let mut subscription = account_summary(&client, &group, &test_case.tags)
+                    .await
+                    .expect(&format!("account_summary failed for {}", test_case.description));
 
-        drop(subscription);
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                // Should get at least one summary
+                let first_update = subscription.next().await;
+                assert!(
+                    matches!(first_update, Some(Ok(AccountSummaryResult::Summary(_)))),
+                    "Expected summary for {}",
+                    test_case.description
+                );
 
-        // Verify the encoded tags are sent correctly
-        let request_messages = get_request_messages(&message_bus);
-        assert!(
-            request_messages[0].contains("AccountType,NetLiquidation,TotalCashValue"),
-            "Request should contain all tags"
-        );
-    }
+                // Should get end marker
+                let second_update = subscription.next().await;
+                assert!(
+                    matches!(second_update, Some(Ok(AccountSummaryResult::End))),
+                    "Expected end marker for {}",
+                    test_case.description
+                );
 
-    #[tokio::test]
-    async fn test_account_summary_empty_tags() {
-        // Test account summary with empty tags list
-        let (client, _) = create_test_client();
-        let group = AccountGroup("All".to_string());
-        let tags: &[&str] = &[];
+                drop(subscription);
+                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
-        let result = account_summary(&client, &group, tags).await;
-        assert!(result.is_ok(), "Empty tags should be allowed");
+                // Verify the encoded tags are sent correctly
+                if let Some(expected_encoding) = test_case.expected_tag_encoding {
+                    let request_messages = get_request_messages(&message_bus);
+                    assert!(!request_messages.is_empty(), "Expected request messages for {}", test_case.description);
+
+                    if !expected_encoding.is_empty() {
+                        assert!(
+                            request_messages[0].contains(expected_encoding),
+                            "Request should contain '{}' for {}, got: {}",
+                            expected_encoding,
+                            test_case.description,
+                            request_messages[0]
+                        );
+                    }
+                }
+            } else {
+                // For tests that don't expect responses (like empty tags)
+                let (client, _) = create_test_client();
+                let result = account_summary(&client, &group, &test_case.tags).await;
+
+                if test_case.should_succeed {
+                    assert!(result.is_ok(), "Expected success for {}, got: {:?}", test_case.description, result.err());
+                } else {
+                    assert!(result.is_err(), "Expected failure for {}", test_case.description);
+                }
+            }
+        }
     }
 
     #[tokio::test]
     async fn test_pnl_different_model_codes() {
-        // Test PnL requests with different model codes
+        use super::common::test_data::tables::pnl_parameter_test_cases;
+
+        let test_cases = pnl_parameter_test_cases();
         let (client, message_bus) = create_test_client();
-
         let account = AccountId(TEST_ACCOUNT.to_string());
-        let model1 = ModelCode("MODEL1".to_string());
-        let model2 = ModelCode("MODEL2".to_string());
+        let mut subscriptions = Vec::new();
 
-        // Request PnL with different model codes
-        let sub1 = pnl(&client, &account, Some(&model1)).await.expect("PnL request 1 failed");
-        let sub2 = pnl(&client, &account, Some(&model2)).await.expect("PnL request 2 failed");
-        let sub3 = pnl(&client, &account, None).await.expect("PnL request 3 failed");
-
-        drop(sub1);
-        drop(sub2);
-        drop(sub3);
-
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
-        let request_messages = get_request_messages(&message_bus);
-        assert!(request_messages.len() >= 6, "Expected at least 6 messages");
-
-        // Verify model codes are encoded correctly - filter for subscription messages only
-        let pnl_requests: Vec<_> = request_messages.iter().filter(|msg| msg.starts_with("92|")).collect();
-        assert!(pnl_requests.len() >= 3, "Expected at least 3 PnL subscription messages");
-        assert!(pnl_requests[0].contains("MODEL1"), "First request should contain MODEL1");
-        assert!(pnl_requests[1].contains("MODEL2"), "Second request should contain MODEL2");
-        assert!(pnl_requests[2].ends_with("||"), "Third request should have empty model code");
-    }
-
-    #[tokio::test]
-    async fn test_positions_multi_with_various_parameters() {
-        // Test positions_multi with different parameter combinations
-        let (client, message_bus) = create_test_client_with_responses(vec![responses::POSITION_MULTI.into(), responses::POSITION_MULTI_END.into()]);
-
-        let account = AccountId(TEST_ACCOUNT.to_string());
-        let model = ModelCode(TEST_MODEL_CODE.to_string());
-
-        // Test all parameter combinations
-        let sub1 = positions_multi(&client, Some(&account), Some(&model))
-            .await
-            .expect("positions_multi with both params failed");
-        drop(sub1);
-
-        let sub2 = positions_multi(&client, Some(&account), None)
-            .await
-            .expect("positions_multi with account only failed");
-        drop(sub2);
-
-        let sub3 = positions_multi(&client, None, Some(&model))
-            .await
-            .expect("positions_multi with model only failed");
-        drop(sub3);
-
-        let sub4 = positions_multi(&client, None, None).await.expect("positions_multi with no params failed");
-        drop(sub4);
-
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
-        let request_messages = get_request_messages(&message_bus);
-        assert!(request_messages.len() >= 8, "Expected at least 8 messages (4 subscribe + 4 cancel)");
-    }
-
-    #[tokio::test]
-    async fn test_subscription_cleanup_on_drop() {
-        // Test that subscriptions are properly cleaned up when dropped
-        let (client, message_bus) = create_test_client();
-
-        let account = AccountId(TEST_ACCOUNT.to_string());
-
-        // Create and immediately drop subscriptions
-        {
-            let _sub1 = pnl(&client, &account, None).await.expect("PnL subscription failed");
-            let _sub2 = positions(&client).await.expect("Positions subscription failed");
-            // Subscriptions dropped here
+        // Create all subscriptions
+        for test_case in &test_cases {
+            let model_code = test_case.model_code.as_ref().map(|s| ModelCode(s.clone()));
+            let sub = pnl(&client, &account, model_code.as_ref())
+                .await
+                .expect(&format!("PnL request failed for {}", test_case.description));
+            subscriptions.push(sub);
         }
 
-        // Allow time for async cleanup
+        // Drop all subscriptions to trigger cancellation
+        drop(subscriptions);
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         let request_messages = get_request_messages(&message_bus);
         assert!(
-            request_messages.len() >= 4,
-            "Expected subscribe and cancel messages for both subscriptions"
+            request_messages.len() >= test_cases.len() * 2,
+            "Expected at least {} messages (subscribe + cancel for each)",
+            test_cases.len() * 2
         );
 
-        // Should have cancel messages
-        let cancel_count = request_messages
-            .iter()
-            .filter(|msg| msg.starts_with("93|") || msg.starts_with("64|"))
-            .count();
-        assert!(cancel_count >= 2, "Expected at least 2 cancel messages");
+        // Verify model codes are encoded correctly - filter for subscription messages only
+        let pnl_requests: Vec<_> = request_messages.iter().filter(|msg| msg.starts_with("92|")).collect();
+
+        assert_eq!(
+            pnl_requests.len(),
+            test_cases.len(),
+            "Expected {} PnL subscription messages",
+            test_cases.len()
+        );
+
+        for (i, test_case) in test_cases.iter().enumerate() {
+            if test_case.expected_pattern == "||" {
+                assert!(
+                    pnl_requests[i].ends_with("||"),
+                    "Request {} should end with empty model code for {}",
+                    i,
+                    test_case.description
+                );
+            } else {
+                assert!(
+                    pnl_requests[i].contains(test_case.expected_pattern),
+                    "Request {} should contain {} for {}",
+                    i,
+                    test_case.expected_pattern,
+                    test_case.description
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_positions_multi_with_various_parameters() {
+        use super::common::test_data::tables::positions_multi_parameter_test_cases;
+
+        let test_cases = positions_multi_parameter_test_cases();
+        let (client, message_bus) = create_test_client_with_responses(vec![responses::POSITION_MULTI.into(), responses::POSITION_MULTI_END.into()]);
+        let mut subscriptions = Vec::new();
+
+        // Create all subscriptions
+        for test_case in &test_cases {
+            let account = test_case.account.as_ref().map(|s| AccountId(s.clone()));
+            let model_code = test_case.model_code.as_ref().map(|s| ModelCode(s.clone()));
+
+            let sub = positions_multi(&client, account.as_ref(), model_code.as_ref())
+                .await
+                .expect(&format!("positions_multi failed for {}", test_case.description));
+            subscriptions.push(sub);
+        }
+
+        // Drop all subscriptions to trigger cancellation
+        drop(subscriptions);
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        let request_messages = get_request_messages(&message_bus);
+        assert!(
+            request_messages.len() >= test_cases.len() * 2,
+            "Expected at least {} messages (subscribe + cancel for each)",
+            test_cases.len() * 2
+        );
+
+        // Verify subscription messages are correct
+        let subscription_messages: Vec<_> = request_messages.iter().filter(|msg| msg.starts_with("74|")).collect();
+
+        assert_eq!(
+            subscription_messages.len(),
+            test_cases.len(),
+            "Expected {} subscription messages",
+            test_cases.len()
+        );
+
+        // Note: In async mode, the actual request IDs may vary, so we verify the pattern structure
+        // rather than exact matches since request IDs are generated dynamically
+        for (i, test_case) in test_cases.iter().enumerate() {
+            let message = subscription_messages[i];
+
+            // Verify message starts with positions_multi opcode
+            assert!(message.starts_with("74|"), "Message should start with positions_multi opcode");
+
+            // Check account parameter presence
+            if let Some(expected_account) = &test_case.account {
+                assert!(
+                    message.contains("DU1234567") || message.contains(expected_account),
+                    "Message should contain account for {}",
+                    test_case.description
+                );
+            }
+
+            // Check model code parameter presence
+            if let Some(expected_model) = &test_case.model_code {
+                assert!(
+                    message.contains("TARGET2024") || message.contains(expected_model),
+                    "Message should contain model code for {}",
+                    test_case.description
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_subscription_cleanup_on_drop() {
+        use super::common::test_data::tables::{subscription_lifecycle_test_cases, SubscriptionType};
+
+        let test_cases = subscription_lifecycle_test_cases();
+        let (client, message_bus) = create_test_client();
+
+        // Test each subscription type individually
+        for test_case in &test_cases {
+            match &test_case.subscription_type {
+                SubscriptionType::PnL { account, model_code } => {
+                    let account_id = AccountId(account.clone());
+                    let model = model_code.as_ref().map(|s| ModelCode(s.clone()));
+                    let sub = pnl(&client, &account_id, model.as_ref())
+                        .await
+                        .expect(&format!("PnL subscription failed for {}", test_case.description));
+                    drop(sub); // Trigger cancellation immediately
+                }
+                SubscriptionType::Positions => {
+                    let sub = positions(&client)
+                        .await
+                        .expect(&format!("Positions subscription failed for {}", test_case.description));
+                    drop(sub); // Trigger cancellation immediately
+                }
+                SubscriptionType::AccountSummary { group, tags } => {
+                    let group_id = AccountGroup(group.clone());
+                    let tag_refs: Vec<&str> = tags.iter().map(|s| s.as_str()).collect();
+                    let sub = account_summary(&client, &group_id, &tag_refs)
+                        .await
+                        .expect(&format!("Account Summary subscription failed for {}", test_case.description));
+                    drop(sub); // Trigger cancellation immediately
+                }
+                SubscriptionType::PositionsMulti { account, model_code } => {
+                    let account_id = account.as_ref().map(|s| AccountId(s.clone()));
+                    let model = model_code.as_ref().map(|s| ModelCode(s.clone()));
+                    let sub = positions_multi(&client, account_id.as_ref(), model.as_ref())
+                        .await
+                        .expect(&format!("Positions Multi subscription failed for {}", test_case.description));
+                    drop(sub); // Trigger cancellation immediately
+                }
+                SubscriptionType::PnLSingle {
+                    account,
+                    contract_id,
+                    model_code,
+                } => {
+                    let account_id = AccountId(account.clone());
+                    let contract = ContractId(*contract_id);
+                    let model = model_code.as_ref().map(|s| ModelCode(s.clone()));
+                    let sub = pnl_single(&client, &account_id, contract, model.as_ref())
+                        .await
+                        .expect(&format!("PnL Single subscription failed for {}", test_case.description));
+                    drop(sub); // Trigger cancellation immediately
+                }
+            }
+
+            // Allow time for async cleanup after each subscription
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        }
+
+        let request_messages = get_request_messages(&message_bus);
+        assert!(
+            request_messages.len() >= test_cases.len() * 2,
+            "Expected subscribe and cancel messages for {} subscriptions, got {} messages",
+            test_cases.len(),
+            request_messages.len()
+        );
+
+        // Verify subscription and cancellation patterns
+        for test_case in &test_cases {
+            let subscribe_count = request_messages
+                .iter()
+                .filter(|msg| msg.starts_with(test_case.expected_subscribe_pattern))
+                .count();
+
+            let cancel_count = request_messages
+                .iter()
+                .filter(|msg| msg.starts_with(test_case.expected_cancel_pattern))
+                .count();
+
+            assert!(
+                subscribe_count >= 1,
+                "Expected at least 1 subscribe message with pattern '{}' for {}",
+                test_case.expected_subscribe_pattern,
+                test_case.description
+            );
+
+            assert!(
+                cancel_count >= 1,
+                "Expected at least 1 cancel message with pattern '{}' for {}",
+                test_case.expected_cancel_pattern,
+                test_case.description
+            );
+        }
     }
 
     #[tokio::test]
