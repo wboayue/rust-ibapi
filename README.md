@@ -10,6 +10,28 @@ This library provides a comprehensive Rust implementation of the Interactive Bro
 
 With this fully featured API, you can retrieve account information, access real-time and historical market data, manage orders, perform market scans, and access news and Wall Street Horizons (WSH) event data. Future updates will focus on bug fixes, maintaining parity with the official API, and enhancing usability.
 
+## Sync/Async Architecture
+
+The rust-ibapi library supports both synchronous (thread-based) and asynchronous (tokio-based) operation modes through feature flags:
+
+- **sync** (default): Traditional synchronous API using threads and crossbeam channels
+- **async**: Asynchronous API using tokio tasks and mpsc channels
+
+When both features are enabled, async takes precedence. This allows you to simply add `--features async` without needing `--no-default-features`.
+
+```bash
+# Sync mode (default)
+cargo build
+cargo test
+
+# Async mode
+cargo build --features async
+cargo test --features async
+
+# For async examples, use --no-default-features
+cargo run --no-default-features --features async --example async_connect
+```
+
 > **🚧 Work in Progress**: Version 2.0 is currently under active development and includes significant architectural improvements, async/await support, and enhanced features. The current release (1.x) remains stable and production-ready.
 
 If you encounter any issues or require a missing feature, please review the [issues list](https://github.com/wboayue/rust-ibapi/issues) before submitting a new one.
@@ -28,7 +50,7 @@ These examples demonstrate key features of the `ibapi` API.
 
 ### Connecting to TWS
 
-The following example shows how to connect to TWS.
+#### Sync Example
 
 ```rust
 use ibapi::prelude::*;
@@ -40,11 +62,25 @@ fn main() {
     println!("Successfully connected to TWS at {connection_url}");
 }
 ```
+
+#### Async Example
+
+```rust
+use ibapi::prelude::*;
+
+#[tokio::main]
+async fn main() {
+    let connection_url = "127.0.0.1:4002";
+
+    let client = Client::connect(connection_url, 100).await.expect("connection to TWS failed!");
+    println!("Successfully connected to TWS at {connection_url}");
+}
+```
 > **Note**: Use `127.0.0.1` instead of `localhost` for the connection. On some systems, `localhost` resolves to an IPv6 address, which TWS may block. TWS only allows specifying IPv4 addresses in the allowed IP addresses list.
 
 ### Creating Contracts
 
-Here’s how to create a stock contract for TSLA using the [stock](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.stock) helper function.
+Here's how to create a stock contract for TSLA using the [stock](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.stock) helper function (same for both sync and async):
 
 ```rust
 use ibapi::prelude::*;
@@ -74,7 +110,7 @@ For a complete list of contract attributes, explore the [Contract documentation]
 
 ### Requesting Historical Market Data
 
-The following is an example of requesting historical data from TWS.
+#### Sync Example
 
 ```rust
 use time::macros::datetime;
@@ -105,9 +141,42 @@ fn main() {
 }
 ```
 
+#### Async Example
+
+```rust
+use time::macros::datetime;
+use ibapi::prelude::*;
+
+#[tokio::main]
+async fn main() {
+    let connection_url = "127.0.0.1:4002";
+    let client = Client::connect(connection_url, 100).await.expect("connection to TWS failed!");
+
+    let contract = Contract::stock("AAPL");
+
+    let historical_data = client
+        .historical_data(
+            &contract,
+            Some(datetime!(2023-04-11 20:00 UTC)),
+            1.days(),
+            HistoricalBarSize::Hour,
+            HistoricalWhatToShow::Trades,
+            true,
+        )
+        .await
+        .expect("historical data request failed");
+
+    println!("start: {:?}, end: {:?}", historical_data.start, historical_data.end);
+
+    for bar in &historical_data.bars {
+        println!("{bar:?}");
+    }
+}
+```
+
 ### Requesting Realtime Market Data
 
-The following is an example of requesting realtime data from TWS.
+#### Sync Example
 
 ```rust
 use ibapi::prelude::*;
@@ -129,10 +198,39 @@ fn main() {
 }
 ```
 
-In this example, the request for realtime bars returns a [Subscription](https://docs.rs/ibapi/latest/ibapi/struct.Subscription.html) that is implicitly converted into a blocking iterator over the bars. The subscription is automatically cancelled when it goes out of scope. The `Subscription` can also be used to iterate over bars in a non-blocking fashion.
+#### Async Example
 
 ```rust
-// Example of non-blocking iteration
+use ibapi::prelude::*;
+use futures::StreamExt;
+
+#[tokio::main]
+async fn main() {
+    let connection_url = "127.0.0.1:4002";
+    let client = Client::connect(connection_url, 100).await.expect("connection to TWS failed!");
+
+    // Request real-time bars data for AAPL with 5-second intervals
+    let contract = Contract::stock("AAPL");
+    let mut subscription = client
+        .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
+        .await
+        .expect("realtime bars request failed!");
+
+    while let Some(bar) = subscription.next().await {
+        // Process each bar here (e.g., print or use in calculations)
+        println!("bar: {bar:?}");
+    }
+}
+```
+
+In both examples, the request for realtime bars returns a [Subscription](https://docs.rs/ibapi/latest/ibapi/struct.Subscription.html) that can be used as an iterator (sync) or stream (async). The subscription is automatically cancelled when it goes out of scope.
+
+#### Non-blocking Iteration (Sync)
+
+```rust
+use std::time::Duration;
+
+// Example of non-blocking iteration in sync mode
 loop {
     match subscription.try_next() {
         Some(bar) => println!("bar: {bar:?}"),
@@ -176,6 +274,8 @@ fn main() {
 
 ### Placing Orders
 
+#### Sync Example
+
 ```rust
 use ibapi::prelude::*;
 
@@ -192,6 +292,35 @@ pub fn main() {
     let subscription = client.place_order(order_id, &contract, &order).expect("place order request failed!");
 
     for event in &subscription {
+        if let PlaceOrder::ExecutionData(data) = event {
+            println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
+        } else {
+            println!("{:?}", event);
+        }
+    }
+}
+```
+
+#### Async Example
+
+```rust
+use ibapi::prelude::*;
+use futures::StreamExt;
+
+#[tokio::main]
+async fn main() {
+    let connection_url = "127.0.0.1:4002";
+    let client = Client::connect(connection_url, 100).await.expect("connection to TWS failed!");
+
+    let contract = Contract::stock("AAPL");
+
+    // Creates a market order to purchase 100 shares
+    let order_id = client.next_order_id();
+    let order = order_builder::market_order(Action::Buy, 100.0);
+
+    let mut subscription = client.place_order(order_id, &contract, &order).await.expect("place order request failed!");
+
+    while let Some(event) = subscription.next().await {
         if let PlaceOrder::ExecutionData(data) = event {
             println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
         } else {
