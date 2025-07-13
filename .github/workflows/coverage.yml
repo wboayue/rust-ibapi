@@ -89,7 +89,7 @@ jobs:
                --output-file target/coverage/lcov.info
           
           # Convert to XML for Coveralls
-          cargo tarpaulin --print-summary \
+          cargo tarpaulin \
             --ignore-tests \
             --ignore-panics \
             --out xml \
