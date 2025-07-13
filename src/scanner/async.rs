@@ -4,11 +4,11 @@ use super::common::{decoders, encoders};
 use super::*;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::orders::TagValue;
-use crate::subscriptions::{DataStream, ResponseContext, Subscription};
+use crate::subscriptions::{ResponseContext, StreamDecoder, Subscription};
 use crate::{server_versions, Client, Error};
 use std::sync::Arc;
 
-impl DataStream<Vec<ScannerData>> for Vec<ScannerData> {
+impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::ScannerData];
 
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ScannerData>, Error> {

@@ -6,13 +6,13 @@ use crate::{
     client::ClientRequestBuilders,
     messages::IncomingMessages,
     protocol::{check_version, Features},
-    subscriptions::{DataStream, ResponseContext, Subscription},
+    subscriptions::{ResponseContext, StreamDecoder, Subscription},
     Client, Error,
 };
 
 use super::{decoders, encoders, AutoFill, WshEventData, WshMetadata};
 
-impl DataStream<WshMetadata> for WshMetadata {
+impl StreamDecoder<WshMetadata> for WshMetadata {
     fn decode(_server_version: i32, message: &mut crate::messages::ResponseMessage) -> Result<WshMetadata, Error> {
         match message.message_type() {
             IncomingMessages::WshMetaData => Ok(decoders::decode_wsh_metadata(message.clone())?),
@@ -29,7 +29,7 @@ impl DataStream<WshMetadata> for WshMetadata {
     }
 }
 
-impl DataStream<WshEventData> for WshEventData {
+impl StreamDecoder<WshEventData> for WshEventData {
     fn decode(_server_version: i32, message: &mut crate::messages::ResponseMessage) -> Result<WshEventData, Error> {
         decode_event_data_message(message.clone())
     }

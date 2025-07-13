@@ -4,7 +4,7 @@ use time::OffsetDateTime;
 
 use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::{DataStream, Subscription};
+use crate::subscriptions::{StreamDecoder, Subscription};
 use crate::{Client, Error};
 use std::sync::Arc;
 
@@ -12,7 +12,7 @@ use super::common::{decoders, encoders, verify};
 use super::*;
 
 // Implement DataStream traits for the order types
-impl DataStream<PlaceOrder> for PlaceOrder {
+impl StreamDecoder<PlaceOrder> for PlaceOrder {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::OpenOrder,
         IncomingMessages::OrderStatus,
@@ -33,7 +33,7 @@ impl DataStream<PlaceOrder> for PlaceOrder {
     }
 }
 
-impl DataStream<OrderUpdate> for OrderUpdate {
+impl StreamDecoder<OrderUpdate> for OrderUpdate {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::OpenOrder,
         IncomingMessages::OrderStatus,
@@ -57,7 +57,7 @@ impl DataStream<OrderUpdate> for OrderUpdate {
     }
 }
 
-impl DataStream<CancelOrder> for CancelOrder {
+impl StreamDecoder<CancelOrder> for CancelOrder {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::OrderStatus, IncomingMessages::Error];
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -69,7 +69,7 @@ impl DataStream<CancelOrder> for CancelOrder {
     }
 }
 
-impl DataStream<Orders> for Orders {
+impl StreamDecoder<Orders> for Orders {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::CompletedOrder,
         IncomingMessages::CommissionsReport,
@@ -93,7 +93,7 @@ impl DataStream<Orders> for Orders {
     }
 }
 
-impl DataStream<Executions> for Executions {
+impl StreamDecoder<Executions> for Executions {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::ExecutionData,
         IncomingMessages::CommissionsReport,
@@ -112,7 +112,7 @@ impl DataStream<Executions> for Executions {
     }
 }
 
-impl DataStream<ExerciseOptions> for ExerciseOptions {
+impl StreamDecoder<ExerciseOptions> for ExerciseOptions {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus, IncomingMessages::Error];
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {

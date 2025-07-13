@@ -3,12 +3,12 @@
 use super::common::{decoders, encoders};
 use super::*;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
-use crate::subscriptions::{DataStream, ResponseContext, Subscription};
+use crate::subscriptions::{ResponseContext, StreamDecoder, Subscription};
 use crate::{server_versions, Client, Error};
 use log::{error, info};
 use std::sync::Arc;
 
-impl DataStream<OptionComputation> for OptionComputation {
+impl StreamDecoder<OptionComputation> for OptionComputation {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickOptionComputation];
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -33,7 +33,7 @@ impl DataStream<OptionComputation> for OptionComputation {
     }
 }
 
-impl DataStream<OptionChain> for OptionChain {
+impl StreamDecoder<OptionChain> for OptionChain {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::SecurityDefinitionOptionParameter,
         IncomingMessages::SecurityDefinitionOptionParameterEnd,

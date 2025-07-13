@@ -4,7 +4,7 @@ use crate::client::ClientRequestBuilders;
 use crate::contracts::{Contract, TagValue};
 use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::{DataStream, ResponseContext, Subscription};
+use crate::subscriptions::{ResponseContext, StreamDecoder, Subscription};
 use crate::{Client, Error};
 
 use super::common::{decoders, encoders};
@@ -12,7 +12,7 @@ use super::{Bar, BarSize, BidAsk, DepthMarketDataDescription, MarketDepths, MidP
 
 // === DataStream implementations ===
 
-impl DataStream<BidAsk> for BidAsk {
+impl StreamDecoder<BidAsk> for BidAsk {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -33,7 +33,7 @@ impl DataStream<BidAsk> for BidAsk {
     }
 }
 
-impl DataStream<MidPoint> for MidPoint {
+impl StreamDecoder<MidPoint> for MidPoint {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -54,7 +54,7 @@ impl DataStream<MidPoint> for MidPoint {
     }
 }
 
-impl DataStream<Bar> for Bar {
+impl StreamDecoder<Bar> for Bar {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::RealTimeBars];
 
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -71,7 +71,7 @@ impl DataStream<Bar> for Bar {
     }
 }
 
-impl DataStream<Trade> for Trade {
+impl StreamDecoder<Trade> for Trade {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickByTick];
 
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -92,7 +92,7 @@ impl DataStream<Trade> for Trade {
     }
 }
 
-impl DataStream<MarketDepths> for MarketDepths {
+impl StreamDecoder<MarketDepths> for MarketDepths {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] =
         &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2, IncomingMessages::Error];
 
@@ -123,7 +123,7 @@ impl DataStream<MarketDepths> for MarketDepths {
     }
 }
 
-impl DataStream<TickTypes> for TickTypes {
+impl StreamDecoder<TickTypes> for TickTypes {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::TickPrice,
         IncomingMessages::TickSize,

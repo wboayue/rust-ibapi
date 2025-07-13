@@ -81,7 +81,7 @@ pub async fn pnl_single(
     .await
 }
 
-pub async fn account_summary(client: &Client, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaries>, Error> {
+pub async fn account_summary(client: &Client, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaryResult>, Error> {
     async_helpers::request_with_id(client, Features::ACCOUNT_SUMMARY, |id| {
         encoders::encode_request_account_summary(id, group, tags)
     })
@@ -236,19 +236,19 @@ mod tests {
         // First update should be a summary
         let first_update = subscription.next().await;
         match first_update {
-            Some(Ok(AccountSummaries::Summary(summary))) => {
+            Some(Ok(AccountSummaryResult::Summary(summary))) => {
                 assert_eq!(summary.account, TEST_ACCOUNT);
                 assert_eq!(summary.tag, AccountSummaryTags::ACCOUNT_TYPE);
                 assert_eq!(summary.value, "FA");
             }
-            _ => panic!("Expected AccountSummaries::Summary, got {first_update:?}"),
+            _ => panic!("Expected AccountSummaryResult::Summary, got {first_update:?}"),
         }
 
         // Second update should be end
         let second_update = subscription.next().await;
         assert!(
-            matches!(second_update, Some(Ok(AccountSummaries::End))),
-            "Expected AccountSummaries::End, got {:?}",
+            matches!(second_update, Some(Ok(AccountSummaryResult::End))),
+            "Expected AccountSummaryResult::End, got {:?}",
             second_update
         );
 

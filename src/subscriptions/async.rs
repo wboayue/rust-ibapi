@@ -10,7 +10,7 @@ use log::{debug, warn};
 use tokio::sync::mpsc;
 
 use super::common::{process_decode_result, ProcessingResult};
-use super::{DataStream, ResponseContext};
+use super::{ResponseContext, StreamDecoder};
 use crate::client::r#async::Client;
 use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::transport::AsyncInternalSubscription;
@@ -101,7 +101,7 @@ impl<T> Subscription<T> {
         response_context: ResponseContext,
     ) -> Self
     where
-        D: DataStream<T> + 'static,
+        D: StreamDecoder<T> + 'static,
         T: 'static,
     {
         let mut sub = Self::with_decoder(internal, client.clone(), D::decode, request_id, order_id, message_type, response_context);
@@ -113,7 +113,7 @@ impl<T> Subscription<T> {
     /// Create a subscription from internal subscription without explicit metadata (for backward compatibility)
     pub(crate) fn new_from_internal_simple<D>(internal: AsyncInternalSubscription, client: Arc<Client>) -> Self
     where
-        D: DataStream<T> + 'static,
+        D: StreamDecoder<T> + 'static,
         T: 'static,
     {
         // The AsyncInternalSubscription already has cleanup logic, so we don't need cancel metadata

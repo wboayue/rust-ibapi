@@ -5,11 +5,11 @@ use super::*;
 use crate::contracts::Contract;
 use crate::market_data::realtime;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
-use crate::subscriptions::{DataStream, ResponseContext, Subscription};
+use crate::subscriptions::{ResponseContext, StreamDecoder, Subscription};
 use crate::{server_versions, Client, Error};
 use std::sync::Arc;
 
-impl DataStream<NewsBulletin> for NewsBulletin {
+impl StreamDecoder<NewsBulletin> for NewsBulletin {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::NewsBulletins];
 
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<NewsBulletin, Error> {
@@ -24,7 +24,7 @@ impl DataStream<NewsBulletin> for NewsBulletin {
     }
 }
 
-impl DataStream<NewsArticle> for NewsArticle {
+impl StreamDecoder<NewsArticle> for NewsArticle {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::HistoricalNews,
         IncomingMessages::HistoricalNewsEnd,

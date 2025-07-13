@@ -17,7 +17,7 @@ use crate::Error;
 use super::id_generator::ClientIdManager;
 use crate::accounts;
 use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
-use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
+use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::subscriptions::Subscription;
 
 /// Asynchronous TWS API Client
@@ -226,14 +226,15 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::Client;
+    /// use ibapi::accounts::types::AccountId;
     /// use futures::StreamExt;
     ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///
-    ///     let account = "U1234567";
-    ///     let mut subscription = client.positions_multi(Some(account), None).await.expect("error requesting positions by model");
+    ///     let account = AccountId("U1234567".to_string());
+    ///     let mut subscription = client.positions_multi(Some(&account), None).await.expect("error requesting positions by model");
     ///     
     ///     while let Some(position) = subscription.next().await {
     ///         println!("{position:?}")
@@ -258,13 +259,14 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::Client;
+    /// use ibapi::accounts::types::AccountId;
     /// use futures::StreamExt;
     ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///     let account = "account id";
-    ///     let mut subscription = client.pnl(account, None).await.expect("error requesting pnl");
+    ///     let account = AccountId("account id".to_string());
+    ///     let mut subscription = client.pnl(&account, None).await.expect("error requesting pnl");
     ///     
     ///     while let Some(pnl) = subscription.next().await {
     ///         println!("{pnl:?}")
@@ -286,16 +288,17 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::Client;
+    /// use ibapi::accounts::types::{AccountId, ContractId};
     /// use futures::StreamExt;
     ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///
-    ///     let account = "<account id>";
-    ///     let contract_id = 1001;
+    ///     let account = AccountId("<account id>".to_string());
+    ///     let contract_id = ContractId(1001);
     ///
-    ///     let mut subscription = client.pnl_single(account, contract_id, None).await.expect("error requesting pnl");
+    ///     let mut subscription = client.pnl_single(&account, contract_id, None).await.expect("error requesting pnl");
     ///     
     ///     while let Some(pnl) = subscription.next().await {
     ///         println!("{pnl:?}")
@@ -323,22 +326,23 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::accounts::AccountSummaryTags;
+    /// use ibapi::accounts::types::AccountGroup;
     /// use futures::StreamExt;
     ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///
-    ///     let group = "All";
+    ///     let group = AccountGroup("All".to_string());
     ///
-    ///     let mut subscription = client.account_summary(group, AccountSummaryTags::ALL).await.expect("error requesting account summary");
+    ///     let mut subscription = client.account_summary(&group, AccountSummaryTags::ALL).await.expect("error requesting account summary");
     ///     
     ///     while let Some(summary) = subscription.next().await {
     ///         println!("{summary:?}")
     ///     }
     /// }
     /// ```
-    pub async fn account_summary(&self, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaries>, Error> {
+    pub async fn account_summary(&self, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaryResult>, Error> {
         accounts::account_summary(self, group, tags).await
     }
 
@@ -355,15 +359,16 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::accounts::AccountUpdate;
+    /// use ibapi::accounts::types::AccountId;
     /// use futures::StreamExt;
     ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///
-    ///     let account = "U1234567";
+    ///     let account = AccountId("U1234567".to_string());
     ///
-    ///     let mut subscription = client.account_updates(account).await.expect("error requesting account updates");
+    ///     let mut subscription = client.account_updates(&account).await.expect("error requesting account updates");
     ///     
     ///     while let Some(update_result) = subscription.next().await {
     ///         match update_result {
@@ -398,15 +403,16 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::accounts::AccountUpdateMulti;
+    /// use ibapi::accounts::types::AccountId;
     /// use futures::StreamExt;
     ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///
-    ///     let account = Some("U1234567");
+    ///     let account = AccountId("U1234567".to_string());
     ///
-    ///     let mut subscription = client.account_updates_multi(account, None).await.expect("error requesting account updates multi");
+    ///     let mut subscription = client.account_updates_multi(Some(&account), None).await.expect("error requesting account updates multi");
     ///     
     ///     while let Some(update_result) = subscription.next().await {
     ///         match update_result {
