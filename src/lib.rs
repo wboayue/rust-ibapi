@@ -43,6 +43,9 @@ pub(crate) mod transport;
 /// Connection management
 pub(crate) mod connection;
 
+/// Common utilities shared across modules
+pub(crate) mod common;
+
 /// Subscription types for streaming data
 pub mod subscriptions;
 
