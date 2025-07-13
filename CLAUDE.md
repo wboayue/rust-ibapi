@@ -473,6 +473,150 @@ To compile async code:
 cargo build --features async
 ```
 
+## Testing Best Practices
+
+### Table-Driven Tests with Shared Data
+
+The codebase uses table-driven tests to ensure comprehensive coverage while sharing test data between sync and async implementations. This approach reduces duplication and ensures both modes are tested identically.
+
+#### Test Structure
+
+Each module should follow this testing pattern:
+
+```
+src/<module>/
+├── common/
+│   ├── test_tables.rs  # Shared test cases and data
+│   └── test_data.rs    # Common test fixtures (optional)
+├── sync.rs             # Sync implementation with tests
+└── async.rs            # Async implementation with tests
+```
+
+#### Shared Test Tables
+
+Define test cases in `common/test_tables.rs`:
+
+```rust
+// src/<module>/common/test_tables.rs
+pub struct ApiTestCase {
+    pub name: &'static str,
+    pub input: TestInput,
+    pub expected: ExpectedResult,
+}
+
+pub const API_TEST_CASES: &[ApiTestCase] = &[
+    ApiTestCase {
+        name: "valid_request",
+        input: TestInput { param: "test" },
+        expected: ExpectedResult::Success,
+    },
+    ApiTestCase {
+        name: "invalid_parameter",
+        input: TestInput { param: "" },
+        expected: ExpectedResult::Error("parameter cannot be empty"),
+    },
+    // ... more test cases
+];
+
+// Common test data
+pub const TEST_REQUEST_ID: i32 = 9000;
+pub const TEST_SERVER_VERSION: i32 = 176;
+```
+
+#### Sync Test Implementation
+
+```rust
+// In src/<module>/sync.rs
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::<module>::common::test_tables::{API_TEST_CASES, TEST_REQUEST_ID};
+
+    #[test]
+    fn test_api_table_driven() {
+        for test_case in API_TEST_CASES {
+            let result = run_test_case(test_case);
+            assert_matches!(result, test_case.expected, 
+                "Test '{}' failed", test_case.name);
+        }
+    }
+
+    fn run_test_case(test_case: &ApiTestCase) -> TestResult {
+        // Test implementation using shared test case
+        // This logic is specific to sync mode but uses shared test data
+    }
+}
+```
+
+#### Async Test Implementation
+
+```rust
+// In src/<module>/async.rs
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::<module>::common::test_tables::{API_TEST_CASES, TEST_REQUEST_ID};
+
+    #[tokio::test]
+    async fn test_api_table_driven() {
+        for test_case in API_TEST_CASES {
+            let result = run_test_case(test_case).await;
+            assert_matches!(result, test_case.expected, 
+                "Test '{}' failed", test_case.name);
+        }
+    }
+
+    async fn run_test_case(test_case: &ApiTestCase) -> TestResult {
+        // Same test logic as sync but using async/await
+        // Uses the same shared test data
+    }
+}
+```
+
+#### Benefits of This Approach
+
+1. **Consistency**: Both sync and async modes are tested with identical test cases
+2. **Maintainability**: Add test cases once in the shared table
+3. **Coverage**: Comprehensive test scenarios without duplication
+4. **Debugging**: Easy to identify which specific test case failed
+5. **Documentation**: Test cases serve as documentation of expected behavior
+
+#### Test Data Organization
+
+Use `test_data.rs` for reusable fixtures:
+
+```rust
+// src/<module>/common/test_data.rs
+pub fn create_test_client() -> Client {
+    // Standard test client setup
+}
+
+pub fn build_test_message(msg_type: &str, data: &[&str]) -> String {
+    format!("{}|{}|", msg_type, data.join("|"))
+}
+
+pub const SAMPLE_RESPONSES: &[&str] = &[
+    "AccountSummary|9000|DU123456|NetLiquidation|25000.00|USD|",
+    "AccountSummaryEnd|9000|",
+];
+```
+
+### Running Tests for Both Modes
+
+Always test both sync and async implementations:
+
+```bash
+# Test sync mode
+cargo test <module>
+
+# Test async mode
+cargo test --features async <module>
+
+# Test specific function in both modes
+cargo test <module>::<function_name>
+cargo test --features async <module>::<function_name>
+```
+
 ## Running Examples
 
 Examples follow a naming convention to indicate their mode:
