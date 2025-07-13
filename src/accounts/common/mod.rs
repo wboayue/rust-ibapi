@@ -5,3 +5,6 @@ pub(super) mod stream_decoders;
 
 #[cfg(test)]
 pub(super) mod test_data;
+
+#[cfg(test)]
+pub(super) mod test_tables;
