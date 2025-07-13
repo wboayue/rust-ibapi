@@ -200,6 +200,106 @@ mod tests {
     }
 
     #[test]
+    fn test_wsh_event_data_by_filter_integration() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec!["105|9000|{\"validated\":true,\"data\":{\"events\":[]}}|".to_owned()],
+        });
+
+        let client = Client::stubbed(message_bus, crate::server_versions::WSH_EVENT_DATA_FILTERS_DATE);
+        let filter = "filter=value";
+        let result = wsh_event_data_by_filter(
+            &client,
+            filter,
+            Some(100),
+            Some(AutoFill {
+                competitors: true,
+                portfolio: false,
+                watchlist: true,
+            }),
+        );
+
+        let request_messages = client.message_bus.request_messages();
+        assert_eq!(request_messages[0].encode_simple(), "102|9000||filter=value|1|0|1|||100|");
+
+        assert!(result.is_ok(), "failed to request wsh event data by filter: {}", result.err().unwrap());
+    }
+
+    #[test]
+    fn test_wsh_event_data_by_filter_no_autofill() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec!["105|9000|{\"validated\":true,\"data\":{\"events\":[]}}|".to_owned()],
+        });
+
+        let client = Client::stubbed(message_bus, crate::server_versions::WSH_EVENT_DATA_FILTERS);
+        let filter = "filter=value";
+        let result = wsh_event_data_by_filter(&client, filter, None, None);
+
+        let request_messages = client.message_bus.request_messages();
+        assert_eq!(request_messages[0].encode_simple(), "102|9000||filter=value|0|0|0|");
+
+        assert!(result.is_ok(), "failed to request wsh event data by filter: {}", result.err().unwrap());
+    }
+
+    #[test]
+    fn test_invalid_server_version_wsh_event_data_filters() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![],
+        });
+
+        let client = Client::stubbed(message_bus, crate::server_versions::WSHE_CALENDAR);
+        let result = wsh_event_data_by_filter(&client, "filter", None, None);
+
+        assert!(matches!(result, Err(Error::ServerVersion(_, _, _))));
+    }
+
+    #[test]
+    fn test_invalid_server_version_wsh_event_data_date_filters() {
+        use time::macros::date;
+
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![],
+        });
+
+        let client = Client::stubbed(message_bus, crate::server_versions::WSH_EVENT_DATA_FILTERS);
+        let result = wsh_event_data_by_contract(&client, 12345, Some(date!(2024 - 01 - 01)), Some(date!(2024 - 12 - 31)), Some(100), None);
+
+        assert!(matches!(result, Err(Error::ServerVersion(_, _, _))));
+    }
+
+    #[test]
+    fn test_wsh_event_data_by_filter_subscription_integration() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![
+                "105|9000|{\"event\":1}|".to_owned(),
+                "105|9000|{\"event\":2}|".to_owned(),
+                "105|9000|{\"event\":3}|".to_owned(),
+            ],
+        });
+
+        let client = Client::stubbed(message_bus, crate::server_versions::WSH_EVENT_DATA_FILTERS);
+        let result = wsh_event_data_by_filter(&client, "test_filter", None, None);
+
+        assert!(result.is_ok());
+        let subscription = result.unwrap();
+
+        // Collect all events
+        let mut events = vec![];
+        while let Some(event) = subscription.next() {
+            events.push(event);
+        }
+
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].data_json, "{\"event\":1}");
+        assert_eq!(events[1].data_json, "{\"event\":2}");
+        assert_eq!(events[2].data_json, "{\"event\":3}");
+    }
+
+    #[test]
     fn test_data_stream_cancel_message() {
         let request_id = test_data::REQUEST_ID_METADATA;
 
