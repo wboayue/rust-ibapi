@@ -54,6 +54,17 @@ impl<'a> RequestBuilder<'a> {
             .await
     }
 
+    /// Send the request and create a subscription with context
+    pub async fn send_with_context<T>(self, message: RequestMessage, context: ResponseContext) -> Result<Subscription<T>, Error>
+    where
+        T: StreamDecoder<T> + Send + 'static,
+    {
+        SubscriptionBuilder::<T>::new(self.client)
+            .with_context(context)
+            .send_with_request_id::<T>(self.request_id, message)
+            .await
+    }
+
     /// Send the request without creating a subscription
     pub async fn send_raw(self, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
         self.client.send_request(self.request_id, message).await
@@ -86,6 +97,17 @@ impl<'a> SharedRequestBuilder<'a> {
         T: StreamDecoder<T> + Send + 'static,
     {
         SubscriptionBuilder::<T>::new(self.client)
+            .send_shared::<T>(self.message_type, message)
+            .await
+    }
+
+    /// Send the request and create a subscription with context
+    pub async fn send_with_context<T>(self, message: RequestMessage, context: ResponseContext) -> Result<Subscription<T>, Error>
+    where
+        T: StreamDecoder<T> + Send + 'static,
+    {
+        SubscriptionBuilder::<T>::new(self.client)
+            .with_context(context)
             .send_shared::<T>(self.message_type, message)
             .await
     }
