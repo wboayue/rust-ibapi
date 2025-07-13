@@ -3,165 +3,16 @@
 use time::OffsetDateTime;
 
 use crate::client::ClientRequestBuilders;
-use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
+use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::{AsyncDataStream, Subscription};
+use crate::subscriptions::Subscription;
 use crate::{Client, Error};
 
-use super::common::{decoders, encoders, errors, helpers::async_helpers};
+use super::common::{decoders, encoders, helpers::async_helpers};
 use super::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use super::*;
 
-// Implement AsyncDataStream traits for the account types
-impl AsyncDataStream<AccountSummaries> for AccountSummaries {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::AccountSummary, IncomingMessages::AccountSummaryEnd];
-
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::AccountSummary => Ok(AccountSummaries::Summary(decoders::decode_account_summary(
-                client.server_version(),
-                message,
-            )?)),
-            IncomingMessages::AccountSummaryEnd => Ok(AccountSummaries::End),
-            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
-        }
-    }
-
-    fn cancel_message(
-        _server_version: i32,
-        request_id: Option<i32>,
-        _context: &crate::client::builders::ResponseContext,
-    ) -> Result<crate::messages::RequestMessage, Error> {
-        let request_id = errors::require_request_id(request_id)?;
-        encoders::encode_cancel_account_summary(request_id)
-    }
-}
-
-impl AsyncDataStream<PnL> for PnL {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::PnL];
-
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
-        decoders::decode_pnl(client.server_version(), message)
-    }
-
-    fn cancel_message(
-        _server_version: i32,
-        request_id: Option<i32>,
-        _context: &crate::client::builders::ResponseContext,
-    ) -> Result<crate::messages::RequestMessage, Error> {
-        let request_id = errors::require_request_id(request_id)?;
-        encoders::encode_cancel_pnl(request_id)
-    }
-}
-
-impl AsyncDataStream<PnLSingle> for PnLSingle {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::PnLSingle];
-
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
-        decoders::decode_pnl_single(client.server_version(), message)
-    }
-
-    fn cancel_message(
-        _server_version: i32,
-        request_id: Option<i32>,
-        _context: &crate::client::builders::ResponseContext,
-    ) -> Result<crate::messages::RequestMessage, Error> {
-        let request_id = errors::require_request_id(request_id)?;
-        encoders::encode_cancel_pnl_single(request_id)
-    }
-}
-
-impl AsyncDataStream<PositionUpdate> for PositionUpdate {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
-
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::Position => Ok(PositionUpdate::Position(decoders::decode_position(message)?)),
-            IncomingMessages::PositionEnd => Ok(PositionUpdate::PositionEnd),
-            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
-        }
-    }
-
-    fn cancel_message(
-        _server_version: i32,
-        _request_id: Option<i32>,
-        _context: &crate::client::builders::ResponseContext,
-    ) -> Result<crate::messages::RequestMessage, Error> {
-        encoders::encode_cancel_positions()
-    }
-}
-
-impl AsyncDataStream<PositionUpdateMulti> for PositionUpdateMulti {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::PositionMulti, IncomingMessages::PositionMultiEnd];
-
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::PositionMulti => Ok(PositionUpdateMulti::Position(decoders::decode_position_multi(message)?)),
-            IncomingMessages::PositionMultiEnd => Ok(PositionUpdateMulti::PositionEnd),
-            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
-        }
-    }
-
-    fn cancel_message(
-        _server_version: i32,
-        request_id: Option<i32>,
-        _context: &crate::client::builders::ResponseContext,
-    ) -> Result<crate::messages::RequestMessage, Error> {
-        let request_id = errors::require_request_id(request_id)?;
-        encoders::encode_cancel_positions_multi(request_id)
-    }
-}
-
-impl AsyncDataStream<AccountUpdate> for AccountUpdate {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
-        IncomingMessages::AccountValue,
-        IncomingMessages::PortfolioValue,
-        IncomingMessages::AccountUpdateTime,
-        IncomingMessages::AccountDownloadEnd,
-    ];
-
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::AccountValue => Ok(AccountUpdate::AccountValue(decoders::decode_account_value(message)?)),
-            IncomingMessages::PortfolioValue => Ok(AccountUpdate::PortfolioValue(decoders::decode_account_portfolio_value(
-                client.server_version(),
-                message,
-            )?)),
-            IncomingMessages::AccountUpdateTime => Ok(AccountUpdate::UpdateTime(decoders::decode_account_update_time(message)?)),
-            IncomingMessages::AccountDownloadEnd => Ok(AccountUpdate::End),
-            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
-        }
-    }
-
-    fn cancel_message(
-        server_version: i32,
-        _request_id: Option<i32>,
-        _context: &crate::client::builders::ResponseContext,
-    ) -> Result<crate::messages::RequestMessage, Error> {
-        encoders::encode_cancel_account_updates(server_version)
-    }
-}
-
-impl AsyncDataStream<AccountUpdateMulti> for AccountUpdateMulti {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::AccountUpdateMulti, IncomingMessages::AccountUpdateMultiEnd];
-
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::AccountUpdateMulti => Ok(AccountUpdateMulti::AccountMultiValue(decoders::decode_account_multi_value(message)?)),
-            IncomingMessages::AccountUpdateMultiEnd => Ok(AccountUpdateMulti::End),
-            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
-        }
-    }
-
-    fn cancel_message(
-        server_version: i32,
-        request_id: Option<i32>,
-        _context: &crate::client::builders::ResponseContext,
-    ) -> Result<crate::messages::RequestMessage, Error> {
-        let request_id = errors::require_request_id_for(request_id, "encode cancel account updates multi")?;
-        encoders::encode_cancel_account_updates_multi(server_version, request_id)
-    }
-}
+// DataStream implementations are now in common/stream_decoders.rs
 
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.

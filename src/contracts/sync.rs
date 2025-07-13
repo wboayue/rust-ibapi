@@ -1,34 +1,37 @@
 use super::common::{decoders, encoders};
 use super::*;
-use crate::client::{DataStream, ResponseContext, Subscription};
+use crate::client::{ResponseContext, StreamDecoder, Subscription};
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::{server_versions, Client, Error};
 use log::{error, info};
 
-impl DataStream<OptionComputation> for OptionComputation {
+impl StreamDecoder<OptionComputation> for OptionComputation {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickOptionComputation];
 
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickOptionComputation => Ok(decoders::decode_option_computation(client.server_version, message)?),
+            IncomingMessages::TickOptionComputation => Ok(decoders::decode_option_computation(server_version, message)?),
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: &ResponseContext) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("request id required to cancel option calculations");
-        match context.request_type {
+        match context.and_then(|c| c.request_type) {
             Some(OutgoingMessages::ReqCalcImpliedVolat) => {
                 encoders::encode_cancel_option_computation(OutgoingMessages::CancelImpliedVolatility, request_id)
             }
             Some(OutgoingMessages::ReqCalcOptionPrice) => encoders::encode_cancel_option_computation(OutgoingMessages::CancelOptionPrice, request_id),
-            _ => panic!("Unsupported request message type option computation cancel: {:?}", context.request_type),
+            _ => panic!(
+                "Unsupported request message type option computation cancel: {:?}",
+                context.and_then(|c| c.request_type)
+            ),
         }
     }
 }
 
-impl DataStream<OptionChain> for OptionChain {
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<OptionChain, Error> {
+impl StreamDecoder<OptionChain> for OptionChain {
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<OptionChain, Error> {
         match message.message_type() {
             IncomingMessages::SecurityDefinitionOptionParameter => Ok(decoders::decode_option_chain(message)?),
             IncomingMessages::SecurityDefinitionOptionParameterEnd => Err(Error::EndOfStream),
@@ -48,7 +51,7 @@ pub(crate) fn contract_details(client: &Client, contract: &Contract) -> Result<V
     verify_contract(client, contract)?;
 
     let request_id = client.next_request_id();
-    let packet = encoders::encode_request_contract_data(client.server_version(), request_id, contract)?;
+    let packet = encoders::encode_request_contract_data(client.server_version, request_id, contract)?;
 
     let responses = client.send_request(request_id, packet)?;
 
@@ -58,7 +61,7 @@ pub(crate) fn contract_details(client: &Client, contract: &Contract) -> Result<V
         log::debug!("response: {response:#?}");
         match response {
             Ok(mut message) if message.message_type() == IncomingMessages::ContractData => {
-                let decoded = decoders::decode_contract_details(client.server_version(), &mut message)?;
+                let decoded = decoders::decode_contract_details(client.server_version, &mut message)?;
                 contract_details.push(decoded);
             }
             Ok(message) if message.message_type() == IncomingMessages::ContractDataEnd => return Ok(contract_details),
@@ -118,7 +121,7 @@ pub(crate) fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<Con
     if let Some(Ok(mut message)) = subscription.next() {
         match message.message_type() {
             IncomingMessages::SymbolSamples => {
-                return decoders::decode_contract_descriptions(client.server_version(), &mut message);
+                return decoders::decode_contract_descriptions(client.server_version, &mut message);
             }
             IncomingMessages::Error => {
                 // TODO custom error
@@ -167,11 +170,11 @@ pub(crate) fn calculate_option_price(
     client.check_server_version(server_versions::REQ_CALC_OPTION_PRICE, "It does not support calculation price requests.")?;
 
     let request_id = client.next_request_id();
-    let message = encoders::encode_calculate_option_price(client.server_version(), request_id, contract, volatility, underlying_price)?;
+    let message = encoders::encode_calculate_option_price(client.server_version, request_id, contract, volatility, underlying_price)?;
     let subscription = client.send_request(request_id, message)?;
 
     match subscription.next() {
-        Some(Ok(mut message)) => OptionComputation::decode(client, &mut message),
+        Some(Ok(mut message)) => OptionComputation::decode(client.server_version, &mut message),
         Some(Err(e)) => Err(e),
         None => Err(Error::Simple("no data for option calculation".into())),
     }
@@ -195,11 +198,11 @@ pub(crate) fn calculate_implied_volatility(
     )?;
 
     let request_id = client.next_request_id();
-    let message = encoders::encode_calculate_implied_volatility(client.server_version(), request_id, contract, option_price, underlying_price)?;
+    let message = encoders::encode_calculate_implied_volatility(client.server_version, request_id, contract, option_price, underlying_price)?;
     let subscription = client.send_request(request_id, message)?;
 
     match subscription.next() {
-        Some(Ok(mut message)) => OptionComputation::decode(client, &mut message),
+        Some(Ok(mut message)) => OptionComputation::decode(client.server_version, &mut message),
         Some(Err(e)) => Err(e),
         None => Err(Error::Simple("no data for option calculation".into())),
     }
@@ -221,5 +224,5 @@ pub(crate) fn option_chain<'a>(
     let request = encoders::encode_request_option_chain(request_id, symbol, exchange, security_type, contract_id)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+    Ok(Subscription::new(client, subscription, None))
 }

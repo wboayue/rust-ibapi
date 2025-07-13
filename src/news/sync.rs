@@ -2,7 +2,7 @@
 
 use super::common::{decoders, encoders};
 use super::*;
-use crate::client::{DataStream, ResponseContext, SharesChannel, Subscription};
+use crate::client::{ResponseContext, SharesChannel, StreamDecoder, Subscription};
 use crate::contracts::Contract;
 use crate::market_data::realtime;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
@@ -10,23 +10,23 @@ use crate::{server_versions, Client, Error};
 
 impl SharesChannel for Vec<NewsProvider> {}
 
-impl DataStream<NewsBulletin> for NewsBulletin {
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<NewsBulletin, Error> {
+impl StreamDecoder<NewsBulletin> for NewsBulletin {
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<NewsBulletin, Error> {
         match message.message_type() {
             IncomingMessages::NewsBulletins => Ok(decoders::decode_news_bulletin(message.clone())?),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
         encoders::encode_cancel_news_bulletin()
     }
 }
 
 impl SharesChannel for Subscription<'_, NewsBulletin> {}
 
-impl DataStream<NewsArticle> for NewsArticle {
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<NewsArticle, Error> {
+impl StreamDecoder<NewsArticle> for NewsArticle {
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<NewsArticle, Error> {
         match message.message_type() {
             IncomingMessages::HistoricalNews => Ok(decoders::decode_historical_news(None, message.clone())?),
             IncomingMessages::HistoricalNewsEnd => Err(Error::EndOfStream),
@@ -56,7 +56,7 @@ pub(crate) fn news_bulletins(client: &Client, all_messages: bool) -> Result<Subs
     let request = encoders::encode_request_news_bulletins(all_messages)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestNewsBulletins, request)?;
 
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+    Ok(Subscription::new(client, subscription, None))
 }
 
 /// Historical News Headlines
@@ -72,7 +72,7 @@ pub(crate) fn historical_news<'a>(
 
     let request_id = client.next_request_id();
     let request = encoders::encode_request_historical_news(
-        client.server_version(),
+        client.server_version,
         request_id,
         contract_id,
         provider_codes,
@@ -82,7 +82,7 @@ pub(crate) fn historical_news<'a>(
     )?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+    Ok(Subscription::new(client, subscription, None))
 }
 
 /// Requests news article body
@@ -90,7 +90,7 @@ pub(crate) fn news_article(client: &Client, provider_code: &str, article_id: &st
     client.check_server_version(server_versions::REQ_NEWS_ARTICLE, "It does not support news article requests.")?;
 
     let request_id = client.next_request_id();
-    let request = encoders::encode_request_news_article(client.server_version(), request_id, provider_code, article_id)?;
+    let request = encoders::encode_request_news_article(client.server_version, request_id, provider_code, article_id)?;
 
     let subscription = client.send_request(request_id, request)?;
     match subscription.next() {
@@ -110,17 +110,11 @@ pub(crate) fn contract_news<'a>(client: &'a Client, contract: &Contract, provide
     let generic_ticks: Vec<_> = generic_ticks.iter().map(|s| s.as_str()).collect();
 
     let request_id = client.next_request_id();
-    let request = realtime::common::encoders::encode_request_market_data(
-        client.server_version(),
-        request_id,
-        contract,
-        generic_ticks.as_slice(),
-        false,
-        false,
-    )?;
+    let request =
+        realtime::common::encoders::encode_request_market_data(client.server_version, request_id, contract, generic_ticks.as_slice(), false, false)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+    Ok(Subscription::new(client, subscription, None))
 }
 
 /// Subscribe to broad tape news
@@ -129,11 +123,10 @@ pub(crate) fn broad_tape_news<'a>(client: &'a Client, provider_code: &str) -> Re
     let generic_ticks = &["mdoff", "292"];
 
     let request_id = client.next_request_id();
-    let request =
-        realtime::common::encoders::encode_request_market_data(client.server_version(), request_id, &contract, generic_ticks, false, false)?;
+    let request = realtime::common::encoders::encode_request_market_data(client.server_version, request_id, &contract, generic_ticks, false, false)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription, ResponseContext::default()))
+    Ok(Subscription::new(client, subscription, None))
 }
 
 #[cfg(test)]

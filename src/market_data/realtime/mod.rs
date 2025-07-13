@@ -4,13 +4,13 @@ use time::OffsetDateTime;
 use crate::ToField;
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
-use crate::client::{DataStream, ResponseContext};
+use crate::client::{ResponseContext, StreamDecoder};
 use crate::contracts::OptionComputation;
 use crate::messages::Notice;
 #[cfg(all(feature = "sync", not(feature = "async")))]
 use crate::messages::{self, IncomingMessages, RequestMessage, ResponseMessage};
 #[cfg(all(feature = "sync", not(feature = "async")))]
-use crate::{Client, Error};
+use crate::Error;
 
 // Common modules
 pub(crate) mod common;
@@ -65,10 +65,10 @@ pub struct BidAsk {
 }
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
-impl DataStream<BidAsk> for BidAsk {
+impl StreamDecoder<BidAsk> for BidAsk {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::TickByTick => common::decoders::decode_bid_ask_tick(message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
@@ -76,7 +76,7 @@ impl DataStream<BidAsk> for BidAsk {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
         common::encoders::encode_cancel_tick_by_tick(request_id)
     }
@@ -101,10 +101,10 @@ pub struct MidPoint {
 }
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
-impl DataStream<MidPoint> for MidPoint {
+impl StreamDecoder<MidPoint> for MidPoint {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::TickByTick => common::decoders::decode_mid_point_tick(message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
@@ -112,7 +112,7 @@ impl DataStream<MidPoint> for MidPoint {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel mid point ticks");
         common::encoders::encode_cancel_tick_by_tick(request_id)
     }
@@ -140,14 +140,14 @@ pub struct Bar {
 }
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
-impl DataStream<Bar> for Bar {
+impl StreamDecoder<Bar> for Bar {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::RealTimeBars];
 
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         common::decoders::decode_realtime_bar(message)
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
         common::encoders::encode_cancel_realtime_bars(request_id)
     }
@@ -173,10 +173,10 @@ pub struct Trade {
 }
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
-impl DataStream<Trade> for Trade {
+impl StreamDecoder<Trade> for Trade {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::TickByTick => common::decoders::decode_trade_tick(message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
@@ -184,7 +184,7 @@ impl DataStream<Trade> for Trade {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
         common::encoders::encode_cancel_tick_by_tick(request_id)
     }
@@ -272,14 +272,14 @@ pub struct MarketDepthL2 {
 }
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
-impl DataStream<MarketDepths> for MarketDepths {
+impl StreamDecoder<MarketDepths> for MarketDepths {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2, IncomingMessages::Error];
 
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::MarketDepth => Ok(MarketDepths::MarketDepth(common::decoders::decode_market_depth(message)?)),
             IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(common::decoders::decode_market_depth_l2(
-                client.server_version,
+                server_version,
                 message,
             )?)),
             IncomingMessages::Error => {
@@ -294,9 +294,9 @@ impl DataStream<MarketDepths> for MarketDepths {
         }
     }
 
-    fn cancel_message(server_version: i32, request_id: Option<i32>, context: &ResponseContext) -> Result<RequestMessage, Error> {
+    fn cancel_message(server_version: i32, request_id: Option<i32>, context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
-        common::encoders::encode_cancel_market_depth(server_version, request_id, context.is_smart_depth)
+        common::encoders::encode_cancel_market_depth(server_version, request_id, context.map(|c| c.is_smart_depth).unwrap_or(false))
     }
 }
 
@@ -331,7 +331,7 @@ pub enum TickTypes {
 }
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
-impl DataStream<TickTypes> for TickTypes {
+impl StreamDecoder<TickTypes> for TickTypes {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[
         IncomingMessages::TickPrice,
         IncomingMessages::TickSize,
@@ -344,15 +344,15 @@ impl DataStream<TickTypes> for TickTypes {
         IncomingMessages::TickReqParams,
     ];
 
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickPrice => Ok(common::decoders::decode_tick_price(client.server_version, message)?),
+            IncomingMessages::TickPrice => Ok(common::decoders::decode_tick_price(server_version, message)?),
             IncomingMessages::TickSize => Ok(TickTypes::Size(common::decoders::decode_tick_size(message)?)),
             IncomingMessages::TickString => Ok(TickTypes::String(common::decoders::decode_tick_string(message)?)),
             IncomingMessages::TickEFP => Ok(TickTypes::EFP(common::decoders::decode_tick_efp(message)?)),
             IncomingMessages::TickGeneric => Ok(TickTypes::Generic(common::decoders::decode_tick_generic(message)?)),
             IncomingMessages::TickOptionComputation => Ok(TickTypes::OptionComputation(common::decoders::decode_tick_option_computation(
-                client.server_version,
+                server_version,
                 message,
             )?)),
             IncomingMessages::TickReqParams => Ok(TickTypes::RequestParameters(common::decoders::decode_tick_request_parameters(message)?)),
@@ -362,7 +362,7 @@ impl DataStream<TickTypes> for TickTypes {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: &ResponseContext) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
         common::encoders::encode_cancel_market_data(request_id)
     }

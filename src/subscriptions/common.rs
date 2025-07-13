@@ -1,6 +1,7 @@
 //! Common utilities for subscription processing
 
 use crate::errors::Error;
+use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 
 /// Checks if an error indicates the subscription should retry processing
 #[allow(dead_code)]
@@ -98,5 +99,38 @@ mod tests {
             ProcessingResult::Error(Error::ConnectionFailed) => {}
             _ => panic!("Expected Error"),
         }
+    }
+}
+
+/// Context information for response handling
+#[derive(Debug, Clone, Default)]
+pub struct ResponseContext {
+    /// Type of the original request that initiated this subscription
+    pub request_type: Option<OutgoingMessages>,
+    /// Whether this is a smart depth subscription
+    pub is_smart_depth: bool,
+}
+
+/// Common trait for decoding streaming data responses
+///
+/// This trait is shared between sync and async implementations to avoid code duplication.
+/// The key change from the original design is that `decode` takes `server_version` directly
+/// instead of the entire `Client`, making it possible to share implementations.
+pub(crate) trait StreamDecoder<T> {
+    /// Message types this stream can handle
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[];
+
+    /// Decode a response message into the stream's data type
+    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
+
+    /// Generate a cancellation message for this stream
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
+        Err(Error::NotImplemented)
+    }
+
+    /// Returns true if this decoded value represents the end of a snapshot subscription
+    #[allow(unused)]
+    fn is_snapshot_end(&self) -> bool {
+        false
     }
 }

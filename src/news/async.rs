@@ -5,37 +5,33 @@ use super::*;
 use crate::contracts::Contract;
 use crate::market_data::realtime;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
-use crate::subscriptions::{AsyncDataStream, Subscription};
+use crate::subscriptions::{DataStream, ResponseContext, Subscription};
 use crate::{server_versions, Client, Error};
 use std::sync::Arc;
 
-impl AsyncDataStream<NewsBulletin> for NewsBulletin {
+impl DataStream<NewsBulletin> for NewsBulletin {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::NewsBulletins];
 
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<NewsBulletin, Error> {
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<NewsBulletin, Error> {
         match message.message_type() {
             IncomingMessages::NewsBulletins => Ok(decoders::decode_news_bulletin(message.clone())?),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 
-    fn cancel_message(
-        _server_version: i32,
-        _request_id: Option<i32>,
-        _context: &crate::client::builders::ResponseContext,
-    ) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
         encoders::encode_cancel_news_bulletin()
     }
 }
 
-impl AsyncDataStream<NewsArticle> for NewsArticle {
+impl DataStream<NewsArticle> for NewsArticle {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::HistoricalNews,
         IncomingMessages::HistoricalNewsEnd,
         IncomingMessages::TickNews,
     ];
 
-    fn decode(_client: &Client, message: &mut ResponseMessage) -> Result<NewsArticle, Error> {
+    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<NewsArticle, Error> {
         match message.message_type() {
             IncomingMessages::HistoricalNews => Ok(decoders::decode_historical_news(None, message.clone())?),
             IncomingMessages::HistoricalNewsEnd => Err(Error::EndOfStream),
@@ -44,13 +40,9 @@ impl AsyncDataStream<NewsArticle> for NewsArticle {
         }
     }
 
-    fn cancel_message(
-        _server_version: i32,
-        request_id: Option<i32>,
-        context: &crate::client::builders::ResponseContext,
-    ) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
         // News articles can come from market data subscriptions, so use the appropriate cancel
-        if context.request_type == Some(OutgoingMessages::RequestMarketData) {
+        if context.and_then(|c| c.request_type) == Some(OutgoingMessages::RequestMarketData) {
             let request_id = request_id.expect("Request ID required to encode cancel market data");
             realtime::common::encoders::encode_cancel_market_data(request_id)
         } else {
@@ -161,7 +153,7 @@ pub(crate) async fn contract_news(client: &Client, contract: &Contract, provider
         Some(request_id),
         None,
         None,
-        crate::client::builders::ResponseContext {
+        ResponseContext {
             request_type: Some(OutgoingMessages::RequestMarketData),
             ..Default::default()
         },
@@ -184,7 +176,7 @@ pub(crate) async fn broad_tape_news(client: &Client, provider_code: &str) -> Res
         Some(request_id),
         None,
         None,
-        crate::client::builders::ResponseContext {
+        ResponseContext {
             request_type: Some(OutgoingMessages::RequestMarketData),
             ..Default::default()
         },

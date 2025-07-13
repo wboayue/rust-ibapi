@@ -10,30 +10,15 @@ use log::{debug, warn};
 use tokio::sync::mpsc;
 
 use super::common::{process_decode_result, ProcessingResult};
-use crate::client::builders::ResponseContext;
+use super::{DataStream, ResponseContext};
 use crate::client::r#async::Client;
-use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::transport::AsyncInternalSubscription;
 use crate::Error;
 
 // Type aliases to reduce complexity
-type CancelFn = Box<dyn Fn(i32, Option<i32>, &ResponseContext) -> Result<RequestMessage, Error> + Send + Sync>;
-type DecoderFn<T> = Box<dyn Fn(&Client, &mut ResponseMessage) -> Result<T, Error> + Send>;
-
-/// Trait for types that can be decoded from response messages
-pub trait AsyncDataStream<T> {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[];
-
-    fn decode(client: &Client, message: &mut ResponseMessage) -> Result<T, Error>;
-
-    fn cancel_message(
-        _server_version: i32,
-        _request_id: Option<i32>,
-        _context: &crate::client::builders::ResponseContext,
-    ) -> Result<crate::messages::RequestMessage, Error> {
-        Err(Error::NotImplemented)
-    }
-}
+type CancelFn = Box<dyn Fn(i32, Option<i32>, Option<&ResponseContext>) -> Result<RequestMessage, Error> + Send + Sync>;
+type DecoderFn<T> = Box<dyn Fn(i32, &mut ResponseMessage) -> Result<T, Error> + Send>;
 
 /// Asynchronous subscription for streaming data
 pub struct Subscription<T> {
@@ -72,7 +57,7 @@ impl<T> Subscription<T> {
         response_context: ResponseContext,
     ) -> Self
     where
-        D: Fn(&Client, &mut ResponseMessage) -> Result<T, Error> + Send + 'static,
+        D: Fn(i32, &mut ResponseMessage) -> Result<T, Error> + Send + 'static,
     {
         Self {
             inner: SubscriptionInner::WithDecoder {
@@ -101,13 +86,13 @@ impl<T> Subscription<T> {
         response_context: ResponseContext,
     ) -> Self
     where
-        F: Fn(&Client, &mut ResponseMessage) -> Result<T, Error> + Send + 'static,
+        F: Fn(i32, &mut ResponseMessage) -> Result<T, Error> + Send + 'static,
     {
         Self::with_decoder(internal, client, decoder, request_id, order_id, message_type, response_context)
     }
 
-    /// Create a subscription from an internal subscription using the AsyncDataStream decoder
-    pub fn new_from_internal<D>(
+    /// Create a subscription from an internal subscription using the DataStream decoder
+    pub(crate) fn new_from_internal<D>(
         internal: AsyncInternalSubscription,
         client: Arc<Client>,
         request_id: Option<i32>,
@@ -116,19 +101,19 @@ impl<T> Subscription<T> {
         response_context: ResponseContext,
     ) -> Self
     where
-        D: AsyncDataStream<T> + 'static,
+        D: DataStream<T> + 'static,
         T: 'static,
     {
-        let mut sub = Self::with_decoder(internal, client, D::decode, request_id, order_id, message_type, response_context);
+        let mut sub = Self::with_decoder(internal, client.clone(), D::decode, request_id, order_id, message_type, response_context);
         // Store the cancel function
         sub.cancel_fn = Some(Box::new(D::cancel_message));
         sub
     }
 
     /// Create a subscription from internal subscription without explicit metadata (for backward compatibility)
-    pub fn new_from_internal_simple<D>(internal: AsyncInternalSubscription, client: Arc<Client>) -> Self
+    pub(crate) fn new_from_internal_simple<D>(internal: AsyncInternalSubscription, client: Arc<Client>) -> Self
     where
-        D: AsyncDataStream<T> + 'static,
+        D: DataStream<T> + 'static,
         T: 'static,
     {
         // The AsyncInternalSubscription already has cleanup logic, so we don't need cancel metadata
@@ -164,7 +149,7 @@ impl<T> Subscription<T> {
             } => loop {
                 match subscription.next().await {
                     Some(mut message) => {
-                        let result = decoder(client, &mut message);
+                        let result = decoder(client.server_version(), &mut message);
                         match process_decode_result(result) {
                             ProcessingResult::Success(val) => return Some(Ok(val)),
                             ProcessingResult::EndOfStream => return None,
@@ -191,7 +176,7 @@ impl<T> Subscription<T> {
 
         if let (Some(client), Some(cancel_fn)) = (&self.client, &self.cancel_fn) {
             let id = self.request_id.or(self.order_id);
-            if let Ok(message) = cancel_fn(client.server_version(), id, &self.response_context) {
+            if let Ok(message) = cancel_fn(client.server_version(), id, Some(&self.response_context)) {
                 if let Err(e) = client.message_bus.send_request(message).await {
                     warn!("error sending cancel message: {e}")
                 }
@@ -221,7 +206,7 @@ impl<T> Drop for Subscription<T> {
             let server_version = client.server_version();
 
             // Clone the cancel function for use in the spawned task
-            if let Ok(message) = cancel_fn(server_version, id, &response_context) {
+            if let Ok(message) = cancel_fn(server_version, id, Some(&response_context)) {
                 // Spawn a task to send the cancel message since drop can't be async
                 tokio::spawn(async move {
                     if let Err(e) = client.message_bus.send_request(message).await {
@@ -249,7 +234,7 @@ impl<T: Unpin + 'static> Stream for Subscription<T> {
                 // Create a Pin for the subscription's receiver
                 match Pin::new(&mut subscription.receiver).poll_recv(cx) {
                     Poll::Ready(Some(mut message)) => {
-                        let result = decoder(client, &mut message);
+                        let result = decoder(client.server_version(), &mut message);
                         match process_decode_result(result) {
                             ProcessingResult::Success(val) => Poll::Ready(Some(Ok(val))),
                             ProcessingResult::EndOfStream => Poll::Ready(None),
