@@ -33,14 +33,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(result) = subscription.next().await {
         match result {
             Ok(update) => match update {
-                AccountSummaries::Summary(summary) => {
+                AccountSummaryResult::Summary(summary) => {
                     if summary.currency.is_empty() {
                         println!("Account {}: {} = {}", summary.account, summary.tag, summary.value);
                     } else {
                         println!("Account {}: {} = {} {}", summary.account, summary.tag, summary.value, summary.currency);
                     }
                 }
-                AccountSummaries::End => {
+                AccountSummaryResult::End => {
                     println!("Account summary complete.");
                     break;
                 }

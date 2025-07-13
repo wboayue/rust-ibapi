@@ -10,13 +10,13 @@ use crate::Error;
 
 use super::{decoders, encoders, errors};
 
-impl StreamDecoder<AccountSummaries> for AccountSummaries {
+impl StreamDecoder<AccountSummaryResult> for AccountSummaryResult {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::AccountSummary, IncomingMessages::AccountSummaryEnd];
 
     fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::AccountSummary => Ok(AccountSummaries::Summary(decoders::decode_account_summary(server_version, message)?)),
-            IncomingMessages::AccountSummaryEnd => Ok(AccountSummaries::End),
+            IncomingMessages::AccountSummary => Ok(AccountSummaryResult::Summary(decoders::decode_account_summary(server_version, message)?)),
+            IncomingMessages::AccountSummaryEnd => Ok(AccountSummaryResult::End),
             message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
         }
     }

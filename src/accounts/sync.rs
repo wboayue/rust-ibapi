@@ -78,7 +78,7 @@ pub fn pnl_single<'a>(
     })
 }
 
-pub fn account_summary<'a>(client: &'a Client, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
+pub fn account_summary<'a>(client: &'a Client, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<'a, AccountSummaryResult>, Error> {
     helpers::request_with_id(client, Features::ACCOUNT_SUMMARY, |id| {
         encoders::encode_request_account_summary(id, group, tags)
     })
@@ -250,7 +250,7 @@ mod tests {
 
     #[test]
     fn test_account_summary() {
-        use crate::accounts::AccountSummaries;
+        use crate::accounts::AccountSummaryResult;
 
         let (client, message_bus) = create_test_client_with_responses(vec![responses::ACCOUNT_SUMMARY.into(), responses::ACCOUNT_SUMMARY_END.into()]);
 
@@ -261,7 +261,7 @@ mod tests {
 
         let first_update = subscription.next();
         match first_update {
-            Some(AccountSummaries::Summary(summary_data)) => {
+            Some(AccountSummaryResult::Summary(summary_data)) => {
                 assert_eq!(summary_data.account, TEST_ACCOUNT); // From responses::ACCOUNT_SUMMARY
                 assert_eq!(summary_data.tag, AccountSummaryTags::ACCOUNT_TYPE);
                 assert_eq!(summary_data.value, "FA");
@@ -271,7 +271,7 @@ mod tests {
 
         let second_update = subscription.next();
         assert!(
-            matches!(second_update, Some(AccountSummaries::End)),
+            matches!(second_update, Some(AccountSummaryResult::End)),
             "Expected AccountSummaries::End, got {:?}",
             second_update
         );

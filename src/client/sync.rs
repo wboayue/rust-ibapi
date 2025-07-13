@@ -14,7 +14,7 @@ use time::{Date, OffsetDateTime};
 use time_tz::Tz;
 
 use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
-use crate::accounts::{AccountSummaries, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
+use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::connection::{sync::Connection, ConnectionMetadata};
 use crate::contracts::{Contract, OptionComputation, SecurityType};
 use crate::errors::Error;
@@ -309,7 +309,7 @@ impl Client {
     ///     println!("{summary:?}")
     /// }
     /// ```
-    pub fn account_summary<'a>(&'a self, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<'a, AccountSummaries>, Error> {
+    pub fn account_summary<'a>(&'a self, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<'a, AccountSummaryResult>, Error> {
         accounts::account_summary(self, group, tags)
     }
 

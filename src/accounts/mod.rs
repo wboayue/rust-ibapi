@@ -102,7 +102,7 @@ impl AccountSummaryTags {
 }
 
 #[derive(Debug)]
-pub enum AccountSummaries {
+pub enum AccountSummaryResult {
     /// Summary of account details such as net liquidation, cash balance, etc.
     Summary(AccountSummary),
     /// End marker for a batch of account summaries
