@@ -13,9 +13,20 @@
 
 ## Overview
 
-The API is designed to provide a robust, efficient, and flexible interface for communicating with TWS (Trader Workstation) or IB Gateway. This API allows developers to build trading applications in Rust, leveraging its performance and safety features. The architecture is built around threads and channels for sending requests and responses between the client and the TWS.
+The API is designed to provide a robust, efficient, and flexible interface for communicating with TWS (Trader Workstation) or IB Gateway. This API allows developers to build trading applications in Rust, leveraging its performance and safety features. The architecture supports both **synchronous** (thread-based) and **asynchronous** (tokio-based) operation modes through feature flags.
 
-The main thread handles user interactions with the API. The MessageBus runs on a dedicated thread. The MessageBus establishes the connection to TWS, sends messages from the client to TWS, and listens for and routes messages from TWS to the client via channels.
+### Architecture Overview
+
+The rust-ibapi crate supports two mutually exclusive modes:
+- **Sync mode** (default): Uses threads and crossbeam channels
+- **Async mode**: Uses tokio tasks and mpsc channels
+
+**Core Components:**
+- **Client**: Main interface for user interactions (adapts to sync/async mode)
+- **MessageBus**: Handles connection and message routing (runs on thread/task)
+- **Common Utilities**: Shared patterns and helpers for both modes
+
+The MessageBus establishes the connection to TWS, sends messages from the client to TWS, and listens for and routes messages from TWS to the client via channels.
 
 ## Getting Started
 
@@ -38,7 +49,12 @@ cargo install cargo-audit
 ```bash
 git clone https://github.com/<your-github-username>/rust-ibapi
 cd rust-ibapi
+
+# Test sync mode (default)
 cargo test
+
+# Test async mode
+cargo test --no-default-features --features async
 ```
 
 5. Set up your development environment:
@@ -50,7 +66,18 @@ cargo test
 * Ensure tests are still passing and coverage hasn't dropped:
 
 ```bash
+# Test both sync and async modes
 cargo test
+cargo test --no-default-features --features async
+
+# Check for linting issues
+cargo clippy
+cargo clippy --no-default-features --features async
+
+# Format code
+cargo fmt
+
+# Generate coverage report
 cargo tarpaulin -o html
 ```
 
@@ -165,6 +192,295 @@ mod tests {
 }
 ```
 
+## Sync/Async Architecture
+
+The codebase supports both synchronous and asynchronous operation modes through feature flags. This dual-mode architecture requires specific patterns and organization to maintain consistency and avoid code duplication.
+
+### Feature Flags
+
+The library uses mutually exclusive feature flags:
+- **`sync`** (default): Traditional synchronous API using threads
+- **`async`**: Asynchronous API using tokio
+
+When both features are enabled, async takes precedence. This allows users to simply add `--features async` without needing `--no-default-features`.
+
+```bash
+# Build with sync mode (default)
+cargo build
+
+# Build with async mode
+cargo build --no-default-features --features async
+
+# Build examples for async mode
+cargo run --no-default-features --features async --example async_connect
+```
+
+### Module Organization
+
+Each API module follows a consistent structure to support both modes:
+
+```
+src/<module>/
+├── mod.rs         # Public types and module exports
+├── common/        # Shared implementation details
+│   ├── mod.rs     # Export encoders/decoders
+│   ├── encoders.rs # Message encoding functions
+│   ├── decoders.rs # Message decoding functions
+│   └── test_data.rs # Shared test fixtures (optional)
+├── sync.rs        # Synchronous implementation
+└── async.rs       # Asynchronous implementation
+```
+
+### Module Structure Pattern
+
+Follow this pattern when creating new modules:
+
+```rust
+// src/<module>/mod.rs
+//! Module description
+
+// Common implementation modules
+mod common;
+
+// Feature-specific implementations
+#[cfg(all(feature = "sync", not(feature = "async")))]
+mod sync;
+
+#[cfg(feature = "async")]
+mod r#async;
+
+// Public types - always available regardless of feature flags
+#[derive(Debug)]
+pub struct MyData {
+    pub field: String,
+}
+
+// Re-export API functions based on active feature
+#[cfg(all(feature = "sync", not(feature = "async")))]
+pub use sync::{my_function};
+
+#[cfg(feature = "async")]
+pub use r#async::{my_function};
+```
+
+### Feature Guard Pattern
+
+**CRITICAL**: When adding new sync-specific code, ALWAYS use:
+
+```rust
+#[cfg(all(feature = "sync", not(feature = "async")))]
+```
+
+**NOT** just:
+```rust
+#[cfg(feature = "sync")]  // DON'T use this alone!
+```
+
+This ensures that async mode properly overrides sync mode when both features are enabled.
+
+For async-specific code, use:
+```rust
+#[cfg(feature = "async")]
+```
+
+### Common Utilities
+
+The `src/common/` directory contains shared utilities used by both sync and async implementations:
+
+#### Error Helpers (`src/common/error_helpers.rs`)
+
+Provides validation and error handling utilities:
+
+```rust
+use crate::common::error_helpers;
+
+// Validate required parameters
+let request_id = error_helpers::require_request_id_for(request_id, "my operation")?;
+
+// Validate ranges
+let port = error_helpers::require_range(port, 1, 65535, "port")?;
+
+// Validate with custom logic
+let value = error_helpers::require_with(value, |v| v > 0, "value must be positive")?;
+```
+
+#### Request Helpers (`src/common/request_helpers.rs`)
+
+Provides common request patterns:
+
+```rust
+use crate::common::request_helpers;
+
+// For one-shot requests with retry logic
+pub fn my_api_call(client: &Client) -> Result<MyData, Error> {
+    request_helpers::one_shot_with_retry(
+        client,
+        OutgoingMessages::MyRequest,
+        || encode_my_request(client.next_request_id()),
+        |message| decode_my_response(message),
+        || Err(Error::UnexpectedEndOfStream),
+    )
+}
+
+// For requests with IDs and subscriptions
+pub fn my_subscription(client: &Client) -> Result<Subscription<MyData>, Error> {
+    request_helpers::request_with_id(client, Features::MY_FEATURE, |request_id| {
+        encode_my_request(request_id)
+    })
+}
+```
+
+#### Retry Logic (`src/common/retry.rs`)
+
+Handles connection reset scenarios:
+
+```rust
+use crate::common::retry;
+
+// Automatically retry on connection reset
+let result = retry::retry_on_connection_reset(|| {
+    // Your operation that might fail due to connection reset
+    my_operation()
+})?;
+```
+
+### Testing Patterns
+
+#### Table-Driven Tests
+
+Use table-driven tests for comprehensive coverage with shared data:
+
+```rust
+// src/<module>/common/test_tables.rs
+pub struct ApiTestCase {
+    pub name: &'static str,
+    pub input: MyInput,
+    pub expected: MyExpected,
+}
+
+pub const MY_API_TESTS: &[ApiTestCase] = &[
+    ApiTestCase {
+        name: "valid input",
+        input: MyInput { field: "test" },
+        expected: MyExpected::Success,
+    },
+    // ... more test cases
+];
+
+// In sync.rs and async.rs tests
+#[test] // or #[tokio::test] for async
+fn test_my_api_table() {
+    use crate::<module>::common::test_tables::MY_API_TESTS;
+    
+    for test_case in MY_API_TESTS {
+        // Test implementation using shared test case
+        let result = my_api(&test_case.input);
+        assert_eq!(result, test_case.expected, "Test '{}' failed", test_case.name);
+    }
+}
+```
+
+#### Shared Test Data
+
+Create reusable test fixtures:
+
+```rust
+// src/<module>/common/test_data.rs
+pub const TEST_REQUEST_ID: i32 = 9000;
+pub const TEST_VALUE: &str = "test_value";
+
+pub fn build_test_response(message_type: &str, data: &str) -> String {
+    format!("{}|{}|{}|", message_type, TEST_REQUEST_ID, data)
+}
+
+pub fn create_test_client() -> Client {
+    // Standard test client setup
+}
+```
+
+### Implementation Guidelines
+
+#### Shared Business Logic
+
+Put shared logic in `common/` modules:
+
+```rust
+// src/<module>/common/encoders.rs
+pub(in crate::<module>) fn encode_my_request(request_id: i32, data: &str) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+    message.push_field(&OutgoingMessages::MyRequest);
+    message.push_field(&request_id);
+    message.push_field(data);
+    Ok(message)
+}
+
+// src/<module>/common/decoders.rs  
+pub(in crate::<module>) fn decode_my_response(message: ResponseMessage) -> Result<MyData, Error> {
+    let mut fields = message.into_iter();
+    fields.next(); // Skip message type
+    
+    let field = fields.next_string()?;
+    Ok(MyData { field })
+}
+```
+
+#### Sync Implementation
+
+```rust
+// src/<module>/sync.rs
+use super::common::{encoders, decoders};
+use crate::common::request_helpers;
+
+pub fn my_function(client: &Client, data: &str) -> Result<MyData, Error> {
+    request_helpers::one_shot_with_retry(
+        client,
+        OutgoingMessages::MyRequest,
+        || encoders::encode_my_request(client.next_request_id(), data),
+        |message| decoders::decode_my_response(message),
+        || Err(Error::UnexpectedEndOfStream),
+    )
+}
+```
+
+#### Async Implementation
+
+```rust
+// src/<module>/async.rs
+use super::common::{encoders, decoders};
+use crate::client::ClientRequestBuilders;
+
+pub async fn my_function(client: &Client, data: &str) -> Result<MyData, Error> {
+    let builder = client.request();
+    let request = encoders::encode_my_request(builder.request_id(), data)?;
+    let mut subscription = builder.send::<MyData>(request).await?;
+
+    match subscription.next().await {
+        Some(Ok(result)) => Ok(result),
+        Some(Err(Error::ConnectionReset)) => {
+            Box::pin(my_function(client, data)).await
+        }
+        Some(Err(e)) => Err(e),
+        None => Err(Error::UnexpectedEndOfStream),
+    }
+}
+```
+
+### Testing Both Modes
+
+Ensure your changes work in both sync and async modes:
+
+```bash
+# Run tests for sync mode
+cargo test <module>
+
+# Run tests for async mode  
+cargo test --no-default-features --features async <module>
+
+# Check clippy for both modes
+cargo clippy
+cargo clippy --no-default-features --features async
+```
+
 ## Core Components
 
 ### MessageBus
@@ -209,47 +525,146 @@ The recommended application design is a separate Client instance per thread to a
 
 ## Extending the API
 
-1. Define the new API method
+Follow these steps to add new API functionality while maintaining consistency with the sync/async architecture:
 
-* The API exposed to the user is defined on the [Client struct](https://github.com/wboayue/rust-ibapi/blob/main/src/client.rs#L33).
-* Define the interface for the new API on the Client struct. The actual implementation of the API is delegated to modules grouped by accounts, contracts, market data, orders and news.
-* Include a docstring describing the API that includes and example of the API usage. [for example](https://github.com/wboayue/rust-ibapi/blob/main/src/client.rs#L226).
+### 1. Define Public Types and API Interface
 
-2. Ensure message identifiers ar defined.
+* Define data types in the module's `mod.rs` file - these should be available regardless of feature flags
+* The API exposed to the user is defined on the [Client struct](https://github.com/wboayue/rust-ibapi/blob/main/src/client.rs#L33)
+* Define the interface for the new API on the Client struct with proper docstrings and examples
+* Group the API in the appropriate module: accounts, contracts, market_data, orders, news, or wsh
 
-* Make sure the appropriate [incoming message](https://github.com/wboayue/rust-ibapi/blob/main/src/messages.rs#L15) and [outgoing message](https://github.com/wboayue/rust-ibapi/blob/main/src/messages.rs#L222) identifiers are defined.
-* Message identifiers for [incoming messages](https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/IncomingMessage.cs) and [outgoing messages](https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/OutgoingMessages.cs) can be found in the interactive brokers codebase.
+### 2. Ensure Message Identifiers Are Defined
 
-3. Update the message type to request ID map.
+* Make sure the appropriate [incoming message](https://github.com/wboayue/rust-ibapi/blob/main/src/messages.rs#L15) and [outgoing message](https://github.com/wboayue/rust-ibapi/blob/main/src/messages.rs#L222) identifiers are defined
+* Message identifiers for [incoming messages](https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/IncomingMessage.cs) and [outgoing messages](https://github.com/InteractiveBrokers/tws-api/blob/master/source/csharpclient/client/OutgoingMessages.cs) can be found in the Interactive Brokers codebase
 
-* When processing messages received from TWS, the request id needs to be determined. This is not the same for all messages.
-* A [map of message type to request id position](https://github.com/wboayue/rust-ibapi/blob/main/src/messages.rs#L199) is maintained and may need to be updated.
+### 3. Update Message Type to Request ID Map
 
-4. Add an implementation for the API in the appropriate group.
+* When processing messages received from TWS, the request ID needs to be determined
+* A [map of message type to request ID position](https://github.com/wboayue/rust-ibapi/blob/main/src/messages.rs#L199) is maintained and may need to be updated
 
-* Add an implementation for the API in the appropriate group: accounts, contracts, market data, orders or news.
-* The implementation will provide an encoder to convert the request to the TWS format
-* Send the message using the `MessageBus`.
-   * Messages with a request id are sent using [send_generic_message](https://github.com/wboayue/rust-ibapi/blob/main/src/client/transport.rs#L26).
-   * Messages without a request id are sent using message type methods. e.g. [request_next_order_id](https://github.com/wboayue/rust-ibapi/blob/main/src/client/transport.rs#L29)
+### 4. Implement Shared Business Logic
 
-5. Implement a decoder for the response.
+Create the common implementation that both sync and async will use:
 
-* Implement a decoder for the response received from the `MessageBus`.
-* Responses contain a channel that can you used to read the results as they become available.
-* For APIs that return a single result, they may simply decode and return the result.
-* For a collection of results, return a Subscription that can be used to iterate over results.
+```rust
+// src/<module>/common/encoders.rs
+pub(in crate::<module>) fn encode_my_request(request_id: i32, param: &str) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+    message.push_field(&OutgoingMessages::MyRequest);
+    message.push_field(&request_id);
+    message.push_field(param);
+    Ok(message)
+}
 
-6. Add test cases.
+// src/<module>/common/decoders.rs
+pub(in crate::<module>) fn decode_my_response(message: ResponseMessage) -> Result<MyData, Error> {
+    // Decode TWS response into your data type
+}
+```
 
-* Add test cases for the new functionality.
-* Run coverage analysis. Your addition should improve or maintain the [current coverage](https://coveralls.io/github/wboayue/rust-ibapi?branch=main).
-* Use `cargo tarpaulin` to generate coverage reports.
+### 5. Implement Sync Version
 
-7. Add an example.
+```rust
+// src/<module>/sync.rs
+use super::common::{encoders, decoders};
+use crate::common::request_helpers;
 
-* Add an example showing the API usage to the [examples folder](https://github.com/wboayue/rust-ibapi/tree/main/examples).
-* Ensure your example is well-documented and can help users understand how to use the new API method.
+pub fn my_function(client: &Client, param: &str) -> Result<MyData, Error> {
+    request_helpers::one_shot_with_retry(
+        client,
+        OutgoingMessages::MyRequest,
+        || encoders::encode_my_request(client.next_request_id(), param),
+        |message| decoders::decode_my_response(message),
+        || Err(Error::UnexpectedEndOfStream),
+    )
+}
+```
+
+### 6. Implement Async Version
+
+```rust
+// src/<module>/async.rs
+use super::common::{encoders, decoders};
+use crate::client::ClientRequestBuilders;
+
+pub async fn my_function(client: &Client, param: &str) -> Result<MyData, Error> {
+    let builder = client.request();
+    let request = encoders::encode_my_request(builder.request_id(), param)?;
+    let mut subscription = builder.send::<MyData>(request).await?;
+
+    match subscription.next().await {
+        Some(Ok(result)) => Ok(result),
+        Some(Err(Error::ConnectionReset)) => {
+            Box::pin(my_function(client, param)).await
+        }
+        Some(Err(e)) => Err(e),
+        None => Err(Error::UnexpectedEndOfStream),
+    }
+}
+```
+
+### 7. Update Module Exports
+
+```rust
+// src/<module>/mod.rs
+#[cfg(all(feature = "sync", not(feature = "async")))]
+pub use sync::{my_function};
+
+#[cfg(feature = "async")]
+pub use r#async::{my_function};
+```
+
+### 8. Add Comprehensive Tests
+
+Create table-driven tests that work for both sync and async:
+
+```rust
+// src/<module>/common/test_tables.rs
+pub struct MyApiTestCase {
+    pub name: &'static str,
+    pub input: &'static str,
+    pub expected_result: ApiExpectedResult,
+}
+
+pub const MY_API_TESTS: &[MyApiTestCase] = &[
+    MyApiTestCase {
+        name: "valid request",
+        input: "test_input",
+        expected_result: ApiExpectedResult::Success { /* ... */ },
+    },
+    // ... more test cases
+];
+```
+
+### 9. Verify Both Modes
+
+Test your implementation in both sync and async modes:
+
+```bash
+# Test sync implementation
+cargo test <module>::sync
+cargo clippy
+
+# Test async implementation  
+cargo test --no-default-features --features async <module>::async
+cargo clippy --no-default-features --features async
+```
+
+### 10. Add Examples
+
+* Add examples showing the API usage to the [examples folder](https://github.com/wboayue/rust-ibapi/tree/main/examples)
+* Create both sync and async examples if applicable:
+  - Sync examples: `examples/sync/my_feature.rs`
+  - Async examples: `examples/async/my_feature.rs` 
+* Ensure examples are well-documented and demonstrate proper usage patterns
+
+### 11. Update Documentation
+
+* Run coverage analysis to ensure your addition maintains [current coverage](https://coveralls.io/github/wboayue/rust-ibapi?branch=main)
+* Use `cargo tarpaulin` to generate coverage reports
+* Update any relevant documentation or README sections
 
 ## Troubleshooting
 
