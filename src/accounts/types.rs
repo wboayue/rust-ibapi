@@ -417,7 +417,7 @@ mod tests {
         let _ = model_code.clone();
 
         let contract_id = ContractId(123);
-        let _ = contract_id.clone();
+        let _ = contract_id;
 
         let account_group = AccountGroup("All".to_string());
         let _ = account_group.clone();
