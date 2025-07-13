@@ -499,7 +499,7 @@ mod tests {
 
     #[test]
     fn test_server_version_errors() {
-        use super::common::test_data::tables::VERSION_TEST_CASES;
+        use super::common::test_tables::VERSION_TEST_CASES;
 
         let account = AccountId(TEST_ACCOUNT.to_string());
         let group = AccountGroup("All".to_string());
@@ -532,7 +532,7 @@ mod tests {
 
     #[test]
     fn test_managed_accounts_additional_scenarios() {
-        use super::common::test_data::tables::managed_accounts_test_cases;
+        use super::common::test_tables::managed_accounts_test_cases;
 
         for test_case in managed_accounts_test_cases() {
             let (client, message_bus) = if test_case.responses.is_empty() {
@@ -551,7 +551,7 @@ mod tests {
 
     #[test]
     fn test_server_time_comprehensive() {
-        use super::common::test_data::tables::server_time_test_cases;
+        use super::common::test_tables::server_time_test_cases;
 
         for test_case in server_time_test_cases() {
             let (client, message_bus) = if test_case.responses.is_empty() {
@@ -591,7 +591,7 @@ mod tests {
 
     #[test]
     fn test_account_summary_comprehensive() {
-        use super::common::test_data::tables::account_summary_tag_test_cases;
+        use super::common::test_tables::account_summary_tag_test_cases;
         use crate::accounts::AccountSummaryResult;
 
         let test_cases = account_summary_tag_test_cases();
@@ -657,7 +657,7 @@ mod tests {
 
     #[test]
     fn test_pnl_comprehensive() {
-        use super::common::test_data::tables::pnl_parameter_test_cases;
+        use super::common::test_tables::pnl_parameter_test_cases;
 
         let test_cases = pnl_parameter_test_cases();
         let (client, message_bus) = create_test_client();
@@ -716,7 +716,7 @@ mod tests {
 
     #[test]
     fn test_pnl_single_edge_cases() {
-        use super::common::test_data::tables::contract_id_test_cases;
+        use super::common::test_tables::contract_id_test_cases;
 
         let test_cases = contract_id_test_cases();
         let (client, message_bus) = create_test_client();
@@ -764,7 +764,7 @@ mod tests {
 
     #[test]
     fn test_positions_multi_parameter_combinations() {
-        use super::common::test_data::tables::positions_multi_parameter_test_cases;
+        use super::common::test_tables::positions_multi_parameter_test_cases;
 
         let test_cases = positions_multi_parameter_test_cases();
         let (client, message_bus) = create_test_client_with_responses(vec![responses::POSITION_MULTI.into(), responses::POSITION_MULTI_END.into()]);
@@ -832,7 +832,7 @@ mod tests {
 
     #[test]
     fn test_subscription_lifecycle() {
-        use super::common::test_data::tables::{subscription_lifecycle_test_cases, SubscriptionType};
+        use super::common::test_tables::{subscription_lifecycle_test_cases, SubscriptionType};
 
         let test_cases = subscription_lifecycle_test_cases();
         let (client, message_bus) = create_test_client();

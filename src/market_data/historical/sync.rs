@@ -79,7 +79,7 @@ pub(crate) fn historical_data(
             }
             Some(Ok(message)) if message.message_type() == IncomingMessages::Error => return Err(Error::from(message)),
             Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
-            Some(Err(Error::ConnectionReset)) => continue,
+            Some(Err(Error::ConnectionReset)) => {}
             Some(Err(e)) => return Err(e),
             None => return Err(Error::UnexpectedEndOfStream),
         }
@@ -131,7 +131,7 @@ pub(crate) fn historical_schedule(
                 return decoders::decode_historical_schedule(&mut message)
             }
             Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
-            Some(Err(Error::ConnectionReset)) => continue,
+            Some(Err(Error::ConnectionReset)) => {}
             Some(Err(e)) => return Err(e),
             None => return Err(Error::UnexpectedEndOfStream),
         }
@@ -296,7 +296,7 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
             }
 
             match self.fill_buffer(next_response()) {
-                Ok(()) => continue,
+                Ok(()) => {}
                 Err(()) => return None,
             }
         }

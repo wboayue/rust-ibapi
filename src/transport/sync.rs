@@ -239,8 +239,8 @@ impl<S: Stream> TcpMessageBus<S> {
         thread::spawn(move || {
             loop {
                 match message_bus.dispatch(server_version) {
-                    Ok(_) => continue,
-                    Err(Error::Shutdown) | Err(Error::ConnectionFailed) => break,
+                    Ok(_) => {}
+                    Err(Error::Shutdown | Error::ConnectionFailed) => break,
                     Err(e) => {
                         error!("Dispatcher encountered an error: {e:?}");
                         break;
