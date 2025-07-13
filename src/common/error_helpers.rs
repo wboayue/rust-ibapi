@@ -1,5 +1,7 @@
 //! Common error handling utilities for the ibapi crate
 
+#![allow(dead_code)] // These utilities will be used by other modules
+
 use crate::Error;
 
 /// Ensures a value is present, returning an error with the specified message if None

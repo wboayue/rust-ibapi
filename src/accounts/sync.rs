@@ -145,7 +145,6 @@ mod tests {
     use std::sync::{Arc, RwLock};
 
     use crate::common::test_utils::helpers::*;
-    use crate::common::test_utils::*;
 
     #[test]
     fn test_pnl() {

@@ -149,7 +149,6 @@ mod tests {
     use crate::testdata::responses;
 
     use crate::common::test_utils::helpers::*;
-    use crate::common::test_utils::*;
 
     #[tokio::test]
     async fn test_positions() {

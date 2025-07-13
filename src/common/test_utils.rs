@@ -1,6 +1,7 @@
 //! Test utilities shared across all modules for testing
 
 #[cfg(test)]
+#[allow(dead_code)] // These utilities will be used by other modules
 pub mod helpers {
     use crate::stubs::MessageBusStub;
     use crate::{server_versions, Client};
@@ -109,8 +110,7 @@ pub mod helpers {
         pub const TEST_TICKER_ID: i32 = 100;
         pub const TEST_TICKER_ID_2: i32 = 200;
     }
-}
 
-/// Re-export constants at module level for easier access
-#[cfg(test)]
-pub use helpers::constants::*;
+    /// Re-export constants at module level for easier access
+    pub use constants::*;
+}
