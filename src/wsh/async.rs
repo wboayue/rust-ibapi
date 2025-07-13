@@ -180,7 +180,7 @@ mod tests {
             let client = Client::stubbed(message_bus, crate::server_versions::WSH_EVENT_DATA_FILTERS_DATE);
             let mut subscription = wsh_event_data_by_filter(&client, test_case.filter, test_case.limit, test_case.auto_fill)
                 .await
-                .expect(&format!("Test '{}' failed to create subscription", test_case.name));
+                .unwrap_or_else(|_| panic!("Test '{}' failed to create subscription", test_case.name));
 
             let mut received_events = vec![];
             while let Some(result) = subscription.next().await {
