@@ -3,68 +3,28 @@
 use time::Date;
 
 use crate::{
-    client::{ResponseContext, StreamDecoder, Subscription},
-    messages::IncomingMessages,
+    client::Subscription,
+    common::request_helpers,
+    messages::OutgoingMessages,
     protocol::{check_version, Features},
     Client, Error,
 };
 
-use super::{decoders, encoders, AutoFill, WshEventData, WshMetadata};
-
-impl StreamDecoder<WshMetadata> for WshMetadata {
-    fn decode(_server_version: i32, message: &mut crate::messages::ResponseMessage) -> Result<WshMetadata, Error> {
-        match message.message_type() {
-            IncomingMessages::WshMetaData => Ok(decoders::decode_wsh_metadata(message.clone())?),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
-    }
-
-    fn cancel_message(
-        _server_version: i32,
-        request_id: Option<i32>,
-        _context: Option<&ResponseContext>,
-    ) -> Result<crate::messages::RequestMessage, Error> {
-        let request_id = request_id.expect("Request ID required to encode cancel wsh metadata message.");
-        encoders::encode_cancel_wsh_metadata(request_id)
-    }
-}
-
-impl StreamDecoder<WshEventData> for WshEventData {
-    fn decode(_server_version: i32, message: &mut crate::messages::ResponseMessage) -> Result<WshEventData, Error> {
-        decode_event_data_message(message.clone())
-    }
-
-    fn cancel_message(
-        _server_version: i32,
-        request_id: Option<i32>,
-        _context: Option<&ResponseContext>,
-    ) -> Result<crate::messages::RequestMessage, Error> {
-        let request_id = request_id.expect("Request ID required to encode cancel wsh metadata message.");
-        encoders::encode_cancel_wsh_event_data(request_id)
-    }
-}
-
-fn decode_event_data_message(message: crate::messages::ResponseMessage) -> Result<WshEventData, Error> {
-    match message.message_type() {
-        IncomingMessages::WshEventData => decoders::decode_wsh_event_data(message),
-        IncomingMessages::Error => Err(Error::from(message)),
-        _ => Err(Error::UnexpectedResponse(message)),
-    }
-}
+use super::{common::decoders, encoders, AutoFill, WshEventData, WshMetadata};
 
 pub fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
     check_version(client.server_version, Features::WSHE_CALENDAR)?;
 
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_wsh_metadata(request_id)?;
-    let subscription = client.send_request(request_id, request)?;
-
-    match subscription.next() {
-        Some(Ok(message)) => Ok(decoders::decode_wsh_metadata(message)?),
-        Some(Err(Error::ConnectionReset)) => wsh_metadata(client),
-        Some(Err(e)) => Err(e),
-        None => Err(Error::UnexpectedEndOfStream),
-    }
+    request_helpers::one_shot_with_retry(
+        client,
+        OutgoingMessages::RequestWshMetaData,
+        || {
+            let request_id = client.next_request_id();
+            encoders::encode_request_wsh_metadata(request_id)
+        },
+        |message| decoders::decode_wsh_metadata(message.clone()),
+        || Err(Error::UnexpectedEndOfStream),
+    )
 }
 
 pub fn wsh_event_data_by_contract(
@@ -85,25 +45,25 @@ pub fn wsh_event_data_by_contract(
         check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
     }
 
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_wsh_event_data(
-        client.server_version,
-        request_id,
-        Some(contract_id),
-        None,
-        start_date,
-        end_date,
-        limit,
-        auto_fill,
-    )?;
-    let subscription = client.send_request(request_id, request)?;
-
-    match subscription.next() {
-        Some(Ok(message)) => decode_event_data_message(message),
-        Some(Err(Error::ConnectionReset)) => wsh_event_data_by_contract(client, contract_id, start_date, end_date, limit, auto_fill),
-        Some(Err(e)) => Err(e),
-        None => Err(Error::UnexpectedEndOfStream),
-    }
+    request_helpers::one_shot_with_retry(
+        client,
+        OutgoingMessages::RequestWshEventData,
+        || {
+            let request_id = client.next_request_id();
+            encoders::encode_request_wsh_event_data(
+                client.server_version,
+                request_id,
+                Some(contract_id),
+                None,
+                start_date,
+                end_date,
+                limit,
+                auto_fill,
+            )
+        },
+        |message| decoders::decode_event_data_message(message.clone()),
+        || Err(Error::UnexpectedEndOfStream),
+    )
 }
 
 pub fn wsh_event_data_by_filter<'a>(
@@ -112,25 +72,22 @@ pub fn wsh_event_data_by_filter<'a>(
     limit: Option<i32>,
     auto_fill: Option<AutoFill>,
 ) -> Result<Subscription<'a, WshEventData>, Error> {
-    check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS)?;
-
     if limit.is_some() {
         check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
     }
 
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_wsh_event_data(
-        client.server_version,
-        request_id,
-        None,
-        Some(filter),
-        None, // start_date
-        None, // end_date
-        limit,
-        auto_fill,
-    )?;
-    let subscription = client.send_request(request_id, request)?;
-    Ok(Subscription::new(client, subscription, None))
+    request_helpers::request_with_id(client, Features::WSH_EVENT_DATA_FILTERS, |request_id| {
+        encoders::encode_request_wsh_event_data(
+            client.server_version,
+            request_id,
+            None,
+            Some(filter),
+            None, // start_date
+            None, // end_date
+            limit,
+            auto_fill,
+        )
+    })
 }
 
 #[cfg(test)]
@@ -138,56 +95,75 @@ mod tests {
     use super::*;
     use crate::messages::ResponseMessage;
     use crate::stubs::MessageBusStub;
+    use crate::subscriptions::StreamDecoder;
+    use crate::wsh::common::test_data::{self, json_responses};
     use std::sync::{Arc, RwLock};
-    use time::macros::date;
 
     #[test]
-    fn test_wsh_metadata_sync() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec!["104|9000|{\"validated\":true,\"data\":{\"metadata\":\"test\"}}|".to_owned()],
-        });
+    fn test_wsh_metadata_table() {
+        use crate::wsh::common::test_tables::{wsh_metadata_test_cases, ApiExpectedResult};
 
-        let client = Client::stubbed(message_bus, crate::server_versions::WSHE_CALENDAR);
-        let result = wsh_metadata(&client);
+        for test_case in wsh_metadata_test_cases() {
+            let message_bus = Arc::new(MessageBusStub {
+                request_messages: RwLock::new(vec![]),
+                response_messages: test_case.response_messages,
+            });
 
-        assert!(result.is_ok(), "failed to request wsh metadata: {}", result.err().unwrap());
-        assert_eq!(
-            result.unwrap(),
-            WshMetadata {
-                data_json: "{\"validated\":true,\"data\":{\"metadata\":\"test\"}}".to_owned()
+            let client = Client::stubbed(message_bus, test_case.server_version);
+            let result = wsh_metadata(&client);
+
+            match test_case.expected_result {
+                ApiExpectedResult::Success { json } => {
+                    assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
+                    assert_eq!(result.unwrap().data_json, json, "Test '{}' json mismatch", test_case.name);
+                }
+                ApiExpectedResult::ServerVersionError => {
+                    assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
+                    assert!(
+                        matches!(result.unwrap_err(), Error::ServerVersion(_, _, _)),
+                        "Test '{}' wrong error type",
+                        test_case.name
+                    );
+                }
             }
-        );
+        }
     }
 
     #[test]
-    fn test_wsh_event_data_by_contract_sync() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec!["105|9001|{\"validated\":true,\"data\":{\"events\":[]}}|".to_owned()],
-        });
+    fn test_wsh_event_data_by_contract_table() {
+        use crate::wsh::common::test_tables::{event_data_by_contract_test_cases, ApiExpectedResult};
 
-        let client = Client::stubbed(message_bus, crate::server_versions::WSH_EVENT_DATA_FILTERS_DATE);
-        let result = wsh_event_data_by_contract(
-            &client,
-            12345,
-            Some(date!(2024 - 01 - 01)),
-            Some(date!(2024 - 12 - 31)),
-            Some(100),
-            Some(AutoFill {
-                competitors: true,
-                portfolio: false,
-                watchlist: true,
-            }),
-        );
+        for test_case in event_data_by_contract_test_cases() {
+            let message_bus = Arc::new(MessageBusStub {
+                request_messages: RwLock::new(vec![]),
+                response_messages: test_case.response_messages,
+            });
 
-        assert!(result.is_ok(), "failed to request wsh event data: {}", result.err().unwrap());
-        assert_eq!(
-            result.unwrap(),
-            WshEventData {
-                data_json: "{\"validated\":true,\"data\":{\"events\":[]}}".to_owned()
+            let client = Client::stubbed(message_bus, test_case.server_version);
+            let result = wsh_event_data_by_contract(
+                &client,
+                test_case.contract_id,
+                test_case.start_date,
+                test_case.end_date,
+                test_case.limit,
+                test_case.auto_fill,
+            );
+
+            match test_case.expected_result {
+                ApiExpectedResult::Success { json } => {
+                    assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
+                    assert_eq!(result.unwrap().data_json, json, "Test '{}' json mismatch", test_case.name);
+                }
+                ApiExpectedResult::ServerVersionError => {
+                    assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
+                    assert!(
+                        matches!(result.unwrap_err(), Error::ServerVersion(_, _, _)),
+                        "Test '{}' wrong error type",
+                        test_case.name
+                    );
+                }
             }
-        );
+        }
     }
 
     #[test]
@@ -195,14 +171,13 @@ mod tests {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             response_messages: vec![
-                "105|9003|{\"event\":\"earnings\",\"date\":\"2024-01-15\"}|".to_owned(),
-                "105|9003|{\"event\":\"dividend\",\"date\":\"2024-02-01\"}|".to_owned(),
+                test_data::build_response("105", test_data::REQUEST_ID_FILTER, json_responses::EVENT_DATA_EARNINGS),
+                test_data::build_response("105", test_data::REQUEST_ID_FILTER, json_responses::EVENT_DATA_DIVIDEND),
             ],
         });
 
         let client = Client::stubbed(message_bus, crate::server_versions::WSH_EVENT_DATA_FILTERS_DATE);
-        let filter = "earnings";
-        let result = wsh_event_data_by_filter(&client, filter, Some(50), None);
+        let result = wsh_event_data_by_filter(&client, test_data::TEST_FILTER, Some(50), None);
 
         assert!(result.is_ok());
         let subscription = result.unwrap();
@@ -211,13 +186,13 @@ mod tests {
         let first = subscription.next();
         assert!(first.is_some());
         let event = first.unwrap();
-        assert_eq!(event.data_json, "{\"event\":\"earnings\",\"date\":\"2024-01-15\"}");
+        assert_eq!(event.data_json, json_responses::EVENT_DATA_EARNINGS);
 
         // Second event
         let second = subscription.next();
         assert!(second.is_some());
         let event = second.unwrap();
-        assert_eq!(event.data_json, "{\"event\":\"dividend\",\"date\":\"2024-02-01\"}");
+        assert_eq!(event.data_json, json_responses::EVENT_DATA_DIVIDEND);
 
         // No more events
         let third = subscription.next();
@@ -226,7 +201,7 @@ mod tests {
 
     #[test]
     fn test_data_stream_cancel_message() {
-        let request_id = 9000;
+        let request_id = test_data::REQUEST_ID_METADATA;
 
         // Test WshMetadata cancel
         let cancel_msg = WshMetadata::cancel_message(0, Some(request_id), None);
@@ -240,38 +215,55 @@ mod tests {
     }
 
     #[test]
-    fn test_data_stream_decode() {
-        // Test WshMetadata decode
-        let mut message = ResponseMessage::from("104\09000\0{\"test\":\"metadata\"}\0");
-        let result = WshMetadata::decode(0, &mut message);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().data_json, "{\"test\":\"metadata\"}");
+    fn test_wsh_metadata_decode_table() {
+        use crate::wsh::common::test_tables::WSH_METADATA_DECODE_TESTS;
 
-        // Test WshEventData decode - success case
-        let mut message = ResponseMessage::from("105\09000\0{\"test\":\"event\"}\0");
-        let result = WshEventData::decode(0, &mut message);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().data_json, "{\"test\":\"event\"}");
+        for test_case in WSH_METADATA_DECODE_TESTS {
+            let mut message = ResponseMessage::from(test_case.message);
+            let result = WshMetadata::decode(0, &mut message);
 
-        // Test WshEventData decode - error case
-        let mut error_message = ResponseMessage::from("4\02\09000\0321\0Test error message\0");
-        let result = WshEventData::decode(0, &mut error_message);
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Message(321, _)));
+            if test_case.should_error {
+                assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
+                match test_case.error_type {
+                    Some("UnexpectedResponse") => assert!(matches!(result.unwrap_err(), Error::UnexpectedResponse(_))),
+                    _ => panic!("Unknown error type for test '{}'", test_case.name),
+                }
+            } else {
+                assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
+                assert_eq!(
+                    result.unwrap().data_json,
+                    test_case.expected_json,
+                    "Test '{}' json mismatch",
+                    test_case.name
+                );
+            }
+        }
     }
 
     #[test]
-    fn test_decode_unexpected_message_type() {
-        // Test unexpected message type for WshMetadata
-        let mut message = ResponseMessage::from("1\09000\0unexpected\0");
-        let result = WshMetadata::decode(0, &mut message);
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::UnexpectedResponse(_)));
+    fn test_wsh_event_data_decode_table() {
+        use crate::wsh::common::test_tables::WSH_EVENT_DATA_DECODE_TESTS;
 
-        // Test unexpected message type for WshEventData
-        let mut message = ResponseMessage::from("1\09000\0unexpected\0");
-        let result = WshEventData::decode(0, &mut message);
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::UnexpectedResponse(_)));
+        for test_case in WSH_EVENT_DATA_DECODE_TESTS {
+            let mut message = ResponseMessage::from(test_case.message);
+            let result = WshEventData::decode(0, &mut message);
+
+            if test_case.should_error {
+                assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
+                match test_case.error_type {
+                    Some("Message") => assert!(matches!(result.unwrap_err(), Error::Message(_, _))),
+                    Some("UnexpectedResponse") => assert!(matches!(result.unwrap_err(), Error::UnexpectedResponse(_))),
+                    _ => panic!("Unknown error type for test '{}'", test_case.name),
+                }
+            } else {
+                assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
+                assert_eq!(
+                    result.unwrap().data_json,
+                    test_case.expected_json,
+                    "Test '{}' json mismatch",
+                    test_case.name
+                );
+            }
+        }
     }
 }

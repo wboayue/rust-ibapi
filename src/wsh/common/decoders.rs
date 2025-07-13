@@ -1,6 +1,6 @@
 //! Decoders for Wall Street Horizon messages
 
-use crate::messages::ResponseMessage;
+use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::wsh::{WshEventData, WshMetadata};
 use crate::Error;
 
@@ -20,4 +20,13 @@ pub(in crate::wsh) fn decode_wsh_event_data(mut message: ResponseMessage) -> Res
     Ok(WshEventData {
         data_json: message.next_string()?,
     })
+}
+
+/// Helper function to decode event data messages with error handling
+pub(in crate::wsh) fn decode_event_data_message(message: ResponseMessage) -> Result<WshEventData, Error> {
+    match message.message_type() {
+        IncomingMessages::WshEventData => decode_wsh_event_data(message),
+        IncomingMessages::Error => Err(Error::from(message)),
+        _ => Err(Error::UnexpectedResponse(message)),
+    }
 }

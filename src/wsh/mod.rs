@@ -11,7 +11,9 @@ use serde::{Deserialize, Serialize};
 mod common;
 
 // Re-export common functionality
-use common::{decoders, encoders};
+#[cfg(test)]
+use common::decoders;
+use common::encoders;
 
 // Feature-specific implementations
 #[cfg(all(feature = "sync", not(feature = "async")))]
@@ -73,83 +75,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_wsh_metadata() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec!["104|9000|{\"validated\":true,\"data\":{\"metadata\":\"test\"}}|".to_owned()],
-        });
-
-        let client = Client::stubbed(message_bus, server_versions::WSHE_CALENDAR);
-        let result = wsh_metadata(&client);
-
-        let request_messages = client.message_bus.request_messages();
-        assert_eq!(request_messages[0].encode_simple(), "100|9000|");
-
-        assert!(result.is_ok(), "failed to request wsh metadata: {}", result.err().unwrap());
-        assert_eq!(
-            result.unwrap(),
-            WshMetadata {
-                data_json: "{\"validated\":true,\"data\":{\"metadata\":\"test\"}}".to_owned()
-            }
-        );
-    }
-
-    #[test]
-    fn test_wsh_event_data_by_contract() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec!["105|9000|{\"validated\":true,\"data\":{\"events\":[]}}|".to_owned()],
-        });
-
-        let client = Client::stubbed(message_bus, server_versions::WSH_EVENT_DATA_FILTERS_DATE);
-        let result = wsh_event_data_by_contract(
-            &client,
-            12345,
-            Some(date!(2024 - 01 - 01)),
-            Some(date!(2024 - 12 - 31)),
-            Some(100),
-            Some(AutoFill {
-                competitors: true,
-                portfolio: true,
-                watchlist: true,
-            }),
-        );
-
-        let request_messages = client.message_bus.request_messages();
-        assert_eq!(request_messages[0].encode_simple(), "102|9000|12345||1|1|1|20240101|20241231|100|");
-
-        assert!(result.is_ok(), "failed to request wsh event data: {}", result.err().unwrap());
-        assert_eq!(
-            result.unwrap(),
-            WshEventData {
-                data_json: "{\"validated\":true,\"data\":{\"events\":[]}}".to_owned()
-            }
-        );
-    }
-
-    #[test]
-    fn test_wsh_event_data_by_contract_no_filters() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec!["105|9000|{\"validated\":true,\"data\":{\"events\":[]}}|".to_owned()],
-        });
-
-        let client = Client::stubbed(message_bus, server_versions::WSHE_CALENDAR);
-        let result = wsh_event_data_by_contract(&client, 12345, None, None, None, None);
-
-        let request_messages = client.message_bus.request_messages();
-        assert_eq!(request_messages[0].encode_simple(), "102|9000|12345|");
-
-        assert!(result.is_ok(), "failed to request wsh event data: {}", result.err().unwrap());
-        assert_eq!(
-            result.unwrap(),
-            WshEventData {
-                data_json: "{\"validated\":true,\"data\":{\"events\":[]}}".to_owned()
-            }
-        );
-    }
-
-    #[test]
     fn test_wsh_event_data_by_filter() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
@@ -190,19 +115,6 @@ mod tests {
         assert_eq!(request_messages[0].encode_simple(), "102|9000||filter=value|0|0|0|");
 
         assert!(result.is_ok(), "failed to request wsh event data by filter: {}", result.err().unwrap());
-    }
-
-    #[test]
-    fn test_invalid_server_version_wsh_metadata() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-        });
-
-        let client = Client::stubbed(message_bus, server_versions::SCALE_ORDERS);
-        let result = wsh_metadata(&client);
-
-        assert!(matches!(result, Err(Error::ServerVersion(_, _, _))));
     }
 
     #[test]
@@ -684,69 +596,10 @@ mod common_tests {
 #[cfg(all(test, feature = "async"))]
 mod async_tests {
     use std::sync::{Arc, RwLock};
-    use time::macros::date;
 
-    use crate::{server_versions, stubs::MessageBusStub, Client, Error};
+    use crate::{server_versions, stubs::MessageBusStub, Client};
 
     use super::*;
-
-    #[tokio::test]
-    async fn test_wsh_metadata() {
-        let stub = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec!["104|9000|{\"validated\":true,\"data\":{\"metadata\":\"test\"}}|".to_owned()],
-        });
-        let message_bus = stub.clone();
-
-        let client = Client::stubbed(message_bus, server_versions::WSHE_CALENDAR);
-        let result = wsh_metadata(&client).await;
-
-        let request_messages = stub.request_messages();
-        assert_eq!(request_messages[0].encode_simple(), "100|9000|");
-
-        assert!(result.is_ok(), "failed to request wsh metadata: {}", result.err().unwrap());
-        assert_eq!(
-            result.unwrap(),
-            WshMetadata {
-                data_json: "{\"validated\":true,\"data\":{\"metadata\":\"test\"}}".to_owned()
-            }
-        );
-    }
-
-    #[tokio::test]
-    async fn test_wsh_event_data_by_contract() {
-        let stub = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec!["105|9000|{\"validated\":true,\"data\":{\"events\":[]}}|".to_owned()],
-        });
-        let message_bus = stub.clone();
-
-        let client = Client::stubbed(message_bus, server_versions::WSH_EVENT_DATA_FILTERS_DATE);
-        let result = wsh_event_data_by_contract(
-            &client,
-            12345,
-            Some(date!(2024 - 01 - 01)),
-            Some(date!(2024 - 12 - 31)),
-            Some(100),
-            Some(AutoFill {
-                competitors: true,
-                portfolio: true,
-                watchlist: true,
-            }),
-        )
-        .await;
-
-        let request_messages = stub.request_messages();
-        assert_eq!(request_messages[0].encode_simple(), "102|9000|12345||1|1|1|20240101|20241231|100|");
-
-        assert!(result.is_ok(), "failed to request wsh event data: {}", result.err().unwrap());
-        assert_eq!(
-            result.unwrap(),
-            WshEventData {
-                data_json: "{\"validated\":true,\"data\":{\"events\":[]}}".to_owned()
-            }
-        );
-    }
 
     #[tokio::test]
     async fn test_wsh_event_data_by_filter() {
@@ -774,32 +627,6 @@ mod async_tests {
         assert_eq!(request_messages[0].encode_simple(), "102|9000||filter=value|1|0|1|||100|");
 
         assert!(result.is_ok(), "failed to request wsh event data by filter: {}", result.err().unwrap());
-    }
-
-    #[tokio::test]
-    async fn test_invalid_server_version_wsh_metadata() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-        });
-
-        let client = Client::stubbed(message_bus, server_versions::SCALE_ORDERS);
-        let result = wsh_metadata(&client).await;
-
-        assert!(matches!(result, Err(Error::ServerVersion(_, _, _))));
-    }
-
-    #[tokio::test]
-    async fn test_invalid_server_version_wsh_event_data_filters() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-        });
-
-        let client = Client::stubbed(message_bus, server_versions::WSHE_CALENDAR);
-        let result = wsh_event_data_by_filter(&client, "filter", None, None).await;
-
-        assert!(matches!(result, Err(Error::ServerVersion(_, _, _))));
     }
 
     #[tokio::test]
