@@ -198,3 +198,100 @@ pub fn subscription_test_cases() -> Vec<SubscriptionTestCase> {
         ],
     }]
 }
+
+/// Test case for integration tests with server version validation
+pub struct IntegrationTestCase {
+    pub name: &'static str,
+    pub server_version: i32,
+    pub response_messages: Vec<String>,
+    pub expected_result: IntegrationExpectedResult,
+}
+
+pub enum IntegrationExpectedResult {
+    Success,
+    ServerVersionError,
+}
+
+/// Test cases for wsh_event_data_by_filter integration tests
+pub fn event_data_by_filter_integration_test_cases() -> Vec<IntegrationTestCase> {
+    vec![
+        IntegrationTestCase {
+            name: "successful filter request with autofill",
+            server_version: crate::server_versions::WSH_EVENT_DATA_FILTERS_DATE,
+            response_messages: vec!["105|9000|{\"validated\":true,\"data\":{\"events\":[]}}|".to_string()],
+            expected_result: IntegrationExpectedResult::Success,
+        },
+        IntegrationTestCase {
+            name: "successful filter request without autofill",
+            server_version: crate::server_versions::WSH_EVENT_DATA_FILTERS,
+            response_messages: vec!["105|9000|{\"validated\":true,\"data\":{\"events\":[]}}|".to_string()],
+            expected_result: IntegrationExpectedResult::Success,
+        },
+        IntegrationTestCase {
+            name: "server version too old for filters",
+            server_version: crate::server_versions::WSHE_CALENDAR,
+            response_messages: vec![],
+            expected_result: IntegrationExpectedResult::ServerVersionError,
+        },
+    ]
+}
+
+/// Test case for subscription integration tests
+pub struct SubscriptionIntegrationTestCase {
+    pub name: &'static str,
+    pub server_version: i32,
+    pub response_messages: Vec<String>,
+    pub expected_events: Vec<String>,
+}
+
+pub fn subscription_integration_test_cases() -> Vec<SubscriptionIntegrationTestCase> {
+    vec![SubscriptionIntegrationTestCase {
+        name: "multiple events subscription",
+        server_version: crate::server_versions::WSH_EVENT_DATA_FILTERS,
+        response_messages: vec![
+            "105|9000|{\"event\":1}|".to_string(),
+            "105|9000|{\"event\":2}|".to_string(),
+            "105|9000|{\"event\":3}|".to_string(),
+        ],
+        expected_events: vec!["{\"event\":1}".to_string(), "{\"event\":2}".to_string(), "{\"event\":3}".to_string()],
+    }]
+}
+
+/// Test case for server version validation tests
+pub struct ServerVersionTestCase {
+    pub name: &'static str,
+    pub server_version: i32,
+    pub contract_id: Option<i32>,
+    pub start_date: Option<time::Date>,
+    pub end_date: Option<time::Date>,
+    pub limit: Option<i32>,
+    pub auto_fill: Option<AutoFill>,
+    pub expected_error: bool,
+}
+
+pub fn server_version_test_cases() -> Vec<ServerVersionTestCase> {
+    use time::macros::date;
+
+    vec![
+        ServerVersionTestCase {
+            name: "filter request with old server version",
+            server_version: crate::server_versions::WSHE_CALENDAR,
+            contract_id: None,
+            start_date: None,
+            end_date: None,
+            limit: None,
+            auto_fill: None,
+            expected_error: true,
+        },
+        ServerVersionTestCase {
+            name: "contract request with date filters on old server version",
+            server_version: crate::server_versions::WSH_EVENT_DATA_FILTERS,
+            contract_id: Some(12345),
+            start_date: Some(date!(2024 - 01 - 01)),
+            end_date: Some(date!(2024 - 12 - 31)),
+            limit: Some(100),
+            auto_fill: None,
+            expected_error: true,
+        },
+    ]
+}

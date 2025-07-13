@@ -200,6 +200,140 @@ mod tests {
     }
 
     #[test]
+    fn test_wsh_event_data_by_filter_integration_table() {
+        use crate::wsh::common::test_tables::{event_data_by_filter_integration_test_cases, IntegrationExpectedResult};
+
+        for test_case in event_data_by_filter_integration_test_cases() {
+            let message_bus = Arc::new(MessageBusStub {
+                request_messages: RwLock::new(vec![]),
+                response_messages: test_case.response_messages,
+            });
+
+            let client = Client::stubbed(message_bus, test_case.server_version);
+
+            let result = match test_case.name {
+                "successful filter request with autofill" => {
+                    let filter = "filter=value";
+                    let result = wsh_event_data_by_filter(
+                        &client,
+                        filter,
+                        Some(100),
+                        Some(AutoFill {
+                            competitors: true,
+                            portfolio: false,
+                            watchlist: true,
+                        }),
+                    );
+
+                    if result.is_ok() {
+                        let request_messages = client.message_bus.request_messages();
+                        assert_eq!(request_messages[0].encode_simple(), "102|9000||filter=value|1|0|1|||100|");
+                    }
+                    result
+                }
+                "successful filter request without autofill" => {
+                    let filter = "filter=value";
+                    let result = wsh_event_data_by_filter(&client, filter, None, None);
+
+                    if result.is_ok() {
+                        let request_messages = client.message_bus.request_messages();
+                        assert_eq!(request_messages[0].encode_simple(), "102|9000||filter=value|0|0|0|");
+                    }
+                    result
+                }
+                _ => wsh_event_data_by_filter(&client, "filter", None, None),
+            };
+
+            match test_case.expected_result {
+                IntegrationExpectedResult::Success => {
+                    assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
+                }
+                IntegrationExpectedResult::ServerVersionError => {
+                    assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
+                    assert!(
+                        matches!(result.unwrap_err(), Error::ServerVersion(_, _, _)),
+                        "Test '{}' wrong error type",
+                        test_case.name
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_server_version_validation_table() {
+        use crate::wsh::common::test_tables::server_version_test_cases;
+
+        for test_case in server_version_test_cases() {
+            let message_bus = Arc::new(MessageBusStub {
+                request_messages: RwLock::new(vec![]),
+                response_messages: vec![],
+            });
+
+            let client = Client::stubbed(message_bus, test_case.server_version);
+
+            let result = if let Some(contract_id) = test_case.contract_id {
+                wsh_event_data_by_contract(
+                    &client,
+                    contract_id,
+                    test_case.start_date,
+                    test_case.end_date,
+                    test_case.limit,
+                    test_case.auto_fill,
+                )
+            } else {
+                wsh_event_data_by_filter(&client, "filter", test_case.limit, test_case.auto_fill).map(|_| WshEventData { data_json: "".to_string() })
+            };
+
+            if test_case.expected_error {
+                assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
+                assert!(
+                    matches!(result.unwrap_err(), Error::ServerVersion(_, _, _)),
+                    "Test '{}' wrong error type",
+                    test_case.name
+                );
+            } else {
+                assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
+            }
+        }
+    }
+
+    #[test]
+    fn test_subscription_integration_table() {
+        use crate::wsh::common::test_tables::subscription_integration_test_cases;
+
+        for test_case in subscription_integration_test_cases() {
+            let message_bus = Arc::new(MessageBusStub {
+                request_messages: RwLock::new(vec![]),
+                response_messages: test_case.response_messages,
+            });
+
+            let client = Client::stubbed(message_bus, test_case.server_version);
+            let result = wsh_event_data_by_filter(&client, "test_filter", None, None);
+
+            assert!(result.is_ok(), "Test '{}' failed to create subscription", test_case.name);
+            let subscription = result.unwrap();
+
+            // Collect all events
+            let mut events = vec![];
+            while let Some(event) = subscription.next() {
+                events.push(event.data_json);
+            }
+
+            assert_eq!(
+                events.len(),
+                test_case.expected_events.len(),
+                "Test '{}' event count mismatch",
+                test_case.name
+            );
+
+            for (i, (received, expected)) in events.iter().zip(test_case.expected_events.iter()).enumerate() {
+                assert_eq!(received, expected, "Test '{}' event {} mismatch", test_case.name, i);
+            }
+        }
+    }
+
+    #[test]
     fn test_data_stream_cancel_message() {
         let request_id = test_data::REQUEST_ID_METADATA;
 
