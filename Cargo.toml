@@ -605,5 +605,6 @@ required-features = ["sync"]
 [[example]]
 name = "contract_builder"
 path = "examples/contract_builder.rs"
+required-features = ["sync"]
 
 

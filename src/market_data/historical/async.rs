@@ -307,7 +307,7 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{contract_samples, Contract};
+    use crate::contracts::{Contract, SecurityType};
     use crate::messages::OutgoingMessages;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
@@ -324,7 +324,14 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus.clone(), server_versions::BOND_ISSUERID);
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
         let what_to_show = WhatToShow::Trades;
         let use_rth = true;
 
@@ -370,7 +377,14 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus.clone(), server_versions::REQ_HISTOGRAM);
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
         let use_rth = true;
         let period = BarSize::Day;
 
@@ -437,7 +451,14 @@ mod tests {
         // Set client timezone for test
         client.time_zone = Some(time_tz::timezones::db::UTC);
 
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
         let end_date = Some(datetime!(2023-03-15 16:00:00 UTC));
         let duration = Duration::seconds(3600);
         let bar_size = BarSize::Min30;
@@ -491,7 +512,14 @@ mod tests {
         let message_bus = Arc::new(MessageBusStub::default());
         let client = Client::stubbed(message_bus, server_versions::TRADING_CLASS - 1);
 
-        let mut contract = contract_samples::simple_future();
+        let mut contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
         contract.trading_class = "ES".to_string(); // Requires TRADING_CLASS version
 
         let result = historical_data(&client, &contract, None, Duration::days(1), BarSize::Hour, None, true).await;
@@ -538,7 +566,14 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
 
         let result = historical_data(&client, &contract, None, Duration::days(1), BarSize::Hour, None, true).await;
         assert!(result.is_err(), "Should fail with error response");
@@ -556,7 +591,14 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
 
         let result = historical_data(&client, &contract, None, Duration::days(1), BarSize::Hour, None, true).await;
         assert!(result.is_err(), "Should fail with unexpected response");
@@ -611,7 +653,14 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
 
         let mut subscription = historical_ticks_bid_ask(&client, &contract, None, None, 3, true, false)
             .await
@@ -658,7 +707,14 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
 
         let mut subscription = historical_ticks_bid_ask(&client, &contract, None, None, 3, true, false)
             .await
@@ -688,7 +744,14 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
         let start = Some(datetime!(2023-03-15 09:00:00 UTC));
         let end = Some(datetime!(2023-03-15 10:00:00 UTC));
         let number_of_ticks = 1;
@@ -752,7 +815,14 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
 
         let mut subscription = historical_ticks_mid_point(&client, &contract, None, None, 1, true)
             .await
@@ -781,7 +851,14 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
 
         let mut subscription = historical_ticks_trade(&client, &contract, None, None, 1, true)
             .await
@@ -815,7 +892,14 @@ mod tests {
         // Set client timezone to Eastern
         client.time_zone = Some(time_tz::timezones::db::america::NEW_YORK);
 
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
         let result = historical_data(&client, &contract, None, Duration::seconds(3600), BarSize::Hour, None, true).await;
 
         assert!(result.is_ok(), "historical_data should succeed with timezone");

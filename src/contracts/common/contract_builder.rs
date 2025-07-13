@@ -413,9 +413,9 @@ impl ContractBuilder {
     /// - Strike price is negative
     /// - Option right is not "P" or "C"
     pub fn build(self) -> Result<Contract, Error> {
-        // Symbol is always required
-        if self.symbol.is_none() {
-            return Err(Error::Simple("Symbol is required".into()));
+        // Symbol is required unless local_symbol or contract_id is provided
+        if self.symbol.is_none() && self.local_symbol.is_none() && self.contract_id.is_none() {
+            return Err(Error::Simple("Symbol, local_symbol, or contract_id is required".into()));
         }
 
         let security_type = self.security_type.clone().unwrap_or_default();
@@ -456,7 +456,7 @@ impl ContractBuilder {
 
         Ok(Contract {
             contract_id: self.contract_id.unwrap_or(0),
-            symbol: self.symbol.unwrap(),
+            symbol: self.symbol.unwrap_or_default(),
             security_type,
             last_trade_date_or_contract_month: self.last_trade_date_or_contract_month.unwrap_or_default(),
             strike: self.strike.unwrap_or(0.0),
@@ -624,11 +624,45 @@ mod tests {
     }
 
     #[test]
-    fn test_contract_builder_build_missing_symbol() {
+    fn test_contract_builder_build_missing_identifier() {
         let result = ContractBuilder::new().build();
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "error occurred: Symbol is required");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "error occurred: Symbol, local_symbol, or contract_id is required"
+        );
+    }
+
+    #[test]
+    fn test_contract_builder_build_with_local_symbol_only() {
+        let result = ContractBuilder::new()
+            .local_symbol("FGBL MAR 23")
+            .security_type(SecurityType::Future)
+            .exchange("EUREX")
+            .currency("EUR")
+            .last_trade_date_or_contract_month("202303")
+            .build();
+
+        assert!(result.is_ok());
+        let contract = result.unwrap();
+        assert_eq!(contract.symbol, ""); // Empty symbol is OK when local_symbol is provided
+        assert_eq!(contract.local_symbol, "FGBL MAR 23");
+        assert_eq!(contract.security_type, SecurityType::Future);
+        assert_eq!(contract.exchange, "EUREX");
+        assert_eq!(contract.currency, "EUR");
+    }
+
+    #[test]
+    fn test_contract_builder_build_with_contract_id_only() {
+        let result = ContractBuilder::new().contract_id(265598).exchange("SMART").build();
+
+        assert!(result.is_ok());
+        let contract = result.unwrap();
+        assert_eq!(contract.symbol, ""); // Empty symbol is OK when contract_id is provided
+        assert_eq!(contract.local_symbol, "");
+        assert_eq!(contract.contract_id, 265598);
+        assert_eq!(contract.exchange, "SMART");
     }
 
     #[test]

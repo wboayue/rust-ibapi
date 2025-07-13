@@ -30,9 +30,6 @@ mod r#async;
 
 pub mod tick_types;
 
-#[cfg(test)]
-pub(crate) mod contract_samples;
-
 // Models
 
 #[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
