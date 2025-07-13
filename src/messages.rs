@@ -358,6 +358,12 @@ impl ToField for OutgoingMessages {
     }
 }
 
+impl std::fmt::Display for OutgoingMessages {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", *self as i32)
+    }
+}
+
 pub fn encode_length(message: &str) -> Vec<u8> {
     let data = message.as_bytes();
 

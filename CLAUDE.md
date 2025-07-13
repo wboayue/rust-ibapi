@@ -630,3 +630,26 @@ cargo run --example positions
 cargo run --features async --example async_connect
 cargo run --features async --example async_market_data
 ```
+
+## Testing Patterns
+
+### Testing RequestMessage Fields
+
+When testing `RequestMessage` objects, use direct indexing to assert on individual fields:
+
+```rust
+#[test]
+fn test_cancel_message() {
+    let request = AccountSummaryResult::cancel_message(server_version, Some(request_id), None).unwrap();
+    
+    // Use direct indexing to test fields
+    assert_eq!(request[0], OutgoingMessages::CancelAccountSummary.to_string());
+    assert_eq!(request[1], request_id.to_string());
+}
+```
+
+This approach:
+- Tests exact field values and positions
+- Avoids substring matching which can give false positives
+- Makes test failures clearer by showing exactly which field is wrong
+- Works because `RequestMessage` implements `Index<usize>` trait
