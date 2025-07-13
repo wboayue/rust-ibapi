@@ -5,6 +5,7 @@
 - [Getting Started](#getting-started)
 - [Coding Standards](#coding-standards)
 - [Domain Type Pattern](#domain-type-pattern)
+- [Sync/Async Architecture](#syncasync-architecture)
 - [Core Components](#core-components)
 - [Request and Response Handling](#request-and-response-handling)
 - [Extending the API](#extending-the-api)
@@ -54,7 +55,7 @@ cd rust-ibapi
 cargo test
 
 # Test async mode
-cargo test --no-default-features --features async
+cargo test --features async
 ```
 
 5. Set up your development environment:
@@ -68,11 +69,11 @@ cargo test --no-default-features --features async
 ```bash
 # Test both sync and async modes
 cargo test
-cargo test --no-default-features --features async
+cargo test --features async
 
 # Check for linting issues
 cargo clippy
-cargo clippy --no-default-features --features async
+cargo clippy --features async
 
 # Format code
 cargo fmt
@@ -208,11 +209,11 @@ When both features are enabled, async takes precedence. This allows users to sim
 # Build with sync mode (default)
 cargo build
 
-# Build with async mode
-cargo build --no-default-features --features async
+# Build with async mode (async takes precedence when both features enabled)
+cargo build --features async
 
 # Build examples for async mode
-cargo run --no-default-features --features async --example async_connect
+cargo run --features async --example async_connect
 ```
 
 ### Module Organization
@@ -226,7 +227,8 @@ src/<module>/
 │   ├── mod.rs     # Export encoders/decoders
 │   ├── encoders.rs # Message encoding functions
 │   ├── decoders.rs # Message decoding functions
-│   └── test_data.rs # Shared test fixtures (optional)
+│   ├── test_tables.rs # Shared test cases (optional)
+│   └── test_data.rs # Common test fixtures (optional)
 ├── sync.rs        # Synchronous implementation
 └── async.rs       # Asynchronous implementation
 ```
@@ -295,23 +297,22 @@ Provides validation and error handling utilities:
 use crate::common::error_helpers;
 
 // Validate required parameters
-let request_id = error_helpers::require_request_id_for(request_id, "my operation")?;
-
-// Validate ranges
-let port = error_helpers::require_range(port, 1, 65535, "port")?;
+let value = error_helpers::require(some_option, "parameter is required")?;
 
 // Validate with custom logic
-let value = error_helpers::require_with(value, |v| v > 0, "value must be positive")?;
+let valid_value = error_helpers::require_with(some_option, || {
+    "value must meet custom criteria".to_string()
+})?;
 ```
 
 #### Request Helpers (`src/common/request_helpers.rs`)
 
-Provides common request patterns:
+Provides common request patterns for both sync and async modes:
 
 ```rust
 use crate::common::request_helpers;
 
-// For one-shot requests with retry logic
+// For one-shot requests with retry logic (sync)
 pub fn my_api_call(client: &Client) -> Result<MyData, Error> {
     request_helpers::one_shot_with_retry(
         client,
@@ -320,6 +321,17 @@ pub fn my_api_call(client: &Client) -> Result<MyData, Error> {
         |message| decode_my_response(message),
         || Err(Error::UnexpectedEndOfStream),
     )
+}
+
+// For one-shot requests with retry logic (async)
+pub async fn my_api_call(client: &Client) -> Result<MyData, Error> {
+    request_helpers::one_shot_with_retry(
+        client,
+        OutgoingMessages::MyRequest,
+        || encode_my_request(client.next_request_id()),
+        |message| decode_my_response(message),
+        || Err(Error::UnexpectedEndOfStream),
+    ).await
 }
 
 // For requests with IDs and subscriptions
@@ -447,21 +459,16 @@ pub fn my_function(client: &Client, data: &str) -> Result<MyData, Error> {
 ```rust
 // src/<module>/async.rs
 use super::common::{encoders, decoders};
-use crate::client::ClientRequestBuilders;
+use crate::common::request_helpers;
 
 pub async fn my_function(client: &Client, data: &str) -> Result<MyData, Error> {
-    let builder = client.request();
-    let request = encoders::encode_my_request(builder.request_id(), data)?;
-    let mut subscription = builder.send::<MyData>(request).await?;
-
-    match subscription.next().await {
-        Some(Ok(result)) => Ok(result),
-        Some(Err(Error::ConnectionReset)) => {
-            Box::pin(my_function(client, data)).await
-        }
-        Some(Err(e)) => Err(e),
-        None => Err(Error::UnexpectedEndOfStream),
-    }
+    request_helpers::one_shot_with_retry(
+        client,
+        OutgoingMessages::MyRequest,
+        || encoders::encode_my_request(client.next_request_id(), data),
+        |message| decoders::decode_my_response(message),
+        || Err(Error::UnexpectedEndOfStream),
+    ).await
 }
 ```
 
@@ -474,11 +481,11 @@ Ensure your changes work in both sync and async modes:
 cargo test <module>
 
 # Run tests for async mode  
-cargo test --no-default-features --features async <module>
+cargo test --features async <module>
 
 # Check clippy for both modes
 cargo clippy
-cargo clippy --no-default-features --features async
+cargo clippy --features async
 ```
 
 ## Core Components
@@ -587,21 +594,16 @@ pub fn my_function(client: &Client, param: &str) -> Result<MyData, Error> {
 ```rust
 // src/<module>/async.rs
 use super::common::{encoders, decoders};
-use crate::client::ClientRequestBuilders;
+use crate::common::request_helpers;
 
 pub async fn my_function(client: &Client, param: &str) -> Result<MyData, Error> {
-    let builder = client.request();
-    let request = encoders::encode_my_request(builder.request_id(), param)?;
-    let mut subscription = builder.send::<MyData>(request).await?;
-
-    match subscription.next().await {
-        Some(Ok(result)) => Ok(result),
-        Some(Err(Error::ConnectionReset)) => {
-            Box::pin(my_function(client, param)).await
-        }
-        Some(Err(e)) => Err(e),
-        None => Err(Error::UnexpectedEndOfStream),
-    }
+    request_helpers::one_shot_with_retry(
+        client,
+        OutgoingMessages::MyRequest,
+        || encoders::encode_my_request(client.next_request_id(), param),
+        |message| decoders::decode_my_response(message),
+        || Err(Error::UnexpectedEndOfStream),
+    ).await
 }
 ```
 
@@ -648,8 +650,8 @@ cargo test <module>::sync
 cargo clippy
 
 # Test async implementation  
-cargo test --no-default-features --features async <module>::async
-cargo clippy --no-default-features --features async
+cargo test --features async <module>::async
+cargo clippy --features async
 ```
 
 ### 10. Add Examples
