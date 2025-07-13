@@ -80,6 +80,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y lcov
           
+          # Create output directory
+          mkdir -p target/coverage
+          
           # Merge the coverage files
           lcov --add-tracefile target/coverage-sync/lcov.info \
                --add-tracefile target/coverage-async/lcov.info \
