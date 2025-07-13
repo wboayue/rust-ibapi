@@ -183,7 +183,7 @@ pub fn market_data<'a>(
 mod tests {
     use super::*;
     use crate::contracts::tick_types::TickType;
-    use crate::contracts::{contract_samples, ComboLeg, Contract, DeltaNeutralContract, SecurityType};
+    use crate::contracts::{ComboLeg, Contract, DeltaNeutralContract, SecurityType};
     use crate::messages::OutgoingMessages;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
@@ -196,7 +196,14 @@ mod tests {
     fn test_validate_tick_by_tick_request() {
         // Test with old server version
         let client = Client::stubbed(Arc::new(MessageBusStub::default()), server_versions::TICK_BY_TICK - 1);
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
 
         let result = validate_tick_by_tick_request(&client, &contract, 0, false);
         assert!(result.is_err(), "Should fail with old server version");
@@ -226,7 +233,14 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-        let contract = contract_samples::future_with_local_symbol();
+        let contract = Contract {
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            local_symbol: "FGBL MAR 23".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
         let bar_size = BarSize::Sec5;
         let what_to_show = WhatToShow::Trades;
         let use_rth = true;
@@ -280,7 +294,14 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::TICK_BY_TICK_IGNORE_SIZE);
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
         let number_of_ticks = 2;
         let ignore_size = false;
 
@@ -322,7 +343,14 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::SMART_DEPTH);
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
         let number_of_rows = 10;
         let is_smart_depth = false;
 
@@ -414,7 +442,14 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::TICK_BY_TICK_IGNORE_SIZE);
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
         let number_of_ticks = 1;
         let ignore_size = false;
 
@@ -448,7 +483,14 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::TICK_BY_TICK);
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
         let number_of_ticks = 0;
         let ignore_size = false;
 
@@ -622,7 +664,14 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::REQ_SMART_COMPONENTS);
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
         let generic_ticks: Vec<&str> = vec![];
         let snapshot = true;
         let regulatory_snapshot = true;
@@ -651,7 +700,14 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::PRICE_BASED_VOLATILITY);
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
         let generic_ticks: Vec<&str> = vec![];
         let snapshot = false;
         let regulatory_snapshot = false;
@@ -690,7 +746,14 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::TICK_BY_TICK_IGNORE_SIZE);
-        let contract = contract_samples::simple_future();
+        let contract = Contract {
+            symbol: "GBL".to_owned(),
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
         let number_of_ticks = 1;
         let ignore_size = false;
 

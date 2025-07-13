@@ -262,7 +262,7 @@ pub fn exercise_options<'a>(
 mod tests {
     use std::sync::{Arc, RwLock};
 
-    use crate::contracts::{contract_samples, Contract, SecurityType};
+    use crate::contracts::{ComboLeg, Contract, SecurityType};
     use crate::orders::{Action, Liquidity};
     use crate::stubs::MessageBusStub;
 
@@ -868,7 +868,14 @@ mod tests {
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
         let order_id = 12;
-        let contract = contract_samples::future_with_local_symbol();
+        let contract = Contract {
+            security_type: SecurityType::Future,
+            exchange: "EUREX".to_owned(),
+            currency: "EUR".to_owned(),
+            local_symbol: "FGBL MAR 23".to_owned(),
+            last_trade_date_or_contract_month: "202303".to_owned(),
+            ..Contract::default()
+        };
         let order = order_builder::limit_order(Action::Buy, 10.0, 500.00);
 
         let results = client.place_order(order_id, &contract, &order);
@@ -893,7 +900,32 @@ mod tests {
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
         let order_id = 12; // get next order id
-        let contract = contract_samples::smart_future_combo_contract();
+        let contract = {
+            let leg_1 = ComboLeg {
+                contract_id: 55928698, //WTI future June 2017
+                ratio: 1,
+                action: "BUY".to_owned(),
+                exchange: "IPE".to_owned(),
+                ..ComboLeg::default()
+            };
+
+            let leg_2 = ComboLeg {
+                contract_id: 55850663, //COIL future June 2017
+                ratio: 1,
+                action: "SELL".to_owned(),
+                exchange: "IPE".to_owned(),
+                ..ComboLeg::default()
+            };
+
+            Contract {
+                symbol: "WTI".to_owned(), // WTI,COIL spread. Symbol can be defined as first leg symbol ("WTI") or currency ("USD").
+                security_type: SecurityType::Spread,
+                currency: "USD".to_owned(),
+                exchange: "SMART".to_owned(),
+                combo_legs: vec![leg_1, leg_2],
+                ..Contract::default()
+            }
+        };
         let order = order_builder::combo_market_order(Action::Sell, 150.0, true);
 
         let results = client.place_order(order_id, &contract, &order);

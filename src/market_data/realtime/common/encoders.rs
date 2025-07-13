@@ -203,7 +203,7 @@ pub(crate) fn encode_cancel_market_data(request_id: i32) -> Result<RequestMessag
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{contracts::contract_samples, contracts::Contract, contracts::TagValue, messages::OutgoingMessages, ToField};
+    use crate::{contracts::Contract, contracts::SecurityType, contracts::TagValue, messages::OutgoingMessages, ToField};
 
     /// Helper function to create a basic test contract
     fn create_test_contract() -> Contract {
@@ -228,7 +228,14 @@ mod tests {
         fn test_encode_tick_by_tick() {
             let request_id = 9000;
             let server_version = server_versions::TICK_BY_TICK;
-            let contract = contract_samples::simple_future();
+            let contract = Contract {
+                symbol: "GBL".to_owned(),
+                security_type: SecurityType::Future,
+                exchange: "EUREX".to_owned(),
+                currency: "EUR".to_owned(),
+                last_trade_date_or_contract_month: "202303".to_owned(),
+                ..Contract::default()
+            };
             let tick_type = "AllLast";
             let number_of_ticks = 1;
             let ignore_size = true;
@@ -268,7 +275,14 @@ mod tests {
         fn test_tick_by_tick_with_old_server() {
             let request_id = 9000;
             let server_version = server_versions::TICK_BY_TICK - 1; // Version before TICK_BY_TICK
-            let contract = contract_samples::simple_future();
+            let contract = Contract {
+                symbol: "GBL".to_owned(),
+                security_type: SecurityType::Future,
+                exchange: "EUREX".to_owned(),
+                currency: "EUR".to_owned(),
+                last_trade_date_or_contract_month: "202303".to_owned(),
+                ..Contract::default()
+            };
             let tick_type = "AllLast";
             let number_of_ticks = 1;
             let ignore_size = true;
@@ -300,7 +314,14 @@ mod tests {
         fn test_encode_request_realtime_bars() {
             let request_id = 9000;
             let server_version = server_versions::TICK_BY_TICK;
-            let contract = contract_samples::simple_future();
+            let contract = Contract {
+                symbol: "GBL".to_owned(),
+                security_type: SecurityType::Future,
+                exchange: "EUREX".to_owned(),
+                currency: "EUR".to_owned(),
+                last_trade_date_or_contract_month: "202303".to_owned(),
+                ..Contract::default()
+            };
             let bar_size = BarSize::Sec5;
             let what_to_show = WhatToShow::Trades;
             let use_rth = true;
@@ -339,7 +360,14 @@ mod tests {
         fn test_encode_request_realtime_bars_with_options() {
             let request_id = 9000;
             let server_version = server_versions::TICK_BY_TICK;
-            let contract = contract_samples::simple_future();
+            let contract = Contract {
+                symbol: "GBL".to_owned(),
+                security_type: SecurityType::Future,
+                exchange: "EUREX".to_owned(),
+                currency: "EUR".to_owned(),
+                last_trade_date_or_contract_month: "202303".to_owned(),
+                ..Contract::default()
+            };
             let bar_size = BarSize::Sec5;
             let what_to_show = WhatToShow::Trades;
             let use_rth = true;
