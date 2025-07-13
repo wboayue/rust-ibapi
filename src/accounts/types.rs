@@ -174,7 +174,7 @@ mod tests {
             let id1 = AccountId::from("U123456");
             let id2 = AccountId::from("U123456");
             let id3 = AccountId::from("U654321");
-            
+
             assert_eq!(id1, id2);
             assert_ne!(id1, id3);
         }
@@ -182,12 +182,12 @@ mod tests {
         #[test]
         fn test_hash() {
             use std::collections::HashSet;
-            
+
             let mut set = HashSet::new();
             set.insert(AccountId::from("U123456"));
             set.insert(AccountId::from("U123456"));
             set.insert(AccountId::from("U654321"));
-            
+
             assert_eq!(set.len(), 2);
             assert!(set.contains(&AccountId::from("U123456")));
             assert!(set.contains(&AccountId::from("U654321")));
@@ -241,7 +241,7 @@ mod tests {
             let code1 = ModelCode::from("MODEL1");
             let code2 = ModelCode::from("MODEL1");
             let code3 = ModelCode::from("MODEL2");
-            
+
             assert_eq!(code1, code2);
             assert_ne!(code1, code3);
         }
@@ -249,12 +249,12 @@ mod tests {
         #[test]
         fn test_hash() {
             use std::collections::HashSet;
-            
+
             let mut set = HashSet::new();
             set.insert(ModelCode::from("MODEL1"));
             set.insert(ModelCode::from("MODEL1"));
             set.insert(ModelCode::from("MODEL2"));
-            
+
             assert_eq!(set.len(), 2);
         }
     }
@@ -312,7 +312,7 @@ mod tests {
             let id1 = ContractId(12345);
             let id2 = ContractId(12345);
             let id3 = ContractId(54321);
-            
+
             assert_eq!(id1, id2);
             assert_ne!(id1, id3);
         }
@@ -329,12 +329,12 @@ mod tests {
         #[test]
         fn test_hash() {
             use std::collections::HashSet;
-            
+
             let mut set = HashSet::new();
             set.insert(ContractId(12345));
             set.insert(ContractId(12345));
             set.insert(ContractId(54321));
-            
+
             assert_eq!(set.len(), 2);
         }
     }
@@ -392,7 +392,7 @@ mod tests {
             let group1 = AccountGroup::from("All");
             let group2 = AccountGroup::from("All");
             let group3 = AccountGroup::from("Group1");
-            
+
             assert_eq!(group1, group2);
             assert_ne!(group1, group3);
         }
@@ -401,7 +401,7 @@ mod tests {
     #[test]
     fn test_types_are_send_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
-        
+
         assert_send_sync::<AccountId>();
         assert_send_sync::<ModelCode>();
         assert_send_sync::<ContractId>();
@@ -449,7 +449,7 @@ mod tests {
     #[test]
     fn test_account_id_string_operations() {
         let id = AccountId::from("U123456");
-        
+
         // Test various string operations via Deref
         assert_eq!(id.to_uppercase(), "U123456");
         assert_eq!(id.chars().count(), 7);
@@ -460,7 +460,7 @@ mod tests {
     #[test]
     fn test_model_code_string_operations() {
         let code = ModelCode::from("model_test");
-        
+
         // Test various string operations via Deref
         assert_eq!(code.to_uppercase(), "MODEL_TEST");
         assert!(code.starts_with("model"));

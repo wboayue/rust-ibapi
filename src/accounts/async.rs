@@ -500,4 +500,351 @@ mod tests {
             ],
         );
     }
+
+    // Additional comprehensive tests
+
+    #[tokio::test]
+    async fn test_server_version_errors() {
+        use crate::server_versions;
+
+        // Test PnL version check
+        let (client_old, _) = create_test_client_with_version(server_versions::PNL - 1);
+        let account = AccountId(TEST_ACCOUNT.to_string());
+        let result = pnl(&client_old, &account, None).await;
+        assert!(result.is_err(), "Expected version error for PnL");
+        if let Err(error) = result {
+            assert!(matches!(error, Error::ServerVersion(_, _, _)));
+        }
+
+        // Test PnL Single version check
+        let (client_pnl_single, _) = create_test_client_with_version(server_versions::REALIZED_PNL - 1);
+        let result = pnl_single(&client_pnl_single, &account, ContractId(1001), None).await;
+        assert!(result.is_err(), "Expected version error for PnL Single");
+        if let Err(error) = result {
+            assert!(matches!(error, Error::ServerVersion(_, _, _)));
+        }
+
+        // Test Account Summary version check
+        let (client_summary, _) = create_test_client_with_version(server_versions::ACCOUNT_SUMMARY - 1);
+        let group = AccountGroup("All".to_string());
+        let result = account_summary(&client_summary, &group, &[AccountSummaryTags::ACCOUNT_TYPE]).await;
+        assert!(result.is_err(), "Expected version error for Account Summary");
+        if let Err(error) = result {
+            assert!(matches!(error, Error::ServerVersion(_, _, _)));
+        }
+
+        // Test Positions Multi version check
+        let (client_multi, _) = create_test_client_with_version(server_versions::MODELS_SUPPORT - 1);
+        let result = positions_multi(&client_multi, Some(&account), None).await;
+        assert!(result.is_err(), "Expected version error for Positions Multi");
+        if let Err(error) = result {
+            assert!(matches!(error, Error::ServerVersion(_, _, _)));
+        }
+
+        // Test Account Updates Multi version check
+        let result = account_updates_multi(&client_multi, Some(&account), None).await;
+        assert!(result.is_err(), "Expected version error for Account Updates Multi");
+        if let Err(error) = result {
+            assert!(matches!(error, Error::ServerVersion(_, _, _)));
+        }
+
+        // Test Family Codes version check
+        let (client_family, _) = create_test_client_with_version(server_versions::REQ_FAMILY_CODES - 1);
+        let result = family_codes(&client_family).await;
+        assert!(result.is_err(), "Expected version error for Family Codes");
+        if let Err(error) = result {
+            assert!(matches!(error, Error::ServerVersion(_, _, _)));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_managed_accounts_empty_response() {
+        // Test empty managed accounts response
+        let (client, message_bus) = create_test_client_with_responses(vec!["15|1||".into()]);
+
+        let accounts = managed_accounts(&client).await.expect("managed_accounts failed");
+        assert_eq!(accounts, vec![String::new()], "Expected single empty account");
+
+        assert_request_messages(&message_bus, &["17|1|"]);
+    }
+
+    #[tokio::test]
+    async fn test_managed_accounts_no_response() {
+        // Test no response scenario (returns empty vector)
+        let (client, message_bus) = create_test_client();
+
+        let accounts = managed_accounts(&client).await.expect("managed_accounts failed");
+        assert!(accounts.is_empty(), "Expected empty accounts list");
+
+        assert_request_messages(&message_bus, &["17|1|"]);
+    }
+
+    #[tokio::test]
+    async fn test_server_time_invalid_timestamp() {
+        // Test invalid timestamp handling
+        let invalid_timestamp = "invalid_timestamp";
+        let (client, message_bus) = create_test_client_with_responses(vec![format!("49|1|{}|", invalid_timestamp)]);
+
+        let result = server_time(&client).await;
+        assert!(result.is_err(), "Expected error for invalid timestamp");
+        // The error could be Parse, ParseInt, or Simple depending on where the parsing fails
+        match result.unwrap_err() {
+            Error::Parse(_, _, _) | Error::ParseInt(_) | Error::Simple(_) => {} // All are acceptable for invalid timestamp
+            other => panic!("Expected Parse, ParseInt, or Simple error, got: {:?}", other),
+        }
+
+        assert_request_messages(&message_bus, &["49|1|"]);
+    }
+
+    #[tokio::test]
+    async fn test_server_time_no_response() {
+        // Test no response scenario
+        let (client, message_bus) = create_test_client();
+
+        let result = server_time(&client).await;
+        assert!(result.is_err(), "Expected error for no response");
+        if let Err(Error::Simple(msg)) = result {
+            assert_eq!(msg, "No response from server");
+        } else {
+            panic!("Expected Simple error with 'No response from server'");
+        }
+
+        assert_request_messages(&message_bus, &["49|1|"]);
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_subscriptions() {
+        // Test multiple concurrent subscriptions
+        let (client, message_bus) = create_test_client();
+
+        let account1 = AccountId("ACCOUNT1".to_string());
+        let account2 = AccountId("ACCOUNT2".to_string());
+
+        // Create multiple concurrent subscriptions
+        let sub1_future = pnl(&client, &account1, None);
+        let sub2_future = pnl(&client, &account2, None);
+        let sub3_future = positions(&client);
+
+        let (sub1, sub2, sub3) = tokio::join!(sub1_future, sub2_future, sub3_future);
+
+        assert!(sub1.is_ok(), "First PnL subscription should succeed");
+        assert!(sub2.is_ok(), "Second PnL subscription should succeed");
+        assert!(sub3.is_ok(), "Positions subscription should succeed");
+
+        drop(sub1.unwrap());
+        drop(sub2.unwrap());
+        drop(sub3.unwrap());
+
+        // Allow time for async cleanup
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        // Verify all requests were sent
+        let request_messages = get_request_messages(&message_bus);
+        assert!(request_messages.len() >= 6, "Expected at least 6 messages (3 subscribe + 3 cancel)");
+    }
+
+    #[tokio::test]
+    async fn test_account_summary_multiple_tags() {
+        // Test account summary with multiple tags
+        let (client, message_bus) = create_test_client_with_responses(vec![responses::ACCOUNT_SUMMARY.into(), responses::ACCOUNT_SUMMARY_END.into()]);
+
+        let group = AccountGroup("All".to_string());
+        let tags = &[
+            AccountSummaryTags::ACCOUNT_TYPE,
+            AccountSummaryTags::NET_LIQUIDATION,
+            AccountSummaryTags::TOTAL_CASH_VALUE,
+        ];
+
+        let mut subscription = account_summary(&client, &group, tags).await.expect("account_summary failed");
+
+        // Should get at least one summary
+        let first_update = subscription.next().await;
+        assert!(matches!(first_update, Some(Ok(AccountSummaryResult::Summary(_)))));
+
+        // Should get end marker
+        let second_update = subscription.next().await;
+        assert!(matches!(second_update, Some(Ok(AccountSummaryResult::End))));
+
+        drop(subscription);
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        // Verify the encoded tags are sent correctly
+        let request_messages = get_request_messages(&message_bus);
+        assert!(
+            request_messages[0].contains("AccountType,NetLiquidation,TotalCashValue"),
+            "Request should contain all tags"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_account_summary_empty_tags() {
+        // Test account summary with empty tags list
+        let (client, _) = create_test_client();
+        let group = AccountGroup("All".to_string());
+        let tags: &[&str] = &[];
+
+        let result = account_summary(&client, &group, tags).await;
+        assert!(result.is_ok(), "Empty tags should be allowed");
+    }
+
+    #[tokio::test]
+    async fn test_pnl_different_model_codes() {
+        // Test PnL requests with different model codes
+        let (client, message_bus) = create_test_client();
+
+        let account = AccountId(TEST_ACCOUNT.to_string());
+        let model1 = ModelCode("MODEL1".to_string());
+        let model2 = ModelCode("MODEL2".to_string());
+
+        // Request PnL with different model codes
+        let sub1 = pnl(&client, &account, Some(&model1)).await.expect("PnL request 1 failed");
+        let sub2 = pnl(&client, &account, Some(&model2)).await.expect("PnL request 2 failed");
+        let sub3 = pnl(&client, &account, None).await.expect("PnL request 3 failed");
+
+        drop(sub1);
+        drop(sub2);
+        drop(sub3);
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        let request_messages = get_request_messages(&message_bus);
+        assert!(request_messages.len() >= 6, "Expected at least 6 messages");
+
+        // Verify model codes are encoded correctly - filter for subscription messages only
+        let pnl_requests: Vec<_> = request_messages.iter().filter(|msg| msg.starts_with("92|")).collect();
+        assert!(pnl_requests.len() >= 3, "Expected at least 3 PnL subscription messages");
+        assert!(pnl_requests[0].contains("MODEL1"), "First request should contain MODEL1");
+        assert!(pnl_requests[1].contains("MODEL2"), "Second request should contain MODEL2");
+        assert!(pnl_requests[2].ends_with("||"), "Third request should have empty model code");
+    }
+
+    #[tokio::test]
+    async fn test_positions_multi_with_various_parameters() {
+        // Test positions_multi with different parameter combinations
+        let (client, message_bus) = create_test_client_with_responses(vec![responses::POSITION_MULTI.into(), responses::POSITION_MULTI_END.into()]);
+
+        let account = AccountId(TEST_ACCOUNT.to_string());
+        let model = ModelCode(TEST_MODEL_CODE.to_string());
+
+        // Test all parameter combinations
+        let sub1 = positions_multi(&client, Some(&account), Some(&model))
+            .await
+            .expect("positions_multi with both params failed");
+        drop(sub1);
+
+        let sub2 = positions_multi(&client, Some(&account), None)
+            .await
+            .expect("positions_multi with account only failed");
+        drop(sub2);
+
+        let sub3 = positions_multi(&client, None, Some(&model))
+            .await
+            .expect("positions_multi with model only failed");
+        drop(sub3);
+
+        let sub4 = positions_multi(&client, None, None).await.expect("positions_multi with no params failed");
+        drop(sub4);
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        let request_messages = get_request_messages(&message_bus);
+        assert!(request_messages.len() >= 8, "Expected at least 8 messages (4 subscribe + 4 cancel)");
+    }
+
+    #[tokio::test]
+    async fn test_subscription_cleanup_on_drop() {
+        // Test that subscriptions are properly cleaned up when dropped
+        let (client, message_bus) = create_test_client();
+
+        let account = AccountId(TEST_ACCOUNT.to_string());
+
+        // Create and immediately drop subscriptions
+        {
+            let _sub1 = pnl(&client, &account, None).await.expect("PnL subscription failed");
+            let _sub2 = positions(&client).await.expect("Positions subscription failed");
+            // Subscriptions dropped here
+        }
+
+        // Allow time for async cleanup
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        let request_messages = get_request_messages(&message_bus);
+        assert!(
+            request_messages.len() >= 4,
+            "Expected subscribe and cancel messages for both subscriptions"
+        );
+
+        // Should have cancel messages
+        let cancel_count = request_messages
+            .iter()
+            .filter(|msg| msg.starts_with("93|") || msg.starts_with("64|"))
+            .count();
+        assert!(cancel_count >= 2, "Expected at least 2 cancel messages");
+    }
+
+    #[tokio::test]
+    async fn test_edge_case_contract_ids() {
+        // Test PnL single with edge case contract IDs
+        let (client, message_bus) = create_test_client();
+
+        let account = AccountId(TEST_ACCOUNT.to_string());
+
+        // Test with zero contract ID
+        let sub1 = pnl_single(&client, &account, ContractId(0), None)
+            .await
+            .expect("PnL single with contract ID 0 failed");
+        drop(sub1);
+
+        // Test with very large contract ID
+        let sub2 = pnl_single(&client, &account, ContractId(i32::MAX), None)
+            .await
+            .expect("PnL single with large contract ID failed");
+        drop(sub2);
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        let request_messages = get_request_messages(&message_bus);
+        assert!(request_messages.len() >= 4, "Expected subscribe and cancel messages");
+
+        // Verify contract IDs are encoded correctly
+        assert!(request_messages[0].contains("|0|"), "First request should contain contract ID 0");
+
+        // Find the second subscription message (not cancel message)
+        let subscription_messages: Vec<_> = request_messages.iter().filter(|msg| msg.starts_with("94|")).collect();
+        assert!(subscription_messages.len() >= 2, "Expected at least 2 subscription messages");
+        assert!(
+            subscription_messages[1].contains(&format!("|{}|", i32::MAX)),
+            "Second request should contain max contract ID"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_account_updates_stream_handling() {
+        // Test continuous account updates stream
+        let (client, message_bus) = create_test_client_with_responses(vec![
+            format!("{}|", responses::ACCOUNT_VALUE),
+            format!("{}|", responses::ACCOUNT_VALUE),
+            format!("{}|", responses::ACCOUNT_VALUE),
+            format!("54|1|{}|", TEST_ACCOUNT), // End marker
+        ]);
+
+        let account = AccountId(TEST_ACCOUNT.to_string());
+        let mut subscription = account_updates(&client, &account).await.expect("account_updates failed");
+
+        let mut update_count = 0;
+        while let Some(update_result) = subscription.next().await {
+            match update_result.expect("Update should not error") {
+                AccountUpdate::AccountValue(_) => {
+                    update_count += 1;
+                }
+                AccountUpdate::End => {
+                    break;
+                }
+                _ => {} // Ignore other update types
+            }
+        }
+
+        assert_eq!(update_count, 3, "Expected 3 account value updates");
+        assert_request_messages(&message_bus, &[&format!("6|2|1|{}|", TEST_ACCOUNT)]);
+    }
 }
