@@ -7,7 +7,7 @@ use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
 use crate::{Client, Error};
 
-use super::common::{decoders, encoders, helpers};
+use super::common::{decoders, encoders};
 use super::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use super::*;
 
@@ -17,7 +17,7 @@ impl SharesChannel for Subscription<'_, PositionUpdate> {}
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.
 pub fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
-    helpers::shared_subscription(
+    crate::common::request_helpers::shared_subscription(
         client,
         Features::POSITIONS,
         OutgoingMessages::RequestPositions,
@@ -40,7 +40,7 @@ pub fn positions_multi<'a>(
 
 // Determine whether an account exists under an account family and find the account family code.
 pub fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
-    helpers::one_shot_request(
+    crate::common::request_helpers::one_shot_request(
         client,
         Features::FAMILY_CODES,
         OutgoingMessages::RequestFamilyCodes,
@@ -57,7 +57,7 @@ pub fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
 // * `account`    - account for which to receive PnL updates
 // * `model_code` - specify to request PnL updates for a specific model
 pub fn pnl<'a>(client: &'a Client, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<'a, PnL>, Error> {
-    helpers::request_with_id(client, Features::PNL, |id| encoders::encode_request_pnl(id, account, model_code))
+    crate::common::request_helpers::request_with_id(client, Features::PNL, |id| encoders::encode_request_pnl(id, account, model_code))
 }
 
 // Requests real time updates for daily PnL of individual positions.
@@ -73,19 +73,19 @@ pub fn pnl_single<'a>(
     contract_id: ContractId,
     model_code: Option<&ModelCode>,
 ) -> Result<Subscription<'a, PnLSingle>, Error> {
-    helpers::request_with_id(client, Features::REALIZED_PNL, |id| {
+    crate::common::request_helpers::request_with_id(client, Features::REALIZED_PNL, |id| {
         encoders::encode_request_pnl_single(id, account, contract_id, model_code)
     })
 }
 
 pub fn account_summary<'a>(client: &'a Client, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<'a, AccountSummaryResult>, Error> {
-    helpers::request_with_id(client, Features::ACCOUNT_SUMMARY, |id| {
+    crate::common::request_helpers::request_with_id(client, Features::ACCOUNT_SUMMARY, |id| {
         encoders::encode_request_account_summary(id, group, tags)
     })
 }
 
 pub fn account_updates<'a>(client: &'a Client, account: &AccountId) -> Result<Subscription<'a, AccountUpdate>, Error> {
-    helpers::shared_request(client, OutgoingMessages::RequestAccountData, || {
+    crate::common::request_helpers::shared_request(client, OutgoingMessages::RequestAccountData, || {
         encoders::encode_request_account_updates(client.server_version(), account)
     })
 }
@@ -104,7 +104,7 @@ pub fn account_updates_multi<'a>(
 }
 
 pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
-    helpers::one_shot_with_retry(
+    crate::common::request_helpers::one_shot_with_retry(
         client,
         OutgoingMessages::RequestManagedAccounts,
         encoders::encode_request_managed_accounts,
@@ -119,7 +119,7 @@ pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
 }
 
 pub fn server_time(client: &Client) -> Result<OffsetDateTime, Error> {
-    helpers::one_shot_with_retry(
+    crate::common::request_helpers::one_shot_with_retry(
         client,
         OutgoingMessages::RequestCurrentTime,
         encoders::encode_request_server_time,
@@ -144,7 +144,7 @@ mod tests {
     use crate::{server_versions, stubs::MessageBusStub, Client, Error};
     use std::sync::{Arc, RwLock};
 
-    use super::super::common::test_utils::helpers::*;
+    use crate::common::test_utils::helpers::*;
 
     #[test]
     fn test_pnl() {

@@ -4,6 +4,7 @@
 - [Overview](#overview)
 - [Getting Started](#getting-started)
 - [Coding Standards](#coding-standards)
+- [Domain Type Pattern](#domain-type-pattern)
 - [Core Components](#core-components)
 - [Request and Response Handling](#request-and-response-handling)
 - [Extending the API](#extending-the-api)
@@ -62,6 +63,107 @@ cargo tarpaulin -o html
 ## Coding Standards
 
 We follow the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/). Please ensure your code adheres to these guidelines. Use `cargo fmt` to format your code and `cargo clippy` to catch common mistakes and improve your Rust code.
+
+## Domain Type Pattern
+
+The codebase uses a newtype pattern for domain-specific types to provide type safety and clarity. This pattern should be followed when adding new domain types.
+
+### Example Implementation
+
+```rust
+use std::fmt;
+use std::ops::Deref;
+
+/// Account identifier
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AccountId(pub String);
+
+impl Deref for AccountId {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl fmt::Display for AccountId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<String> for AccountId {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl From<&str> for AccountId {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+```
+
+### Key Components
+
+1. **Newtype Wrapper**: Use a tuple struct with a single field (e.g., `AccountId(pub String)`)
+2. **Common Traits**: Implement the following traits as appropriate:
+   - `Debug`, `Clone`, `PartialEq`, `Eq`, `Hash` - Usually derived
+   - `Deref` - Allows transparent access to the inner type's methods
+   - `Display` - For user-friendly string representation
+   - `From<T>` - For ergonomic conversions from the inner type
+
+3. **Benefits**:
+   - **Type Safety**: Prevents mixing up different types of IDs or values
+   - **Self-Documenting**: Function signatures clearly indicate expected types
+   - **Zero-Cost Abstraction**: No runtime overhead compared to using raw types
+   - **IDE Support**: Better autocomplete and type hints
+
+### When to Use This Pattern
+
+Apply this pattern when you have:
+- Domain-specific identifiers (AccountId, OrderId, TickerId)
+- Domain-specific codes or keys (ModelCode, Symbol)
+- Values that could be confused if using primitive types
+- Values that benefit from additional type safety
+
+### Testing Domain Types
+
+Include comprehensive tests for your domain types:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_deref() {
+        let id = AccountId("U123456".to_string());
+        assert_eq!(&*id, "U123456");
+        assert_eq!(id.len(), 7);  // Uses str method via Deref
+    }
+
+    #[test]
+    fn test_display() {
+        let id = AccountId("U123456".to_string());
+        assert_eq!(format!("{}", id), "U123456");
+    }
+
+    #[test]
+    fn test_from_string() {
+        let id = AccountId::from("U123456".to_string());
+        assert_eq!(id.0, "U123456");
+    }
+
+    #[test]
+    fn test_equality() {
+        let id1 = AccountId::from("U123456");
+        let id2 = AccountId::from("U123456");
+        assert_eq!(id1, id2);
+    }
+}
+```
 
 ## Core Components
 
