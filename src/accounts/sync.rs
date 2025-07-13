@@ -144,7 +144,8 @@ mod tests {
     use crate::{server_versions, stubs::MessageBusStub, Client, Error};
     use std::sync::{Arc, RwLock};
 
-    use super::super::common::test_utils::helpers::*;
+    use crate::common::test_utils::helpers::*;
+    use crate::common::test_utils::*;
 
     #[test]
     fn test_pnl() {

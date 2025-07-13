@@ -2,3 +2,6 @@
 
 pub mod request_helpers;
 pub mod retry;
+
+#[cfg(test)]
+pub mod test_utils;
