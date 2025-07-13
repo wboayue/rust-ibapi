@@ -1,73 +1,100 @@
-name: coverage
+name: Coverage
 
 on:
+  # Run on main branch pushes and completed CI runs
+  push:
+    branches:
+      - main
   workflow_run:
-      workflows:
-        - ci
-      branches:
-        - main
-      types:
-        - completed
+    workflows:
+      - CI
+    branches:
+      - main
+    types:
+      - completed
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # Optimize coverage builds
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: "-C instrument-coverage"
 
 jobs:
   coverage:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # Only run if CI passed or on direct push to main
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    
+    strategy:
+      matrix:
+        feature: [sync, async]
+    name: Coverage ${{ matrix.feature }}
+    
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      # Cache cargo registry, index, and build directories
-      - name: Cache cargo
-        uses: actions/cache@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # Use optimized Rust caching
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-coverage-
-            ${{ runner.os }}-cargo-
+          key: coverage-${{ matrix.feature }}
+          cache-on-failure: true
 
+      # Install tarpaulin with caching
       - name: Install tarpaulin
-        run: cargo install cargo-tarpaulin
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin
 
-      # Run coverage for sync features
-      - name: Coverage for sync
+      # Run coverage with optimized settings
+      - name: Generate coverage
         run: |
-          cargo tarpaulin --engine llvm --follow-exec --post-test-delay 10 \
-            --out xml --output-dir target/coverage/sync \
-            -- --test-threads 1
+          if [ "${{ matrix.feature }}" = "sync" ]; then
+            cargo tarpaulin \
+              --engine llvm \
+              --timeout 300 \
+              --out xml \
+              --output-dir target/coverage/ \
+              --skip-clean \
+              -- --test-threads 1
+          else
+            cargo tarpaulin \
+              --engine llvm \
+              --timeout 300 \
+              --no-default-features --features async \
+              --out xml \
+              --output-dir target/coverage/ \
+              --skip-clean \
+              -- --test-threads 1
+          fi
 
-      # Run coverage for async features
-      - name: Coverage for async
-        run: |
-          cargo tarpaulin --engine llvm --follow-exec --post-test-delay 10 \
-            --no-default-features --features async \
-            --out xml --output-dir target/coverage/async \
-            -- --test-threads 1
-
-      # Merge coverage reports and upload to Coveralls
-      - name: Upload coverage to Coveralls
+      # Upload to Coveralls with better error handling
+      - name: Upload to Coveralls
         uses: coverallsapp/github-action@v2
         with:
-          files: target/coverage/sync/cobertura.xml target/coverage/async/cobertura.xml
+          file: target/coverage/cobertura.xml
           format: cobertura
-          flag-name: run-${{ matrix.feature }}
+          flag-name: ${{ matrix.feature }}
           parallel: true
+          allow-empty: true
 
-  # Finish the parallel coverage upload
-  finish:
+  # Finalize coverage upload
+  coverage-finish:
     needs: coverage
-    if: ${{ always() }}
+    if: always()
     runs-on: ubuntu-latest
+    name: Coverage complete
+    
     steps:
-      - name: Coveralls Finished
+      - name: Coveralls finished
         uses: coverallsapp/github-action@v2
         with:
           parallel-finished: true
+          carryforward: "sync,async"

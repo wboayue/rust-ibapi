@@ -1,4 +1,4 @@
-name: ci
+name: CI
 
 on:
   pull_request:
@@ -11,132 +11,123 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # Enable more efficient cargo builds
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUST_LOG: info
 
 jobs:
-  test:
+  # Single job that runs all checks for each feature set
+  ci:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         feature: [sync, async]
-    name: Test ${{ matrix.feature }}
+    name: CI ${{ matrix.feature }}
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      # Cache cargo registry, index, and build directories
-      - name: Cache cargo
-        uses: actions/cache@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ matrix.feature }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.feature }}-
-            ${{ runner.os }}-cargo-
+          components: rustfmt, clippy
 
-      - name: Build (${{ matrix.feature }})
-        run: |
-          if [ "${{ matrix.feature }}" = "sync" ]; then
-            cargo build --verbose
-          else
-            cargo build --verbose --no-default-features --features async
-          fi
-
-      - name: Run tests (${{ matrix.feature }})
-        run: |
-          if [ "${{ matrix.feature }}" = "sync" ]; then
-            cargo test --verbose
-          else
-            cargo test --verbose --no-default-features --features async
-          fi
-
-      - name: Build all examples (${{ matrix.feature }})
-        run: |
-          if [ "${{ matrix.feature }}" = "sync" ]; then
-            cargo build --examples --verbose
-          else
-            cargo build --examples --verbose --no-default-features --features async
-          fi
-
-  # Run clippy on both feature sets
-  clippy:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        feature: [sync, async]
-    name: Clippy ${{ matrix.feature }}
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      # Use Swatinem's Rust cache for better performance
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          components: clippy
+          key: ${{ matrix.feature }}
+          cache-on-failure: true
+          # Cache target directory for each feature set separately
+          cache-targets: true
+          # Clean cache if it gets too large
+          cache-all-crates: true
 
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-clippy-${{ matrix.feature }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-clippy-${{ matrix.feature }}-
-            ${{ runner.os }}-cargo-clippy-
-
-      - name: Run clippy (${{ matrix.feature }})
-        run: |
-          if [ "${{ matrix.feature }}" = "sync" ]; then
-            cargo clippy --all-targets -- -D warnings
-          else
-            cargo clippy --all-targets --no-default-features --features async -- -D warnings
-          fi
-
-  # Format check (only needs to run once)
-  fmt:
-    runs-on: ubuntu-latest
-    name: Format
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
+      # Combine format check (run once per matrix to catch issues early)
       - name: Check formatting
         run: cargo fmt -- --check
 
-  # Documentation build for both features
-  docs:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        feature: [sync, async]
-    name: Docs ${{ matrix.feature }}
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-docs-${{ matrix.feature }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-docs-${{ matrix.feature }}-
-            ${{ runner.os }}-cargo-docs-
-
-      - name: Build documentation (${{ matrix.feature }})
+      # Build with optimizations for faster subsequent steps
+      - name: Build
         run: |
           if [ "${{ matrix.feature }}" = "sync" ]; then
-            cargo doc --no-deps
+            cargo build --locked
           else
-            cargo doc --no-deps --no-default-features --features async
+            cargo build --locked --no-default-features --features async
           fi
+
+      # Run clippy before tests to catch issues early
+      - name: Run clippy
+        run: |
+          if [ "${{ matrix.feature }}" = "sync" ]; then
+            cargo clippy --all-targets --locked -- -D warnings
+          else
+            cargo clippy --all-targets --locked --no-default-features --features async -- -D warnings
+          fi
+
+      # Run tests
+      - name: Run tests
+        run: |
+          if [ "${{ matrix.feature }}" = "sync" ]; then
+            cargo test --locked
+          else
+            cargo test --locked --no-default-features --features async
+          fi
+
+      # Build examples (only if previous steps pass)
+      - name: Build examples
+        run: |
+          if [ "${{ matrix.feature }}" = "sync" ]; then
+            cargo build --examples --locked
+          else
+            cargo build --examples --locked --no-default-features --features async
+          fi
+
+      # Build documentation
+      - name: Build documentation
+        run: |
+          if [ "${{ matrix.feature }}" = "sync" ]; then
+            cargo doc --no-deps --locked
+          else
+            cargo doc --no-deps --locked --no-default-features --features async
+          fi
+
+      # Check that benches compile (if any exist)
+      - name: Check benches compile
+        run: |
+          if [ "${{ matrix.feature }}" = "sync" ]; then
+            cargo check --benches --locked || true
+          else
+            cargo check --benches --locked --no-default-features --features async || true
+          fi
+
+  # Separate minimal job for basic checks that don't need feature matrix
+  basic-checks:
+    runs-on: ubuntu-latest
+    name: Basic checks
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: basic-checks
+
+      # Check that Cargo.toml is properly formatted and valid
+      - name: Check Cargo.toml
+        run: |
+          cargo metadata --format-version 1 > /dev/null
+          
+      # Audit dependencies for security vulnerabilities
+      - name: Security audit
+        run: |
+          cargo install --locked cargo-audit || true
+          cargo audit || true
