@@ -32,6 +32,11 @@ pub trait AsyncMessageBus: Send + Sync {
     async fn subscribe_shared(&self, channel_type: OutgoingMessages) -> AsyncInternalSubscription;
     async fn subscribe_order(&self, order_id: i32) -> AsyncInternalSubscription;
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error>;
+
+    #[cfg(test)]
+    fn request_messages(&self) -> Vec<RequestMessage> {
+        vec![]
+    }
 }
 
 /// Internal subscription for async implementation
