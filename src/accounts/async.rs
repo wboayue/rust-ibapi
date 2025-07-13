@@ -549,7 +549,7 @@ mod tests {
 
             let accounts = managed_accounts(&client)
                 .await
-                .expect(&format!("managed_accounts failed for {}", test_case.scenario));
+                .unwrap_or_else(|_| panic!("managed_accounts failed for {}", test_case.scenario));
             assert_eq!(accounts, test_case.expected, "{}: {}", test_case.scenario, test_case.description);
             assert_request_messages(&message_bus, &["17|1|"]);
         }
@@ -642,7 +642,7 @@ mod tests {
 
                 let mut subscription = account_summary(&client, &group, &test_case.tags)
                     .await
-                    .expect(&format!("account_summary failed for {}", test_case.description));
+                    .unwrap_or_else(|_| panic!("account_summary failed for {}", test_case.description));
 
                 // Should get at least one summary
                 let first_update = subscription.next().await;
@@ -706,7 +706,7 @@ mod tests {
             let model_code = test_case.model_code.as_ref().map(|s| ModelCode(s.clone()));
             let sub = pnl(&client, &account, model_code.as_ref())
                 .await
-                .expect(&format!("PnL request failed for {}", test_case.description));
+                .unwrap_or_else(|_| panic!("PnL request failed for {}", test_case.description));
             subscriptions.push(sub);
         }
 
@@ -766,7 +766,7 @@ mod tests {
 
             let sub = positions_multi(&client, account.as_ref(), model_code.as_ref())
                 .await
-                .expect(&format!("positions_multi failed for {}", test_case.description));
+                .unwrap_or_else(|_| panic!("positions_multi failed for {}", test_case.description));
             subscriptions.push(sub);
         }
 
@@ -834,13 +834,13 @@ mod tests {
                     let model = model_code.as_ref().map(|s| ModelCode(s.clone()));
                     let sub = pnl(&client, &account_id, model.as_ref())
                         .await
-                        .expect(&format!("PnL subscription failed for {}", test_case.description));
+                        .unwrap_or_else(|_| panic!("PnL subscription failed for {}", test_case.description));
                     drop(sub); // Trigger cancellation immediately
                 }
                 SubscriptionType::Positions => {
                     let sub = positions(&client)
                         .await
-                        .expect(&format!("Positions subscription failed for {}", test_case.description));
+                        .unwrap_or_else(|_| panic!("Positions subscription failed for {}", test_case.description));
                     drop(sub); // Trigger cancellation immediately
                 }
                 SubscriptionType::AccountSummary { group, tags } => {
@@ -848,7 +848,7 @@ mod tests {
                     let tag_refs: Vec<&str> = tags.iter().map(|s| s.as_str()).collect();
                     let sub = account_summary(&client, &group_id, &tag_refs)
                         .await
-                        .expect(&format!("Account Summary subscription failed for {}", test_case.description));
+                        .unwrap_or_else(|_| panic!("Account Summary subscription failed for {}", test_case.description));
                     drop(sub); // Trigger cancellation immediately
                 }
                 SubscriptionType::PositionsMulti { account, model_code } => {
@@ -856,7 +856,7 @@ mod tests {
                     let model = model_code.as_ref().map(|s| ModelCode(s.clone()));
                     let sub = positions_multi(&client, account_id.as_ref(), model.as_ref())
                         .await
-                        .expect(&format!("Positions Multi subscription failed for {}", test_case.description));
+                        .unwrap_or_else(|_| panic!("Positions Multi subscription failed for {}", test_case.description));
                     drop(sub); // Trigger cancellation immediately
                 }
                 SubscriptionType::PnLSingle {
@@ -869,7 +869,7 @@ mod tests {
                     let model = model_code.as_ref().map(|s| ModelCode(s.clone()));
                     let sub = pnl_single(&client, &account_id, contract, model.as_ref())
                         .await
-                        .expect(&format!("PnL Single subscription failed for {}", test_case.description));
+                        .unwrap_or_else(|_| panic!("PnL Single subscription failed for {}", test_case.description));
                     drop(sub); // Trigger cancellation immediately
                 }
             }
@@ -927,7 +927,7 @@ mod tests {
         for test_case in &test_cases {
             let sub = pnl_single(&client, &account, test_case.contract_id, None)
                 .await
-                .expect(&format!("PnL single failed for {}", test_case.description));
+                .unwrap_or_else(|_| panic!("PnL single failed for {}", test_case.description));
             subscriptions.push(sub);
         }
 
