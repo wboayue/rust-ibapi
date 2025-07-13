@@ -8,7 +8,8 @@ use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::subscriptions::{ResponseContext, StreamDecoder};
 use crate::Error;
 
-use super::{decoders, encoders, errors};
+use super::{decoders, encoders};
+use crate::common::error_helpers;
 
 impl StreamDecoder<AccountSummaryResult> for AccountSummaryResult {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::AccountSummary, IncomingMessages::AccountSummaryEnd];
@@ -22,7 +23,7 @@ impl StreamDecoder<AccountSummaryResult> for AccountSummaryResult {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
-        let request_id = errors::require_request_id(request_id)?;
+        let request_id = error_helpers::require_request_id(request_id)?;
         encoders::encode_cancel_account_summary(request_id)
     }
 }
@@ -35,7 +36,7 @@ impl StreamDecoder<PnL> for PnL {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
-        let request_id = errors::require_request_id(request_id)?;
+        let request_id = error_helpers::require_request_id(request_id)?;
         encoders::encode_cancel_pnl(request_id)
     }
 }
@@ -48,7 +49,7 @@ impl StreamDecoder<PnLSingle> for PnLSingle {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
-        let request_id = errors::require_request_id(request_id)?;
+        let request_id = error_helpers::require_request_id(request_id)?;
         encoders::encode_cancel_pnl_single(request_id)
     }
 }
@@ -81,7 +82,7 @@ impl StreamDecoder<PositionUpdateMulti> for PositionUpdateMulti {
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
-        let request_id = errors::require_request_id(request_id)?;
+        let request_id = error_helpers::require_request_id(request_id)?;
         encoders::encode_cancel_positions_multi(request_id)
     }
 }
@@ -124,7 +125,7 @@ impl StreamDecoder<AccountUpdateMulti> for AccountUpdateMulti {
     }
 
     fn cancel_message(server_version: i32, request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
-        let request_id = errors::require_request_id_for(request_id, "encode cancel account updates multi")?;
+        let request_id = error_helpers::require_request_id_for(request_id, "encode cancel account updates multi")?;
         encoders::encode_cancel_account_updates_multi(server_version, request_id)
     }
 }
