@@ -203,17 +203,18 @@ The library uses mutually exclusive feature flags:
 - **`sync`** (default): Traditional synchronous API using threads
 - **`async`**: Asynchronous API using tokio
 
-When both features are enabled, async takes precedence. This allows users to simply add `--features async` without needing `--no-default-features`.
+When both features are enabled, async takes precedence. This allows users to simply add `--features async` for library compilation and testing, but examples require `--no-default-features --features async`.
 
 ```bash
 # Build with sync mode (default)
 cargo build
 
-# Build with async mode (async takes precedence when both features enabled)
+# Build/test library with async mode (async takes precedence when both features enabled)
 cargo build --features async
+cargo test --features async
 
-# Build examples for async mode
-cargo run --features async --example async_connect
+# Build/run async examples (requires --no-default-features)
+cargo run --no-default-features --features async --example async_connect
 ```
 
 ### Module Organization
@@ -298,6 +299,10 @@ use crate::common::error_helpers;
 
 // Validate required parameters
 let value = error_helpers::require(some_option, "parameter is required")?;
+let request_id = error_helpers::require_request_id_for(request_id, "my operation")?;
+
+// Validate ranges
+let port = error_helpers::require_range(port, 1, 65535, "port")?;
 
 // Validate with custom logic
 let valid_value = error_helpers::require_with(some_option, || {
