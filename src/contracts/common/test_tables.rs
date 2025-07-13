@@ -5,6 +5,7 @@ use crate::messages::OutgoingMessages;
 use crate::server_versions;
 
 /// Test case for contract details tests
+#[allow(clippy::type_complexity)]
 pub struct ContractDetailsTestCase {
     pub name: &'static str,
     pub contract: Contract,

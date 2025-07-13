@@ -342,7 +342,7 @@ mod tests {
             let mut subscription = result.unwrap();
 
             let mut count = 0;
-            while let Some(_) = subscription.next().await {
+            while subscription.next().await.is_some() {
                 count += 1;
             }
             assert_eq!(count, test_case.expected_count, "Test '{}' count mismatch", test_case.name);
