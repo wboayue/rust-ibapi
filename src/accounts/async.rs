@@ -109,7 +109,7 @@ pub async fn account_updates_multi(
 }
 
 pub async fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
-    super::common::helpers::async_helpers::one_shot_with_retry(
+    crate::common::request_helpers::one_shot_with_retry(
         client,
         OutgoingMessages::RequestManagedAccounts,
         encoders::encode_request_managed_accounts,
@@ -125,7 +125,7 @@ pub async fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
 }
 
 pub async fn server_time(client: &Client) -> Result<OffsetDateTime, Error> {
-    super::common::helpers::async_helpers::one_shot_with_retry(
+    crate::common::request_helpers::one_shot_with_retry(
         client,
         OutgoingMessages::RequestCurrentTime,
         encoders::encode_request_server_time,

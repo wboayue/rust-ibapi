@@ -71,6 +71,26 @@ mod sync_helpers {
             Ok(default())
         }
     }
+
+    /// Helper for one-shot requests with retry logic
+    pub fn one_shot_with_retry<R>(
+        client: &Client,
+        message_type: OutgoingMessages,
+        encoder: impl Fn() -> Result<RequestMessage, Error>,
+        processor: impl Fn(&mut ResponseMessage) -> Result<R, Error>,
+        on_none: impl Fn() -> Result<R, Error>,
+    ) -> Result<R, Error> {
+        crate::common::retry::retry_on_connection_reset(|| {
+            let request = encoder()?;
+            let subscription = client.shared_request(message_type).send_raw(request)?;
+
+            match subscription.next() {
+                Some(Ok(mut message)) => processor(&mut message),
+                Some(Err(e)) => Err(e),
+                None => on_none(),
+            }
+        })
+    }
 }
 
 // Async implementations
@@ -145,6 +165,26 @@ mod async_helpers {
         } else {
             Ok(default())
         }
+    }
+
+    /// Async helper for one-shot requests with retry logic
+    pub async fn one_shot_with_retry<R>(
+        client: &Client,
+        message_type: OutgoingMessages,
+        encoder: impl Fn() -> Result<RequestMessage, Error>,
+        processor: impl Fn(&mut ResponseMessage) -> Result<R, Error>,
+        on_none: impl Fn() -> Result<R, Error>,
+    ) -> Result<R, Error> {
+        crate::common::retry::retry_on_connection_reset(|| async {
+            let request = encoder()?;
+            let mut subscription = client.shared_request(message_type).send_raw(request).await?;
+
+            match subscription.next().await {
+                Some(mut message) => processor(&mut message),
+                None => on_none(),
+            }
+        })
+        .await
     }
 }
 
