@@ -78,12 +78,12 @@ impl AsyncConnection {
         self.recorder.record_request(message);
         let encoded = message.encode();
         debug!("-> {encoded:?}");
-        
+
         // Record the request if debug logging is enabled
         if log::log_enabled!(log::Level::Debug) {
             trace::record_request(encoded.clone()).await;
         }
-        
+
         let length_encoded = crate::messages::encode_length(&encoded);
 
         let mut socket = self.socket.lock().await;
@@ -111,7 +111,7 @@ impl AsyncConnection {
 
         let raw_string = String::from_utf8(data)?;
         debug!("<- {raw_string:?}");
-        
+
         // Record the response if debug logging is enabled
         if log::log_enabled!(log::Level::Debug) {
             trace::record_response(raw_string.clone()).await;

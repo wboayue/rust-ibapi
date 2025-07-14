@@ -1,6 +1,6 @@
 //! Common connection logic shared between sync and async implementations
 
-use log::{debug, error};
+use log::{debug, error, warn};
 use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
@@ -117,7 +117,10 @@ impl ConnectionProtocol for ConnectionHandler {
             }
             _ => {
                 // Other messages during connection are logged but not processed
-                debug!("Received message during connection: {:?}", message.message_type());
+                warn!(
+                    "CONSUMING MESSAGE during connection setup: {:?} - THIS MESSAGE IS LOST!",
+                    message.message_type()
+                );
             }
         }
 

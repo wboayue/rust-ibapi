@@ -126,35 +126,20 @@ impl Client {
 
     /// Send a request with a specific request ID
     pub async fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
-        // First subscribe to the response channel
-        let subscription = self.message_bus.subscribe(request_id).await;
-
-        // Then send the request
-        self.message_bus.send_request(message).await?;
-
-        Ok(subscription)
+        // Use atomic subscribe + send
+        self.message_bus.send_request(request_id, message).await
     }
 
     /// Send a shared request (no ID)
     pub async fn send_shared_request(&self, message_type: OutgoingMessages, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
-        // First subscribe to the shared channel
-        let subscription = self.message_bus.subscribe_shared(message_type).await;
-
-        // Then send the request
-        self.message_bus.send_request(message).await?;
-
-        Ok(subscription)
+        // Use atomic subscribe + send
+        self.message_bus.send_shared_request(message_type, message).await
     }
 
     /// Send an order request
     pub async fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
-        // First subscribe to the order channel
-        let subscription = self.message_bus.subscribe_order(order_id).await;
-
-        // Then send the request
-        self.message_bus.send_request(message).await?;
-
-        Ok(subscription)
+        // Use atomic subscribe + send
+        self.message_bus.send_order_request(order_id, message).await
     }
 
     /// Create order update subscription
@@ -164,7 +149,7 @@ impl Client {
 
     /// Send a message without expecting a response
     pub async fn send_message(&self, message: RequestMessage) -> Result<(), Error> {
-        self.message_bus.send_request(message).await
+        self.message_bus.send_message(message).await
     }
 
     // === Account Management ===

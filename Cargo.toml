@@ -622,9 +622,5 @@ name = "async_trace_test_simple"
 path = "examples/async/trace_test_simple.rs"
 required-features = ["async"]
 
-[[example]]
-name = "async_trace_test_debug"
-path = "examples/async/trace_test_debug.rs"
-required-features = ["async"]
 
 

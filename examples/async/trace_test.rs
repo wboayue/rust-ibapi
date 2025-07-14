@@ -8,15 +8,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
 
     println!("Testing trace functionality in async mode...");
-    
+
     // Connect to TWS/Gateway
     let client = Client::connect("127.0.0.1:4002", 100).await?;
     println!("Connected to TWS/Gateway");
-    
+
     // Make a simple request to trigger trace recording
     let server_time = client.server_time().await?;
     println!("Server time: {}", server_time);
-    
+
     // Check if we captured the interaction
     if let Some(interaction) = trace::last_interaction().await {
         println!("\nCaptured interaction:");
@@ -34,6 +34,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         println!("No interaction captured (this shouldn't happen with debug logging)");
     }
-    
+
     Ok(())
 }

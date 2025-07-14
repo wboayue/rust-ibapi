@@ -221,11 +221,8 @@ where
     where
         D: StreamDecoder<T> + 'static,
     {
-        // Subscribe to the response channel first
-        let subscription = self.client.message_bus.subscribe(request_id).await;
-
-        // Then send the request
-        self.client.message_bus.send_request(message).await?;
+        // Use atomic subscribe + send
+        let subscription = self.client.message_bus.send_request(request_id, message).await?;
 
         // Create subscription with decoder
         Ok(Subscription::new_from_internal::<D>(
@@ -243,11 +240,8 @@ where
     where
         D: StreamDecoder<T> + 'static,
     {
-        // Subscribe to the shared channel first
-        let subscription = self.client.message_bus.subscribe_shared(message_type).await;
-
-        // Then send the request
-        self.client.message_bus.send_request(message).await?;
+        // Use atomic subscribe + send
+        let subscription = self.client.message_bus.send_shared_request(message_type, message).await?;
 
         Ok(Subscription::new_from_internal::<D>(
             subscription,
@@ -264,11 +258,8 @@ where
     where
         D: StreamDecoder<T> + 'static,
     {
-        // Send the request
-        self.client.message_bus.send_request(message).await?;
-
-        // Subscribe to the order channel
-        let subscription = self.client.message_bus.subscribe_order(order_id).await;
+        // Use atomic subscribe + send
+        let subscription = self.client.message_bus.send_order_request(order_id, message).await?;
 
         Ok(Subscription::new_from_internal::<D>(
             subscription,
