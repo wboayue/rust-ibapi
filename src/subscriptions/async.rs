@@ -177,7 +177,7 @@ impl<T> Subscription<T> {
         if let (Some(client), Some(cancel_fn)) = (&self.client, &self.cancel_fn) {
             let id = self.request_id.or(self.order_id);
             if let Ok(message) = cancel_fn(client.server_version(), id, Some(&self.response_context)) {
-                if let Err(e) = client.message_bus.send_request(message).await {
+                if let Err(e) = client.message_bus.send_message(message).await {
                     warn!("error sending cancel message: {e}")
                 }
             }
@@ -209,7 +209,7 @@ impl<T> Drop for Subscription<T> {
             if let Ok(message) = cancel_fn(server_version, id, Some(&response_context)) {
                 // Spawn a task to send the cancel message since drop can't be async
                 tokio::spawn(async move {
-                    if let Err(e) = client.message_bus.send_request(message).await {
+                    if let Err(e) = client.message_bus.send_message(message).await {
                         warn!("error sending cancel message in drop: {e}");
                     }
                 });

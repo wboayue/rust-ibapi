@@ -607,4 +607,20 @@ name = "contract_builder"
 path = "examples/contract_builder.rs"
 required-features = ["sync"]
 
+[[example]]
+name = "trace_test"
+path = "examples/sync/trace_test.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "async_trace_test"
+path = "examples/async/trace_test.rs"
+required-features = ["async"]
+
+[[example]]
+name = "async_trace_test_simple"
+path = "examples/async/trace_test_simple.rs"
+required-features = ["async"]
+
+
 

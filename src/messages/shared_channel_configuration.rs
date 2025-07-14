@@ -7,7 +7,6 @@ pub struct ChannelMapping<'a> {
 }
 
 // For shared channels configures mapping of request message id to response message ids.
-#[cfg(all(feature = "sync", not(feature = "async")))]
 pub(crate) const CHANNEL_MAPPINGS: &[ChannelMapping] = &[
     ChannelMapping {
         request: OutgoingMessages::RequestIds,

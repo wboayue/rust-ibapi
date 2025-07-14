@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use log::{debug, error, info, warn};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio::task;
 use tokio::time::{sleep, Duration};
 
@@ -19,7 +19,7 @@ pub enum CleanupSignal {
 }
 
 use crate::connection::r#async::AsyncConnection;
-use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::Error;
 
 use super::routing::{determine_routing, is_warning_error, map_incoming_to_outgoing, RoutingDecision, UNSPECIFIED_REQUEST_ID};
@@ -27,10 +27,25 @@ use super::routing::{determine_routing, is_warning_error, map_incoming_to_outgoi
 /// Asynchronous message bus trait
 #[async_trait]
 pub trait AsyncMessageBus: Send + Sync {
-    async fn send_request(&self, request: RequestMessage) -> Result<(), Error>;
-    async fn subscribe(&self, request_id: i32) -> AsyncInternalSubscription;
-    async fn subscribe_shared(&self, channel_type: OutgoingMessages) -> AsyncInternalSubscription;
-    async fn subscribe_order(&self, order_id: i32) -> AsyncInternalSubscription;
+    /// Atomic subscribe + send for requests with IDs
+    async fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error>;
+
+    /// Atomic subscribe + send for orders
+    async fn send_order_request(&self, order_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error>;
+
+    /// Atomic subscribe + send for shared channels
+    async fn send_shared_request(&self, message_type: OutgoingMessages, message: RequestMessage) -> Result<AsyncInternalSubscription, Error>;
+
+    /// Send without expecting response
+    async fn send_message(&self, message: RequestMessage) -> Result<(), Error>;
+
+    /// Cancel operations
+    #[allow(dead_code)]
+    async fn cancel_subscription(&self, request_id: i32, message: RequestMessage) -> Result<(), Error>;
+    #[allow(dead_code)]
+    async fn cancel_order_subscription(&self, order_id: i32, message: RequestMessage) -> Result<(), Error>;
+
+    /// Order update stream
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error>;
 
     #[cfg(test)]
@@ -105,6 +120,7 @@ impl Drop for AsyncInternalSubscription {
 }
 
 type ChannelSender = mpsc::UnboundedSender<ResponseMessage>;
+type SharedChannelSender = broadcast::Sender<ResponseMessage>;
 
 /// Asynchronous TCP message bus implementation
 pub struct AsyncTcpMessageBus {
@@ -112,7 +128,7 @@ pub struct AsyncTcpMessageBus {
     /// Maps request IDs to their response channels
     request_channels: Arc<RwLock<HashMap<i32, ChannelSender>>>,
     /// Maps shared channel types to their response channels
-    shared_channels: Arc<RwLock<HashMap<OutgoingMessages, ChannelSender>>>,
+    shared_channels: Arc<RwLock<HashMap<OutgoingMessages, SharedChannelSender>>>,
     /// Maps order IDs to their response channels
     order_channels: Arc<RwLock<HashMap<i32, ChannelSender>>>,
     /// Optional channel for order update stream
@@ -126,10 +142,17 @@ impl AsyncTcpMessageBus {
     pub fn new(connection: AsyncConnection) -> Result<Self, Error> {
         let (cleanup_sender, cleanup_receiver) = mpsc::unbounded_channel();
 
+        // Pre-create broadcast senders for all shared channels (like sync does)
+        let mut shared_channels = HashMap::new();
+        for mapping in shared_channel_configuration::CHANNEL_MAPPINGS {
+            let (sender, _) = broadcast::channel(1000); // Buffer size for shared channels
+            shared_channels.insert(mapping.request, sender);
+        }
+
         let message_bus = Self {
             connection: Arc::new(connection),
             request_channels: Arc::new(RwLock::new(HashMap::new())),
-            shared_channels: Arc::new(RwLock::new(HashMap::new())),
+            shared_channels: Arc::new(RwLock::new(shared_channels)),
             order_channels: Arc::new(RwLock::new(HashMap::new())),
             order_update_stream: Arc::new(RwLock::new(None)),
             cleanup_sender,
@@ -157,7 +180,6 @@ impl AsyncTcpMessageBus {
                     CleanupSignal::Shared(message_type) => {
                         let mut channels = shared_channels.write().await;
                         channels.remove(&message_type);
-                        debug!("Cleaned up shared channel for type: {message_type:?}");
                     }
                 }
             }
@@ -170,7 +192,7 @@ impl AsyncTcpMessageBus {
     pub fn process_messages(self: Arc<Self>, _server_version: i32, reconnect_delay: Duration) -> Result<(), Error> {
         let message_bus = self.clone();
 
-        task::spawn(async move {
+        let _handle = task::spawn(async move {
             loop {
                 match message_bus.read_and_route_message().await {
                     Ok(_) => continue,
@@ -194,8 +216,6 @@ impl AsyncTcpMessageBus {
     /// Read a message and route it to the appropriate channel
     async fn read_and_route_message(&self) -> Result<(), Error> {
         let message = self.connection.read_message().await?;
-
-        debug!("Received message type: {:?}", message.message_type());
 
         // Use common routing logic
         match determine_routing(&message) {
@@ -293,10 +313,11 @@ impl AsyncTcpMessageBus {
             _ => {}
         }
 
-        // Use the common mapping function
+        // Use the common mapping function to route to broadcast channel
         if let Some(channel_type) = map_incoming_to_outgoing(message_type) {
             let channels = self.shared_channels.read().await;
             if let Some(sender) = channels.get(&channel_type) {
+                // Broadcast to all subscribers
                 let _ = sender.send(message);
             }
         }
@@ -316,44 +337,121 @@ impl AsyncTcpMessageBus {
         }
         false
     }
-
-    /// Send a request to TWS
-    async fn send_request_internal(&self, request: RequestMessage) -> Result<(), Error> {
-        self.connection.write_message(&request).await
-    }
 }
 
 #[async_trait]
 impl AsyncMessageBus for AsyncTcpMessageBus {
-    async fn send_request(&self, request: RequestMessage) -> Result<(), Error> {
-        self.send_request_internal(request).await
-    }
-
-    async fn subscribe(&self, request_id: i32) -> AsyncInternalSubscription {
+    async fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
+        // Create channel first
         let (sender, receiver) = mpsc::unbounded_channel();
 
+        // Insert into map BEFORE sending
+        {
+            let mut channels = self.request_channels.write().await;
+            channels.insert(request_id, sender);
+        }
+
+        // Now send the request - any response will find the channel
+        self.connection.write_message(&message).await?;
+
+        // Return subscription with cleanup
+        Ok(AsyncInternalSubscription::with_cleanup(
+            receiver,
+            self.cleanup_sender.clone(),
+            CleanupSignal::Request(request_id),
+        ))
+    }
+
+    async fn send_order_request(&self, order_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
+        // Same pattern for orders
+        let (sender, receiver) = mpsc::unbounded_channel();
+
+        {
+            let mut channels = self.order_channels.write().await;
+            channels.insert(order_id, sender);
+        }
+
+        self.connection.write_message(&message).await?;
+
+        Ok(AsyncInternalSubscription::with_cleanup(
+            receiver,
+            self.cleanup_sender.clone(),
+            CleanupSignal::Order(order_id),
+        ))
+    }
+
+    async fn send_shared_request(&self, message_type: OutgoingMessages, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
+        // Get the pre-created broadcast sender and create a new receiver
+        let receiver = {
+            let channels = self.shared_channels.read().await;
+            if let Some(sender) = channels.get(&message_type) {
+                sender.subscribe()
+            } else {
+                return Err(Error::Simple(format!(
+                    "No shared channel configured for message type: {:?}",
+                    message_type
+                )));
+            }
+        };
+
+        // Send the request - response will be routed to the broadcast channel
+        self.connection.write_message(&message).await?;
+
+        // Convert broadcast receiver to mpsc for compatibility with AsyncInternalSubscription
+        let (mpsc_sender, mpsc_receiver) = mpsc::unbounded_channel();
+
+        // Spawn task to relay from broadcast to mpsc
+        let mut broadcast_receiver = receiver;
+        tokio::spawn(async move {
+            while let Ok(message) = broadcast_receiver.recv().await {
+                if mpsc_sender.send(message).is_err() {
+                    break; // Receiver dropped
+                }
+            }
+        });
+
+        Ok(AsyncInternalSubscription::with_cleanup(
+            mpsc_receiver,
+            self.cleanup_sender.clone(),
+            CleanupSignal::Shared(message_type),
+        ))
+    }
+
+    async fn send_message(&self, message: RequestMessage) -> Result<(), Error> {
+        // For fire-and-forget messages
+        self.connection.write_message(&message).await
+    }
+
+    async fn cancel_subscription(&self, request_id: i32, message: RequestMessage) -> Result<(), Error> {
+        self.connection.write_message(&message).await?;
+
+        let channels = self.request_channels.read().await;
+        if let Some(sender) = channels.get(&request_id) {
+            // Send cancellation error to the channel
+            let _ = sender.send(ResponseMessage::from("Cancelled"));
+        }
+
+        // Remove channel
         let mut channels = self.request_channels.write().await;
-        channels.insert(request_id, sender);
+        channels.remove(&request_id);
 
-        AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), CleanupSignal::Request(request_id))
+        Ok(())
     }
 
-    async fn subscribe_shared(&self, channel_type: OutgoingMessages) -> AsyncInternalSubscription {
-        let (sender, receiver) = mpsc::unbounded_channel();
+    async fn cancel_order_subscription(&self, order_id: i32, message: RequestMessage) -> Result<(), Error> {
+        self.connection.write_message(&message).await?;
 
-        let mut channels = self.shared_channels.write().await;
-        channels.insert(channel_type, sender);
+        let channels = self.order_channels.read().await;
+        if let Some(sender) = channels.get(&order_id) {
+            // Send cancellation error to the channel
+            let _ = sender.send(ResponseMessage::from("Cancelled"));
+        }
 
-        AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), CleanupSignal::Shared(channel_type))
-    }
-
-    async fn subscribe_order(&self, order_id: i32) -> AsyncInternalSubscription {
-        let (sender, receiver) = mpsc::unbounded_channel();
-
+        // Remove channel
         let mut channels = self.order_channels.write().await;
-        channels.insert(order_id, sender);
+        channels.remove(&order_id);
 
-        AsyncInternalSubscription::with_cleanup(receiver, self.cleanup_sender.clone(), CleanupSignal::Order(order_id))
+        Ok(())
     }
 
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
