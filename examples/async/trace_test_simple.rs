@@ -16,7 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Make a simple request to trigger trace recording
     let server_time = client.server_time().await?;
-    println!("Server time: {}", server_time);
+    println!("Server time: {server_time}");
 
     // Check if we captured the interaction
     if let Some(interaction) = trace::last_interaction().await {

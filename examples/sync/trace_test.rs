@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Make a simple request to trigger trace recording
     let server_time = client.server_time()?;
-    println!("Server time: {}", server_time);
+    println!("Server time: {server_time}");
 
     // Check if we captured the interaction
     if let Some(interaction) = trace::last_interaction() {
@@ -25,9 +25,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  Response {}: {} bytes", i + 1, response.len());
             // Print first 100 chars of response
             if response.len() > 100 {
-                println!("    {}", &response[..100]);
+                println!("    {}...", &response[..100]);
             } else {
-                println!("    {}", response);
+                println!("    {response}");
             }
         }
     } else {
