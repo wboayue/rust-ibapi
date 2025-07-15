@@ -18,8 +18,88 @@ use time::OffsetDateTime;
 use crate::{Error, ToField};
 
 pub(crate) mod shared_channel_configuration;
+pub mod parser_registry;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod from_str_tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_outgoing_messages_from_str() {
+        // Test some common message types
+        assert_eq!(OutgoingMessages::from_str("1").unwrap(), OutgoingMessages::RequestMarketData);
+        assert_eq!(OutgoingMessages::from_str("17").unwrap(), OutgoingMessages::RequestManagedAccounts);
+        assert_eq!(OutgoingMessages::from_str("49").unwrap(), OutgoingMessages::RequestCurrentTime);
+        assert_eq!(OutgoingMessages::from_str("61").unwrap(), OutgoingMessages::RequestPositions);
+        
+        // Test error cases
+        assert!(OutgoingMessages::from_str("999").is_err());
+        assert!(OutgoingMessages::from_str("abc").is_err());
+        assert!(OutgoingMessages::from_str("").is_err());
+    }
+    
+    #[test]
+    fn test_outgoing_messages_roundtrip() {
+        // Test that we can convert to string and back
+        let msg = OutgoingMessages::RequestCurrentTime;
+        let as_string = msg.to_string();
+        let parsed = OutgoingMessages::from_str(&as_string).unwrap();
+        assert_eq!(parsed, OutgoingMessages::RequestCurrentTime);
+        
+        // Test with another message type
+        let msg = OutgoingMessages::RequestManagedAccounts;
+        let as_string = msg.to_string();
+        let parsed = OutgoingMessages::from_str(&as_string).unwrap();
+        assert_eq!(parsed, OutgoingMessages::RequestManagedAccounts);
+    }
+
+    #[test]
+    fn test_incoming_messages_from_str() {
+        // Test some common message types
+        assert_eq!(IncomingMessages::from_str("4").unwrap(), IncomingMessages::Error);
+        assert_eq!(IncomingMessages::from_str("15").unwrap(), IncomingMessages::ManagedAccounts);
+        assert_eq!(IncomingMessages::from_str("49").unwrap(), IncomingMessages::CurrentTime);
+        assert_eq!(IncomingMessages::from_str("61").unwrap(), IncomingMessages::Position);
+        
+        // Test NotValid for unknown values
+        assert_eq!(IncomingMessages::from_str("999").unwrap(), IncomingMessages::NotValid);
+        assert_eq!(IncomingMessages::from_str("0").unwrap(), IncomingMessages::NotValid);
+        assert_eq!(IncomingMessages::from_str("-1").unwrap(), IncomingMessages::NotValid);
+        
+        // Test error cases for non-numeric strings
+        assert!(IncomingMessages::from_str("abc").is_err());
+        assert!(IncomingMessages::from_str("").is_err());
+        assert!(IncomingMessages::from_str("1.5").is_err());
+    }
+    
+    #[test]
+    fn test_incoming_messages_roundtrip() {
+        // Test with CurrentTime message
+        let n = 49;
+        let msg = IncomingMessages::from(n);
+        let as_string = n.to_string();
+        let parsed = IncomingMessages::from_str(&as_string).unwrap();
+        assert_eq!(parsed, msg);
+        
+        // Test with ManagedAccounts message
+        let n = 15;
+        let msg = IncomingMessages::from(n);
+        let as_string = n.to_string();
+        let parsed = IncomingMessages::from_str(&as_string).unwrap();
+        assert_eq!(parsed, msg);
+        
+        // Test with NotValid (unknown value)
+        let n = 999;
+        let msg = IncomingMessages::from(n);
+        let as_string = n.to_string();
+        let parsed = IncomingMessages::from_str(&as_string).unwrap();
+        assert_eq!(parsed, msg);
+        assert_eq!(parsed, IncomingMessages::NotValid);
+    }
+}
 
 const INFINITY_STR: &str = "Infinity";
 const UNSET_DOUBLE: &str = "1.7976931348623157E308";
@@ -208,6 +288,17 @@ impl From<i32> for IncomingMessages {
     }
 }
 
+impl FromStr for IncomingMessages {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.parse::<i32>() {
+            Ok(n) => Ok(IncomingMessages::from(n)),
+            Err(_) => Err(Error::Simple(format!("Invalid incoming message type: {}", s))),
+        }
+    }
+}
+
 pub fn order_id_index(kind: IncomingMessages) -> Option<usize> {
     match kind {
         IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => Some(1),
@@ -361,6 +452,97 @@ impl ToField for OutgoingMessages {
 impl std::fmt::Display for OutgoingMessages {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", *self as i32)
+    }
+}
+
+impl FromStr for OutgoingMessages {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.parse::<i32>() {
+            Ok(1) => Ok(OutgoingMessages::RequestMarketData),
+            Ok(2) => Ok(OutgoingMessages::CancelMarketData),
+            Ok(3) => Ok(OutgoingMessages::PlaceOrder),
+            Ok(4) => Ok(OutgoingMessages::CancelOrder),
+            Ok(5) => Ok(OutgoingMessages::RequestOpenOrders),
+            Ok(6) => Ok(OutgoingMessages::RequestAccountData),
+            Ok(7) => Ok(OutgoingMessages::RequestExecutions),
+            Ok(8) => Ok(OutgoingMessages::RequestIds),
+            Ok(9) => Ok(OutgoingMessages::RequestContractData),
+            Ok(10) => Ok(OutgoingMessages::RequestMarketDepth),
+            Ok(11) => Ok(OutgoingMessages::CancelMarketDepth),
+            Ok(12) => Ok(OutgoingMessages::RequestNewsBulletins),
+            Ok(13) => Ok(OutgoingMessages::CancelNewsBulletin),
+            Ok(14) => Ok(OutgoingMessages::ChangeServerLog),
+            Ok(15) => Ok(OutgoingMessages::RequestAutoOpenOrders),
+            Ok(16) => Ok(OutgoingMessages::RequestAllOpenOrders),
+            Ok(17) => Ok(OutgoingMessages::RequestManagedAccounts),
+            Ok(18) => Ok(OutgoingMessages::RequestFA),
+            Ok(19) => Ok(OutgoingMessages::ReplaceFA),
+            Ok(20) => Ok(OutgoingMessages::RequestHistoricalData),
+            Ok(21) => Ok(OutgoingMessages::ExerciseOptions),
+            Ok(22) => Ok(OutgoingMessages::RequestScannerSubscription),
+            Ok(23) => Ok(OutgoingMessages::CancelScannerSubscription),
+            Ok(24) => Ok(OutgoingMessages::RequestScannerParameters),
+            Ok(25) => Ok(OutgoingMessages::CancelHistoricalData),
+            Ok(49) => Ok(OutgoingMessages::RequestCurrentTime),
+            Ok(50) => Ok(OutgoingMessages::RequestRealTimeBars),
+            Ok(51) => Ok(OutgoingMessages::CancelRealTimeBars),
+            Ok(52) => Ok(OutgoingMessages::RequestFundamentalData),
+            Ok(53) => Ok(OutgoingMessages::CancelFundamentalData),
+            Ok(54) => Ok(OutgoingMessages::ReqCalcImpliedVolat),
+            Ok(55) => Ok(OutgoingMessages::ReqCalcOptionPrice),
+            Ok(56) => Ok(OutgoingMessages::CancelImpliedVolatility),
+            Ok(57) => Ok(OutgoingMessages::CancelOptionPrice),
+            Ok(58) => Ok(OutgoingMessages::RequestGlobalCancel),
+            Ok(59) => Ok(OutgoingMessages::RequestMarketDataType),
+            Ok(61) => Ok(OutgoingMessages::RequestPositions),
+            Ok(62) => Ok(OutgoingMessages::RequestAccountSummary),
+            Ok(63) => Ok(OutgoingMessages::CancelAccountSummary),
+            Ok(64) => Ok(OutgoingMessages::CancelPositions),
+            Ok(65) => Ok(OutgoingMessages::VerifyRequest),
+            Ok(66) => Ok(OutgoingMessages::VerifyMessage),
+            Ok(67) => Ok(OutgoingMessages::QueryDisplayGroups),
+            Ok(68) => Ok(OutgoingMessages::SubscribeToGroupEvents),
+            Ok(69) => Ok(OutgoingMessages::UpdateDisplayGroup),
+            Ok(70) => Ok(OutgoingMessages::UnsubscribeFromGroupEvents),
+            Ok(71) => Ok(OutgoingMessages::StartApi),
+            Ok(72) => Ok(OutgoingMessages::VerifyAndAuthRequest),
+            Ok(73) => Ok(OutgoingMessages::VerifyAndAuthMessage),
+            Ok(74) => Ok(OutgoingMessages::RequestPositionsMulti),
+            Ok(75) => Ok(OutgoingMessages::CancelPositionsMulti),
+            Ok(76) => Ok(OutgoingMessages::RequestAccountUpdatesMulti),
+            Ok(77) => Ok(OutgoingMessages::CancelAccountUpdatesMulti),
+            Ok(78) => Ok(OutgoingMessages::RequestSecurityDefinitionOptionalParameters),
+            Ok(79) => Ok(OutgoingMessages::RequestSoftDollarTiers),
+            Ok(80) => Ok(OutgoingMessages::RequestFamilyCodes),
+            Ok(81) => Ok(OutgoingMessages::RequestMatchingSymbols),
+            Ok(82) => Ok(OutgoingMessages::RequestMktDepthExchanges),
+            Ok(83) => Ok(OutgoingMessages::RequestSmartComponents),
+            Ok(84) => Ok(OutgoingMessages::RequestNewsArticle),
+            Ok(85) => Ok(OutgoingMessages::RequestNewsProviders),
+            Ok(86) => Ok(OutgoingMessages::RequestHistoricalNews),
+            Ok(87) => Ok(OutgoingMessages::RequestHeadTimestamp),
+            Ok(88) => Ok(OutgoingMessages::RequestHistogramData),
+            Ok(89) => Ok(OutgoingMessages::CancelHistogramData),
+            Ok(90) => Ok(OutgoingMessages::CancelHeadTimestamp),
+            Ok(91) => Ok(OutgoingMessages::RequestMarketRule),
+            Ok(92) => Ok(OutgoingMessages::RequestPnL),
+            Ok(93) => Ok(OutgoingMessages::CancelPnL),
+            Ok(94) => Ok(OutgoingMessages::RequestPnLSingle),
+            Ok(95) => Ok(OutgoingMessages::CancelPnLSingle),
+            Ok(96) => Ok(OutgoingMessages::RequestHistoricalTicks),
+            Ok(97) => Ok(OutgoingMessages::RequestTickByTickData),
+            Ok(98) => Ok(OutgoingMessages::CancelTickByTickData),
+            Ok(99) => Ok(OutgoingMessages::RequestCompletedOrders),
+            Ok(100) => Ok(OutgoingMessages::RequestWshMetaData),
+            Ok(101) => Ok(OutgoingMessages::CancelWshMetaData),
+            Ok(102) => Ok(OutgoingMessages::RequestWshEventData),
+            Ok(103) => Ok(OutgoingMessages::CancelWshEventData),
+            Ok(104) => Ok(OutgoingMessages::RequestUserInfo),
+            Ok(n) => Err(Error::Simple(format!("Unknown outgoing message type: {}", n))),
+            Err(_) => Err(Error::Simple(format!("Invalid outgoing message type: {}", s))),
+        }
     }
 }
 
