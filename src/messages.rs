@@ -17,8 +17,8 @@ use time::OffsetDateTime;
 
 use crate::{Error, ToField};
 
-pub(crate) mod shared_channel_configuration;
 pub mod parser_registry;
+pub(crate) mod shared_channel_configuration;
 #[cfg(test)]
 mod tests;
 
@@ -34,13 +34,13 @@ mod from_str_tests {
         assert_eq!(OutgoingMessages::from_str("17").unwrap(), OutgoingMessages::RequestManagedAccounts);
         assert_eq!(OutgoingMessages::from_str("49").unwrap(), OutgoingMessages::RequestCurrentTime);
         assert_eq!(OutgoingMessages::from_str("61").unwrap(), OutgoingMessages::RequestPositions);
-        
+
         // Test error cases
         assert!(OutgoingMessages::from_str("999").is_err());
         assert!(OutgoingMessages::from_str("abc").is_err());
         assert!(OutgoingMessages::from_str("").is_err());
     }
-    
+
     #[test]
     fn test_outgoing_messages_roundtrip() {
         // Test that we can convert to string and back
@@ -48,7 +48,7 @@ mod from_str_tests {
         let as_string = msg.to_string();
         let parsed = OutgoingMessages::from_str(&as_string).unwrap();
         assert_eq!(parsed, OutgoingMessages::RequestCurrentTime);
-        
+
         // Test with another message type
         let msg = OutgoingMessages::RequestManagedAccounts;
         let as_string = msg.to_string();
@@ -63,18 +63,18 @@ mod from_str_tests {
         assert_eq!(IncomingMessages::from_str("15").unwrap(), IncomingMessages::ManagedAccounts);
         assert_eq!(IncomingMessages::from_str("49").unwrap(), IncomingMessages::CurrentTime);
         assert_eq!(IncomingMessages::from_str("61").unwrap(), IncomingMessages::Position);
-        
+
         // Test NotValid for unknown values
         assert_eq!(IncomingMessages::from_str("999").unwrap(), IncomingMessages::NotValid);
         assert_eq!(IncomingMessages::from_str("0").unwrap(), IncomingMessages::NotValid);
         assert_eq!(IncomingMessages::from_str("-1").unwrap(), IncomingMessages::NotValid);
-        
+
         // Test error cases for non-numeric strings
         assert!(IncomingMessages::from_str("abc").is_err());
         assert!(IncomingMessages::from_str("").is_err());
         assert!(IncomingMessages::from_str("1.5").is_err());
     }
-    
+
     #[test]
     fn test_incoming_messages_roundtrip() {
         // Test with CurrentTime message
@@ -83,14 +83,14 @@ mod from_str_tests {
         let as_string = n.to_string();
         let parsed = IncomingMessages::from_str(&as_string).unwrap();
         assert_eq!(parsed, msg);
-        
+
         // Test with ManagedAccounts message
         let n = 15;
         let msg = IncomingMessages::from(n);
         let as_string = n.to_string();
         let parsed = IncomingMessages::from_str(&as_string).unwrap();
         assert_eq!(parsed, msg);
-        
+
         // Test with NotValid (unknown value)
         let n = 999;
         let msg = IncomingMessages::from(n);

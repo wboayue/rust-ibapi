@@ -1,0 +1,203 @@
+header:
+  server_version: 173
+  recorded_at: 2025-07-15 19:05:13.111551 +00:00:00
+interactions:
+- name: server_time
+  request:
+    raw: "49\01\0"
+    fields:
+    - name: message_type
+      value: '49'
+    - name: version
+      value: '1'
+  responses:
+  - raw: "49\01\01752606307\0"
+    fields:
+    - name: message_type
+      value: '49'
+    - name: version
+      value: '1'
+    - name: timestamp
+      value: '1752606307'
+    - name: timestamp_parsed
+      value: 2025-07-15 19:05:07.0 +00:00:00
+- name: managed_accounts
+  request:
+    raw: "17\01\0"
+    fields:
+    - name: message_type
+      value: '17'
+    - name: version
+      value: '1'
+  responses:
+  - raw: "15\01\0ACCOUNT_ID\0"
+    fields:
+    - name: message_type
+      value: '15'
+    - name: version
+      value: '1'
+    - name: accounts
+      value: ACCOUNT_ID
+- name: positions
+  request:
+    raw: "61\01\0"
+    fields:
+    - name: message_type
+      value: '61'
+    - name: version
+      value: '1'
+  responses:
+  - raw: "61\03\0ACCOUNT_ID\0265598\0AAPL\0STK\0\00.0\0\0\0NASDAQ\0USD\0AAPL\0NMS\0-110\0201.8829709\0"
+    fields:
+    - name: message_type
+      value: '61'
+    - name: version
+      value: '3'
+    - name: account
+      value: ACCOUNT_ID
+    - name: contract_id
+      value: '265598'
+    - name: symbol
+      value: AAPL
+    - name: security_type
+      value: STK
+    - name: last_trade_date_or_contract_month
+      value: ''
+    - name: strike
+      value: '0.0'
+    - name: right
+      value: ''
+    - name: multiplier
+      value: ''
+    - name: exchange
+      value: NASDAQ
+    - name: currency
+      value: USD
+    - name: local_symbol
+      value: AAPL
+    - name: trading_class
+      value: NMS
+    - name: position
+      value: '-110'
+    - name: average_cost
+      value: '201.8829709'
+  - raw: "61\03\0ACCOUNT_ID\0637533641\0ES\0FUT\020250919\00.0\0\050\0\0USD\0ESU5\0ES\01\0315114.75\0"
+    fields:
+    - name: message_type
+      value: '61'
+    - name: version
+      value: '3'
+    - name: account
+      value: ACCOUNT_ID
+    - name: contract_id
+      value: '637533641'
+    - name: symbol
+      value: ES
+    - name: security_type
+      value: FUT
+    - name: last_trade_date_or_contract_month
+      value: '20250919'
+    - name: strike
+      value: '0.0'
+    - name: right
+      value: ''
+    - name: multiplier
+      value: '50'
+    - name: exchange
+      value: ''
+    - name: currency
+      value: USD
+    - name: local_symbol
+      value: ESU5
+    - name: trading_class
+      value: ES
+    - name: position
+      value: '1'
+    - name: average_cost
+      value: '315114.75'
+  - raw: "62\01\0"
+    fields:
+    - name: message_type
+      value: '62'
+    - name: version
+      value: '1'
+- name: account_summary
+  request:
+    raw: "62\01\09000\0All\0NetLiquidation,TotalCashValue,GrossPositionValue\0"
+    fields:
+    - name: message_type
+      value: '62'
+    - name: version
+      value: '1'
+    - name: request_id
+      value: '9000'
+    - name: group
+      value: All
+    - name: tags
+      value: NetLiquidation,TotalCashValue,GrossPositionValue
+  responses:
+  - raw: "63\01\09000\0ACCOUNT_ID\0GrossPositionValue\023172.60\0USD\0"
+    fields:
+    - name: message_type
+      value: '63'
+    - name: version
+      value: '1'
+    - name: request_id
+      value: '9000'
+    - name: account
+      value: ACCOUNT_ID
+    - name: tag
+      value: GrossPositionValue
+    - name: value
+      value: '23172.60'
+    - name: currency
+      value: USD
+  - raw: "63\01\09000\0ACCOUNT_ID\0NetLiquidation\0246447.83\0USD\0"
+    fields:
+    - name: message_type
+      value: '63'
+    - name: version
+      value: '1'
+    - name: request_id
+      value: '9000'
+    - name: account
+      value: ACCOUNT_ID
+    - name: tag
+      value: NetLiquidation
+    - name: value
+      value: '246447.83'
+    - name: currency
+      value: USD
+  - raw: "63\01\09000\0ACCOUNT_ID\0TotalCashValue\0269339.33\0USD\0"
+    fields:
+    - name: message_type
+      value: '63'
+    - name: version
+      value: '1'
+    - name: request_id
+      value: '9000'
+    - name: account
+      value: ACCOUNT_ID
+    - name: tag
+      value: TotalCashValue
+    - name: value
+      value: '269339.33'
+    - name: currency
+      value: USD
+  - raw: "64\01\09000\0"
+    fields:
+    - name: message_type
+      value: '64'
+    - name: version
+      value: '1'
+    - name: request_id
+      value: '9000'
+- name: pnl
+  request:
+    raw: "93\09001\0"
+    fields:
+    - name: message_type
+      value: '93'
+    - name: request_id
+      value: '9001'
+  responses: []
