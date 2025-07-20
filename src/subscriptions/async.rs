@@ -1,11 +1,8 @@
 //! Asynchronous subscription implementation
 
-use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
-use futures::stream::Stream;
 use log::{debug, warn};
 use tokio::sync::mpsc;
 
@@ -18,7 +15,7 @@ use crate::Error;
 
 // Type aliases to reduce complexity
 type CancelFn = Box<dyn Fn(i32, Option<i32>, Option<&ResponseContext>) -> Result<RequestMessage, Error> + Send + Sync>;
-type DecoderFn<T> = Box<dyn Fn(i32, &mut ResponseMessage) -> Result<T, Error> + Send>;
+type DecoderFn<T> = Arc<dyn Fn(i32, &mut ResponseMessage) -> Result<T, Error> + Send + Sync>;
 
 /// Asynchronous subscription for streaming data
 pub struct Subscription<T> {
@@ -31,7 +28,7 @@ pub struct Subscription<T> {
     cancelled: Arc<AtomicBool>,
     client: Option<Arc<Client>>,
     /// Cancel message generator
-    cancel_fn: Option<CancelFn>,
+    cancel_fn: Option<Arc<CancelFn>>,
 }
 
 enum SubscriptionInner<T> {
@@ -43,6 +40,41 @@ enum SubscriptionInner<T> {
     },
     /// Pre-decoded subscription - receives T directly
     PreDecoded { receiver: mpsc::UnboundedReceiver<Result<T, Error>> },
+}
+
+impl<T> Clone for SubscriptionInner<T> {
+    fn clone(&self) -> Self {
+        match self {
+            SubscriptionInner::WithDecoder {
+                subscription,
+                decoder,
+                client,
+            } => SubscriptionInner::WithDecoder {
+                subscription: subscription.clone(),
+                decoder: decoder.clone(),
+                client: client.clone(),
+            },
+            SubscriptionInner::PreDecoded { .. } => {
+                // Can't clone mpsc receivers
+                panic!("Cannot clone pre-decoded subscriptions");
+            }
+        }
+    }
+}
+
+impl<T> Clone for Subscription<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            request_id: self.request_id,
+            order_id: self.order_id,
+            _message_type: self._message_type,
+            response_context: self.response_context.clone(),
+            cancelled: self.cancelled.clone(),
+            client: self.client.clone(),
+            cancel_fn: self.cancel_fn.clone(),
+        }
+    }
 }
 
 impl<T> Subscription<T> {
@@ -57,12 +89,12 @@ impl<T> Subscription<T> {
         response_context: ResponseContext,
     ) -> Self
     where
-        D: Fn(i32, &mut ResponseMessage) -> Result<T, Error> + Send + 'static,
+        D: Fn(i32, &mut ResponseMessage) -> Result<T, Error> + Send + Sync + 'static,
     {
         Self {
             inner: SubscriptionInner::WithDecoder {
                 subscription: internal,
-                decoder: Box::new(decoder),
+                decoder: Arc::new(decoder),
                 client: client.clone(),
             },
             request_id,
@@ -86,7 +118,7 @@ impl<T> Subscription<T> {
         response_context: ResponseContext,
     ) -> Self
     where
-        F: Fn(i32, &mut ResponseMessage) -> Result<T, Error> + Send + 'static,
+        F: Fn(i32, &mut ResponseMessage) -> Result<T, Error> + Send + Sync + 'static,
     {
         Self::with_decoder(internal, client, decoder, request_id, order_id, message_type, response_context)
     }
@@ -106,7 +138,7 @@ impl<T> Subscription<T> {
     {
         let mut sub = Self::with_decoder(internal, client.clone(), D::decode, request_id, order_id, message_type, response_context);
         // Store the cancel function
-        sub.cancel_fn = Some(Box::new(D::cancel_message));
+        sub.cancel_fn = Some(Arc::new(Box::new(D::cancel_message)));
         sub
     }
 
@@ -220,37 +252,6 @@ impl<T> Drop for Subscription<T> {
     }
 }
 
-impl<T: Unpin + 'static> Stream for Subscription<T> {
-    type Item = Result<T, Error>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = self.get_mut();
-        match &mut this.inner {
-            SubscriptionInner::WithDecoder {
-                subscription,
-                decoder,
-                client,
-            } => {
-                // Create a Pin for the subscription's receiver
-                match Pin::new(&mut subscription.receiver).poll_recv(cx) {
-                    Poll::Ready(Some(mut message)) => {
-                        let result = decoder(client.server_version(), &mut message);
-                        match process_decode_result(result) {
-                            ProcessingResult::Success(val) => Poll::Ready(Some(Ok(val))),
-                            ProcessingResult::EndOfStream => Poll::Ready(None),
-                            ProcessingResult::Retry => {
-                                // For retry, we need to re-poll
-                                cx.waker().wake_by_ref();
-                                Poll::Pending
-                            }
-                            ProcessingResult::Error(err) => Poll::Ready(Some(Err(err))),
-                        }
-                    }
-                    Poll::Ready(None) => Poll::Ready(None),
-                    Poll::Pending => Poll::Pending,
-                }
-            }
-            SubscriptionInner::PreDecoded { receiver } => receiver.poll_recv(cx),
-        }
-    }
-}
+// Note: Stream trait implementation removed because tokio's broadcast::Receiver
+// doesn't provide poll_recv. Users should use the async next() method instead.
+// If Stream is needed, users can convert using futures::stream::unfold.

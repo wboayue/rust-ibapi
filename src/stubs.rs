@@ -16,8 +16,11 @@ use crate::transport::{InternalSubscription, MessageBus, SubscriptionBuilder};
 use {
     crate::transport::{r#async::AsyncInternalSubscription, AsyncMessageBus},
     async_trait::async_trait,
-    tokio::sync::mpsc,
+    tokio::sync::broadcast,
 };
+
+#[cfg(feature = "async")]
+const TEST_BROADCAST_CAPACITY: usize = 1024;
 
 pub(crate) struct MessageBusStub {
     pub request_messages: RwLock<Vec<RequestMessage>>,
@@ -151,7 +154,7 @@ impl AsyncMessageBus for MessageBusStub {
     async fn send_request(&self, _request_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
         self.request_messages.write().unwrap().push(message);
 
-        let (sender, receiver) = mpsc::unbounded_channel();
+        let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
         // Send pre-configured response messages
         for message in &self.response_messages {
             let message = ResponseMessage::from(&message.replace('|', "\0"));
@@ -164,7 +167,7 @@ impl AsyncMessageBus for MessageBusStub {
     async fn send_order_request(&self, _order_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
         self.request_messages.write().unwrap().push(message);
 
-        let (sender, receiver) = mpsc::unbounded_channel();
+        let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
         // Send pre-configured response messages
         for message in &self.response_messages {
             let message = ResponseMessage::from(&message.replace('|', "\0"));
@@ -177,7 +180,7 @@ impl AsyncMessageBus for MessageBusStub {
     async fn send_shared_request(&self, _message_type: OutgoingMessages, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
         self.request_messages.write().unwrap().push(message);
 
-        let (sender, receiver) = mpsc::unbounded_channel();
+        let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
         // Send pre-configured response messages
         for message in &self.response_messages {
             let message = ResponseMessage::from(&message.replace('|', "\0"));
@@ -201,7 +204,7 @@ impl AsyncMessageBus for MessageBusStub {
     }
 
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
-        let (sender, receiver) = mpsc::unbounded_channel();
+        let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
 
         // Send pre-configured response messages
         for message in &self.response_messages {
