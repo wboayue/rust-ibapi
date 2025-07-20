@@ -15,10 +15,12 @@ pub struct ParsedField {
 }
 
 /// Field definition for message parsing
+type FieldTransform = Box<dyn Fn(&str) -> String + Send + Sync>;
+
 pub struct FieldDef {
     index: usize,
     name: &'static str,
-    transform: Option<Box<dyn Fn(&str) -> String + Send + Sync>>,
+    transform: Option<FieldTransform>,
 }
 
 impl FieldDef {
@@ -373,7 +375,7 @@ pub fn parse_generic_message(parts: &[&str]) -> Vec<ParsedField> {
     let mut fields = Vec::new();
 
     // First field is always message type
-    if let Some(msg_type) = parts.get(0) {
+    if let Some(msg_type) = parts.first() {
         fields.push(ParsedField {
             name: "message_type".to_string(),
             value: msg_type.to_string(),

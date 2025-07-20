@@ -102,7 +102,7 @@ fn parse_request_fields(raw: &str, registry: &MessageParserRegistry) -> Vec<Fiel
         return Vec::new();
     }
 
-    match parts.get(0).map(|s| OutgoingMessages::from_str(s)) {
+    match parts.first().map(|s| OutgoingMessages::from_str(s)) {
         Some(Ok(msg_type)) => {
             let mut parsed = registry.parse_request(msg_type, &parts);
 
@@ -131,7 +131,7 @@ fn parse_response_fields(raw: &str, registry: &MessageParserRegistry) -> Vec<Fie
         return Vec::new();
     }
 
-    match parts.get(0).map(|s| IncomingMessages::from_str(s)) {
+    match parts.first().map(|s| IncomingMessages::from_str(s)) {
         Some(Ok(msg_type)) => {
             let mut parsed = registry.parse_response(msg_type, &parts);
 
@@ -197,7 +197,7 @@ impl InteractionRecorder {
     where
         F: FnOnce() -> Result<InteractionRecord, Box<dyn std::error::Error>>,
     {
-        println!("Recording {} interaction...", name);
+        println!("Recording {name} interaction...");
 
         // Clear any previous interaction
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -249,7 +249,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Record server_time interaction
     match recorder.record_interaction("server_time", || {
         let server_time = client.server_time()?;
-        println!("Server time: {}", server_time);
+        println!("Server time: {server_time}");
 
         // Capture interaction immediately after the call
         let interaction = trace::last_interaction().ok_or("No interaction captured - ensure debug logging is enabled")?;
@@ -268,13 +268,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Responses: {} message(s)", record.responses.len());
             interactions.push(record);
         }
-        Err(e) => eprintln!("Failed to record server_time: {}", e),
+        Err(e) => eprintln!("Failed to record server_time: {e}"),
     }
 
     // Record managed_accounts interaction
     match recorder.record_interaction("managed_accounts", || {
         let accounts = client.managed_accounts()?;
-        println!("Managed accounts: {:?} (will be sanitized)", accounts);
+        println!("Managed accounts: {accounts:?} (will be sanitized)");
 
         // Capture interaction immediately
         let interaction = trace::last_interaction().ok_or("No interaction captured - ensure debug logging is enabled")?;
@@ -293,14 +293,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Responses: {} message(s)", record.responses.len());
             interactions.push(record);
         }
-        Err(e) => eprintln!("Failed to record managed_accounts: {}", e),
+        Err(e) => eprintln!("Failed to record managed_accounts: {e}"),
     }
 
     // Skip other interactions for now to debug
     // Get the first account for subsequent queries
     let accounts = client.managed_accounts().unwrap_or_default();
     let account = accounts.first().map(|s| s.as_str()).unwrap_or("DU1234567");
-    println!("\nUsing account: {} for subsequent queries", account);
+    println!("\nUsing account: {account} for subsequent queries");
 
     // Record positions interaction
     match recorder.record_interaction("positions", || {
@@ -314,9 +314,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 break;
             }
             position_count += 1;
-            println!("Got position #{}", position_count);
+            println!("Got position #{position_count}");
         }
-        println!("Finished consuming positions: {}", position_count);
+        println!("Finished consuming positions: {position_count}");
 
         // Capture interaction before subscription is dropped
         let interaction = trace::last_interaction().ok_or("No interaction captured - ensure debug logging is enabled")?;
@@ -338,7 +338,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Responses: {} message(s)", record.responses.len());
             interactions.push(record);
         }
-        Err(e) => eprintln!("Failed to record positions: {}", e),
+        Err(e) => eprintln!("Failed to record positions: {e}"),
     }
 
     // Record account_summary interaction
@@ -355,9 +355,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 break;
             }
             summary_count += 1;
-            println!("Got summary #{}", summary_count);
+            println!("Got summary #{summary_count}");
         }
-        println!("Finished consuming summaries: {}", summary_count);
+        println!("Finished consuming summaries: {summary_count}");
 
         // Capture interaction before subscription is dropped
         let interaction = trace::last_interaction().ok_or("No interaction captured - ensure debug logging is enabled")?;
@@ -379,7 +379,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Responses: {} message(s)", record.responses.len());
             interactions.push(record);
         }
-        Err(e) => eprintln!("Failed to record account_summary: {}", e),
+        Err(e) => eprintln!("Failed to record account_summary: {e}"),
     }
 
     // Record pnl interaction
@@ -392,9 +392,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Read a few PnL updates
         for update in pnl_stream.into_iter().take(3) {
             pnl_updates += 1;
-            println!("Got PnL update #{}: {:?}", pnl_updates, update);
+            println!("Got PnL update #{pnl_updates}: {update:?}");
         }
-        println!("Finished consuming PnL updates: {}", pnl_updates);
+        println!("Finished consuming PnL updates: {pnl_updates}");
 
         // Give it a moment to ensure trace is updated
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -419,7 +419,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Responses: {} message(s)", record.responses.len());
             interactions.push(record);
         }
-        Err(e) => eprintln!("Failed to record pnl: {}", e),
+        Err(e) => eprintln!("Failed to record pnl: {e}"),
     }
 
     // Create header with server version
@@ -436,7 +436,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::write(output_path, &yaml_content)?;
 
     println!("\nSaved to {}:", output_path.display());
-    println!("{}", yaml_content);
+    println!("{yaml_content}");
 
     Ok(())
 }

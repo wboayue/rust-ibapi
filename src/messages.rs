@@ -622,6 +622,10 @@ impl ResponseMessage {
         self.fields.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.fields.is_empty()
+    }
+
     pub fn message_type(&self) -> IncomingMessages {
         if self.fields.is_empty() {
             IncomingMessages::NotValid
