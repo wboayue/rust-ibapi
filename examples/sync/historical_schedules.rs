@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example historical_schedules
+//! cargo run --features sync --example historical_schedules
 //! ```
 
 use clap::{arg, Command};

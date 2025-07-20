@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example calculate_implied_volatility
+//! cargo run --features sync --example calculate_implied_volatility
 //! ```
 
 use ibapi::contracts::Contract;

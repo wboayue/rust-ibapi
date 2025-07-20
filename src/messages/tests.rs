@@ -1,5 +1,5 @@
 use crate::contracts::{ComboLegOpenClose, SecurityType};
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A};
 
 use super::*;
@@ -51,7 +51,7 @@ fn test_message_encodes_string() {
 }
 
 #[test]
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 fn test_message_encodes_rule_80_a() {
     let mut message = RequestMessage::new();
 
@@ -71,7 +71,7 @@ fn test_message_encodes_rule_80_a() {
 }
 
 #[test]
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 fn test_message_encodes_order_condition() {
     let mut message = RequestMessage::new();
 
@@ -87,7 +87,7 @@ fn test_message_encodes_order_condition() {
 }
 
 #[test]
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 fn test_message_encodes_action() {
     let mut message = RequestMessage::new();
 
@@ -141,7 +141,7 @@ fn test_message_encodes_outgoing_message() {
 }
 
 #[test]
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 fn test_message_encodes_order_open_close() {
     let mut message = RequestMessage::new();
 

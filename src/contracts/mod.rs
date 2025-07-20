@@ -22,7 +22,7 @@ use crate::{Error, ToField};
 mod common;
 
 // Feature-specific implementations
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 mod sync;
 
 #[cfg(feature = "async")]
@@ -561,7 +561,7 @@ pub struct PriceIncrement {
 }
 
 // Re-export API functions based on active feature
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub(crate) use sync::{calculate_implied_volatility, calculate_option_price, contract_details, market_rule, matching_symbols, option_chain};
 
 #[cfg(feature = "async")]

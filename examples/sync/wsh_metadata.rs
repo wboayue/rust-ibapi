@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example wsh_metadata
+//! cargo run --features sync --example wsh_metadata
 //! ```
 
 use ibapi::Client;

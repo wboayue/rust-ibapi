@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example executions
+//! cargo run --features sync --example executions
 //! ```
 
 use ibapi::orders::ExecutionFilter;

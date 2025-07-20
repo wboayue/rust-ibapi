@@ -12,24 +12,29 @@ With this fully featured API, you can retrieve account information, access real-
 
 ## Sync/Async Architecture
 
-The rust-ibapi library supports both synchronous (thread-based) and asynchronous (tokio-based) operation modes through feature flags:
+The rust-ibapi library requires you to explicitly choose between synchronous (thread-based) and asynchronous (tokio-based) operation modes:
 
-- **sync** (default): Traditional synchronous API using threads and crossbeam channels
-- **async**: Asynchronous API using tokio tasks and mpsc channels
+- **sync**: Traditional synchronous API using threads and crossbeam channels
+- **async**: Asynchronous API using tokio tasks and broadcast channels
 
-When both features are enabled, async takes precedence. This allows you to simply add `--features async` without needing `--no-default-features`.
+You must specify exactly one feature when using this crate:
+
+```toml
+# In Cargo.toml, choose one:
+ibapi = { version = "2.0", features = ["sync"] }   # For synchronous API
+# OR
+ibapi = { version = "2.0", features = ["async"] }  # For asynchronous API
+```
 
 ```bash
-# Sync mode (default)
-cargo build
-cargo test
+# Build and test examples:
+cargo build --features sync
+cargo test --features sync
 
-# Async mode
+# Or for async:
 cargo build --features async
 cargo test --features async
-
-# For async examples, use --no-default-features
-cargo run --no-default-features --features async --example async_connect
+cargo run --features async --example async_connect
 ```
 
 > **🚧 Work in Progress**: Version 2.0 is currently under active development and includes significant architectural improvements, async/await support, and enhanced features. The current release (1.x) remains stable and production-ready.

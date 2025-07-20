@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example head_timestamp
+//! cargo run --features sync --example head_timestamp
 //! ```
 
 use clap::{arg, Command};

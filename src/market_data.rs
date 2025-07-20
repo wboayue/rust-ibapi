@@ -6,7 +6,7 @@
 
 use crate::{server_versions, Error};
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 use crate::{messages::OutgoingMessages, Client};
 
 pub mod historical;
@@ -25,7 +25,7 @@ pub enum MarketDataType {
     DelayedFrozen = 4,
 }
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub(crate) fn switch_market_data_type(client: &Client, market_data_type: MarketDataType) -> Result<(), Error> {
     client.check_server_version(server_versions::REQ_MARKET_DATA_TYPE, "It does not support market data type requests.")?;
 

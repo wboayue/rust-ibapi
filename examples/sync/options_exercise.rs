@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example options_exercise
+//! cargo run --features sync --example options_exercise
 //! ```
 
 use ibapi::{

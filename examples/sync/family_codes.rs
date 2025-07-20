@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example family_codes
+//! cargo run --features sync --example family_codes
 //! ```
 
 use ibapi::Client;

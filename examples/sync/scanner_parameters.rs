@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example scanner_parameters
+//! cargo run --features sync --example scanner_parameters
 //! ```
 
 use ibapi::Client;

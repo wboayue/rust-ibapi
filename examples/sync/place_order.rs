@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example place_order
+//! cargo run --features sync --example place_order
 //! ```
 
 use clap::{arg, ArgMatches, Command};

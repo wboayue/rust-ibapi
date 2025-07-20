@@ -7,7 +7,7 @@
 mod common;
 
 // Feature-specific implementations
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 mod sync;
 
 #[cfg(feature = "async")]
@@ -17,7 +17,7 @@ mod r#async;
 pub use common::Interaction;
 
 // Re-export API functions based on active feature
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub use sync::{last_interaction, record_request, record_response};
 
 #[cfg(feature = "async")]

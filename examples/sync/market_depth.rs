@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example market_depth
+//! cargo run --features sync --example market_depth
 //! ```
 
 use ibapi::contracts::Contract;

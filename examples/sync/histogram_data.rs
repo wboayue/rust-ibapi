@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example histogram_data
+//! cargo run --features sync --example histogram_data
 //! ```
 
 use ibapi::contracts::Contract;

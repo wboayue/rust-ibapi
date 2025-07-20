@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example pnl
+//! cargo run --features sync --example pnl
 //! ```
 
 use clap::{arg, Command};

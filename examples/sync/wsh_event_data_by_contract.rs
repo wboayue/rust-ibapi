@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example wsh_event_data_by_contract
+//! cargo run --features sync --example wsh_event_data_by_contract
 //! ```
 
 use ibapi::Client;

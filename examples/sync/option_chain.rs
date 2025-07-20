@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example option_chain
+//! cargo run --features sync --example option_chain
 //! ```
 
 use ibapi::{contracts::SecurityType, Client};

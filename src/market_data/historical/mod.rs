@@ -10,7 +10,7 @@ use crate::{Error, ToField};
 
 pub(crate) mod common;
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub mod sync;
 
 #[cfg(feature = "async")]
@@ -402,7 +402,7 @@ impl ToField for Option<WhatToShow> {
 }
 
 // Re-export functions based on active feature
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub use sync::*;
 
 #[cfg(feature = "async")]
@@ -438,7 +438,7 @@ impl TickDecoder<TickMidpoint> for TickMidpoint {
 }
 
 // Re-export TickSubscription and iterator types based on active feature
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub use sync::{TickSubscription, TickSubscriptionIter, TickSubscriptionOwnedIter, TickSubscriptionTimeoutIter, TickSubscriptionTryIter};
 
 #[cfg(feature = "async")]

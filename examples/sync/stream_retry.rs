@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example stream_retry
+//! cargo run --features sync --example stream_retry
 //! ```
 
 use ibapi::contracts::Contract;

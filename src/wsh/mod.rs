@@ -16,7 +16,7 @@ use common::decoders;
 use common::encoders;
 
 // Feature-specific implementations
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 mod sync;
 
 #[cfg(feature = "async")]
@@ -59,7 +59,7 @@ impl AutoFill {
 }
 
 // Re-export API functions based on active feature
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub use sync::{wsh_event_data_by_contract, wsh_event_data_by_filter, wsh_metadata};
 
 #[cfg(feature = "async")]

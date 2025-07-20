@@ -10,7 +10,7 @@ use crate::Error;
 pub const DEFAULT_MAX_RETRIES: u32 = 3;
 
 // Sync implementations
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 mod sync_retry {
     use super::*;
 
@@ -75,7 +75,7 @@ mod async_retry {
 }
 
 // Re-export based on feature flags
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub use sync_retry::*;
 
 #[cfg(feature = "async")]
@@ -85,7 +85,7 @@ pub use async_retry::*;
 mod tests {
     use super::*;
 
-    #[cfg(all(feature = "sync", not(feature = "async")))]
+    #[cfg(feature = "sync")]
     mod sync_tests {
         use super::*;
         use std::cell::RefCell;

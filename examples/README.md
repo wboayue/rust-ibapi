@@ -6,15 +6,15 @@ This directory contains comprehensive examples demonstrating how to use the rust
 
 Examples are organized into two main categories:
 
-- **[sync/](sync/)** - Synchronous examples using the default sync feature
-- **[async/](async/)** - Asynchronous examples using Tokio and the async feature
+- **[sync/](sync/)** - Synchronous examples using threads and crossbeam channels
+- **[async/](async/)** - Asynchronous examples using Tokio and async/await
 
 ## Quick Start
 
 ### Synchronous Example
 ```bash
 # Run a sync example
-cargo run --example server_time
+cargo run --features sync --example server_time
 ```
 
 ### Asynchronous Example

@@ -1,18 +1,18 @@
 # Synchronous Examples
 
-This directory contains synchronous examples demonstrating how to use the rust-ibapi library with the default sync feature.
+This directory contains synchronous examples demonstrating how to use the rust-ibapi library with the sync feature.
 
 ## Running Examples
 
-All sync examples can be run using:
+All sync examples require the sync feature to be enabled:
 
 ```bash
-cargo run --example <example_name>
+cargo run --features sync --example <example_name>
 ```
 
 For example:
 ```bash
-cargo run --example server_time
+cargo run --features sync --example server_time
 ```
 
 ## Connection Examples

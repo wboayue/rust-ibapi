@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example readme_historical_data
+//! cargo run --features sync --example readme_historical_data
 //! ```
 
 use ibapi::prelude::*;

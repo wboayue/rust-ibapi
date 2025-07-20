@@ -5,35 +5,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build Commands
 
 ```bash
-# Build the library (sync by default)
-cargo build
+# Build the library with sync support
+cargo build --features sync
 
 # Build with async support
-cargo build --no-default-features --features async
+cargo build --features async
 
 # Build with optimizations
-cargo build --release
+cargo build --release --features sync  # or --features async
 
 # Build all targets including examples
-cargo build --all-targets
+cargo build --all-targets --features sync  # or --features async
 
-# Run tests
-cargo test
+# Run tests (sync)
+cargo test --features sync
 
 # Run async tests
-cargo test --no-default-features --features async
+cargo test --features async
 
 # Run a specific test
-cargo test <test_name>
+cargo test <test_name> --features sync  # or --features async
 
 # Run tests in a specific module
-cargo test --package ibapi <module>::
+cargo test --package ibapi <module>:: --features sync  # or --features async
 
 # Run tests with verbose output
-cargo test -- --nocapture
+cargo test --features sync -- --nocapture
 
 # Check code with clippy
-cargo clippy
+cargo clippy --features sync
+cargo clippy --features async  # Check both
 
 # Format code
 cargo fmt
@@ -46,30 +47,34 @@ just cover
 
 ## Feature Flags
 
-The library supports two mutually exclusive features:
-- **sync** (default): Traditional synchronous API using threads
+The library requires you to explicitly choose one of two mutually exclusive features:
+- **sync**: Traditional synchronous API using threads
 - **async**: Asynchronous API using tokio
 
-When both features are enabled, async takes precedence. This allows users to simply add `--features async` without needing `--no-default-features`.
+There is no default feature. You must specify exactly one:
 
-To use async:
 ```bash
+# For sync mode
+cargo build --features sync
+
+# For async mode
 cargo build --features async
 ```
 
+If you don't specify a feature, you'll get a helpful compile error explaining how to use the crate.
+
 ### Important: Feature Guard Pattern
 
-When adding new sync-specific code, ALWAYS use:
+Since the features are mutually exclusive, you can use simple feature guards:
 ```rust
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 ```
 
-NOT just:
 ```rust
-#[cfg(feature = "sync")]  // DON'T use this alone!
+#[cfg(feature = "async")]
 ```
 
-This ensures that async mode properly overrides sync mode when both features are enabled.
+The crate enforces that exactly one feature is enabled at compile time.
 
 For async-specific code, use:
 ```rust
@@ -468,9 +473,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-To compile async code:
-```bash
-cargo build --features async
+To use the crate in your project:
+```toml
+# For sync mode
+ibapi = { version = "2.0", features = ["sync"] }
+
+# For async mode  
+ibapi = { version = "2.0", features = ["async"] }
 ```
 
 ## Testing Best Practices
@@ -607,14 +616,14 @@ Always test both sync and async implementations:
 
 ```bash
 # Test sync mode
-cargo test <module>
+cargo test <module> --features sync
 
 # Test async mode
-cargo test --features async <module>
+cargo test <module> --features async
 
 # Test specific function in both modes
-cargo test <module>::<function_name>
-cargo test --features async <module>::<function_name>
+cargo test <module>::<function_name> --features sync
+cargo test <module>::<function_name> --features async
 ```
 
 ## Running Examples
@@ -622,11 +631,11 @@ cargo test --features async <module>::<function_name>
 Examples follow a naming convention to indicate their mode:
 
 ```bash
-# Sync examples (default)
-cargo run --example market_data
-cargo run --example positions
+# Sync examples
+cargo run --features sync --example market_data
+cargo run --features sync --example positions
 
-# Async examples (note: no need for --no-default-features)
+# Async examples
 cargo run --features async --example async_connect
 cargo run --features async --example async_market_data
 ```

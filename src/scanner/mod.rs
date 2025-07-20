@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 mod common;
 
 // Feature-specific implementations
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 mod sync;
 
 #[cfg(feature = "async")]
@@ -105,7 +105,7 @@ pub struct ScannerData {
 }
 
 // Re-export API functions based on active feature
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub(crate) use sync::{scanner_parameters, scanner_subscription};
 
 #[cfg(feature = "async")]

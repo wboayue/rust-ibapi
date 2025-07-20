@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example scanner_subscription_complex_orders
+//! cargo run --features sync --example scanner_subscription_complex_orders
 //! ```
 
 use ibapi::{orders, scanner, Client};

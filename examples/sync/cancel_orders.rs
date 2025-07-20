@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example cancel_orders
+//! cargo run --features sync --example cancel_orders
 //! ```
 
 use clap::{arg, Command};

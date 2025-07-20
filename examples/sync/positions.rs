@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example positions
+//! cargo run --features sync --example positions
 //! ```
 
 use ibapi::{accounts::PositionUpdate, Client};

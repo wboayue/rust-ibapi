@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example bracket_order
+//! cargo run --features sync --example bracket_order
 //! ```
 
 use ibapi::contracts::Contract;

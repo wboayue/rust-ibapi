@@ -2,7 +2,7 @@
 //!
 //! To run this example:
 //! ```bash
-//! cargo run --example connect
+//! cargo run --features sync --example connect
 //! ```
 //!
 //! Make sure TWS or IB Gateway is running with API connections enabled:

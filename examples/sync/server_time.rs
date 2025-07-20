@@ -5,7 +5,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example server_time
+//! cargo run --features sync --example server_time
 //! ```
 
 use ibapi::Client;

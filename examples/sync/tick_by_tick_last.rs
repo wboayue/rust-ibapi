@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example tick_by_tick_last
+//! cargo run --features sync --example tick_by_tick_last
 //! ```
 
 use std::time::Duration;
