@@ -30,6 +30,7 @@ log = "0.4.22"
 time = {version = "0.3.36", features = ["formatting", "macros", "local-offset", "parsing", "serde"]}
 time-tz = "2.0.0"
 serde = {version = "1.0.214" , features = ["derive"]}
+serde_json = "1.0"
 
 # Async dependencies
 tokio = { version = "1.41", features = ["net", "rt-multi-thread", "sync", "time", "macros", "io-util"], optional = true }
@@ -44,6 +45,9 @@ pretty_assertions = "1.4.1"
 tempfile = "3.13"
 temp-env = "0.3.6"
 serial_test = "3.1.1"
+toml = "0.8"
+serde_yaml = "0.9"
+# toml_edit = "0.22"  # Not needed - we're custom generating TOML
 
 [[example]]
 name = "async_connect"
@@ -621,6 +625,11 @@ required-features = ["async"]
 name = "async_trace_test_simple"
 path = "examples/async/trace_test_simple.rs"
 required-features = ["async"]
+
+[[example]]
+name = "record_interactions"
+path = "examples/record_interactions.rs"
+required-features = ["sync"]
 
 
 
