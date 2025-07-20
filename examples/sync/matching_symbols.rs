@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example matching_symbols
+//! cargo run --features sync --example matching_symbols
 //! ```
 
 use ibapi::Client;

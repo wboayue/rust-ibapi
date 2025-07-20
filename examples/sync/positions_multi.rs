@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example positions_multi
+//! cargo run --features sync --example positions_multi
 //! ```
 
 use std::env;

@@ -27,12 +27,12 @@ pub use crate::contracts::{Contract, SecurityType};
 pub use crate::market_data::historical::{BarSize as HistoricalBarSize, ToDuration, WhatToShow as HistoricalWhatToShow};
 
 // Market data types - realtime
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub use crate::market_data::realtime::{BarSize as RealtimeBarSize, TickTypes, WhatToShow as RealtimeWhatToShow};
 pub use crate::market_data::MarketDataType;
 
 // Order types
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub use crate::orders::{order_builder, Action, ExecutionFilter, OrderUpdate, Orders, PlaceOrder};
 
 // Account types
@@ -41,7 +41,7 @@ pub use crate::accounts::{
 };
 
 // Client subscription type
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub use crate::client::Subscription;
 #[cfg(feature = "async")]
 pub use crate::subscriptions::Subscription;

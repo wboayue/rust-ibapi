@@ -11,7 +11,7 @@ use time::OffsetDateTime;
 mod common;
 
 // Feature-specific implementations
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 mod sync;
 
 #[cfg(feature = "async")]
@@ -91,7 +91,7 @@ pub struct NewsArticleBody {
 }
 
 // Re-export API functions based on active feature
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub(crate) use sync::{broad_tape_news, contract_news, historical_news, news_article, news_bulletins, news_providers};
 
 #[cfg(feature = "async")]

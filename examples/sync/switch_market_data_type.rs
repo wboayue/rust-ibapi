@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example switch_market_data_type
+//! cargo run --features sync --example switch_market_data_type
 //! ```
 
 use ibapi::market_data::MarketDataType;

@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example news_article
+//! cargo run --features sync --example news_article
 //! ```
 
 use ibapi::Client;

@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example calculate_option_price
+//! cargo run --features sync --example calculate_option_price
 //! ```
 
 use ibapi::contracts::{Contract, SecurityType};

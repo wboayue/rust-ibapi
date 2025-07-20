@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example stream_bars
+//! cargo run --features sync --example stream_bars
 //! ```
 
 use std::thread;

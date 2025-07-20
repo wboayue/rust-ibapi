@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example account_summary
+//! cargo run --features sync --example account_summary
 //! ```
 
 use ibapi::accounts::{types::AccountGroup, AccountSummaryResult, AccountSummaryTags};

@@ -5,7 +5,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example managed_accounts
+//! cargo run --features sync --example managed_accounts
 //! ```
 
 use ibapi::Client;

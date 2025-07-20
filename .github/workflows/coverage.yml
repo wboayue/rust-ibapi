@@ -56,6 +56,7 @@ jobs:
           cargo tarpaulin \
             --engine llvm \
             --timeout 300 \
+            --features sync \
             --out lcov \
             --output-dir target/coverage-sync/ \
             --skip-clean \
@@ -67,7 +68,7 @@ jobs:
           cargo tarpaulin \
             --engine llvm \
             --timeout 300 \
-            --no-default-features --features async \
+            --features async \
             --out lcov \
             --output-dir target/coverage-async/ \
             --skip-clean \

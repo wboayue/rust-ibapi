@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example tick_by_tick_bid_ask
+//! cargo run --features sync --example tick_by_tick_bid_ask
 //! ```
 
 use std::time::Duration;

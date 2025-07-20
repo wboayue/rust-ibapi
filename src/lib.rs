@@ -22,11 +22,30 @@
 #![allow(clippy::uninlined_format_args)]
 #![allow(clippy::assertions_on_constants)]
 
-// Feature guards - async takes precedence over sync
+// Feature guards
 #[cfg(not(any(feature = "sync", feature = "async")))]
 compile_error!(
-    "Either 'sync' or 'async' feature must be enabled. \
-     Use default features for sync mode, or use --features async for async mode."
+    "You must enable either the 'sync' or 'async' feature to use this crate.\n\
+     \n\
+     For synchronous (thread-based) API:\n\
+         cargo add ibapi --features sync\n\
+     \n\
+     For asynchronous (tokio-based) API:\n\
+         cargo add ibapi --features async\n\
+     \n\
+     In Cargo.toml:\n\
+         ibapi = { version = \"2.0\", features = [\"sync\"] }  # or [\"async\"]\n\
+     \n\
+     Note: The 'sync' and 'async' features are mutually exclusive."
+);
+
+#[cfg(all(feature = "sync", feature = "async"))]
+compile_error!(
+    "The 'sync' and 'async' features are mutually exclusive.\n\
+     Please enable only one of them:\n\
+     \n\
+     For synchronous API: --features sync\n\
+     For asynchronous API: --features async"
 );
 
 /// Describes items present in an account.

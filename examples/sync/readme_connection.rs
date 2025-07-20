@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example readme_connection
+//! cargo run --features sync --example readme_connection
 //! ```
 
 /// Example of connecting to TWS.

@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example historical_ticks_trade
+//! cargo run --features sync --example historical_ticks_trade
 //! ```
 
 use clap::{arg, Command};

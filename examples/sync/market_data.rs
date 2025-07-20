@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example market_data
+//! cargo run --features sync --example market_data
 //! ```
 
 use ibapi::{contracts::Contract, market_data::realtime::TickTypes, Client};

@@ -251,13 +251,13 @@ pub struct AccountMultiValue {
 }
 
 // Feature-specific implementations
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 mod sync;
 
 #[cfg(feature = "async")]
 mod r#async;
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub use sync::{
     account_summary, account_updates, account_updates_multi, family_codes, managed_accounts, pnl, pnl_single, positions, positions_multi, server_time,
 };

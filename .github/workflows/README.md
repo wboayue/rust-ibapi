@@ -39,18 +39,18 @@ Runs after successful CI workflow completion:
 
 The workflows test both feature configurations:
 
-1. **Sync (default)**:
+1. **Sync**:
    ```bash
-   cargo build
-   cargo test
-   cargo build --examples
+   cargo build --features sync
+   cargo test --features sync
+   cargo build --examples --features sync
    ```
 
 2. **Async**:
    ```bash
-   cargo build --no-default-features --features async
-   cargo test --no-default-features --features async
-   cargo build --examples --no-default-features --features async
+   cargo build --features async
+   cargo test --features async
+   cargo build --examples --features async
    ```
 
 This script runs all the same checks that CI will run.

@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example breakout
+//! cargo run --features sync --example breakout
 //! ```
 
 use std::collections::VecDeque;

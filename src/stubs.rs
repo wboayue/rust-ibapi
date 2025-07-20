@@ -1,15 +1,15 @@
 use std::sync::RwLock;
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 use std::sync::{Arc, Mutex};
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 use crossbeam::channel;
 
 use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::Error;
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 use crate::transport::{InternalSubscription, MessageBus, SubscriptionBuilder};
 
 #[cfg(feature = "async")]
@@ -31,7 +31,7 @@ pub(crate) struct MessageBusStub {
 }
 
 // Separate tracking for order update subscriptions to maintain backward compatibility
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 static ORDER_UPDATE_SUBSCRIPTION_TRACKER: Mutex<Option<usize>> = Mutex::new(None);
 
 impl Default for MessageBusStub {
@@ -49,7 +49,7 @@ impl MessageBusStub {
     }
 }
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 impl MessageBus for MessageBusStub {
     fn request_messages(&self) -> Vec<RequestMessage> {
         self.request_messages.read().unwrap().clone()
@@ -121,7 +121,7 @@ impl MessageBus for MessageBusStub {
     // }
 }
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 fn mock_request(
     stub: &MessageBusStub,
     request_id: Option<i32>,

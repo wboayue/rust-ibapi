@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example market_rule
+//! cargo run --features sync --example market_rule
 //! ```
 
 use ibapi::Client;

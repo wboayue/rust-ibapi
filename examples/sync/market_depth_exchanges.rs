@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example market_depth_exchanges
+//! cargo run --features sync --example market_depth_exchanges
 //! ```
 
 use ibapi::Client;

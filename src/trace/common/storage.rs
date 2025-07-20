@@ -1,21 +1,21 @@
 use super::{Interaction, SharedInteraction};
 use std::sync::Arc;
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 use std::sync::RwLock;
 
 #[cfg(feature = "async")]
 use tokio::sync::RwLock;
 
 /// Global storage for the current interaction
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 static CURRENT_INTERACTION: RwLock<Option<Arc<RwLock<Interaction>>>> = RwLock::new(None);
 
 #[cfg(feature = "async")]
 static CURRENT_INTERACTION: RwLock<Option<Arc<RwLock<Interaction>>>> = RwLock::const_new(None);
 
 /// Storage operations for sync mode
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub(in crate::trace) mod sync_ops {
     use super::*;
 

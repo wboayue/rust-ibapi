@@ -1,7 +1,7 @@
 //! Common request/response helper functions to reduce boilerplate across modules
 
 // Sync implementations
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 mod sync_helpers {
     use crate::client::{Client, ClientRequestBuilders, SharesChannel, StreamDecoder, Subscription, SubscriptionBuilderExt};
     use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
@@ -189,7 +189,7 @@ mod async_helpers {
 }
 
 // Re-export based on feature flags
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub use sync_helpers::*;
 
 #[cfg(feature = "async")]

@@ -52,57 +52,27 @@ jobs:
 
       # Build with optimizations for faster subsequent steps
       - name: Build
-        run: |
-          if [ "${{ matrix.feature }}" = "sync" ]; then
-            cargo build
-          else
-            cargo build --no-default-features --features async
-          fi
+        run: cargo build --features ${{ matrix.feature }}
 
       # Run clippy before tests to catch issues early
       - name: Run clippy
-        run: |
-          if [ "${{ matrix.feature }}" = "sync" ]; then
-            cargo clippy --all-targets -- -D warnings
-          else
-            cargo clippy --all-targets --no-default-features --features async -- -D warnings
-          fi
+        run: cargo clippy --all-targets --features ${{ matrix.feature }} -- -D warnings
 
       # Run tests
       - name: Run tests
-        run: |
-          if [ "${{ matrix.feature }}" = "sync" ]; then
-            cargo test
-          else
-            cargo test --no-default-features --features async
-          fi
+        run: cargo test --features ${{ matrix.feature }}
 
       # Build examples (only if previous steps pass)
       - name: Build examples
-        run: |
-          if [ "${{ matrix.feature }}" = "sync" ]; then
-            cargo build --examples
-          else
-            cargo build --examples --no-default-features --features async
-          fi
+        run: cargo build --examples --features ${{ matrix.feature }}
 
       # Build documentation
       - name: Build documentation
-        run: |
-          if [ "${{ matrix.feature }}" = "sync" ]; then
-            cargo doc --no-deps
-          else
-            cargo doc --no-deps --no-default-features --features async
-          fi
+        run: cargo doc --no-deps --features ${{ matrix.feature }}
 
       # Check that benches compile (if any exist)
       - name: Check benches compile
-        run: |
-          if [ "${{ matrix.feature }}" = "sync" ]; then
-            cargo check --benches || true
-          else
-            cargo check --benches --no-default-features --features async || true
-          fi
+        run: cargo check --benches --features ${{ matrix.feature }} || true
 
   # Separate minimal job for basic checks that don't need feature matrix
   basic-checks:

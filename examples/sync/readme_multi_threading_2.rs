@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example readme_multi_threading_2
+//! cargo run --features sync --example readme_multi_threading_2
 //! ```
 
 use std::thread;

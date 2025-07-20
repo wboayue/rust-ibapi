@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example historical_data_options
+//! cargo run --features sync --example historical_data_options
 //! ```
 
 use ibapi::contracts::{Contract, SecurityType};

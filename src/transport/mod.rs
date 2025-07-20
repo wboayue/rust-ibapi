@@ -1,20 +1,20 @@
 //! Transport layer for TWS communication with sync/async support
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 use std::sync::Arc;
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 use std::time::Duration;
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 use crossbeam::channel::{Receiver, Sender};
 
 use crate::errors::Error;
 use crate::messages::{RequestMessage, ResponseMessage};
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 use crate::messages::OutgoingMessages;
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub mod sync;
 
 #[cfg(feature = "async")]
@@ -25,7 +25,7 @@ pub mod r#async;
 pub(crate) type Response = Result<ResponseMessage, Error>;
 
 // MessageBus trait - defines the interface for message handling
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub(crate) trait MessageBus: Send + Sync {
     // Sends formatted message to TWS and creates a reply channel by request id.
     fn send_request(&self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
@@ -71,7 +71,7 @@ pub(crate) trait MessageBus: Send + Sync {
 }
 
 // InternalSubscription - handles receiving messages for sync subscriptions
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 #[derive(Debug, Default)]
 pub(crate) struct InternalSubscription {
     receiver: Option<Receiver<Response>>,              // requests with request ids receive responses via this channel
@@ -83,7 +83,7 @@ pub(crate) struct InternalSubscription {
     pub(crate) message_type: Option<OutgoingMessages>, // initiating message type
 }
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 impl InternalSubscription {
     // Blocks until next message become available.
     pub(crate) fn next(&self) -> Option<Response> {
@@ -140,7 +140,7 @@ impl InternalSubscription {
     }
 }
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 impl Drop for InternalSubscription {
     fn drop(&mut self) {
         if let (Some(request_id), Some(signaler)) = (self.request_id, &self.signaler) {
@@ -162,7 +162,7 @@ impl Drop for InternalSubscription {
 
 // Signals are used to notify the backend when a subscriber is dropped.
 // This facilitates the cleanup of the SenderHashes.
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub enum Signal {
     Request(i32),
     Order(i32),
@@ -170,7 +170,7 @@ pub enum Signal {
 }
 
 // SubscriptionBuilder for creating InternalSubscription instances
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub(crate) struct SubscriptionBuilder {
     receiver: Option<Receiver<Response>>,
     sender: Option<Sender<Response>>,
@@ -181,7 +181,7 @@ pub(crate) struct SubscriptionBuilder {
     message_type: Option<OutgoingMessages>,
 }
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 impl SubscriptionBuilder {
     pub(crate) fn new() -> Self {
         Self {
@@ -258,10 +258,10 @@ impl SubscriptionBuilder {
 }
 
 // Sync exports
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub use sync::TcpMessageBus;
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
+#[cfg(feature = "sync")]
 pub(crate) use sync::TcpSocket;
 
 // Async exports (placeholder for now)

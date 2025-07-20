@@ -18,10 +18,10 @@ exclude = [
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["sync"]
+# No default features - users must explicitly choose sync or async
 sync = ["dep:crossbeam"]
 async = ["dep:tokio", "dep:futures", "dep:async-trait"]
-# Note: sync and async are mutually exclusive. When async is enabled, it takes precedence over sync.
+# Note: sync and async are mutually exclusive. You must specify exactly one.
 
 [dependencies]
 byteorder = "1.5.0"

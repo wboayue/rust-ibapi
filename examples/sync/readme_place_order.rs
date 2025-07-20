@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example readme_place_order
+//! cargo run --features sync --example readme_place_order
 //! ```
 
 use ibapi::prelude::*;
