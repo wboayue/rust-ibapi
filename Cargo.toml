@@ -236,6 +236,11 @@ name = "async_scanner_subscription_complex"
 path = "examples/async/scanner_subscription_complex.rs"
 required-features = ["async"]
 
+[[example]]
+name = "async_test_clone_subscription"
+path = "examples/async/test_clone_subscription.rs"
+required-features = ["async"]
+
 # Sync-only examples
 [[example]]
 name = "bracket_order"

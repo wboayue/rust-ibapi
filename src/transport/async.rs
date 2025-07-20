@@ -10,6 +10,10 @@ use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio::task;
 use tokio::time::{sleep, Duration};
 
+/// Default capacity for broadcast channels
+/// This should be large enough to handle bursts of messages without lagging
+const BROADCAST_CHANNEL_CAPACITY: usize = 1024;
+
 /// Cleanup signal for removing channels when subscriptions are dropped
 #[derive(Debug, Clone)]
 pub enum CleanupSignal {
@@ -56,14 +60,25 @@ pub trait AsyncMessageBus: Send + Sync {
 
 /// Internal subscription for async implementation
 pub struct AsyncInternalSubscription {
-    pub(crate) receiver: mpsc::UnboundedReceiver<ResponseMessage>,
+    pub(crate) receiver: broadcast::Receiver<ResponseMessage>,
     cleanup_sender: Option<mpsc::UnboundedSender<CleanupSignal>>,
     cleanup_signal: Option<CleanupSignal>,
     cleanup_sent: bool,
 }
 
+impl Clone for AsyncInternalSubscription {
+    fn clone(&self) -> Self {
+        Self {
+            receiver: self.receiver.resubscribe(),
+            cleanup_sender: self.cleanup_sender.clone(),
+            cleanup_signal: self.cleanup_signal.clone(),
+            cleanup_sent: false, // Each clone should handle its own cleanup
+        }
+    }
+}
+
 impl AsyncInternalSubscription {
-    pub fn new(receiver: mpsc::UnboundedReceiver<ResponseMessage>) -> Self {
+    pub fn new(receiver: broadcast::Receiver<ResponseMessage>) -> Self {
         Self {
             receiver,
             cleanup_sender: None,
@@ -73,7 +88,7 @@ impl AsyncInternalSubscription {
     }
 
     pub fn with_cleanup(
-        receiver: mpsc::UnboundedReceiver<ResponseMessage>,
+        receiver: broadcast::Receiver<ResponseMessage>,
         cleanup_sender: mpsc::UnboundedSender<CleanupSignal>,
         cleanup_signal: CleanupSignal,
     ) -> Self {
@@ -86,18 +101,28 @@ impl AsyncInternalSubscription {
     }
 
     pub async fn next(&mut self) -> Option<ResponseMessage> {
-        self.receiver.recv().await
+        loop {
+            match self.receiver.recv().await {
+                Ok(msg) => return Some(msg),
+                Err(broadcast::error::RecvError::Closed) => return None,
+                Err(broadcast::error::RecvError::Lagged(_)) => {
+                    // If we lagged, continue the loop to try again
+                    continue;
+                }
+            }
+        }
     }
 
     /// Extract the receiver for use in subscriptions (disables cleanup)
-    pub fn take_receiver(mut self) -> mpsc::UnboundedReceiver<ResponseMessage> {
+    pub fn take_receiver(mut self) -> broadcast::Receiver<ResponseMessage> {
         // Disable cleanup by clearing the cleanup info - the subscription will now own the receiver
         self.cleanup_sender = None;
         self.cleanup_signal = None;
         self.cleanup_sent = true; // Mark as sent to prevent Drop from sending
 
         // Create a dummy receiver to replace the original one
-        let (_, dummy_receiver) = mpsc::unbounded_channel();
+        let (dummy_sender, dummy_receiver) = broadcast::channel(1);
+        drop(dummy_sender); // Close the channel immediately
         mem::replace(&mut self.receiver, dummy_receiver)
     }
 
@@ -119,20 +144,19 @@ impl Drop for AsyncInternalSubscription {
     }
 }
 
-type ChannelSender = mpsc::UnboundedSender<ResponseMessage>;
-type SharedChannelSender = broadcast::Sender<ResponseMessage>;
+type BroadcastSender = broadcast::Sender<ResponseMessage>;
 
 /// Asynchronous TCP message bus implementation
 pub struct AsyncTcpMessageBus {
     connection: Arc<AsyncConnection>,
     /// Maps request IDs to their response channels
-    request_channels: Arc<RwLock<HashMap<i32, ChannelSender>>>,
+    request_channels: Arc<RwLock<HashMap<i32, BroadcastSender>>>,
     /// Maps shared channel types to their response channels
-    shared_channels: Arc<RwLock<HashMap<OutgoingMessages, SharedChannelSender>>>,
+    shared_channels: Arc<RwLock<HashMap<OutgoingMessages, BroadcastSender>>>,
     /// Maps order IDs to their response channels
-    order_channels: Arc<RwLock<HashMap<i32, ChannelSender>>>,
+    order_channels: Arc<RwLock<HashMap<i32, BroadcastSender>>>,
     /// Optional channel for order update stream
-    order_update_stream: Arc<RwLock<Option<ChannelSender>>>,
+    order_update_stream: Arc<RwLock<Option<BroadcastSender>>>,
     /// Channel for cleanup signals
     cleanup_sender: mpsc::UnboundedSender<CleanupSignal>,
 }
@@ -145,7 +169,7 @@ impl AsyncTcpMessageBus {
         // Pre-create broadcast senders for all shared channels (like sync does)
         let mut shared_channels = HashMap::new();
         for mapping in shared_channel_configuration::CHANNEL_MAPPINGS {
-            let (sender, _) = broadcast::channel(1000); // Buffer size for shared channels
+            let (sender, _) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY); // Buffer size for shared channels
             shared_channels.insert(mapping.request, sender);
         }
 
@@ -342,8 +366,8 @@ impl AsyncTcpMessageBus {
 #[async_trait]
 impl AsyncMessageBus for AsyncTcpMessageBus {
     async fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
-        // Create channel first
-        let (sender, receiver) = mpsc::unbounded_channel();
+        // Create broadcast channel with reasonable buffer
+        let (sender, receiver) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
 
         // Insert into map BEFORE sending
         {
@@ -364,7 +388,7 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
 
     async fn send_order_request(&self, order_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
         // Same pattern for orders
-        let (sender, receiver) = mpsc::unbounded_channel();
+        let (sender, receiver) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
 
         {
             let mut channels = self.order_channels.write().await;
@@ -397,21 +421,9 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
         // Send the request - response will be routed to the broadcast channel
         self.connection.write_message(&message).await?;
 
-        // Convert broadcast receiver to mpsc for compatibility with AsyncInternalSubscription
-        let (mpsc_sender, mpsc_receiver) = mpsc::unbounded_channel();
-
-        // Spawn task to relay from broadcast to mpsc
-        let mut broadcast_receiver = receiver;
-        tokio::spawn(async move {
-            while let Ok(message) = broadcast_receiver.recv().await {
-                if mpsc_sender.send(message).is_err() {
-                    break; // Receiver dropped
-                }
-            }
-        });
-
+        // Return subscription directly - no relay needed!
         Ok(AsyncInternalSubscription::with_cleanup(
-            mpsc_receiver,
+            receiver,
             self.cleanup_sender.clone(),
             CleanupSignal::Shared(message_type),
         ))
@@ -461,7 +473,7 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
             return Err(Error::AlreadySubscribed);
         }
 
-        let (sender, receiver) = mpsc::unbounded_channel();
+        let (sender, receiver) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
 
         *order_update_stream = Some(sender);
 
