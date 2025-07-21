@@ -154,10 +154,7 @@ pub mod mocks {
 
             self.write_message("9\01\090\0".to_string())?;
             self.write_message("15\01\02334\0".to_string())?;
-            //     message.skip(); // message type
-            //     message.skip(); // message version
-            //     info.next_order_id = Some(message.next_int()?);
-
+            
             let response = self.read_message()?;
             println!("Received response-2: {:?}", String::from_utf8_lossy(&response));
 
