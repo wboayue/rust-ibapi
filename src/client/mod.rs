@@ -34,25 +34,45 @@ pub(crate) use builders::{ClientRequestBuilders, SubscriptionBuilderExt};
 pub mod mocks {
     use byteorder::{BigEndian, ReadBytesExt};
     use std::io::{Cursor, Read, Write};
-    use std::net::{SocketAddr, TcpListener};
+    use std::net::TcpListener;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
     use std::thread;
     use time_tz::timezones;
 
-    use crate::messages::{encode_length, IncomingMessages};
+    use crate::messages::{encode_length, OutgoingMessages};
+
+    #[derive(Debug, Clone)]
+    struct Interaction {
+        request: OutgoingMessages,
+        responses: Vec<String>,
+    }
 
     pub struct MockGateway {
         listener: Option<TcpListener>,
-        address: Option<SocketAddr>,
         handle: Option<thread::JoinHandle<()>>,
+        running: Arc<AtomicBool>,
+        requests: Arc<Mutex<Vec<String>>>,
+        interactions: Vec<Interaction>,
     }
 
     impl MockGateway {
         pub fn new() -> Self {
             MockGateway {
                 listener: None,
-                address: None,
                 handle: None,
+                running: Arc::new(AtomicBool::new(true)),
+                requests: Arc::new(Mutex::new(Vec::new())),
+                interactions: Vec::new(),
             }
+        }
+
+        pub fn requests(&self) -> Vec<String> {
+            self.requests.lock().unwrap().clone()
+        }
+
+        pub fn add_interaction(&mut self, request: OutgoingMessages, responses: Vec<String>) {
+            self.interactions.push(Interaction { request, responses });
         }
 
         pub fn start(&mut self) -> Result<String, Box<dyn std::error::Error>> {
@@ -60,27 +80,21 @@ pub mod mocks {
             let listener = TcpListener::bind("127.0.0.1:0")?;
             let address = listener.local_addr()?;
 
-            println!("MockGateway listening on {}", address);
-
-            // Store the address for later use
-            self.address = Some(address);
+            let requests = Arc::clone(&self.requests);
+            let interactions = self.interactions.clone();
 
             // Spawn a thread to handle connections
             let listener_clone = listener.try_clone()?;
             let handle = thread::spawn(move || {
-                println!("MockGateway thread started on {}", address);
                 for stream in listener_clone.incoming() {
                     if let Ok(stream) = stream {
-                        println!("Client connected: {:?}", stream.peer_addr());
-                        let mut handler = ConnectionHandler::new(stream);
+                        let mut handler = ConnectionHandler::new(stream, requests.clone(), interactions.clone());
                         let e = handler.handle_connection();
                         if let Err(err) = e {
                             eprintln!("Error handling connection: {}", err);
                         }
                     }
                 }
-                // thread::sleep(std::time::Duration::from_secs(2));
-                println!("MockGateway thread exiting");
             });
 
             self.handle = Some(handle);
@@ -101,6 +115,8 @@ pub mod mocks {
 
     impl Drop for MockGateway {
         fn drop(&mut self) {
+            self.running.store(false, Ordering::SeqCst);
+
             println!("MockGateway is being dropped, cleaning up...");
             // Clean up the listener when dropped
             if let Some(listener) = self.listener.take() {
@@ -115,22 +131,30 @@ pub mod mocks {
 
     struct ConnectionHandler {
         stream: std::net::TcpStream,
+        requests: Arc<Mutex<Vec<String>>>,
+        interactions: Vec<Interaction>,
+        current_interaction: usize,
     }
 
     impl ConnectionHandler {
-        pub fn new(stream: std::net::TcpStream) -> Self {
-            ConnectionHandler { stream }
+        pub fn new(stream: std::net::TcpStream, requests: Arc<Mutex<Vec<String>>>, interactions: Vec<Interaction>) -> Self {
+            ConnectionHandler {
+                stream,
+                requests,
+                interactions,
+                current_interaction: 0,
+            }
         }
 
         pub fn handshake_response(&self) -> String {
             "176\020240120 12:00:00 EST\0".to_string()
         }
 
-        pub fn read_message(&mut self) -> Result<Vec<u8>, std::io::Error> {
+        pub fn read_message(&mut self) -> Result<String, std::io::Error> {
             let size = self.read_size()?;
             let mut buf = vec![0u8; size];
             self.stream.read_exact(&mut buf)?;
-            Ok(buf)
+            Ok(String::from_utf8_lossy(&buf).into_owned())
         }
 
         pub fn write_message(&mut self, message: String) -> Result<(), std::io::Error> {
@@ -140,28 +164,41 @@ pub mod mocks {
         }
 
         pub fn handle_connection(&mut self) -> Result<(), std::io::Error> {
-            let header = self.read_header()?;
-            println!("Received header: {}", header);
+            let magic_token = self.read_magic_token()?;
+            println!("Received magic token: {}", magic_token);
 
             let message = self.read_message()?;
-            println!("Received message: {}", String::from_utf8_lossy(&message));
+            println!("Received message: {}", message);
 
             self.write_message(self.handshake_response())?;
             println!("Sent handshake response: {:?}", self.handshake_response());
 
-            let response = self.read_message()?;
-            println!("Received response-1: {:?}", String::from_utf8_lossy(&response));
+            let request = self.read_message()?;
+            println!("Received request-1: {:?}", request);
 
             self.write_message("9\01\090\0".to_string())?;
             self.write_message("15\01\02334\0".to_string())?;
-            
-            let response = self.read_message()?;
-            println!("Received response-2: {:?}", String::from_utf8_lossy(&response));
+
+            let request = self.read_message()?;
+            println!("Received request-2: {:?}", request);
+
+            self.add_request(request);
+
+            let interaction = self.interactions[self.current_interaction].clone();
+            for response in &interaction.responses {
+                self.write_message(response.clone())?;
+                println!("Sent response: {}", response);
+            }
 
             Ok(())
         }
 
-        pub fn read_header(&mut self) -> Result<String, std::io::Error> {
+        pub fn add_request(&mut self, request: String) {
+            let mut requests = self.requests.lock().unwrap();
+            requests.push(request);
+        }
+
+        pub fn read_magic_token(&mut self) -> Result<String, std::io::Error> {
             let mut buf = [0u8; 4];
             self.stream.read_exact(&mut buf)?;
             Ok(String::from_utf8_lossy(&buf).into_owned())
