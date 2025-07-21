@@ -32,9 +32,6 @@ use crate::{accounts, contracts, market_data, news, orders, scanner, wsh};
 
 use super::id_generator::ClientIdManager;
 
-#[cfg(test)]
-mod tests;
-
 // Client
 
 /// TWS API Client. Manages the connection to TWS or Gateway.
@@ -1957,3 +1954,91 @@ impl Debug for Client {
 ///
 // Re-export SharesChannel trait from subscriptions module
 pub use crate::subscriptions::SharesChannel;
+
+#[cfg(test)]
+mod tests {
+    use std::{sync::Arc, thread};
+
+    use super::Client;
+    use super::*;
+    use crate::client::mocks::MockGateway;
+    use crate::{connection::ConnectionMetadata, stubs::MessageBusStub};
+
+    #[test]
+    fn test_connect() {
+        println!("Starting mock gateway for testing...");
+        let mut gateway = MockGateway::new();
+        println!("Starting mock gateway...");
+        let address = gateway.start().expect("Failed to start mock gateway");
+
+        println!("Mock gateway started at {:?}", address);
+
+        let client_id = 100;
+        let client = Client::connect(&address, client_id);
+
+        println!("Connected to mock gateway at {:?}", client);
+        assert!(client.is_ok());
+
+        let client = client.unwrap();
+
+        assert_eq!(client.client_id(), client_id);
+        assert_eq!(client.server_version(), gateway.server_version());
+        assert_eq!(client.time_zone, gateway.time_zone());
+
+        drop(gateway);
+        println!("Mock gateway dropped, waiting for cleanup...");
+    }
+
+    #[test]
+    fn test_client_id() {
+        let client_id = 500;
+        let connection_metadata = ConnectionMetadata {
+            client_id,
+            ..ConnectionMetadata::default()
+        };
+        let message_bus = Arc::new(MessageBusStub::default());
+
+        let client = Client::new(connection_metadata, message_bus).unwrap();
+
+        assert_eq!(client.client_id(), client_id);
+    }
+
+    #[test]
+    fn test_subscription_cancel_only_sends_once() {
+        // This test verifies that calling cancel() multiple times only sends one cancel message
+        // This addresses issue #258 where explicit cancel() followed by Drop could send duplicate messages
+
+        let message_bus = Arc::new(MessageBusStub::default());
+        let client = Client::stubbed(message_bus.clone(), 100);
+
+        // Create a subscription using realtime bars as an example
+        let contract = crate::contracts::Contract::stock("AAPL");
+        let subscription = client
+            .realtime_bars(
+                &contract,
+                crate::market_data::realtime::BarSize::Sec5,
+                crate::market_data::realtime::WhatToShow::Trades,
+                false,
+            )
+            .expect("Failed to create subscription");
+
+        // Get initial request count (should be 1 for the realtime bars request)
+        let initial_count = message_bus.request_messages().len();
+        assert_eq!(initial_count, 1, "Should have one request for realtime bars");
+
+        // First cancel should add one more message
+        subscription.cancel();
+        let after_first_cancel = message_bus.request_messages().len();
+        assert_eq!(after_first_cancel, 2, "Should have two messages after first cancel");
+
+        // Second cancel should not send another message
+        subscription.cancel();
+        let after_second_cancel = message_bus.request_messages().len();
+        assert_eq!(after_second_cancel, 2, "Should still have two messages after second cancel");
+
+        // Drop should also not send another message (implicitly calls cancel)
+        drop(subscription);
+        let after_drop = message_bus.request_messages().len();
+        assert_eq!(after_drop, 2, "Should still have two messages after drop");
+    }
+}
