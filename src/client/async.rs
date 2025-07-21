@@ -1863,3 +1863,53 @@ impl Client {
         &self.message_bus
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::vec;
+
+    use super::Client;
+    use super::*;
+    use crate::client::mocks::MockGateway;
+    use crate::{connection::ConnectionMetadata, stubs::MessageBusStub};
+
+    const CLIENT_ID: i32 = 100;
+
+    #[tokio::test]
+    async fn test_connect() {
+        let mut gateway = MockGateway::new();
+
+        let address = gateway.start().expect("Failed to start mock gateway");
+
+        let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
+
+        assert_eq!(client.client_id(), CLIENT_ID);
+        assert_eq!(client.server_version(), gateway.server_version());
+        assert_eq!(client.time_zone, gateway.time_zone());
+
+        assert_eq!(gateway.requests().len(), 0, "No requests should be sent on connect");
+    }
+
+    #[tokio::test]
+    async fn test_server_time() {
+        let mut gateway = MockGateway::new();
+
+        let expected_server_time = OffsetDateTime::now_utc().replace_nanosecond(0).unwrap();
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestCurrentTime,
+            vec![format!("49\01\0{}\0", expected_server_time.unix_timestamp())],
+        );
+
+        let address = gateway.start().expect("Failed to start mock gateway");
+
+        let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
+
+        let server_time = client.server_time().await.unwrap();
+        assert_eq!(server_time, expected_server_time);
+
+        let requests = gateway.requests();
+        assert_eq!(requests[0], "49\01\0");
+    }
+}
