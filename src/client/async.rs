@@ -1867,6 +1867,7 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::thread;
     use std::vec;
 
     use super::Client;

@@ -34,7 +34,7 @@ pub(crate) use builders::{ClientRequestBuilders, SubscriptionBuilderExt};
 pub mod mocks {
     use byteorder::{BigEndian, ReadBytesExt};
     use std::io::{Cursor, Read, Write};
-    use std::net::TcpListener;
+    use std::net::{TcpListener, TcpStream};
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
     use std::thread;
@@ -49,7 +49,6 @@ pub mod mocks {
     }
 
     pub struct MockGateway {
-        listener: Option<TcpListener>,
         handle: Option<thread::JoinHandle<()>>,
         running: Arc<AtomicBool>,
         requests: Arc<Mutex<Vec<String>>>,
@@ -59,7 +58,6 @@ pub mod mocks {
     impl MockGateway {
         pub fn new() -> Self {
             MockGateway {
-                listener: None,
                 handle: None,
                 running: Arc::new(AtomicBool::new(true)),
                 requests: Arc::new(Mutex::new(Vec::new())),
@@ -82,23 +80,30 @@ pub mod mocks {
 
             let requests = Arc::clone(&self.requests);
             let interactions = self.interactions.clone();
+            let running = Arc::clone(&self.running);
 
-            // Spawn a thread to handle connections
-            let listener_clone = listener.try_clone()?;
             let handle = thread::spawn(move || {
-                for stream in listener_clone.incoming() {
-                    if let Ok(stream) = stream {
-                        let mut handler = ConnectionHandler::new(stream, requests.clone(), interactions.clone());
-                        let e = handler.handle_connection();
-                        if let Err(err) = e {
-                            eprintln!("Error handling connection: {}", err);
+                while running.load(Ordering::SeqCst) {
+                    let stream = match listener.accept() {
+                        Ok((stream, addr)) => {
+                            println!("Accepted connection from {}", addr);
+                            stream
                         }
+                        Err(e) => {
+                            eprintln!("Error accepting connection: {}", e);
+                            return;
+                        }
+                    };
+
+                    let mut handler = ConnectionHandler::new(stream, requests.clone(), interactions.clone());
+                    let e = handler.handle_connection();
+                    if let Err(err) = e {
+                        eprintln!("Error handling connection: {}", err);
                     }
                 }
             });
 
             self.handle = Some(handle);
-            self.listener = Some(listener);
 
             // Return the address as a string
             Ok(address.to_string())
@@ -118,13 +123,9 @@ pub mod mocks {
             self.running.store(false, Ordering::SeqCst);
 
             println!("MockGateway is being dropped, cleaning up...");
-            // Clean up the listener when dropped
-            if let Some(listener) = self.listener.take() {
-                drop(listener);
-            }
 
             if let Some(handle) = self.handle.take() {
-                // handle.join().expect("Failed to join mock gateway thread");
+                handle.join().expect("Failed to join mock gateway thread");
             }
         }
     }
