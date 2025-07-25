@@ -1872,16 +1872,15 @@ mod tests {
 
     use super::Client;
     use super::*;
-    use crate::client::mocks::MockGateway;
+    use crate::client::common::mocks::MockGateway;
+    use crate::client::common::tests::*;
     use crate::{connection::ConnectionMetadata, stubs::MessageBusStub};
 
     const CLIENT_ID: i32 = 100;
 
     #[tokio::test]
     async fn test_connect() {
-        let mut gateway = MockGateway::new();
-
-        let address = gateway.start().expect("Failed to start mock gateway");
+        let (gateway, address) = setup_connect();
 
         let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
 
@@ -1894,16 +1893,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_time() {
-        let mut gateway = MockGateway::new();
-
-        let expected_server_time = OffsetDateTime::now_utc().replace_nanosecond(0).unwrap();
-
-        gateway.add_interaction(
-            OutgoingMessages::RequestCurrentTime,
-            vec![format!("49\01\0{}\0", expected_server_time.unix_timestamp())],
-        );
-
-        let address = gateway.start().expect("Failed to start mock gateway");
+        let (gateway, address, expected_server_time) = setup_server_time();
 
         let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
 
