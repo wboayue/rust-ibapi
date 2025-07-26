@@ -201,8 +201,13 @@ impl<S: Stream> TcpMessageBus<S> {
 
         match self.read_message() {
             Ok(message) => {
-                self.dispatch_message(server_version, message);
-                Ok(())
+                if message.is_shutdown() {
+                    self.request_shutdown();
+                    Err(Error::Shutdown)
+                } else {
+                    self.dispatch_message(server_version, message);
+                    Ok(())
+                }
             }
             Err(ref err) if is_timeout_error(err) => {
                 if self.is_shutting_down() {

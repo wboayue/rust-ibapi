@@ -1866,15 +1866,8 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use std::thread;
-    use std::vec;
-
     use super::Client;
-    use super::*;
-    use crate::client::common::mocks::MockGateway;
     use crate::client::common::tests::*;
-    use crate::{connection::ConnectionMetadata, stubs::MessageBusStub};
 
     const CLIENT_ID: i32 = 100;
 

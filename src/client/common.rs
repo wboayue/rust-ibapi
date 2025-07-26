@@ -3,7 +3,6 @@ pub mod mocks {
     use byteorder::{BigEndian, ReadBytesExt};
     use std::io::{Cursor, Read, Write};
     use std::net::{TcpListener, TcpStream};
-    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
     use std::thread;
     use time_tz::timezones;
@@ -18,7 +17,6 @@ pub mod mocks {
 
     pub struct MockGateway {
         handle: Option<thread::JoinHandle<()>>,
-        running: Arc<AtomicBool>,
         requests: Arc<Mutex<Vec<String>>>,
         interactions: Vec<Interaction>,
         server_version: i32,
@@ -28,10 +26,9 @@ pub mod mocks {
         pub fn new(server_version: i32) -> Self {
             MockGateway {
                 handle: None,
-                running: Arc::new(AtomicBool::new(true)),
                 requests: Arc::new(Mutex::new(Vec::new())),
                 interactions: Vec::new(),
-                server_version: server_version,
+                server_version,
             }
         }
 
@@ -49,26 +46,21 @@ pub mod mocks {
 
             let requests = Arc::clone(&self.requests);
             let interactions = self.interactions.clone();
-            let running = Arc::clone(&self.running);
             let server_version = self.server_version;
 
             let handle = thread::spawn(move || {
-                while running.load(Ordering::SeqCst) {
-                    let stream = match listener.accept() {
-                        Ok((stream, addr)) => {
-                            println!("Accepted connection from {}", addr);
-                            stream
-                        }
-                        Err(e) => {
-                            eprintln!("Error accepting connection: {}", e);
-                            return;
-                        }
-                    };
-
-                    let mut handler = ConnectionHandler::new(server_version, requests.clone(), interactions.clone());
-                    if let Err(err) = handler.handle(stream) {
-                        eprintln!("Error handling connection: {}", err);
+                // Handle single request and exit
+                let stream = match listener.accept() {
+                    Ok((stream, _)) => stream,
+                    Err(e) => {
+                        eprintln!("Error accepting connection: {}", e);
+                        return;
                     }
+                };
+
+                let mut handler = ConnectionHandler::new(server_version, requests.clone(), interactions.clone());
+                if let Err(err) = handler.handle(stream) {
+                    eprintln!("Error handling connection: {}", err);
                 }
             });
 
@@ -82,16 +74,12 @@ pub mod mocks {
         }
 
         pub fn time_zone(&self) -> Option<&time_tz::Tz> {
-            Some(&timezones::db::EST)
+            Some(timezones::db::EST)
         }
     }
 
     impl Drop for MockGateway {
         fn drop(&mut self) {
-            self.running.store(false, Ordering::SeqCst);
-
-            println!("MockGateway is being dropped, cleaning up...");
-
             if let Some(handle) = self.handle.take() {
                 handle.join().expect("Failed to join mock gateway thread");
             }
@@ -133,31 +121,71 @@ pub mod mocks {
         }
 
         pub fn handle(&mut self, mut stream: TcpStream) -> Result<(), std::io::Error> {
-            let magic_token = self.read_magic_token(&mut stream)?;
-            println!("Received magic token: {}", magic_token);
+            self.handle_startup(&mut stream)?;
 
-            let message = self.read_message(&mut stream)?;
-            println!("Received message: {}", message);
-
-            self.write_message(&mut stream, self.handshake_response())?;
-            println!("Sent handshake response: {:?}", self.handshake_response());
-
-            let request = self.read_message(&mut stream)?;
-            println!("Received request-1: {:?}", request);
-
-            self.write_message(&mut stream, "9\01\090\0".to_string())?;
-            self.write_message(&mut stream, "15\01\02334\0".to_string())?;
-
-            let request = self.read_message(&mut stream)?;
-            println!("Received request-2: {:?}", request);
-
-            self.add_request(request);
-
-            let interaction = self.interactions[self.current_interaction].clone();
-            for response in &interaction.responses {
-                self.write_message(&mut stream, response.clone())?;
-                println!("Sent response: {}", response);
+            if self.interactions.is_empty() {
+                self.send_shutdown(&mut stream)?;
+                return Ok(());
             }
+
+            while let Ok(request) = self.read_message(&mut stream) {
+                self.add_request(request.clone());
+
+                // Check if we have a matching interaction
+                if self.current_interaction < self.interactions.len() {
+                    let interaction = self.interactions[self.current_interaction].clone();
+                    if request.starts_with(&format!("{}\0", interaction.request)) {
+                        for response in &interaction.responses {
+                            self.write_message(&mut stream, response.clone())?;
+                        }
+                        self.current_interaction += 1;
+                    } else {
+                        eprintln!(
+                            "No matching interaction for request: {} - received: {}",
+                            interaction.request,
+                            request
+                        );
+                        break;
+                    }
+                } else {
+                    eprintln!("No more interactions defined");
+                    break;
+                }
+            }
+
+            self.send_shutdown(&mut stream)?;
+
+            Ok(())
+        }
+
+        pub fn handle_startup(&mut self, stream: &mut TcpStream) -> Result<(), std::io::Error> {
+            let magic_token = self.read_magic_token(stream)?;
+            assert_eq!(magic_token, "API\0");
+
+            // Supported server versions
+            let supported_versions = self.read_message(stream)?;
+            println!("Supported server versions: {}", supported_versions);
+
+            // Send handshake response
+            self.write_message(stream, self.handshake_response())?;
+
+            // Start API
+            let message = self.read_message(stream)?;
+            assert_eq!(message, "71\02\0100\0\0");
+
+            // next valid order id
+            self.write_message(stream, "9\01\090\0".to_string())?;
+
+            // managed accounts
+            self.write_message(stream, "15\01\02334\0".to_string())?;
+
+            Ok(())
+        }
+
+        pub fn send_shutdown(&mut self, stream: &mut TcpStream) -> Result<(), std::io::Error> {
+            // signal shutdown
+            println!("Sending shutdown message");
+            self.write_message(stream, "-2\01\0".to_string())?;
 
             Ok(())
         }

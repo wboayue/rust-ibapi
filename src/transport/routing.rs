@@ -17,11 +17,17 @@ pub enum RoutingDecision {
     SharedMessage(IncomingMessages),
     /// Special handling for error messages
     Error { request_id: i32, error_code: i32 },
+    /// Shutdown signal
+    Shutdown,
 }
 
 /// Determine how to route an incoming message
 pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
     let message_type = message.message_type();
+
+    if message_type == IncomingMessages::Shutdown {
+        return RoutingDecision::Shutdown;
+    }
 
     // Special handling for error messages
     if message_type == IncomingMessages::Error {

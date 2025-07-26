@@ -226,6 +226,10 @@ impl AsyncTcpMessageBus {
                         // TODO: Implement reconnection logic
                         continue;
                     }
+                    Err(Error::Shutdown) => {
+                        error!("Received shutdown signal, stopping message processing.");
+                        break;
+                    }
                     Err(e) => {
                         error!("Error processing message: {e}");
                         continue;
@@ -248,6 +252,7 @@ impl AsyncTcpMessageBus {
             RoutingDecision::ByMessageType(message_type) => self.route_to_shared_channel(message_type, message).await,
             RoutingDecision::SharedMessage(message_type) => self.route_to_shared_channel(message_type, message).await,
             RoutingDecision::Error { request_id, error_code } => self.route_error_message_new(message, request_id, error_code).await,
+            RoutingDecision::Shutdown => Err(Error::Shutdown),
         }
     }
 
