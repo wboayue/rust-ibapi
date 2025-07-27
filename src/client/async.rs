@@ -37,31 +37,8 @@ pub struct Client {
 impl Drop for Client {
     fn drop(&mut self) {
         debug!("dropping async client");
-
-        // Try to run shutdown synchronously if we're in a tokio context
-        let message_bus = self.message_bus.clone();
-
-        // Check if we're in a tokio runtime
-        if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            // Try block_in_place first (only works in multi-threaded runtime)
-            // If it panics, fall back to spawn_blocking
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                tokio::task::block_in_place(|| {
-                    handle.block_on(async move {
-                        message_bus.ensure_shutdown().await;
-                    });
-                });
-            }));
-
-            if result.is_err() {
-                // block_in_place failed, try spawn_blocking
-                // This returns immediately but at least starts the shutdown
-                let message_bus = self.message_bus.clone();
-                let _ = handle.spawn(async move {
-                    message_bus.ensure_shutdown().await;
-                });
-            }
-        }
+        // Request shutdown of the message bus synchronously
+        self.message_bus.request_shutdown_sync();
     }
 }
 
@@ -1916,7 +1893,7 @@ mod tests {
         assert_eq!(gateway.requests().len(), 0, "No requests should be sent on connect");
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[tokio::test]
     async fn test_server_time() {
         let _ = env_logger::builder().is_test(true).try_init();
 

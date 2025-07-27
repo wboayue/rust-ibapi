@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::mem;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_trait::async_trait;
 use log::{debug, error, info, warn};
@@ -54,6 +55,9 @@ pub trait AsyncMessageBus: Send + Sync {
 
     /// Ensure shutdown of the message bus
     async fn ensure_shutdown(&self);
+
+    /// Request shutdown synchronously (for use in Drop)
+    fn request_shutdown_sync(&self);
 
     #[cfg(test)]
     fn request_messages(&self) -> Vec<RequestMessage> {
@@ -165,7 +169,15 @@ pub struct AsyncTcpMessageBus {
     /// Handle to the message processing task
     process_task: Arc<RwLock<Option<task::JoinHandle<()>>>>,
     /// Shutdown flag
-    shutdown_requested: Arc<tokio::sync::Notify>,
+    shutdown_requested: Arc<AtomicBool>,
+}
+
+impl Drop for AsyncTcpMessageBus {
+    fn drop(&mut self) {
+        debug!("dropping async tcp message bus");
+        // Set the shutdown flag so the background task exits
+        self.shutdown_requested.store(true, Ordering::Relaxed);
+    }
 }
 
 impl AsyncTcpMessageBus {
@@ -188,7 +200,7 @@ impl AsyncTcpMessageBus {
             order_update_stream: Arc::new(RwLock::new(None)),
             cleanup_sender,
             process_task: Arc::new(RwLock::new(None)),
-            shutdown_requested: Arc::new(tokio::sync::Notify::new()),
+            shutdown_requested: Arc::new(AtomicBool::new(false)),
         };
 
         // Start cleanup task
@@ -224,15 +236,21 @@ impl AsyncTcpMessageBus {
     /// Start processing messages from TWS
     pub fn process_messages(self: Arc<Self>, _server_version: i32, reconnect_delay: Duration) -> Result<(), Error> {
         let message_bus = self.clone();
-        let shutdown_notify = self.shutdown_requested.clone();
+        let shutdown_flag = self.shutdown_requested.clone();
 
         let handle = task::spawn(async move {
             loop {
                 // Check for shutdown request
+                if shutdown_flag.load(Ordering::Relaxed) {
+                    debug!("Shutdown requested, stopping message processing");
+                    break;
+                }
+
+                // Use tokio::select to check shutdown flag while waiting for messages
                 tokio::select! {
-                    _ = shutdown_notify.notified() => {
-                        debug!("Shutdown requested, stopping message processing");
-                        break;
+                    _ = tokio::time::sleep(Duration::from_millis(100)) => {
+                        // Check shutdown flag periodically
+                        continue;
                     }
                     result = message_bus.read_and_route_message() => {
                         match result {
@@ -276,10 +294,13 @@ impl AsyncTcpMessageBus {
     async fn read_and_route_message(&self) -> Result<(), Error> {
         debug!("read_and_route_message: waiting for message");
         let message = self.connection.read_message().await?;
-        debug!("read_and_route_message: received message");
+        debug!("read_and_route_message: received message: {:?}", message.message_type());
 
         // Use common routing logic
-        match determine_routing(&message) {
+        let routing = determine_routing(&message);
+        debug!("Routing decision: {:?}", routing);
+        
+        match routing {
             RoutingDecision::ByRequestId(request_id) => self.route_to_request_channel(request_id, message).await,
             RoutingDecision::ByOrderId(order_id) => self.route_to_order_channel(order_id, message).await,
             RoutingDecision::ByMessageType(message_type) => self.route_to_shared_channel(message_type, message).await,
@@ -296,6 +317,9 @@ impl AsyncTcpMessageBus {
     /// Notify all waiting subscriptions about shutdown
     async fn request_shutdown(&self) {
         debug!("shutdown requested");
+        
+        // Set the shutdown flag
+        self.shutdown_requested.store(true, Ordering::Relaxed);
 
         // Clear all channels - dropping the senders will close the channels
         // and cause all receivers to get RecvError::Closed
@@ -555,9 +579,6 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
         // Request shutdown
         self.request_shutdown().await;
 
-        // Notify the processing task to stop
-        self.shutdown_requested.notify_one();
-
         // Wait for the processing task to finish
         let task_handle = {
             let mut task_guard = self.process_task.write().await;
@@ -571,5 +592,10 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
             }
             debug!("Processing task finished");
         }
+    }
+
+    fn request_shutdown_sync(&self) {
+        debug!("sync shutdown requested");
+        self.shutdown_requested.store(true, Ordering::Relaxed);
     }
 }

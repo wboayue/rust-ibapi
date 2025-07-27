@@ -219,6 +219,10 @@ impl AsyncMessageBus for MessageBusStub {
         // No-op for test stub
     }
 
+    fn request_shutdown_sync(&self) {
+        // No-op for test stub
+    }
+
     #[cfg(test)]
     fn request_messages(&self) -> Vec<RequestMessage> {
         self.request_messages.read().unwrap().clone()

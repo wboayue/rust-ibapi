@@ -130,6 +130,9 @@ pub mod mocks {
                 self.send_shutdown(&mut stream)?;
                 return Ok(());
             }
+            
+            // Set a read timeout so we don't wait forever for requests
+            stream.set_read_timeout(Some(std::time::Duration::from_millis(500)))?;
 
             while let Ok(request) = self.read_message(&mut stream) {
                 self.add_request(request.clone());
@@ -154,6 +157,9 @@ pub mod mocks {
 
             self.send_shutdown(&mut stream)?;
             println!("MockGateway: Shutdown sent, closing connection");
+            
+            // Give the client a moment to read the shutdown message
+            std::thread::sleep(std::time::Duration::from_millis(50));
 
             Ok(())
         }
@@ -186,6 +192,9 @@ pub mod mocks {
             // signal shutdown
             println!("Sending shutdown message");
             self.write_message(stream, "-2\01\0".to_string())?;
+            
+            // Flush to ensure the message is sent
+            stream.flush()?;
 
             Ok(())
         }
