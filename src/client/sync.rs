@@ -2014,7 +2014,7 @@ mod tests {
 
         let positions = client.positions().unwrap();
         let mut position_count = 0;
-        
+
         for position_update in positions {
             match position_update {
                 crate::accounts::PositionUpdate::Position(position) => {
@@ -2029,7 +2029,7 @@ mod tests {
                 }
             }
         }
-        
+
         assert_eq!(position_count, 1);
         let requests = gateway.requests();
         assert_eq!(requests[0], "61\01\0");
@@ -2038,23 +2038,23 @@ mod tests {
     #[test]
     fn test_account_summary() {
         use crate::accounts::types::AccountGroup;
-        
+
         let (gateway, address) = setup_account_summary();
 
         let client = Client::connect(&address, CLIENT_ID).expect("Failed to connect");
 
         let group = AccountGroup("All".to_string());
         let tags = vec!["NetLiquidation", "TotalCashValue"];
-        
+
         let summaries = client.account_summary(&group, &tags).unwrap();
         let mut summary_count = 0;
-        
+
         for summary_result in summaries {
             match summary_result {
                 crate::accounts::AccountSummaryResult::Summary(summary) => {
                     assert_eq!(summary.account, "DU1234567");
                     assert_eq!(summary.currency, "USD");
-                    
+
                     if summary.tag == "NetLiquidation" {
                         assert_eq!(summary.value, "25000.00");
                     } else if summary.tag == "TotalCashValue" {
@@ -2067,7 +2067,7 @@ mod tests {
                 }
             }
         }
-        
+
         assert_eq!(summary_count, 2);
         let requests = gateway.requests();
         assert_eq!(requests[0], "62\01\09000\0All\0NetLiquidation,TotalCashValue\0");
@@ -2076,19 +2076,19 @@ mod tests {
     #[test]
     fn test_pnl() {
         use crate::accounts::types::AccountId;
-        
+
         let (gateway, address) = setup_pnl();
 
         let client = Client::connect(&address, CLIENT_ID).expect("Failed to connect");
 
         let account = AccountId("DU1234567".to_string());
         let pnl = client.pnl(&account, None).unwrap();
-        
+
         let first_pnl = pnl.into_iter().next().unwrap();
         assert_eq!(first_pnl.daily_pnl, 250.50);
         assert_eq!(first_pnl.unrealized_pnl, Some(1500.00));
         assert_eq!(first_pnl.realized_pnl, Some(750.00));
-        
+
         let requests = gateway.requests();
         assert_eq!(requests[0], "92\09000\0DU1234567\0\0");
     }
@@ -2097,19 +2097,19 @@ mod tests {
     #[ignore = "Shared subscription being cancelled immediately - needs investigation"]
     fn test_account_updates() {
         use crate::accounts::types::AccountId;
-        
+
         let (gateway, address) = setup_account_updates();
 
         let client = Client::connect(&address, CLIENT_ID).expect("Failed to connect");
 
         let account = AccountId("DU1234567".to_string());
         let updates = client.account_updates(&account).unwrap();
-        
+
         let mut value_count = 0;
         let mut portfolio_count = 0;
         let mut has_time_update = false;
         let mut has_end = false;
-        
+
         for update in &updates {
             match update {
                 crate::accounts::AccountUpdate::AccountValue(value) => {
@@ -2140,12 +2140,12 @@ mod tests {
                 }
             }
         }
-        
+
         assert!(has_end, "Expected End message");
         assert_eq!(value_count, 1);
         assert_eq!(portfolio_count, 1);
         assert!(has_time_update);
-        
+
         let requests = gateway.requests();
         assert_eq!(requests[0], "6\02\01\0DU1234567\0");
     }

@@ -299,10 +299,7 @@ pub mod tests {
     pub fn setup_pnl() -> (MockGateway, String) {
         let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
 
-        gateway.add_interaction(
-            OutgoingMessages::RequestPnL,
-            vec!["94\09000\0250.50\01500.00\0750.00\0".to_string()],
-        );
+        gateway.add_interaction(OutgoingMessages::RequestPnL, vec!["94\09000\0250.50\01500.00\0750.00\0".to_string()]);
 
         let address = gateway.start().expect("Failed to start mock gateway");
 
@@ -325,7 +322,7 @@ pub mod tests {
         // Add interaction for the cancel request
         gateway.add_interaction(
             OutgoingMessages::RequestAccountData,
-            vec![],  // No response for cancel
+            vec![], // No response for cancel
         );
 
         let address = gateway.start().expect("Failed to start mock gateway");

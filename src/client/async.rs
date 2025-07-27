@@ -1927,7 +1927,7 @@ mod tests {
 
         let mut positions = client.positions().await.unwrap();
         let mut position_count = 0;
-        
+
         while let Some(position_update) = positions.next().await {
             match position_update.unwrap() {
                 crate::accounts::PositionUpdate::Position(position) => {
@@ -1942,7 +1942,7 @@ mod tests {
                 }
             }
         }
-        
+
         assert_eq!(position_count, 1);
         let requests = gateway.requests();
         assert_eq!(requests[0], "61\01\0");
@@ -1951,23 +1951,23 @@ mod tests {
     #[tokio::test]
     async fn test_account_summary() {
         use crate::accounts::types::AccountGroup;
-        
+
         let (gateway, address) = setup_account_summary();
 
         let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
 
         let group = AccountGroup("All".to_string());
         let tags = vec!["NetLiquidation", "TotalCashValue"];
-        
+
         let mut summaries = client.account_summary(&group, &tags).await.unwrap();
         let mut summary_count = 0;
-        
+
         while let Some(summary_result) = summaries.next().await {
             match summary_result.unwrap() {
                 crate::accounts::AccountSummaryResult::Summary(summary) => {
                     assert_eq!(summary.account, "DU1234567");
                     assert_eq!(summary.currency, "USD");
-                    
+
                     if summary.tag == "NetLiquidation" {
                         assert_eq!(summary.value, "25000.00");
                     } else if summary.tag == "TotalCashValue" {
@@ -1980,7 +1980,7 @@ mod tests {
                 }
             }
         }
-        
+
         assert_eq!(summary_count, 2);
         let requests = gateway.requests();
         assert_eq!(requests[0], "62\01\09000\0All\0NetLiquidation,TotalCashValue\0");
@@ -1989,19 +1989,19 @@ mod tests {
     #[tokio::test]
     async fn test_pnl() {
         use crate::accounts::types::AccountId;
-        
+
         let (gateway, address) = setup_pnl();
 
         let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
 
         let account = AccountId("DU1234567".to_string());
         let mut pnl = client.pnl(&account, None).await.unwrap();
-        
+
         let first_pnl = pnl.next().await.unwrap().unwrap();
         assert_eq!(first_pnl.daily_pnl, 250.50);
         assert_eq!(first_pnl.unrealized_pnl, Some(1500.00));
         assert_eq!(first_pnl.realized_pnl, Some(750.00));
-        
+
         let requests = gateway.requests();
         assert_eq!(requests[0], "92\09000\0DU1234567\0\0");
     }
@@ -2010,18 +2010,18 @@ mod tests {
     #[ignore = "Shared subscription being cancelled immediately - needs investigation"]
     async fn test_account_updates() {
         use crate::accounts::types::AccountId;
-        
+
         let (gateway, address) = setup_account_updates();
 
         let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
 
         let account = AccountId("DU1234567".to_string());
         let mut updates = client.account_updates(&account).await.unwrap();
-        
+
         let mut value_count = 0;
         let mut portfolio_count = 0;
         let mut has_time_update = false;
-        
+
         while let Some(update) = updates.next().await {
             match update.unwrap() {
                 crate::accounts::AccountUpdate::AccountValue(value) => {
@@ -2051,11 +2051,11 @@ mod tests {
                 }
             }
         }
-        
+
         assert_eq!(value_count, 1);
         assert_eq!(portfolio_count, 1);
         assert!(has_time_update);
-        
+
         let requests = gateway.requests();
         assert_eq!(requests[0], "6\02\01\0DU1234567\0");
     }
