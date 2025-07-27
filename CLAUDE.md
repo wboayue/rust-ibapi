@@ -484,6 +484,61 @@ ibapi = { version = "2.0", features = ["async"] }
 
 ## Testing Best Practices
 
+### Integration Test Pattern for Client Module
+
+The client module uses a MockGateway pattern for integration testing that simulates the actual IB Gateway/TWS protocol:
+
+#### Key Components
+
+1. **MockGateway** (`client/common.rs`): A test server that simulates IB Gateway/TWS
+   - Binds to a random TCP port and accepts connections
+   - Handles the full handshake protocol including magic token exchange
+   - Records all incoming requests for verification
+   - Sends pre-configured responses based on defined interactions
+
+2. **Shared Test Setup Functions** (`client/common.rs`):
+   ```rust
+   pub fn setup_connect() -> (MockGateway, String)
+   pub fn setup_server_time() -> (MockGateway, String, OffsetDateTime)
+   ```
+
+3. **Integration Tests**: Both sync and async modules have identical test cases
+   - Tests use actual TCP connections, not mocks
+   - Verify the complete protocol flow from connection to response
+   - Check both request format and response parsing
+
+#### Example Test Pattern
+
+```rust
+// Sync test
+#[test]
+fn test_server_time() {
+    let (gateway, address, expected_server_time) = setup_server_time();
+    let client = Client::connect(&address, CLIENT_ID).expect("Failed to connect");
+    let server_time = client.server_time().unwrap();
+    assert_eq!(server_time, expected_server_time);
+    assert_eq!(gateway.requests()[0], "49\01\0");  // Verify exact request format
+}
+
+// Async test (identical logic with async/await)
+#[tokio::test]
+async fn test_server_time() {
+    let (gateway, address, expected_server_time) = setup_server_time();
+    let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
+    let server_time = client.server_time().await.unwrap();
+    assert_eq!(server_time, expected_server_time);
+    assert_eq!(gateway.requests()[0], "49\01\0");
+}
+```
+
+#### Benefits
+
+- **Real Network Testing**: Uses actual TCP connections to test the full network stack
+- **Protocol Verification**: Tests the complete handshake and message exchange
+- **Request Recording**: Captures all requests for detailed verification
+- **Interaction-Based**: Pre-configure expected request/response pairs
+- **Shared Logic**: Common setup ensures sync/async tests are identical
+
 ### Table-Driven Tests with Shared Data
 
 The codebase uses table-driven tests to ensure comprehensive coverage while sharing test data between sync and async implementations. This approach reduces duplication and ensures both modes are tested identically.

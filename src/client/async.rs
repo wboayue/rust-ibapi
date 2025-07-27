@@ -3,6 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use log::debug;
 use time::OffsetDateTime;
 use time_tz::Tz;
 
@@ -31,6 +32,14 @@ pub struct Client {
 
     client_id: i32,                   // ID of client.
     id_manager: Arc<ClientIdManager>, // Manages request and order ID generation
+}
+
+impl Drop for Client {
+    fn drop(&mut self) {
+        debug!("dropping async client");
+        // Request shutdown of the message bus synchronously
+        self.message_bus.request_shutdown_sync();
+    }
 }
 
 impl Client {
@@ -1861,5 +1870,39 @@ impl Client {
     #[cfg(test)]
     pub fn message_bus(&self) -> &Arc<dyn AsyncMessageBus> {
         &self.message_bus
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Client;
+    use crate::client::common::tests::*;
+
+    const CLIENT_ID: i32 = 100;
+
+    #[tokio::test]
+    async fn test_connect() {
+        let (gateway, address) = setup_connect();
+
+        let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
+
+        assert_eq!(client.client_id(), CLIENT_ID);
+        assert_eq!(client.server_version(), gateway.server_version());
+        assert_eq!(client.time_zone, gateway.time_zone());
+
+        assert_eq!(gateway.requests().len(), 0, "No requests should be sent on connect");
+    }
+
+    #[tokio::test]
+    async fn test_server_time() {
+        let (gateway, address, expected_server_time) = setup_server_time();
+
+        let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
+
+        let server_time = client.server_time().await.unwrap();
+        assert_eq!(server_time, expected_server_time);
+
+        let requests = gateway.requests();
+        assert_eq!(requests[0], "49\01\0");
     }
 }

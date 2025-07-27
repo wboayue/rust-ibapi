@@ -1,6 +1,7 @@
 //! Client implementation with sync/async support
 
 pub(crate) mod builders;
+pub(crate) mod common;
 pub(crate) mod error_handler;
 pub(crate) mod id_generator;
 

@@ -113,6 +113,7 @@ pub(crate) const CODE_INDEX: usize = 3;
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub enum IncomingMessages {
+    Shutdown = -2,
     NotValid = -1,
     TickPrice = 1,
     TickSize = 2,
@@ -201,6 +202,7 @@ pub enum IncomingMessages {
 impl From<i32> for IncomingMessages {
     fn from(value: i32) -> IncomingMessages {
         match value {
+            -2 => IncomingMessages::Shutdown,
             1 => IncomingMessages::TickPrice,
             2 => IncomingMessages::TickSize,
             3 => IncomingMessages::OrderStatus,
@@ -624,6 +626,10 @@ impl ResponseMessage {
 
     pub fn is_empty(&self) -> bool {
         self.fields.is_empty()
+    }
+
+    pub fn is_shutdown(&self) -> bool {
+        self.message_type() == IncomingMessages::Shutdown
     }
 
     pub fn message_type(&self) -> IncomingMessages {
