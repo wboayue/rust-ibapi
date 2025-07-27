@@ -1967,9 +1967,9 @@ mod tests {
 
     #[test]
     fn test_connect() {
-        let (gateway, address) = setup_connect();
+        let gateway = setup_connect();
 
-        let client = Client::connect(&address, CLIENT_ID).expect("Failed to connect");
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
         assert_eq!(client.client_id(), CLIENT_ID);
         assert_eq!(client.server_version(), gateway.server_version());
@@ -1980,14 +1980,12 @@ mod tests {
 
     #[test]
     fn test_server_time() {
-        let _ = env_logger::builder().is_test(true).try_init();
+        let (gateway, expectations) = setup_server_time();
 
-        let (gateway, address, expected_server_time) = setup_server_time();
-
-        let client = Client::connect(&address, CLIENT_ID).expect("Failed to connect");
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
         let server_time = client.server_time().unwrap();
-        assert_eq!(server_time, expected_server_time);
+        assert_eq!(server_time, expectations.server_time);
 
         let requests = gateway.requests();
         assert_eq!(requests[0], "49\01\0");
@@ -1995,12 +1993,12 @@ mod tests {
 
     #[test]
     fn test_managed_accounts() {
-        let (gateway, address, expected_accounts) = setup_managed_accounts();
+        let (gateway, expectations) = setup_managed_accounts();
 
-        let client = Client::connect(&address, CLIENT_ID).expect("Failed to connect");
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
         let accounts = client.managed_accounts().unwrap();
-        assert_eq!(accounts, expected_accounts);
+        assert_eq!(accounts, expectations.accounts);
 
         let requests = gateway.requests();
         assert_eq!(requests[0], "17\01\0");
@@ -2008,9 +2006,9 @@ mod tests {
 
     #[test]
     fn test_positions() {
-        let (gateway, address) = setup_positions();
+        let gateway = setup_positions();
 
-        let client = Client::connect(&address, CLIENT_ID).expect("Failed to connect");
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
         let positions = client.positions().unwrap();
         let mut position_count = 0;
@@ -2039,9 +2037,9 @@ mod tests {
     fn test_account_summary() {
         use crate::accounts::types::AccountGroup;
 
-        let (gateway, address) = setup_account_summary();
+        let gateway = setup_account_summary();
 
-        let client = Client::connect(&address, CLIENT_ID).expect("Failed to connect");
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
         let group = AccountGroup("All".to_string());
         let tags = vec!["NetLiquidation", "TotalCashValue"];
@@ -2077,9 +2075,9 @@ mod tests {
     fn test_pnl() {
         use crate::accounts::types::AccountId;
 
-        let (gateway, address) = setup_pnl();
+        let gateway = setup_pnl();
 
-        let client = Client::connect(&address, CLIENT_ID).expect("Failed to connect");
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
         let account = AccountId("DU1234567".to_string());
         let pnl = client.pnl(&account, None).unwrap();
@@ -2098,9 +2096,9 @@ mod tests {
     fn test_account_updates() {
         use crate::accounts::types::AccountId;
 
-        let (gateway, address) = setup_account_updates();
+        let gateway = setup_account_updates();
 
-        let client = Client::connect(&address, CLIENT_ID).expect("Failed to connect");
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
         let account = AccountId("DU1234567".to_string());
         let updates = client.account_updates(&account).unwrap();

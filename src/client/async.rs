@@ -1882,9 +1882,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_connect() {
-        let (gateway, address) = setup_connect();
+        let gateway = setup_connect();
 
-        let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
 
         assert_eq!(client.client_id(), CLIENT_ID);
         assert_eq!(client.server_version(), gateway.server_version());
@@ -1895,12 +1895,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_time() {
-        let (gateway, address, expected_server_time) = setup_server_time();
+        let (gateway, expectations) = setup_server_time();
 
-        let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
 
         let server_time = client.server_time().await.unwrap();
-        assert_eq!(server_time, expected_server_time);
+        assert_eq!(server_time, expectations.server_time);
 
         let requests = gateway.requests();
         assert_eq!(requests[0], "49\01\0");
@@ -1908,12 +1908,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_managed_accounts() {
-        let (gateway, address, expected_accounts) = setup_managed_accounts();
+        let (gateway, expectations) = setup_managed_accounts();
 
-        let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
 
         let accounts = client.managed_accounts().await.unwrap();
-        assert_eq!(accounts, expected_accounts);
+        assert_eq!(accounts, expectations.accounts);
 
         let requests = gateway.requests();
         assert_eq!(requests[0], "17\01\0");
@@ -1921,9 +1921,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_positions() {
-        let (gateway, address) = setup_positions();
+        let gateway = setup_positions();
 
-        let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
 
         let mut positions = client.positions().await.unwrap();
         let mut position_count = 0;
@@ -1952,9 +1952,9 @@ mod tests {
     async fn test_account_summary() {
         use crate::accounts::types::AccountGroup;
 
-        let (gateway, address) = setup_account_summary();
+        let gateway = setup_account_summary();
 
-        let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
 
         let group = AccountGroup("All".to_string());
         let tags = vec!["NetLiquidation", "TotalCashValue"];
@@ -1990,9 +1990,9 @@ mod tests {
     async fn test_pnl() {
         use crate::accounts::types::AccountId;
 
-        let (gateway, address) = setup_pnl();
+        let gateway = setup_pnl();
 
-        let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
 
         let account = AccountId("DU1234567".to_string());
         let mut pnl = client.pnl(&account, None).await.unwrap();
@@ -2011,9 +2011,9 @@ mod tests {
     async fn test_account_updates() {
         use crate::accounts::types::AccountId;
 
-        let (gateway, address) = setup_account_updates();
+        let gateway = setup_account_updates();
 
-        let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
 
         let account = AccountId("DU1234567".to_string());
         let mut updates = client.account_updates(&account).await.unwrap();
@@ -2021,6 +2021,7 @@ mod tests {
         let mut value_count = 0;
         let mut portfolio_count = 0;
         let mut has_time_update = false;
+        let mut has_end = false;
 
         while let Some(update) = updates.next().await {
             match update.unwrap() {
@@ -2047,11 +2048,13 @@ mod tests {
                     has_time_update = true;
                 }
                 crate::accounts::AccountUpdate::End => {
+                    has_end = true;
                     break;
                 }
             }
         }
 
+        assert!(has_end, "Expected End message");
         assert_eq!(value_count, 1);
         assert_eq!(portfolio_count, 1);
         assert!(has_time_update);

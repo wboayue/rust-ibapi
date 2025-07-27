@@ -20,6 +20,7 @@ pub mod mocks {
         requests: Arc<Mutex<Vec<String>>>,
         interactions: Vec<Interaction>,
         server_version: i32,
+        address: Option<String>,
     }
 
     impl MockGateway {
@@ -29,6 +30,7 @@ pub mod mocks {
                 requests: Arc::new(Mutex::new(Vec::new())),
                 interactions: Vec::new(),
                 server_version,
+                address: None,
             }
         }
 
@@ -36,11 +38,23 @@ pub mod mocks {
             self.requests.lock().unwrap().clone()
         }
 
+        pub fn address(&self) -> String {
+            self.address.clone().unwrap_or_default()
+        }
+
         pub fn add_interaction(&mut self, request: OutgoingMessages, responses: Vec<String>) {
             self.interactions.push(Interaction { request, responses });
         }
 
-        pub fn start(&mut self) -> Result<String, Box<dyn std::error::Error>> {
+        pub fn server_version(&self) -> i32 {
+            self.server_version
+        }
+
+        pub fn time_zone(&self) -> Option<&time_tz::Tz> {
+            Some(timezones::db::EST)
+        }
+
+        pub fn start(&mut self) -> Result<(), anyhow::Error> {
             let listener = TcpListener::bind("127.0.0.1:0")?;
             let address = listener.local_addr()?;
 
@@ -68,16 +82,9 @@ pub mod mocks {
             });
 
             self.handle = Some(handle);
+            self.address = Some(address.to_string());
 
-            Ok(address.to_string())
-        }
-
-        pub fn server_version(&self) -> i32 {
-            self.server_version
-        }
-
-        pub fn time_zone(&self) -> Option<&time_tz::Tz> {
-            Some(timezones::db::EST)
+            Ok(())
         }
     }
 
@@ -226,15 +233,17 @@ pub mod tests {
 
     use crate::{client::common::mocks::MockGateway, messages::OutgoingMessages, server_versions};
 
-    pub fn setup_connect() -> (MockGateway, String) {
+    pub fn setup_connect() -> MockGateway {
         let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
-
-        let address = gateway.start().expect("Failed to start mock gateway");
-
-        (gateway, address)
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
     }
 
-    pub fn setup_server_time() -> (MockGateway, String, OffsetDateTime) {
+    pub struct ServerTimeExpectations {
+        pub server_time: OffsetDateTime,
+    }
+
+    pub fn setup_server_time() -> (MockGateway, ServerTimeExpectations) {
         let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
 
         let server_time = OffsetDateTime::now_utc().replace_nanosecond(0).unwrap();
@@ -244,12 +253,16 @@ pub mod tests {
             vec![format!("49\01\0{}\0", server_time.unix_timestamp())],
         );
 
-        let address = gateway.start().expect("Failed to start mock gateway");
+        gateway.start().expect("Failed to start mock gateway");
 
-        (gateway, address, server_time)
+        (gateway, ServerTimeExpectations { server_time })
     }
 
-    pub fn setup_managed_accounts() -> (MockGateway, String, Vec<String>) {
+    pub struct ManagedAccountsExpectations {
+        pub accounts: Vec<String>,
+    }
+
+    pub fn setup_managed_accounts() -> (MockGateway, ManagedAccountsExpectations) {
         let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
         let expected_accounts = vec!["DU1234567".to_string(), "DU1234568".to_string()];
 
@@ -258,12 +271,12 @@ pub mod tests {
             vec![format!("15\01\0{}\0", expected_accounts.join(","))],
         );
 
-        let address = gateway.start().expect("Failed to start mock gateway");
+        gateway.start().expect("Failed to start mock gateway");
 
-        (gateway, address, expected_accounts)
+        (gateway, ManagedAccountsExpectations { accounts: expected_accounts })
     }
 
-    pub fn setup_positions() -> (MockGateway, String) {
+    pub fn setup_positions() -> MockGateway {
         let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
 
         gateway.add_interaction(
@@ -274,12 +287,11 @@ pub mod tests {
             ],
         );
 
-        let address = gateway.start().expect("Failed to start mock gateway");
-
-        (gateway, address)
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
     }
 
-    pub fn setup_account_summary() -> (MockGateway, String) {
+    pub fn setup_account_summary() -> MockGateway {
         let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
 
         gateway.add_interaction(
@@ -291,22 +303,20 @@ pub mod tests {
             ],
         );
 
-        let address = gateway.start().expect("Failed to start mock gateway");
-
-        (gateway, address)
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
     }
 
-    pub fn setup_pnl() -> (MockGateway, String) {
+    pub fn setup_pnl() -> MockGateway {
         let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
 
         gateway.add_interaction(OutgoingMessages::RequestPnL, vec!["94\09000\0250.50\01500.00\0750.00\0".to_string()]);
 
-        let address = gateway.start().expect("Failed to start mock gateway");
-
-        (gateway, address)
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
     }
 
-    pub fn setup_account_updates() -> (MockGateway, String) {
+    pub fn setup_account_updates() -> MockGateway {
         let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
 
         gateway.add_interaction(
@@ -325,8 +335,7 @@ pub mod tests {
             vec![], // No response for cancel
         );
 
-        let address = gateway.start().expect("Failed to start mock gateway");
-
-        (gateway, address)
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
     }
 }
