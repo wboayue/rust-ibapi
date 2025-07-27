@@ -1980,6 +1980,8 @@ mod tests {
 
     #[test]
     fn test_server_time() {
+        let _ = env_logger::builder().is_test(true).try_init();
+
         let (gateway, address, expected_server_time) = setup_server_time();
 
         let client = Client::connect(&address, CLIENT_ID).expect("Failed to connect");

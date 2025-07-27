@@ -2,8 +2,8 @@
 
 use std::collections::HashMap;
 use std::mem;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use log::{debug, error, info, warn};
@@ -292,15 +292,10 @@ impl AsyncTcpMessageBus {
 
     /// Read a message and route it to the appropriate channel
     async fn read_and_route_message(&self) -> Result<(), Error> {
-        debug!("read_and_route_message: waiting for message");
         let message = self.connection.read_message().await?;
-        debug!("read_and_route_message: received message: {:?}", message.message_type());
 
         // Use common routing logic
-        let routing = determine_routing(&message);
-        debug!("Routing decision: {:?}", routing);
-        
-        match routing {
+        match determine_routing(&message) {
             RoutingDecision::ByRequestId(request_id) => self.route_to_request_channel(request_id, message).await,
             RoutingDecision::ByOrderId(order_id) => self.route_to_order_channel(order_id, message).await,
             RoutingDecision::ByMessageType(message_type) => self.route_to_shared_channel(message_type, message).await,
@@ -317,7 +312,7 @@ impl AsyncTcpMessageBus {
     /// Notify all waiting subscriptions about shutdown
     async fn request_shutdown(&self) {
         debug!("shutdown requested");
-        
+
         // Set the shutdown flag
         self.shutdown_requested.store(true, Ordering::Relaxed);
 

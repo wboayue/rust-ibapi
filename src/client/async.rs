@@ -1895,17 +1895,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_time() {
-        let _ = env_logger::builder().is_test(true).try_init();
-
         let (gateway, address, expected_server_time) = setup_server_time();
 
         let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
 
-        println!("Connected to mock gateway, requesting server time...");
-        let result = client.server_time().await;
-        println!("Server time result: {:?}", result);
-
-        let server_time = result.unwrap();
+        let server_time = client.server_time().await.unwrap();
         assert_eq!(server_time, expected_server_time);
 
         let requests = gateway.requests();
