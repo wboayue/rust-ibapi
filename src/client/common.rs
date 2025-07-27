@@ -51,7 +51,10 @@ pub mod mocks {
             let handle = thread::spawn(move || {
                 // Handle single request and exit
                 let stream = match listener.accept() {
-                    Ok((stream, _)) => stream,
+                    Ok((stream, addr)) => {
+                        println!("MockGateway: Accepted connection from {}", addr);
+                        stream
+                    }
                     Err(e) => {
                         eprintln!("Error accepting connection: {}", e);
                         return;
@@ -140,20 +143,17 @@ pub mod mocks {
                         }
                         self.current_interaction += 1;
                     } else {
-                        eprintln!(
-                            "No matching interaction for request: {} - received: {}",
-                            interaction.request,
-                            request
-                        );
+                        eprintln!("No matching interaction for request: {} - received: {}", interaction.request, request);
                         break;
                     }
                 } else {
-                    eprintln!("No more interactions defined");
+                    eprintln!("No more interactions defined, will send shutdown");
                     break;
                 }
             }
 
             self.send_shutdown(&mut stream)?;
+            println!("MockGateway: Shutdown sent, closing connection");
 
             Ok(())
         }

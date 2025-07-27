@@ -3,6 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use log::debug;
 use time::OffsetDateTime;
 use time_tz::Tz;
 
@@ -31,6 +32,37 @@ pub struct Client {
 
     client_id: i32,                   // ID of client.
     id_manager: Arc<ClientIdManager>, // Manages request and order ID generation
+}
+
+impl Drop for Client {
+    fn drop(&mut self) {
+        debug!("dropping async client");
+
+        // Try to run shutdown synchronously if we're in a tokio context
+        let message_bus = self.message_bus.clone();
+
+        // Check if we're in a tokio runtime
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            // Try block_in_place first (only works in multi-threaded runtime)
+            // If it panics, fall back to spawn_blocking
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                tokio::task::block_in_place(|| {
+                    handle.block_on(async move {
+                        message_bus.ensure_shutdown().await;
+                    });
+                });
+            }));
+
+            if result.is_err() {
+                // block_in_place failed, try spawn_blocking
+                // This returns immediately but at least starts the shutdown
+                let message_bus = self.message_bus.clone();
+                let _ = handle.spawn(async move {
+                    message_bus.ensure_shutdown().await;
+                });
+            }
+        }
+    }
 }
 
 impl Client {
@@ -1884,13 +1916,19 @@ mod tests {
         assert_eq!(gateway.requests().len(), 0, "No requests should be sent on connect");
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_server_time() {
+        let _ = env_logger::builder().is_test(true).try_init();
+
         let (gateway, address, expected_server_time) = setup_server_time();
 
         let client = Client::connect(&address, CLIENT_ID).await.expect("Failed to connect");
 
-        let server_time = client.server_time().await.unwrap();
+        println!("Connected to mock gateway, requesting server time...");
+        let result = client.server_time().await;
+        println!("Server time result: {:?}", result);
+
+        let server_time = result.unwrap();
         assert_eq!(server_time, expected_server_time);
 
         let requests = gateway.requests();

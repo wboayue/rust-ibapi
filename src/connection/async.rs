@@ -1,5 +1,7 @@
 //! Asynchronous connection implementation
 
+use std::sync::Arc;
+
 use log::debug;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -97,7 +99,13 @@ impl AsyncConnection {
         let mut length_bytes = [0u8; 4];
         {
             let mut socket = self.socket.lock().await;
-            socket.read_exact(&mut length_bytes).await?;
+            match socket.read_exact(&mut length_bytes).await {
+                Ok(_) => {}
+                Err(e) => {
+                    debug!("Error reading message length: {:?}", e);
+                    return Err(Error::Io(Arc::new(e)));
+                }
+            }
         }
 
         let message_length = u32::from_be_bytes(length_bytes) as usize;
