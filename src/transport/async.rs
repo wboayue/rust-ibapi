@@ -54,6 +54,7 @@ pub trait AsyncMessageBus: Send + Sync {
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error>;
 
     /// Ensure shutdown of the message bus
+    #[allow(dead_code)]
     async fn ensure_shutdown(&self);
 
     /// Request shutdown synchronously (for use in Drop)
