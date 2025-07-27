@@ -248,4 +248,88 @@ pub mod tests {
 
         (gateway, address, server_time)
     }
+
+    pub fn setup_managed_accounts() -> (MockGateway, String, Vec<String>) {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+        let expected_accounts = vec!["DU1234567".to_string(), "DU1234568".to_string()];
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestManagedAccounts,
+            vec![format!("15\01\0{}\0", expected_accounts.join(","))],
+        );
+
+        let address = gateway.start().expect("Failed to start mock gateway");
+
+        (gateway, address, expected_accounts)
+    }
+
+    pub fn setup_positions() -> (MockGateway, String) {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestPositions,
+            vec![
+                "61\03\0DU1234567\012345\0AAPL\0STK\0\00.0\0\0\0SMART\0USD\0AAPL\0AAPL\0500.0\0150.25\0".to_string(),
+                "62\01\0".to_string(),
+            ],
+        );
+
+        let address = gateway.start().expect("Failed to start mock gateway");
+
+        (gateway, address)
+    }
+
+    pub fn setup_account_summary() -> (MockGateway, String) {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestAccountSummary,
+            vec![
+                "63\01\09000\0DU1234567\0NetLiquidation\025000.00\0USD\0".to_string(),
+                "63\01\09000\0DU1234567\0TotalCashValue\015000.00\0USD\0".to_string(),
+                "64\01\09000\0".to_string(),
+            ],
+        );
+
+        let address = gateway.start().expect("Failed to start mock gateway");
+
+        (gateway, address)
+    }
+
+    pub fn setup_pnl() -> (MockGateway, String) {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestPnL,
+            vec!["94\09000\0250.50\01500.00\0750.00\0".to_string()],
+        );
+
+        let address = gateway.start().expect("Failed to start mock gateway");
+
+        (gateway, address)
+    }
+
+    pub fn setup_account_updates() -> (MockGateway, String) {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestAccountData,
+            vec![
+                "6\02\0NetLiquidation\025000.00\0USD\0DU1234567\0".to_string(),
+                "7\03\012345\0AAPL\0STK\0\00.0\0\0\0SMART\0USD\0AAPL\0AAPL\0500.0\0151.50\075750.00\0150.25\0375.00\0125.00\0DU1234567\0".to_string(),
+                "8\020240122 15:30:00\0".to_string(),
+                "54\01\0DU1234567\0".to_string(),
+            ],
+        );
+
+        // Add interaction for the cancel request
+        gateway.add_interaction(
+            OutgoingMessages::RequestAccountData,
+            vec![],  // No response for cancel
+        );
+
+        let address = gateway.start().expect("Failed to start mock gateway");
+
+        (gateway, address)
+    }
 }
