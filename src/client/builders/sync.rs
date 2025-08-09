@@ -236,47 +236,47 @@ where
 #[allow(dead_code)]
 pub trait ClientRequestBuilders {
     /// Create a request builder with an auto-generated request ID
-    fn request(&self) -> RequestBuilder;
+    fn request(&self) -> RequestBuilder<'_>;
 
     /// Create a request builder with a specific request ID
-    fn request_with_id(&self, request_id: i32) -> RequestBuilder;
+    fn request_with_id(&self, request_id: i32) -> RequestBuilder<'_>;
 
     /// Create a shared request builder
-    fn shared_request(&self, message_type: OutgoingMessages) -> SharedRequestBuilder;
+    fn shared_request(&self, message_type: OutgoingMessages) -> SharedRequestBuilder<'_>;
 
     /// Create an order request builder
-    fn order_request(&self) -> OrderRequestBuilder;
+    fn order_request(&self) -> OrderRequestBuilder<'_>;
 
     /// Create an order request builder with a specific order ID
-    fn order_request_with_id(&self, order_id: i32) -> OrderRequestBuilder;
+    fn order_request_with_id(&self, order_id: i32) -> OrderRequestBuilder<'_>;
 
     /// Create a simple message builder
-    fn message(&self) -> MessageBuilder;
+    fn message(&self) -> MessageBuilder<'_>;
 }
 
 #[allow(dead_code)]
 impl ClientRequestBuilders for Client {
-    fn request(&self) -> RequestBuilder {
+    fn request(&self) -> RequestBuilder<'_> {
         RequestBuilder::new(self)
     }
 
-    fn request_with_id(&self, request_id: i32) -> RequestBuilder {
+    fn request_with_id(&self, request_id: i32) -> RequestBuilder<'_> {
         RequestBuilder::with_id(self, request_id)
     }
 
-    fn shared_request(&self, message_type: OutgoingMessages) -> SharedRequestBuilder {
+    fn shared_request(&self, message_type: OutgoingMessages) -> SharedRequestBuilder<'_> {
         SharedRequestBuilder::new(self, message_type)
     }
 
-    fn order_request(&self) -> OrderRequestBuilder {
+    fn order_request(&self) -> OrderRequestBuilder<'_> {
         OrderRequestBuilder::new(self)
     }
 
-    fn order_request_with_id(&self, order_id: i32) -> OrderRequestBuilder {
+    fn order_request_with_id(&self, order_id: i32) -> OrderRequestBuilder<'_> {
         OrderRequestBuilder::with_id(self, order_id)
     }
 
-    fn message(&self) -> MessageBuilder {
+    fn message(&self) -> MessageBuilder<'_> {
         MessageBuilder::new(self)
     }
 }
@@ -284,13 +284,13 @@ impl ClientRequestBuilders for Client {
 /// Extension trait to add subscription builder to Client
 pub trait SubscriptionBuilderExt {
     /// Creates a new subscription builder
-    fn subscription<T>(&self) -> SubscriptionBuilder<T>
+    fn subscription<T>(&self) -> SubscriptionBuilder<'_, T>
     where
         T: StreamDecoder<T> + 'static;
 }
 
 impl SubscriptionBuilderExt for Client {
-    fn subscription<T>(&self) -> SubscriptionBuilder<T>
+    fn subscription<T>(&self) -> SubscriptionBuilder<'_, T>
     where
         T: StreamDecoder<T> + 'static,
     {
