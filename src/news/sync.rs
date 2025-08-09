@@ -52,7 +52,7 @@ pub(crate) fn news_providers(client: &Client) -> Result<Vec<NewsProvider>, Error
 }
 
 /// Subscribes to IB's News Bulletins.
-pub(crate) fn news_bulletins(client: &Client, all_messages: bool) -> Result<Subscription<NewsBulletin>, Error> {
+pub(crate) fn news_bulletins(client: &Client, all_messages: bool) -> Result<Subscription<'_, NewsBulletin>, Error> {
     let request = encoders::encode_request_news_bulletins(all_messages)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestNewsBulletins, request)?;
 

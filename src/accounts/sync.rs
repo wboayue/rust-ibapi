@@ -16,7 +16,7 @@ impl SharesChannel for Subscription<'_, PositionUpdate> {}
 
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.
-pub fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
+pub fn positions(client: &Client) -> Result<Subscription<'_, PositionUpdate>, Error> {
     crate::common::request_helpers::shared_subscription(
         client,
         Features::POSITIONS,

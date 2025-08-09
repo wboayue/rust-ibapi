@@ -118,6 +118,7 @@ pub struct ResponseContext {
 /// instead of the entire `Client`, making it possible to share implementations.
 pub(crate) trait StreamDecoder<T> {
     /// Message types this stream can handle
+    #[allow(dead_code)]
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[];
 
     /// Decode a response message into the stream's data type

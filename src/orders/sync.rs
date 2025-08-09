@@ -176,7 +176,7 @@ pub fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
 }
 
 // Requests completed [Order]s.
-pub fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<Orders>, Error> {
+pub fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<'_, Orders>, Error> {
     client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
 
     let request = encoders::encode_completed_orders(api_only)?;
@@ -191,7 +191,7 @@ pub fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<
 /// # Arguments
 /// * `client` - [Client] used to communicate with server.
 ///
-pub fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
+pub fn open_orders(client: &Client) -> Result<Subscription<'_, Orders>, Error> {
     let request = encoders::encode_open_orders()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestOpenOrders, request)?;
 
@@ -200,7 +200,7 @@ pub fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
 
 // Requests all *current* open orders in associated accounts at the current moment.
 // Open orders are returned once; this function does not initiate a subscription.
-pub fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
+pub fn all_open_orders(client: &Client) -> Result<Subscription<'_, Orders>, Error> {
     let request = encoders::encode_all_open_orders()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAllOpenOrders, request)?;
 
@@ -208,7 +208,7 @@ pub fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
 }
 
 // Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
-pub fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription<Orders>, Error> {
+pub fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription<'_, Orders>, Error> {
     let request = encoders::encode_auto_open_orders(auto_bind)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request)?;
 
@@ -223,7 +223,7 @@ pub fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription
 //
 // # Arguments
 // * `filter` - filter criteria used to determine which execution reports are returned
-pub fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
+pub fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subscription<'_, Executions>, Error> {
     let request_id = client.next_request_id();
 
     let request = encoders::encode_executions(client.server_version, request_id, &filter)?;
