@@ -19,7 +19,7 @@ This document tracks known issues, technical debt, and improvements needed in th
   - BUT uses a separate `map_incoming_to_outgoing()` function in `routing.rs` for response routing
   - Two sources of truth that must be kept manually in sync
 
-**Impact:** This inconsistency can lead to bugs where a channel is configured but responses aren't routed (as happened with `FamilyCodes`).
+**Impact:** This inconsistency can lead to bugs where a channel is configured but responses aren't routed (as happened with `FamilyCodes` and `MarketRule`). This also affects integration testing where async tests fail while sync tests pass.
 
 **Proposed Solutions:**
 1. **Option A:** Modify async to use the same approach as sync (check channel existence directly)
