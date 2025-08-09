@@ -2247,6 +2247,64 @@ mod tests {
     }
 
     #[test]
+    fn test_account_updates_multi() {
+        use crate::accounts::types::{AccountId, ModelCode};
+
+        let gateway = setup_account_updates_multi();
+
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        let account = AccountId("DU1234567".to_string());
+        let model_code: Option<ModelCode> = None;
+        let updates = client.account_updates_multi(Some(&account), model_code.as_ref()).unwrap();
+
+        let mut cash_balance_found = false;
+        let mut currency_found = false;
+        let mut stock_market_value_found = false;
+        let mut has_end = false;
+
+        for update in updates {
+            match update {
+                crate::accounts::AccountUpdateMulti::AccountMultiValue(value) => {
+                    assert_eq!(value.account, "DU1234567");
+                    assert_eq!(value.model_code, "");
+
+                    match value.key.as_str() {
+                        "CashBalance" => {
+                            assert_eq!(value.value, "94629.71");
+                            assert_eq!(value.currency, "USD");
+                            cash_balance_found = true;
+                        }
+                        "Currency" => {
+                            assert_eq!(value.value, "USD");
+                            assert_eq!(value.currency, "USD");
+                            currency_found = true;
+                        }
+                        "StockMarketValue" => {
+                            assert_eq!(value.value, "0.00");
+                            assert_eq!(value.currency, "BASE");
+                            stock_market_value_found = true;
+                        }
+                        _ => panic!("Unexpected key: {}", value.key),
+                    }
+                }
+                crate::accounts::AccountUpdateMulti::End => {
+                    has_end = true;
+                    break;
+                }
+            }
+        }
+
+        assert!(cash_balance_found, "Expected CashBalance update");
+        assert!(currency_found, "Expected Currency update");
+        assert!(stock_market_value_found, "Expected StockMarketValue update");
+        assert!(has_end, "Expected End message");
+
+        let requests = gateway.requests();
+        assert_eq!(requests[0], "76\01\09000\0DU1234567\0\01\0");
+    }
+
+    #[test]
     fn test_client_id() {
         let client_id = 500;
         let connection_metadata = ConnectionMetadata {

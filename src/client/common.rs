@@ -283,14 +283,16 @@ pub mod tests {
         let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
         let expected_order_id = 12345;
 
-        gateway.add_interaction(
-            OutgoingMessages::RequestIds,
-            vec![format!("9\01\0{}\0", expected_order_id)],
-        );
+        gateway.add_interaction(OutgoingMessages::RequestIds, vec![format!("9\01\0{}\0", expected_order_id)]);
 
         gateway.start().expect("Failed to start mock gateway");
 
-        (gateway, NextValidOrderIdExpectations { next_valid_order_id: expected_order_id })
+        (
+            gateway,
+            NextValidOrderIdExpectations {
+                next_valid_order_id: expected_order_id,
+            },
+        )
     }
 
     pub fn setup_positions() -> MockGateway {
@@ -382,13 +384,32 @@ pub mod tests {
             OutgoingMessages::RequestAccountData,
             vec![
                 "6\02\0NetLiquidation\025000.00\0USD\0DU1234567\0".to_string(),
-                // PortfolioValue v4: type(7), version(4), symbol, sec_type, expiry, strike, right, 
+                // PortfolioValue v4: type(7), version(4), symbol, sec_type, expiry, strike, right,
                 // currency, local_symbol, position, market_price, market_value, avg_cost, unrealized_pnl, realized_pnl, account
                 // (NO contract_id, multiplier, primary_exchange, trading_class in v4!)
                 "7\04\0AAPL\0STK\0\00.0\0\0USD\0AAPL\0500.0\0151.50\075750.00\0150.25\0375.00\0125.00\0DU1234567\0".to_string(),
                 // AccountUpdateTime: type(8), version(ignored), timestamp
                 "8\01\020240122 15:30:00\0".to_string(),
                 "54\01\0DU1234567\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_account_updates_multi() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestAccountUpdatesMulti,
+            vec![
+                // AccountUpdateMulti: type(73), version(1), request_id, account, model_code, key, value, currency
+                "73\01\09000\0DU1234567\0\0CashBalance\094629.71\0USD\0".to_string(),
+                "73\01\09000\0DU1234567\0\0Currency\0USD\0USD\0".to_string(),
+                "73\01\09000\0DU1234567\0\0StockMarketValue\00.00\0BASE\0".to_string(),
+                // AccountUpdateMultiEnd: type(74), version(1), request_id
+                "74\01\09000\0".to_string(),
             ],
         );
 

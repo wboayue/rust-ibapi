@@ -2156,4 +2156,62 @@ mod tests {
         let requests = gateway.requests();
         assert_eq!(requests[0], "80\01\0");
     }
+
+    #[tokio::test]
+    async fn test_account_updates_multi() {
+        use crate::accounts::types::{AccountId, ModelCode};
+
+        let gateway = setup_account_updates_multi();
+
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        let account = AccountId("DU1234567".to_string());
+        let model_code: Option<ModelCode> = None;
+        let mut updates = client.account_updates_multi(Some(&account), model_code.as_ref()).await.unwrap();
+
+        let mut cash_balance_found = false;
+        let mut currency_found = false;
+        let mut stock_market_value_found = false;
+        let mut has_end = false;
+
+        while let Some(update) = updates.next().await {
+            match update.unwrap() {
+                crate::accounts::AccountUpdateMulti::AccountMultiValue(value) => {
+                    assert_eq!(value.account, "DU1234567");
+                    assert_eq!(value.model_code, "");
+
+                    match value.key.as_str() {
+                        "CashBalance" => {
+                            assert_eq!(value.value, "94629.71");
+                            assert_eq!(value.currency, "USD");
+                            cash_balance_found = true;
+                        }
+                        "Currency" => {
+                            assert_eq!(value.value, "USD");
+                            assert_eq!(value.currency, "USD");
+                            currency_found = true;
+                        }
+                        "StockMarketValue" => {
+                            assert_eq!(value.value, "0.00");
+                            assert_eq!(value.currency, "BASE");
+                            stock_market_value_found = true;
+                        }
+                        _ => panic!("Unexpected key: {}", value.key),
+                    }
+                }
+                crate::accounts::AccountUpdateMulti::End => {
+                    has_end = true;
+                    break;
+                }
+            }
+        }
+
+        assert!(cash_balance_found, "Expected CashBalance update");
+        assert!(currency_found, "Expected Currency update");
+        assert!(stock_market_value_found, "Expected StockMarketValue update");
+        assert!(has_end, "Expected End message");
+
+        let requests = gateway.requests();
+        assert_eq!(requests[0], "76\01\09000\0DU1234567\0\01\0");
+    }
 }

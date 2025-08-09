@@ -32,7 +32,7 @@ This document tracks the integration testing status of public Client methods usi
 | `pnl_single()` | ✅ | ✅ | Tested |
 | `account_summary()` | ✅ | ✅ | Tested |
 | `account_updates()` | ✅ | ✅ | Tested - Fixed PortfolioValue message format |
-| `account_updates_multi()` | ❌ | ❌ | Needs test |
+| `account_updates_multi()` | ✅ | ✅ | Tested |
 | `family_codes()` | ✅ | ✅ | Tested |
 
 ## Contract Management
@@ -119,10 +119,10 @@ This document tracks the integration testing status of public Client methods usi
 ## Summary Statistics
 
 - **Total testable methods**: ~55
-- **Currently tested**: 11 (both sync and async)
+- **Currently tested**: 12 (both sync and async)
 - **Partially tested**: 0
-- **Not tested**: ~44
-- **Coverage**: ~20%
+- **Not tested**: ~43
+- **Coverage**: ~22%
 
 ## Priority for Testing
 
