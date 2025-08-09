@@ -2456,8 +2456,7 @@ mod tests {
             .expect("Failed to get option chain");
 
         let mut chains = Vec::new();
-        futures::pin_mut!(subscription);
-        use futures::StreamExt;
+        let mut subscription = subscription;
         while let Some(chain_result) = subscription.next().await {
             match chain_result {
                 Ok(chain) => chains.push(chain),
