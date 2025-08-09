@@ -2150,6 +2150,29 @@ mod tests {
     }
 
     #[test]
+    fn test_pnl_single() {
+        use crate::accounts::types::{AccountId, ContractId};
+
+        let gateway = setup_pnl_single();
+
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        let account = AccountId("DU1234567".to_string());
+        let contract_id = ContractId(12345);
+        let pnl_single = client.pnl_single(&account, contract_id, None).unwrap();
+
+        let first_pnl = pnl_single.into_iter().next().unwrap();
+        assert_eq!(first_pnl.position, 100.0);
+        assert_eq!(first_pnl.daily_pnl, 150.25);
+        assert_eq!(first_pnl.unrealized_pnl, 500.00);
+        assert_eq!(first_pnl.realized_pnl, 250.00);
+        assert_eq!(first_pnl.value, 1000.00);
+
+        let requests = gateway.requests();
+        assert_eq!(requests[0], "94\09000\0DU1234567\0\012345\0");
+    }
+
+    #[test]
     #[ignore = "Shared subscription being cancelled immediately - needs investigation"]
     fn test_account_updates() {
         use crate::accounts::types::AccountId;
@@ -2204,6 +2227,24 @@ mod tests {
 
         let requests = gateway.requests();
         assert_eq!(requests[0], "6\02\01\0DU1234567\0");
+    }
+
+    #[test]
+    fn test_family_codes() {
+        let gateway = setup_family_codes();
+
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        let family_codes = client.family_codes().unwrap();
+
+        assert_eq!(family_codes.len(), 2);
+        assert_eq!(family_codes[0].account_id, "DU1234567");
+        assert_eq!(family_codes[0].family_code, "FAM001");
+        assert_eq!(family_codes[1].account_id, "DU1234568");
+        assert_eq!(family_codes[1].family_code, "FAM002");
+
+        let requests = gateway.requests();
+        assert_eq!(requests[0], "80\01\0");
     }
 
     #[test]

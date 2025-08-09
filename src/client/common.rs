@@ -350,6 +350,32 @@ pub mod tests {
         gateway
     }
 
+    pub fn setup_pnl_single() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Response format: message_type\0request_id\0position\0daily_pnl\0unrealized_pnl\0realized_pnl\0value\0
+        gateway.add_interaction(
+            OutgoingMessages::RequestPnLSingle,
+            vec!["95\09000\0100.0\0150.25\0500.00\0250.00\01000.00\0".to_string()],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_family_codes() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Response format: message_type\0count\0account_id\0family_code\0...
+        gateway.add_interaction(
+            OutgoingMessages::RequestFamilyCodes,
+            vec!["78\02\0DU1234567\0FAM001\0DU1234568\0FAM002\0".to_string()],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
     pub fn setup_account_updates() -> MockGateway {
         let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
 

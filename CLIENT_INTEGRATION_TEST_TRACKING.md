@@ -29,11 +29,11 @@ This document tracks the integration testing status of public Client methods usi
 | `positions()` | ✅ | ✅ | Tested |
 | `positions_multi()` | ✅ | ✅ | Tested |
 | `pnl()` | ✅ | ✅ | Tested |
-| `pnl_single()` | ❌ | ❌ | Needs test |
+| `pnl_single()` | ✅ | ✅ | Tested |
 | `account_summary()` | ✅ | ✅ | Tested |
 | `account_updates()` | ⚠️ | ⚠️ | Test exists but ignored - shared subscription issue |
 | `account_updates_multi()` | ❌ | ❌ | Needs test |
-| `family_codes()` | ❌ | ❌ | Needs test |
+| `family_codes()` | ✅ | ✅ | Tested |
 
 ## Contract Management
 
