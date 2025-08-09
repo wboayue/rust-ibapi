@@ -223,7 +223,11 @@ impl Client {
     ///     println!("{position:?}")
     /// }
     /// ```
-    pub fn positions_multi(&self, account: Option<&AccountId>, model_code: Option<&ModelCode>) -> Result<Subscription<'_, PositionUpdateMulti>, Error> {
+    pub fn positions_multi(
+        &self,
+        account: Option<&AccountId>,
+        model_code: Option<&ModelCode>,
+    ) -> Result<Subscription<'_, PositionUpdateMulti>, Error> {
         accounts::positions_multi(self, account, model_code)
     }
 
