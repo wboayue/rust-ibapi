@@ -1907,6 +1907,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_next_valid_order_id() {
+        let (gateway, expectations) = setup_next_valid_order_id();
+
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        let next_valid_order_id = client.next_valid_order_id().await.unwrap();
+        assert_eq!(next_valid_order_id, expectations.next_valid_order_id);
+
+        let requests = gateway.requests();
+        assert_eq!(requests[0], "8\01\00\0");
+    }
+
+    #[tokio::test]
     async fn test_managed_accounts() {
         let (gateway, expectations) = setup_managed_accounts();
 
@@ -1946,6 +1959,47 @@ mod tests {
         assert_eq!(position_count, 1);
         let requests = gateway.requests();
         assert_eq!(requests[0], "61\01\0");
+    }
+
+    #[tokio::test]
+    async fn test_positions_multi() {
+        use crate::accounts::types::AccountId;
+
+        let gateway = setup_positions_multi();
+
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        let account = AccountId("DU1234567".to_string());
+        let mut positions = client.positions_multi(Some(&account), None).await.unwrap();
+        let mut position_count = 0;
+
+        while let Some(position_update) = positions.next().await {
+            match position_update.unwrap() {
+                crate::accounts::PositionUpdateMulti::Position(position) => {
+                    position_count += 1;
+                    if position_count == 1 {
+                        assert_eq!(position.account, "DU1234567");
+                        assert_eq!(position.contract.symbol, "AAPL");
+                        assert_eq!(position.position, 500.0);
+                        assert_eq!(position.average_cost, 150.25);
+                        assert_eq!(position.model_code, "MODEL1");
+                    } else if position_count == 2 {
+                        assert_eq!(position.account, "DU1234568");
+                        assert_eq!(position.contract.symbol, "GOOGL");
+                        assert_eq!(position.position, 200.0);
+                        assert_eq!(position.average_cost, 2500.00);
+                        assert_eq!(position.model_code, "MODEL1");
+                    }
+                }
+                crate::accounts::PositionUpdateMulti::PositionEnd => {
+                    break;
+                }
+            }
+        }
+
+        assert_eq!(position_count, 2);
+        let requests = gateway.requests();
+        assert_eq!(requests[0], "74\01\09000\0DU1234567\0\0");
     }
 
     #[tokio::test]
@@ -2007,7 +2061,29 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Shared subscription being cancelled immediately - needs investigation"]
+    async fn test_pnl_single() {
+        use crate::accounts::types::{AccountId, ContractId};
+
+        let gateway = setup_pnl_single();
+
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        let account = AccountId("DU1234567".to_string());
+        let contract_id = ContractId(12345);
+        let mut pnl_single = client.pnl_single(&account, contract_id, None).await.unwrap();
+
+        let first_pnl = pnl_single.next().await.unwrap().unwrap();
+        assert_eq!(first_pnl.position, 100.0);
+        assert_eq!(first_pnl.daily_pnl, 150.25);
+        assert_eq!(first_pnl.unrealized_pnl, 500.00);
+        assert_eq!(first_pnl.realized_pnl, 250.00);
+        assert_eq!(first_pnl.value, 1000.00);
+
+        let requests = gateway.requests();
+        assert_eq!(requests[0], "94\09000\0DU1234567\0\012345\0");
+    }
+
+    #[tokio::test]
     async fn test_account_updates() {
         use crate::accounts::types::AccountId;
 
@@ -2061,5 +2137,81 @@ mod tests {
 
         let requests = gateway.requests();
         assert_eq!(requests[0], "6\02\01\0DU1234567\0");
+    }
+
+    #[tokio::test]
+    async fn test_family_codes() {
+        let gateway = setup_family_codes();
+
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        let family_codes = client.family_codes().await.unwrap();
+
+        assert_eq!(family_codes.len(), 2);
+        assert_eq!(family_codes[0].account_id, "DU1234567");
+        assert_eq!(family_codes[0].family_code, "FAM001");
+        assert_eq!(family_codes[1].account_id, "DU1234568");
+        assert_eq!(family_codes[1].family_code, "FAM002");
+
+        let requests = gateway.requests();
+        assert_eq!(requests[0], "80\01\0");
+    }
+
+    #[tokio::test]
+    async fn test_account_updates_multi() {
+        use crate::accounts::types::{AccountId, ModelCode};
+
+        let gateway = setup_account_updates_multi();
+
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        let account = AccountId("DU1234567".to_string());
+        let model_code: Option<ModelCode> = None;
+        let mut updates = client.account_updates_multi(Some(&account), model_code.as_ref()).await.unwrap();
+
+        let mut cash_balance_found = false;
+        let mut currency_found = false;
+        let mut stock_market_value_found = false;
+        let mut has_end = false;
+
+        while let Some(update) = updates.next().await {
+            match update.unwrap() {
+                crate::accounts::AccountUpdateMulti::AccountMultiValue(value) => {
+                    assert_eq!(value.account, "DU1234567");
+                    assert_eq!(value.model_code, "");
+
+                    match value.key.as_str() {
+                        "CashBalance" => {
+                            assert_eq!(value.value, "94629.71");
+                            assert_eq!(value.currency, "USD");
+                            cash_balance_found = true;
+                        }
+                        "Currency" => {
+                            assert_eq!(value.value, "USD");
+                            assert_eq!(value.currency, "USD");
+                            currency_found = true;
+                        }
+                        "StockMarketValue" => {
+                            assert_eq!(value.value, "0.00");
+                            assert_eq!(value.currency, "BASE");
+                            stock_market_value_found = true;
+                        }
+                        _ => panic!("Unexpected key: {}", value.key),
+                    }
+                }
+                crate::accounts::AccountUpdateMulti::End => {
+                    has_end = true;
+                    break;
+                }
+            }
+        }
+
+        assert!(cash_balance_found, "Expected CashBalance update");
+        assert!(currency_found, "Expected Currency update");
+        assert!(stock_market_value_found, "Expected StockMarketValue update");
+        assert!(has_end, "Expected End message");
+
+        let requests = gateway.requests();
+        assert_eq!(requests[0], "76\01\09000\0DU1234567\0\01\0");
     }
 }

@@ -89,7 +89,7 @@ impl SharedChannels {
     // Notify all listeners of a given message type with message.
     fn send_message(&self, message_type: IncomingMessages, message: &ResponseMessage) {
         if let Some(senders) = self.senders.get(&message_type) {
-            for sender in senders {
+            for sender in senders.iter() {
                 if let Err(e) = sender.send(Ok(message.clone())) {
                     warn!("error sending message: {e}");
                 }
