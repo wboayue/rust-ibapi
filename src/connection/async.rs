@@ -90,6 +90,7 @@ impl AsyncConnection {
 
         let mut socket = self.socket.lock().await;
         socket.write_all(&length_encoded).await?;
+        socket.flush().await?;
         Ok(())
     }
 

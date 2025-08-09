@@ -70,14 +70,15 @@ pub mod mocks {
                         stream
                     }
                     Err(e) => {
-                        eprintln!("Error accepting connection: {}", e);
+                        eprintln!("MockGateway: Failed to accept connection: {}", e);
                         return;
                     }
                 };
 
                 let mut handler = ConnectionHandler::new(server_version, requests.clone(), interactions.clone());
                 if let Err(err) = handler.handle(stream) {
-                    eprintln!("Error handling connection: {}", err);
+                    // Error handling connection
+                    eprintln!("MockGateway: Error handling connection: {}", err);
                 }
             });
 
@@ -148,16 +149,14 @@ pub mod mocks {
                 if self.current_interaction < self.interactions.len() {
                     let interaction = self.interactions[self.current_interaction].clone();
                     if request.starts_with(&format!("{}\0", interaction.request)) {
-                        for response in &interaction.responses {
+                        for response in interaction.responses.iter() {
                             self.write_message(&mut stream, response.clone())?;
                         }
                         self.current_interaction += 1;
                     } else {
-                        eprintln!("No matching interaction for request: {} - received: {}", interaction.request, request);
                         break;
                     }
                 } else {
-                    eprintln!("No more interactions defined, will send shutdown");
                     break;
                 }
             }
@@ -383,16 +382,14 @@ pub mod tests {
             OutgoingMessages::RequestAccountData,
             vec![
                 "6\02\0NetLiquidation\025000.00\0USD\0DU1234567\0".to_string(),
-                "7\03\012345\0AAPL\0STK\0\00.0\0\0\0SMART\0USD\0AAPL\0AAPL\0500.0\0151.50\075750.00\0150.25\0375.00\0125.00\0DU1234567\0".to_string(),
-                "8\020240122 15:30:00\0".to_string(),
+                // PortfolioValue v4: type(7), version(4), symbol, sec_type, expiry, strike, right, 
+                // currency, local_symbol, position, market_price, market_value, avg_cost, unrealized_pnl, realized_pnl, account
+                // (NO contract_id, multiplier, primary_exchange, trading_class in v4!)
+                "7\04\0AAPL\0STK\0\00.0\0\0USD\0AAPL\0500.0\0151.50\075750.00\0150.25\0375.00\0125.00\0DU1234567\0".to_string(),
+                // AccountUpdateTime: type(8), version(ignored), timestamp
+                "8\01\020240122 15:30:00\0".to_string(),
                 "54\01\0DU1234567\0".to_string(),
             ],
-        );
-
-        // Add interaction for the cancel request
-        gateway.add_interaction(
-            OutgoingMessages::RequestAccountData,
-            vec![], // No response for cancel
         );
 
         gateway.start().expect("Failed to start mock gateway");

@@ -2084,7 +2084,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Shared subscription being cancelled immediately - needs investigation"]
     async fn test_account_updates() {
         use crate::accounts::types::AccountId;
 
@@ -2146,9 +2145,7 @@ mod tests {
 
         let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
 
-        println!("About to call family_codes()");
         let family_codes = client.family_codes().await.unwrap();
-        println!("family_codes() returned: {:?}", family_codes);
 
         assert_eq!(family_codes.len(), 2);
         assert_eq!(family_codes[0].account_id, "DU1234567");

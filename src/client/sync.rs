@@ -2173,7 +2173,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Shared subscription being cancelled immediately - needs investigation"]
     fn test_account_updates() {
         use crate::accounts::types::AccountId;
 
@@ -2189,7 +2188,7 @@ mod tests {
         let mut has_time_update = false;
         let mut has_end = false;
 
-        for update in &updates {
+        for update in updates {
             match update {
                 crate::accounts::AccountUpdate::AccountValue(value) => {
                     assert_eq!(value.key, "NetLiquidation");

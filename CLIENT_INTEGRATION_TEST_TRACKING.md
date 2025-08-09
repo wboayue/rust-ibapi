@@ -31,7 +31,7 @@ This document tracks the integration testing status of public Client methods usi
 | `pnl()` | ✅ | ✅ | Tested |
 | `pnl_single()` | ✅ | ✅ | Tested |
 | `account_summary()` | ✅ | ✅ | Tested |
-| `account_updates()` | ⚠️ | ⚠️ | Test exists but ignored - shared subscription issue |
+| `account_updates()` | ✅ | ✅ | Tested - Fixed PortfolioValue message format |
 | `account_updates_multi()` | ❌ | ❌ | Needs test |
 | `family_codes()` | ✅ | ✅ | Tested |
 
@@ -119,10 +119,10 @@ This document tracks the integration testing status of public Client methods usi
 ## Summary Statistics
 
 - **Total testable methods**: ~55
-- **Currently tested**: 8 (both sync and async)
-- **Partially tested**: 2 (account_updates - ignored due to shared subscription issue)
-- **Not tested**: ~45
-- **Coverage**: ~15%
+- **Currently tested**: 11 (both sync and async)
+- **Partially tested**: 0
+- **Not tested**: ~44
+- **Coverage**: ~20%
 
 ## Priority for Testing
 
