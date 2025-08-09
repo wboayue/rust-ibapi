@@ -416,4 +416,114 @@ pub mod tests {
         gateway.start().expect("Failed to start mock gateway");
         gateway
     }
+
+    pub fn setup_contract_details() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestContractData,
+            vec![
+                // ContractData: type(10), symbol, sec_type, last_trade_date, strike, right, exchange, currency, 
+                // local_symbol, market_name, trading_class, contract_id, min_tick, multiplier,
+                // order_types, valid_exchanges, price_magnifier, under_contract_id, long_name, primary_exchange,
+                // contract_month, industry, category, subcategory, time_zone_id, trading_hours, liquid_hours,
+                // ev_rule, ev_multiplier, sec_id_list_count, agg_group, under_symbol, under_security_type,
+                // market_rule_ids, real_expiration_date, stock_type, min_size, size_increment, suggested_size_increment
+                "10\09000\0AAPL\0STK\0\00.0\0\0NASDAQ\0USD\0AAPL\0NMS\0AAPL\0265598\00.01\0\0ACTIVETIM,AD,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DARKONLY,DARKPOLL,DAY,DEACT,DEACTDIS,DEACTPX,DIS,FOK,GAT,GTC,GTD,GTT,HID,IBKRATS,ICE,IMB,IOC,LIT,LMT,LOC,MIDPX,MIT,MKT,MOC,MTL,NGCOMB,NODARK,NONALGO,OCA,OPG,OPGREROUT,PEGBENCH,PEGMID,PEGMKT,PEGPRI,PEGSTK,POSTONLY,PREOPGRTH,PRICEIMP,REL,RPI,RTH,SCALE,SCALEODD,SCALERST,SIZEPRIO,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,SWEEP,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF\0SMART,AMEX,NYSE,CBOE,PHLX,ISE,CHX,ARCA,ISLAND,DRCTEDGE,BEX,BATS,EDGEA,CSFBALGO,JEFFALGO,BYX,IEX,EDGX,FOXRIVER,PEARL,NYSENAT,LTSE,MEMX,TPLUS1,PSX\00\00\0Apple Inc\0NASDAQ\0\0Technology\0Computers\0Computers\0US/Eastern\020240122:0930-1600;20240123:0930-1600\020240122:0930-1600;20240123:0930-1600\0\00\00\00\0\0\0Consolidated\0\0NMS\01\01\01\0".to_string(),
+                // ContractDataEnd: type(52), version(1), request_id
+                "52\01\09000\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_matching_symbols() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::BOND_ISSUERID);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestMatchingSymbols,
+            vec![
+                // SymbolSamples: type(79), request_id, count, 
+                // (contract_id, symbol, security_type, primary_exchange, currency, deriv_sec_types_count, [deriv_types], description, issuer_id)*
+                // Format based on the decoder test
+                "79\09000\02\0265598\0AAPL\0STK\0NASDAQ\0USD\02\0OPT\0WAR\0Apple Inc.\0AAPL123\0276821\0MSFT\0STK\0NASDAQ\0USD\01\0OPT\0Microsoft Corporation\0MSFT456\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_market_rule() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::MARKET_RULES);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestMarketRule,
+            vec![
+                // MarketRule: type(93), market_rule_id, price_increments_count, (low_edge, increment)*
+                // Example with 3 price increments for market rule ID 26
+                "93\026\03\00.0\00.01\0100.0\00.05\01000.0\00.10\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_calculate_option_price() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::PRICE_BASED_VOLATILITY);
+
+        gateway.add_interaction(
+            OutgoingMessages::ReqCalcImpliedVolat,
+            vec![
+                // TickOptionComputation: type(21), request_id, tick_type, tick_attribute, 
+                // implied_volatility, delta, option_price, pv_dividend, gamma, vega, theta, underlying_price
+                // tick_type=13 (ModelOption), tick_attribute=0
+                "21\09000\013\00\00.25\00.5\012.75\00.0\00.05\00.02\0-0.01\0100.0\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_calculate_implied_volatility() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::PRICE_BASED_VOLATILITY);
+
+        gateway.add_interaction(
+            OutgoingMessages::ReqCalcImpliedVolat,
+            vec![
+                // TickOptionComputation: type(21), request_id, tick_type, tick_attribute, 
+                // implied_volatility, delta, option_price, pv_dividend, gamma, vega, theta, underlying_price
+                // tick_type=13 (ModelOption), tick_attribute=1 (price-based)
+                // When calculating IV from price, we get back the computed IV (0.35 in this example)
+                "21\09000\013\01\00.35\00.45\015.50\00.0\00.04\00.03\0-0.02\0105.0\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_option_chain() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::SEC_DEF_OPT_PARAMS_REQ);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestSecurityDefinitionOptionalParameters,
+            vec![
+                // SecurityDefinitionOptionParameter: type(75), request_id, exchange, underlying_contract_id,
+                // trading_class, multiplier, expirations_count, expirations, strikes_count, strikes
+                "75\09000\0SMART\0265598\0AAPL\0100\03\020250117\020250221\020250321\05\090.0\095.0\0100.0\0105.0\0110.0\0".to_string(),
+                // Multiple exchanges can be returned
+                "75\09000\0CBOE\0265598\0AAPL\0100\02\020250117\020250221\04\095.0\0100.0\0105.0\0110.0\0".to_string(),
+                // SecurityDefinitionOptionParameterEnd: type(76), request_id
+                "76\09000\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
 }

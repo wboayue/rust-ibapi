@@ -100,6 +100,7 @@ pub fn map_incoming_to_outgoing(message_type: IncomingMessages) -> Option<Outgoi
         IncomingMessages::SmartComponents => Some(OutgoingMessages::RequestSmartComponents),
         IncomingMessages::TickReqParams => Some(OutgoingMessages::RequestMarketData),
         IncomingMessages::FamilyCodes => Some(OutgoingMessages::RequestFamilyCodes),
+        IncomingMessages::MarketRule => Some(OutgoingMessages::RequestMarketRule),
         _ => None,
     }
 }

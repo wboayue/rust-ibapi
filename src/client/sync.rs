@@ -2319,6 +2319,51 @@ mod tests {
     }
 
     #[test]
+    fn test_contract_details() {
+        let gateway = setup_contract_details();
+
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        let contract = crate::contracts::Contract::stock("AAPL");
+        let details = client.contract_details(&contract).expect("Failed to get contract details");
+
+        assert_eq!(details.len(), 1);
+        let detail = &details[0];
+        
+        // Verify contract fields
+        assert_eq!(detail.contract.symbol, "AAPL");
+        assert_eq!(detail.contract.security_type, crate::contracts::SecurityType::Stock);
+        assert_eq!(detail.contract.currency, "USD");
+        assert_eq!(detail.contract.exchange, "NASDAQ");
+        assert_eq!(detail.contract.local_symbol, "AAPL");
+        assert_eq!(detail.contract.trading_class, "AAPL");
+        assert_eq!(detail.contract.contract_id, 265598);
+        assert_eq!(detail.contract.primary_exchange, "NASDAQ");
+        
+        // Verify contract details fields
+        assert_eq!(detail.market_name, "NMS");
+        assert_eq!(detail.min_tick, 0.01);
+        assert!(detail.order_types.contains(&"LMT".to_string()));
+        assert!(detail.order_types.contains(&"MKT".to_string()));
+        assert!(detail.valid_exchanges.contains(&"SMART".to_string()));
+        assert_eq!(detail.long_name, "Apple Inc");
+        assert_eq!(detail.industry, "Technology");
+        assert_eq!(detail.category, "Computers");
+        assert_eq!(detail.subcategory, "Computers");
+        assert_eq!(detail.time_zone_id, "US/Eastern");
+        assert_eq!(detail.stock_type, "NMS");
+        assert_eq!(detail.min_size, 1.0);
+        assert_eq!(detail.size_increment, 1.0);
+        assert_eq!(detail.suggested_size_increment, 1.0);
+
+        let requests = gateway.requests();
+        // Request format: OutgoingMessages::RequestContractData(9), version(8), request_id, contract_id(0), 
+        // symbol, security_type, last_trade_date, strike, right, multiplier, exchange, primary_exchange, 
+        // currency, local_symbol, trading_class, include_expired, security_id_type, security_id, issuer_id
+        assert_eq!(requests[0], "9\08\09000\00\0AAPL\0STK\0\00\0\0\0SMART\0\0USD\0\0\00\0\0\0");
+    }
+
+    #[test]
     fn test_subscription_cancel_only_sends_once() {
         // This test verifies that calling cancel() multiple times only sends one cancel message
         // This addresses issue #258 where explicit cancel() followed by Drop could send duplicate messages
@@ -2355,5 +2400,236 @@ mod tests {
         drop(subscription);
         let after_drop = message_bus.request_messages().len();
         assert_eq!(after_drop, 2, "Should still have two messages after drop");
+    }
+
+    #[test]
+    fn test_matching_symbols() {
+        let gateway = setup_matching_symbols();
+
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        let results = client.matching_symbols("AAP").expect("Failed to get matching symbols");
+        let contract_descriptions: Vec<_> = results.collect();
+
+        assert_eq!(contract_descriptions.len(), 2, "Should have 2 matching symbols");
+
+        // First contract description
+        assert_eq!(contract_descriptions[0].contract.contract_id, 265598);
+        assert_eq!(contract_descriptions[0].contract.symbol, "AAPL");
+        assert_eq!(contract_descriptions[0].contract.security_type, crate::contracts::SecurityType::Stock);
+        assert_eq!(contract_descriptions[0].contract.primary_exchange, "NASDAQ");
+        assert_eq!(contract_descriptions[0].contract.currency, "USD");
+        assert_eq!(contract_descriptions[0].derivative_security_types.len(), 2);
+        assert_eq!(contract_descriptions[0].derivative_security_types[0], "OPT");
+        assert_eq!(contract_descriptions[0].derivative_security_types[1], "WAR");
+        assert_eq!(contract_descriptions[0].contract.description, "Apple Inc.");
+        assert_eq!(contract_descriptions[0].contract.issuer_id, "AAPL123");
+
+        // Second contract description
+        assert_eq!(contract_descriptions[1].contract.contract_id, 276821);
+        assert_eq!(contract_descriptions[1].contract.symbol, "MSFT");
+        assert_eq!(contract_descriptions[1].contract.security_type, crate::contracts::SecurityType::Stock);
+        assert_eq!(contract_descriptions[1].contract.primary_exchange, "NASDAQ");
+        assert_eq!(contract_descriptions[1].contract.currency, "USD");
+        assert_eq!(contract_descriptions[1].derivative_security_types.len(), 1);
+        assert_eq!(contract_descriptions[1].derivative_security_types[0], "OPT");
+        assert_eq!(contract_descriptions[1].contract.description, "Microsoft Corporation");
+        assert_eq!(contract_descriptions[1].contract.issuer_id, "MSFT456");
+
+        // Verify request format
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have 1 request");
+        // Request format: RequestMatchingSymbols(81), request_id, pattern
+        assert!(requests[0].starts_with("81\0"), "Request should start with message type 81");
+        assert!(requests[0].contains("\0AAP\0"), "Request should contain the pattern AAP");
+    }
+
+    #[test]
+    fn test_market_rule() {
+        let gateway = setup_market_rule();
+
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        let market_rule = client.market_rule(26).expect("Failed to get market rule");
+
+        // Verify market rule ID
+        assert_eq!(market_rule.market_rule_id, 26, "Market rule ID should be 26");
+
+        // Verify price increments
+        assert_eq!(market_rule.price_increments.len(), 3, "Should have 3 price increments");
+
+        // First increment: 0-100, increment 0.01
+        assert_eq!(market_rule.price_increments[0].low_edge, 0.0, "First increment low edge");
+        assert_eq!(market_rule.price_increments[0].increment, 0.01, "First increment value");
+
+        // Second increment: 100-1000, increment 0.05
+        assert_eq!(market_rule.price_increments[1].low_edge, 100.0, "Second increment low edge");
+        assert_eq!(market_rule.price_increments[1].increment, 0.05, "Second increment value");
+
+        // Third increment: 1000+, increment 0.10
+        assert_eq!(market_rule.price_increments[2].low_edge, 1000.0, "Third increment low edge");
+        assert_eq!(market_rule.price_increments[2].increment, 0.10, "Third increment value");
+
+        // Verify request format
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have 1 request");
+        // Request format: RequestMarketRule(91), market_rule_id
+        assert_eq!(requests[0], "91\026\0", "Request should be message type 91 with market rule ID 26");
+    }
+
+    #[test]
+    fn test_calculate_option_price() {
+        let gateway = setup_calculate_option_price();
+
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        // Create an option contract
+        let contract = crate::contracts::Contract {
+            symbol: "AAPL".to_string(),
+            security_type: crate::contracts::SecurityType::Option,
+            exchange: "SMART".to_string(),
+            currency: "USD".to_string(),
+            last_trade_date_or_contract_month: "20250120".to_string(),
+            strike: 100.0,
+            right: "C".to_string(),
+            ..Default::default()
+        };
+
+        let volatility = 0.25;
+        let underlying_price = 100.0;
+
+        let computation = client
+            .calculate_option_price(&contract, volatility, underlying_price)
+            .expect("Failed to calculate option price");
+
+        // Verify computation results
+        assert_eq!(computation.field, crate::contracts::tick_types::TickType::ModelOption, "Should be ModelOption tick type");
+        assert_eq!(computation.tick_attribute, Some(0), "Tick attribute should be 0");
+        assert_eq!(computation.implied_volatility, Some(0.25), "Implied volatility should match");
+        assert_eq!(computation.delta, Some(0.5), "Delta should be 0.5");
+        assert_eq!(computation.option_price, Some(12.75), "Option price should be 12.75");
+        assert_eq!(computation.present_value_dividend, Some(0.0), "PV dividend should be 0");
+        assert_eq!(computation.gamma, Some(0.05), "Gamma should be 0.05");
+        assert_eq!(computation.vega, Some(0.02), "Vega should be 0.02");
+        assert_eq!(computation.theta, Some(-0.01), "Theta should be -0.01");
+        assert_eq!(computation.underlying_price, Some(100.0), "Underlying price should be 100");
+
+        // Verify request format
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have 1 request");
+        // Request format: ReqCalcImpliedVolat(54), version(3), request_id, contract fields, volatility, underlying_price
+        assert!(requests[0].starts_with("54\03\0"), "Request should start with message type 54 and version 3");
+        assert!(requests[0].contains("\0AAPL\0"), "Request should contain symbol AAPL");
+        assert!(requests[0].contains("\00.25\0"), "Request should contain volatility 0.25");
+        assert!(requests[0].contains("\0100\0"), "Request should contain underlying price 100");
+    }
+
+    #[test]
+    fn test_calculate_implied_volatility() {
+        let gateway = setup_calculate_implied_volatility();
+
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        // Create an option contract
+        let contract = crate::contracts::Contract {
+            symbol: "MSFT".to_string(),
+            security_type: crate::contracts::SecurityType::Option,
+            exchange: "SMART".to_string(),
+            currency: "USD".to_string(),
+            last_trade_date_or_contract_month: "20250220".to_string(),
+            strike: 105.0,
+            right: "P".to_string(),  // Put option
+            ..Default::default()
+        };
+
+        let option_price = 15.50;
+        let underlying_price = 105.0;
+
+        let computation = client
+            .calculate_implied_volatility(&contract, option_price, underlying_price)
+            .expect("Failed to calculate implied volatility");
+
+        // Verify computation results
+        assert_eq!(computation.field, crate::contracts::tick_types::TickType::ModelOption, "Should be ModelOption tick type");
+        assert_eq!(computation.tick_attribute, Some(1), "Tick attribute should be 1 (price-based)");
+        assert_eq!(computation.implied_volatility, Some(0.35), "Implied volatility should be 0.35");
+        assert_eq!(computation.delta, Some(0.45), "Delta should be 0.45");
+        assert_eq!(computation.option_price, Some(15.50), "Option price should be 15.50");
+        assert_eq!(computation.present_value_dividend, Some(0.0), "PV dividend should be 0");
+        assert_eq!(computation.gamma, Some(0.04), "Gamma should be 0.04");
+        assert_eq!(computation.vega, Some(0.03), "Vega should be 0.03");
+        assert_eq!(computation.theta, Some(-0.02), "Theta should be -0.02");
+        assert_eq!(computation.underlying_price, Some(105.0), "Underlying price should be 105");
+
+        // Verify request format
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have 1 request");
+        // Request format: ReqCalcImpliedVolat(54), version(3), request_id, contract fields, option_price, underlying_price
+        assert!(requests[0].starts_with("54\03\0"), "Request should start with message type 54 and version 3");
+        assert!(requests[0].contains("\0MSFT\0"), "Request should contain symbol MSFT");
+        assert!(requests[0].contains("\015.5\0"), "Request should contain option price 15.5");
+        assert!(requests[0].contains("\0105\0"), "Request should contain underlying price 105");
+    }
+
+    #[test]
+    fn test_option_chain() {
+        let gateway = setup_option_chain();
+
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        let symbol = "AAPL";
+        let exchange = "";  // Empty means all exchanges
+        let security_type = crate::contracts::SecurityType::Stock;
+        let contract_id = 0;  // 0 means use symbol
+
+        let subscription = client
+            .option_chain(symbol, exchange, security_type, contract_id)
+            .expect("Failed to get option chain");
+
+        let mut chains = Vec::new();
+        for chain in subscription {
+            chains.push(chain);
+        }
+
+        // Should have received 2 option chains (SMART and CBOE)
+        assert_eq!(chains.len(), 2, "Should have 2 option chains");
+
+        // First chain - SMART exchange
+        assert_eq!(chains[0].exchange, "SMART", "First chain should be SMART");
+        assert_eq!(chains[0].underlying_contract_id, 265598, "Underlying contract ID");
+        assert_eq!(chains[0].trading_class, "AAPL", "Trading class");
+        assert_eq!(chains[0].multiplier, "100", "Multiplier");
+        assert_eq!(chains[0].expirations.len(), 3, "Should have 3 expirations");
+        assert_eq!(chains[0].expirations[0], "20250117");
+        assert_eq!(chains[0].expirations[1], "20250221");
+        assert_eq!(chains[0].expirations[2], "20250321");
+        assert_eq!(chains[0].strikes.len(), 5, "Should have 5 strikes");
+        assert_eq!(chains[0].strikes[0], 90.0);
+        assert_eq!(chains[0].strikes[1], 95.0);
+        assert_eq!(chains[0].strikes[2], 100.0);
+        assert_eq!(chains[0].strikes[3], 105.0);
+        assert_eq!(chains[0].strikes[4], 110.0);
+
+        // Second chain - CBOE exchange
+        assert_eq!(chains[1].exchange, "CBOE", "Second chain should be CBOE");
+        assert_eq!(chains[1].underlying_contract_id, 265598, "Underlying contract ID");
+        assert_eq!(chains[1].trading_class, "AAPL", "Trading class");
+        assert_eq!(chains[1].multiplier, "100", "Multiplier");
+        assert_eq!(chains[1].expirations.len(), 2, "Should have 2 expirations");
+        assert_eq!(chains[1].expirations[0], "20250117");
+        assert_eq!(chains[1].expirations[1], "20250221");
+        assert_eq!(chains[1].strikes.len(), 4, "Should have 4 strikes");
+        assert_eq!(chains[1].strikes[0], 95.0);
+        assert_eq!(chains[1].strikes[1], 100.0);
+        assert_eq!(chains[1].strikes[2], 105.0);
+        assert_eq!(chains[1].strikes[3], 110.0);
+
+        // Verify request format
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have 1 request");
+        // Request format: RequestSecurityDefinitionOptionalParameters(78), request_id, symbol, exchange, security_type, contract_id
+        assert!(requests[0].starts_with("78\0"), "Request should start with message type 78");
+        assert!(requests[0].contains("\0AAPL\0"), "Request should contain symbol AAPL");
+        assert!(requests[0].contains("\0STK\0"), "Request should contain security type STK");
     }
 }
