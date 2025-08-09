@@ -337,7 +337,7 @@ pub struct TickAttributeLast {
     pub unreported: bool,
 }
 
-#[derive(Clone, Debug, Copy, PartialEq)]
+#[derive(Clone, Debug, Copy, PartialEq, Serialize, Deserialize)]
 pub enum WhatToShow {
     Trades,
     MidPoint,
