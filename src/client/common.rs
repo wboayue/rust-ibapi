@@ -478,7 +478,7 @@ pub mod tests {
         gateway.add_interaction(
             OutgoingMessages::ReqCalcImpliedVolat,
             vec![
-                // TickOptionComputation: type(21), request_id, tick_type, tick_attribute, 
+                // TickOptionComputation: type(21), request_id, tick_type, tick_attribute,
                 // implied_volatility, delta, option_price, pv_dividend, gamma, vega, theta, underlying_price
                 // tick_type=13 (ModelOption), tick_attribute=0
                 "21\09000\013\00\00.25\00.5\012.75\00.0\00.05\00.02\0-0.01\0100.0\0".to_string(),
@@ -495,7 +495,7 @@ pub mod tests {
         gateway.add_interaction(
             OutgoingMessages::ReqCalcImpliedVolat,
             vec![
-                // TickOptionComputation: type(21), request_id, tick_type, tick_attribute, 
+                // TickOptionComputation: type(21), request_id, tick_type, tick_attribute,
                 // implied_volatility, delta, option_price, pv_dividend, gamma, vega, theta, underlying_price
                 // tick_type=13 (ModelOption), tick_attribute=1 (price-based)
                 // When calculating IV from price, we get back the computed IV (0.35 in this example)

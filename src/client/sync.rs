@@ -2329,7 +2329,7 @@ mod tests {
 
         assert_eq!(details.len(), 1);
         let detail = &details[0];
-        
+
         // Verify contract fields
         assert_eq!(detail.contract.symbol, "AAPL");
         assert_eq!(detail.contract.security_type, crate::contracts::SecurityType::Stock);
@@ -2339,7 +2339,7 @@ mod tests {
         assert_eq!(detail.contract.trading_class, "AAPL");
         assert_eq!(detail.contract.contract_id, 265598);
         assert_eq!(detail.contract.primary_exchange, "NASDAQ");
-        
+
         // Verify contract details fields
         assert_eq!(detail.market_name, "NMS");
         assert_eq!(detail.min_tick, 0.01);
@@ -2357,8 +2357,8 @@ mod tests {
         assert_eq!(detail.suggested_size_increment, 1.0);
 
         let requests = gateway.requests();
-        // Request format: OutgoingMessages::RequestContractData(9), version(8), request_id, contract_id(0), 
-        // symbol, security_type, last_trade_date, strike, right, multiplier, exchange, primary_exchange, 
+        // Request format: OutgoingMessages::RequestContractData(9), version(8), request_id, contract_id(0),
+        // symbol, security_type, last_trade_date, strike, right, multiplier, exchange, primary_exchange,
         // currency, local_symbol, trading_class, include_expired, security_id_type, security_id, issuer_id
         assert_eq!(requests[0], "9\08\09000\00\0AAPL\0STK\0\00\0\0\0SMART\0\0USD\0\0\00\0\0\0");
     }
@@ -2503,7 +2503,11 @@ mod tests {
             .expect("Failed to calculate option price");
 
         // Verify computation results
-        assert_eq!(computation.field, crate::contracts::tick_types::TickType::ModelOption, "Should be ModelOption tick type");
+        assert_eq!(
+            computation.field,
+            crate::contracts::tick_types::TickType::ModelOption,
+            "Should be ModelOption tick type"
+        );
         assert_eq!(computation.tick_attribute, Some(0), "Tick attribute should be 0");
         assert_eq!(computation.implied_volatility, Some(0.25), "Implied volatility should match");
         assert_eq!(computation.delta, Some(0.5), "Delta should be 0.5");
@@ -2518,7 +2522,10 @@ mod tests {
         let requests = gateway.requests();
         assert_eq!(requests.len(), 1, "Should have 1 request");
         // Request format: ReqCalcImpliedVolat(54), version(3), request_id, contract fields, volatility, underlying_price
-        assert!(requests[0].starts_with("54\03\0"), "Request should start with message type 54 and version 3");
+        assert!(
+            requests[0].starts_with("54\03\0"),
+            "Request should start with message type 54 and version 3"
+        );
         assert!(requests[0].contains("\0AAPL\0"), "Request should contain symbol AAPL");
         assert!(requests[0].contains("\00.25\0"), "Request should contain volatility 0.25");
         assert!(requests[0].contains("\0100\0"), "Request should contain underlying price 100");
@@ -2538,7 +2545,7 @@ mod tests {
             currency: "USD".to_string(),
             last_trade_date_or_contract_month: "20250220".to_string(),
             strike: 105.0,
-            right: "P".to_string(),  // Put option
+            right: "P".to_string(), // Put option
             ..Default::default()
         };
 
@@ -2550,7 +2557,11 @@ mod tests {
             .expect("Failed to calculate implied volatility");
 
         // Verify computation results
-        assert_eq!(computation.field, crate::contracts::tick_types::TickType::ModelOption, "Should be ModelOption tick type");
+        assert_eq!(
+            computation.field,
+            crate::contracts::tick_types::TickType::ModelOption,
+            "Should be ModelOption tick type"
+        );
         assert_eq!(computation.tick_attribute, Some(1), "Tick attribute should be 1 (price-based)");
         assert_eq!(computation.implied_volatility, Some(0.35), "Implied volatility should be 0.35");
         assert_eq!(computation.delta, Some(0.45), "Delta should be 0.45");
@@ -2565,7 +2576,10 @@ mod tests {
         let requests = gateway.requests();
         assert_eq!(requests.len(), 1, "Should have 1 request");
         // Request format: ReqCalcImpliedVolat(54), version(3), request_id, contract fields, option_price, underlying_price
-        assert!(requests[0].starts_with("54\03\0"), "Request should start with message type 54 and version 3");
+        assert!(
+            requests[0].starts_with("54\03\0"),
+            "Request should start with message type 54 and version 3"
+        );
         assert!(requests[0].contains("\0MSFT\0"), "Request should contain symbol MSFT");
         assert!(requests[0].contains("\015.5\0"), "Request should contain option price 15.5");
         assert!(requests[0].contains("\0105\0"), "Request should contain underlying price 105");
@@ -2578,9 +2592,9 @@ mod tests {
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
         let symbol = "AAPL";
-        let exchange = "";  // Empty means all exchanges
+        let exchange = ""; // Empty means all exchanges
         let security_type = crate::contracts::SecurityType::Stock;
-        let contract_id = 0;  // 0 means use symbol
+        let contract_id = 0; // 0 means use symbol
 
         let subscription = client
             .option_chain(symbol, exchange, security_type, contract_id)
