@@ -1907,6 +1907,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_next_valid_order_id() {
+        let (gateway, expectations) = setup_next_valid_order_id();
+
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        let next_valid_order_id = client.next_valid_order_id().await.unwrap();
+        assert_eq!(next_valid_order_id, expectations.next_valid_order_id);
+
+        let requests = gateway.requests();
+        assert_eq!(requests[0], "8\01\00\0");
+    }
+
+    #[tokio::test]
     async fn test_managed_accounts() {
         let (gateway, expectations) = setup_managed_accounts();
 
@@ -1946,6 +1959,47 @@ mod tests {
         assert_eq!(position_count, 1);
         let requests = gateway.requests();
         assert_eq!(requests[0], "61\01\0");
+    }
+
+    #[tokio::test]
+    async fn test_positions_multi() {
+        use crate::accounts::types::AccountId;
+
+        let gateway = setup_positions_multi();
+
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        let account = AccountId("DU1234567".to_string());
+        let mut positions = client.positions_multi(Some(&account), None).await.unwrap();
+        let mut position_count = 0;
+
+        while let Some(position_update) = positions.next().await {
+            match position_update.unwrap() {
+                crate::accounts::PositionUpdateMulti::Position(position) => {
+                    position_count += 1;
+                    if position_count == 1 {
+                        assert_eq!(position.account, "DU1234567");
+                        assert_eq!(position.contract.symbol, "AAPL");
+                        assert_eq!(position.position, 500.0);
+                        assert_eq!(position.average_cost, 150.25);
+                        assert_eq!(position.model_code, "MODEL1");
+                    } else if position_count == 2 {
+                        assert_eq!(position.account, "DU1234568");
+                        assert_eq!(position.contract.symbol, "GOOGL");
+                        assert_eq!(position.position, 200.0);
+                        assert_eq!(position.average_cost, 2500.00);
+                        assert_eq!(position.model_code, "MODEL1");
+                    }
+                }
+                crate::accounts::PositionUpdateMulti::PositionEnd => {
+                    break;
+                }
+            }
+        }
+
+        assert_eq!(position_count, 2);
+        let requests = gateway.requests();
+        assert_eq!(requests[0], "74\01\09000\0DU1234567\0\0");
     }
 
     #[tokio::test]

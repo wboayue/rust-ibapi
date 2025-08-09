@@ -276,6 +276,24 @@ pub mod tests {
         (gateway, ManagedAccountsExpectations { accounts: expected_accounts })
     }
 
+    pub struct NextValidOrderIdExpectations {
+        pub next_valid_order_id: i32,
+    }
+
+    pub fn setup_next_valid_order_id() -> (MockGateway, NextValidOrderIdExpectations) {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+        let expected_order_id = 12345;
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestIds,
+            vec![format!("9\01\0{}\0", expected_order_id)],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+
+        (gateway, NextValidOrderIdExpectations { next_valid_order_id: expected_order_id })
+    }
+
     pub fn setup_positions() -> MockGateway {
         let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
 
@@ -284,6 +302,22 @@ pub mod tests {
             vec![
                 "61\03\0DU1234567\012345\0AAPL\0STK\0\00.0\0\0\0SMART\0USD\0AAPL\0AAPL\0500.0\0150.25\0".to_string(),
                 "62\01\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_positions_multi() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestPositionsMulti,
+            vec![
+                "71\03\09000\0DU1234567\012345\0AAPL\0STK\0\00.0\0\0\0SMART\0USD\0AAPL\0AAPL\0500.0\0150.25\0MODEL1\0".to_string(),
+                "71\03\09000\0DU1234568\067890\0GOOGL\0STK\0\00.0\0\0\0SMART\0USD\0GOOGL\0GOOGL\0200.0\02500.00\0MODEL1\0".to_string(),
+                "72\01\09000\0".to_string(),
             ],
         );
 
