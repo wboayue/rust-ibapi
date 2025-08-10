@@ -2766,4 +2766,117 @@ mod tests {
         assert!(requests[0].starts_with("3\0"), "Request should be a PlaceOrder message");
         assert!(requests[0].contains(&format!("\0{}\0", order_id)), "Request should contain order ID");
     }
+
+    #[test]
+    fn test_submit_order_with_order_update_stream() {
+        use crate::client::common::tests::setup_place_order;
+        use crate::contracts::Contract;
+        use crate::orders::{order_builder, Action, OrderUpdate};
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_place_order();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        // Create a stock contract
+        let contract = Contract::stock("AAPL");
+
+        // Create a market order
+        let order = order_builder::market_order(Action::Buy, 100.0);
+
+        // Use order ID 1001 to match the mock responses
+        let order_id = 1001;
+
+        // First, start the order update stream BEFORE submitting the order
+        let update_stream = client.order_update_stream().expect("Failed to create order update stream");
+
+        // Submit the order (fire and forget)
+        client.submit_order(order_id, &contract, &order).expect("Failed to submit order");
+
+        // Collect events from the update stream
+        let mut order_status_count = 0;
+        let mut _open_order_count = 0;
+        let mut execution_count = 0;
+        let mut commission_count = 0;
+        let mut events_received = 0;
+
+        // Read events from the update stream
+        // Use next_timeout to avoid blocking forever
+        println!("Starting to read from update stream...");
+        let timeout = std::time::Duration::from_millis(500);
+        
+        while events_received < 6 {
+            if let Some(update) = update_stream.next_timeout(timeout) {
+                events_received += 1;
+                println!("Event {}: {:?}", events_received, &update);
+
+                match update {
+                OrderUpdate::OrderStatus(status) => {
+                    order_status_count += 1;
+                    assert_eq!(status.order_id, order_id);
+
+                    if order_status_count == 1 {
+                        // First status: PreSubmitted
+                        assert_eq!(status.status, "PreSubmitted");
+                        assert_eq!(status.filled, 0.0);
+                        assert_eq!(status.remaining, 100.0);
+                    } else if order_status_count == 2 {
+                        // Second status: Submitted
+                        assert_eq!(status.status, "Submitted");
+                        assert_eq!(status.filled, 0.0);
+                        assert_eq!(status.remaining, 100.0);
+                    } else if order_status_count == 3 {
+                        // Third status: Filled
+                        assert_eq!(status.status, "Filled");
+                        assert_eq!(status.filled, 100.0);
+                        assert_eq!(status.remaining, 0.0);
+                        assert_eq!(status.average_fill_price, 150.25);
+                    }
+                }
+                OrderUpdate::OpenOrder(order_data) => {
+                    _open_order_count += 1;
+                    assert_eq!(order_data.order_id, order_id);
+                    assert_eq!(order_data.contract.symbol, "AAPL");
+                    assert_eq!(order_data.contract.contract_id, 265598);
+                    assert_eq!(order_data.order.action, Action::Buy);
+                    assert_eq!(order_data.order.total_quantity, 100.0);
+                    assert_eq!(order_data.order.order_type, "LMT");
+                    assert_eq!(order_data.order.limit_price, Some(1.0));
+                }
+                OrderUpdate::ExecutionData(exec_data) => {
+                    execution_count += 1;
+                    assert_eq!(exec_data.execution.order_id, order_id);
+                    assert_eq!(exec_data.contract.symbol, "AAPL");
+                    assert_eq!(exec_data.execution.shares, 100.0);
+                    assert_eq!(exec_data.execution.price, 150.25);
+                }
+                OrderUpdate::CommissionReport(report) => {
+                    commission_count += 1;
+                    assert_eq!(report.commission, 1.25);
+                    assert_eq!(report.currency, "USD");
+                }
+                OrderUpdate::Message(_) => {
+                    // Skip any messages
+                }
+            }
+            } else {
+                // Timeout reached, no more messages available
+                break;
+            }
+        }
+
+        // Verify we received all expected events
+        assert_eq!(order_status_count, 3, "Should receive 3 order status updates");
+        assert_eq!(_open_order_count, 1, "Should receive 1 open order");
+        assert_eq!(execution_count, 1, "Should receive 1 execution");
+        assert_eq!(commission_count, 1, "Should receive 1 commission report");
+
+        // Verify the request was sent
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        // PlaceOrder message type is 3
+        assert!(requests[0].starts_with("3\0"), "Request should be a PlaceOrder message");
+        assert!(requests[0].contains(&format!("\0{}\0", order_id)), "Request should contain order ID");
+    }
 }
