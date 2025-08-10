@@ -174,11 +174,11 @@ Messages follow the IB TWS protocol format using null-terminated strings:
 | `global_cancel()` | ✅ | ✅ | Tested |
 | `order_update_stream()` | ✅ | ✅ | Tested with submit_order |
 | `open_orders()` | ✅ | ✅ | Tested |
-| `all_open_orders()` | ❌ | ❌ | Needs test |
-| `auto_open_orders()` | ❌ | ❌ | Needs test |
-| `completed_orders()` | ❌ | ❌ | Needs test |
+| `all_open_orders()` | ✅ | ✅ | Tested |
+| `auto_open_orders()` | ✅ | ✅ | Tested |
+| `completed_orders()` | ✅ | ✅ | Tested - Fixed decoder and async routing |
 | `executions()` | ❌ | ❌ | Needs test |
-| `exercise_options()` | ❌ | ❌ | Needs test (async only) |
+| `exercise_options()` | ❌ | ❌ | Needs test |
 
 ## Market Data - Real-time
 

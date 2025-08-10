@@ -2941,6 +2941,202 @@ mod tests {
     }
 
     #[test]
+    fn test_all_open_orders() {
+        use crate::client::common::tests::setup_all_open_orders;
+        use crate::orders::{Action, Orders};
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_all_open_orders();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        // Request all open orders
+        let subscription = client.all_open_orders().expect("Failed to request all open orders");
+
+        // Collect orders from the subscription
+        let mut orders = Vec::new();
+        for result in subscription {
+            match result {
+                Orders::OrderData(order_data) => {
+                    orders.push(order_data);
+                }
+                Orders::OrderStatus(_) => {
+                    // Skip order status messages for this test
+                }
+                Orders::Notice(_) => {
+                    // Skip notices
+                }
+            }
+        }
+
+        // Verify we received 3 orders (from different clients)
+        assert_eq!(orders.len(), 3, "Should receive 3 open orders from all accounts");
+
+        // Verify first order (TSLA from client 101)
+        let order1 = &orders[0];
+        assert_eq!(order1.order_id, 2001);
+        assert_eq!(order1.contract.symbol, "TSLA");
+        assert_eq!(order1.contract.security_type, crate::contracts::SecurityType::Stock);
+        assert_eq!(order1.order.action, Action::Buy);
+        assert_eq!(order1.order.total_quantity, 10.0);
+        assert_eq!(order1.order.order_type, "LMT");
+        assert_eq!(order1.order.limit_price, Some(420.0));
+        assert_eq!(order1.order.account, "DU1236110");
+
+        // Verify second order (AMZN from client 102)
+        let order2 = &orders[1];
+        assert_eq!(order2.order_id, 2002);
+        assert_eq!(order2.contract.symbol, "AMZN");
+        assert_eq!(order2.order.action, Action::Sell);
+        assert_eq!(order2.order.total_quantity, 5.0);
+        assert_eq!(order2.order.order_type, "MKT");
+        assert_eq!(order2.order.account, "DU1236111");
+
+        // Verify third order (GOOGL from current client 100)
+        let order3 = &orders[2];
+        assert_eq!(order3.order_id, 1003);
+        assert_eq!(order3.contract.symbol, "GOOGL");
+        assert_eq!(order3.order.action, Action::Buy);
+        assert_eq!(order3.order.total_quantity, 20.0);
+        assert_eq!(order3.order.order_type, "LMT");
+        assert_eq!(order3.order.limit_price, Some(2800.0));
+        assert_eq!(order3.order.account, "DU1236109");
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        assert_eq!(requests[0], "16\01\0", "Request should be RequestAllOpenOrders with version 1");
+    }
+
+    #[test]
+    fn test_auto_open_orders() {
+        use crate::client::common::tests::setup_auto_open_orders;
+        use crate::orders::Orders;
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_auto_open_orders();
+        // Note: auto_open_orders usually requires client_id 0 for real TWS connections,
+        // but for testing we use CLIENT_ID (100) to match the mock gateway expectation
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        // Request auto open orders with auto_bind=true
+        let subscription = client.auto_open_orders(true).expect("Failed to request auto open orders");
+
+        // Collect messages from the subscription
+        let mut order_statuses = Vec::new();
+        let mut orders = Vec::new();
+        for result in subscription {
+            match result {
+                Orders::OrderData(order_data) => {
+                    orders.push(order_data);
+                }
+                Orders::OrderStatus(status) => {
+                    order_statuses.push(status);
+                }
+                Orders::Notice(_) => {
+                    // Skip notices
+                }
+            }
+        }
+
+        // Verify we received order status updates
+        assert_eq!(order_statuses.len(), 2, "Should receive 2 order status updates");
+        
+        // Verify first status (PreSubmitted)
+        let status1 = &order_statuses[0];
+        assert_eq!(status1.order_id, 3001);
+        assert_eq!(status1.status, "PreSubmitted");
+        
+        // Verify second status (Submitted)
+        let status2 = &order_statuses[1];
+        assert_eq!(status2.order_id, 3001);
+        assert_eq!(status2.status, "Submitted");
+
+        // Verify we received 1 order
+        assert_eq!(orders.len(), 1, "Should receive 1 order");
+
+        // Verify the order (FB from TWS)
+        let order = &orders[0];
+        assert_eq!(order.order_id, 3001);
+        assert_eq!(order.contract.symbol, "FB");
+        assert_eq!(order.contract.security_type, crate::contracts::SecurityType::Stock);
+        assert_eq!(order.order.action, crate::orders::Action::Buy);
+        assert_eq!(order.order.total_quantity, 50.0);
+        assert_eq!(order.order.order_type, "MKT");
+        assert_eq!(order.order.account, "TWS");
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        assert_eq!(requests[0], "15\01\01\0", "Request should be RequestAutoOpenOrders with version 1 and auto_bind=true");
+    }
+
+    #[test]
+    fn test_completed_orders() {
+        use crate::client::common::tests::setup_completed_orders;
+        use crate::orders::{Action, Orders};
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_completed_orders();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        // Request completed orders (api_only=false to get all completed orders)
+        let subscription = client.completed_orders(false).expect("Failed to request completed orders");
+
+        // Collect orders from the subscription
+        let mut orders = Vec::new();
+        for result in subscription {
+            match result {
+                Orders::OrderData(order_data) => {
+                    orders.push(order_data);
+                }
+                Orders::OrderStatus(_) => {
+                    // Skip order status messages
+                }
+                Orders::Notice(_) => {
+                    // Skip notices
+                }
+            }
+        }
+
+        // Verify we received 2 completed orders
+        assert_eq!(orders.len(), 2, "Should receive 2 completed orders");
+
+        // Verify first completed order (ES futures - based on captured data)
+        let order1 = &orders[0];
+        // CompletedOrder messages don't have order_id in the message, defaults to -1
+        assert_eq!(order1.order_id, -1);
+        assert_eq!(order1.contract.symbol, "ES");
+        assert_eq!(order1.contract.security_type, crate::contracts::SecurityType::Future);
+        assert_eq!(order1.order.action, Action::Buy);
+        assert_eq!(order1.order.total_quantity, 1.0);
+        assert_eq!(order1.order.order_type, "LMT");
+        assert_eq!(order1.order_state.status, "Cancelled");
+        assert_eq!(order1.order.perm_id, 616088517);
+
+        // Verify second completed order (AAPL)
+        let order2 = &orders[1];
+        assert_eq!(order2.order_id, -1); // CompletedOrder messages don't have order_id
+        assert_eq!(order2.contract.symbol, "AAPL");
+        assert_eq!(order2.contract.security_type, crate::contracts::SecurityType::Stock);
+        assert_eq!(order2.order.action, Action::Buy);
+        assert_eq!(order2.order.total_quantity, 100.0);
+        assert_eq!(order2.order.order_type, "MKT");
+        assert_eq!(order2.order_state.status, "Filled");
+        assert_eq!(order2.order.perm_id, 1377295418);
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        assert_eq!(requests[0], "99\00\0", "Request should be RequestCompletedOrders with api_only=false");
+    }
+
+    #[test]
     fn test_cancel_order() {
         use crate::client::common::tests::setup_cancel_order;
         use crate::messages::Notice;

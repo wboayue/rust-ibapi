@@ -582,6 +582,25 @@ impl OrderDecoder {
         Ok(())
     }
 
+    fn read_customer_account(&mut self) -> Result<(), Error> {
+        // Customer account field for completed orders
+        self.order.customer_account = self.message.next_string()?;
+        Ok(())
+    }
+
+    fn read_professional_customer(&mut self) -> Result<(), Error> {
+        // Professional customer flag for completed orders
+        self.order.professional_customer = self.message.next_bool()?;
+        Ok(())
+    }
+
+    fn read_submitter(&mut self) -> Result<(), Error> {
+        // Submitter field for completed orders
+        let _submitter = self.message.next_string()?;
+        // Note: We don't store submitter in the Order struct currently
+        Ok(())
+    }
+
     fn read_order_status(&mut self) -> Result<(), Error> {
         self.order_state.status = self.message.next_string()?;
         Ok(())
@@ -891,6 +910,9 @@ pub(crate) fn decode_completed_order(server_version: i32, message: ResponseMessa
     decoder.read_completed_time()?;
     decoder.read_completed_status()?;
     decoder.read_peg_best_peg_mid_order_attributes()?;
+    decoder.read_customer_account()?;
+    decoder.read_professional_customer()?;
+    decoder.read_submitter()?;
 
     Ok(decoder.into_order_data())
 }

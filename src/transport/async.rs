@@ -486,7 +486,7 @@ impl AsyncTcpMessageBus {
                     warn!("could not route message {:?}", message);
                 }
             }
-            IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => {
+            IncomingMessages::CompletedOrder | IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => {
                 // These messages don't have order IDs, route to shared channel if available
                 let shared_channels = self.shared_channel_senders.read().await;
                 if let Some(senders) = shared_channels.get(&message_type) {
