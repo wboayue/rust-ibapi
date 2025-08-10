@@ -603,7 +603,7 @@ pub mod tests {
         // Real CompletedOrder message captured from IB Gateway
         // This is a cancelled ES futures order
         let msg1 = "101\0637533641\0ES\0FUT\020250919\00\0?\050\0CME\0USD\0ESU5\0ES\0BUY\01\0LMT\01000.0\00.0\0GTC\0\0DU1236109\0\00\0\0616088517\00\00\00\0\0\0\0\0\0\0\0\0\0\00\0\0-1\0\0\0\0\0\02147483647\00\00\0\03\00\0\00\0None\0\00\00\00\0\00\00\0\0\0\00\00\00\02147483647\02147483647\0\0\0\0IB\00\00\0\00\0Cancelled\00\00\00\01001.0\01.7976931348623157E308\00\01\00\0\00\02147483647\00\0Not an insider or substantial shareholder\00\00\09223372036854775807\020250810 09:07:39 America/Los_Angeles\0Cancelled by Trader\0\0\0\0\0\0".to_string();
-        
+
         // Create a second message for a filled stock order (AAPL)
         let msg2 = "101\0265598\0AAPL\0STK\0\00\0\0\0SMART\0USD\0AAPL\0NMS\0BUY\0100\0MKT\00.0\00.0\0DAY\0\0DU1236109\0\00\0\01377295418\00\00\00\0\0\0\0\0\0\0\0\0\0\00\0\0-1\0\0\0\0\0\02147483647\00\00\0\03\00\0\00\0None\0\00\00\00\0\00\00\0\0\0\00\00\00\02147483647\02147483647\0\0\0\0IB\00\00\0\00\0Filled\0100\00\00\0150.25\01.7976931348623157E308\00\01\00\0\00\02147483647\00\0Not an insider or substantial shareholder\00\00\09223372036854775807\020231122 10:30:00 America/Los_Angeles\0Filled\0\0\0\0\0\0".to_string();
 
@@ -688,6 +688,39 @@ pub mod tests {
                 "3\01034\0Cancelled\00\050\00\0137729542\00\00\0100\0\00\0".to_string(),
                 // Error message for second order
                 "4\02\01034\0202\0Order Canceled - reason:\0\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_executions() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Add interaction for RequestExecutions message
+        gateway.add_interaction(
+            OutgoingMessages::RequestExecutions,
+            vec![
+                // ExecutionData message - stock execution (AAPL)
+                // Fields: type(11), request_id, order_id, contract_id, symbol, sec_type, 
+                // last_trade_date, strike, right, multiplier, exchange, currency, local_symbol, trading_class,
+                // execution_id, time, account, exchange, side, shares, price, perm_id, client_id,
+                // liquidation, cum_qty, avg_price, order_ref, ev_rule, ev_multiplier, model_code, last_liquidity
+                "11\09000\01001\0265598\0AAPL\0STK\0\00.0\0\0\0SMART\0USD\0AAPL\0AAPL\0000e1a2b.67890abc.01.01\020240125 10:30:00\0DU1234567\0SMART\0BOT\0100\0150.25\0123456\0100\00\0100\0150.25\0\0\00.0\0\00\0".to_string(),
+                // CommissionReport message for first execution
+                // Fields: type(59), version(1), execution_id, commission, currency, realized_pnl, yield, yield_redemption_date
+                "59\01\0000e1a2b.67890abc.01.01\01.25\0USD\00.0\00.0\00\0".to_string(),
+                // ExecutionData message - futures execution (ES)
+                "11\09000\01002\0637533641\0ES\0FUT\020250919\00.0\0\050\0CME\0USD\0ESU5\0ES\0000e1a2b.67890def.02.01\020240125 10:31:00\0DU1234567\0CME\0SLD\05\05050.25\0123457\0100\00\05\05050.25\0\0\00.0\0\00\0".to_string(),
+                // CommissionReport message for second execution
+                "59\01\0000e1a2b.67890def.02.01\02.50\0USD\0125.50\00.0\00\0".to_string(),
+                // ExecutionData message - options execution (SPY)
+                "11\09000\01003\0123456789\0SPY\0OPT\020240126\0450.0\0C\0100\0CBOE\0USD\0SPY240126C00450000\0SPY\0000e1a2b.67890ghi.03.01\020240125 10:32:00\0DU1234567\0CBOE\0BOT\010\02.50\0123458\0100\00\010\02.50\0\0\00.0\0\00\0".to_string(),
+                // CommissionReport message for third execution
+                "59\01\0000e1a2b.67890ghi.03.01\00.65\0USD\0250.00\00.0\00\0".to_string(),
+                // ExecutionDataEnd message
+                "55\01\09000\0".to_string(),
             ],
         );
 

@@ -435,8 +435,11 @@ impl AsyncTcpMessageBus {
         // Special handling for different order message types
         match message_type {
             IncomingMessages::ExecutionData => {
-                // Route ExecutionData to order channel and store execution_id mapping
-                if let Some(actual_order_id) = message.order_id() {
+                let order_id = message.order_id();
+                let request_id = message.request_id();
+
+                // First check matching orders channel
+                if let Some(actual_order_id) = order_id {
                     let channels = self.order_channels.read().await;
                     if let Some(sender) = channels.get(&actual_order_id) {
                         // Store execution_id -> sender mapping for commission reports
@@ -448,7 +451,24 @@ impl AsyncTcpMessageBus {
                         return Ok(());
                     }
                 }
-                // Fall through to shared channel check
+
+                // Then check request channel (for executions() API calls)
+                if let Some(req_id) = request_id {
+                    let channels = self.request_channels.read().await;
+                    if let Some(sender) = channels.get(&req_id) {
+                        // Store execution_id -> sender mapping for commission reports
+                        if let Some(execution_id) = message.execution_id() {
+                            let mut exec_channels = self.execution_channels.write().await;
+                            exec_channels.insert(execution_id, sender.clone());
+                        }
+                        let _ = sender.send(message);
+                        return Ok(());
+                    }
+                }
+
+                if !sent_to_update_stream {
+                    warn!("could not route ExecutionData message {:?}", message);
+                }
             }
             IncomingMessages::CommissionsReport => {
                 // Route CommissionReport using execution_id
@@ -485,6 +505,30 @@ impl AsyncTcpMessageBus {
                 if !sent_to_update_stream {
                     warn!("could not route message {:?}", message);
                 }
+            }
+            IncomingMessages::ExecutionDataEnd => {
+                let order_id = message.order_id();
+                let request_id = message.request_id();
+
+                // First check matching orders channel
+                if let Some(actual_order_id) = order_id {
+                    let channels = self.order_channels.read().await;
+                    if let Some(sender) = channels.get(&actual_order_id) {
+                        let _ = sender.send(message);
+                        return Ok(());
+                    }
+                }
+
+                // Then check request channel
+                if let Some(req_id) = request_id {
+                    let channels = self.request_channels.read().await;
+                    if let Some(sender) = channels.get(&req_id) {
+                        let _ = sender.send(message);
+                        return Ok(());
+                    }
+                }
+
+                warn!("could not route ExecutionDataEnd message {:?}", message);
             }
             IncomingMessages::CompletedOrder | IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => {
                 // These messages don't have order IDs, route to shared channel if available
