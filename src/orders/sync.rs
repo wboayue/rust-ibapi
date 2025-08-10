@@ -150,9 +150,7 @@ pub fn global_cancel(client: &Client) -> Result<(), Error> {
     client.check_server_version(server_versions::REQ_GLOBAL_CANCEL, "It does not support global cancel requests.")?;
 
     let message = encoders::encode_global_cancel()?;
-
-    let request_id = client.next_request_id();
-    client.send_order(request_id, message)?;
+    client.send_message(message)?;
 
     Ok(())
 }

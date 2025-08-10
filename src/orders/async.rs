@@ -199,8 +199,7 @@ pub async fn global_cancel(client: &Client) -> Result<(), Error> {
     check_version(client.server_version(), Features::REQ_GLOBAL_CANCEL)?;
 
     let message = encoders::encode_global_cancel()?;
-    let request_id = client.next_request_id();
-    client.send_order(request_id, message).await?;
+    client.send_message(message).await?;
 
     Ok(())
 }
