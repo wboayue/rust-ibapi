@@ -27,7 +27,7 @@ use crate::connection::r#async::AsyncConnection;
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::Error;
 
-use super::routing::{determine_routing, is_warning_error, map_incoming_to_outgoing, RoutingDecision, UNSPECIFIED_REQUEST_ID};
+use super::routing::{determine_routing, is_warning_error, RoutingDecision, UNSPECIFIED_REQUEST_ID};
 
 /// Asynchronous message bus trait
 #[async_trait]
@@ -159,8 +159,10 @@ pub struct AsyncTcpMessageBus {
     connection: Arc<AsyncConnection>,
     /// Maps request IDs to their response channels
     request_channels: Arc<RwLock<HashMap<i32, BroadcastSender>>>,
-    /// Maps shared channel types to their response channels
-    shared_channels: Arc<RwLock<HashMap<OutgoingMessages, BroadcastSender>>>,
+    /// Maps IncomingMessages to broadcast senders (like sync does)
+    shared_channel_senders: Arc<RwLock<HashMap<IncomingMessages, Vec<BroadcastSender>>>>,
+    /// Maps OutgoingMessages to receivers for client subscription
+    shared_channel_receivers: Arc<RwLock<HashMap<OutgoingMessages, broadcast::Receiver<ResponseMessage>>>>,
     /// Maps order IDs to their response channels
     order_channels: Arc<RwLock<HashMap<i32, BroadcastSender>>>,
     /// Maps execution IDs to their response channels (for commission reports)
@@ -188,17 +190,25 @@ impl AsyncTcpMessageBus {
     pub fn new(connection: AsyncConnection) -> Result<Self, Error> {
         let (cleanup_sender, cleanup_receiver) = mpsc::unbounded_channel();
 
-        // Pre-create broadcast senders for all shared channels (like sync does)
-        let mut shared_channels = HashMap::new();
+        // Pre-create broadcast channels for all shared channels (like sync does)
+        let mut shared_channel_senders = HashMap::new();
+        let mut shared_channel_receivers = HashMap::new();
+
         for mapping in shared_channel_configuration::CHANNEL_MAPPINGS {
-            let (sender, _) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY); // Buffer size for shared channels
-            shared_channels.insert(mapping.request, sender);
+            let (sender, receiver) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
+            shared_channel_receivers.insert(mapping.request, receiver);
+
+            // Map each response type to the sender (multiple response types can share same sender)
+            for response_type in mapping.responses {
+                shared_channel_senders.entry(*response_type).or_insert_with(Vec::new).push(sender.clone());
+            }
         }
 
         let message_bus = Self {
             connection: Arc::new(connection),
             request_channels: Arc::new(RwLock::new(HashMap::new())),
-            shared_channels: Arc::new(RwLock::new(shared_channels)),
+            shared_channel_senders: Arc::new(RwLock::new(shared_channel_senders)),
+            shared_channel_receivers: Arc::new(RwLock::new(shared_channel_receivers)),
             order_channels: Arc::new(RwLock::new(HashMap::new())),
             execution_channels: Arc::new(RwLock::new(HashMap::new())),
             order_update_stream: Arc::new(RwLock::new(None)),
@@ -209,7 +219,7 @@ impl AsyncTcpMessageBus {
 
         // Start cleanup task
         let request_channels = message_bus.request_channels.clone();
-        let shared_channels = message_bus.shared_channels.clone();
+        let shared_channel_receivers = message_bus.shared_channel_receivers.clone();
         let order_channels = message_bus.order_channels.clone();
 
         task::spawn(async move {
@@ -227,7 +237,7 @@ impl AsyncTcpMessageBus {
                         debug!("Cleaned up order channel for ID: {order_id}");
                     }
                     CleanupSignal::Shared(message_type) => {
-                        let mut channels = shared_channels.write().await;
+                        let mut channels = shared_channel_receivers.write().await;
                         channels.remove(&message_type);
                     }
                 }
@@ -333,7 +343,12 @@ impl AsyncTcpMessageBus {
         }
 
         {
-            let mut channels = self.shared_channels.write().await;
+            let mut channels = self.shared_channel_senders.write().await;
+            channels.clear();
+        }
+
+        {
+            let mut channels = self.shared_channel_receivers.write().await;
             channels.clear();
         }
 
@@ -414,10 +429,11 @@ impl AsyncTcpMessageBus {
     /// Route message to order-specific channel
     async fn route_to_order_channel(&self, order_id: i32, message: ResponseMessage) -> Result<(), Error> {
         // Send to order update stream if it exists
-        self.send_order_update(&message).await;
+        let sent_to_update_stream = self.send_order_update(&message).await;
+        let message_type = message.message_type();
 
-        // Special handling for ExecutionData and CommissionReport
-        match message.message_type() {
+        // Special handling for different order message types
+        match message_type {
             IncomingMessages::ExecutionData => {
                 // Route ExecutionData to order channel and store execution_id mapping
                 if let Some(actual_order_id) = message.order_id() {
@@ -429,8 +445,10 @@ impl AsyncTcpMessageBus {
                             exec_channels.insert(execution_id, sender.clone());
                         }
                         let _ = sender.send(message);
+                        return Ok(());
                     }
                 }
+                // Fall through to shared channel check
             }
             IncomingMessages::CommissionsReport => {
                 // Route CommissionReport using execution_id
@@ -438,7 +456,50 @@ impl AsyncTcpMessageBus {
                     let exec_channels = self.execution_channels.read().await;
                     if let Some(sender) = exec_channels.get(&execution_id) {
                         let _ = sender.send(message);
+                        return Ok(());
                     }
+                }
+                // Fall through to shared channel check
+            }
+            IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => {
+                // For OpenOrder and OrderStatus, try order channel first
+                if let Some(actual_order_id) = message.order_id() {
+                    let channels = self.order_channels.read().await;
+                    if let Some(sender) = channels.get(&actual_order_id) {
+                        let _ = sender.send(message);
+                        return Ok(());
+                    }
+
+                    // If no order channel, check if there's a shared channel (like sync does)
+                    let shared_channels = self.shared_channel_senders.read().await;
+                    if let Some(senders) = shared_channels.get(&message_type) {
+                        for sender in senders {
+                            if let Err(e) = sender.send(message.clone()) {
+                                warn!("error sending to shared channel for {message_type:?}: {e}");
+                            }
+                        }
+                        return Ok(());
+                    }
+                }
+
+                if !sent_to_update_stream {
+                    warn!("could not route message {:?}", message);
+                }
+            }
+            IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => {
+                // These messages don't have order IDs, route to shared channel if available
+                let shared_channels = self.shared_channel_senders.read().await;
+                if let Some(senders) = shared_channels.get(&message_type) {
+                    for sender in senders {
+                        if let Err(e) = sender.send(message.clone()) {
+                            warn!("error sending to shared channel for {message_type:?}: {e}");
+                        }
+                    }
+                    return Ok(());
+                }
+
+                if !sent_to_update_stream {
+                    warn!("could not route message {:?}", message);
                 }
             }
             _ => {
@@ -447,7 +508,12 @@ impl AsyncTcpMessageBus {
                     let channels = self.order_channels.read().await;
                     if let Some(sender) = channels.get(&order_id) {
                         let _ = sender.send(message);
+                        return Ok(());
                     }
+                }
+
+                if !sent_to_update_stream {
+                    warn!("could not route message {:?}", message);
                 }
             }
         }
@@ -469,12 +535,14 @@ impl AsyncTcpMessageBus {
             _ => {}
         }
 
-        // Use the common mapping function to route to broadcast channel
-        if let Some(channel_type) = map_incoming_to_outgoing(message_type) {
-            let channels = self.shared_channels.read().await;
-            if let Some(sender) = channels.get(&channel_type) {
-                // Broadcast to all subscribers
-                let _ = sender.send(message);
+        // Route to all senders for this message type (like sync does)
+        let channels = self.shared_channel_senders.read().await;
+        if let Some(senders) = channels.get(&message_type) {
+            // Broadcast to all subscribers
+            for sender in senders {
+                if let Err(e) = sender.send(message.clone()) {
+                    warn!("error sending to shared channel for {message_type:?}: {e}");
+                }
             }
         }
 
@@ -537,11 +605,11 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
     }
 
     async fn send_shared_request(&self, message_type: OutgoingMessages, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
-        // Get the pre-created broadcast sender and create a new receiver
+        // Get the pre-created broadcast receiver
         let receiver = {
-            let channels = self.shared_channels.read().await;
-            if let Some(sender) = channels.get(&message_type) {
-                sender.subscribe()
+            let channels = self.shared_channel_receivers.read().await;
+            if let Some(receiver) = channels.get(&message_type) {
+                receiver.resubscribe()
             } else {
                 return Err(Error::Simple(format!(
                     "No shared channel configured for message type: {:?}",

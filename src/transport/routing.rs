@@ -1,7 +1,5 @@
 //! Common message routing logic for sync and async implementations
 
-#[allow(unused_imports)]
-use crate::messages::OutgoingMessages;
 use crate::messages::{IncomingMessages, ResponseMessage};
 
 /// Represents how a message should be routed
@@ -71,37 +69,6 @@ pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
             RoutingDecision::SharedMessage(message_type)
         }
         _ => RoutingDecision::ByMessageType(message_type),
-    }
-}
-
-/// Maps incoming message types to their corresponding outgoing request types
-/// This is used for shared channel routing
-#[allow(dead_code)]
-pub fn map_incoming_to_outgoing(message_type: IncomingMessages) -> Option<OutgoingMessages> {
-    match message_type {
-        IncomingMessages::ManagedAccounts => Some(OutgoingMessages::RequestManagedAccounts),
-        IncomingMessages::NextValidId => Some(OutgoingMessages::RequestIds),
-        IncomingMessages::CurrentTime => Some(OutgoingMessages::RequestCurrentTime),
-        IncomingMessages::Position => Some(OutgoingMessages::RequestPositions),
-        IncomingMessages::PositionEnd => Some(OutgoingMessages::RequestPositions),
-        IncomingMessages::AccountValue => Some(OutgoingMessages::RequestAccountData),
-        IncomingMessages::PortfolioValue => Some(OutgoingMessages::RequestAccountData),
-        IncomingMessages::AccountUpdateTime => Some(OutgoingMessages::RequestAccountData),
-        IncomingMessages::AccountDownloadEnd => Some(OutgoingMessages::RequestAccountData),
-        IncomingMessages::MarketDataType => Some(OutgoingMessages::RequestMarketDataType),
-        IncomingMessages::TickPrice => Some(OutgoingMessages::RequestMarketData),
-        IncomingMessages::TickSize => Some(OutgoingMessages::RequestMarketData),
-        IncomingMessages::TickString => Some(OutgoingMessages::RequestMarketData),
-        IncomingMessages::TickGeneric => Some(OutgoingMessages::RequestMarketData),
-        IncomingMessages::TickOptionComputation => Some(OutgoingMessages::RequestMarketData),
-        IncomingMessages::TickSnapshotEnd => Some(OutgoingMessages::RequestMarketData),
-        IncomingMessages::MarketDepth => Some(OutgoingMessages::RequestMarketDepth),
-        IncomingMessages::MarketDepthL2 => Some(OutgoingMessages::RequestMarketDepth),
-        IncomingMessages::SmartComponents => Some(OutgoingMessages::RequestSmartComponents),
-        IncomingMessages::TickReqParams => Some(OutgoingMessages::RequestMarketData),
-        IncomingMessages::FamilyCodes => Some(OutgoingMessages::RequestFamilyCodes),
-        IncomingMessages::MarketRule => Some(OutgoingMessages::RequestMarketRule),
-        _ => None,
     }
 }
 
@@ -212,18 +179,5 @@ mod tests {
             RoutingDecision::ByOrderId(id) => assert_eq!(id, -1),
             routing => panic!("Expected ByOrderId(-1) routing, got {routing:?}"),
         }
-    }
-
-    #[test]
-    fn test_map_incoming_to_outgoing() {
-        assert_eq!(
-            map_incoming_to_outgoing(IncomingMessages::ManagedAccounts),
-            Some(OutgoingMessages::RequestManagedAccounts)
-        );
-        assert_eq!(
-            map_incoming_to_outgoing(IncomingMessages::Position),
-            Some(OutgoingMessages::RequestPositions)
-        );
-        assert_eq!(map_incoming_to_outgoing(IncomingMessages::ContractData), None);
     }
 }

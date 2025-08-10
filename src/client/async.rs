@@ -2719,7 +2719,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Async routing issue: map_incoming_to_outgoing can't handle multiple request types generating same response types (see OPEN_ITEMS.md)
     async fn test_open_orders() {
         use crate::client::common::tests::setup_open_orders;
         use crate::orders::{Action, Orders};
