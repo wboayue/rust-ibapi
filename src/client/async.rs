@@ -2528,9 +2528,9 @@ mod tests {
         let mut execution_count = 0;
         let mut commission_count = 0;
 
-        // We expect 5 messages total (3 order statuses, 1 execution, 1 commission)
+        // We expect 6 messages total (3 order statuses, 1 open order, 1 execution, 1 commission)
         // Take only the expected number of events to avoid reading the shutdown message
-        for _ in 0..5 {
+        for _ in 0..6 {
             let event = match subscription.next().await {
                 Some(Ok(event)) => event,
                 Some(Err(crate::Error::EndOfStream)) => break,
@@ -2565,8 +2565,11 @@ mod tests {
                     _open_order_count += 1;
                     assert_eq!(order_data.order_id, order_id);
                     assert_eq!(order_data.contract.symbol, "AAPL");
+                    assert_eq!(order_data.contract.contract_id, 265598);
                     assert_eq!(order_data.order.action, Action::Buy);
                     assert_eq!(order_data.order.total_quantity, 100.0);
+                    assert_eq!(order_data.order.order_type, "LMT");
+                    assert_eq!(order_data.order.limit_price, Some(1.0));
                 }
                 PlaceOrder::ExecutionData(exec_data) => {
                     execution_count += 1;
@@ -2588,8 +2591,7 @@ mod tests {
 
         // Verify we received all expected events
         assert_eq!(order_status_count, 3, "Should receive 3 order status updates");
-        // OpenOrder is too complex to mock properly, so we skip it for now
-        // assert_eq!(open_order_count, 1, "Should receive 1 open order");
+        assert_eq!(_open_order_count, 1, "Should receive 1 open order");
         assert_eq!(execution_count, 1, "Should receive 1 execution");
         assert_eq!(commission_count, 1, "Should receive 1 commission report");
 
