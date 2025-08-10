@@ -3337,4 +3337,107 @@ mod tests {
             "Request should be RequestExecutions with correct filter parameters"
         );
     }
+
+    #[test]
+    fn test_exercise_options() {
+        use crate::client::common::tests::setup_exercise_options;
+        use crate::contracts::{Contract, SecurityType};
+        use crate::orders::{ExerciseAction, ExerciseOptions};
+        use time::macros::datetime;
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_exercise_options();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        // Create option contract for SPY
+        let mut contract = Contract::default();
+        contract.contract_id = 123456789;
+        contract.symbol = "SPY".to_string();
+        contract.security_type = SecurityType::Option;
+        contract.last_trade_date_or_contract_month = "20240126".to_string();
+        contract.strike = 450.0;
+        contract.right = "C".to_string(); // Call option
+        contract.multiplier = "100".to_string();
+        contract.exchange = "CBOE".to_string();
+        contract.currency = "USD".to_string();
+        contract.local_symbol = "SPY240126C00450000".to_string();
+        contract.trading_class = "SPY".to_string();
+
+        // Exercise the option
+        let exercise_action = ExerciseAction::Exercise;
+        let exercise_quantity = 10;
+        let account = "DU1234567";
+        let ovrd = false;
+        let manual_order_time = Some(datetime!(2024-01-25 10:30:00 UTC));
+
+        let subscription = client
+            .exercise_options(&contract, exercise_action, exercise_quantity, account, ovrd, manual_order_time)
+            .expect("Failed to exercise options");
+
+        // Collect results
+        let mut order_statuses = Vec::new();
+        let mut open_orders = Vec::new();
+
+        for result in subscription {
+            match result {
+                ExerciseOptions::OrderStatus(status) => order_statuses.push(status),
+                ExerciseOptions::OpenOrder(order) => open_orders.push(order),
+                ExerciseOptions::Notice(_notice) => {
+                    // Note: Warning messages (2100-2200) are currently not routed to subscriptions
+                    // They are only logged. See TODO.md for future improvements.
+                }
+            }
+        }
+
+        // Verify we got the expected responses
+        assert_eq!(order_statuses.len(), 3, "Should have 3 order status updates");
+        assert_eq!(open_orders.len(), 1, "Should have 1 open order");
+
+        // Verify order statuses
+        assert_eq!(order_statuses[0].status, "PreSubmitted");
+        assert_eq!(order_statuses[0].filled, 0.0);
+        assert_eq!(order_statuses[0].remaining, 10.0);
+
+        assert_eq!(order_statuses[1].status, "Submitted");
+        assert_eq!(order_statuses[2].status, "Filled");
+        assert_eq!(order_statuses[2].filled, 10.0);
+        assert_eq!(order_statuses[2].remaining, 0.0);
+
+        // Verify open order
+        let open_order = &open_orders[0];
+        assert_eq!(open_order.order.order_id, 90);
+        assert_eq!(open_order.contract.symbol, "SPY");
+        assert_eq!(open_order.contract.security_type, SecurityType::Option);
+        assert_eq!(open_order.order.order_type, "EXERCISE");
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+
+        // Request format: ExerciseOptions(21), version(2), order_id, contract fields, exercise_action, exercise_quantity, account, ovrd, manual_order_time
+        let expected_request = format!(
+            "21\02\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0",
+            90, // order_id (using next_order_id from client)
+            contract.contract_id,
+            contract.symbol,
+            contract.security_type,
+            contract.last_trade_date_or_contract_month,
+            contract.strike,
+            contract.right,
+            contract.multiplier,
+            contract.exchange,
+            contract.currency,
+            contract.local_symbol,
+            contract.trading_class,
+            exercise_action as i32,
+            exercise_quantity,
+            account,
+            if ovrd { 1 } else { 0 },
+            "20240125 10:30:00 UTC" // manual_order_time formatted
+        );
+
+        assert_eq!(requests[0], expected_request, "Request should be ExerciseOptions with correct parameters");
+    }
 }

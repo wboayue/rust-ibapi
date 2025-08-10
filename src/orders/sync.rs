@@ -239,11 +239,11 @@ pub fn exercise_options<'a>(
     ovrd: bool,
     manual_order_time: Option<OffsetDateTime>,
 ) -> Result<Subscription<'a, ExerciseOptions>, Error> {
-    let request_id = client.next_request_id();
+    let order_id = client.next_order_id();
 
     let request = encoders::encode_exercise_options(
         client.server_version,
-        request_id,
+        order_id,
         contract,
         exercise_action,
         exercise_quantity,
@@ -251,7 +251,7 @@ pub fn exercise_options<'a>(
         ovrd,
         manual_order_time,
     )?;
-    let subscription = client.send_request(request_id, request)?;
+    let subscription = client.send_order(order_id, request)?;
 
     Ok(Subscription::new(client, subscription, None))
 }

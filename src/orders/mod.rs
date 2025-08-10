@@ -1157,7 +1157,7 @@ pub enum Executions {
 }
 
 /// Exercise action for options.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum ExerciseAction {
     /// Exercise the option.
     Exercise = 1,

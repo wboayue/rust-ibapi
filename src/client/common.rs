@@ -727,4 +727,30 @@ pub mod tests {
         gateway.start().expect("Failed to start mock gateway");
         gateway
     }
+
+    pub fn setup_exercise_options() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Add interaction for ExerciseOptions message
+        // Using order_id 90 to match the next_order_id from client
+        gateway.add_interaction(
+            OutgoingMessages::ExerciseOptions,
+            vec![
+                // OrderStatus message - Option exercise submitted
+                // Fields: type(3), order_id, status, filled, remaining, avg_fill_price, perm_id, parent_id, last_fill_price, client_id, why_held, mkt_cap_price
+                "3\090\0PreSubmitted\00\010\00.0\0123456\00\00.0\0100\0\00\0".to_string(),
+                // OpenOrder message - Option exercise order
+                // Fields: Similar to place_order but for an option contract being exercised
+                // contract_id=123456789 for SPY option, security_type=OPT, right=C (Call), strike=450.0
+                "5\090\0123456789\0SPY\0OPT\020240126\0450.0\0C\0100\0CBOE\0USD\0SPY240126C00450000\0SPY\0BUY\010\0EXERCISE\00.0\00.0\0DAY\0\0DU1234567\0\00\0\0100\01377295700\00\00\00\0\01377295700.0/DU1234567/100\0\0\0\0\0\0\0\0\0\00\0\0-1\00\0\0\0\0\0\02147483647\00\00\00\0\03\00\00\0\00\00\0\00\0None\0\00\0\0\0\0?\00\00\0\00\00\0\0\0\0\0\00\00\00\02147483647\02147483647\0\0\00\0\0IB\00\00\0\00\00\0PreSubmitted\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\0\0\0\0\0\00\00\00\0None\01.7976931348623157E308\02.0\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\00\0\0\0\00\01\00\00\00\0\0\00\0\0\0\0\0\0".to_string(),
+                // OrderStatus message - Option exercise in progress
+                "3\090\0Submitted\00\010\00.0\0123456\00\00.0\0100\0\00\0".to_string(),
+                // OrderStatus message - Option exercise filled
+                "3\090\0Filled\010\00\00.0\0123456\00\00.0\0100\0\00\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
 }

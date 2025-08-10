@@ -178,7 +178,7 @@ Messages follow the IB TWS protocol format using null-terminated strings:
 | `auto_open_orders()` | ✅ | ✅ | Tested |
 | `completed_orders()` | ✅ | ✅ | Tested - Fixed decoder and async routing |
 | `executions()` | ✅ | ✅ | Tested |
-| `exercise_options()` | ❌ | ❌ | Needs test |
+| `exercise_options()` | ✅ | ✅ | Tested |
 
 ## Market Data - Real-time
 
@@ -237,10 +237,10 @@ Messages follow the IB TWS protocol format using null-terminated strings:
 ## Summary Statistics
 
 - **Total testable methods**: ~55
-- **Currently tested**: 24 (both sync and async)
+- **Currently tested**: 25 (both sync and async)
 - **Partially tested**: 0
-- **Not tested**: ~31
-- **Coverage**: ~44%
+- **Not tested**: ~30
+- **Coverage**: ~45%
 
 ## Priority for Testing
 

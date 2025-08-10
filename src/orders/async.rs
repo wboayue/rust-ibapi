@@ -300,10 +300,10 @@ pub async fn exercise_options(
     ovrd: bool,
     manual_order_time: Option<OffsetDateTime>,
 ) -> Result<Subscription<ExerciseOptions>, Error> {
-    let request_id = client.next_request_id();
+    let order_id = client.next_order_id();
     let request = encoders::encode_exercise_options(
         client.server_version(),
-        request_id,
+        order_id,
         contract,
         exercise_action,
         exercise_quantity,
@@ -311,7 +311,7 @@ pub async fn exercise_options(
         ovrd,
         manual_order_time,
     )?;
-    let internal_subscription = client.send_request(request_id, request).await?;
+    let internal_subscription = client.send_order(order_id, request).await?;
     Ok(Subscription::new_from_internal_simple::<ExerciseOptions>(
         internal_subscription,
         Arc::new(client.clone()),
