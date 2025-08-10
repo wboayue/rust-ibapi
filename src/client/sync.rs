@@ -3352,18 +3352,20 @@ mod tests {
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
         // Create option contract for SPY
-        let mut contract = Contract::default();
-        contract.contract_id = 123456789;
-        contract.symbol = "SPY".to_string();
-        contract.security_type = SecurityType::Option;
-        contract.last_trade_date_or_contract_month = "20240126".to_string();
-        contract.strike = 450.0;
-        contract.right = "C".to_string(); // Call option
-        contract.multiplier = "100".to_string();
-        contract.exchange = "CBOE".to_string();
-        contract.currency = "USD".to_string();
-        contract.local_symbol = "SPY240126C00450000".to_string();
-        contract.trading_class = "SPY".to_string();
+        let contract = Contract {
+            contract_id: 123456789,
+            symbol: "SPY".to_string(),
+            security_type: SecurityType::Option,
+            last_trade_date_or_contract_month: "20240126".to_string(),
+            strike: 450.0,
+            right: "C".to_string(), // Call option
+            multiplier: "100".to_string(),
+            exchange: "CBOE".to_string(),
+            currency: "USD".to_string(),
+            local_symbol: "SPY240126C00450000".to_string(),
+            trading_class: "SPY".to_string(),
+            ..Default::default()
+        };
 
         // Exercise the option
         let exercise_action = ExerciseAction::Exercise;
