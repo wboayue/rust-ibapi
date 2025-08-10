@@ -163,6 +163,8 @@ pub struct AsyncTcpMessageBus {
     shared_channels: Arc<RwLock<HashMap<OutgoingMessages, BroadcastSender>>>,
     /// Maps order IDs to their response channels
     order_channels: Arc<RwLock<HashMap<i32, BroadcastSender>>>,
+    /// Maps execution IDs to their response channels (for commission reports)
+    execution_channels: Arc<RwLock<HashMap<String, BroadcastSender>>>,
     /// Optional channel for order update stream
     order_update_stream: Arc<RwLock<Option<BroadcastSender>>>,
     /// Channel for cleanup signals
@@ -198,6 +200,7 @@ impl AsyncTcpMessageBus {
             request_channels: Arc::new(RwLock::new(HashMap::new())),
             shared_channels: Arc::new(RwLock::new(shared_channels)),
             order_channels: Arc::new(RwLock::new(HashMap::new())),
+            execution_channels: Arc::new(RwLock::new(HashMap::new())),
             order_update_stream: Arc::new(RwLock::new(None)),
             cleanup_sender,
             process_task: Arc::new(RwLock::new(None)),
@@ -405,10 +408,42 @@ impl AsyncTcpMessageBus {
         // Send to order update stream if it exists
         self.send_order_update(&message).await;
 
-        let channels = self.order_channels.read().await;
-        if let Some(sender) = channels.get(&order_id) {
-            let _ = sender.send(message);
+        // Special handling for ExecutionData and CommissionReport
+        match message.message_type() {
+            IncomingMessages::ExecutionData => {
+                // Route ExecutionData to order channel and store execution_id mapping
+                if let Some(actual_order_id) = message.order_id() {
+                    let channels = self.order_channels.read().await;
+                    if let Some(sender) = channels.get(&actual_order_id) {
+                        // Store execution_id -> sender mapping for commission reports
+                        if let Some(execution_id) = message.execution_id() {
+                            let mut exec_channels = self.execution_channels.write().await;
+                            exec_channels.insert(execution_id, sender.clone());
+                        }
+                        let _ = sender.send(message);
+                    }
+                }
+            }
+            IncomingMessages::CommissionsReport => {
+                // Route CommissionReport using execution_id
+                if let Some(execution_id) = message.execution_id() {
+                    let exec_channels = self.execution_channels.read().await;
+                    if let Some(sender) = exec_channels.get(&execution_id) {
+                        let _ = sender.send(message);
+                    }
+                }
+            }
+            _ => {
+                // All other order messages route by order_id
+                if order_id >= 0 {
+                    let channels = self.order_channels.read().await;
+                    if let Some(sender) = channels.get(&order_id) {
+                        let _ = sender.send(message);
+                    }
+                }
+            }
         }
+
         Ok(())
     }
 

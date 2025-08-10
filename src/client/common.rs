@@ -149,8 +149,14 @@ pub mod mocks {
                 if self.current_interaction < self.interactions.len() {
                     let interaction = self.interactions[self.current_interaction].clone();
                     if request.starts_with(&format!("{}\0", interaction.request)) {
-                        for response in interaction.responses.iter() {
+                        println!("MockGateway: Sending {} responses", interaction.responses.len());
+                        for (i, response) in interaction.responses.iter().enumerate() {
+                            let msg_type = response.split('\0').next().unwrap_or("unknown");
+                            println!("MockGateway: Sending response {} (type {})", i + 1, msg_type);
                             self.write_message(&mut stream, response.clone())?;
+                            stream.flush()?;
+                            // Small delay between messages to ensure proper delivery
+                            std::thread::sleep(std::time::Duration::from_millis(10));
                         }
                         self.current_interaction += 1;
                     } else {
@@ -160,6 +166,9 @@ pub mod mocks {
                     break;
                 }
             }
+
+            // Keep the connection alive for a bit to allow client to read all messages
+            std::thread::sleep(std::time::Duration::from_millis(500));
 
             self.send_shutdown(&mut stream)?;
             println!("MockGateway: Shutdown sent, closing connection");
@@ -520,6 +529,34 @@ pub mod tests {
                 "75\09000\0CBOE\0265598\0AAPL\0100\02\020250117\020250221\04\095.0\0100.0\0105.0\0110.0\0".to_string(),
                 // SecurityDefinitionOptionParameterEnd: type(76), request_id
                 "76\09000\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_place_order() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        gateway.add_interaction(
+            OutgoingMessages::PlaceOrder,
+            vec![
+                // Real OrderStatus message captured from TWS
+                "3\01001\0PreSubmitted\00\0100\00\0123456\00\00\0100\0\00\0".to_string(),
+                // Another OrderStatus showing submitted
+                "3\01001\0Submitted\00\0100\00\0123456\00\00\0100\0\00\0".to_string(),
+                // OrderStatus update when filled
+                "3\01001\0Filled\0100\00\0150.25\0123456\00\0150.25\0100\0\00\0".to_string(),
+                // ExecutionData message - complete format with all required fields
+                // Fields: type(11), request_id, order_id, contract_id, symbol, sec_type, 
+                // last_trade_date, strike, right, multiplier, exchange, currency, local_symbol, trading_class,
+                // execution_id, time, account, exchange, side, shares, price, perm_id, client_id,
+                // liquidation, cum_qty, avg_price, order_ref, ev_rule, ev_multiplier, model_code, last_liquidity
+                "11\0-1\01001\0265598\0AAPL\0STK\0\00.0\0\0\0SMART\0USD\0AAPL\0AAPL\0000e1a2b.67890abc.01.01\020240125 10:30:00\0DU1234567\0SMART\0BOT\0100\0150.25\0123456\0100\00\0100\0150.25\0\0\00.0\0\00\0".to_string(),
+                // CommissionReport message
+                // type(59), version(1), execution_id, commission, currency, realized_pnl, yield, yield_redemption_date
+                "59\01\0000e1a2b.67890abc.01.01\01.25\0USD\00.0\00.0\00\0".to_string(),
             ],
         );
 

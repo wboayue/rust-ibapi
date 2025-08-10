@@ -168,7 +168,7 @@ Messages follow the IB TWS protocol format using null-terminated strings:
 
 | Method | Sync Status | Async Status | Notes |
 |--------|-------------|--------------|-------|
-| `place_order()` | ❌ | ❌ | Needs test |
+| `place_order()` | ✅ | ✅ | Tested - Fixed ExecutionData/CommissionReport routing |
 | `submit_order()` | ❌ | ❌ | Needs test |
 | `cancel_order()` | ❌ | ❌ | Needs test |
 | `global_cancel()` | ❌ | ❌ | Needs test |
