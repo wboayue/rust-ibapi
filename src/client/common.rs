@@ -536,6 +536,25 @@ pub mod tests {
         gateway
     }
 
+    pub fn setup_open_orders() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestOpenOrders,
+            vec![
+                // OpenOrder message - Order 1: Copy exact format from place_order test
+                "5\01001\0265598\0AAPL\0STK\0\00\0?\0\0SMART\0USD\0AAPL\0NMS\0BUY\0100\0MKT\00.0\00.0\0DAY\0\0DU1236109\0\00\0\0100\01377295418\00\00\00\0\01377295418.0/DU1236109/100\0\0\0\0\0\0\0\0\0\00\0\0-1\00\0\0\0\0\0\02147483647\00\00\00\0\03\00\00\0\00\00\0\00\0None\0\00\0\0\0\0?\00\00\0\00\00\0\0\0\0\0\00\00\00\02147483647\02147483647\0\0\00\0\0IB\00\00\0\00\00\0PreSubmitted\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\0\0\0\0\0\00\00\00\0None\01.7976931348623157E308\02.0\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\00\0\0\0\00\01\00\00\00\0\0\00\0\0\0\0\0\0".to_string(),
+                // OpenOrder message - Order 2: Same format but changed order_id, symbol, action, quantity, order_type, limit_price
+                "5\01002\0276821\0MSFT\0STK\0\00\0?\0\0SMART\0USD\0MSFT\0NMS\0SELL\050\0LMT\0350.0\00.0\0DAY\0\0DU1236109\0\00\0\0100\01377295419\00\00\00\0\01377295419.0/DU1236109/100\0\0\0\0\0\0\0\0\0\00\0\0-1\00\0\0\0\0\0\02147483647\00\00\00\0\03\00\00\0\00\00\0\00\0None\0\00\0\0\0\0?\00\00\0\00\00\0\0\0\0\0\00\00\00\02147483647\02147483647\0\0\00\0\0IB\00\00\0\00\00\0Submitted\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\0\0\0\0\0\00\00\00\0None\01.7976931348623157E308\02.0\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\00\0\0\0\00\01\00\00\00\0\0\00\0\0\0\0\0\0".to_string(),
+                // OpenOrderEnd message: type(53), version(1)
+                "53\01\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
     pub fn setup_place_order() -> MockGateway {
         let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
 
@@ -559,6 +578,50 @@ pub mod tests {
                 // CommissionReport message
                 // type(59), version(1), execution_id, commission, currency, realized_pnl, yield, yield_redemption_date
                 "59\01\0000e1a2b.67890abc.01.01\01.25\0USD\00.0\00.0\00\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_cancel_order() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Add interaction for cancel_order
+        gateway.add_interaction(
+            OutgoingMessages::CancelOrder,
+            vec![
+                // OrderStatus message showing order was cancelled
+                // Fields: type(3), order_id, status, filled, remaining, avg_fill_price, perm_id, parent_id, last_fill_price, client_id, why_held, mkt_cap_price
+                "3\01001\0Cancelled\00\0100\00.0\0123456\00\00.0\0100\0\00\0".to_string(),
+                // Error message confirming cancellation (optional but common)
+                // Fields: type(4), version(2), id(order_id), error_code(202), error_string
+                "4\02\01001\0202\0Order Cancelled - reason:User requested order cancellation\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_global_cancel() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Add interaction for global_cancel - simulates cancelling two open orders
+        gateway.add_interaction(
+            OutgoingMessages::RequestGlobalCancel,
+            vec![
+                // OrderStatus for first cancelled order
+                // Fields: type(3), order_id, status, filled, remaining, avg_fill_price, perm_id, parent_id, last_fill_price, client_id, why_held, mkt_cap_price
+                "3\01033\0Cancelled\00\0100\00\0137729541\00\00\0100\0\00\0".to_string(),
+                // Error message for first order
+                // Fields: type(4), version(2), id(order_id), error_code(202), error_string, advanced_order_reject_json
+                "4\02\01033\0202\0Order Canceled - reason:\0\0".to_string(),
+                // OrderStatus for second cancelled order
+                "3\01034\0Cancelled\00\050\00\0137729542\00\00\0100\0\00\0".to_string(),
+                // Error message for second order
+                "4\02\01034\0202\0Order Canceled - reason:\0\0".to_string(),
             ],
         );
 

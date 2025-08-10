@@ -2805,61 +2805,61 @@ mod tests {
         // Use next_timeout to avoid blocking forever
         println!("Starting to read from update stream...");
         let timeout = std::time::Duration::from_millis(500);
-        
+
         while events_received < 6 {
             if let Some(update) = update_stream.next_timeout(timeout) {
                 events_received += 1;
                 println!("Event {}: {:?}", events_received, &update);
 
                 match update {
-                OrderUpdate::OrderStatus(status) => {
-                    order_status_count += 1;
-                    assert_eq!(status.order_id, order_id);
+                    OrderUpdate::OrderStatus(status) => {
+                        order_status_count += 1;
+                        assert_eq!(status.order_id, order_id);
 
-                    if order_status_count == 1 {
-                        // First status: PreSubmitted
-                        assert_eq!(status.status, "PreSubmitted");
-                        assert_eq!(status.filled, 0.0);
-                        assert_eq!(status.remaining, 100.0);
-                    } else if order_status_count == 2 {
-                        // Second status: Submitted
-                        assert_eq!(status.status, "Submitted");
-                        assert_eq!(status.filled, 0.0);
-                        assert_eq!(status.remaining, 100.0);
-                    } else if order_status_count == 3 {
-                        // Third status: Filled
-                        assert_eq!(status.status, "Filled");
-                        assert_eq!(status.filled, 100.0);
-                        assert_eq!(status.remaining, 0.0);
-                        assert_eq!(status.average_fill_price, 150.25);
+                        if order_status_count == 1 {
+                            // First status: PreSubmitted
+                            assert_eq!(status.status, "PreSubmitted");
+                            assert_eq!(status.filled, 0.0);
+                            assert_eq!(status.remaining, 100.0);
+                        } else if order_status_count == 2 {
+                            // Second status: Submitted
+                            assert_eq!(status.status, "Submitted");
+                            assert_eq!(status.filled, 0.0);
+                            assert_eq!(status.remaining, 100.0);
+                        } else if order_status_count == 3 {
+                            // Third status: Filled
+                            assert_eq!(status.status, "Filled");
+                            assert_eq!(status.filled, 100.0);
+                            assert_eq!(status.remaining, 0.0);
+                            assert_eq!(status.average_fill_price, 150.25);
+                        }
+                    }
+                    OrderUpdate::OpenOrder(order_data) => {
+                        _open_order_count += 1;
+                        assert_eq!(order_data.order_id, order_id);
+                        assert_eq!(order_data.contract.symbol, "AAPL");
+                        assert_eq!(order_data.contract.contract_id, 265598);
+                        assert_eq!(order_data.order.action, Action::Buy);
+                        assert_eq!(order_data.order.total_quantity, 100.0);
+                        assert_eq!(order_data.order.order_type, "LMT");
+                        assert_eq!(order_data.order.limit_price, Some(1.0));
+                    }
+                    OrderUpdate::ExecutionData(exec_data) => {
+                        execution_count += 1;
+                        assert_eq!(exec_data.execution.order_id, order_id);
+                        assert_eq!(exec_data.contract.symbol, "AAPL");
+                        assert_eq!(exec_data.execution.shares, 100.0);
+                        assert_eq!(exec_data.execution.price, 150.25);
+                    }
+                    OrderUpdate::CommissionReport(report) => {
+                        commission_count += 1;
+                        assert_eq!(report.commission, 1.25);
+                        assert_eq!(report.currency, "USD");
+                    }
+                    OrderUpdate::Message(_) => {
+                        // Skip any messages
                     }
                 }
-                OrderUpdate::OpenOrder(order_data) => {
-                    _open_order_count += 1;
-                    assert_eq!(order_data.order_id, order_id);
-                    assert_eq!(order_data.contract.symbol, "AAPL");
-                    assert_eq!(order_data.contract.contract_id, 265598);
-                    assert_eq!(order_data.order.action, Action::Buy);
-                    assert_eq!(order_data.order.total_quantity, 100.0);
-                    assert_eq!(order_data.order.order_type, "LMT");
-                    assert_eq!(order_data.order.limit_price, Some(1.0));
-                }
-                OrderUpdate::ExecutionData(exec_data) => {
-                    execution_count += 1;
-                    assert_eq!(exec_data.execution.order_id, order_id);
-                    assert_eq!(exec_data.contract.symbol, "AAPL");
-                    assert_eq!(exec_data.execution.shares, 100.0);
-                    assert_eq!(exec_data.execution.price, 150.25);
-                }
-                OrderUpdate::CommissionReport(report) => {
-                    commission_count += 1;
-                    assert_eq!(report.commission, 1.25);
-                    assert_eq!(report.currency, "USD");
-                }
-                OrderUpdate::Message(_) => {
-                    // Skip any messages
-                }
-            }
             } else {
                 // Timeout reached, no more messages available
                 break;
@@ -2878,5 +2878,155 @@ mod tests {
         // PlaceOrder message type is 3
         assert!(requests[0].starts_with("3\0"), "Request should be a PlaceOrder message");
         assert!(requests[0].contains(&format!("\0{}\0", order_id)), "Request should contain order ID");
+    }
+
+    #[test]
+    fn test_open_orders() {
+        use crate::client::common::tests::setup_open_orders;
+        use crate::orders::{Action, Orders};
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_open_orders();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        // Request open orders
+        let subscription = client.open_orders().expect("Failed to request open orders");
+
+        // Collect orders from the subscription
+        let mut orders = Vec::new();
+        for result in subscription {
+            match result {
+                Orders::OrderData(order_data) => {
+                    orders.push(order_data);
+                }
+                Orders::OrderStatus(_) => {
+                    // Skip order status messages for this test
+                }
+                Orders::Notice(_) => {
+                    // Skip notices
+                }
+            }
+        }
+
+        // Verify we received 2 orders
+        assert_eq!(orders.len(), 2, "Should receive 2 open orders");
+
+        // Verify first order (AAPL)
+        let order1 = &orders[0];
+        assert_eq!(order1.order_id, 1001);
+        assert_eq!(order1.contract.symbol, "AAPL");
+        assert_eq!(order1.contract.security_type, crate::contracts::SecurityType::Stock);
+        assert_eq!(order1.order.action, Action::Buy);
+        assert_eq!(order1.order.total_quantity, 100.0);
+        assert_eq!(order1.order.order_type, "MKT");
+        assert_eq!(order1.order_state.status, "PreSubmitted");
+
+        // Verify second order (MSFT)
+        let order2 = &orders[1];
+        assert_eq!(order2.order_id, 1002);
+        assert_eq!(order2.contract.symbol, "MSFT");
+        assert_eq!(order2.contract.security_type, crate::contracts::SecurityType::Stock);
+        assert_eq!(order2.order.action, Action::Sell);
+        assert_eq!(order2.order.total_quantity, 50.0);
+        assert_eq!(order2.order.order_type, "LMT");
+        assert_eq!(order2.order.limit_price, Some(350.0));
+        assert_eq!(order2.order_state.status, "Submitted");
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        assert_eq!(requests[0], "5\01\0", "Request should be RequestOpenOrders with version 1");
+    }
+
+    #[test]
+    fn test_cancel_order() {
+        use crate::client::common::tests::setup_cancel_order;
+        use crate::messages::Notice;
+        use crate::orders::CancelOrder;
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_cancel_order();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        // Cancel order with ID 1001
+        let order_id = 1001;
+        let manual_order_cancel_time = "";
+
+        // Call cancel_order and get the result
+        let result = client.cancel_order(order_id, manual_order_cancel_time);
+
+        // Verify the result
+        match result {
+            Ok(cancel_result) => {
+                // Iterate through the cancellation results
+                let mut order_status_received = false;
+                let mut notice_received = false;
+
+                for item in cancel_result {
+                    match item {
+                        CancelOrder::OrderStatus(status) => {
+                            assert_eq!(status.order_id, order_id);
+                            assert_eq!(status.status, "Cancelled");
+                            assert_eq!(status.filled, 0.0);
+                            assert_eq!(status.remaining, 100.0);
+                            order_status_received = true;
+                            println!("Received OrderStatus: {:?}", status);
+                        }
+                        CancelOrder::Notice(Notice { code, message }) => {
+                            // Notice messages with code 202 are order cancellation confirmations
+                            // The message should contain the order ID in the format
+                            assert_eq!(code, 202);
+                            assert!(message.contains("Order Cancelled"));
+                            notice_received = true;
+                            println!("Received Notice: code={}, message={}", code, message);
+                        }
+                    }
+                }
+
+                assert!(order_status_received, "Should have received OrderStatus");
+                assert!(notice_received, "Should have received Notice confirmation");
+            }
+            Err(e) => panic!("Failed to cancel order: {}", e),
+        }
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        assert!(requests[0].starts_with("4\0"), "Request should be a CancelOrder message");
+        assert!(requests[0].contains(&format!("{}\0", order_id)), "Request should contain order ID");
+    }
+
+    #[test]
+    fn test_global_cancel() {
+        use crate::client::common::tests::setup_global_cancel;
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_global_cancel();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        // Call global_cancel
+        let result = client.global_cancel();
+
+        // Verify the result
+        match result {
+            Ok(()) => {
+                println!("Global cancel request sent successfully");
+            }
+            Err(e) => panic!("Failed to send global cancel: {}", e),
+        }
+
+        // Give the gateway time to process the request
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        assert_eq!(requests[0], "58\01\0", "Request should be a RequestGlobalCancel message with version 1");
     }
 }

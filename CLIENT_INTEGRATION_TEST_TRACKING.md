@@ -169,11 +169,11 @@ Messages follow the IB TWS protocol format using null-terminated strings:
 | Method | Sync Status | Async Status | Notes |
 |--------|-------------|--------------|-------|
 | `place_order()` | ✅ | ✅ | Tested - Fixed ExecutionData/CommissionReport routing |
-| `submit_order()` | ❌ | ❌ | Needs test |
-| `cancel_order()` | ❌ | ❌ | Needs test |
-| `global_cancel()` | ❌ | ❌ | Needs test |
-| `order_update_stream()` | ❌ | ❌ | Needs test |
-| `open_orders()` | ❌ | ❌ | Needs test |
+| `submit_order()` | ✅ | ✅ | Tested with order_update_stream |
+| `cancel_order()` | ✅ | ✅ | Tested |
+| `global_cancel()` | ✅ | ✅ | Tested |
+| `order_update_stream()` | ✅ | ✅ | Tested with submit_order |
+| `open_orders()` | ✅ | ✅ | Tested |
 | `all_open_orders()` | ❌ | ❌ | Needs test |
 | `auto_open_orders()` | ❌ | ❌ | Needs test |
 | `completed_orders()` | ❌ | ❌ | Needs test |
@@ -237,10 +237,10 @@ Messages follow the IB TWS protocol format using null-terminated strings:
 ## Summary Statistics
 
 - **Total testable methods**: ~55
-- **Currently tested**: 18 (both sync and async)
+- **Currently tested**: 23 (both sync and async)
 - **Partially tested**: 0
-- **Not tested**: ~37
-- **Coverage**: ~33%
+- **Not tested**: ~32
+- **Coverage**: ~42%
 
 ## Priority for Testing
 
