@@ -21,6 +21,13 @@ This document tracks known issues, technical debt, and improvements needed in th
 
 **Impact:** This inconsistency can lead to bugs where a channel is configured but responses aren't routed (as happened with `FamilyCodes` and `MarketRule`). This also affects integration testing where async tests fail while sync tests pass.
 
+**Specific Example - Order Messages:**
+The issue is particularly problematic for order-related messages where multiple request types generate the same response types:
+- `RequestOpenOrders`, `RequestAllOpenOrders`, and `RequestAutoOpenOrders` all generate `OpenOrder`, `OrderStatus`, and `OpenOrderEnd` responses
+- The `map_incoming_to_outgoing()` function can only map each response type to ONE request type
+- When an `OpenOrder` message arrives, the async implementation cannot determine which of the three possible shared channels to route it to
+- This causes integration tests for `open_orders()` to fail in async mode while passing in sync mode
+
 **Proposed Solutions:**
 1. **Option A:** Modify async to use the same approach as sync (check channel existence directly)
 2. **Option B:** Generate `map_incoming_to_outgoing()` from `CHANNEL_MAPPINGS` to ensure consistency
