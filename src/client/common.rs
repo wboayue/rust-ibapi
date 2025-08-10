@@ -149,8 +149,14 @@ pub mod mocks {
                 if self.current_interaction < self.interactions.len() {
                     let interaction = self.interactions[self.current_interaction].clone();
                     if request.starts_with(&format!("{}\0", interaction.request)) {
-                        for response in interaction.responses.iter() {
+                        println!("MockGateway: Sending {} responses", interaction.responses.len());
+                        for (i, response) in interaction.responses.iter().enumerate() {
+                            let msg_type = response.split('\0').next().unwrap_or("unknown");
+                            println!("MockGateway: Sending response {} (type {})", i + 1, msg_type);
                             self.write_message(&mut stream, response.clone())?;
+                            stream.flush()?;
+                            // Small delay between messages to ensure proper delivery
+                            std::thread::sleep(std::time::Duration::from_millis(10));
                         }
                         self.current_interaction += 1;
                     } else {
@@ -160,6 +166,9 @@ pub mod mocks {
                     break;
                 }
             }
+
+            // Keep the connection alive for a bit to allow client to read all messages
+            std::thread::sleep(std::time::Duration::from_millis(500));
 
             self.send_shutdown(&mut stream)?;
             println!("MockGateway: Shutdown sent, closing connection");
@@ -520,6 +529,224 @@ pub mod tests {
                 "75\09000\0CBOE\0265598\0AAPL\0100\02\020250117\020250221\04\095.0\0100.0\0105.0\0110.0\0".to_string(),
                 // SecurityDefinitionOptionParameterEnd: type(76), request_id
                 "76\09000\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_open_orders() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestOpenOrders,
+            vec![
+                // OpenOrder message - Order 1: Copy exact format from place_order test
+                "5\01001\0265598\0AAPL\0STK\0\00\0?\0\0SMART\0USD\0AAPL\0NMS\0BUY\0100\0MKT\00.0\00.0\0DAY\0\0DU1236109\0\00\0\0100\01377295418\00\00\00\0\01377295418.0/DU1236109/100\0\0\0\0\0\0\0\0\0\00\0\0-1\00\0\0\0\0\0\02147483647\00\00\00\0\03\00\00\0\00\00\0\00\0None\0\00\0\0\0\0?\00\00\0\00\00\0\0\0\0\0\00\00\00\02147483647\02147483647\0\0\00\0\0IB\00\00\0\00\00\0PreSubmitted\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\0\0\0\0\0\00\00\00\0None\01.7976931348623157E308\02.0\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\00\0\0\0\00\01\00\00\00\0\0\00\0\0\0\0\0\0".to_string(),
+                // OpenOrder message - Order 2: Same format but changed order_id, symbol, action, quantity, order_type, limit_price
+                "5\01002\0276821\0MSFT\0STK\0\00\0?\0\0SMART\0USD\0MSFT\0NMS\0SELL\050\0LMT\0350.0\00.0\0DAY\0\0DU1236109\0\00\0\0100\01377295419\00\00\00\0\01377295419.0/DU1236109/100\0\0\0\0\0\0\0\0\0\00\0\0-1\00\0\0\0\0\0\02147483647\00\00\00\0\03\00\00\0\00\00\0\00\0None\0\00\0\0\0\0?\00\00\0\00\00\0\0\0\0\0\00\00\00\02147483647\02147483647\0\0\00\0\0IB\00\00\0\00\00\0Submitted\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\0\0\0\0\0\00\00\00\0None\01.7976931348623157E308\02.0\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\00\0\0\0\00\01\00\00\00\0\0\00\0\0\0\0\0\0".to_string(),
+                // OpenOrderEnd message: type(53), version(1)
+                "53\01\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_all_open_orders() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestAllOpenOrders,
+            vec![
+                // OpenOrder message - Order 1: TSLA order from different client
+                "5\02001\076792\0TSLA\0STK\0\00\0?\0\0SMART\0USD\0TSLA\0NMS\0BUY\010\0LMT\0420.0\00.0\0GTC\0\0DU1236110\0\00\0\0101\01377295500\00\00\00\0\01377295500.0/DU1236110/101\0\0\0\0\0\0\0\0\0\00\0\0-1\00\0\0\0\0\0\02147483647\00\00\00\0\03\00\00\0\00\00\0\00\0None\0\00\0\0\0\0?\00\00\0\00\00\0\0\0\0\0\00\00\00\02147483647\02147483647\0\0\00\0\0IB\00\00\0\00\00\0Submitted\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\0\0\0\0\0\00\00\00\0None\01.7976931348623157E308\02.0\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\00\0\0\0\00\01\00\00\00\0\0\00\0\0\0\0\0\0".to_string(),
+                // OpenOrder message - Order 2: AMZN order from different client  
+                "5\02002\03691\0AMZN\0STK\0\00\0?\0\0SMART\0USD\0AMZN\0NMS\0SELL\05\0MKT\00.0\00.0\0DAY\0\0DU1236111\0\00\0\0102\01377295501\00\00\00\0\01377295501.0/DU1236111/102\0\0\0\0\0\0\0\0\0\00\0\0-1\00\0\0\0\0\0\02147483647\00\00\00\0\03\00\00\0\00\00\0\00\0None\0\00\0\0\0\0?\00\00\0\00\00\0\0\0\0\0\00\00\00\02147483647\02147483647\0\0\00\0\0IB\00\00\0\00\00\0PreSubmitted\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\0\0\0\0\0\00\00\00\0None\01.7976931348623157E308\02.0\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\00\0\0\0\00\01\00\00\00\0\0\00\0\0\0\0\0\0".to_string(),
+                // OpenOrder message - Order 3: GOOGL order from current client
+                "5\01003\026578\0GOOGL\0STK\0\00\0?\0\0SMART\0USD\0GOOGL\0NMS\0BUY\020\0LMT\02800.0\00.0\0DAY\0\0DU1236109\0\00\0\0100\01377295502\00\00\00\0\01377295502.0/DU1236109/100\0\0\0\0\0\0\0\0\0\00\0\0-1\00\0\0\0\0\0\02147483647\00\00\00\0\03\00\00\0\00\00\0\00\0None\0\00\0\0\0\0?\00\00\0\00\00\0\0\0\0\0\00\00\00\02147483647\02147483647\0\0\00\0\0IB\00\00\0\00\00\0Submitted\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\0\0\0\0\0\00\00\00\0None\01.7976931348623157E308\02.0\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\00\0\0\0\00\01\00\00\00\0\0\00\0\0\0\0\0\0".to_string(),
+                // OpenOrderEnd message
+                "53\01\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_auto_open_orders() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestAutoOpenOrders,
+            vec![
+                // OrderStatus message - Order 3001 status update
+                "3\03001\0PreSubmitted\00\0100\00\0123456\00\00\0100\0\00\0".to_string(),
+                // OpenOrder message - Order 3001: FB order from TWS
+                "5\03001\013407\0FB\0STK\0\00\0?\0\0SMART\0USD\0FB\0NMS\0BUY\050\0MKT\00.0\00.0\0DAY\0\0TWS\0\00\0\00\01377295600\00\00\00\0\01377295600.0/TWS/0\0\0\0\0\0\0\0\0\0\00\0\0-1\00\0\0\0\0\0\02147483647\00\00\00\0\03\00\00\0\00\00\0\00\0None\0\00\0\0\0\0?\00\00\0\00\00\0\0\0\0\0\00\00\00\02147483647\02147483647\0\0\00\0\0IB\00\00\0\00\00\0PreSubmitted\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\0\0\0\0\0\00\00\00\0None\01.7976931348623157E308\02.0\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\00\0\0\0\00\01\00\00\00\0\0\00\0\0\0\0\0\0".to_string(),
+                // OrderStatus message - Order 3001 submitted
+                "3\03001\0Submitted\00\0100\00\0123456\00\00\0100\0\00\0".to_string(),
+                // OpenOrderEnd message
+                "53\01\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_completed_orders() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::COMPLETED_ORDERS);
+
+        // Real CompletedOrder message captured from IB Gateway
+        // This is a cancelled ES futures order
+        let msg1 = "101\0637533641\0ES\0FUT\020250919\00\0?\050\0CME\0USD\0ESU5\0ES\0BUY\01\0LMT\01000.0\00.0\0GTC\0\0DU1236109\0\00\0\0616088517\00\00\00\0\0\0\0\0\0\0\0\0\0\00\0\0-1\0\0\0\0\0\02147483647\00\00\0\03\00\0\00\0None\0\00\00\00\0\00\00\0\0\0\00\00\00\02147483647\02147483647\0\0\0\0IB\00\00\0\00\0Cancelled\00\00\00\01001.0\01.7976931348623157E308\00\01\00\0\00\02147483647\00\0Not an insider or substantial shareholder\00\00\09223372036854775807\020250810 09:07:39 America/Los_Angeles\0Cancelled by Trader\0\0\0\0\0\0".to_string();
+
+        // Create a second message for a filled stock order (AAPL)
+        let msg2 = "101\0265598\0AAPL\0STK\0\00\0\0\0SMART\0USD\0AAPL\0NMS\0BUY\0100\0MKT\00.0\00.0\0DAY\0\0DU1236109\0\00\0\01377295418\00\00\00\0\0\0\0\0\0\0\0\0\0\00\0\0-1\0\0\0\0\0\02147483647\00\00\0\03\00\0\00\0None\0\00\00\00\0\00\00\0\0\0\00\00\00\02147483647\02147483647\0\0\0\0IB\00\00\0\00\0Filled\0100\00\00\0150.25\01.7976931348623157E308\00\01\00\0\00\02147483647\00\0Not an insider or substantial shareholder\00\00\09223372036854775807\020231122 10:30:00 America/Los_Angeles\0Filled\0\0\0\0\0\0".to_string();
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestCompletedOrders,
+            vec![
+                msg1,
+                msg2,
+                // CompletedOrdersEnd message - captured from real IB Gateway
+                "102\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_place_order() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        gateway.add_interaction(
+            OutgoingMessages::PlaceOrder,
+            vec![
+                // Real OrderStatus message captured from TWS
+                "3\01001\0PreSubmitted\00\0100\00\0123456\00\00\0100\0\00\0".to_string(),
+                // Another OrderStatus showing submitted
+                "3\01001\0Submitted\00\0100\00\0123456\00\00\0100\0\00\0".to_string(),
+                // OrderStatus update when filled
+                "3\01001\0Filled\0100\00\0150.25\0123456\00\0150.25\0100\0\00\0".to_string(),
+                // OpenOrder message - captured from real TWS, with order_id changed to 1001
+                "5\01001\0265598\0AAPL\0STK\0\00\0?\0\0SMART\0USD\0AAPL\0NMS\0BUY\0100\0LMT\01.0\00.0\0DAY\0\0DU1236109\0\00\0\0100\01377295418\00\00\00\0\01377295418.0/DU1236109/100\0\0\0\0\0\0\0\0\0\00\0\0-1\00\0\0\0\0\0\02147483647\00\00\00\0\03\00\00\0\00\00\0\00\0None\0\00\0\0\0\0?\00\00\0\00\00\0\0\0\0\0\00\00\00\02147483647\02147483647\0\0\00\0\0IB\00\00\0\00\00\0PreSubmitted\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\0\0\0\0\0\00\00\00\0None\01.7976931348623157E308\02.0\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\00\0\0\0\00\01\00\00\00\0\0\00\0\0\0\0\0\0".to_string(),
+                // ExecutionData message - complete format with all required fields
+                // Fields: type(11), request_id, order_id, contract_id, symbol, sec_type, 
+                // last_trade_date, strike, right, multiplier, exchange, currency, local_symbol, trading_class,
+                // execution_id, time, account, exchange, side, shares, price, perm_id, client_id,
+                // liquidation, cum_qty, avg_price, order_ref, ev_rule, ev_multiplier, model_code, last_liquidity
+                "11\0-1\01001\0265598\0AAPL\0STK\0\00.0\0\0\0SMART\0USD\0AAPL\0AAPL\0000e1a2b.67890abc.01.01\020240125 10:30:00\0DU1234567\0SMART\0BOT\0100\0150.25\0123456\0100\00\0100\0150.25\0\0\00.0\0\00\0".to_string(),
+                // CommissionReport message
+                // type(59), version(1), execution_id, commission, currency, realized_pnl, yield, yield_redemption_date
+                "59\01\0000e1a2b.67890abc.01.01\01.25\0USD\00.0\00.0\00\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_cancel_order() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Add interaction for cancel_order
+        gateway.add_interaction(
+            OutgoingMessages::CancelOrder,
+            vec![
+                // OrderStatus message showing order was cancelled
+                // Fields: type(3), order_id, status, filled, remaining, avg_fill_price, perm_id, parent_id, last_fill_price, client_id, why_held, mkt_cap_price
+                "3\01001\0Cancelled\00\0100\00.0\0123456\00\00.0\0100\0\00\0".to_string(),
+                // Error message confirming cancellation (optional but common)
+                // Fields: type(4), version(2), id(order_id), error_code(202), error_string
+                "4\02\01001\0202\0Order Cancelled - reason:User requested order cancellation\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_global_cancel() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Add interaction for global_cancel - simulates cancelling two open orders
+        gateway.add_interaction(
+            OutgoingMessages::RequestGlobalCancel,
+            vec![
+                // OrderStatus for first cancelled order
+                // Fields: type(3), order_id, status, filled, remaining, avg_fill_price, perm_id, parent_id, last_fill_price, client_id, why_held, mkt_cap_price
+                "3\01033\0Cancelled\00\0100\00\0137729541\00\00\0100\0\00\0".to_string(),
+                // Error message for first order
+                // Fields: type(4), version(2), id(order_id), error_code(202), error_string, advanced_order_reject_json
+                "4\02\01033\0202\0Order Canceled - reason:\0\0".to_string(),
+                // OrderStatus for second cancelled order
+                "3\01034\0Cancelled\00\050\00\0137729542\00\00\0100\0\00\0".to_string(),
+                // Error message for second order
+                "4\02\01034\0202\0Order Canceled - reason:\0\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_executions() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Add interaction for RequestExecutions message
+        gateway.add_interaction(
+            OutgoingMessages::RequestExecutions,
+            vec![
+                // ExecutionData message - stock execution (AAPL)
+                // Fields: type(11), request_id, order_id, contract_id, symbol, sec_type, 
+                // last_trade_date, strike, right, multiplier, exchange, currency, local_symbol, trading_class,
+                // execution_id, time, account, exchange, side, shares, price, perm_id, client_id,
+                // liquidation, cum_qty, avg_price, order_ref, ev_rule, ev_multiplier, model_code, last_liquidity
+                "11\09000\01001\0265598\0AAPL\0STK\0\00.0\0\0\0SMART\0USD\0AAPL\0AAPL\0000e1a2b.67890abc.01.01\020240125 10:30:00\0DU1234567\0SMART\0BOT\0100\0150.25\0123456\0100\00\0100\0150.25\0\0\00.0\0\00\0".to_string(),
+                // CommissionReport message for first execution
+                // Fields: type(59), version(1), execution_id, commission, currency, realized_pnl, yield, yield_redemption_date
+                "59\01\0000e1a2b.67890abc.01.01\01.25\0USD\00.0\00.0\00\0".to_string(),
+                // ExecutionData message - futures execution (ES)
+                "11\09000\01002\0637533641\0ES\0FUT\020250919\00.0\0\050\0CME\0USD\0ESU5\0ES\0000e1a2b.67890def.02.01\020240125 10:31:00\0DU1234567\0CME\0SLD\05\05050.25\0123457\0100\00\05\05050.25\0\0\00.0\0\00\0".to_string(),
+                // CommissionReport message for second execution
+                "59\01\0000e1a2b.67890def.02.01\02.50\0USD\0125.50\00.0\00\0".to_string(),
+                // ExecutionData message - options execution (SPY)
+                "11\09000\01003\0123456789\0SPY\0OPT\020240126\0450.0\0C\0100\0CBOE\0USD\0SPY240126C00450000\0SPY\0000e1a2b.67890ghi.03.01\020240125 10:32:00\0DU1234567\0CBOE\0BOT\010\02.50\0123458\0100\00\010\02.50\0\0\00.0\0\00\0".to_string(),
+                // CommissionReport message for third execution
+                "59\01\0000e1a2b.67890ghi.03.01\00.65\0USD\0250.00\00.0\00\0".to_string(),
+                // ExecutionDataEnd message
+                "55\01\09000\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_exercise_options() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Add interaction for ExerciseOptions message
+        // Using order_id 90 to match the next_order_id from client
+        gateway.add_interaction(
+            OutgoingMessages::ExerciseOptions,
+            vec![
+                // OrderStatus message - Option exercise submitted
+                // Fields: type(3), order_id, status, filled, remaining, avg_fill_price, perm_id, parent_id, last_fill_price, client_id, why_held, mkt_cap_price
+                "3\090\0PreSubmitted\00\010\00.0\0123456\00\00.0\0100\0\00\0".to_string(),
+                // OpenOrder message - Option exercise order
+                // Fields: Similar to place_order but for an option contract being exercised
+                // contract_id=123456789 for SPY option, security_type=OPT, right=C (Call), strike=450.0
+                "5\090\0123456789\0SPY\0OPT\020240126\0450.0\0C\0100\0CBOE\0USD\0SPY240126C00450000\0SPY\0BUY\010\0EXERCISE\00.0\00.0\0DAY\0\0DU1234567\0\00\0\0100\01377295700\00\00\00\0\01377295700.0/DU1234567/100\0\0\0\0\0\0\0\0\0\00\0\0-1\00\0\0\0\0\0\02147483647\00\00\00\0\03\00\00\0\00\00\0\00\0None\0\00\0\0\0\0?\00\00\0\00\00\0\0\0\0\0\00\00\00\02147483647\02147483647\0\0\00\0\0IB\00\00\0\00\00\0PreSubmitted\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\0\0\0\0\0\00\00\00\0None\01.7976931348623157E308\02.0\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\01.7976931348623157E308\00\0\0\0\00\01\00\00\00\0\0\00\0\0\0\0\0\0".to_string(),
+                // OrderStatus message - Option exercise in progress
+                "3\090\0Submitted\00\010\00.0\0123456\00\00.0\0100\0\00\0".to_string(),
+                // OrderStatus message - Option exercise filled
+                "3\090\0Filled\010\00\00.0\0123456\00\00.0\0100\0\00\0".to_string(),
             ],
         );
 

@@ -489,6 +489,10 @@ pub struct Order {
     pub duration: Option<i32>, // TODO date object?
     /// Value must be positive, and it is number of seconds that SMART order would be parked for at IBKRATS before being routed to exchange.
     pub post_to_ats: Option<i32>,
+    /// Customer account information for completed orders.
+    pub customer_account: String,
+    /// Indicates if this is a professional customer order.
+    pub professional_customer: bool,
 }
 
 impl Default for Order {
@@ -630,6 +634,8 @@ impl Default for Order {
             use_price_mgmt_algo: false,
             duration: None,
             post_to_ats: None,
+            customer_account: String::new(),
+            professional_customer: false,
         }
     }
 }
@@ -1151,7 +1157,7 @@ pub enum Executions {
 }
 
 /// Exercise action for options.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum ExerciseAction {
     /// Exercise the option.
     Exercise = 1,

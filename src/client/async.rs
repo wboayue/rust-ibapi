@@ -2497,4 +2497,801 @@ mod tests {
         assert!(requests[0].contains("\0AAPL\0"), "Request should contain symbol AAPL");
         assert!(requests[0].contains("\0STK\0"), "Request should contain security type STK");
     }
+
+    #[tokio::test]
+    async fn test_place_order() {
+        use crate::client::common::tests::setup_place_order;
+        use crate::contracts::Contract;
+        use crate::orders::{order_builder, Action, PlaceOrder};
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_place_order();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Create a stock contract
+        let contract = Contract::stock("AAPL");
+
+        // Create a market order
+        let order = order_builder::market_order(Action::Buy, 100.0);
+
+        // Use order ID 1001 to match the mock responses
+        let order_id = 1001;
+
+        // Place the order
+        let mut subscription = client.place_order(order_id, &contract, &order).await.expect("Failed to place order");
+
+        // Collect all events from the subscription
+        let mut order_status_count = 0;
+        let mut _open_order_count = 0;
+        let mut execution_count = 0;
+        let mut commission_count = 0;
+
+        // We expect 6 messages total (3 order statuses, 1 open order, 1 execution, 1 commission)
+        // Take only the expected number of events to avoid reading the shutdown message
+        for _ in 0..6 {
+            let event = match subscription.next().await {
+                Some(Ok(event)) => event,
+                Some(Err(crate::Error::EndOfStream)) => break,
+                Some(Err(e)) => panic!("Unexpected error: {:?}", e),
+                None => break,
+            };
+
+            match event {
+                PlaceOrder::OrderStatus(status) => {
+                    order_status_count += 1;
+                    assert_eq!(status.order_id, order_id);
+
+                    if order_status_count == 1 {
+                        // First status: PreSubmitted
+                        assert_eq!(status.status, "PreSubmitted");
+                        assert_eq!(status.filled, 0.0);
+                        assert_eq!(status.remaining, 100.0);
+                    } else if order_status_count == 2 {
+                        // Second status: Submitted
+                        assert_eq!(status.status, "Submitted");
+                        assert_eq!(status.filled, 0.0);
+                        assert_eq!(status.remaining, 100.0);
+                    } else if order_status_count == 3 {
+                        // Third status: Filled
+                        assert_eq!(status.status, "Filled");
+                        assert_eq!(status.filled, 100.0);
+                        assert_eq!(status.remaining, 0.0);
+                        assert_eq!(status.average_fill_price, 150.25);
+                    }
+                }
+                PlaceOrder::OpenOrder(order_data) => {
+                    _open_order_count += 1;
+                    assert_eq!(order_data.order_id, order_id);
+                    assert_eq!(order_data.contract.symbol, "AAPL");
+                    assert_eq!(order_data.contract.contract_id, 265598);
+                    assert_eq!(order_data.order.action, Action::Buy);
+                    assert_eq!(order_data.order.total_quantity, 100.0);
+                    assert_eq!(order_data.order.order_type, "LMT");
+                    assert_eq!(order_data.order.limit_price, Some(1.0));
+                }
+                PlaceOrder::ExecutionData(exec_data) => {
+                    execution_count += 1;
+                    assert_eq!(exec_data.execution.order_id, order_id);
+                    assert_eq!(exec_data.contract.symbol, "AAPL");
+                    assert_eq!(exec_data.execution.shares, 100.0);
+                    assert_eq!(exec_data.execution.price, 150.25);
+                }
+                PlaceOrder::CommissionReport(report) => {
+                    commission_count += 1;
+                    assert_eq!(report.commission, 1.25);
+                    assert_eq!(report.currency, "USD");
+                }
+                PlaceOrder::Message(_) => {
+                    // Skip any messages
+                }
+            }
+        }
+
+        // Verify we received all expected events
+        assert_eq!(order_status_count, 3, "Should receive 3 order status updates");
+        assert_eq!(_open_order_count, 1, "Should receive 1 open order");
+        assert_eq!(execution_count, 1, "Should receive 1 execution");
+        assert_eq!(commission_count, 1, "Should receive 1 commission report");
+
+        // Verify the request was sent
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        // PlaceOrder message type is 3
+        assert!(requests[0].starts_with("3\0"), "Request should be a PlaceOrder message");
+        assert!(requests[0].contains(&format!("\0{}\0", order_id)), "Request should contain order ID");
+    }
+
+    #[tokio::test]
+    async fn test_submit_order_with_order_update_stream() {
+        use crate::client::common::tests::setup_place_order;
+        use crate::contracts::Contract;
+        use crate::orders::{order_builder, Action, OrderUpdate};
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_place_order();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Create a stock contract
+        let contract = Contract::stock("AAPL");
+
+        // Create a market order
+        let order = order_builder::market_order(Action::Buy, 100.0);
+
+        // Use order ID 1001 to match the mock responses
+        let order_id = 1001;
+
+        // First, start the order update stream
+        let mut update_stream = client.order_update_stream().await.expect("Failed to create order update stream");
+
+        // Submit the order (fire and forget)
+        client.submit_order(order_id, &contract, &order).await.expect("Failed to submit order");
+
+        // Collect events from the update stream
+        let mut order_status_count = 0;
+        let mut _open_order_count = 0;
+        let mut execution_count = 0;
+        let mut commission_count = 0;
+
+        // Read events from the update stream with timeout
+        println!("Starting to read from update stream...");
+        let timeout_duration = std::time::Duration::from_millis(500);
+        let mut events_received = 0;
+
+        while events_received < 6 {
+            let update = match tokio::time::timeout(timeout_duration, update_stream.next()).await {
+                Ok(Some(Ok(update))) => {
+                    events_received += 1;
+                    println!("Event {}: {:?}", events_received, &update);
+                    update
+                }
+                Ok(Some(Err(e))) => panic!("Error receiving update: {}", e),
+                Ok(None) => break, // Stream ended
+                Err(_) => break,   // Timeout reached
+            };
+
+            match update {
+                OrderUpdate::OrderStatus(status) => {
+                    order_status_count += 1;
+                    assert_eq!(status.order_id, order_id);
+
+                    if order_status_count == 1 {
+                        // First status: PreSubmitted
+                        assert_eq!(status.status, "PreSubmitted");
+                        assert_eq!(status.filled, 0.0);
+                        assert_eq!(status.remaining, 100.0);
+                    } else if order_status_count == 2 {
+                        // Second status: Submitted
+                        assert_eq!(status.status, "Submitted");
+                        assert_eq!(status.filled, 0.0);
+                        assert_eq!(status.remaining, 100.0);
+                    } else if order_status_count == 3 {
+                        // Third status: Filled
+                        assert_eq!(status.status, "Filled");
+                        assert_eq!(status.filled, 100.0);
+                        assert_eq!(status.remaining, 0.0);
+                        assert_eq!(status.average_fill_price, 150.25);
+                    }
+                }
+                OrderUpdate::OpenOrder(order_data) => {
+                    _open_order_count += 1;
+                    assert_eq!(order_data.order_id, order_id);
+                    assert_eq!(order_data.contract.symbol, "AAPL");
+                    assert_eq!(order_data.contract.contract_id, 265598);
+                    assert_eq!(order_data.order.action, Action::Buy);
+                    assert_eq!(order_data.order.total_quantity, 100.0);
+                    assert_eq!(order_data.order.order_type, "LMT");
+                    assert_eq!(order_data.order.limit_price, Some(1.0));
+                }
+                OrderUpdate::ExecutionData(exec_data) => {
+                    execution_count += 1;
+                    assert_eq!(exec_data.execution.order_id, order_id);
+                    assert_eq!(exec_data.contract.symbol, "AAPL");
+                    assert_eq!(exec_data.execution.shares, 100.0);
+                    assert_eq!(exec_data.execution.price, 150.25);
+                }
+                OrderUpdate::CommissionReport(report) => {
+                    commission_count += 1;
+                    assert_eq!(report.commission, 1.25);
+                    assert_eq!(report.currency, "USD");
+                }
+                OrderUpdate::Message(_) => {
+                    // Skip any messages
+                }
+            }
+        }
+
+        // Verify we received all expected events
+        assert_eq!(order_status_count, 3, "Should receive 3 order status updates");
+        assert_eq!(_open_order_count, 1, "Should receive 1 open order");
+        assert_eq!(execution_count, 1, "Should receive 1 execution");
+        assert_eq!(commission_count, 1, "Should receive 1 commission report");
+
+        // Verify the request was sent
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        // PlaceOrder message type is 3
+        assert!(requests[0].starts_with("3\0"), "Request should be a PlaceOrder message");
+        assert!(requests[0].contains(&format!("\0{}\0", order_id)), "Request should contain order ID");
+    }
+
+    #[tokio::test]
+    async fn test_open_orders() {
+        use crate::client::common::tests::setup_open_orders;
+        use crate::orders::{Action, Orders};
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_open_orders();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Request open orders
+        let mut subscription = client.open_orders().await.expect("Failed to request open orders");
+
+        // Collect orders from the subscription
+        let mut orders = Vec::new();
+        while let Some(result) = subscription.next().await {
+            match result {
+                Ok(Orders::OrderData(order_data)) => {
+                    orders.push(order_data);
+                }
+                Ok(Orders::OrderStatus(_)) => {
+                    // Skip order status messages for this test
+                }
+                Ok(Orders::Notice(_)) => {
+                    // Skip notices
+                }
+                Err(crate::Error::EndOfStream) => break,
+                Err(e) => panic!("Unexpected error: {:?}", e),
+            }
+        }
+
+        // Verify we received 2 orders
+        assert_eq!(orders.len(), 2, "Should receive 2 open orders");
+
+        // Verify first order (AAPL)
+        let order1 = &orders[0];
+        assert_eq!(order1.order_id, 1001);
+        assert_eq!(order1.contract.symbol, "AAPL");
+        assert_eq!(order1.contract.security_type, crate::contracts::SecurityType::Stock);
+        assert_eq!(order1.order.action, Action::Buy);
+        assert_eq!(order1.order.total_quantity, 100.0);
+        assert_eq!(order1.order.order_type, "MKT");
+        assert_eq!(order1.order_state.status, "PreSubmitted");
+
+        // Verify second order (MSFT)
+        let order2 = &orders[1];
+        assert_eq!(order2.order_id, 1002);
+        assert_eq!(order2.contract.symbol, "MSFT");
+        assert_eq!(order2.contract.security_type, crate::contracts::SecurityType::Stock);
+        assert_eq!(order2.order.action, Action::Sell);
+        assert_eq!(order2.order.total_quantity, 50.0);
+        assert_eq!(order2.order.order_type, "LMT");
+        assert_eq!(order2.order.limit_price, Some(350.0));
+        assert_eq!(order2.order_state.status, "Submitted");
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        assert_eq!(requests[0], "5\01\0", "Request should be RequestOpenOrders with version 1");
+    }
+
+    #[tokio::test]
+    async fn test_all_open_orders() {
+        use crate::client::common::tests::setup_all_open_orders;
+        use crate::orders::{Action, Orders};
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_all_open_orders();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Request all open orders
+        let mut subscription = client.all_open_orders().await.expect("Failed to request all open orders");
+
+        // Collect orders from the subscription
+        let mut orders = Vec::new();
+        while let Some(result) = subscription.next().await {
+            match result {
+                Ok(Orders::OrderData(order_data)) => {
+                    orders.push(order_data);
+                }
+                Ok(Orders::OrderStatus(_)) => {
+                    // Skip order status messages for this test
+                }
+                Ok(Orders::Notice(_)) => {
+                    // Skip notices
+                }
+                Err(crate::Error::EndOfStream) => break,
+                Err(e) => panic!("Unexpected error: {:?}", e),
+            }
+        }
+
+        // Verify we received 3 orders (from different clients)
+        assert_eq!(orders.len(), 3, "Should receive 3 open orders from all accounts");
+
+        // Verify first order (TSLA from client 101)
+        let order1 = &orders[0];
+        assert_eq!(order1.order_id, 2001);
+        assert_eq!(order1.contract.symbol, "TSLA");
+        assert_eq!(order1.contract.security_type, crate::contracts::SecurityType::Stock);
+        assert_eq!(order1.order.action, Action::Buy);
+        assert_eq!(order1.order.total_quantity, 10.0);
+        assert_eq!(order1.order.order_type, "LMT");
+        assert_eq!(order1.order.limit_price, Some(420.0));
+        assert_eq!(order1.order.account, "DU1236110");
+
+        // Verify second order (AMZN from client 102)
+        let order2 = &orders[1];
+        assert_eq!(order2.order_id, 2002);
+        assert_eq!(order2.contract.symbol, "AMZN");
+        assert_eq!(order2.order.action, Action::Sell);
+        assert_eq!(order2.order.total_quantity, 5.0);
+        assert_eq!(order2.order.order_type, "MKT");
+        assert_eq!(order2.order.account, "DU1236111");
+
+        // Verify third order (GOOGL from current client 100)
+        let order3 = &orders[2];
+        assert_eq!(order3.order_id, 1003);
+        assert_eq!(order3.contract.symbol, "GOOGL");
+        assert_eq!(order3.order.action, Action::Buy);
+        assert_eq!(order3.order.total_quantity, 20.0);
+        assert_eq!(order3.order.order_type, "LMT");
+        assert_eq!(order3.order.limit_price, Some(2800.0));
+        assert_eq!(order3.order.account, "DU1236109");
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        assert_eq!(requests[0], "16\01\0", "Request should be RequestAllOpenOrders with version 1");
+    }
+
+    #[tokio::test]
+    async fn test_auto_open_orders() {
+        use crate::client::common::tests::setup_auto_open_orders;
+        use crate::orders::Orders;
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_auto_open_orders();
+        // Note: auto_open_orders usually requires client_id 0 for real TWS connections,
+        // but for testing we use CLIENT_ID (100) to match the mock gateway expectation
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Request auto open orders with auto_bind=true
+        let mut subscription = client.auto_open_orders(true).await.expect("Failed to request auto open orders");
+
+        // Collect messages from the subscription
+        let mut order_statuses = Vec::new();
+        let mut orders = Vec::new();
+        while let Some(result) = subscription.next().await {
+            match result {
+                Ok(Orders::OrderData(order_data)) => {
+                    orders.push(order_data);
+                }
+                Ok(Orders::OrderStatus(status)) => {
+                    order_statuses.push(status);
+                }
+                Ok(Orders::Notice(_)) => {
+                    // Skip notices
+                }
+                Err(crate::Error::EndOfStream) => break,
+                Err(e) => panic!("Unexpected error: {:?}", e),
+            }
+        }
+
+        // Verify we received order status updates
+        assert_eq!(order_statuses.len(), 2, "Should receive 2 order status updates");
+
+        // Verify first status (PreSubmitted)
+        let status1 = &order_statuses[0];
+        assert_eq!(status1.order_id, 3001);
+        assert_eq!(status1.status, "PreSubmitted");
+
+        // Verify second status (Submitted)
+        let status2 = &order_statuses[1];
+        assert_eq!(status2.order_id, 3001);
+        assert_eq!(status2.status, "Submitted");
+
+        // Verify we received 1 order
+        assert_eq!(orders.len(), 1, "Should receive 1 order");
+
+        // Verify the order (FB from TWS)
+        let order = &orders[0];
+        assert_eq!(order.order_id, 3001);
+        assert_eq!(order.contract.symbol, "FB");
+        assert_eq!(order.contract.security_type, crate::contracts::SecurityType::Stock);
+        assert_eq!(order.order.action, crate::orders::Action::Buy);
+        assert_eq!(order.order.total_quantity, 50.0);
+        assert_eq!(order.order.order_type, "MKT");
+        assert_eq!(order.order.account, "TWS");
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        assert_eq!(
+            requests[0], "15\01\01\0",
+            "Request should be RequestAutoOpenOrders with version 1 and auto_bind=true"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_completed_orders() {
+        use crate::client::common::tests::setup_completed_orders;
+        use crate::orders::{Action, Orders};
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_completed_orders();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Request completed orders (api_only=false to get all completed orders)
+        let mut subscription = client.completed_orders(false).await.expect("Failed to request completed orders");
+
+        // Collect orders from the subscription
+        let mut orders = Vec::new();
+        while let Some(result) = subscription.next().await {
+            match result {
+                Ok(Orders::OrderData(order_data)) => {
+                    orders.push(order_data);
+                }
+                Ok(Orders::OrderStatus(_)) => {
+                    // Skip order status messages
+                }
+                Ok(Orders::Notice(_)) => {
+                    // Skip notices
+                }
+                Err(crate::Error::EndOfStream) => break,
+                Err(e) => panic!("Unexpected error: {:?}", e),
+            }
+        }
+
+        // Verify we received 2 completed orders
+        assert_eq!(orders.len(), 2, "Should receive 2 completed orders");
+
+        // Verify first completed order (ES futures - based on captured data)
+        let order1 = &orders[0];
+        // CompletedOrder messages don't have order_id in the message, defaults to -1
+        assert_eq!(order1.order_id, -1);
+        assert_eq!(order1.contract.symbol, "ES");
+        assert_eq!(order1.contract.security_type, crate::contracts::SecurityType::Future);
+        assert_eq!(order1.order.action, Action::Buy);
+        assert_eq!(order1.order.total_quantity, 1.0);
+        assert_eq!(order1.order.order_type, "LMT");
+        assert_eq!(order1.order_state.status, "Cancelled");
+        assert_eq!(order1.order.perm_id, 616088517);
+
+        // Verify second completed order (AAPL)
+        let order2 = &orders[1];
+        assert_eq!(order2.order_id, -1); // CompletedOrder messages don't have order_id
+        assert_eq!(order2.contract.symbol, "AAPL");
+        assert_eq!(order2.contract.security_type, crate::contracts::SecurityType::Stock);
+        assert_eq!(order2.order.action, Action::Buy);
+        assert_eq!(order2.order.total_quantity, 100.0);
+        assert_eq!(order2.order.order_type, "MKT");
+        assert_eq!(order2.order_state.status, "Filled");
+        assert_eq!(order2.order.perm_id, 1377295418);
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        assert_eq!(requests[0], "99\00\0", "Request should be RequestCompletedOrders with api_only=false");
+    }
+
+    #[tokio::test]
+    async fn test_cancel_order() {
+        use crate::client::common::tests::setup_cancel_order;
+        use crate::messages::Notice;
+        use crate::orders::CancelOrder;
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_cancel_order();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Cancel order with ID 1001
+        let order_id = 1001;
+        let manual_order_cancel_time = "";
+
+        // Call cancel_order and get the result
+        let result = client.cancel_order(order_id, manual_order_cancel_time).await;
+
+        // Verify the result
+        match result {
+            Ok(mut cancel_stream) => {
+                // Collect results from the stream
+                let mut order_status_received = false;
+                let mut notice_received = false;
+
+                while let Some(result) = cancel_stream.next().await {
+                    match result {
+                        Ok(CancelOrder::OrderStatus(status)) => {
+                            assert_eq!(status.order_id, order_id);
+                            assert_eq!(status.status, "Cancelled");
+                            assert_eq!(status.filled, 0.0);
+                            assert_eq!(status.remaining, 100.0);
+                            order_status_received = true;
+                            println!("Received OrderStatus: {:?}", status);
+                        }
+                        Ok(CancelOrder::Notice(Notice { code, message })) => {
+                            // Notice messages with code 202 are order cancellation confirmations
+                            // The message should contain the order ID in the format
+                            assert_eq!(code, 202);
+                            assert!(message.contains("Order Cancelled"));
+                            notice_received = true;
+                            println!("Received Notice: code={}, message={}", code, message);
+                        }
+                        Err(e) => panic!("Error in cancel stream: {}", e),
+                    }
+                }
+
+                assert!(order_status_received, "Should have received OrderStatus");
+                assert!(notice_received, "Should have received Notice confirmation");
+            }
+            Err(e) => panic!("Failed to cancel order: {}", e),
+        }
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        assert!(requests[0].starts_with("4\0"), "Request should be a CancelOrder message");
+        assert!(requests[0].contains(&format!("{}\0", order_id)), "Request should contain order ID");
+    }
+
+    #[tokio::test]
+    async fn test_global_cancel() {
+        use crate::client::common::tests::setup_global_cancel;
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_global_cancel();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Call global_cancel
+        let result = client.global_cancel().await;
+
+        // Verify the result
+        match result {
+            Ok(()) => {
+                println!("Global cancel request sent successfully");
+            }
+            Err(e) => panic!("Failed to send global cancel: {}", e),
+        }
+
+        // Give the gateway time to process the request
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        assert_eq!(requests[0], "58\01\0", "Request should be a RequestGlobalCancel message with version 1");
+    }
+
+    #[tokio::test]
+    async fn test_executions() {
+        use crate::client::common::tests::setup_executions;
+        use crate::contracts::SecurityType;
+        use crate::orders::{ExecutionFilter, Executions};
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_executions();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Create an execution filter
+        let filter = ExecutionFilter {
+            client_id: Some(CLIENT_ID),
+            account_code: "DU1234567".to_string(),
+            time: "".to_string(),          // Empty means all time
+            symbol: "".to_string(),        // Empty means all symbols
+            security_type: "".to_string(), // Empty means all types
+            exchange: "".to_string(),      // Empty means all exchanges
+            side: "".to_string(),          // Empty means all sides
+        };
+
+        // Request executions
+        let mut subscription = client.executions(filter).await.expect("Failed to request executions");
+
+        // Collect executions from the subscription
+        let mut execution_data = Vec::new();
+        let mut commission_reports = Vec::new();
+
+        while let Some(result) = subscription.next().await {
+            match result {
+                Ok(Executions::ExecutionData(data)) => {
+                    execution_data.push(data);
+                }
+                Ok(Executions::CommissionReport(report)) => {
+                    commission_reports.push(report);
+                }
+                Ok(Executions::Notice(_)) => {
+                    // Skip notices
+                }
+                Err(crate::Error::EndOfStream) => break,
+                Err(e) => panic!("Unexpected error: {:?}", e),
+            }
+        }
+
+        // Verify we received 3 executions and 3 commission reports
+        assert_eq!(execution_data.len(), 3, "Should receive 3 execution data messages");
+        assert_eq!(commission_reports.len(), 3, "Should receive 3 commission reports");
+
+        // Verify first execution (AAPL stock)
+        let exec1 = &execution_data[0];
+        assert_eq!(exec1.request_id, 9000);
+        assert_eq!(exec1.execution.order_id, 1001);
+        assert_eq!(exec1.contract.symbol, "AAPL");
+        assert_eq!(exec1.contract.security_type, SecurityType::Stock);
+        assert_eq!(exec1.execution.execution_id, "000e1a2b.67890abc.01.01");
+        assert_eq!(exec1.execution.side, "BOT");
+        assert_eq!(exec1.execution.shares, 100.0);
+        assert_eq!(exec1.execution.price, 150.25);
+
+        // Verify first commission report
+        let comm1 = &commission_reports[0];
+        assert_eq!(comm1.execution_id, "000e1a2b.67890abc.01.01");
+        assert_eq!(comm1.commission, 1.25);
+        assert_eq!(comm1.currency, "USD");
+
+        // Verify second execution (ES futures)
+        let exec2 = &execution_data[1];
+        assert_eq!(exec2.request_id, 9000);
+        assert_eq!(exec2.execution.order_id, 1002);
+        assert_eq!(exec2.contract.symbol, "ES");
+        assert_eq!(exec2.contract.security_type, SecurityType::Future);
+        assert_eq!(exec2.execution.execution_id, "000e1a2b.67890def.02.01");
+        assert_eq!(exec2.execution.side, "SLD");
+        assert_eq!(exec2.execution.shares, 5.0);
+        assert_eq!(exec2.execution.price, 5050.25);
+
+        // Verify second commission report
+        let comm2 = &commission_reports[1];
+        assert_eq!(comm2.execution_id, "000e1a2b.67890def.02.01");
+        assert_eq!(comm2.commission, 2.50);
+        assert_eq!(comm2.realized_pnl, Some(125.50));
+
+        // Verify third execution (SPY options)
+        let exec3 = &execution_data[2];
+        assert_eq!(exec3.request_id, 9000);
+        assert_eq!(exec3.execution.order_id, 1003);
+        assert_eq!(exec3.contract.symbol, "SPY");
+        assert_eq!(exec3.contract.security_type, SecurityType::Option);
+        assert_eq!(exec3.execution.execution_id, "000e1a2b.67890ghi.03.01");
+        assert_eq!(exec3.execution.side, "BOT");
+        assert_eq!(exec3.execution.shares, 10.0);
+        assert_eq!(exec3.execution.price, 2.50);
+
+        // Verify third commission report
+        let comm3 = &commission_reports[2];
+        assert_eq!(comm3.execution_id, "000e1a2b.67890ghi.03.01");
+        assert_eq!(comm3.commission, 0.65);
+        assert_eq!(comm3.realized_pnl, Some(250.00));
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        // Request format: RequestExecutions(7), version(3), request_id(9000), client_id, account_code, time, symbol, security_type, exchange, side
+        assert_eq!(
+            requests[0], "7\03\09000\0100\0DU1234567\0\0\0\0\0\0",
+            "Request should be RequestExecutions with correct filter parameters"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_exercise_options() {
+        use crate::client::common::tests::setup_exercise_options;
+        use crate::contracts::{Contract, SecurityType};
+        use crate::orders::{ExerciseAction, ExerciseOptions};
+        use time::macros::datetime;
+
+        // Initialize env_logger for debug output
+        let _ = env_logger::try_init();
+
+        let gateway = setup_exercise_options();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Create option contract for SPY
+        let contract = Contract {
+            contract_id: 123456789,
+            symbol: "SPY".to_string(),
+            security_type: SecurityType::Option,
+            last_trade_date_or_contract_month: "20240126".to_string(),
+            strike: 450.0,
+            right: "C".to_string(), // Call option
+            multiplier: "100".to_string(),
+            exchange: "CBOE".to_string(),
+            currency: "USD".to_string(),
+            local_symbol: "SPY240126C00450000".to_string(),
+            trading_class: "SPY".to_string(),
+            ..Default::default()
+        };
+
+        // Exercise the option
+        let exercise_action = ExerciseAction::Exercise;
+        let exercise_quantity = 10;
+        let account = "DU1234567";
+        let ovrd = false;
+        let manual_order_time = Some(datetime!(2024-01-25 10:30:00 UTC));
+
+        let mut subscription = client
+            .exercise_options(&contract, exercise_action, exercise_quantity, account, ovrd, manual_order_time)
+            .await
+            .expect("Failed to exercise options");
+
+        // Collect results
+        let mut order_statuses = Vec::new();
+        let mut open_orders = Vec::new();
+
+        while let Some(result) = subscription.next().await {
+            match result {
+                Ok(ExerciseOptions::OrderStatus(status)) => order_statuses.push(status),
+                Ok(ExerciseOptions::OpenOrder(order)) => open_orders.push(order),
+                Ok(ExerciseOptions::Notice(_notice)) => {
+                    // Note: Warning messages (2100-2200) are currently not routed to subscriptions
+                    // They are only logged. See TODO.md for future improvements.
+                }
+                Err(crate::Error::EndOfStream) => break,
+                Err(e) => panic!("Unexpected error: {:?}", e),
+            }
+        }
+
+        // Verify we got the expected responses
+        assert_eq!(order_statuses.len(), 3, "Should have 3 order status updates");
+        assert_eq!(open_orders.len(), 1, "Should have 1 open order");
+
+        // Verify order statuses
+        assert_eq!(order_statuses[0].status, "PreSubmitted");
+        assert_eq!(order_statuses[0].filled, 0.0);
+        assert_eq!(order_statuses[0].remaining, 10.0);
+
+        assert_eq!(order_statuses[1].status, "Submitted");
+        assert_eq!(order_statuses[2].status, "Filled");
+        assert_eq!(order_statuses[2].filled, 10.0);
+        assert_eq!(order_statuses[2].remaining, 0.0);
+
+        // Verify open order
+        let open_order = &open_orders[0];
+        assert_eq!(open_order.order.order_id, 90);
+        assert_eq!(open_order.contract.symbol, "SPY");
+        assert_eq!(open_order.contract.security_type, SecurityType::Option);
+        assert_eq!(open_order.order.order_type, "EXERCISE");
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+
+        // Request format: ExerciseOptions(21), version(2), order_id, contract fields, exercise_action, exercise_quantity, account, ovrd, manual_order_time
+        let expected_request = format!(
+            "21\02\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0",
+            90, // order_id (using next_order_id from client)
+            contract.contract_id,
+            contract.symbol,
+            contract.security_type,
+            contract.last_trade_date_or_contract_month,
+            contract.strike,
+            contract.right,
+            contract.multiplier,
+            contract.exchange,
+            contract.currency,
+            contract.local_symbol,
+            contract.trading_class,
+            exercise_action as i32,
+            exercise_quantity,
+            account,
+            if ovrd { 1 } else { 0 },
+            "20240125 10:30:00 UTC" // manual_order_time formatted
+        );
+
+        assert_eq!(requests[0], expected_request, "Request should be ExerciseOptions with correct parameters");
+    }
 }

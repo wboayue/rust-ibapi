@@ -295,8 +295,17 @@ impl<S: Stream> TcpMessageBus<S> {
         match message.message_type() {
             IncomingMessages::ExecutionData => {
                 let sent_to_update_stream = self.send_order_update(&message);
+                let order_id = message.order_id();
+                let request_id = message.request_id();
+                debug!(
+                    "ExecutionData: order_id={:?}, request_id={:?}, orders.contains(order_id)={}, orders.len={}",
+                    order_id,
+                    request_id,
+                    order_id.is_some_and(|id| self.orders.contains(&id)),
+                    self.orders.len()
+                );
 
-                match (message.order_id(), message.request_id()) {
+                match (order_id, request_id) {
                     // First check matching orders channel
                     (Some(order_id), _) if self.orders.contains(&order_id) => {
                         // Store execution-to-order mapping for commission reports
@@ -368,6 +377,12 @@ impl<S: Stream> TcpMessageBus<S> {
             }
             IncomingMessages::CommissionsReport => {
                 let sent_to_update_stream = self.send_order_update(&message);
+                let exec_id = message.execution_id();
+                debug!(
+                    "CommissionReport: exec_id={:?}, executions.contains={}",
+                    exec_id,
+                    exec_id.as_ref().is_some_and(|id| self.executions.contains(id))
+                );
 
                 if let Some(execution_id) = message.execution_id() {
                     if let Err(e) = self.executions.send(&execution_id, Ok(message)) {
@@ -489,6 +504,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         let sender_copy = sender.clone();
 
         self.orders.insert(order_id, sender);
+        debug!("Registered order subscription for order_id={}", order_id);
 
         self.connection.write_message(message)?;
 
