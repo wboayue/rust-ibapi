@@ -192,7 +192,12 @@ pub mod mocks {
 
             // Start API
             let message = self.read_message(stream)?;
-            assert_eq!(message, "71\02\0100\0\0");
+            // For server versions > 72 (OPTIONAL_CAPABILITIES), expect an extra empty field
+            if self.server_version > 72 {
+                assert_eq!(message, "71\02\0100\0\0");
+            } else {
+                assert_eq!(message, "71\02\0100\0");
+            }
 
             // next valid order id
             self.write_message(stream, "9\01\090\0".to_string())?;
@@ -748,6 +753,205 @@ pub mod tests {
                 // OrderStatus message - Option exercise filled
                 "3\090\0Filled\010\00\00.0\0123456\00\00.0\0100\0\00\0".to_string(),
             ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    // === Market Data Setup Functions ===
+
+    pub fn setup_market_data() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestMarketData,
+            vec![
+                // TickPrice - Bid price
+                // type(1), version(6), request_id, tick_type(1=bid), price, size(deprecated), attrib_mask
+                "1\06\09000\01\0150.50\00\01\0".to_string(),
+                // TickSize - Bid size
+                // type(2), version(6), request_id, tick_type(0=bid_size), size
+                "2\06\09000\00\0100\0".to_string(),
+                // TickPrice - Ask price
+                // type(1), version(6), request_id, tick_type(2=ask), price, size(deprecated), attrib_mask
+                "1\06\09000\02\0151.00\00\00\0".to_string(),
+                // TickSize - Ask size
+                // type(2), version(6), request_id, tick_type(3=ask_size), size
+                "2\06\09000\03\0200\0".to_string(),
+                // TickPrice - Last price
+                // type(1), version(6), request_id, tick_type(4=last), price, size(deprecated), attrib_mask
+                "1\06\09000\04\0150.75\00\00\0".to_string(),
+                // TickSize - Last size
+                // type(2), version(6), request_id, tick_type(5=last_size), size
+                "2\06\09000\05\050\0".to_string(),
+                // TickString - Last timestamp
+                // type(46), version(6), request_id, tick_type(45=last_timestamp), value
+                "46\06\09000\045\01705500000\0".to_string(),
+                // TickGeneric - Volume
+                // type(45), version(6), request_id, tick_type(8=volume), value
+                "45\06\09000\08\01500000\0".to_string(),
+                // TickSnapshotEnd - for snapshot requests
+                // type(17), version(1), request_id
+                "17\01\09000\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_realtime_bars() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestRealTimeBars,
+            vec![
+                // RealTimeBars message - 5 second bar
+                // type(50), version(3), request_id, time, open, high, low, close, volume, wap, count
+                "50\03\09000\01705500000\0150.25\0150.75\0150.00\0150.50\01000\0150.40\025\0".to_string(),
+                // Another bar after 5 seconds
+                "50\03\09000\01705500005\0150.50\0151.00\0150.40\0150.90\01200\0150.70\030\0".to_string(),
+                // Third bar
+                "50\03\09000\01705500010\0150.90\0151.25\0150.85\0151.20\0800\0151.05\020\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_tick_by_tick_last() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::TICK_BY_TICK);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestTickByTickData,
+            vec![
+                // TickByTick message - Last trade
+                // type(99), request_id, tick_type(1=Last, 2=AllLast), time, price, size,
+                // tick_attrib_last(mask), exchange, special_conditions
+                "99\09000\01\01705500000\0150.75\0100\00\0NASDAQ\0\0".to_string(),
+                // Another Last trade
+                "99\09000\01\01705500001\0150.80\050\02\0NYSE\0\0".to_string(),
+                // Third Last trade
+                "99\09000\01\01705500002\0150.70\0150\00\0NASDAQ\0\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_tick_by_tick_all_last() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::TICK_BY_TICK);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestTickByTickData,
+            vec![
+                // TickByTick message - AllLast trade (includes all trades)
+                // type(99), request_id, tick_type(2=AllLast), time, price, size,
+                // tick_attrib_last(mask), exchange, special_conditions
+                "99\09000\02\01705500000\0150.75\0100\00\0NASDAQ\0\0".to_string(),
+                // Another AllLast trade (unreported trade)
+                "99\09000\02\01705500001\0150.80\050\02\0DARK\0ISO\0".to_string(),
+                // Third AllLast trade
+                "99\09000\02\01705500002\0150.70\0150\00\0NYSE\0\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_tick_by_tick_bid_ask() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::TICK_BY_TICK);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestTickByTickData,
+            vec![
+                // TickByTick message - BidAsk
+                // type(99), request_id, tick_type(3=BidAsk), time, bid_price, ask_price,
+                // bid_size, ask_size, tick_attrib_bid_ask(mask)
+                "99\09000\03\01705500000\0150.50\0150.55\0100\0200\00\0".to_string(),
+                // BidAsk update - bid past low
+                "99\09000\03\01705500001\0150.45\0150.55\0150\0200\01\0".to_string(),
+                // BidAsk update - ask past high
+                "99\09000\03\01705500002\0150.45\0150.60\0150\0100\02\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_tick_by_tick_midpoint() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::TICK_BY_TICK);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestTickByTickData,
+            vec![
+                // TickByTick message - MidPoint
+                // type(99), request_id, tick_type(4=MidPoint), time, midpoint
+                "99\09000\04\01705500000\0150.525\0".to_string(),
+                // MidPoint update
+                "99\09000\04\01705500001\0150.50\0".to_string(),
+                // Another MidPoint update
+                "99\09000\04\01705500002\0150.525\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_market_depth() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestMarketDepth,
+            vec![
+                // MarketDepth message type 12 version 1 (for is_smart_depth=false)
+                // type(12), version(1), request_id(9000), position(0),
+                // operation(0=insert), side(1=bid), price, size
+                "12\01\09000\00\00\01\0150.50\0100\0".to_string(),
+                // MarketDepth v1 - Ask insert at position 0
+                "12\01\09000\00\00\00\0150.55\0200\0".to_string(),
+                // MarketDepth v1 - Bid update at position 0
+                "12\01\09000\00\01\01\0150.49\0150\0".to_string(),
+                // MarketDepth v1 - Ask delete at position 0
+                "12\01\09000\00\02\00\0150.55\00\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_market_depth_exchanges() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::SERVICE_DATA_TYPE);
+
+        gateway.add_interaction(
+            OutgoingMessages::RequestMktDepthExchanges,
+            vec![
+                // MktDepthExchanges message
+                // type(80), number_of_descriptions(3), then for each:
+                // exchange, sec_type, listing_exchange, service_data_type, agg_group
+                "80\03\0ISLAND\0STK\0NASDAQ\0Deep2\01\0NYSE\0STK\0NYSE\0Deep\02\0ARCA\0STK\0NYSE\0Deep\02\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_switch_market_data_type() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::REQ_MARKET_DATA_TYPE);
+
+        // Note: switch_market_data_type doesn't return a response, it's a fire-and-forget request
+        // We just need to ensure the gateway accepts the request without error
+        gateway.add_interaction(
+            OutgoingMessages::RequestMarketDataType,
+            vec![], // No response expected
         );
 
         gateway.start().expect("Failed to start mock gateway");
