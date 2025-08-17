@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Display};
+use std::fmt::{self, Debug, Display};
 use std::num::ParseIntError;
 use std::str::FromStr;
 
@@ -87,30 +87,52 @@ impl Display for BarSize {
     }
 }
 
+#[derive(Debug)]
+pub struct BarSizeParseError;
+
+impl Display for BarSizeParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Invalid BarSize string")
+    }
+}
+
+impl FromStr for BarSize {
+    type Err = BarSizeParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_str() {
+            "SEC" => Ok(Self::Sec),
+            "SEC5" => Ok(Self::Sec5),
+            "SEC15" => Ok(Self::Sec15),
+            "SEC30" => Ok(Self::Sec30),
+            "MIN" => Ok(Self::Min),
+            "MIN2" => Ok(Self::Min2),
+            "MIN3" => Ok(Self::Min3),
+            "MIN5" => Ok(Self::Min5),
+            "MIN15" => Ok(Self::Min15),
+            "MIN20" => Ok(Self::Min20),
+            "MIN30" => Ok(Self::Min30),
+            "HOUR" => Ok(Self::Hour),
+            "HOUR2" => Ok(Self::Hour2),
+            "HOUR3" => Ok(Self::Hour3),
+            "HOUR4" => Ok(Self::Hour4),
+            "HOUR8" => Ok(Self::Hour8),
+            "DAY" => Ok(Self::Day),
+            "WEEK" => Ok(Self::Week),
+            "MONTH" => Ok(Self::Month),
+            _ => Err(BarSizeParseError),
+        }
+    }
+}
+
 impl From<&str> for BarSize {
     fn from(val: &str) -> Self {
-        match val.to_uppercase().as_str() {
-            "SEC" => Self::Sec,
-            "SEC5" => Self::Sec5,
-            "SEC15" => Self::Sec15,
-            "SEC30" => Self::Sec30,
-            "MIN" => Self::Min,
-            "MIN2" => Self::Min2,
-            "MIN3" => Self::Min3,
-            "MIN5" => Self::Min5,
-            "MIN15" => Self::Min15,
-            "MIN20" => Self::Min20,
-            "MIN30" => Self::Min30,
-            "HOUR" => Self::Hour,
-            "HOUR2" => Self::Hour2,
-            "HOUR3" => Self::Hour3,
-            "HOUR4" => Self::Hour4,
-            "HOUR8" => Self::Hour8,
-            "DAY" => Self::Day,
-            "WEEK" => Self::Week,
-            "MONTH" => Self::Month,
-            _ => panic!("unsupported value: {val}"),
-        }
+        Self::from_str(val).unwrap()
+    }
+}
+impl From<String> for BarSize {
+    fn from(val: String) -> Self {
+        Self::from(val.as_str())
     }
 }
 
@@ -207,13 +229,13 @@ impl FromStr for Duration {
 }
 
 impl From<&str> for Duration {
-    fn from(value: &str) -> Self {
-        Self::from_str(value).unwrap()
+    fn from(val: &str) -> Self {
+        Self::from_str(val).unwrap()
     }
 }
 impl From<String> for Duration {
-    fn from(value: String) -> Self {
-        Self::from(value.as_str())
+    fn from(val: String) -> Self {
+        Self::from(val.as_str())
     }
 }
 
@@ -368,21 +390,44 @@ impl std::fmt::Display for WhatToShow {
     }
 }
 
+#[derive(Debug)]
+pub struct WhatToShowParseError;
+
+impl fmt::Display for WhatToShowParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Invalid WhatToShow string")
+    }
+}
+
+impl FromStr for WhatToShow {
+    type Err = WhatToShowParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_str() {
+            "TRADES" => Ok(Self::Trades),
+            "MIDPOINT" => Ok(Self::MidPoint),
+            "BID" => Ok(Self::Bid),
+            "ASK" => Ok(Self::Ask),
+            "BID_ASK" => Ok(Self::BidAsk),
+            "HISTORICAL_VOLATILITY" => Ok(Self::HistoricalVolatility),
+            "OPTION_IMPLIED_VOLATILITY" => Ok(Self::OptionImpliedVolatility),
+            "FEE_RATE" => Ok(Self::FeeRate),
+            "SCHEDULE" => Ok(Self::Schedule),
+            "ADJUSTED_LAST" => Ok(Self::AdjustedLast),
+            _ => Err(WhatToShowParseError),
+        }
+    }
+}
+
 impl From<&str> for WhatToShow {
     fn from(val: &str) -> Self {
-        match val.to_uppercase().as_str() {
-            "TRADES" => Self::Trades,
-            "MIDPOINT" => Self::MidPoint,
-            "BID" => Self::Bid,
-            "ASK" => Self::Ask,
-            "BID_ASK" => Self::BidAsk,
-            "HISTORICAL_VOLATILITY" => Self::HistoricalVolatility,
-            "OPTION_IMPLIED_VOLATILITY" => Self::OptionImpliedVolatility,
-            "FEE_RATE" => Self::FeeRate,
-            "SCHEDULE" => Self::Schedule,
-            "ADJUSTED_LAST" => Self::AdjustedLast,
-            _ => panic!("unsupported value: {val}"),
-        }
+        Self::from_str(val).unwrap()
+    }
+}
+
+impl From<String> for WhatToShow {
+    fn from(val: String) -> Self {
+        Self::from(val.as_str())
     }
 }
 
