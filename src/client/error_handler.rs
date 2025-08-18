@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn test_is_connection_error() {
-        let io_err = Error::Io(std::sync::Arc::new(io::Error::new(ErrorKind::ConnectionReset, "reset")));
+        let io_err = Error::Io(io::Error::new(ErrorKind::ConnectionReset, "reset"));
         assert!(is_connection_error(&io_err));
 
         assert!(is_connection_error(&Error::ConnectionReset));
@@ -129,10 +129,10 @@ mod tests {
 
     #[test]
     fn test_is_timeout_error() {
-        let timeout_err = Error::Io(std::sync::Arc::new(io::Error::new(ErrorKind::WouldBlock, "would block")));
+        let timeout_err = Error::Io(io::Error::new(ErrorKind::WouldBlock, "would block"));
         assert!(is_timeout_error(&timeout_err));
 
-        let non_timeout = Error::Io(std::sync::Arc::new(io::Error::other("other")));
+        let non_timeout = Error::Io(io::Error::other("other"));
         assert!(!is_timeout_error(&non_timeout));
     }
 

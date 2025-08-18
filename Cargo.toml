@@ -27,6 +27,7 @@ async = ["dep:tokio", "dep:futures", "dep:async-trait"]
 byteorder = "1.5.0"
 crossbeam = { version = "0.8.4", optional = true }
 log = "0.4.22"
+thiserror = "2.0"
 time = {version = "0.3.36", features = ["formatting", "macros", "local-offset", "parsing", "serde"]}
 time-tz = "2.0.0"
 serde = {version = "1.0.214" , features = ["derive"]}
