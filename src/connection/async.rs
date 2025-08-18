@@ -1,7 +1,5 @@
 //! Asynchronous connection implementation
 
-use std::sync::Arc;
-
 use log::debug;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -90,6 +88,7 @@ impl AsyncConnection {
 
         let mut socket = self.socket.lock().await;
         socket.write_all(&length_encoded).await?;
+        socket.flush().await?;
         Ok(())
     }
 
@@ -103,7 +102,7 @@ impl AsyncConnection {
                 Ok(_) => {}
                 Err(e) => {
                     debug!("Error reading message length: {:?}", e);
-                    return Err(Error::Io(Arc::new(e)));
+                    return Err(Error::Io(e));
                 }
             }
         }

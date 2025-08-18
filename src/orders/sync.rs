@@ -150,9 +150,7 @@ pub fn global_cancel(client: &Client) -> Result<(), Error> {
     client.check_server_version(server_versions::REQ_GLOBAL_CANCEL, "It does not support global cancel requests.")?;
 
     let message = encoders::encode_global_cancel()?;
-
-    let request_id = client.next_request_id();
-    client.send_order(request_id, message)?;
+    client.send_message(message)?;
 
     Ok(())
 }
@@ -176,7 +174,7 @@ pub fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
 }
 
 // Requests completed [Order]s.
-pub fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<Orders>, Error> {
+pub fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<'_, Orders>, Error> {
     client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
 
     let request = encoders::encode_completed_orders(api_only)?;
@@ -191,7 +189,7 @@ pub fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<
 /// # Arguments
 /// * `client` - [Client] used to communicate with server.
 ///
-pub fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
+pub fn open_orders(client: &Client) -> Result<Subscription<'_, Orders>, Error> {
     let request = encoders::encode_open_orders()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestOpenOrders, request)?;
 
@@ -200,7 +198,7 @@ pub fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
 
 // Requests all *current* open orders in associated accounts at the current moment.
 // Open orders are returned once; this function does not initiate a subscription.
-pub fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
+pub fn all_open_orders(client: &Client) -> Result<Subscription<'_, Orders>, Error> {
     let request = encoders::encode_all_open_orders()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAllOpenOrders, request)?;
 
@@ -208,7 +206,7 @@ pub fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
 }
 
 // Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
-pub fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription<Orders>, Error> {
+pub fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription<'_, Orders>, Error> {
     let request = encoders::encode_auto_open_orders(auto_bind)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request)?;
 
@@ -223,7 +221,7 @@ pub fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription
 //
 // # Arguments
 // * `filter` - filter criteria used to determine which execution reports are returned
-pub fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
+pub fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subscription<'_, Executions>, Error> {
     let request_id = client.next_request_id();
 
     let request = encoders::encode_executions(client.server_version, request_id, &filter)?;
@@ -241,11 +239,11 @@ pub fn exercise_options<'a>(
     ovrd: bool,
     manual_order_time: Option<OffsetDateTime>,
 ) -> Result<Subscription<'a, ExerciseOptions>, Error> {
-    let request_id = client.next_request_id();
+    let order_id = client.next_order_id();
 
     let request = encoders::encode_exercise_options(
         client.server_version,
-        request_id,
+        order_id,
         contract,
         exercise_action,
         exercise_quantity,
@@ -253,7 +251,7 @@ pub fn exercise_options<'a>(
         ovrd,
         manual_order_time,
     )?;
-    let subscription = client.send_request(request_id, request)?;
+    let subscription = client.send_order(order_id, request)?;
 
     Ok(Subscription::new(client, subscription, None))
 }
@@ -638,9 +636,12 @@ mod tests {
 
     #[test]
     fn completed_orders() {
+        let _ = env_logger::try_init();
+
         let message_bus = Arc::new(MessageBusStub {
             response_messages: vec![
-                "101|265598|AAPL|STK||0|?||SMART|USD|AAPL|NMS|BUY|0|MKT|0.0|0.0|DAY||DU1234567||0||1824933227|0|0|0|||||||||||0||-1||||||2147483647|0|0||3|0||0|None||0|0|0||0|0||||0|0|0|2147483647|2147483647||||IB|0|0||0|Filled|0|0|0|1.7976931348623157E308|1.7976931348623157E308|0|1|0||100|2147483647|0|Not an insider or substantial shareholder|0|0|9223372036854775807|20230306 12:28:30 America/Los_Angeles|Filled Size: 100|".to_owned(),
+                // Copy exact format from integration test, just changing account to DU1234567
+                "101|265598|AAPL|STK||0|||SMART|USD|AAPL|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||1377295418|0|0|0|||||||||||0||-1||||||2147483647|0|0||3|0||0|None||0|0|0||0|0||||0|0|0|2147483647|2147483647||||IB|0|0||0|Filled|100|0|0|150.25|1.7976931348623157E308|0|1|0||0|2147483647|0|Not an insider or substantial shareholder|0|0|9223372036854775807|20231122 10:30:00 America/Los_Angeles|Filled||||||".to_owned(),
                 "102|".to_owned(),
             ],
             ..Default::default()
@@ -673,14 +674,14 @@ mod tests {
                 "contract.last_trade_date_or_contract_month"
             );
             assert_eq!(contract.strike, 0.0, "contract.strike");
-            assert_eq!(contract.right, "?", "contract.right");
+            assert_eq!(contract.right, "", "contract.right");
             assert_eq!(contract.multiplier, "", "contract.multiplier");
             assert_eq!(contract.exchange, "SMART", "contract.exchange");
             assert_eq!(contract.currency, "USD", "contract.currency");
             assert_eq!(contract.local_symbol, "AAPL", "contract.local_symbol");
             assert_eq!(contract.trading_class, "NMS", "contract.trading_class");
             assert_eq!(order.action, Action::Buy, "order.action");
-            assert_eq!(order.total_quantity, 0.0, "order.total_quantity");
+            assert_eq!(order.total_quantity, 100.0, "order.total_quantity");
             assert_eq!(order.order_type, "MKT", "order.order_type");
             assert_eq!(order.limit_price, Some(0.0), "order.limit_price");
             assert_eq!(order.aux_price, Some(0.0), "order.aux_price");
@@ -690,7 +691,7 @@ mod tests {
             assert_eq!(order.open_close, None, "order.open_close");
             assert_eq!(order.origin, 0, "order.origin");
             assert_eq!(order.order_ref, "", "order.order_ref");
-            assert_eq!(order.perm_id, 1824933227, "order.perm_id");
+            assert_eq!(order.perm_id, 1377295418, "order.perm_id");
             assert_eq!(order.outside_rth, false, "order.outside_rth");
             assert_eq!(order.hidden, false, "order.hidden");
             assert_eq!(order.discretionary_amt, 0.0, "order.discretionary_amt");
@@ -728,7 +729,7 @@ mod tests {
             assert_eq!(order.delta_neutral_designated_location, "", "order.delta_neutral_designated_location");
             assert_eq!(order.continuous_update, false, "order.continuous_update");
             assert_eq!(order.reference_price_type, Some(0), "order.reference_price_type");
-            assert_eq!(order.trail_stop_price, None, "order.trail_stop_price");
+            assert_eq!(order.trail_stop_price, Some(150.25), "order.trail_stop_price");
             assert_eq!(order.trailing_percent, None, "order.trailing_percent");
             assert_eq!(contract.combo_legs_description, "", "contract.combo_legs_description");
             assert_eq!(contract.combo_legs.len(), 0, "contract.combo_legs.len()");
@@ -749,13 +750,13 @@ mod tests {
             assert_eq!(order.randomize_size, false, "order.randomize_size");
             assert_eq!(order.randomize_price, false, "order.randomize_price");
             assert_eq!(order.conditions.len(), 0, "order.conditions.len()");
-            assert_eq!(order.trail_stop_price, None, "order.trail_stop_price");
+            assert_eq!(order.trail_stop_price, Some(150.25), "order.trail_stop_price");
             assert_eq!(order.limit_price_offset, None, "order.limit_price_offset");
             assert_eq!(order.cash_qty, Some(0.0), "order.cash_qty");
             assert_eq!(order.dont_use_auto_price_for_hedge, true, "order.dont_use_auto_price_for_hedge");
             assert_eq!(order.is_oms_container, false, "order.is_oms_container");
             assert_eq!(order.auto_cancel_date, "", "order.auto_cancel_date");
-            assert_eq!(order.filled_quantity, 100.0, "order.filled_quantity");
+            assert_eq!(order.filled_quantity, 0.0, "order.filled_quantity");
             assert_eq!(order.ref_futures_con_id, None, "order.ref_futures_con_id");
             assert_eq!(order.auto_cancel_parent, false, "order.auto_cancel_parent");
             assert_eq!(order.shareholder, "Not an insider or substantial shareholder", "order.shareholder");
@@ -763,10 +764,10 @@ mod tests {
             assert_eq!(order.route_marketable_to_bbo, false, "order.route_marketable_to_bbo");
             assert_eq!(order.parent_perm_id, None, "order.parent_perm_id");
             assert_eq!(
-                order_state.completed_time, "20230306 12:28:30 America/Los_Angeles",
+                order_state.completed_time, "20231122 10:30:00 America/Los_Angeles",
                 "order_state.completed_time"
             );
-            assert_eq!(order_state.completed_status, "Filled Size: 100", "order_state.completed_status");
+            assert_eq!(order_state.completed_status, "Filled", "order_state.completed_status");
         } else {
             assert!(false, "expected order data");
         }

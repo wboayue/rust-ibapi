@@ -1,93 +1,100 @@
-//! Error types and handling for the IBAPI library.
+//! Error types for the IBAPI library.
 //!
-//! This module defines the comprehensive error types that can occur during
-//! API operations, including network errors, parsing errors, and TWS-specific
-//! errors with detailed error codes and messages.
+//! This module defines all error types that can occur during API operations,
+//! including I/O errors, parsing errors, and TWS-specific protocol errors.
 
-use std::{num::ParseIntError, string::FromUtf8Error, sync::Arc};
+use std::{num::ParseIntError, string::FromUtf8Error};
+use thiserror::Error;
 
 use crate::messages::{ResponseMessage, CODE_INDEX, MESSAGE_INDEX};
 
-#[derive(Debug, Clone)]
+/// The main error type for IBAPI operations.
+///
+/// This enum is marked `#[non_exhaustive]` to allow adding new error variants
+/// in future versions without breaking compatibility.
+#[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
-    // Errors from external libraries
-    Io(Arc<std::io::Error>),
-    ParseInt(ParseIntError),
-    FromUtf8(FromUtf8Error),
-    ParseTime(time::error::Parse),
+    // External error types
+    /// I/O error from network operations.
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    /// Failed to parse an integer from string.
+    #[error(transparent)]
+    ParseInt(#[from] ParseIntError),
+
+    /// Invalid UTF-8 sequence in response data.
+    #[error(transparent)]
+    FromUtf8(#[from] FromUtf8Error),
+
+    /// Failed to parse time/date string.
+    #[error(transparent)]
+    ParseTime(#[from] time::error::Parse),
+
+    /// Mutex was poisoned by a panic in another thread.
+    #[error("{0}")]
     Poison(String),
 
-    // Errors from IBAPI library
+    // IBAPI-specific errors
+    /// Feature or method not yet implemented.
+    #[error("not implemented")]
     NotImplemented,
+
+    /// Failed to parse a protocol message.
+    /// Contains: (field_index, field_value, error_description)
+    #[error("parse error: {0} - {1} - {2}")]
     Parse(usize, String, String),
+
+    /// Server version requirement not met.
+    /// Contains: (required_version, actual_version, feature_name)
+    #[error("server version {0} required, got {1}: {2}")]
     ServerVersion(i32, i32, String),
+
+    /// Generic error with custom message.
+    #[error("error occurred: {0}")]
     Simple(String),
+
+    /// Invalid argument provided to API method.
+    #[error("InvalidArgument: {0}")]
     InvalidArgument(String),
+
+    /// Failed to establish connection to TWS/Gateway.
+    #[error("ConnectionFailed")]
     ConnectionFailed,
+
+    /// Connection was reset by TWS/Gateway.
+    #[error("ConnectionReset")]
     ConnectionReset,
+
+    /// Operation was cancelled by user or system.
+    #[error("Cancelled")]
     Cancelled,
+
+    /// Client is shutting down.
+    #[error("Shutdown")]
     Shutdown,
+
+    /// Reached end of data stream.
+    #[error("EndOfStream")]
     EndOfStream,
+
+    /// Received unexpected message type.
+    #[error("UnexpectedResponse: {0:?}")]
     UnexpectedResponse(ResponseMessage),
+
+    /// Stream ended unexpectedly.
+    #[error("UnexpectedEndOfStream")]
     UnexpectedEndOfStream,
+
+    /// Error message from TWS/Gateway.
+    /// Contains: (error_code, error_message)
+    #[error("[{0}] {1}")]
     Message(i32, String),
-    /// Returned when attempting to create a subscription that already exists.
+
+    /// Attempted to create a duplicate subscription.
+    #[error("AlreadySubscribed")]
     AlreadySubscribed,
-}
-
-impl std::error::Error for Error {}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Error::Io(ref err) => err.fmt(f),
-            Error::ParseInt(ref err) => err.fmt(f),
-            Error::FromUtf8(ref err) => err.fmt(f),
-            Error::ParseTime(ref err) => err.fmt(f),
-            Error::Poison(ref err) => write!(f, "{err}"),
-
-            Error::NotImplemented => write!(f, "not implemented"),
-            Error::Parse(i, value, message) => write!(f, "parse error: {i} - {value} - {message}"),
-            Error::ServerVersion(wanted, have, message) => write!(f, "server version {wanted} required, got {have}: {message}"),
-            Error::ConnectionFailed => write!(f, "ConnectionFailed"),
-            Error::ConnectionReset => write!(f, "ConnectionReset"),
-            Error::Cancelled => write!(f, "Cancelled"),
-            Error::Shutdown => write!(f, "Shutdown"),
-            Error::EndOfStream => write!(f, "EndOfStream"),
-            Error::UnexpectedResponse(message) => write!(f, "UnexpectedResponse: {message:?}"),
-            Error::UnexpectedEndOfStream => write!(f, "UnexpectedEndOfStream"),
-
-            Error::Simple(ref err) => write!(f, "error occurred: {err}"),
-            Error::InvalidArgument(ref err) => write!(f, "InvalidArgument: {err}"),
-            Error::Message(code, message) => write!(f, "[{code}] {message}"),
-            Error::AlreadySubscribed => write!(f, "AlreadySubscribed"),
-        }
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Error {
-        Error::Io(Arc::new(err))
-    }
-}
-
-impl From<ParseIntError> for Error {
-    fn from(err: ParseIntError) -> Error {
-        Error::ParseInt(err)
-    }
-}
-
-impl From<FromUtf8Error> for Error {
-    fn from(err: FromUtf8Error) -> Error {
-        Error::FromUtf8(err)
-    }
-}
-
-impl From<time::error::Parse> for Error {
-    fn from(err: time::error::Parse) -> Error {
-        Error::ParseTime(err)
-    }
 }
 
 impl From<ResponseMessage> for Error {
@@ -122,10 +129,7 @@ mod tests {
     #[test]
     fn test_error_display() {
         let cases = vec![
-            (
-                Error::Io(Arc::new(io::Error::new(io::ErrorKind::NotFound, "file not found"))),
-                "file not found",
-            ),
+            (Error::Io(io::Error::new(io::ErrorKind::NotFound, "file not found")), "file not found"),
             (Error::ParseInt("123x".parse::<i32>().unwrap_err()), "invalid digit found in string"),
             (
                 Error::FromUtf8(String::from_utf8(vec![0, 159, 146, 150]).unwrap_err()),
@@ -158,6 +162,8 @@ mod tests {
     #[test]
     fn test_error_is_error() {
         let error = Error::Simple("test error".to_string());
+        // With thiserror, source() returns the underlying error if using #[from]
+        // For Simple errors, there's no underlying source
         assert!(error.source().is_none());
     }
 

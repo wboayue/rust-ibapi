@@ -335,6 +335,8 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         IncomingMessages::OpenOrder => Some(1),
         IncomingMessages::PnL => Some(1),
         IncomingMessages::PnLSingle => Some(1),
+        IncomingMessages::PositionMulti => Some(2),
+        IncomingMessages::PositionMultiEnd => Some(2),
         IncomingMessages::RealTimeBars => Some(2),
         IncomingMessages::ScannerData => Some(2),
         IncomingMessages::SecurityDefinitionOptionParameter => Some(1),

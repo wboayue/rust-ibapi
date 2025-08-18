@@ -89,7 +89,7 @@ impl SharedChannels {
     // Notify all listeners of a given message type with message.
     fn send_message(&self, message_type: IncomingMessages, message: &ResponseMessage) {
         if let Some(senders) = self.senders.get(&message_type) {
-            for sender in senders {
+            for sender in senders.iter() {
                 if let Err(e) = sender.send(Ok(message.clone())) {
                     warn!("error sending message: {e}");
                 }
@@ -98,10 +98,13 @@ impl SharedChannels {
     }
 
     // Notify all senders with a given message
-    fn notify_all(&self, message: &Response) {
+    fn notify_all<F>(&self, message_fn: F)
+    where
+        F: Fn() -> Response,
+    {
         for senders in self.senders.values() {
             for sender in senders {
-                if let Err(e) = sender.send(message.clone()) {
+                if let Err(e) = sender.send(message_fn()) {
                     warn!("error sending notification: {e}");
                 }
             }
@@ -148,9 +151,9 @@ impl<S: Stream> TcpMessageBus<S> {
     fn request_shutdown(&self) {
         debug!("shutdown requested");
 
-        self.requests.notify_all(&Err(Error::Shutdown));
-        self.orders.notify_all(&Err(Error::Shutdown));
-        self.shared_channels.notify_all(&Err(Error::Shutdown));
+        self.requests.notify_all(|| Err(Error::Shutdown));
+        self.orders.notify_all(|| Err(Error::Shutdown));
+        self.shared_channels.notify_all(|| Err(Error::Shutdown));
 
         self.requests.clear();
         self.orders.clear();
@@ -162,9 +165,9 @@ impl<S: Stream> TcpMessageBus<S> {
     fn reset(&self) {
         debug!("reset message bus");
 
-        self.requests.notify_all(&Err(Error::ConnectionReset));
-        self.orders.notify_all(&Err(Error::ConnectionReset));
-        self.shared_channels.notify_all(&Err(Error::ConnectionReset));
+        self.requests.notify_all(|| Err(Error::ConnectionReset));
+        self.orders.notify_all(|| Err(Error::ConnectionReset));
+        self.shared_channels.notify_all(|| Err(Error::ConnectionReset));
 
         self.requests.clear();
         self.orders.clear();
@@ -295,8 +298,17 @@ impl<S: Stream> TcpMessageBus<S> {
         match message.message_type() {
             IncomingMessages::ExecutionData => {
                 let sent_to_update_stream = self.send_order_update(&message);
+                let order_id = message.order_id();
+                let request_id = message.request_id();
+                debug!(
+                    "ExecutionData: order_id={:?}, request_id={:?}, orders.contains(order_id)={}, orders.len={}",
+                    order_id,
+                    request_id,
+                    order_id.is_some_and(|id| self.orders.contains(&id)),
+                    self.orders.len()
+                );
 
-                match (message.order_id(), message.request_id()) {
+                match (order_id, request_id) {
                     // First check matching orders channel
                     (Some(order_id), _) if self.orders.contains(&order_id) => {
                         // Store execution-to-order mapping for commission reports
@@ -368,6 +380,12 @@ impl<S: Stream> TcpMessageBus<S> {
             }
             IncomingMessages::CommissionsReport => {
                 let sent_to_update_stream = self.send_order_update(&message);
+                let exec_id = message.execution_id();
+                debug!(
+                    "CommissionReport: exec_id={:?}, executions.contains={}",
+                    exec_id,
+                    exec_id.as_ref().is_some_and(|id| self.executions.contains(id))
+                );
 
                 if let Some(execution_id) = message.execution_id() {
                     if let Err(e) = self.executions.send(&execution_id, Ok(message)) {
@@ -489,6 +507,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         let sender_copy = sender.clone();
 
         self.orders.insert(order_id, sender);
+        debug!("Registered order subscription for order_id={}", order_id);
 
         self.connection.write_message(message)?;
 
@@ -598,7 +617,7 @@ struct SenderHash<K, V> {
     senders: RwLock<HashMap<K, Sender<V>>>,
 }
 
-impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug + Clone> SenderHash<K, V> {
+impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K, V> {
     pub fn new() -> Self {
         Self {
             senders: RwLock::new(HashMap::new()),
@@ -648,10 +667,13 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug + Clone> Send
         senders.clear();
     }
 
-    pub fn notify_all(&self, message: &V) {
+    pub fn notify_all<F>(&self, message_fn: F)
+    where
+        F: Fn() -> V,
+    {
         let senders = self.senders.read().unwrap();
         for sender in senders.values() {
-            if let Err(e) = sender.send(message.clone()) {
+            if let Err(e) = sender.send(message_fn()) {
                 warn!("error sending notification: {e}");
             }
         }
@@ -863,7 +885,7 @@ mod tests {
         let message = format!("Simulated {} error", kind);
         debug!("mock -> {message}");
         let io_error = std::io::Error::new(kind, message);
-        Error::Io(Arc::new(io_error))
+        Error::Io(io_error)
     }
 
     #[derive(Debug)]

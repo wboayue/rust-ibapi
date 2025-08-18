@@ -253,15 +253,15 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
         }
     }
 
-    pub fn iter(&self) -> TickSubscriptionIter<T> {
+    pub fn iter(&self) -> TickSubscriptionIter<'_, T> {
         TickSubscriptionIter { subscription: self }
     }
 
-    pub fn try_iter(&self) -> TickSubscriptionTryIter<T> {
+    pub fn try_iter(&self) -> TickSubscriptionTryIter<'_, T> {
         TickSubscriptionTryIter { subscription: self }
     }
 
-    pub fn timeout_iter(&self, duration: std::time::Duration) -> TickSubscriptionTimeoutIter<T> {
+    pub fn timeout_iter(&self, duration: std::time::Duration) -> TickSubscriptionTimeoutIter<'_, T> {
         TickSubscriptionTimeoutIter {
             subscription: self,
             timeout: duration,
