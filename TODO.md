@@ -46,3 +46,30 @@ Consider one of the following approaches:
 - `transport/sync.rs:264-265`: Where warnings are diverted to `error_event` instead of subscriptions
 - `transport/sync.rs:579-609`: The `error_event` function that only logs warnings
 - `transport/sync.rs:31`: `WARNING_CODES` constant defining the range (2100..=2169)
+
+## SnapshotEnd Message Routing Issue
+
+During integration testing of real-time market data methods, it was discovered that `SnapshotEnd` messages (IncomingMessages type 17) are not being properly routed to subscriptions in the test environment. The debug logs show "no recipient found for: ResponseMessage { i: 0, fields: ["17", "1", "9000"] }" when the SnapshotEnd message arrives.
+
+### Issue Details
+
+- The SnapshotEnd message is sent by MockGateway but not received by the subscription
+- Other tick messages (Price, Size, Generic, String) are routed correctly
+- This affects snapshot market data requests where we expect a SnapshotEnd to signal completion
+
+### Files Affected
+
+- `src/client/sync.rs`: test_market_data() test has commented assertion for snapshot_end
+- `src/client/async.rs`: Same issue likely exists in async version
+- `src/transport/sync.rs`: Message routing logic may need investigation
+- `src/market_data/realtime/mod.rs`: TickTypes::SnapshotEnd variant handling
+
+### Potential Causes
+
+1. The subscription might be closing/dropping before the SnapshotEnd message arrives
+2. Message routing logic might not handle SnapshotEnd messages correctly
+3. The subscription channel might be full or closed when SnapshotEnd arrives
+
+### Test Case
+
+See `src/client/sync.rs:test_market_data()` where the SnapshotEnd assertion is currently commented out.

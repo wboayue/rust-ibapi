@@ -143,8 +143,8 @@ impl<'a, T: StreamDecoder<T> + 'static> Subscription<'a, T> {
     /// * `Some(Error)` - If an error has occurred
     /// * `None` - If no error has occurred
     pub fn error(&self) -> Option<Error> {
-        let error = self.error.lock().unwrap();
-        error.clone()
+        let mut error = self.error.lock().unwrap();
+        error.take()
     }
 
     fn clear_error(&self) {

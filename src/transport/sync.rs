@@ -98,10 +98,13 @@ impl SharedChannels {
     }
 
     // Notify all senders with a given message
-    fn notify_all(&self, message: &Response) {
+    fn notify_all<F>(&self, message_fn: F)
+    where
+        F: Fn() -> Response,
+    {
         for senders in self.senders.values() {
             for sender in senders {
-                if let Err(e) = sender.send(message.clone()) {
+                if let Err(e) = sender.send(message_fn()) {
                     warn!("error sending notification: {e}");
                 }
             }
@@ -148,9 +151,9 @@ impl<S: Stream> TcpMessageBus<S> {
     fn request_shutdown(&self) {
         debug!("shutdown requested");
 
-        self.requests.notify_all(&Err(Error::Shutdown));
-        self.orders.notify_all(&Err(Error::Shutdown));
-        self.shared_channels.notify_all(&Err(Error::Shutdown));
+        self.requests.notify_all(|| Err(Error::Shutdown));
+        self.orders.notify_all(|| Err(Error::Shutdown));
+        self.shared_channels.notify_all(|| Err(Error::Shutdown));
 
         self.requests.clear();
         self.orders.clear();
@@ -162,9 +165,9 @@ impl<S: Stream> TcpMessageBus<S> {
     fn reset(&self) {
         debug!("reset message bus");
 
-        self.requests.notify_all(&Err(Error::ConnectionReset));
-        self.orders.notify_all(&Err(Error::ConnectionReset));
-        self.shared_channels.notify_all(&Err(Error::ConnectionReset));
+        self.requests.notify_all(|| Err(Error::ConnectionReset));
+        self.orders.notify_all(|| Err(Error::ConnectionReset));
+        self.shared_channels.notify_all(|| Err(Error::ConnectionReset));
 
         self.requests.clear();
         self.orders.clear();
@@ -614,7 +617,7 @@ struct SenderHash<K, V> {
     senders: RwLock<HashMap<K, Sender<V>>>,
 }
 
-impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug + Clone> SenderHash<K, V> {
+impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug> SenderHash<K, V> {
     pub fn new() -> Self {
         Self {
             senders: RwLock::new(HashMap::new()),
@@ -664,10 +667,13 @@ impl<K: std::hash::Hash + Eq + std::fmt::Debug, V: std::fmt::Debug + Clone> Send
         senders.clear();
     }
 
-    pub fn notify_all(&self, message: &V) {
+    pub fn notify_all<F>(&self, message_fn: F)
+    where
+        F: Fn() -> V,
+    {
         let senders = self.senders.read().unwrap();
         for sender in senders.values() {
-            if let Err(e) = sender.send(message.clone()) {
+            if let Err(e) = sender.send(message_fn()) {
                 warn!("error sending notification: {e}");
             }
         }
@@ -879,7 +885,7 @@ mod tests {
         let message = format!("Simulated {} error", kind);
         debug!("mock -> {message}");
         let io_error = std::io::Error::new(kind, message);
-        Error::Io(Arc::new(io_error))
+        Error::Io(io_error)
     }
 
     #[derive(Debug)]

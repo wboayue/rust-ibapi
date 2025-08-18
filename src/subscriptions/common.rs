@@ -22,7 +22,7 @@ pub(crate) fn should_store_error(error: &Error) -> bool {
 }
 
 /// Common error types that can occur during subscription processing
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) enum ProcessingResult<T> {
     /// Successfully processed a value
     Success(T),
