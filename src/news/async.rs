@@ -7,7 +7,6 @@ use crate::market_data::realtime;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::subscriptions::{ResponseContext, StreamDecoder, Subscription};
 use crate::{server_versions, Client, Error};
-use std::sync::Arc;
 
 impl StreamDecoder<NewsBulletin> for NewsBulletin {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::NewsBulletins];
@@ -72,7 +71,8 @@ pub(crate) async fn news_bulletins(client: &Client, all_messages: bool) -> Resul
 
     Ok(Subscription::new_from_internal::<NewsBulletin>(
         internal_subscription,
-        Arc::new(client.clone()),
+        client.server_version(),
+        client.message_bus.clone(),
         None,
         None,
         Some(OutgoingMessages::RequestNewsBulletins),
@@ -105,7 +105,8 @@ pub(crate) async fn historical_news(
 
     Ok(Subscription::new_from_internal::<NewsArticle>(
         internal_subscription,
-        Arc::new(client.clone()),
+        client.server_version(),
+        client.message_bus.clone(),
         Some(request_id),
         None,
         None,
@@ -149,7 +150,8 @@ pub(crate) async fn contract_news(client: &Client, contract: &Contract, provider
 
     Ok(Subscription::new_from_internal::<NewsArticle>(
         internal_subscription,
-        Arc::new(client.clone()),
+        client.server_version(),
+        client.message_bus.clone(),
         Some(request_id),
         None,
         None,
@@ -172,7 +174,8 @@ pub(crate) async fn broad_tape_news(client: &Client, provider_code: &str) -> Res
 
     Ok(Subscription::new_from_internal::<NewsArticle>(
         internal_subscription,
-        Arc::new(client.clone()),
+        client.server_version(),
+        client.message_bus.clone(),
         Some(request_id),
         None,
         None,

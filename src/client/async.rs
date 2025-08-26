@@ -22,7 +22,6 @@ use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, F
 use crate::subscriptions::Subscription;
 
 /// Asynchronous TWS API Client
-#[derive(Clone)]
 pub struct Client {
     /// IB server version
     pub(crate) server_version: i32,

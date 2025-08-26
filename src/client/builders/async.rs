@@ -9,7 +9,7 @@ use crate::client::r#async::Client;
 use crate::errors::Error;
 use crate::messages::{OutgoingMessages, RequestMessage};
 use crate::subscriptions::{ResponseContext, StreamDecoder, Subscription};
-use crate::transport::AsyncInternalSubscription;
+use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 
 /// Builder for creating requests with IDs
 #[allow(dead_code)]
@@ -49,7 +49,9 @@ impl<'a> RequestBuilder<'a> {
     where
         T: StreamDecoder<T> + Send + 'static,
     {
-        SubscriptionBuilder::<T>::new(self.client)
+        let server_version = self.client.server_version();
+        let message_bus = self.client.message_bus.clone();
+        SubscriptionBuilder::<T>::new_with_components(server_version, message_bus)
             .send_with_request_id::<T>(self.request_id, message)
             .await
     }
@@ -59,7 +61,9 @@ impl<'a> RequestBuilder<'a> {
     where
         T: StreamDecoder<T> + Send + 'static,
     {
-        SubscriptionBuilder::<T>::new(self.client)
+        let server_version = self.client.server_version();
+        let message_bus = self.client.message_bus.clone();
+        SubscriptionBuilder::<T>::new_with_components(server_version, message_bus)
             .with_context(context)
             .send_with_request_id::<T>(self.request_id, message)
             .await
@@ -96,7 +100,9 @@ impl<'a> SharedRequestBuilder<'a> {
     where
         T: StreamDecoder<T> + Send + 'static,
     {
-        SubscriptionBuilder::<T>::new(self.client)
+        let server_version = self.client.server_version();
+        let message_bus = self.client.message_bus.clone();
+        SubscriptionBuilder::<T>::new_with_components(server_version, message_bus)
             .send_shared::<T>(self.message_type, message)
             .await
     }
@@ -106,7 +112,9 @@ impl<'a> SharedRequestBuilder<'a> {
     where
         T: StreamDecoder<T> + Send + 'static,
     {
-        SubscriptionBuilder::<T>::new(self.client)
+        let server_version = self.client.server_version();
+        let message_bus = self.client.message_bus.clone();
+        SubscriptionBuilder::<T>::new_with_components(server_version, message_bus)
             .with_context(context)
             .send_shared::<T>(self.message_type, message)
             .await
@@ -184,21 +192,23 @@ impl<'a> MessageBuilder<'a> {
 
 /// Builder for creating subscriptions with consistent patterns
 #[allow(dead_code)]
-pub(crate) struct SubscriptionBuilder<'a, T> {
-    client: &'a Client,
+pub(crate) struct SubscriptionBuilder<T> {
+    server_version: i32,
+    message_bus: Arc<dyn AsyncMessageBus>,
     context: ResponseContext,
     _phantom: PhantomData<T>,
 }
 
 #[allow(dead_code)]
-impl<'a, T> SubscriptionBuilder<'a, T>
+impl<T> SubscriptionBuilder<T>
 where
     T: Send + 'static,
 {
-    /// Creates a new subscription builder
-    pub fn new(client: &'a Client) -> Self {
+    /// Creates a new subscription builder from components
+    pub fn new_with_components(server_version: i32, message_bus: Arc<dyn AsyncMessageBus>) -> Self {
         Self {
-            client,
+            server_version,
+            message_bus,
             context: ResponseContext::default(),
             _phantom: PhantomData,
         }
@@ -222,12 +232,13 @@ where
         D: StreamDecoder<T> + 'static,
     {
         // Use atomic subscribe + send
-        let subscription = self.client.message_bus.send_request(request_id, message).await?;
+        let subscription = self.message_bus.send_request(request_id, message).await?;
 
         // Create subscription with decoder
         Ok(Subscription::new_from_internal::<D>(
             subscription,
-            Arc::new(self.client.clone()),
+            self.server_version,
+            self.message_bus.clone(),
             Some(request_id),
             None,
             None,
@@ -241,11 +252,12 @@ where
         D: StreamDecoder<T> + 'static,
     {
         // Use atomic subscribe + send
-        let subscription = self.client.message_bus.send_shared_request(message_type, message).await?;
+        let subscription = self.message_bus.send_shared_request(message_type, message).await?;
 
         Ok(Subscription::new_from_internal::<D>(
             subscription,
-            Arc::new(self.client.clone()),
+            self.server_version,
+            self.message_bus.clone(),
             None,
             None,
             Some(message_type),
@@ -259,11 +271,12 @@ where
         D: StreamDecoder<T> + 'static,
     {
         // Use atomic subscribe + send
-        let subscription = self.client.message_bus.send_order_request(order_id, message).await?;
+        let subscription = self.message_bus.send_order_request(order_id, message).await?;
 
         Ok(Subscription::new_from_internal::<D>(
             subscription,
-            Arc::new(self.client.clone()),
+            self.server_version,
+            self.message_bus.clone(),
             None,
             Some(order_id),
             None,
@@ -325,16 +338,18 @@ impl ClientRequestBuilders for Client {
 /// Extension trait to add subscription builder to Client
 pub trait SubscriptionBuilderExt {
     /// Creates a new subscription builder
-    fn subscription<T>(&self) -> SubscriptionBuilder<'_, T>
+    fn subscription<T>(&self) -> SubscriptionBuilder<T>
     where
         T: Send + 'static;
 }
 
 impl SubscriptionBuilderExt for Client {
-    fn subscription<T>(&self) -> SubscriptionBuilder<'_, T>
+    fn subscription<T>(&self) -> SubscriptionBuilder<T>
     where
         T: Send + 'static,
     {
-        SubscriptionBuilder::new(self)
+        let server_version = self.server_version();
+        let message_bus = self.message_bus.clone();
+        SubscriptionBuilder::new_with_components(server_version, message_bus)
     }
 }

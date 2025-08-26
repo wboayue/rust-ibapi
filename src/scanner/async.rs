@@ -6,7 +6,6 @@ use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, Respon
 use crate::orders::TagValue;
 use crate::subscriptions::{ResponseContext, StreamDecoder, Subscription};
 use crate::{server_versions, Client, Error};
-use std::sync::Arc;
 
 impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::ScannerData];
@@ -54,7 +53,8 @@ pub(crate) async fn scanner_subscription(
 
     Ok(Subscription::new_from_internal::<Vec<ScannerData>>(
         internal_subscription,
-        Arc::new(client.clone()),
+        client.server_version(),
+        client.message_bus.clone(),
         Some(request_id),
         None,
         None,
