@@ -6,7 +6,6 @@ use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessag
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::{StreamDecoder, Subscription};
 use crate::{Client, Error};
-use std::sync::Arc;
 
 use super::common::{decoders, encoders, verify};
 use super::*;
@@ -132,7 +131,8 @@ pub async fn order_update_stream(client: &Client) -> Result<Subscription<OrderUp
     let internal_subscription = client.create_order_update_subscription().await?;
     Ok(Subscription::new_from_internal_simple::<OrderUpdate>(
         internal_subscription,
-        Arc::new(client.clone()),
+        client.server_version(),
+        client.message_bus.clone(),
     ))
 }
 
@@ -175,7 +175,8 @@ pub async fn place_order(client: &Client, order_id: i32, contract: &Contract, or
 
     Ok(Subscription::new_from_internal_simple::<PlaceOrder>(
         internal_subscription,
-        Arc::new(client.clone()),
+        client.server_version(),
+        client.message_bus.clone(),
     ))
 }
 
@@ -190,7 +191,8 @@ pub async fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_ti
 
     Ok(Subscription::new_from_internal_simple::<CancelOrder>(
         internal_subscription,
-        Arc::new(client.clone()),
+        client.server_version(),
+        client.message_bus.clone(),
     ))
 }
 
@@ -231,7 +233,8 @@ pub async fn completed_orders(client: &Client, api_only: bool) -> Result<Subscri
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestCompletedOrders, request).await?;
     Ok(Subscription::new_from_internal_simple::<Orders>(
         internal_subscription,
-        Arc::new(client.clone()),
+        client.server_version(),
+        client.message_bus.clone(),
     ))
 }
 
@@ -246,7 +249,8 @@ pub async fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error>
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestOpenOrders, request).await?;
     Ok(Subscription::new_from_internal_simple::<Orders>(
         internal_subscription,
-        Arc::new(client.clone()),
+        client.server_version(),
+        client.message_bus.clone(),
     ))
 }
 
@@ -258,7 +262,8 @@ pub async fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Er
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestAllOpenOrders, request).await?;
     Ok(Subscription::new_from_internal_simple::<Orders>(
         internal_subscription,
-        Arc::new(client.clone()),
+        client.server_version(),
+        client.message_bus.clone(),
     ))
 }
 
@@ -269,7 +274,8 @@ pub async fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscr
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request).await?;
     Ok(Subscription::new_from_internal_simple::<Orders>(
         internal_subscription,
-        Arc::new(client.clone()),
+        client.server_version(),
+        client.message_bus.clone(),
     ))
 }
 
@@ -287,7 +293,8 @@ pub async fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subs
     let internal_subscription = client.send_request(request_id, request).await?;
     Ok(Subscription::new_from_internal_simple::<Executions>(
         internal_subscription,
-        Arc::new(client.clone()),
+        client.server_version(),
+        client.message_bus.clone(),
     ))
 }
 
@@ -314,7 +321,8 @@ pub async fn exercise_options(
     let internal_subscription = client.send_order(order_id, request).await?;
     Ok(Subscription::new_from_internal_simple::<ExerciseOptions>(
         internal_subscription,
-        Arc::new(client.clone()),
+        client.server_version(),
+        client.message_bus.clone(),
     ))
 }
 
