@@ -475,7 +475,6 @@ pub use r#async::TickSubscription;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::str::FromStr;
 
     #[test]
     fn test_bar_size_to_string() {
