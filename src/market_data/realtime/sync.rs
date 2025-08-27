@@ -11,14 +11,14 @@ use super::common::{decoders, encoders};
 use super::{Bar, BarSize, BidAsk, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, Trade, WhatToShow};
 
 // Requests realtime bars.
-pub(crate) fn realtime_bars<'a>(
-    client: &'a Client,
+pub(crate) fn realtime_bars(
+    client: &Client,
     contract: &Contract,
     bar_size: &BarSize,
     what_to_show: &WhatToShow,
     use_rth: bool,
     options: Vec<TagValue>,
-) -> Result<Subscription<'a, Bar>, Error> {
+) -> Result<Subscription<Bar>, Error> {
     let builder = client.request();
     let request = encoders::encode_request_realtime_bars(
         client.server_version(),
@@ -34,12 +34,12 @@ pub(crate) fn realtime_bars<'a>(
 }
 
 // Requests tick by tick AllLast ticks.
-pub(crate) fn tick_by_tick_all_last<'a>(
-    client: &'a Client,
+pub(crate) fn tick_by_tick_all_last(
+    client: &Client,
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<Subscription<'a, Trade>, Error> {
+) -> Result<Subscription<Trade>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -62,12 +62,7 @@ pub(super) fn validate_tick_by_tick_request(client: &Client, _contract: &Contrac
 }
 
 // Requests tick by tick Last ticks.
-pub(crate) fn tick_by_tick_last<'a>(
-    client: &'a Client,
-    contract: &Contract,
-    number_of_ticks: i32,
-    ignore_size: bool,
-) -> Result<Subscription<'a, Trade>, Error> {
+pub(crate) fn tick_by_tick_last(client: &Client, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<Trade>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -79,12 +74,12 @@ pub(crate) fn tick_by_tick_last<'a>(
 }
 
 // Requests tick by tick BidAsk ticks.
-pub(crate) fn tick_by_tick_bid_ask<'a>(
-    client: &'a Client,
+pub(crate) fn tick_by_tick_bid_ask(
+    client: &Client,
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<Subscription<'a, BidAsk>, Error> {
+) -> Result<Subscription<BidAsk>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -96,12 +91,12 @@ pub(crate) fn tick_by_tick_bid_ask<'a>(
 }
 
 // Requests tick by tick MidPoint ticks.
-pub(crate) fn tick_by_tick_midpoint<'a>(
-    client: &'a Client,
+pub(crate) fn tick_by_tick_midpoint(
+    client: &Client,
     contract: &Contract,
     number_of_ticks: i32,
     ignore_size: bool,
-) -> Result<Subscription<'a, MidPoint>, Error> {
+) -> Result<Subscription<MidPoint>, Error> {
     validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
 
     let server_version = client.server_version();
@@ -112,12 +107,12 @@ pub(crate) fn tick_by_tick_midpoint<'a>(
     builder.send(request)
 }
 
-pub(crate) fn market_depth<'a>(
-    client: &'a Client,
+pub(crate) fn market_depth(
+    client: &Client,
     contract: &Contract,
     number_of_rows: i32,
     is_smart_depth: bool,
-) -> Result<Subscription<'a, MarketDepths>, Error> {
+) -> Result<Subscription<MarketDepths>, Error> {
     if is_smart_depth {
         check_version(client.server_version(), Features::SMART_DEPTH)?;
     }
@@ -159,13 +154,13 @@ pub fn market_depth_exchanges(client: &Client) -> Result<Vec<DepthMarketDataDesc
 }
 
 // Requests real time market data.
-pub fn market_data<'a>(
-    client: &'a Client,
+pub fn market_data(
+    client: &Client,
     contract: &Contract,
     generic_ticks: &[&str],
     snapshot: bool,
     regulatory_snapshot: bool,
-) -> Result<Subscription<'a, TickTypes>, Error> {
+) -> Result<Subscription<TickTypes>, Error> {
     let builder = client.request();
     let request = encoders::encode_request_market_data(
         client.server_version(),

@@ -2,17 +2,16 @@
 
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use log::{debug, error, warn};
 
 use super::common::{process_decode_result, should_retry_error, should_store_error, ProcessingResult};
 use super::{ResponseContext, StreamDecoder};
-use crate::client::Client;
 use crate::errors::Error;
 use crate::messages::{OutgoingMessages, ResponseMessage};
-use crate::transport::InternalSubscription;
+use crate::transport::{InternalSubscription, MessageBus};
 
 /// A [Subscription] is a stream of responses returned from TWS. A [Subscription] is normally returned when invoking an API that can return more than one value.
 ///
@@ -20,9 +19,9 @@ use crate::transport::InternalSubscription;
 ///
 /// Alternatively, you may poll subscriptions in a blocking or non-blocking manner using the [next](Subscription::next), [try_next](Subscription::try_next) or [next_timeout](Subscription::next_timeout) methods.
 #[allow(private_bounds)]
-#[derive(Debug)]
-pub struct Subscription<'a, T: StreamDecoder<T> + 'static> {
-    client: &'a Client,
+pub struct Subscription<T: StreamDecoder<T>> {
+    server_version: i32,
+    message_bus: Arc<dyn MessageBus>,
     request_id: Option<i32>,
     order_id: Option<i32>,
     message_type: Option<OutgoingMessages>,
@@ -35,14 +34,20 @@ pub struct Subscription<'a, T: StreamDecoder<T> + 'static> {
 }
 
 #[allow(private_bounds)]
-impl<'a, T: StreamDecoder<T> + 'static> Subscription<'a, T> {
-    pub(crate) fn new(client: &'a Client, subscription: InternalSubscription, context: Option<ResponseContext>) -> Self {
+impl<T: StreamDecoder<T>> Subscription<T> {
+    pub(crate) fn new(
+        server_version: i32,
+        message_bus: Arc<dyn MessageBus>,
+        subscription: InternalSubscription,
+        context: Option<ResponseContext>,
+    ) -> Self {
         let request_id = subscription.request_id;
         let order_id = subscription.order_id;
         let message_type = subscription.message_type;
 
         Subscription {
-            client,
+            server_version,
+            message_bus,
             request_id,
             order_id,
             message_type,
@@ -70,22 +75,22 @@ impl<'a, T: StreamDecoder<T> + 'static> Subscription<'a, T> {
         self.cancelled.store(true, Ordering::Relaxed);
 
         if let Some(request_id) = self.request_id {
-            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, self.response_context.as_ref()) {
-                if let Err(e) = self.client.message_bus.cancel_subscription(request_id, &message) {
+            if let Ok(message) = T::cancel_message(self.server_version, self.request_id, self.response_context.as_ref()) {
+                if let Err(e) = self.message_bus.cancel_subscription(request_id, &message) {
                     warn!("error cancelling subscription: {e}")
                 }
                 self.subscription.cancel();
             }
         } else if let Some(order_id) = self.order_id {
-            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, self.response_context.as_ref()) {
-                if let Err(e) = self.client.message_bus.cancel_order_subscription(order_id, &message) {
+            if let Ok(message) = T::cancel_message(self.server_version, self.request_id, self.response_context.as_ref()) {
+                if let Err(e) = self.message_bus.cancel_order_subscription(order_id, &message) {
                     warn!("error cancelling order subscription: {e}")
                 }
                 self.subscription.cancel();
             }
         } else if let Some(message_type) = self.message_type {
-            if let Ok(message) = T::cancel_message(self.client.server_version(), self.request_id, self.response_context.as_ref()) {
-                if let Err(e) = self.client.message_bus.cancel_shared_subscription(message_type, &message) {
+            if let Ok(message) = T::cancel_message(self.server_version, self.request_id, self.response_context.as_ref()) {
+                if let Err(e) = self.message_bus.cancel_shared_subscription(message_type, &message) {
                     warn!("error cancelling shared subscription: {e}")
                 }
                 self.subscription.cancel();
@@ -169,7 +174,7 @@ impl<'a, T: StreamDecoder<T> + 'static> Subscription<'a, T> {
     }
 
     fn process_message(&self, mut message: ResponseMessage) -> Option<T> {
-        match process_decode_result(T::decode(self.client.server_version, &mut message)) {
+        match process_decode_result(T::decode(self.server_version, &mut message)) {
             ProcessingResult::Success(val) => {
                 // Check if this decoded value represents the end of a snapshot subscription
                 if val.is_snapshot_end() {
@@ -362,7 +367,7 @@ impl<'a, T: StreamDecoder<T> + 'static> Subscription<'a, T> {
     }
 }
 
-impl<T: StreamDecoder<T> + 'static> Drop for Subscription<'_, T> {
+impl<T: StreamDecoder<T>> Drop for Subscription<T> {
     /// Cancel subscription on drop
     fn drop(&mut self) {
         debug!("dropping subscription");
@@ -372,12 +377,11 @@ impl<T: StreamDecoder<T> + 'static> Drop for Subscription<'_, T> {
 
 /// An iterator that yields items as they become available, blocking if necessary.
 #[allow(private_bounds)]
-#[derive(Debug)]
-pub struct SubscriptionIter<'a, T: StreamDecoder<T> + 'static> {
-    subscription: &'a Subscription<'a, T>,
+pub struct SubscriptionIter<'a, T: StreamDecoder<T>> {
+    subscription: &'a Subscription<T>,
 }
 
-impl<T: StreamDecoder<T> + 'static> Iterator for SubscriptionIter<'_, T> {
+impl<T: StreamDecoder<T>> Iterator for SubscriptionIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -385,7 +389,7 @@ impl<T: StreamDecoder<T> + 'static> Iterator for SubscriptionIter<'_, T> {
     }
 }
 
-impl<'a, T: StreamDecoder<T> + 'static> IntoIterator for &'a Subscription<'a, T> {
+impl<'a, T: StreamDecoder<T>> IntoIterator for &'a Subscription<T> {
     type Item = T;
     type IntoIter = SubscriptionIter<'a, T>;
 
@@ -396,12 +400,11 @@ impl<'a, T: StreamDecoder<T> + 'static> IntoIterator for &'a Subscription<'a, T>
 
 /// An iterator that takes ownership and yields items as they become available, blocking if necessary.
 #[allow(private_bounds)]
-#[derive(Debug)]
-pub struct SubscriptionOwnedIter<'a, T: StreamDecoder<T> + 'static> {
-    subscription: Subscription<'a, T>,
+pub struct SubscriptionOwnedIter<T: StreamDecoder<T>> {
+    subscription: Subscription<T>,
 }
 
-impl<T: StreamDecoder<T> + 'static> Iterator for SubscriptionOwnedIter<'_, T> {
+impl<T: StreamDecoder<T>> Iterator for SubscriptionOwnedIter<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -409,9 +412,9 @@ impl<T: StreamDecoder<T> + 'static> Iterator for SubscriptionOwnedIter<'_, T> {
     }
 }
 
-impl<'a, T: StreamDecoder<T> + 'static> IntoIterator for Subscription<'a, T> {
+impl<T: StreamDecoder<T>> IntoIterator for Subscription<T> {
     type Item = T;
-    type IntoIter = SubscriptionOwnedIter<'a, T>;
+    type IntoIter = SubscriptionOwnedIter<T>;
 
     fn into_iter(self) -> Self::IntoIter {
         SubscriptionOwnedIter { subscription: self }
@@ -420,12 +423,11 @@ impl<'a, T: StreamDecoder<T> + 'static> IntoIterator for Subscription<'a, T> {
 
 /// An iterator that yields items as they become available without blocking.
 #[allow(private_bounds)]
-#[derive(Debug)]
-pub struct SubscriptionTryIter<'a, T: StreamDecoder<T> + 'static> {
-    subscription: &'a Subscription<'a, T>,
+pub struct SubscriptionTryIter<'a, T: StreamDecoder<T>> {
+    subscription: &'a Subscription<T>,
 }
 
-impl<T: StreamDecoder<T> + 'static> Iterator for SubscriptionTryIter<'_, T> {
+impl<T: StreamDecoder<T>> Iterator for SubscriptionTryIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -435,13 +437,12 @@ impl<T: StreamDecoder<T> + 'static> Iterator for SubscriptionTryIter<'_, T> {
 
 /// An iterator that yields items with a timeout.
 #[allow(private_bounds)]
-#[derive(Debug)]
-pub struct SubscriptionTimeoutIter<'a, T: StreamDecoder<T> + 'static> {
-    subscription: &'a Subscription<'a, T>,
+pub struct SubscriptionTimeoutIter<'a, T: StreamDecoder<T>> {
+    subscription: &'a Subscription<T>,
     timeout: Duration,
 }
 
-impl<T: StreamDecoder<T> + 'static> Iterator for SubscriptionTimeoutIter<'_, T> {
+impl<T: StreamDecoder<T>> Iterator for SubscriptionTimeoutIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {

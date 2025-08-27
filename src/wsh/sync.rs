@@ -66,12 +66,12 @@ pub fn wsh_event_data_by_contract(
     )
 }
 
-pub fn wsh_event_data_by_filter<'a>(
-    client: &'a Client,
+pub fn wsh_event_data_by_filter(
+    client: &Client,
     filter: &str,
     limit: Option<i32>,
     auto_fill: Option<AutoFill>,
-) -> Result<Subscription<'a, WshEventData>, Error> {
+) -> Result<Subscription<WshEventData>, Error> {
     if limit.is_some() {
         check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
     }
@@ -251,7 +251,7 @@ mod tests {
                 IntegrationExpectedResult::ServerVersionError => {
                     assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
                     assert!(
-                        matches!(result.unwrap_err(), Error::ServerVersion(_, _, _)),
+                        matches!(result.as_ref().err(), Some(Error::ServerVersion(_, _, _))),
                         "Test '{}' wrong error type",
                         test_case.name
                     );

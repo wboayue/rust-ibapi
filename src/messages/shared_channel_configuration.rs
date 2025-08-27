@@ -1,9 +1,9 @@
 use super::{IncomingMessages, OutgoingMessages};
 
 #[allow(dead_code)]
-pub struct ChannelMapping<'a> {
+pub struct ChannelMapping {
     pub request: OutgoingMessages,
-    pub responses: &'a [IncomingMessages],
+    pub responses: &'static [IncomingMessages],
 }
 
 // For shared channels configures mapping of request message id to response message ids.

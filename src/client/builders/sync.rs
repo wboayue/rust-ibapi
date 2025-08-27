@@ -1,6 +1,7 @@
 //! Synchronous builder implementations
 
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use crate::client::sync::Client;
 use crate::client::{ResponseContext, StreamDecoder};
@@ -43,17 +44,17 @@ impl<'a> RequestBuilder<'a> {
     }
 
     /// Send the request and create a subscription
-    pub fn send<T>(self, message: RequestMessage) -> Result<Subscription<'a, T>, Error>
+    pub fn send<T>(self, message: RequestMessage) -> Result<Subscription<T>, Error>
     where
-        T: StreamDecoder<T> + 'static,
+        T: StreamDecoder<T>,
     {
         SubscriptionBuilder::new(self.client).send_with_request_id(self.request_id, message)
     }
 
     /// Send the request and create a subscription with context
-    pub fn send_with_context<T>(self, message: RequestMessage, context: ResponseContext) -> Result<Subscription<'a, T>, Error>
+    pub fn send_with_context<T>(self, message: RequestMessage, context: ResponseContext) -> Result<Subscription<T>, Error>
     where
-        T: StreamDecoder<T> + 'static,
+        T: StreamDecoder<T>,
     {
         SubscriptionBuilder::new(self.client)
             .with_context(context)
@@ -87,17 +88,17 @@ impl<'a> SharedRequestBuilder<'a> {
     }
 
     /// Send the request and create a subscription
-    pub fn send<T>(self, message: RequestMessage) -> Result<Subscription<'a, T>, Error>
+    pub fn send<T>(self, message: RequestMessage) -> Result<Subscription<T>, Error>
     where
-        T: StreamDecoder<T> + 'static,
+        T: StreamDecoder<T>,
     {
         SubscriptionBuilder::new(self.client).send_shared(self.message_type, message)
     }
 
     /// Send the request and create a subscription with context
-    pub fn send_with_context<T>(self, message: RequestMessage, context: ResponseContext) -> Result<Subscription<'a, T>, Error>
+    pub fn send_with_context<T>(self, message: RequestMessage, context: ResponseContext) -> Result<Subscription<T>, Error>
     where
-        T: StreamDecoder<T> + 'static,
+        T: StreamDecoder<T>,
     {
         SubscriptionBuilder::new(self.client)
             .with_context(context)
@@ -185,7 +186,7 @@ pub(crate) struct SubscriptionBuilder<'a, T> {
 #[allow(dead_code)]
 impl<'a, T> SubscriptionBuilder<'a, T>
 where
-    T: StreamDecoder<T> + 'static,
+    T: StreamDecoder<T>,
 {
     /// Creates a new subscription builder
     pub fn new(client: &'a Client) -> Self {
@@ -209,24 +210,29 @@ where
     }
 
     /// Builds a subscription from an internal subscription (already sent)
-    pub fn build(self, subscription: InternalSubscription) -> Subscription<'a, T> {
-        Subscription::new(self.client, subscription, Some(self.context))
+    pub fn build(self, subscription: InternalSubscription) -> Subscription<T> {
+        Subscription::new(
+            self.client.server_version,
+            Arc::clone(&self.client.message_bus),
+            subscription,
+            Some(self.context),
+        )
     }
 
     /// Sends a request with a specific request ID and builds the subscription
-    pub fn send_with_request_id(self, request_id: i32, message: RequestMessage) -> Result<Subscription<'a, T>, Error> {
+    pub fn send_with_request_id(self, request_id: i32, message: RequestMessage) -> Result<Subscription<T>, Error> {
         let subscription = self.client.send_request(request_id, message)?;
         Ok(self.build(subscription))
     }
 
     /// Sends a shared request (no ID) and builds the subscription
-    pub fn send_shared(self, message_type: OutgoingMessages, message: RequestMessage) -> Result<Subscription<'a, T>, Error> {
+    pub fn send_shared(self, message_type: OutgoingMessages, message: RequestMessage) -> Result<Subscription<T>, Error> {
         let subscription = self.client.send_shared_request(message_type, message)?;
         Ok(self.build(subscription))
     }
 
     /// Sends an order request and builds the subscription
-    pub fn send_order(self, order_id: i32, message: RequestMessage) -> Result<Subscription<'a, T>, Error> {
+    pub fn send_order(self, order_id: i32, message: RequestMessage) -> Result<Subscription<T>, Error> {
         let subscription = self.client.send_order(order_id, message)?;
         Ok(self.build(subscription))
     }
@@ -286,13 +292,13 @@ pub trait SubscriptionBuilderExt {
     /// Creates a new subscription builder
     fn subscription<T>(&self) -> SubscriptionBuilder<'_, T>
     where
-        T: StreamDecoder<T> + 'static;
+        T: StreamDecoder<T>;
 }
 
 impl SubscriptionBuilderExt for Client {
     fn subscription<T>(&self) -> SubscriptionBuilder<'_, T>
     where
-        T: StreamDecoder<T> + 'static,
+        T: StreamDecoder<T>,
     {
         SubscriptionBuilder::new(self)
     }

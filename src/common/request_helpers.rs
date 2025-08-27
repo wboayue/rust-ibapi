@@ -9,11 +9,11 @@ mod sync_helpers {
     use crate::Error;
 
     /// Helper for requests that need a request ID and return a subscription
-    pub fn request_with_id<'a, T>(
-        client: &'a Client,
+    pub fn request_with_id<T>(
+        client: &Client,
         feature: ProtocolFeature,
         encoder: impl FnOnce(i32) -> Result<RequestMessage, Error>,
-    ) -> Result<Subscription<'a, T>, Error>
+    ) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T>,
     {
@@ -24,15 +24,15 @@ mod sync_helpers {
     }
 
     /// Helper for shared requests (no request ID) that return a subscription
-    pub fn shared_subscription<'a, T>(
-        client: &'a Client,
+    pub fn shared_subscription<T>(
+        client: &Client,
         feature: ProtocolFeature,
         message_type: OutgoingMessages,
         encoder: impl FnOnce() -> Result<RequestMessage, Error>,
-    ) -> Result<Subscription<'a, T>, Error>
+    ) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T>,
-        Subscription<'a, T>: SharesChannel,
+        Subscription<T>: SharesChannel,
     {
         check_version(client.server_version(), feature)?;
         let request = encoder()?;
@@ -40,11 +40,11 @@ mod sync_helpers {
     }
 
     /// Helper for shared requests without version check
-    pub fn shared_request<'a, T>(
-        client: &'a Client,
+    pub fn shared_request<T>(
+        client: &Client,
         message_type: OutgoingMessages,
         encoder: impl FnOnce() -> Result<RequestMessage, Error>,
-    ) -> Result<Subscription<'a, T>, Error>
+    ) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T>,
     {

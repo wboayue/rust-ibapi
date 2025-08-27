@@ -12,11 +12,11 @@ use super::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use super::*;
 
 // Implement SharesChannel for PositionUpdate subscription
-impl SharesChannel for Subscription<'_, PositionUpdate> {}
+impl SharesChannel for Subscription<PositionUpdate> {}
 
 // Subscribes to position updates for all accessible accounts.
 // All positions sent initially, and then only updates as positions change.
-pub fn positions(client: &Client) -> Result<Subscription<'_, PositionUpdate>, Error> {
+pub fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
     crate::common::request_helpers::shared_subscription(
         client,
         Features::POSITIONS,
@@ -25,11 +25,11 @@ pub fn positions(client: &Client) -> Result<Subscription<'_, PositionUpdate>, Er
     )
 }
 
-pub fn positions_multi<'a>(
-    client: &'a Client,
+pub fn positions_multi(
+    client: &Client,
     account: Option<&AccountId>,
     model_code: Option<&ModelCode>,
-) -> Result<Subscription<'a, PositionUpdateMulti>, Error> {
+) -> Result<Subscription<PositionUpdateMulti>, Error> {
     check_version(client.server_version(), Features::MODELS_SUPPORT)?;
 
     let builder = client.request();
@@ -56,7 +56,7 @@ pub fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
 // * `client`     - client
 // * `account`    - account for which to receive PnL updates
 // * `model_code` - specify to request PnL updates for a specific model
-pub fn pnl<'a>(client: &'a Client, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<'a, PnL>, Error> {
+pub fn pnl(client: &Client, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
     crate::common::request_helpers::request_with_id(client, Features::PNL, |id| encoders::encode_request_pnl(id, account, model_code))
 }
 
@@ -67,34 +67,34 @@ pub fn pnl<'a>(client: &'a Client, account: &AccountId, model_code: Option<&Mode
 // * `account` - Account in which position exists
 // * `contract_id` - Contract ID of contract to receive daily PnL updates for. Note: does not return message if invalid conId is entered
 // * `model_code` - Model in which position exists
-pub fn pnl_single<'a>(
-    client: &'a Client,
+pub fn pnl_single(
+    client: &Client,
     account: &AccountId,
     contract_id: ContractId,
     model_code: Option<&ModelCode>,
-) -> Result<Subscription<'a, PnLSingle>, Error> {
+) -> Result<Subscription<PnLSingle>, Error> {
     crate::common::request_helpers::request_with_id(client, Features::REALIZED_PNL, |id| {
         encoders::encode_request_pnl_single(id, account, contract_id, model_code)
     })
 }
 
-pub fn account_summary<'a>(client: &'a Client, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<'a, AccountSummaryResult>, Error> {
+pub fn account_summary(client: &Client, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaryResult>, Error> {
     crate::common::request_helpers::request_with_id(client, Features::ACCOUNT_SUMMARY, |id| {
         encoders::encode_request_account_summary(id, group, tags)
     })
 }
 
-pub fn account_updates<'a>(client: &'a Client, account: &AccountId) -> Result<Subscription<'a, AccountUpdate>, Error> {
+pub fn account_updates(client: &Client, account: &AccountId) -> Result<Subscription<AccountUpdate>, Error> {
     crate::common::request_helpers::shared_request(client, OutgoingMessages::RequestAccountData, || {
         encoders::encode_request_account_updates(client.server_version(), account)
     })
 }
 
-pub fn account_updates_multi<'a>(
-    client: &'a Client,
+pub fn account_updates_multi(
+    client: &Client,
     account: Option<&AccountId>,
     model_code: Option<&ModelCode>,
-) -> Result<Subscription<'a, AccountUpdateMulti>, Error> {
+) -> Result<Subscription<AccountUpdateMulti>, Error> {
     check_version(client.server_version(), Features::MODELS_SUPPORT)?;
 
     let builder = client.request();
