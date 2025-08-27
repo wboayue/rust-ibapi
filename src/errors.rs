@@ -6,6 +6,7 @@
 use std::{num::ParseIntError, string::FromUtf8Error};
 use thiserror::Error;
 
+use crate::market_data::historical::HistoricalParseError;
 use crate::messages::{ResponseMessage, CODE_INDEX, MESSAGE_INDEX};
 
 /// The main error type for IBAPI operations.
@@ -95,6 +96,9 @@ pub enum Error {
     /// Attempted to create a duplicate subscription.
     #[error("AlreadySubscribed")]
     AlreadySubscribed,
+
+    #[error("HistoricalParseError: {0}")]
+    HistoricalParseError(HistoricalParseError),
 }
 
 impl From<ResponseMessage> for Error {

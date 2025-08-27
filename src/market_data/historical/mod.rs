@@ -1,6 +1,7 @@
-use std::fmt::{Debug, Display};
+use std::fmt::{self, Debug, Display};
 use std::num::ParseIntError;
 use std::str::FromStr;
+use thiserror::Error;
 
 use serde::{Deserialize, Serialize};
 use time::{Date, OffsetDateTime};
@@ -15,6 +16,18 @@ pub mod sync;
 
 #[cfg(feature = "async")]
 pub mod r#async;
+
+#[derive(Debug, Error, PartialEq)]
+pub enum HistoricalParseError {
+    #[error("Invalid BarSize input '{0}'")]
+    BarSize(String),
+    #[error("Invalid Duration input '{0}' {1}")]
+    Duration(String, String),
+    #[error("Invalid WhatToShow input '{0}'")]
+    WhatToShow(String),
+    #[error("ParseIntError '{0}' {1}")]
+    ParseIntError(String, ParseIntError),
+}
 
 /// Bar describes the historical data bar.
 #[derive(Clone, Debug, PartialEq, Copy, Serialize, Deserialize)]
@@ -87,30 +100,43 @@ impl Display for BarSize {
     }
 }
 
+impl FromStr for BarSize {
+    type Err = HistoricalParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_str() {
+            "SEC" => Ok(Self::Sec),
+            "SEC5" => Ok(Self::Sec5),
+            "SEC15" => Ok(Self::Sec15),
+            "SEC30" => Ok(Self::Sec30),
+            "MIN" => Ok(Self::Min),
+            "MIN2" => Ok(Self::Min2),
+            "MIN3" => Ok(Self::Min3),
+            "MIN5" => Ok(Self::Min5),
+            "MIN15" => Ok(Self::Min15),
+            "MIN20" => Ok(Self::Min20),
+            "MIN30" => Ok(Self::Min30),
+            "HOUR" => Ok(Self::Hour),
+            "HOUR2" => Ok(Self::Hour2),
+            "HOUR3" => Ok(Self::Hour3),
+            "HOUR4" => Ok(Self::Hour4),
+            "HOUR8" => Ok(Self::Hour8),
+            "DAY" => Ok(Self::Day),
+            "WEEK" => Ok(Self::Week),
+            "MONTH" => Ok(Self::Month),
+            _ => Err(HistoricalParseError::BarSize(s.to_string())),
+        }
+    }
+}
+
 impl From<&str> for BarSize {
     fn from(val: &str) -> Self {
-        match val.to_uppercase().as_str() {
-            "SEC" => Self::Sec,
-            "SEC5" => Self::Sec5,
-            "SEC15" => Self::Sec15,
-            "SEC30" => Self::Sec30,
-            "MIN" => Self::Min,
-            "MIN2" => Self::Min2,
-            "MIN3" => Self::Min3,
-            "MIN5" => Self::Min5,
-            "MIN15" => Self::Min15,
-            "MIN20" => Self::Min20,
-            "MIN30" => Self::Min30,
-            "HOUR" => Self::Hour,
-            "HOUR2" => Self::Hour2,
-            "HOUR3" => Self::Hour3,
-            "HOUR4" => Self::Hour4,
-            "HOUR8" => Self::Hour8,
-            "DAY" => Self::Day,
-            "WEEK" => Self::Week,
-            "MONTH" => Self::Month,
-            _ => panic!("unsupported value: {val}"),
-        }
+        Self::from_str(val).unwrap()
+    }
+}
+impl From<String> for BarSize {
+    fn from(val: String) -> Self {
+        Self::from(val.as_str())
     }
 }
 
@@ -159,61 +185,40 @@ impl Display for Duration {
         write!(f, "{} {}", self.value, self.unit)
     }
 }
-#[derive(Debug, PartialEq)]
-pub enum DurationParseError {
-    EmptyString,
-    MissingDelimiter(String),
-    ParseIntError(ParseIntError),
-    UnsupportedUnit(String),
-}
-impl From<ParseIntError> for DurationParseError {
-    fn from(err: ParseIntError) -> Self {
-        DurationParseError::ParseIntError(err)
-    }
-}
-impl Display for DurationParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            DurationParseError::EmptyString => write!(f, "Empty duration string"),
-            DurationParseError::ParseIntError(err) => write!(f, "Parse integer error: {err}"),
-            DurationParseError::MissingDelimiter(msg) => write!(f, "Missing delimiter: {msg}"),
-            DurationParseError::UnsupportedUnit(unit) => write!(f, "Unsupported duration unit: {unit}"),
-        }
-    }
-}
-impl std::error::Error for DurationParseError {}
 
 impl FromStr for Duration {
-    type Err = DurationParseError;
-    fn from_str(val: &str) -> Result<Self, DurationParseError> {
+    type Err = HistoricalParseError;
+    fn from_str(val: &str) -> Result<Self, HistoricalParseError> {
         if val.is_empty() {
-            return Err(DurationParseError::EmptyString);
+            return Err(HistoricalParseError::Duration(val.to_string(), "Empty string".to_string()));
         }
         match val.to_uppercase().rsplit_once(' ') {
             Some((value_part, unit_part)) => {
-                let value = value_part.parse::<i32>().map_err(DurationParseError::from)?;
+                let value = value_part
+                    .parse::<i32>()
+                    .map_err(|e| HistoricalParseError::ParseIntError(value_part.to_string(), e))?;
                 match unit_part {
                     "S" => Ok(Self::seconds(value)),
                     "D" => Ok(Self::days(value)),
                     "W" => Ok(Self::weeks(value)),
                     "M" => Ok(Self::months(value)),
                     "Y" => Ok(Self::years(value)),
-                    _ => Err(DurationParseError::UnsupportedUnit(unit_part.to_string())),
+                    _ => Err(HistoricalParseError::Duration(val.to_string(), "Unsupported unit".to_string())),
                 }
             }
-            None => Err(DurationParseError::MissingDelimiter(val.to_string())),
+            None => Err(HistoricalParseError::Duration(val.to_string(), "Missing delimiter".to_string())),
         }
     }
 }
 
 impl From<&str> for Duration {
-    fn from(value: &str) -> Self {
-        Self::from_str(value).unwrap()
+    fn from(val: &str) -> Self {
+        Self::from_str(val).unwrap()
     }
 }
 impl From<String> for Duration {
-    fn from(value: String) -> Self {
-        Self::from(value.as_str())
+    fn from(val: String) -> Self {
+        Self::from(val.as_str())
     }
 }
 
@@ -368,21 +373,44 @@ impl std::fmt::Display for WhatToShow {
     }
 }
 
+#[derive(Debug)]
+pub struct WhatToShowParseError;
+
+impl fmt::Display for WhatToShowParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Invalid WhatToShow string")
+    }
+}
+
+impl FromStr for WhatToShow {
+    type Err = HistoricalParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_str() {
+            "TRADES" => Ok(Self::Trades),
+            "MIDPOINT" => Ok(Self::MidPoint),
+            "BID" => Ok(Self::Bid),
+            "ASK" => Ok(Self::Ask),
+            "BID_ASK" => Ok(Self::BidAsk),
+            "HISTORICAL_VOLATILITY" => Ok(Self::HistoricalVolatility),
+            "OPTION_IMPLIED_VOLATILITY" => Ok(Self::OptionImpliedVolatility),
+            "FEE_RATE" => Ok(Self::FeeRate),
+            "SCHEDULE" => Ok(Self::Schedule),
+            "ADJUSTED_LAST" => Ok(Self::AdjustedLast),
+            _ => Err(HistoricalParseError::WhatToShow(s.to_string())),
+        }
+    }
+}
+
 impl From<&str> for WhatToShow {
     fn from(val: &str) -> Self {
-        match val.to_uppercase().as_str() {
-            "TRADES" => Self::Trades,
-            "MIDPOINT" => Self::MidPoint,
-            "BID" => Self::Bid,
-            "ASK" => Self::Ask,
-            "BID_ASK" => Self::BidAsk,
-            "HISTORICAL_VOLATILITY" => Self::HistoricalVolatility,
-            "OPTION_IMPLIED_VOLATILITY" => Self::OptionImpliedVolatility,
-            "FEE_RATE" => Self::FeeRate,
-            "SCHEDULE" => Self::Schedule,
-            "ADJUSTED_LAST" => Self::AdjustedLast,
-            _ => panic!("unsupported value: {val}"),
-        }
+        Self::from_str(val).unwrap()
+    }
+}
+
+impl From<String> for WhatToShow {
+    fn from(val: String) -> Self {
+        Self::from(val.as_str())
     }
 }
 
@@ -447,7 +475,6 @@ pub use r#async::TickSubscription;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::str::FromStr;
 
     #[test]
     fn test_bar_size_to_string() {
@@ -546,29 +573,61 @@ mod tests {
         assert_eq!("4 M".parse(), Ok(Duration::months(4)));
         assert_eq!("5 Y".parse(), Ok(Duration::years(5)));
 
-        assert_eq!("".parse::<Duration>(), Err(DurationParseError::EmptyString));
-        assert_eq!("1S".parse::<Duration>(), Err(DurationParseError::MissingDelimiter("1S".to_string())));
-        assert!("abc S".parse::<Duration>().unwrap_err().to_string().contains("Parse integer error"));
-        assert_eq!("1 X".parse::<Duration>(), Err(DurationParseError::UnsupportedUnit("X".to_string())));
-
-        assert_eq!(DurationParseError::EmptyString.to_string(), "Empty duration string");
         assert_eq!(
-            DurationParseError::MissingDelimiter("1S".to_string()).to_string(),
-            "Missing delimiter: 1S"
+            "".parse::<Duration>(),
+            Err(HistoricalParseError::Duration("".to_string(), "Empty string".to_string()))
         );
         assert_eq!(
-            DurationParseError::UnsupportedUnit("X".to_string()).to_string(),
-            "Unsupported duration unit: X"
+            "1S".parse::<Duration>(),
+            Err(HistoricalParseError::Duration("1S".to_string(), "Missing delimiter".to_string()))
+        );
+        assert_eq!(
+            "1 X".parse::<Duration>(),
+            Err(HistoricalParseError::Duration("1 X".to_string(), "Unsupported unit".to_string()))
         );
 
-        if let Err(err) = i32::from_str("abc") {
-            assert_eq!(
-                DurationParseError::ParseIntError(err).to_string(),
-                "Parse integer error: invalid digit found in string"
-            );
-        }
+        let expected_int_error = "abc ".parse::<i32>().unwrap_err();
+        assert_eq!(
+            "abc ".parse::<Duration>(),
+            Err(HistoricalParseError::ParseIntError("ABC".to_string(), expected_int_error))
+        );
 
         assert_eq!(Duration::seconds(1), Duration::from("1 S"));
         assert_eq!(Duration::seconds(1), Duration::from(String::from("1 S")));
+    }
+
+    #[test]
+    fn test_historical_parse_error_display() {
+        let expected_int_error = "abc".parse::<i32>().unwrap_err();
+
+        let cases = vec![
+            (
+                HistoricalParseError::BarSize("invalid".to_string()),
+                "Invalid BarSize input 'invalid'".to_string(),
+            ),
+            (
+                HistoricalParseError::Duration("invalid".to_string(), "Empty string".to_string()),
+                "Invalid Duration input 'invalid' Empty string".to_string(),
+            ),
+            (
+                HistoricalParseError::Duration("1S".to_string(), "Missing delimiter".to_string()),
+                "Invalid Duration input '1S' Missing delimiter".to_string(),
+            ),
+            (
+                HistoricalParseError::Duration("1 X".to_string(), "Unsupported unit".to_string()),
+                "Invalid Duration input '1 X' Unsupported unit".to_string(),
+            ),
+            (
+                HistoricalParseError::ParseIntError("abc ".to_string(), expected_int_error),
+                "ParseIntError 'abc ' invalid digit found in string".to_string(),
+            ),
+            (
+                HistoricalParseError::WhatToShow("invalid".to_string()),
+                "Invalid WhatToShow input 'invalid'".to_string(),
+            ),
+        ];
+        for (error, expected) in cases {
+            assert_eq!(error.to_string(), expected);
+        }
     }
 }
