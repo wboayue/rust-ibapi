@@ -197,7 +197,7 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub fn positions(&self) -> Result<Subscription<'_, PositionUpdate>, Error> {
+    pub fn positions(&self) -> Result<Subscription<PositionUpdate>, Error> {
         accounts::positions(self)
     }
 
@@ -223,11 +223,7 @@ impl Client {
     ///     println!("{position:?}")
     /// }
     /// ```
-    pub fn positions_multi(
-        &self,
-        account: Option<&AccountId>,
-        model_code: Option<&ModelCode>,
-    ) -> Result<Subscription<'_, PositionUpdateMulti>, Error> {
+    pub fn positions_multi(&self, account: Option<&AccountId>, model_code: Option<&ModelCode>) -> Result<Subscription<PositionUpdateMulti>, Error> {
         accounts::positions_multi(self, account, model_code)
     }
 
@@ -251,7 +247,7 @@ impl Client {
     ///     println!("{pnl:?}")
     /// }
     /// ```
-    pub fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<'_, PnL>, Error> {
+    pub fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
         accounts::pnl(self, account, model_code)
     }
 
@@ -279,12 +275,7 @@ impl Client {
     ///     println!("{pnl:?}")
     /// }
     /// ```
-    pub fn pnl_single<'a>(
-        &'a self,
-        account: &AccountId,
-        contract_id: ContractId,
-        model_code: Option<&ModelCode>,
-    ) -> Result<Subscription<'a, PnLSingle>, Error> {
+    pub fn pnl_single(&self, account: &AccountId, contract_id: ContractId, model_code: Option<&ModelCode>) -> Result<Subscription<PnLSingle>, Error> {
         accounts::pnl_single(self, account, contract_id, model_code)
     }
 
@@ -310,7 +301,7 @@ impl Client {
     ///     println!("{summary:?}")
     /// }
     /// ```
-    pub fn account_summary<'a>(&'a self, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<'a, AccountSummaryResult>, Error> {
+    pub fn account_summary(&self, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaryResult>, Error> {
         accounts::account_summary(self, group, tags)
     }
 
@@ -343,7 +334,7 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub fn account_updates<'a>(&'a self, account: &AccountId) -> Result<Subscription<'a, AccountUpdate>, Error> {
+    pub fn account_updates(&self, account: &AccountId) -> Result<Subscription<AccountUpdate>, Error> {
         accounts::account_updates(self, account)
     }
 
@@ -377,11 +368,11 @@ impl Client {
     ///     }
     /// }
     /// ```
-    pub fn account_updates_multi<'a>(
-        &'a self,
+    pub fn account_updates_multi(
+        &self,
         account: Option<&AccountId>,
         model_code: Option<&ModelCode>,
-    ) -> Result<Subscription<'a, AccountUpdateMulti>, Error> {
+    ) -> Result<Subscription<AccountUpdateMulti>, Error> {
         accounts::account_updates_multi(self, account, model_code)
     }
 
@@ -543,7 +534,7 @@ impl Client {
         exchange: &str,
         security_type: SecurityType,
         contract_id: i32,
-    ) -> Result<Subscription<'_, contracts::OptionChain>, Error> {
+    ) -> Result<Subscription<contracts::OptionChain>, Error> {
         contracts::option_chain(self, symbol, exchange, security_type, contract_id)
     }
 
@@ -564,7 +555,7 @@ impl Client {
     ///    println!("{order_data:?}")
     /// }
     /// ```
-    pub fn all_open_orders(&self) -> Result<Subscription<'_, Orders>, Error> {
+    pub fn all_open_orders(&self) -> Result<Subscription<Orders>, Error> {
         orders::all_open_orders(self)
     }
 
@@ -585,7 +576,7 @@ impl Client {
     ///    println!("{order_data:?}")
     /// }
     /// ```
-    pub fn auto_open_orders(&self, auto_bind: bool) -> Result<Subscription<'_, Orders>, Error> {
+    pub fn auto_open_orders(&self, auto_bind: bool) -> Result<Subscription<Orders>, Error> {
         orders::auto_open_orders(self, auto_bind)
     }
 
@@ -608,7 +599,7 @@ impl Client {
     ///    println!("{result:?}");
     /// }
     /// ```
-    pub fn cancel_order(&self, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<'_, CancelOrder>, Error> {
+    pub fn cancel_order(&self, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
         orders::cancel_order(self, order_id, manual_order_cancel_time)
     }
 
@@ -629,7 +620,7 @@ impl Client {
     ///    println!("{order_data:?}")
     /// }
     /// ```
-    pub fn completed_orders(&self, api_only: bool) -> Result<Subscription<'_, Orders>, Error> {
+    pub fn completed_orders(&self, api_only: bool) -> Result<Subscription<Orders>, Error> {
         orders::completed_orders(self, api_only)
     }
 
@@ -660,7 +651,7 @@ impl Client {
     ///    println!("{execution_data:?}")
     /// }
     /// ```
-    pub fn executions(&self, filter: orders::ExecutionFilter) -> Result<Subscription<'_, Executions>, Error> {
+    pub fn executions(&self, filter: orders::ExecutionFilter) -> Result<Subscription<Executions>, Error> {
         orders::executions(self, filter)
     }
 
@@ -694,7 +685,7 @@ impl Client {
     ///    println!("{order_data:?}")
     /// }
     /// ```
-    pub fn open_orders(&self) -> Result<Subscription<'_, Orders>, Error> {
+    pub fn open_orders(&self) -> Result<Subscription<Orders>, Error> {
         orders::open_orders(self)
     }
 
@@ -735,7 +726,7 @@ impl Client {
     ///    }
     /// }
     /// ```
-    pub fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<Subscription<'_, PlaceOrder>, Error> {
+    pub fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
         orders::place_order(self, order_id, contract, order)
     }
 
@@ -865,7 +856,7 @@ impl Client {
     ///
     /// This stream provides updates for all orders, not just a specific order.
     /// To track a specific order, filter the updates by order ID.
-    pub fn order_update_stream(&self) -> Result<Subscription<'_, OrderUpdate>, Error> {
+    pub fn order_update_stream(&self) -> Result<Subscription<OrderUpdate>, Error> {
         orders::order_update_stream(self)
     }
 
@@ -880,15 +871,15 @@ impl Client {
     /// * `account`           - Destination account.
     /// * `ovrd`              - Specifies whether your setting will override the system’s natural action. For example, if your action is "exercise" and the option is not in-the-money, by natural action the option would not exercise. If you have override set to true the natural action would be overridden and the out-of-the money option would be exercised.
     /// * `manual_order_time` - Specify the time at which the options should be exercised. If `None`, the current time will be used. Requires TWS API 10.26 or higher.
-    pub fn exercise_options<'a>(
-        &'a self,
+    pub fn exercise_options(
+        &self,
         contract: &Contract,
         exercise_action: orders::ExerciseAction,
         exercise_quantity: i32,
         account: &str,
         ovrd: bool,
         manual_order_time: Option<OffsetDateTime>,
-    ) -> Result<Subscription<'a, ExerciseOptions>, Error> {
+    ) -> Result<Subscription<ExerciseOptions>, Error> {
         orders::exercise_options(self, contract, exercise_action, exercise_quantity, account, ovrd, manual_order_time)
     }
 
@@ -1207,13 +1198,7 @@ impl Client {
     ///     println!("bar[{i}]: {bar:?}");
     /// }
     /// ```
-    pub fn realtime_bars<'a>(
-        &'a self,
-        contract: &Contract,
-        bar_size: BarSize,
-        what_to_show: WhatToShow,
-        use_rth: bool,
-    ) -> Result<Subscription<'a, Bar>, Error> {
+    pub fn realtime_bars(&self, contract: &Contract, bar_size: BarSize, what_to_show: WhatToShow, use_rth: bool) -> Result<Subscription<Bar>, Error> {
         realtime::realtime_bars(self, contract, &bar_size, &what_to_show, use_rth, Vec::default())
     }
 
@@ -1243,12 +1228,12 @@ impl Client {
     ///     println!("All Last Tick: {tick:?}");
     /// }
     /// ```
-    pub fn tick_by_tick_all_last<'a>(
-        &'a self,
+    pub fn tick_by_tick_all_last(
+        &self,
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<Subscription<'a, realtime::Trade>, Error> {
+    ) -> Result<Subscription<realtime::Trade>, Error> {
         realtime::tick_by_tick_all_last(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -1278,12 +1263,12 @@ impl Client {
     ///     println!("BidAsk Tick: {tick:?}");
     /// }
     /// ```
-    pub fn tick_by_tick_bid_ask<'a>(
-        &'a self,
+    pub fn tick_by_tick_bid_ask(
+        &self,
         contract: &Contract,
         number_of_ticks: i32,
         ignore_size: bool,
-    ) -> Result<Subscription<'a, realtime::BidAsk>, Error> {
+    ) -> Result<Subscription<realtime::BidAsk>, Error> {
         realtime::tick_by_tick_bid_ask(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -1313,12 +1298,7 @@ impl Client {
     ///     println!("Last Tick: {tick:?}");
     /// }
     /// ```
-    pub fn tick_by_tick_last<'a>(
-        &'a self,
-        contract: &Contract,
-        number_of_ticks: i32,
-        ignore_size: bool,
-    ) -> Result<Subscription<'a, realtime::Trade>, Error> {
+    pub fn tick_by_tick_last(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<realtime::Trade>, Error> {
         realtime::tick_by_tick_last(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -1348,12 +1328,7 @@ impl Client {
     ///     println!("MidPoint Tick: {tick:?}");
     /// }
     /// ```
-    pub fn tick_by_tick_midpoint<'a>(
-        &'a self,
-        contract: &Contract,
-        number_of_ticks: i32,
-        ignore_size: bool,
-    ) -> Result<Subscription<'a, MidPoint>, Error> {
+    pub fn tick_by_tick_midpoint(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<MidPoint>, Error> {
         realtime::tick_by_tick_midpoint(self, contract, number_of_ticks, ignore_size)
     }
 
@@ -1405,12 +1380,7 @@ impl Client {
     ///     println!("error: {error:?}");
     /// }
     /// ```
-    pub fn market_depth<'a>(
-        &'a self,
-        contract: &Contract,
-        number_of_rows: i32,
-        is_smart_depth: bool,
-    ) -> Result<Subscription<'a, MarketDepths>, Error> {
+    pub fn market_depth(&self, contract: &Contract, number_of_rows: i32, is_smart_depth: bool) -> Result<Subscription<MarketDepths>, Error> {
         realtime::market_depth(self, contract, number_of_rows, is_smart_depth)
     }
 
@@ -1496,7 +1466,7 @@ impl Client {
         generic_ticks: &[&str],
         snapshot: bool,
         regulatory_snapshot: bool,
-    ) -> Result<Subscription<'_, TickTypes>, Error> {
+    ) -> Result<Subscription<TickTypes>, Error> {
         realtime::market_data(self, contract, generic_ticks, snapshot, regulatory_snapshot)
     }
 
@@ -1538,7 +1508,7 @@ impl Client {
     ///   println!("news bulletin {news_bulletin:?}");
     /// }
     /// ```
-    pub fn news_bulletins(&self, all_messages: bool) -> Result<Subscription<'_, news::NewsBulletin>, Error> {
+    pub fn news_bulletins(&self, all_messages: bool) -> Result<Subscription<news::NewsBulletin>, Error> {
         news::news_bulletins(self, all_messages)
     }
 
@@ -1590,7 +1560,7 @@ impl Client {
         start_time: OffsetDateTime,
         end_time: OffsetDateTime,
         total_results: u8,
-    ) -> Result<Subscription<'_, news::NewsArticle>, Error> {
+    ) -> Result<Subscription<news::NewsArticle>, Error> {
         news::historical_news(self, contract_id, provider_codes, start_time, end_time, total_results)
     }
 
@@ -1642,7 +1612,7 @@ impl Client {
     ///     println!("{article:?}");
     /// }
     /// ```
-    pub fn contract_news(&self, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<'_, NewsArticle>, Error> {
+    pub fn contract_news(&self, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<NewsArticle>, Error> {
         news::contract_news(self, contract, provider_codes)
     }
 
@@ -1666,7 +1636,7 @@ impl Client {
     ///     println!("{article:?}");
     /// }
     /// ```
-    pub fn broad_tape_news(&self, provider_code: &str) -> Result<Subscription<'_, NewsArticle>, Error> {
+    pub fn broad_tape_news(&self, provider_code: &str) -> Result<Subscription<NewsArticle>, Error> {
         news::broad_tape_news(self, provider_code)
     }
 
@@ -1778,7 +1748,7 @@ impl Client {
         &self,
         subscription: &scanner::ScannerSubscription,
         filter: &Vec<orders::TagValue>,
-    ) -> Result<Subscription<'_, Vec<ScannerData>>, Error> {
+    ) -> Result<Subscription<Vec<ScannerData>>, Error> {
         scanner::scanner_subscription(self, subscription, filter)
     }
 
@@ -1849,14 +1819,16 @@ impl Client {
     ///
     /// let filter = ""; // see https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#wsheventdata-object
     /// let event_data = client.wsh_event_data_by_filter(filter, None, None).expect("request wsh event data failed");
-    /// println!("{event_data:?}");
+    /// for result in event_data {
+    ///     println!("{result:?}");
+    /// }
     /// ```
     pub fn wsh_event_data_by_filter(
         &self,
         filter: &str,
         limit: Option<i32>,
         auto_fill: Option<AutoFill>,
-    ) -> Result<Subscription<'_, wsh::WshEventData>, Error> {
+    ) -> Result<Subscription<wsh::WshEventData>, Error> {
         wsh::wsh_event_data_by_filter(self, filter, limit, auto_fill)
     }
 

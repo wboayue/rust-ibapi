@@ -8,7 +8,6 @@ use tokio::sync::mpsc;
 
 use super::common::{process_decode_result, ProcessingResult};
 use super::{ResponseContext, StreamDecoder};
-use crate::client::r#async::Client;
 use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 use crate::Error;
@@ -81,57 +80,8 @@ impl<T> Clone for Subscription<T> {
 
 impl<T> Subscription<T> {
     /// Create a subscription from an internal subscription and a decoder
-    pub fn with_decoder<D>(
-        internal: AsyncInternalSubscription,
-        client: Arc<Client>,
-        decoder: D,
-        request_id: Option<i32>,
-        order_id: Option<i32>,
-        message_type: Option<OutgoingMessages>,
-        response_context: ResponseContext,
-    ) -> Self
-    where
-        D: Fn(i32, &mut ResponseMessage) -> Result<T, Error> + Send + Sync + 'static,
-    {
-        let server_version = client.server_version();
-        let message_bus = client.message_bus.clone();
-
-        Self {
-            inner: SubscriptionInner::WithDecoder {
-                subscription: internal,
-                decoder: Arc::new(decoder),
-                server_version,
-            },
-            request_id,
-            order_id,
-            _message_type: message_type,
-            response_context,
-            cancelled: Arc::new(AtomicBool::new(false)),
-            server_version,
-            message_bus: Some(message_bus),
-            cancel_fn: None,
-        }
-    }
-
-    /// Create a subscription from an internal subscription with a decoder function
-    pub fn new_with_decoder<F>(
-        internal: AsyncInternalSubscription,
-        client: Arc<Client>,
-        decoder: F,
-        request_id: Option<i32>,
-        order_id: Option<i32>,
-        message_type: Option<OutgoingMessages>,
-        response_context: ResponseContext,
-    ) -> Self
-    where
-        F: Fn(i32, &mut ResponseMessage) -> Result<T, Error> + Send + Sync + 'static,
-    {
-        Self::with_decoder(internal, client, decoder, request_id, order_id, message_type, response_context)
-    }
-
-    /// Create a subscription from components and a decoder
     #[allow(clippy::too_many_arguments)]
-    pub fn with_decoder_components<D>(
+    pub fn with_decoder<D>(
         internal: AsyncInternalSubscription,
         server_version: i32,
         message_bus: Arc<dyn AsyncMessageBus>,
@@ -159,6 +109,60 @@ impl<T> Subscription<T> {
             message_bus: Some(message_bus),
             cancel_fn: None,
         }
+    }
+
+    /// Create a subscription from an internal subscription with a decoder function
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_decoder<F>(
+        internal: AsyncInternalSubscription,
+        server_version: i32,
+        message_bus: Arc<dyn AsyncMessageBus>,
+        decoder: F,
+        request_id: Option<i32>,
+        order_id: Option<i32>,
+        message_type: Option<OutgoingMessages>,
+        response_context: ResponseContext,
+    ) -> Self
+    where
+        F: Fn(i32, &mut ResponseMessage) -> Result<T, Error> + Send + Sync + 'static,
+    {
+        Self::with_decoder(
+            internal,
+            server_version,
+            message_bus,
+            decoder,
+            request_id,
+            order_id,
+            message_type,
+            response_context,
+        )
+    }
+
+    /// Create a subscription from components and a decoder (alias for with_decoder)
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_decoder_components<D>(
+        internal: AsyncInternalSubscription,
+        server_version: i32,
+        message_bus: Arc<dyn AsyncMessageBus>,
+        decoder: D,
+        request_id: Option<i32>,
+        order_id: Option<i32>,
+        message_type: Option<OutgoingMessages>,
+        response_context: ResponseContext,
+    ) -> Self
+    where
+        D: Fn(i32, &mut ResponseMessage) -> Result<T, Error> + Send + Sync + 'static,
+    {
+        Self::with_decoder(
+            internal,
+            server_version,
+            message_bus,
+            decoder,
+            request_id,
+            order_id,
+            message_type,
+            response_context,
+        )
     }
 
     /// Create a subscription from an internal subscription using the DataStream decoder

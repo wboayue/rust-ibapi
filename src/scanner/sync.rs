@@ -1,5 +1,7 @@
 //! Synchronous implementation of scanner functionality
 
+use std::sync::Arc;
+
 use super::common::{decoders, encoders};
 use super::*;
 use crate::client::{ResponseContext, StreamDecoder, Subscription};
@@ -34,11 +36,11 @@ pub(crate) fn scanner_parameters(client: &Client) -> Result<String, Error> {
 }
 
 /// Starts a subscription to market scan results based on the provided parameters.
-pub(crate) fn scanner_subscription<'a>(
-    client: &'a Client,
+pub(crate) fn scanner_subscription(
+    client: &Client,
     subscription: &ScannerSubscription,
     filter: &Vec<TagValue>,
-) -> Result<Subscription<'a, Vec<ScannerData>>, Error> {
+) -> Result<Subscription<Vec<ScannerData>>, Error> {
     if !filter.is_empty() {
         client.check_server_version(
             server_versions::SCANNER_GENERIC_OPTS,
@@ -50,7 +52,12 @@ pub(crate) fn scanner_subscription<'a>(
     let request = encoders::encode_scanner_subscription(request_id, client.server_version, subscription, filter)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription, None))
+    Ok(Subscription::new(
+        client.server_version,
+        Arc::clone(&client.message_bus),
+        subscription,
+        None,
+    ))
 }
 
 #[cfg(test)]

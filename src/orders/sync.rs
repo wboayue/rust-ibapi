@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::common::{decoders, encoders, verify};
 use super::{CancelOrder, ExecutionFilter, Executions, ExerciseAction, ExerciseOptions, OrderUpdate, Orders, PlaceOrder};
 use crate::client::{StreamDecoder, Subscription};
@@ -85,9 +87,14 @@ impl StreamDecoder<ExerciseOptions> for ExerciseOptions {
 /// Subscribes to order update events. Only one subscription can be active at a time.
 ///
 /// This function returns a subscription that will receive updates of activity for all orders placed by the client.
-pub fn order_update_stream<'a>(client: &'a Client) -> Result<Subscription<'a, OrderUpdate>, Error> {
+pub fn order_update_stream(client: &Client) -> Result<Subscription<OrderUpdate>, Error> {
     let subscription = client.create_order_update_subscription()?;
-    Ok(Subscription::new(client, subscription, None))
+    Ok(Subscription::new(
+        client.server_version,
+        Arc::clone(&client.message_bus),
+        subscription,
+        None,
+    ))
 }
 
 /// Submits an Order.
@@ -120,18 +127,23 @@ pub fn submit_order(client: &Client, order_id: i32, contract: &Contract, order: 
 // Submits an Order.
 // After the order is submitted correctly, events will be returned concerning the order's activity.
 // https://interactivebrokers.github.io/tws-api/order_submission.html
-pub fn place_order<'a>(client: &'a Client, order_id: i32, contract: &Contract, order: &super::Order) -> Result<Subscription<'a, PlaceOrder>, Error> {
+pub fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &super::Order) -> Result<Subscription<PlaceOrder>, Error> {
     verify::verify_order(client, order, order_id)?;
     verify::verify_order_contract(client, contract, order_id)?;
 
     let request = encoders::encode_place_order(client.server_version, order_id, contract, order)?;
     let subscription = client.send_order(order_id, request)?;
 
-    Ok(Subscription::new(client, subscription, None))
+    Ok(Subscription::new(
+        client.server_version,
+        Arc::clone(&client.message_bus),
+        subscription,
+        None,
+    ))
 }
 
 // Cancels an open [Order].
-pub fn cancel_order<'a>(client: &'a Client, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<'a, CancelOrder>, Error> {
+pub fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
     if !manual_order_cancel_time.is_empty() {
         client.check_server_version(
             server_versions::MANUAL_ORDER_TIME,
@@ -142,7 +154,12 @@ pub fn cancel_order<'a>(client: &'a Client, order_id: i32, manual_order_cancel_t
     let request = encoders::encode_cancel_order(client.server_version, order_id, manual_order_cancel_time)?;
     let subscription = client.send_order(order_id, request)?;
 
-    Ok(Subscription::new(client, subscription, None))
+    Ok(Subscription::new(
+        client.server_version,
+        Arc::clone(&client.message_bus),
+        subscription,
+        None,
+    ))
 }
 
 // Cancels all open [Order]s.
@@ -174,13 +191,18 @@ pub fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
 }
 
 // Requests completed [Order]s.
-pub fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<'_, Orders>, Error> {
+pub fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<Orders>, Error> {
     client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
 
     let request = encoders::encode_completed_orders(api_only)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestCompletedOrders, request)?;
 
-    Ok(Subscription::new(client, subscription, None))
+    Ok(Subscription::new(
+        client.server_version,
+        Arc::clone(&client.message_bus),
+        subscription,
+        None,
+    ))
 }
 
 /// Requests all open orders places by this specific API client (identified by the API client id).
@@ -189,28 +211,43 @@ pub fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<
 /// # Arguments
 /// * `client` - [Client] used to communicate with server.
 ///
-pub fn open_orders(client: &Client) -> Result<Subscription<'_, Orders>, Error> {
+pub fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
     let request = encoders::encode_open_orders()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestOpenOrders, request)?;
 
-    Ok(Subscription::new(client, subscription, None))
+    Ok(Subscription::new(
+        client.server_version,
+        Arc::clone(&client.message_bus),
+        subscription,
+        None,
+    ))
 }
 
 // Requests all *current* open orders in associated accounts at the current moment.
 // Open orders are returned once; this function does not initiate a subscription.
-pub fn all_open_orders(client: &Client) -> Result<Subscription<'_, Orders>, Error> {
+pub fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
     let request = encoders::encode_all_open_orders()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAllOpenOrders, request)?;
 
-    Ok(Subscription::new(client, subscription, None))
+    Ok(Subscription::new(
+        client.server_version,
+        Arc::clone(&client.message_bus),
+        subscription,
+        None,
+    ))
 }
 
 // Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
-pub fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription<'_, Orders>, Error> {
+pub fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription<Orders>, Error> {
     let request = encoders::encode_auto_open_orders(auto_bind)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request)?;
 
-    Ok(Subscription::new(client, subscription, None))
+    Ok(Subscription::new(
+        client.server_version,
+        Arc::clone(&client.message_bus),
+        subscription,
+        None,
+    ))
 }
 
 // Requests current day's (since midnight) executions matching the filter.
@@ -221,24 +258,29 @@ pub fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription
 //
 // # Arguments
 // * `filter` - filter criteria used to determine which execution reports are returned
-pub fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subscription<'_, Executions>, Error> {
+pub fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
     let request_id = client.next_request_id();
 
     let request = encoders::encode_executions(client.server_version, request_id, &filter)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription, None))
+    Ok(Subscription::new(
+        client.server_version,
+        Arc::clone(&client.message_bus),
+        subscription,
+        None,
+    ))
 }
 
-pub fn exercise_options<'a>(
-    client: &'a Client,
+pub fn exercise_options(
+    client: &Client,
     contract: &Contract,
     exercise_action: ExerciseAction,
     exercise_quantity: i32,
     account: &str,
     ovrd: bool,
     manual_order_time: Option<OffsetDateTime>,
-) -> Result<Subscription<'a, ExerciseOptions>, Error> {
+) -> Result<Subscription<ExerciseOptions>, Error> {
     let order_id = client.next_order_id();
 
     let request = encoders::encode_exercise_options(
@@ -253,7 +295,12 @@ pub fn exercise_options<'a>(
     )?;
     let subscription = client.send_order(order_id, request)?;
 
-    Ok(Subscription::new(client, subscription, None))
+    Ok(Subscription::new(
+        client.server_version,
+        Arc::clone(&client.message_bus),
+        subscription,
+        None,
+    ))
 }
 
 #[cfg(test)]

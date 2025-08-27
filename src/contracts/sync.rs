@@ -165,13 +165,13 @@ pub(crate) fn calculate_implied_volatility(
     }
 }
 
-pub(crate) fn option_chain<'a>(
-    client: &'a Client,
+pub(crate) fn option_chain(
+    client: &Client,
     symbol: &str,
     exchange: &str,
     security_type: SecurityType,
     contract_id: i32,
-) -> Result<Subscription<'a, OptionChain>, Error> {
+) -> Result<Subscription<OptionChain>, Error> {
     request_helpers::request_with_id(client, Features::SEC_DEF_OPT_PARAMS_REQ, |request_id| {
         encoders::encode_request_option_chain(request_id, symbol, exchange, security_type, contract_id)
     })

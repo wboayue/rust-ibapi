@@ -1,5 +1,7 @@
 //! Synchronous implementation of news functionality
 
+use std::sync::Arc;
+
 use super::common::{decoders, encoders};
 use super::*;
 use crate::client::{ResponseContext, SharesChannel, StreamDecoder, Subscription};
@@ -23,7 +25,7 @@ impl StreamDecoder<NewsBulletin> for NewsBulletin {
     }
 }
 
-impl SharesChannel for Subscription<'_, NewsBulletin> {}
+impl SharesChannel for Subscription<NewsBulletin> {}
 
 impl StreamDecoder<NewsArticle> for NewsArticle {
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<NewsArticle, Error> {
@@ -52,22 +54,27 @@ pub(crate) fn news_providers(client: &Client) -> Result<Vec<NewsProvider>, Error
 }
 
 /// Subscribes to IB's News Bulletins.
-pub(crate) fn news_bulletins(client: &Client, all_messages: bool) -> Result<Subscription<'_, NewsBulletin>, Error> {
+pub(crate) fn news_bulletins(client: &Client, all_messages: bool) -> Result<Subscription<NewsBulletin>, Error> {
     let request = encoders::encode_request_news_bulletins(all_messages)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestNewsBulletins, request)?;
 
-    Ok(Subscription::new(client, subscription, None))
+    Ok(Subscription::new(
+        client.server_version,
+        Arc::clone(&client.message_bus),
+        subscription,
+        None,
+    ))
 }
 
 /// Historical News Headlines
-pub(crate) fn historical_news<'a>(
-    client: &'a Client,
+pub(crate) fn historical_news(
+    client: &Client,
     contract_id: i32,
     provider_codes: &[&str],
     start_time: OffsetDateTime,
     end_time: OffsetDateTime,
     total_results: u8,
-) -> Result<Subscription<'a, NewsArticle>, Error> {
+) -> Result<Subscription<NewsArticle>, Error> {
     client.check_server_version(server_versions::REQ_HISTORICAL_NEWS, "It does not support historical news requests.")?;
 
     let request_id = client.next_request_id();
@@ -82,7 +89,12 @@ pub(crate) fn historical_news<'a>(
     )?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription, None))
+    Ok(Subscription::new(
+        client.server_version,
+        Arc::clone(&client.message_bus),
+        subscription,
+        None,
+    ))
 }
 
 /// Requests news article body
@@ -102,7 +114,7 @@ pub(crate) fn news_article(client: &Client, provider_code: &str, article_id: &st
 }
 
 /// Subscribe to news for a specific contract
-pub(crate) fn contract_news<'a>(client: &'a Client, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<'a, NewsArticle>, Error> {
+pub(crate) fn contract_news(client: &Client, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<NewsArticle>, Error> {
     let mut generic_ticks = vec!["mdoff".to_string()];
     for provider in provider_codes {
         generic_ticks.push(format!("292:{provider}"));
@@ -114,11 +126,16 @@ pub(crate) fn contract_news<'a>(client: &'a Client, contract: &Contract, provide
         realtime::common::encoders::encode_request_market_data(client.server_version, request_id, contract, generic_ticks.as_slice(), false, false)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription, None))
+    Ok(Subscription::new(
+        client.server_version,
+        Arc::clone(&client.message_bus),
+        subscription,
+        None,
+    ))
 }
 
 /// Subscribe to broad tape news
-pub(crate) fn broad_tape_news<'a>(client: &'a Client, provider_code: &str) -> Result<Subscription<'a, NewsArticle>, Error> {
+pub(crate) fn broad_tape_news(client: &Client, provider_code: &str) -> Result<Subscription<NewsArticle>, Error> {
     let contract = Contract::news(provider_code);
     let generic_ticks = &["mdoff", "292"];
 
@@ -126,7 +143,12 @@ pub(crate) fn broad_tape_news<'a>(client: &'a Client, provider_code: &str) -> Re
     let request = realtime::common::encoders::encode_request_market_data(client.server_version, request_id, &contract, generic_ticks, false, false)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(client, subscription, None))
+    Ok(Subscription::new(
+        client.server_version,
+        Arc::clone(&client.message_bus),
+        subscription,
+        None,
+    ))
 }
 
 #[cfg(test)]
