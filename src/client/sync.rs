@@ -1819,7 +1819,9 @@ impl Client {
     ///
     /// let filter = ""; // see https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#wsheventdata-object
     /// let event_data = client.wsh_event_data_by_filter(filter, None, None).expect("request wsh event data failed");
-    /// println!("{event_data:?}");
+    /// for result in event_data {
+    ///     println!("{result:?}");
+    /// }
     /// ```
     pub fn wsh_event_data_by_filter(
         &self,
