@@ -124,6 +124,7 @@ pub struct TcpMessageBus<S: Stream> {
     signals_recv: Receiver<Signal>,
     shutdown_requested: AtomicBool,
     order_update_stream: Mutex<Option<Sender<Response>>>, // Optional receiver for order updates
+    connected: AtomicBool,                                // Track connection state
 }
 
 impl<S: Stream> TcpMessageBus<S> {
@@ -141,6 +142,7 @@ impl<S: Stream> TcpMessageBus<S> {
             signals_recv,
             shutdown_requested: AtomicBool::new(false),
             order_update_stream: Mutex::new(None),
+            connected: AtomicBool::new(true), // Initially connected after successful connection
         })
     }
 
@@ -159,6 +161,7 @@ impl<S: Stream> TcpMessageBus<S> {
         self.orders.clear();
         self.executions.clear();
 
+        self.connected.store(false, Ordering::Relaxed);
         self.shutdown_requested.store(true, Ordering::Relaxed);
     }
 
@@ -172,6 +175,8 @@ impl<S: Stream> TcpMessageBus<S> {
         self.requests.clear();
         self.orders.clear();
         self.executions.clear();
+
+        self.connected.store(false, Ordering::Relaxed);
     }
 
     fn clean_request(&self, request_id: i32) {
@@ -221,6 +226,7 @@ impl<S: Stream> TcpMessageBus<S> {
             }
             Err(ref err) if is_connection_error(err) => {
                 error!("error reading next message (will attempt reconnect): {err:?}");
+                self.connected.store(false, Ordering::Relaxed);
 
                 if let Err(reconnect_err) = self.connection.reconnect() {
                     error!("failed to reconnect to TWS/Gateway: {reconnect_err:?}");
@@ -229,6 +235,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 }
 
                 info!("successfully reconnected to TWS/Gateway");
+                self.connected.store(true, Ordering::Relaxed);
                 self.reset();
                 Ok(())
             }
@@ -576,6 +583,10 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     fn ensure_shutdown(&self) {
         self.request_shutdown();
         self.join();
+    }
+
+    fn is_connected(&self) -> bool {
+        self.connected.load(Ordering::Relaxed) && !self.is_shutting_down()
     }
 }
 

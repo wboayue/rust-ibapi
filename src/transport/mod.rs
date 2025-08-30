@@ -63,6 +63,9 @@ pub(crate) trait MessageBus: Send + Sync {
 
     fn ensure_shutdown(&self);
 
+    /// Returns true if the client is currently connected to TWS/IB Gateway
+    fn is_connected(&self) -> bool;
+
     // Testing interface. Tracks requests sent messages when Bus is stubbed.
     #[cfg(test)]
     fn request_messages(&self) -> Vec<RequestMessage> {

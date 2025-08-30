@@ -60,6 +60,9 @@ pub trait AsyncMessageBus: Send + Sync {
     /// Request shutdown synchronously (for use in Drop)
     fn request_shutdown_sync(&self);
 
+    /// Returns true if the client is currently connected to TWS/IB Gateway
+    fn is_connected(&self) -> bool;
+
     #[cfg(test)]
     fn request_messages(&self) -> Vec<RequestMessage> {
         vec![]
@@ -175,6 +178,8 @@ pub struct AsyncTcpMessageBus {
     process_task: Arc<RwLock<Option<task::JoinHandle<()>>>>,
     /// Shutdown flag
     shutdown_requested: Arc<AtomicBool>,
+    /// Connection state
+    connected: Arc<AtomicBool>,
 }
 
 impl Drop for AsyncTcpMessageBus {
@@ -215,6 +220,7 @@ impl AsyncTcpMessageBus {
             cleanup_sender,
             process_task: Arc::new(RwLock::new(None)),
             shutdown_requested: Arc::new(AtomicBool::new(false)),
+            connected: Arc::new(AtomicBool::new(true)), // Initially connected after successful connection
         };
 
         // Start cleanup task
@@ -271,6 +277,7 @@ impl AsyncTcpMessageBus {
                             Ok(_) => continue,
                             Err(Error::ConnectionReset) => {
                                 error!("Connection reset, attempting to reconnect...");
+                                message_bus.connected.store(false, Ordering::Relaxed);
                                 sleep(reconnect_delay).await;
                                 // TODO: Implement reconnection logic
                                 continue;
@@ -281,6 +288,7 @@ impl AsyncTcpMessageBus {
                             }
                             Err(Error::Io(_)) => {
                                 error!("IO error, connection closed. Shutting down.");
+                                message_bus.connected.store(false, Ordering::Relaxed);
                                 message_bus.request_shutdown().await;
                                 break;
                             }
@@ -327,7 +335,8 @@ impl AsyncTcpMessageBus {
     async fn request_shutdown(&self) {
         debug!("shutdown requested");
 
-        // Set the shutdown flag
+        // Set the shutdown flag and mark as disconnected
+        self.connected.store(false, Ordering::Relaxed);
         self.shutdown_requested.store(true, Ordering::Relaxed);
 
         // Clear all channels - dropping the senders will close the channels
@@ -747,6 +756,11 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
 
     fn request_shutdown_sync(&self) {
         debug!("sync shutdown requested");
+        self.connected.store(false, Ordering::Relaxed);
         self.shutdown_requested.store(true, Ordering::Relaxed);
+    }
+
+    fn is_connected(&self) -> bool {
+        self.connected.load(Ordering::Relaxed) && !self.shutdown_requested.load(Ordering::Relaxed)
     }
 }

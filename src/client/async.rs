@@ -101,6 +101,31 @@ impl Client {
         self.connection_time
     }
 
+    /// Returns true if the client is currently connected to TWS/IB Gateway.
+    ///
+    /// This method checks if the underlying connection to TWS or IB Gateway is active.
+    /// Returns false if the connection has been lost, shut down, or reset.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     
+    ///     if client.is_connected() {
+    ///         println!("Client is connected to TWS/Gateway");
+    ///     } else {
+    ///         println!("Client is not connected");
+    ///     }
+    /// }
+    /// ```
+    pub fn is_connected(&self) -> bool {
+        self.message_bus.is_connected()
+    }
+
     /// Returns the ID assigned to the [Client].
     pub fn client_id(&self) -> i32 {
         self.client_id
