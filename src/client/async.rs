@@ -4114,7 +4114,6 @@ mod tests {
     #[tokio::test]
     async fn test_news_bulletins() {
         use crate::client::common::tests::setup_news_bulletins;
-        use futures::StreamExt;
 
         let gateway = setup_news_bulletins();
         let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
@@ -4159,7 +4158,6 @@ mod tests {
     #[tokio::test]
     async fn test_historical_news() {
         use crate::client::common::tests::setup_historical_news;
-        use futures::StreamExt;
         use time::macros::datetime;
 
         let gateway = setup_historical_news();
@@ -4275,11 +4273,13 @@ mod tests {
         let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
 
         // Create scanner subscription parameters
-        let mut scanner_subscription = ScannerSubscription::default();
-        scanner_subscription.instrument = Some("STK".to_string());
-        scanner_subscription.location_code = Some("STK.US.MAJOR".to_string());
-        scanner_subscription.scan_code = Some("TOP_PERC_GAIN".to_string());
-        scanner_subscription.number_of_rows = 10;
+        let scanner_subscription = ScannerSubscription {
+            instrument: Some("STK".to_string()),
+            location_code: Some("STK.US.MAJOR".to_string()),
+            scan_code: Some("TOP_PERC_GAIN".to_string()),
+            number_of_rows: 10,
+            ..Default::default()
+        };
 
         // Request scanner subscription
         let mut subscription = client
@@ -4362,7 +4362,6 @@ mod tests {
     async fn test_contract_news() {
         use crate::client::common::tests::setup_contract_news;
         use crate::contracts::Contract;
-        use futures::StreamExt;
 
         let gateway = setup_contract_news();
         let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");

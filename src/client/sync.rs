@@ -4391,11 +4391,13 @@ mod tests {
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
         // Create scanner subscription parameters
-        let mut scanner_subscription = ScannerSubscription::default();
-        scanner_subscription.instrument = Some("STK".to_string());
-        scanner_subscription.location_code = Some("STK.US.MAJOR".to_string());
-        scanner_subscription.scan_code = Some("TOP_PERC_GAIN".to_string());
-        scanner_subscription.number_of_rows = 10;
+        let scanner_subscription = ScannerSubscription {
+            instrument: Some("STK".to_string()),
+            location_code: Some("STK.US.MAJOR".to_string()),
+            scan_code: Some("TOP_PERC_GAIN".to_string()),
+            number_of_rows: 10,
+            ..Default::default()
+        };
 
         // Request scanner subscription
         let subscription = client
