@@ -9,8 +9,9 @@ use super::ConnectionMetadata;
 use crate::errors::Error;
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::trace;
+use crate::transport::common::{FibonacciBackoff, MAX_RETRIES};
 use crate::transport::recorder::MessageRecorder;
-use crate::transport::sync::{FibonacciBackoff, Stream, MAX_RETRIES};
+use crate::transport::sync::Stream;
 
 type Response = Result<ResponseMessage, Error>;
 

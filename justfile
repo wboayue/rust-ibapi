@@ -13,3 +13,11 @@ tag VERSION:
 # Lists all available versions
 versions:
     @git tag
+
+# Run tests for both sync and async features
+test:
+    @echo "Running sync tests..."
+    cargo test --features sync
+    @echo ""
+    @echo "Running async tests..."
+    cargo test --features async

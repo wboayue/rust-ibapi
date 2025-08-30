@@ -1,5 +1,8 @@
 //! Transport layer for TWS communication with sync/async support
 
+// Common utilities
+pub(crate) mod common;
+
 #[cfg(feature = "sync")]
 use std::sync::Arc;
 #[cfg(feature = "sync")]

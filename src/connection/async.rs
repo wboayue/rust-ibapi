@@ -1,15 +1,17 @@
 //! Asynchronous connection implementation
 
-use log::debug;
+use log::{debug, info};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
+use tokio::time::sleep;
 
 use super::common::{parse_connection_time, AccountInfo, ConnectionHandler, ConnectionProtocol};
 use super::ConnectionMetadata;
 use crate::errors::Error;
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::trace;
+use crate::transport::common::{FibonacciBackoff, MAX_RETRIES};
 use crate::transport::recorder::MessageRecorder;
 
 type Response = Result<ResponseMessage, Error>;
@@ -22,6 +24,7 @@ pub struct AsyncConnection {
     pub(crate) connection_metadata: Mutex<ConnectionMetadata>,
     pub(crate) recorder: MessageRecorder,
     pub(crate) connection_handler: ConnectionHandler,
+    pub(crate) connection_url: String,
 }
 
 impl AsyncConnection {
@@ -38,6 +41,7 @@ impl AsyncConnection {
             }),
             recorder: MessageRecorder::from_env(),
             connection_handler: ConnectionHandler::default(),
+            connection_url: address.to_string(),
         };
 
         connection.establish_connection().await?;
@@ -63,6 +67,37 @@ impl AsyncConnection {
             let connection_metadata = self.connection_metadata.lock().await;
             connection_metadata.server_version
         })
+    }
+
+    /// Reconnect to TWS with fibonacci backoff
+    pub async fn reconnect(&self) -> Result<(), Error> {
+        let mut backoff = FibonacciBackoff::new(30);
+
+        for i in 0..MAX_RETRIES {
+            let next_delay = backoff.next_delay();
+            info!("next reconnection attempt in {next_delay:#?}");
+
+            sleep(next_delay).await;
+
+            match TcpStream::connect(&self.connection_url).await {
+                Ok(new_socket) => {
+                    info!("reconnected !!!");
+
+                    let mut socket = self.socket.lock().await;
+                    *socket = new_socket;
+                    drop(socket);
+
+                    self.establish_connection().await?;
+
+                    return Ok(());
+                }
+                Err(e) => {
+                    info!("reconnection attempt {}/{} failed: {e}", i + 1, MAX_RETRIES);
+                }
+            }
+        }
+
+        Err(Error::ConnectionFailed)
     }
 
     /// Establish connection to TWS

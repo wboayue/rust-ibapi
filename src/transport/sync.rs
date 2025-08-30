@@ -24,7 +24,6 @@ use crate::{server_versions, Error};
 
 // pub(crate) const MIN_SERVER_VERSION: i32 = 100;
 // pub(crate) const MAX_SERVER_VERSION: i32 = server_versions::WSH_EVENT_DATA_FILTERS_DATE;
-pub(crate) const MAX_RETRIES: i32 = 20;
 const TWS_READ_TIMEOUT: Duration = Duration::from_secs(1);
 
 // Defines the range of warning codes (2100–2169) used by the TWS API.
@@ -123,8 +122,8 @@ pub struct TcpMessageBus<S: Stream> {
     signals_send: Sender<Signal>,
     signals_recv: Receiver<Signal>,
     shutdown_requested: AtomicBool,
-    order_update_stream: Mutex<Option<Sender<Response>>>, // Optional receiver for order updates
-    connected: AtomicBool,                                // Track connection state
+    order_update_stream: Mutex<Option<Sender<Response>>>,
+    connected: AtomicBool,
 }
 
 impl<S: Stream> TcpMessageBus<S> {
@@ -142,7 +141,7 @@ impl<S: Stream> TcpMessageBus<S> {
             signals_recv,
             shutdown_requested: AtomicBool::new(false),
             order_update_stream: Mutex::new(None),
-            connected: AtomicBool::new(true), // Initially connected after successful connection
+            connected: AtomicBool::new(true),
         })
     }
 
@@ -772,34 +771,6 @@ impl Io for TcpSocket {
 pub(crate) trait Io {
     fn read_message(&self) -> Result<Vec<u8>, Error>;
     fn write_all(&self, buf: &[u8]) -> Result<(), Error>;
-}
-
-pub(crate) struct FibonacciBackoff {
-    previous: u64,
-    current: u64,
-    max: u64,
-}
-
-impl FibonacciBackoff {
-    pub(crate) fn new(max: u64) -> Self {
-        FibonacciBackoff {
-            previous: 0,
-            current: 1,
-            max,
-        }
-    }
-
-    pub(crate) fn next_delay(&mut self) -> Duration {
-        let next = self.previous + self.current;
-        self.previous = self.current;
-        self.current = next;
-
-        if next > self.max {
-            Duration::from_secs(self.max)
-        } else {
-            Duration::from_secs(next)
-        }
-    }
 }
 
 #[cfg(test)]
