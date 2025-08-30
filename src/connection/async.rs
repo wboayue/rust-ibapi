@@ -83,9 +83,10 @@ impl AsyncConnection {
                 Ok(new_socket) => {
                     info!("reconnected !!!");
 
-                    let mut socket = self.socket.lock().await;
-                    *socket = new_socket;
-                    drop(socket);
+                    {
+                        let mut socket = self.socket.lock().await;
+                        *socket = new_socket;
+                    }
 
                     self.establish_connection().await?;
 
