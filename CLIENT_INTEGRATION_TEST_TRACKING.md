@@ -119,6 +119,7 @@ Messages follow the IB TWS protocol format using null-terminated strings:
 3. **Use Meaningful Request IDs**: Use consistent IDs like 9000 for easier debugging
 4. **Document Message Formats**: Add comments explaining the structure of request/response messages
 5. **Keep Tests Identical**: Sync and async tests should have identical assertions
+6. **Record Real Messages**: When implementing new tests, you can run against a real IB Gateway/TWS server with `IBAPI_RECORDING_DIR=/tmp/tws-messages` to capture actual protocol messages for use in MockGateway setup functions
 
 ## Test Status Legend
 - ✅ Tested - Integration test exists using MockGateway
@@ -184,29 +185,29 @@ Messages follow the IB TWS protocol format using null-terminated strings:
 
 | Method | Sync Status | Async Status | Notes |
 |--------|-------------|--------------|-------|
-| `market_data()` | ❌ | ❌ | Needs test |
-| `realtime_bars()` | ❌ | ❌ | Needs test (async only) |
-| `tick_by_tick_all_last()` | ❌ | ❌ | Needs test (async only) |
-| `tick_by_tick_last()` | ❌ | ❌ | Needs test (async only) |
-| `tick_by_tick_bid_ask()` | ❌ | ❌ | Needs test (async only) |
-| `tick_by_tick_midpoint()` | ❌ | ❌ | Needs test (async only) |
-| `market_depth()` | ❌ | ❌ | Needs test (async only) |
-| `market_depth_exchanges()` | ❌ | ❌ | Needs test |
-| `switch_market_data_type()` | ❌ | ❌ | Needs test |
+| `market_data()` | ✅ | ✅ | Tested |
+| `realtime_bars()` | ✅ | ✅ | Tested |
+| `tick_by_tick_all_last()` | ✅ | ✅ | Tested |
+| `tick_by_tick_last()` | ✅ | ✅ | Tested |
+| `tick_by_tick_bid_ask()` | ✅ | ✅ | Tested |
+| `tick_by_tick_midpoint()` | ✅ | ✅ | Tested |
+| `market_depth()` | ✅ | ✅ | Tested |
+| `market_depth_exchanges()` | ✅ | ✅ | Tested |
+| `switch_market_data_type()` | ✅ | ✅ | Tested |
 
 ## Market Data - Historical
 
 | Method | Sync Status | Async Status | Notes |
 |--------|-------------|--------------|-------|
-| `head_timestamp()` | ❌ | ❌ | Needs test |
-| `historical_data()` | ❌ | ❌ | Needs test |
-| `historical_schedules()` | ❌ | N/A | Needs test (sync only) |
-| `historical_schedules_ending_now()` | ❌ | N/A | Needs test (sync only) |
-| `historical_schedule()` | N/A | ❌ | Needs test (async only) |
-| `historical_ticks_bid_ask()` | ❌ | ❌ | Needs test |
-| `historical_ticks_mid_point()` | ❌ | ❌ | Needs test |
-| `historical_ticks_trade()` | ❌ | ❌ | Needs test |
-| `histogram_data()` | ❌ | ❌ | Needs test |
+| `head_timestamp()` | ✅ | ✅ | Tested |
+| `historical_data()` | ✅ | ✅ | Tested |
+| `historical_schedules()` | ✅ | N/A | Tested (sync only) |
+| `historical_schedules_ending_now()` | ✅ | N/A | Tested via historical_schedules |
+| `historical_schedule()` | N/A | ✅ | Tested (async only) |
+| `historical_ticks_bid_ask()` | ✅ | ✅ | Tested |
+| `historical_ticks_mid_point()` | ✅ | ✅ | Tested |
+| `historical_ticks_trade()` | ✅ | ✅ | Tested |
+| `histogram_data()` | ✅ | ✅ | Tested |
 
 ## News
 
@@ -237,10 +238,10 @@ Messages follow the IB TWS protocol format using null-terminated strings:
 ## Summary Statistics
 
 - **Total testable methods**: ~55
-- **Currently tested**: 25 (both sync and async)
+- **Currently tested**: 43 (both sync and async)
 - **Partially tested**: 0
-- **Not tested**: ~30
-- **Coverage**: ~45%
+- **Not tested**: ~12
+- **Coverage**: ~78%
 
 ## Priority for Testing
 

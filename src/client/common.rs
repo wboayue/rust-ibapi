@@ -957,4 +957,118 @@ pub mod tests {
         gateway.start().expect("Failed to start mock gateway");
         gateway
     }
+
+    // === Historical Data Test Setup Functions ===
+
+    pub fn setup_head_timestamp() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::PEGBEST_PEGMID_OFFSETS);
+
+        // Add response for head timestamp request
+        gateway.add_interaction(
+            OutgoingMessages::RequestHeadTimestamp,
+            vec![
+                "88\09000\01705311000\0".to_string(), // HeadTimestamp message: type=88, request_id=9000, timestamp=2024-01-15 09:30:00 UTC
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_historical_data() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Add response for historical data request
+        gateway.add_interaction(
+            OutgoingMessages::RequestHistoricalData,
+            vec![
+                // Message type=17, request_id=9000, start_date, end_date, bar_count=3, then bars
+                "17\09000\020240122  09:30:00\020240122  09:45:00\03\01705398600\0150.25\0150.75\0150.00\0150.50\01000\0150.40\025\01705398900\0150.50\0151.00\0150.40\0150.90\01200\0150.70\030\01705399200\0150.90\0151.25\0150.85\0151.20\01500\0151.05\035\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_historical_schedules() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Add response for historical schedules request
+        gateway.add_interaction(
+            OutgoingMessages::RequestHistoricalData,
+            vec![
+                // Message type=106 (HistoricalSchedule), request_id=9000, start, end, timezone, session_count=1, then session data
+                "106\09000\020240122-09:30:00\020240122-16:00:00\0US/Eastern\01\020240122-09:30:00\020240122-16:00:00\020240122\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_historical_ticks_bid_ask() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Add response for historical ticks bid/ask request
+        gateway.add_interaction(
+            OutgoingMessages::RequestHistoricalTicks,
+            vec![
+                // Message type=97 (HistoricalTickBidAsk), request_id=9000, number_of_ticks=3, then for each tick: timestamp, mask, priceBid, priceAsk, sizeBid, sizeAsk, then done flag
+                "97\09000\03\01705920600\00\0150.25\0150.50\0100\0200\01705920605\00\0150.30\0150.55\0150\0250\01705920610\00\0150.35\0150.60\0200\0300\01\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_historical_ticks_mid_point() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Add response for historical ticks midpoint request
+        gateway.add_interaction(
+            OutgoingMessages::RequestHistoricalTicks,
+            vec![
+                // Message type=96 (HistoricalTick/Midpoint), request_id=9000, number_of_ticks=3, then for each tick: timestamp, skip_field, price, size (always 0), then done flag
+                "96\09000\03\01705920600\00\0150.375\00\01705920605\00\0150.425\00\01705920610\00\0150.475\00\01\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_historical_ticks_trade() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Add response for historical ticks trade request
+        gateway.add_interaction(
+            OutgoingMessages::RequestHistoricalTicks,
+            vec![
+                // Message type=98 (HistoricalTickLast/Trade), request_id=9000, number_of_ticks=3, then for each tick: timestamp, mask, price, size, exchange, specialConditions, then done flag
+                "98\09000\03\01705920600\00\0150.50\0100\0NASDAQ\0T\01705920605\00\0150.55\0200\0NYSE\0\01705920610\00\0150.60\0150\0NASDAQ\0\01\0"
+                    .to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_histogram_data() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Add response for histogram data request
+        gateway.add_interaction(
+            OutgoingMessages::RequestHistogramData,
+            vec![
+                // Message type=89, request_id=9000, count=3, then for each entry: price, size
+                "89\09000\03\0150.00\01000\0150.50\01500\0151.00\0800\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
 }

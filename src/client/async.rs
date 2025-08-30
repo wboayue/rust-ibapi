@@ -3794,4 +3794,290 @@ mod tests {
         // Verify request format: RequestMarketDataType(59), version(1), market_data_type(3=Delayed)
         assert_eq!(requests[0], "59\01\03\0", "Request should be RequestMarketDataType with Delayed(3)");
     }
+
+    // === Historical Data Tests ===
+
+    #[tokio::test]
+    async fn test_head_timestamp() {
+        use crate::client::common::tests::setup_head_timestamp;
+        use crate::contracts::Contract;
+        use crate::market_data::historical::WhatToShow;
+
+        let gateway = setup_head_timestamp();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        let contract = Contract::stock("AAPL");
+        let what_to_show = WhatToShow::Trades;
+        let use_rth = true;
+
+        let timestamp = client
+            .head_timestamp(&contract, what_to_show, use_rth)
+            .await
+            .expect("Failed to get head timestamp");
+
+        // Verify the timestamp is as expected (2024-01-15 09:30:00)
+        assert_eq!(timestamp.year(), 2024);
+        assert_eq!(timestamp.month() as u8, 1);
+        assert_eq!(timestamp.day(), 15);
+        assert_eq!(timestamp.hour(), 9);
+        assert_eq!(timestamp.minute(), 30);
+
+        let requests = gateway.requests();
+        assert!(requests[0].starts_with("87\0"), "Request should be RequestHeadTimestamp");
+        assert!(requests[0].contains("AAPL\0STK\0"), "Request should contain AAPL stock");
+        assert!(requests[0].contains("TRADES\0"), "Request should contain TRADES");
+    }
+
+    #[tokio::test]
+    async fn test_historical_data() {
+        use crate::client::common::tests::setup_historical_data;
+        use crate::contracts::Contract;
+        use crate::market_data::historical::{BarSize, Duration, WhatToShow};
+        use futures::StreamExt;
+        use time::macros::datetime;
+
+        let gateway = setup_historical_data();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        let contract = Contract::stock("AAPL");
+        let end_date_time = datetime!(2024-01-22 16:00:00).assume_utc();
+        let duration = Duration::days(1);
+        let bar_size = BarSize::Min5;
+        let what_to_show = WhatToShow::Trades;
+        let use_rth = true;
+
+        let historical_data = client
+            .historical_data(&contract, Some(end_date_time), duration, bar_size, Some(what_to_show), use_rth)
+            .await
+            .expect("Failed to get historical data");
+
+        // Get bars from HistoricalData struct
+        let bars = &historical_data.bars;
+
+        assert_eq!(bars.len(), 3, "Should receive 3 bars");
+
+        // Verify first bar
+        assert_eq!(bars[0].open, 150.25);
+        assert_eq!(bars[0].high, 150.75);
+        assert_eq!(bars[0].low, 150.00);
+        assert_eq!(bars[0].close, 150.50);
+        assert_eq!(bars[0].volume, 1000.0);
+        assert_eq!(bars[0].wap, 150.40);
+        assert_eq!(bars[0].count, 25);
+
+        // Verify second bar
+        assert_eq!(bars[1].open, 150.50);
+        assert_eq!(bars[1].high, 151.00);
+        assert_eq!(bars[1].low, 150.40);
+        assert_eq!(bars[1].close, 150.90);
+        assert_eq!(bars[1].volume, 1200.0);
+
+        // Verify third bar
+        assert_eq!(bars[2].open, 150.90);
+        assert_eq!(bars[2].high, 151.25);
+        assert_eq!(bars[2].low, 150.85);
+        assert_eq!(bars[2].close, 151.20);
+
+        let requests = gateway.requests();
+        assert!(requests[0].starts_with("20\0"), "Request should be RequestHistoricalData");
+        assert!(requests[0].contains("AAPL\0STK\0"), "Request should contain AAPL stock");
+    }
+
+    #[tokio::test]
+    async fn test_historical_schedule() {
+        use crate::client::common::tests::setup_historical_schedules;
+        use crate::contracts::Contract;
+        use crate::market_data::historical::Duration;
+        use time::macros::datetime;
+
+        let gateway = setup_historical_schedules();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        let contract = Contract::stock("AAPL");
+        let end_date_time = datetime!(2024-01-22 16:00:00).assume_utc();
+        let duration = Duration::days(1);
+
+        let schedule = client
+            .historical_schedule(&contract, Some(end_date_time), duration)
+            .await
+            .expect("Failed to get historical schedule");
+
+        // Schedule has start and end as OffsetDateTime
+        assert_eq!(schedule.time_zone, "US/Eastern");
+        assert!(schedule.sessions.len() > 0, "Should have at least one session");
+
+        let requests = gateway.requests();
+        assert!(requests[0].starts_with("20\0"), "Request should be RequestHistoricalData");
+        assert!(requests[0].contains("AAPL\0STK\0"), "Request should contain AAPL stock");
+        assert!(requests[0].contains("2\0"), "Request should contain formatDate=2 for schedule");
+    }
+
+    #[tokio::test]
+    async fn test_historical_ticks_bid_ask() {
+        use crate::client::common::tests::setup_historical_ticks_bid_ask;
+        use crate::contracts::Contract;
+        use time::macros::datetime;
+
+        let gateway = setup_historical_ticks_bid_ask();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        let contract = Contract::stock("AAPL");
+        let start_date_time = datetime!(2024-01-22 09:30:00).assume_utc();
+        let number_of_ticks = 100;
+        let use_rth = true;
+
+        let mut tick_subscription = client
+            .historical_ticks_bid_ask(&contract, Some(start_date_time), None, number_of_ticks, use_rth, false)
+            .await
+            .expect("Failed to get historical ticks bid/ask");
+
+        // Collect ticks from the subscription
+        let mut ticks = Vec::new();
+        while let Some(tick) = tick_subscription.next().await {
+            ticks.push(tick);
+        }
+
+        assert_eq!(ticks.len(), 3, "Should receive 3 ticks");
+
+        // Verify first tick
+        assert_eq!(ticks[0].price_bid, 150.25);
+        assert_eq!(ticks[0].price_ask, 150.50);
+        assert_eq!(ticks[0].size_bid, 100);
+        assert_eq!(ticks[0].size_ask, 200);
+
+        // Verify second tick
+        assert_eq!(ticks[1].price_bid, 150.30);
+        assert_eq!(ticks[1].price_ask, 150.55);
+        assert_eq!(ticks[1].size_bid, 150);
+        assert_eq!(ticks[1].size_ask, 250);
+
+        // Verify third tick
+        assert_eq!(ticks[2].price_bid, 150.35);
+        assert_eq!(ticks[2].price_ask, 150.60);
+
+        let requests = gateway.requests();
+        assert!(requests[0].starts_with("96\0"), "Request should be RequestHistoricalTicks");
+        assert!(requests[0].contains("AAPL\0STK\0"), "Request should contain AAPL stock");
+        assert!(requests[0].contains("BID_ASK\0"), "Request should contain BID_ASK");
+    }
+
+    #[tokio::test]
+    async fn test_historical_ticks_mid_point() {
+        use crate::client::common::tests::setup_historical_ticks_mid_point;
+        use crate::contracts::Contract;
+        use time::macros::datetime;
+
+        let gateway = setup_historical_ticks_mid_point();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        let contract = Contract::stock("AAPL");
+        let start_date_time = datetime!(2024-01-22 09:30:00).assume_utc();
+        let number_of_ticks = 100;
+        let use_rth = true;
+
+        let mut tick_subscription = client
+            .historical_ticks_mid_point(&contract, Some(start_date_time), None, number_of_ticks, use_rth)
+            .await
+            .expect("Failed to get historical ticks midpoint");
+
+        // Collect ticks from the subscription
+        let mut ticks = Vec::new();
+        while let Some(tick) = tick_subscription.next().await {
+            ticks.push(tick);
+        }
+
+        assert_eq!(ticks.len(), 3, "Should receive 3 ticks");
+
+        // Verify ticks
+        assert_eq!(ticks[0].price, 150.375);
+        assert_eq!(ticks[0].size, 0);
+        assert_eq!(ticks[1].price, 150.425);
+        assert_eq!(ticks[1].size, 0);
+        assert_eq!(ticks[2].price, 150.475);
+        assert_eq!(ticks[2].size, 0);
+
+        let requests = gateway.requests();
+        assert!(requests[0].starts_with("96\0"), "Request should be RequestHistoricalTicks");
+        assert!(requests[0].contains("MIDPOINT\0"), "Request should contain MIDPOINT");
+    }
+
+    #[tokio::test]
+    async fn test_historical_ticks_trade() {
+        use crate::client::common::tests::setup_historical_ticks_trade;
+        use crate::contracts::Contract;
+        use time::macros::datetime;
+
+        let gateway = setup_historical_ticks_trade();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        let contract = Contract::stock("AAPL");
+        let start_date_time = datetime!(2024-01-22 09:30:00).assume_utc();
+        let number_of_ticks = 100;
+        let use_rth = true;
+
+        let mut tick_subscription = client
+            .historical_ticks_trade(&contract, Some(start_date_time), None, number_of_ticks, use_rth)
+            .await
+            .expect("Failed to get historical ticks trade");
+
+        // Collect ticks from the subscription
+        let mut ticks = Vec::new();
+        while let Some(tick) = tick_subscription.next().await {
+            ticks.push(tick);
+        }
+
+        assert_eq!(ticks.len(), 3, "Should receive 3 ticks");
+
+        // Verify ticks
+        assert_eq!(ticks[0].price, 150.50);
+        assert_eq!(ticks[0].size, 100);
+        assert_eq!(ticks[0].exchange, "NASDAQ");
+        assert_eq!(ticks[0].special_conditions, "T");
+
+        assert_eq!(ticks[1].price, 150.55);
+        assert_eq!(ticks[1].size, 200);
+        assert_eq!(ticks[1].exchange, "NYSE");
+
+        assert_eq!(ticks[2].price, 150.60);
+        assert_eq!(ticks[2].size, 150);
+
+        let requests = gateway.requests();
+        assert!(requests[0].starts_with("96\0"), "Request should be RequestHistoricalTicks");
+        assert!(requests[0].contains("TRADES\0"), "Request should contain TRADES");
+    }
+
+    #[tokio::test]
+    async fn test_histogram_data() {
+        use crate::client::common::tests::setup_histogram_data;
+        use crate::contracts::Contract;
+        use crate::market_data::historical::BarSize;
+
+        let gateway = setup_histogram_data();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        let contract = Contract::stock("AAPL");
+        let use_rth = true;
+        let period = BarSize::Day;
+
+        let entries = client
+            .histogram_data(&contract, use_rth, period)
+            .await
+            .expect("Failed to get histogram data");
+
+        assert_eq!(entries.len(), 3, "Should receive 3 entries");
+
+        // Verify entries
+        assert_eq!(entries[0].price, 150.00);
+        assert_eq!(entries[0].size, 1000);
+
+        assert_eq!(entries[1].price, 150.50);
+        assert_eq!(entries[1].size, 1500);
+
+        assert_eq!(entries[2].price, 151.00);
+        assert_eq!(entries[2].size, 800);
+
+        let requests = gateway.requests();
+        assert!(requests[0].starts_with("88\0"), "Request should be RequestHistogramData");
+        assert!(requests[0].contains("AAPL\0STK\0"), "Request should contain AAPL stock");
+    }
 }
