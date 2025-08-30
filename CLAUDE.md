@@ -21,14 +21,14 @@ cargo test --features async
 ## Documentation Index
 
 ### Core Concepts
-- [**Architecture Overview**](docs/claude/architecture.md) - System design, components, and module organization
-- [**Feature Flags**](docs/claude/feature-flags.md) - Sync vs async modes and feature guards
-- [**API Patterns**](docs/claude/api-patterns.md) - Builder patterns, protocol versions, and common patterns
+- [**Architecture Overview**](docs/architecture.md) - System design, components, and module organization
+- [**Feature Flags**](docs/feature-flags.md) - Sync vs async modes and feature guards
+- [**API Patterns**](docs/api-patterns.md) - Builder patterns, protocol versions, and common patterns
 
 ### Development
-- [**Code Style Guidelines**](docs/claude/code-style.md) - Coding standards and conventions
-- [**Build and Test**](docs/claude/build-and-test.md) - Build commands, testing patterns, and CI
-- [**Examples Guide**](docs/claude/examples.md) - Running and writing examples
+- [**Code Style Guidelines**](docs/code-style.md) - Coding standards and conventions
+- [**Build and Test**](docs/build-and-test.md) - Build commands, testing patterns, and CI
+- [**Examples Guide**](docs/examples.md) - Running and writing examples
 
 ## Key Points to Remember
 

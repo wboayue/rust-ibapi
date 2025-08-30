@@ -3,6 +3,7 @@
 ## Table of Contents
 - [Overview](#overview)
 - [Getting Started](#getting-started)
+- [Documentation](#documentation)
 - [Coding Standards](#coding-standards)
 - [Domain Type Pattern](#domain-type-pattern)
 - [Sync/Async Architecture](#syncasync-architecture)
@@ -88,9 +89,29 @@ cargo tarpaulin -o html
 
 * Follow GitHub's guide on [creating a pull request from a fork](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork).
 
+## Documentation
+
+The project maintains comprehensive documentation for both human developers and AI assistants:
+
+### Core Documentation
+
+- [**Architecture Overview**](docs/architecture.md) - System design, components, and module organization
+- [**Feature Flags**](docs/feature-flags.md) - Detailed guide to sync vs async modes and feature guards
+- [**API Patterns**](docs/api-patterns.md) - Builder patterns, protocol versions, and common patterns
+- [**Code Style Guidelines**](docs/code-style.md) - Detailed coding standards and conventions
+- [**Build and Test**](docs/build-and-test.md) - Build commands, testing patterns, and CI configuration
+- [**Examples Guide**](docs/examples.md) - How to run and write examples
+- [**Testing Patterns**](docs/testing-patterns.md) - Table-driven tests and shared test data
+
+### Quick Reference
+
+For AI assistants working with this codebase, see [CLAUDE.md](CLAUDE.md) for a condensed reference guide.
+
 ## Coding Standards
 
 We follow the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/). Please ensure your code adheres to these guidelines. Use `cargo fmt` to format your code and `cargo clippy` to catch common mistakes and improve your Rust code.
+
+For detailed coding standards specific to this project, see [Code Style Guidelines](docs/code-style.md).
 
 ## Domain Type Pattern
 
