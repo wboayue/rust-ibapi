@@ -9,8 +9,9 @@ use super::ConnectionMetadata;
 use crate::errors::Error;
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::trace;
+use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::recorder::MessageRecorder;
-use crate::transport::sync::{FibonacciBackoff, Stream, MAX_RETRIES};
+use crate::transport::sync::Stream;
 
 type Response = Result<ResponseMessage, Error>;
 
@@ -35,7 +36,7 @@ impl<S: Stream> Connection<S> {
                 client_id,
                 ..Default::default()
             }),
-            max_retries: MAX_RETRIES,
+            max_retries: MAX_RECONNECT_ATTEMPTS,
             recorder: MessageRecorder::from_env(),
             connection_handler: ConnectionHandler::default(),
         };
@@ -208,7 +209,7 @@ impl<S: Stream> Connection<S> {
                 client_id,
                 ..Default::default()
             }),
-            max_retries: MAX_RETRIES,
+            max_retries: MAX_RECONNECT_ATTEMPTS,
             recorder: MessageRecorder::new(false, String::from("")),
             connection_handler: ConnectionHandler::default(),
         }

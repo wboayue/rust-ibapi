@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Code Style Guidelines
+
+- **Comments**: Keep comments concise and avoid redundancy. Don't state the obvious.
+  - Good: Complex logic that needs explanation
+  - Bad: `// Initialize connection` right before `Connection::new()`
+  - Bad: `// Set flag to true` right before `flag = true`
+- **Inline comments**: Use sparingly, only when the code's intent isn't clear
+- **Doc comments**: Required for all public APIs, should explain the "what" and "why", not the "how"
+
 ## Build Commands
 
 ```bash

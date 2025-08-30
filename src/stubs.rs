@@ -116,6 +116,10 @@ impl MessageBus for MessageBusStub {
 
     fn ensure_shutdown(&self) {}
 
+    fn is_connected(&self) -> bool {
+        true // Stub always returns connected
+    }
+
     // fn process_messages(&mut self, _server_version: i32) -> Result<(), Error> {
     //     Ok(())
     // }
@@ -221,6 +225,10 @@ impl AsyncMessageBus for MessageBusStub {
 
     fn request_shutdown_sync(&self) {
         // No-op for test stub
+    }
+
+    fn is_connected(&self) -> bool {
+        true // Stub always returns connected
     }
 
     #[cfg(test)]

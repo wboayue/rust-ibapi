@@ -24,7 +24,6 @@ use crate::{server_versions, Error};
 
 // pub(crate) const MIN_SERVER_VERSION: i32 = 100;
 // pub(crate) const MAX_SERVER_VERSION: i32 = server_versions::WSH_EVENT_DATA_FILTERS_DATE;
-pub(crate) const MAX_RETRIES: i32 = 20;
 const TWS_READ_TIMEOUT: Duration = Duration::from_secs(1);
 
 // Defines the range of warning codes (2100–2169) used by the TWS API.
@@ -123,7 +122,8 @@ pub struct TcpMessageBus<S: Stream> {
     signals_send: Sender<Signal>,
     signals_recv: Receiver<Signal>,
     shutdown_requested: AtomicBool,
-    order_update_stream: Mutex<Option<Sender<Response>>>, // Optional receiver for order updates
+    order_update_stream: Mutex<Option<Sender<Response>>>,
+    connected: AtomicBool,
 }
 
 impl<S: Stream> TcpMessageBus<S> {
@@ -141,6 +141,7 @@ impl<S: Stream> TcpMessageBus<S> {
             signals_recv,
             shutdown_requested: AtomicBool::new(false),
             order_update_stream: Mutex::new(None),
+            connected: AtomicBool::new(true),
         })
     }
 
@@ -159,6 +160,7 @@ impl<S: Stream> TcpMessageBus<S> {
         self.orders.clear();
         self.executions.clear();
 
+        self.connected.store(false, Ordering::Relaxed);
         self.shutdown_requested.store(true, Ordering::Relaxed);
     }
 
@@ -172,6 +174,8 @@ impl<S: Stream> TcpMessageBus<S> {
         self.requests.clear();
         self.orders.clear();
         self.executions.clear();
+
+        self.connected.store(false, Ordering::Relaxed);
     }
 
     fn clean_request(&self, request_id: i32) {
@@ -221,6 +225,7 @@ impl<S: Stream> TcpMessageBus<S> {
             }
             Err(ref err) if is_connection_error(err) => {
                 error!("error reading next message (will attempt reconnect): {err:?}");
+                self.connected.store(false, Ordering::Relaxed);
 
                 if let Err(reconnect_err) = self.connection.reconnect() {
                     error!("failed to reconnect to TWS/Gateway: {reconnect_err:?}");
@@ -229,6 +234,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 }
 
                 info!("successfully reconnected to TWS/Gateway");
+                self.connected.store(true, Ordering::Relaxed);
                 self.reset();
                 Ok(())
             }
@@ -577,6 +583,10 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         self.request_shutdown();
         self.join();
     }
+
+    fn is_connected(&self) -> bool {
+        self.connected.load(Ordering::Relaxed) && !self.is_shutting_down()
+    }
 }
 
 fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), Error> {
@@ -763,39 +773,12 @@ pub(crate) trait Io {
     fn write_all(&self, buf: &[u8]) -> Result<(), Error>;
 }
 
-pub(crate) struct FibonacciBackoff {
-    previous: u64,
-    current: u64,
-    max: u64,
-}
-
-impl FibonacciBackoff {
-    pub(crate) fn new(max: u64) -> Self {
-        FibonacciBackoff {
-            previous: 0,
-            current: 1,
-            max,
-        }
-    }
-
-    pub(crate) fn next_delay(&mut self) -> Duration {
-        let next = self.previous + self.current;
-        self.previous = self.current;
-        self.current = next;
-
-        if next > self.max {
-            Duration::from_secs(self.max)
-        } else {
-            Duration::from_secs(next)
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::connection::sync::Connection;
     use crate::tests::assert_send_and_sync;
+    use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 
     // Additional imports for connection tests
     use crate::client::Client;
@@ -842,19 +825,6 @@ mod tests {
     fn test_thread_safe() {
         assert_send_and_sync::<Connection<TcpSocket>>();
         assert_send_and_sync::<TcpMessageBus<TcpSocket>>();
-    }
-
-    #[test]
-    fn test_fibonacci_backoff() {
-        let mut backoff = FibonacciBackoff::new(10);
-
-        assert_eq!(backoff.next_delay(), Duration::from_secs(1));
-        assert_eq!(backoff.next_delay(), Duration::from_secs(2));
-        assert_eq!(backoff.next_delay(), Duration::from_secs(3));
-        assert_eq!(backoff.next_delay(), Duration::from_secs(5));
-        assert_eq!(backoff.next_delay(), Duration::from_secs(8));
-        assert_eq!(backoff.next_delay(), Duration::from_secs(10));
-        assert_eq!(backoff.next_delay(), Duration::from_secs(10));
     }
 
     #[test]
@@ -1131,7 +1101,7 @@ mod tests {
             Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
         ];
-        let socket = MockSocket::new(events, MAX_RETRIES as usize + 1);
+        let socket = MockSocket::new(events, MAX_RECONNECT_ATTEMPTS as usize + 1);
 
         let connection = Connection::stubbed(socket, 28);
         connection.establish_connection()?;
@@ -1153,7 +1123,7 @@ mod tests {
             Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
         ];
-        let socket = MockSocket::new(events, MAX_RETRIES as usize - 1);
+        let socket = MockSocket::new(events, MAX_RECONNECT_ATTEMPTS as usize - 1);
 
         let connection = Connection::stubbed(socket, 28);
         connection.establish_connection()?;

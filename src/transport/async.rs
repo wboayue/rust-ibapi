@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use log::{debug, error, info, warn};
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio::task;
-use tokio::time::{sleep, Duration};
+use tokio::time::Duration;
 
 /// Default capacity for broadcast channels
 /// This should be large enough to handle bursts of messages without lagging
@@ -59,6 +59,9 @@ pub trait AsyncMessageBus: Send + Sync {
 
     /// Request shutdown synchronously (for use in Drop)
     fn request_shutdown_sync(&self);
+
+    /// Returns true if the client is currently connected to TWS/IB Gateway
+    fn is_connected(&self) -> bool;
 
     #[cfg(test)]
     fn request_messages(&self) -> Vec<RequestMessage> {
@@ -175,6 +178,7 @@ pub struct AsyncTcpMessageBus {
     process_task: Arc<RwLock<Option<task::JoinHandle<()>>>>,
     /// Shutdown flag
     shutdown_requested: Arc<AtomicBool>,
+    connected: Arc<AtomicBool>,
 }
 
 impl Drop for AsyncTcpMessageBus {
@@ -215,6 +219,7 @@ impl AsyncTcpMessageBus {
             cleanup_sender,
             process_task: Arc::new(RwLock::new(None)),
             shutdown_requested: Arc::new(AtomicBool::new(false)),
+            connected: Arc::new(AtomicBool::new(true)),
         };
 
         // Start cleanup task
@@ -248,7 +253,7 @@ impl AsyncTcpMessageBus {
     }
 
     /// Start processing messages from TWS
-    pub fn process_messages(self: Arc<Self>, _server_version: i32, reconnect_delay: Duration) -> Result<(), Error> {
+    pub fn process_messages(self: Arc<Self>, _server_version: i32, _reconnect_delay: Duration) -> Result<(), Error> {
         let message_bus = self.clone();
         let shutdown_flag = self.shutdown_requested.clone();
 
@@ -267,26 +272,43 @@ impl AsyncTcpMessageBus {
                         continue;
                     }
                     result = message_bus.read_and_route_message() => {
+                        use crate::client::error_handler::{is_connection_error, is_timeout_error};
+
                         match result {
                             Ok(_) => continue,
-                            Err(Error::ConnectionReset) => {
-                                error!("Connection reset, attempting to reconnect...");
-                                sleep(reconnect_delay).await;
-                                // TODO: Implement reconnection logic
+                            Err(ref err) if is_timeout_error(err) => {
+                                if message_bus.shutdown_requested.load(Ordering::Relaxed) {
+                                    debug!("dispatcher task exiting");
+                                    break;
+                                }
+                                continue;
+                            }
+                            Err(ref err) if is_connection_error(err) => {
+                                error!("Connection error detected, attempting to reconnect: {err:?}");
+                                message_bus.connected.store(false, Ordering::Relaxed);
+
+                                match message_bus.connection.reconnect().await {
+                                    Ok(_) => {
+                                        info!("Successfully reconnected to TWS/Gateway");
+                                        message_bus.connected.store(true, Ordering::Relaxed);
+                                        message_bus.reset_channels().await;
+                                    }
+                                    Err(e) => {
+                                        error!("Failed to reconnect to TWS/Gateway: {e:?}");
+                                        message_bus.request_shutdown().await;
+                                        break;
+                                    }
+                                }
                                 continue;
                             }
                             Err(Error::Shutdown) => {
                                 error!("Received shutdown signal, stopping message processing.");
                                 break;
                             }
-                            Err(Error::Io(_)) => {
-                                error!("IO error, connection closed. Shutting down.");
+                            Err(err) => {
+                                error!("Error processing message (shutting down): {err:?}");
                                 message_bus.request_shutdown().await;
                                 break;
-                            }
-                            Err(e) => {
-                                error!("Error processing message: {e}");
-                                continue;
                             }
                         }
                     }
@@ -323,11 +345,48 @@ impl AsyncTcpMessageBus {
         }
     }
 
+    /// Reset all channels after reconnection
+    async fn reset_channels(&self) {
+        debug!("resetting message bus channels");
+
+        {
+            let channels = self.request_channels.read().await;
+            for (_, sender) in channels.iter() {
+                let error_msg = ResponseMessage::from("ConnectionReset");
+                let _ = sender.send(error_msg);
+            }
+        }
+
+        {
+            let channels = self.order_channels.read().await;
+            for (_, sender) in channels.iter() {
+                let error_msg = ResponseMessage::from("ConnectionReset");
+                let _ = sender.send(error_msg);
+            }
+        }
+
+        {
+            let mut channels = self.request_channels.write().await;
+            channels.clear();
+        }
+
+        {
+            let mut channels = self.order_channels.write().await;
+            channels.clear();
+        }
+
+        {
+            let mut channels = self.execution_channels.write().await;
+            channels.clear();
+        }
+    }
+
     /// Notify all waiting subscriptions about shutdown
     async fn request_shutdown(&self) {
         debug!("shutdown requested");
 
-        // Set the shutdown flag
+        // Set the shutdown flag and mark as disconnected
+        self.connected.store(false, Ordering::Relaxed);
         self.shutdown_requested.store(true, Ordering::Relaxed);
 
         // Clear all channels - dropping the senders will close the channels
@@ -747,6 +806,11 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
 
     fn request_shutdown_sync(&self) {
         debug!("sync shutdown requested");
+        self.connected.store(false, Ordering::Relaxed);
         self.shutdown_requested.store(true, Ordering::Relaxed);
+    }
+
+    fn is_connected(&self) -> bool {
+        self.connected.load(Ordering::Relaxed) && !self.shutdown_requested.load(Ordering::Relaxed)
     }
 }

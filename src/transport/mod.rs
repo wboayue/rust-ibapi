@@ -1,5 +1,8 @@
 //! Transport layer for TWS communication with sync/async support
 
+// Common utilities
+pub(crate) mod common;
+
 #[cfg(feature = "sync")]
 use std::sync::Arc;
 #[cfg(feature = "sync")]
@@ -62,6 +65,9 @@ pub(crate) trait MessageBus: Send + Sync {
     fn cancel_order_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error>;
 
     fn ensure_shutdown(&self);
+
+    /// Returns true if the client is currently connected to TWS/IB Gateway
+    fn is_connected(&self) -> bool;
 
     // Testing interface. Tracks requests sent messages when Bus is stubbed.
     #[cfg(test)]

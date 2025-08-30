@@ -182,6 +182,11 @@ path = "examples/async/calculate_option_price.rs"
 required-features = ["async"]
 
 [[example]]
+name = "async_connection_monitoring"
+path = "examples/async/connection_monitoring.rs"
+required-features = ["async"]
+
+[[example]]
 name = "async_contract_details"
 path = "examples/async/contract_details.rs"
 required-features = ["async"]
@@ -490,6 +495,11 @@ required-features = ["sync"]
 [[example]]
 name = "connect"
 path = "examples/sync/connect.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "connection_monitoring"
+path = "examples/sync/connection_monitoring.rs"
 required-features = ["sync"]
 
 [[example]]
