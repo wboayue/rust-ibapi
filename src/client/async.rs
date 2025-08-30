@@ -4079,4 +4079,425 @@ mod tests {
         assert!(requests[0].starts_with("88\0"), "Request should be RequestHistogramData");
         assert!(requests[0].contains("AAPL\0STK\0"), "Request should contain AAPL stock");
     }
+
+    // === News Tests ===
+
+    #[tokio::test]
+    async fn test_news_providers() {
+        use crate::client::common::tests::setup_news_providers;
+
+        let gateway = setup_news_providers();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Request news providers
+        let providers = client.news_providers().await.expect("Failed to get news providers");
+
+        // Verify we received 3 providers
+        assert_eq!(providers.len(), 3, "Should receive 3 news providers");
+
+        // Verify provider details
+        assert_eq!(providers[0].code, "BRFG");
+        assert_eq!(providers[0].name, "Briefing.com General Market Columns");
+
+        assert_eq!(providers[1].code, "BRFUPDN");
+        assert_eq!(providers[1].name, "Briefing.com Analyst Actions");
+
+        assert_eq!(providers[2].code, "DJ-RT");
+        assert_eq!(providers[2].name, "Dow Jones Real-Time News");
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        assert_eq!(requests[0], "85\0", "Request should be RequestNewsProviders");
+    }
+
+    #[tokio::test]
+    async fn test_news_bulletins() {
+        use crate::client::common::tests::setup_news_bulletins;
+        use futures::StreamExt;
+
+        let gateway = setup_news_bulletins();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Request news bulletins with all_messages=true
+        let mut subscription = client.news_bulletins(true).await.expect("Failed to get news bulletins");
+
+        // Collect news bulletins
+        let mut bulletins = Vec::new();
+        while let Some(result) = subscription.next().await {
+            match result {
+                Ok(b) => bulletins.push(b),
+                Err(_) => break,
+            }
+            if bulletins.len() >= 2 {
+                break; // We expect 2 bulletins
+            }
+        }
+
+        // Verify we received 2 bulletins
+        assert_eq!(bulletins.len(), 2, "Should receive 2 news bulletins");
+
+        // Verify bulletin details
+        assert_eq!(bulletins[0].message_id, 123);
+        assert_eq!(bulletins[0].message_type, 1);
+        assert_eq!(bulletins[0].message, "Important market announcement");
+        assert_eq!(bulletins[0].exchange, "NYSE");
+
+        assert_eq!(bulletins[1].message_id, 124);
+        assert_eq!(bulletins[1].message_type, 2);
+        assert_eq!(bulletins[1].message, "Trading halt on symbol XYZ");
+        assert_eq!(bulletins[1].exchange, "NASDAQ");
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert!(
+            requests[0].starts_with("12\01\01\0"),
+            "Request should be RequestNewsBulletins with version 1 and all_messages=true"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_historical_news() {
+        use crate::client::common::tests::setup_historical_news;
+        use futures::StreamExt;
+        use time::macros::datetime;
+
+        let gateway = setup_historical_news();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Request historical news
+        let start_time = datetime!(2024-01-15 14:00:00 UTC);
+        let end_time = datetime!(2024-01-15 15:00:00 UTC);
+        let mut subscription = client
+            .historical_news(
+                1234,               // contract_id
+                &["DJ-RT", "BRFG"], // provider_codes
+                start_time,
+                end_time,
+                10, // total_results
+            )
+            .await
+            .expect("Failed to get historical news");
+
+        // Collect news articles
+        let mut articles = Vec::new();
+        while let Some(result) = subscription.next().await {
+            match result {
+                Ok(a) => articles.push(a),
+                Err(_) => break,
+            }
+            if articles.len() >= 2 {
+                break; // We expect 2 articles
+            }
+        }
+
+        // Verify we received 2 articles
+        assert_eq!(articles.len(), 2, "Should receive 2 news articles");
+
+        // Verify article details
+        assert_eq!(articles[0].provider_code, "DJ-RT");
+        assert_eq!(articles[0].article_id, "DJ001234");
+        assert_eq!(articles[0].headline, "Market hits new highs amid positive earnings");
+
+        assert_eq!(articles[1].provider_code, "BRFG");
+        assert_eq!(articles[1].article_id, "BRF5678");
+        assert_eq!(articles[1].headline, "Federal Reserve announces policy decision");
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert!(requests[0].starts_with("86\0"), "Request should be RequestHistoricalNews");
+        assert!(requests[0].contains("1234\0"), "Request should contain contract_id 1234");
+        assert!(requests[0].contains("DJ-RT+BRFG\0"), "Request should contain provider codes");
+    }
+
+    #[tokio::test]
+    async fn test_news_article() {
+        use crate::client::common::tests::setup_news_article;
+
+        let gateway = setup_news_article();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Request news article
+        let article = client
+            .news_article(
+                "DJ-RT",    // provider_code
+                "DJ001234", // article_id
+            )
+            .await
+            .expect("Failed to get news article");
+
+        // Verify article details
+        assert_eq!(article.article_type, crate::news::ArticleType::Text);
+        assert_eq!(
+            article.article_text,
+            "This is the full text of the news article. It contains detailed information about the market event described in the headline."
+        );
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert!(requests[0].starts_with("84\0"), "Request should be RequestNewsArticle");
+        assert!(requests[0].contains("DJ-RT\0"), "Request should contain provider code");
+        assert!(requests[0].contains("DJ001234\0"), "Request should contain article ID");
+    }
+
+    #[tokio::test]
+    async fn test_scanner_parameters() {
+        use crate::client::common::tests::setup_scanner_parameters;
+
+        let gateway = setup_scanner_parameters();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Request scanner parameters
+        let xml = client.scanner_parameters().await.expect("Failed to get scanner parameters");
+
+        // Verify we received XML content
+        assert!(xml.contains("<ScanParameterResponse>"), "Should contain ScanParameterResponse");
+        assert!(xml.contains("<Instrument>STK</Instrument>"), "Should contain STK instrument");
+        assert!(xml.contains("<Instrument>OPT</Instrument>"), "Should contain OPT instrument");
+        assert!(xml.contains("<Location>US</Location>"), "Should contain US location");
+        assert!(
+            xml.contains("<ScanType>TOP_PERC_GAIN</ScanType>"),
+            "Should contain TOP_PERC_GAIN scan type"
+        );
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert_eq!(requests.len(), 1, "Should have sent 1 request");
+        assert_eq!(requests[0], "24\01\0", "Request should be RequestScannerParameters with version 1");
+    }
+
+    #[tokio::test]
+    async fn test_scanner_subscription() {
+        use crate::client::common::tests::setup_scanner_subscription;
+        use crate::scanner::ScannerSubscription;
+
+        let gateway = setup_scanner_subscription();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Create scanner subscription parameters
+        let mut scanner_subscription = ScannerSubscription::default();
+        scanner_subscription.instrument = Some("STK".to_string());
+        scanner_subscription.location_code = Some("STK.US.MAJOR".to_string());
+        scanner_subscription.scan_code = Some("TOP_PERC_GAIN".to_string());
+        scanner_subscription.number_of_rows = 10;
+
+        // Request scanner subscription
+        let mut subscription = client
+            .scanner_subscription(&scanner_subscription, &vec![])
+            .await
+            .expect("Failed to get scanner subscription");
+
+        // Collect scanner data - subscription yields Vec<ScannerData>, not individual items
+        let mut scan_data_vecs = Vec::new();
+        while let Some(result) = subscription.next().await {
+            match result {
+                Ok(d) => scan_data_vecs.push(d),
+                Err(_) => break,
+            }
+            if !scan_data_vecs.is_empty() {
+                break; // We expect 1 batch
+            }
+        }
+
+        assert_eq!(scan_data_vecs.len(), 1, "Should receive 1 batch of scan data");
+        let scan_data = &scan_data_vecs[0];
+
+        // Verify we received 2 scan items
+        assert_eq!(scan_data.len(), 2, "Should receive 2 scan data items");
+
+        // Verify scan data details
+        assert_eq!(scan_data[0].rank, 1);
+        assert_eq!(scan_data[0].contract_details.contract.contract_id, 1234);
+        assert_eq!(scan_data[0].contract_details.contract.symbol, "AAPL");
+
+        assert_eq!(scan_data[1].rank, 2);
+        assert_eq!(scan_data[1].contract_details.contract.contract_id, 5678);
+        assert_eq!(scan_data[1].contract_details.contract.symbol, "GOOGL");
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert!(requests[0].starts_with("22\0"), "Request should be RequestScannerSubscription");
+    }
+
+    #[tokio::test]
+    async fn test_wsh_metadata() {
+        use crate::client::common::tests::setup_wsh_metadata;
+
+        let gateway = setup_wsh_metadata();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Request WSH metadata
+        let metadata = client.wsh_metadata().await.expect("Failed to get WSH metadata");
+
+        // Verify metadata
+        assert_eq!(metadata.data_json, "{\"dataJson\":\"sample_metadata\"}");
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert!(requests[0].starts_with("100\0"), "Request should be RequestWshMetaData");
+    }
+
+    #[tokio::test]
+    async fn test_wsh_event_data() {
+        use crate::client::common::tests::setup_wsh_event_data;
+
+        let gateway = setup_wsh_event_data();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Request WSH event data by contract_id - returns a single WshEventData
+        let event_data = client
+            .wsh_event_data_by_contract(1234, None, None, None, None)
+            .await
+            .expect("Failed to get WSH event data");
+
+        // Verify we received the event data (only the first message is processed)
+        assert_eq!(event_data.data_json, "{\"dataJson\":\"event1\"}");
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert!(requests[0].starts_with("102\0"), "Request should be RequestWshEventData");
+    }
+
+    #[tokio::test]
+    async fn test_contract_news() {
+        use crate::client::common::tests::setup_contract_news;
+        use crate::contracts::Contract;
+        use futures::StreamExt;
+
+        let gateway = setup_contract_news();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Create a contract for the request
+        let contract = Contract::stock("AAPL");
+        let provider_codes = &["DJ-RT", "BRFG"];
+
+        // Request contract news
+        let mut subscription = client
+            .contract_news(&contract, provider_codes)
+            .await
+            .expect("Failed to get contract news");
+
+        // Collect news articles
+        let mut articles = Vec::new();
+        while let Some(result) = subscription.next().await {
+            match result {
+                Ok(a) => articles.push(a),
+                Err(_) => break,
+            }
+            if articles.len() >= 2 {
+                break; // We expect 2 articles
+            }
+        }
+
+        // Verify we received 2 articles
+        assert_eq!(articles.len(), 2, "Should receive 2 news articles");
+
+        // Verify article details
+        assert_eq!(articles[0].provider_code, "DJ-RT");
+        assert_eq!(articles[0].article_id, "DJ001234");
+        assert_eq!(articles[0].headline, "Stock rises on earnings beat");
+        assert_eq!(articles[0].extra_data, "extraData1");
+
+        assert_eq!(articles[1].provider_code, "BRFG");
+        assert_eq!(articles[1].article_id, "BRF5678");
+        assert_eq!(articles[1].headline, "Company announces expansion");
+        assert_eq!(articles[1].extra_data, "extraData2");
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert!(requests[0].starts_with("1\0"), "Request should be RequestMarketData");
+        assert!(requests[0].contains("AAPL\0STK\0"), "Request should contain AAPL stock");
+        assert!(
+            requests[0].contains("mdoff,292:DJ-RT,292:BRFG\0"),
+            "Request should contain news generic ticks"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_broad_tape_news() {
+        use crate::client::common::tests::setup_broad_tape_news;
+
+        let gateway = setup_broad_tape_news();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Request broad tape news
+        let mut subscription = client.broad_tape_news("BRFG").await.expect("Failed to get broad tape news");
+
+        // Collect news articles
+        let mut articles = Vec::new();
+        while let Some(result) = subscription.next().await {
+            match result {
+                Ok(a) => articles.push(a),
+                Err(_) => break,
+            }
+            if articles.len() >= 2 {
+                break; // We expect 2 articles
+            }
+        }
+
+        // Verify we received 2 articles
+        assert_eq!(articles.len(), 2, "Should receive 2 news articles");
+
+        // Verify article details
+        assert_eq!(articles[0].provider_code, "BRFG");
+        assert_eq!(articles[0].article_id, "BRF001");
+        assert_eq!(articles[0].headline, "Market update: Tech sector rallies");
+        assert_eq!(articles[0].extra_data, "extraData1");
+
+        assert_eq!(articles[1].provider_code, "BRFG");
+        assert_eq!(articles[1].article_id, "BRF002");
+        assert_eq!(articles[1].headline, "Fed minutes released");
+        assert_eq!(articles[1].extra_data, "extraData2");
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert!(requests[0].starts_with("1\0"), "Request should be RequestMarketData");
+
+        // Debug: print the actual request to understand the format
+        if !requests[0].contains("BRFG") || !requests[0].contains("NEWS") {
+            eprintln!("Actual request: {:?}", requests[0]);
+        }
+
+        // Check for the contract components (symbol, sec_type, exchange)
+        assert!(requests[0].contains("BRFG:BRFG_ALL"), "Request should contain BRFG:BRFG_ALL symbol");
+        assert!(requests[0].contains("NEWS"), "Request should contain NEWS security type");
+        assert!(requests[0].contains("mdoff,292\0"), "Request should contain news generic ticks");
+    }
+
+    #[tokio::test]
+    async fn test_wsh_event_data_by_filter() {
+        use crate::client::common::tests::setup_wsh_event_data_by_filter;
+
+        let gateway = setup_wsh_event_data_by_filter();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        // Request WSH event data by filter (no limit param to avoid version check)
+        let filter = "{\"watchlist\":[\"AAPL\"],\"country\":\"ALL\"}";
+        let mut subscription = client
+            .wsh_event_data_by_filter(filter, None, None)
+            .await
+            .expect("Failed to get WSH event data by filter");
+
+        // Collect events
+        let mut events = Vec::new();
+        while let Some(result) = subscription.next().await {
+            match result {
+                Ok(e) => events.push(e),
+                Err(_) => break,
+            }
+            if events.len() >= 2 {
+                break; // We expect 2 events
+            }
+        }
+
+        // Verify we received 2 events
+        assert_eq!(events.len(), 2, "Should receive 2 WSH events");
+        assert_eq!(events[0].data_json, "{\"dataJson\":\"filtered_event1\"}");
+        assert_eq!(events[1].data_json, "{\"dataJson\":\"filtered_event2\"}");
+
+        // Verify the request was sent correctly
+        let requests = gateway.requests();
+        assert!(requests[0].starts_with("102\0"), "Request should be RequestWshEventData");
+        assert!(requests[0].contains(filter), "Request should contain the filter");
+    }
 }

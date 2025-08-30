@@ -213,27 +213,27 @@ Messages follow the IB TWS protocol format using null-terminated strings:
 
 | Method | Sync Status | Async Status | Notes |
 |--------|-------------|--------------|-------|
-| `news_providers()` | ❌ | ❌ | Needs test |
-| `news_bulletins()` | ❌ | ❌ | Needs test |
-| `historical_news()` | ❌ | ❌ | Needs test |
-| `news_article()` | ❌ | ❌ | Needs test |
-| `contract_news()` | ❌ | ❌ | Needs test |
-| `broad_tape_news()` | ❌ | ❌ | Needs test |
+| `news_providers()` | ❌ | ❌ | Needs test - setup function added |
+| `news_bulletins()` | ❌ | ❌ | Needs test - setup function added |
+| `historical_news()` | ❌ | ❌ | Needs test - setup function added |
+| `news_article()` | ❌ | ❌ | Needs test - setup function added |
+| `contract_news()` | ❌ | ❌ | Needs test - setup function added |
+| `broad_tape_news()` | ❌ | ❌ | Needs test - setup function added |
 
 ## Scanner
 
 | Method | Sync Status | Async Status | Notes |
 |--------|-------------|--------------|-------|
-| `scanner_parameters()` | ❌ | ❌ | Needs test |
-| `scanner_subscription()` | ❌ | ❌ | Needs test |
+| `scanner_parameters()` | ❌ | ❌ | Needs test - setup function added |
+| `scanner_subscription()` | ❌ | ❌ | Needs test - setup function added |
 
 ## Wall Street Horizon (WSH)
 
 | Method | Sync Status | Async Status | Notes |
 |--------|-------------|--------------|-------|
-| `wsh_metadata()` | ❌ | ❌ | Needs test |
-| `wsh_event_data_by_contract()` | ❌ | ❌ | Needs test |
-| `wsh_event_data_by_filter()` | ❌ | ❌ | Needs test |
+| `wsh_metadata()` | ❌ | ❌ | Needs test - setup function added |
+| `wsh_event_data_by_contract()` | ❌ | ❌ | Needs test - setup function added |
+| `wsh_event_data_by_filter()` | ❌ | ❌ | Needs test - setup function added |
 
 ## Summary Statistics
 

@@ -59,7 +59,8 @@ pub(crate) async fn news_providers(client: &Client) -> Result<Vec<NewsProvider>,
     let mut subscription = client.send_shared_request(OutgoingMessages::RequestNewsProviders, request).await?;
 
     match subscription.next().await {
-        Some(message) => decoders::decode_news_providers(message),
+        Some(Ok(message)) => decoders::decode_news_providers(message),
+        Some(Err(e)) => Err(e),
         None => Err(Error::UnexpectedEndOfStream),
     }
 }
@@ -124,7 +125,8 @@ pub(crate) async fn news_article(client: &Client, provider_code: &str, article_i
     let mut subscription = client.send_request(request_id, request).await?;
 
     match subscription.next().await {
-        Some(message) => decoders::decode_news_article(message),
+        Some(Ok(message)) => decoders::decode_news_article(message),
+        Some(Err(e)) => Err(e),
         None => Err(Error::UnexpectedEndOfStream),
     }
 }

@@ -160,10 +160,10 @@ mod async_helpers {
         let request = encoder()?;
         let mut subscription = client.shared_request(message_type).send_raw(request).await?;
 
-        if let Some(mut message) = subscription.next().await {
-            processor(&mut message)
-        } else {
-            Ok(default())
+        match subscription.next().await {
+            Some(Ok(mut message)) => processor(&mut message),
+            Some(Err(e)) => Err(e),
+            None => Ok(default()),
         }
     }
 
@@ -180,7 +180,8 @@ mod async_helpers {
             let mut subscription = client.shared_request(message_type).send_raw(request).await?;
 
             match subscription.next().await {
-                Some(mut message) => processor(&mut message),
+                Some(Ok(mut message)) => processor(&mut message),
+                Some(Err(e)) => Err(e),
                 None => on_none(),
             }
         })

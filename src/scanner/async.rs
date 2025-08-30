@@ -29,7 +29,8 @@ pub(crate) async fn scanner_parameters(client: &Client) -> Result<String, Error>
     let mut subscription = client.send_shared_request(OutgoingMessages::RequestScannerParameters, request).await?;
 
     match subscription.next().await {
-        Some(message) => decoders::decode_scanner_parameters(message),
+        Some(Ok(message)) => decoders::decode_scanner_parameters(message),
+        Some(Err(e)) => Err(e),
         None => Err(Error::UnexpectedEndOfStream),
     }
 }

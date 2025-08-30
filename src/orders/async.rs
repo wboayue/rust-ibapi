@@ -212,15 +212,17 @@ pub async fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
 
     let mut internal_subscription = client.send_shared_request(OutgoingMessages::RequestIds, message).await?;
 
-    if let Some(message) = internal_subscription.next().await {
-        let order_id_index = 2;
-        let next_order_id = message.peek_int(order_id_index)?;
+    match internal_subscription.next().await {
+        Some(Ok(message)) => {
+            let order_id_index = 2;
+            let next_order_id = message.peek_int(order_id_index)?;
 
-        client.set_next_order_id(next_order_id);
+            client.set_next_order_id(next_order_id);
 
-        Ok(next_order_id)
-    } else {
-        Err(Error::Simple("no response from server".into()))
+            Ok(next_order_id)
+        }
+        Some(Err(e)) => Err(e),
+        None => Err(Error::Simple("no response from server".into())),
     }
 }
 

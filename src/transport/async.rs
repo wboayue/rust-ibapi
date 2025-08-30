@@ -111,10 +111,10 @@ impl AsyncInternalSubscription {
         }
     }
 
-    pub async fn next(&mut self) -> Option<ResponseMessage> {
+    pub async fn next(&mut self) -> Option<Result<ResponseMessage, Error>> {
         loop {
             match self.receiver.recv().await {
-                Ok(msg) => return Some(msg),
+                Ok(msg) => return Some(Ok(msg)),
                 Err(broadcast::error::RecvError::Closed) => return None,
                 Err(broadcast::error::RecvError::Lagged(_)) => {
                     // If we lagged, continue the loop to try again

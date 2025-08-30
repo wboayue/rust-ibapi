@@ -81,4 +81,12 @@ pub(crate) const CHANNEL_MAPPINGS: &[ChannelMapping] = &[
         request: OutgoingMessages::RequestScannerParameters,
         responses: &[IncomingMessages::ScannerParameters],
     },
+    ChannelMapping {
+        request: OutgoingMessages::RequestWshMetaData,
+        responses: &[IncomingMessages::WshMetaData],
+    },
+    ChannelMapping {
+        request: OutgoingMessages::RequestWshEventData,
+        responses: &[IncomingMessages::WshEventData],
+    },
 ];
