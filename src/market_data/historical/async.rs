@@ -23,8 +23,9 @@ pub async fn head_timestamp(client: &Client, contract: &Contract, what_to_show: 
     let mut subscription = builder.send_raw(request).await?;
 
     match subscription.next().await {
-        Some(mut message) if message.message_type() == IncomingMessages::HeadTimestamp => Ok(decoders::decode_head_timestamp(&mut message)?),
-        Some(message) => Err(Error::UnexpectedResponse(message)),
+        Some(Ok(mut message)) if message.message_type() == IncomingMessages::HeadTimestamp => Ok(decoders::decode_head_timestamp(&mut message)?),
+        Some(Ok(message)) => Err(Error::UnexpectedResponse(message)),
+        Some(Err(e)) => Err(e),
         None => {
             // Connection might have been reset, retry
             Box::pin(head_timestamp(client, contract, what_to_show, use_rth)).await
@@ -75,11 +76,12 @@ pub async fn historical_data(
         let mut subscription = builder.send_raw(request).await?;
 
         match subscription.next().await {
-            Some(mut message) if message.message_type() == IncomingMessages::HistoricalData => {
+            Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalData => {
                 return decoders::decode_historical_data(client.server_version(), time_zone(client), &mut message)
             }
-            Some(message) if message.message_type() == IncomingMessages::Error => return Err(Error::from(message)),
-            Some(message) => return Err(Error::UnexpectedResponse(message)),
+            Some(Ok(message)) if message.message_type() == IncomingMessages::Error => return Err(Error::from(message)),
+            Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
+            Some(Err(e)) => return Err(e),
             None => continue, // Connection reset, retry
         }
     }
@@ -127,10 +129,11 @@ pub async fn historical_schedule(
         let mut subscription = builder.send_raw(request).await?;
 
         match subscription.next().await {
-            Some(mut message) if message.message_type() == IncomingMessages::HistoricalSchedule => {
+            Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalSchedule => {
                 return decoders::decode_historical_schedule(&mut message)
             }
-            Some(message) => return Err(Error::UnexpectedResponse(message)),
+            Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
+            Some(Err(e)) => return Err(e),
             None => continue, // Connection reset, retry
         }
     }
@@ -228,7 +231,8 @@ pub async fn histogram_data(client: &Client, contract: &Contract, use_rth: bool,
         let mut subscription = builder.send_raw(request).await?;
 
         match subscription.next().await {
-            Some(mut message) => return decoders::decode_histogram_data(&mut message),
+            Some(Ok(mut message)) => return decoders::decode_histogram_data(&mut message),
+            Some(Err(e)) => return Err(e),
             None => continue, // Connection reset, retry
         }
     }
@@ -276,16 +280,17 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
 
     async fn fill_buffer(&mut self) -> Result<(), ()> {
         match self.messages.next().await {
-            Some(mut message) if message.message_type() == T::MESSAGE_TYPE => {
+            Some(Ok(mut message)) if message.message_type() == T::MESSAGE_TYPE => {
                 let (ticks, done) = T::decode(&mut message).unwrap();
                 self.buffer.extend(ticks);
                 self.done = done;
                 Ok(())
             }
-            Some(message) => {
+            Some(Ok(message)) => {
                 debug!("unexpected message: {message:?}");
                 Ok(())
             }
+            Some(Err(_)) => Err(()),
             None => Err(()),
         }
     }

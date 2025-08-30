@@ -287,7 +287,8 @@ pub async fn market_depth_exchanges(client: &Client) -> Result<Vec<DepthMarketDa
         let response = subscription.next().await;
 
         match response {
-            Some(mut message) => return decoders::decode_market_depth_exchanges(client.server_version(), &mut message),
+            Some(Ok(mut message)) => return decoders::decode_market_depth_exchanges(client.server_version(), &mut message),
+            Some(Err(e)) => return Err(e),
             None => {
                 debug!("connection reset. retrying market_depth_exchanges");
                 continue;

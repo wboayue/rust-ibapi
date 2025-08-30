@@ -233,7 +233,7 @@ impl<T> Subscription<T> {
                 server_version,
             } => loop {
                 match subscription.next().await {
-                    Some(mut message) => {
+                    Some(Ok(mut message)) => {
                         let result = decoder(*server_version, &mut message);
                         match process_decode_result(result) {
                             ProcessingResult::Success(val) => return Some(Ok(val)),
@@ -242,6 +242,7 @@ impl<T> Subscription<T> {
                             ProcessingResult::Error(err) => return Some(Err(err)),
                         }
                     }
+                    Some(Err(e)) => return Some(Err(e)),
                     None => return None,
                 }
             },

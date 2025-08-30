@@ -28,16 +28,21 @@ pub async fn contract_details(client: &Client, contract: &Contract) -> Result<Ve
 
     let mut contract_details: Vec<ContractDetails> = Vec::default();
 
-    while let Some(mut response) = responses.next().await {
-        log::debug!("response: {response:#?}");
-        match response.message_type() {
-            IncomingMessages::ContractData => {
-                let decoded = decoders::decode_contract_details(client.server_version(), &mut response)?;
-                contract_details.push(decoded);
+    while let Some(response_result) = responses.next().await {
+        match response_result {
+            Ok(mut response) => {
+                log::debug!("response: {response:#?}");
+                match response.message_type() {
+                    IncomingMessages::ContractData => {
+                        let decoded = decoders::decode_contract_details(client.server_version(), &mut response)?;
+                        contract_details.push(decoded);
+                    }
+                    IncomingMessages::ContractDataEnd => return Ok(contract_details),
+                    IncomingMessages::Error => return Err(Error::from(response)),
+                    _ => return Err(Error::UnexpectedResponse(response)),
+                }
             }
-            IncomingMessages::ContractDataEnd => return Ok(contract_details),
-            IncomingMessages::Error => return Err(Error::from(response)),
-            _ => return Err(Error::UnexpectedResponse(response)),
+            Err(e) => return Err(e),
         }
     }
 
@@ -77,21 +82,25 @@ pub async fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<Cont
     let request = encoders::encode_request_matching_symbols(request_id, pattern)?;
     let mut subscription = builder.send_raw(request).await?;
 
-    if let Some(mut message) = subscription.next().await {
-        match message.message_type() {
-            IncomingMessages::SymbolSamples => {
-                return decoders::decode_contract_descriptions(client.server_version(), &mut message);
-            }
-            IncomingMessages::Error => {
-                // TODO custom error
-                error!("unexpected error: {message:?}");
-                return Err(Error::Simple(format!("unexpected error: {message:?}")));
-            }
-            _ => {
-                info!("unexpected message: {message:?}");
-                return Err(Error::Simple(format!("unexpected message: {message:?}")));
+    match subscription.next().await {
+        Some(Ok(mut message)) => {
+            match message.message_type() {
+                IncomingMessages::SymbolSamples => {
+                    return decoders::decode_contract_descriptions(client.server_version(), &mut message);
+                }
+                IncomingMessages::Error => {
+                    // TODO custom error
+                    error!("unexpected error: {message:?}");
+                    return Err(Error::Simple(format!("unexpected error: {message:?}")));
+                }
+                _ => {
+                    info!("unexpected message: {message:?}");
+                    return Err(Error::Simple(format!("unexpected message: {message:?}")));
+                }
             }
         }
+        Some(Err(e)) => return Err(e),
+        None => {}
     }
 
     Ok(Vec::default())
@@ -108,7 +117,8 @@ pub async fn market_rule(client: &Client, market_rule_id: i32) -> Result<MarketR
     let mut subscription = client.shared_request(OutgoingMessages::RequestMarketRule).send_raw(request).await?;
 
     match subscription.next().await {
-        Some(mut message) => Ok(decoders::decode_market_rule(&mut message)?),
+        Some(Ok(mut message)) => Ok(decoders::decode_market_rule(&mut message)?),
+        Some(Err(e)) => Err(e),
         None => Err(Error::Simple("no market rule found".into())),
     }
 }
@@ -133,7 +143,8 @@ pub async fn calculate_option_price(
     let mut subscription = builder.send_raw(message).await?;
 
     match subscription.next().await {
-        Some(mut message) => OptionComputation::decode(client.server_version(), &mut message),
+        Some(Ok(mut message)) => OptionComputation::decode(client.server_version(), &mut message),
+        Some(Err(e)) => Err(e),
         None => Err(Error::Simple("no data for option calculation".into())),
     }
 }
@@ -158,7 +169,8 @@ pub async fn calculate_implied_volatility(
     let mut subscription = builder.send_raw(message).await?;
 
     match subscription.next().await {
-        Some(mut message) => OptionComputation::decode(client.server_version(), &mut message),
+        Some(Ok(mut message)) => OptionComputation::decode(client.server_version(), &mut message),
+        Some(Err(e)) => Err(e),
         None => Err(Error::Simple("no data for option calculation".into())),
     }
 }

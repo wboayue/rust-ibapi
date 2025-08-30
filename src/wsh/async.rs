@@ -4,7 +4,6 @@ use time::Date;
 
 use crate::{
     common::request_helpers,
-    messages::OutgoingMessages,
     protocol::{check_version, Features},
     subscriptions::Subscription,
     Client, Error,
@@ -15,13 +14,9 @@ use super::{common::decoders, encoders, AutoFill, WshEventData, WshMetadata};
 pub async fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
     check_version(client.server_version(), Features::WSHE_CALENDAR)?;
 
-    request_helpers::one_shot_with_retry(
+    request_helpers::one_shot_request_with_retry(
         client,
-        OutgoingMessages::RequestWshMetaData,
-        || {
-            let request_id = client.next_request_id();
-            encoders::encode_request_wsh_metadata(request_id)
-        },
+        encoders::encode_request_wsh_metadata,
         |message| decoders::decode_wsh_metadata(message.clone()),
         || Err(Error::UnexpectedEndOfStream),
     )
@@ -46,13 +41,12 @@ pub async fn wsh_event_data_by_contract(
         check_version(client.server_version(), Features::WSH_EVENT_DATA_FILTERS_DATE)?;
     }
 
-    request_helpers::one_shot_with_retry(
+    let server_version = client.server_version();
+    request_helpers::one_shot_request_with_retry(
         client,
-        OutgoingMessages::RequestWshEventData,
-        || {
-            let request_id = client.next_request_id();
+        |request_id| {
             encoders::encode_request_wsh_event_data(
-                client.server_version(),
+                server_version,
                 request_id,
                 Some(contract_id),
                 None,

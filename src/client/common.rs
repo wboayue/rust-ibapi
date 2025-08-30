@@ -1071,4 +1071,202 @@ pub mod tests {
         gateway.start().expect("Failed to start mock gateway");
         gateway
     }
+
+    // === News Test Setup Functions ===
+
+    pub fn setup_news_providers() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::REQ_NEWS_PROVIDERS);
+
+        // Add response for news providers request
+        gateway.add_interaction(
+            OutgoingMessages::RequestNewsProviders,
+            vec![
+                // NewsProviders message: type=85, num_providers=3, then for each provider: code, name
+                "85\03\0BRFG\0Briefing.com General Market Columns\0BRFUPDN\0Briefing.com Analyst Actions\0DJ-RT\0Dow Jones Real-Time News\0"
+                    .to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_news_bulletins() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Add response for news bulletins request
+        gateway.add_interaction(
+            OutgoingMessages::RequestNewsBulletins,
+            vec![
+                // NewsBulletins message: type=14, version=1, message_id, message_type, message, exchange
+                "14\01\0123\01\0Important market announcement\0NYSE\0".to_string(),
+                "14\01\0124\02\0Trading halt on symbol XYZ\0NASDAQ\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_historical_news() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::REQ_HISTORICAL_NEWS);
+
+        // Add response for historical news request
+        gateway.add_interaction(
+            OutgoingMessages::RequestHistoricalNews,
+            vec![
+                // HistoricalNews message: type=86, request_id=9000, time, provider_code, article_id, headline
+                "86\09000\02024-01-15 14:30:00.000\0DJ-RT\0DJ001234\0Market hits new highs amid positive earnings\0".to_string(),
+                "86\09000\02024-01-15 14:25:00.000\0BRFG\0BRF5678\0Federal Reserve announces policy decision\0".to_string(),
+                // HistoricalNewsEnd message: type=87, request_id=9000, has_more=false
+                "87\09000\00\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_news_article() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::REQ_NEWS_ARTICLE);
+
+        // Add response for news article request
+        gateway.add_interaction(
+            OutgoingMessages::RequestNewsArticle,
+            vec![
+                // NewsArticle message: type=83, request_id=9000, article_type=0 (text), article_text
+                "83\09000\00\0This is the full text of the news article. It contains detailed information about the market event described in the headline.\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_scanner_parameters() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
+
+        // Add response for scanner parameters request
+        gateway.add_interaction(
+            OutgoingMessages::RequestScannerParameters,
+            vec![
+                // ScannerParameters message: type=19, version=1, xml_content
+                "19\01\0<ScanParameterResponse><InstrumentList><Instrument>STK</Instrument><Instrument>OPT</Instrument></InstrumentList><LocationTree><Location>US</Location></LocationTree><ScanTypeList><ScanType>TOP_PERC_GAIN</ScanType></ScanTypeList></ScanParameterResponse>\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_scanner_subscription() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::SCANNER_GENERIC_OPTS);
+
+        // Add response for scanner subscription request
+        gateway.add_interaction(
+            OutgoingMessages::RequestScannerSubscription,
+            vec![
+                // ScannerData message: type=20, version, request_id=9000, number_of_items=2
+                "20\03\09000\02\0".to_string() +
+                // rank, contract_id, symbol, sec_type, expiry, strike, right, exchange, currency, local_symbol, market_name, trading_class
+                "1\01234\0AAPL\0STK\0\00.0\0\0SMART\0USD\0AAPL\0NMS\0AAPL\0" +
+                // distance, benchmark, projection, legs
+                "\0\0\0\0" +
+                // rank 2
+                "2\05678\0GOOGL\0STK\0\00.0\0\0SMART\0USD\0GOOGL\0NMS\0GOOGL\0" +
+                "\0\0\0\0",
+                // ScannerDataEnd
+                "20\03\09000\0-1\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_wsh_metadata() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::WSHE_CALENDAR);
+
+        // Add response for WSH metadata request
+        gateway.add_interaction(
+            OutgoingMessages::RequestWshMetaData,
+            vec![
+                // WshMetaData message: type=104, request_id=9000, data_json
+                "104\09000\0{\"dataJson\":\"sample_metadata\"}\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_wsh_event_data() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::WSHE_CALENDAR);
+
+        // Add response for WSH event data request
+        gateway.add_interaction(
+            OutgoingMessages::RequestWshEventData,
+            vec![
+                // WshEventData message: type=105, request_id=9000, data_json, end_flag
+                "105\09000\0{\"dataJson\":\"event1\"}\0".to_string(),
+                "105\09000\0{\"dataJson\":\"event2\"}\0".to_string(),
+                "105\09000\0\01\0".to_string(), // end flag = true
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_contract_news() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::REQ_NEWS_ARTICLE);
+
+        // Add response for contract news request (via market data with news ticks)
+        gateway.add_interaction(
+            OutgoingMessages::RequestMarketData,
+            vec![
+                // TickNews message: type=84, request_id=9000, time, provider_code, article_id, headline, extra_data
+                "84\09000\01705920600000\0DJ-RT\0DJ001234\0Stock rises on earnings beat\0extraData1\0".to_string(),
+                "84\09000\01705920700000\0BRFG\0BRF5678\0Company announces expansion\0extraData2\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_broad_tape_news() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::REQ_NEWS_ARTICLE);
+
+        // Add response for broad tape news request (via market data with news ticks)
+        gateway.add_interaction(
+            OutgoingMessages::RequestMarketData,
+            vec![
+                // TickNews message: type=84, request_id=9000, time, provider_code, article_id, headline, extra_data
+                "84\09000\01705920600000\0BRFG\0BRF001\0Market update: Tech sector rallies\0extraData1\0".to_string(),
+                "84\09000\01705920700000\0BRFG\0BRF002\0Fed minutes released\0extraData2\0".to_string(),
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
+
+    pub fn setup_wsh_event_data_by_filter() -> MockGateway {
+        let mut gateway = MockGateway::new(server_versions::WSH_EVENT_DATA_FILTERS);
+
+        // Add response for WSH event data by filter request
+        gateway.add_interaction(
+            OutgoingMessages::RequestWshEventData,
+            vec![
+                // WshEventData message: type=105, request_id=9000, data_json, end_flag
+                "105\09000\0{\"dataJson\":\"filtered_event1\"}\0".to_string(),
+                "105\09000\0{\"dataJson\":\"filtered_event2\"}\0".to_string(),
+                "105\09000\0\01\0".to_string(), // end flag = true
+            ],
+        );
+
+        gateway.start().expect("Failed to start mock gateway");
+        gateway
+    }
 }
