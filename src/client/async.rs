@@ -3833,7 +3833,6 @@ mod tests {
         use crate::client::common::tests::setup_historical_data;
         use crate::contracts::Contract;
         use crate::market_data::historical::{BarSize, Duration, WhatToShow};
-        use futures::StreamExt;
         use time::macros::datetime;
 
         let gateway = setup_historical_data();
@@ -3904,7 +3903,7 @@ mod tests {
 
         // Schedule has start and end as OffsetDateTime
         assert_eq!(schedule.time_zone, "US/Eastern");
-        assert!(schedule.sessions.len() > 0, "Should have at least one session");
+        assert!(!schedule.sessions.is_empty(), "Should have at least one session");
 
         let requests = gateway.requests();
         assert!(requests[0].starts_with("20\0"), "Request should be RequestHistoricalData");

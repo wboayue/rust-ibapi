@@ -4032,7 +4032,7 @@ mod tests {
 
         // Schedule has start and end as OffsetDateTime, not strings
         assert_eq!(schedule.time_zone, "US/Eastern");
-        assert!(schedule.sessions.len() > 0, "Should have at least one session");
+        assert!(!schedule.sessions.is_empty(), "Should have at least one session");
 
         let requests = gateway.requests();
         assert!(requests[0].starts_with("20\0"), "Request should be RequestHistoricalData");
