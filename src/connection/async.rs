@@ -11,7 +11,7 @@ use super::ConnectionMetadata;
 use crate::errors::Error;
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::trace;
-use crate::transport::common::{FibonacciBackoff, MAX_RETRIES};
+use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::recorder::MessageRecorder;
 
 type Response = Result<ResponseMessage, Error>;
@@ -73,7 +73,7 @@ impl AsyncConnection {
     pub async fn reconnect(&self) -> Result<(), Error> {
         let mut backoff = FibonacciBackoff::new(30);
 
-        for i in 0..MAX_RETRIES {
+        for i in 0..MAX_RECONNECT_ATTEMPTS {
             let next_delay = backoff.next_delay();
             info!("next reconnection attempt in {next_delay:#?}");
 
@@ -93,7 +93,7 @@ impl AsyncConnection {
                     return Ok(());
                 }
                 Err(e) => {
-                    info!("reconnection attempt {}/{} failed: {e}", i + 1, MAX_RETRIES);
+                    info!("reconnection attempt {}/{} failed: {e}", i + 1, MAX_RECONNECT_ATTEMPTS);
                 }
             }
         }

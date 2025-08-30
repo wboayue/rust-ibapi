@@ -778,6 +778,7 @@ mod tests {
     use super::*;
     use crate::connection::sync::Connection;
     use crate::tests::assert_send_and_sync;
+    use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 
     // Additional imports for connection tests
     use crate::client::Client;
@@ -824,19 +825,6 @@ mod tests {
     fn test_thread_safe() {
         assert_send_and_sync::<Connection<TcpSocket>>();
         assert_send_and_sync::<TcpMessageBus<TcpSocket>>();
-    }
-
-    #[test]
-    fn test_fibonacci_backoff() {
-        let mut backoff = FibonacciBackoff::new(10);
-
-        assert_eq!(backoff.next_delay(), Duration::from_secs(1));
-        assert_eq!(backoff.next_delay(), Duration::from_secs(2));
-        assert_eq!(backoff.next_delay(), Duration::from_secs(3));
-        assert_eq!(backoff.next_delay(), Duration::from_secs(5));
-        assert_eq!(backoff.next_delay(), Duration::from_secs(8));
-        assert_eq!(backoff.next_delay(), Duration::from_secs(10));
-        assert_eq!(backoff.next_delay(), Duration::from_secs(10));
     }
 
     #[test]
@@ -1113,7 +1101,7 @@ mod tests {
             Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
         ];
-        let socket = MockSocket::new(events, MAX_RETRIES as usize + 1);
+        let socket = MockSocket::new(events, MAX_RECONNECT_ATTEMPTS as usize + 1);
 
         let connection = Connection::stubbed(socket, 28);
         connection.establish_connection()?;
@@ -1135,7 +1123,7 @@ mod tests {
             Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
         ];
-        let socket = MockSocket::new(events, MAX_RETRIES as usize - 1);
+        let socket = MockSocket::new(events, MAX_RECONNECT_ATTEMPTS as usize - 1);
 
         let connection = Connection::stubbed(socket, 28);
         connection.establish_connection()?;

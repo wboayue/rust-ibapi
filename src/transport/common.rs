@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 /// Maximum number of reconnection attempts
-pub(crate) const MAX_RETRIES: i32 = 20;
+pub(crate) const MAX_RECONNECT_ATTEMPTS: i32 = 20;
 
 /// Fibonacci backoff for reconnection attempts
 pub(crate) struct FibonacciBackoff {
