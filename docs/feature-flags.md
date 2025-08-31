@@ -1,6 +1,36 @@
 # Feature Flags
 
-The library requires you to explicitly choose one of two mutually exclusive features:
+The library requires you to explicitly choose one of two mutually exclusive features.
+
+## Feature Selection Flow
+
+```mermaid
+graph TD
+    Start[cargo build/test/run]
+    Check{Feature specified?}
+    CheckWhich{Which feature?}
+    CheckBoth{Both specified?}
+    Sync[Build with Sync Mode]
+    Async[Build with Async Mode]
+    Error1[❌ Error: No feature specified<br/>Must use --features sync<br/>OR --features async]
+    Error2[❌ Error: Mutually exclusive<br/>Cannot use both features]
+    
+    Start --> Check
+    Check -->|No| Error1
+    Check -->|Yes| CheckBoth
+    CheckBoth -->|Yes| Error2
+    CheckBoth -->|No| CheckWhich
+    CheckWhich -->|--features sync| Sync
+    CheckWhich -->|--features async| Async
+    
+    Sync --> Success1[✓ Thread-based execution]
+    Async --> Success2[✓ Tokio-based execution]
+    
+    style Error1 fill:#ffcdd2
+    style Error2 fill:#ffcdd2
+    style Success1 fill:#c8e6c9
+    style Success2 fill:#c8e6c9
+```
 
 ## Available Features
 

@@ -1,6 +1,32 @@
 # Architecture Overview
 
-The rust-ibapi crate is a Rust implementation of the Interactive Brokers TWS API. The architecture supports both synchronous (thread-based) and asynchronous (tokio-based) operation modes through feature flags.
+The rust-ibapi crate is a Rust implementation of the Interactive Brokers TWS API. The architecture supports both synchronous (thread-based) and asynchronous (tokio-based) operation modes through mutually exclusive feature flags.
+
+## System Architecture
+
+```mermaid
+graph TB
+    User[User Application]
+    Client[Client API]
+    MessageBus[MessageBus]
+    Connection[Connection Manager]
+    TWS[TWS/IB Gateway]
+    
+    User -->|API Calls| Client
+    Client -->|Requests| MessageBus
+    MessageBus -->|Messages| Connection
+    Connection <-->|TCP Socket| TWS
+    TWS -->|Responses| Connection
+    Connection -->|Messages| MessageBus
+    MessageBus -->|Responses| Client
+    Client -->|Results| User
+    
+    style User fill:#e1f5fe
+    style Client fill:#b3e5fc
+    style MessageBus fill:#81d4fa
+    style Connection fill:#4fc3f7
+    style TWS fill:#29b6f6
+```
 
 ## Core Components
 
@@ -32,11 +58,60 @@ Low-level connection management:
 
 ## Request/Response Flow
 
+```mermaid
+sequenceDiagram
+    participant U as User App
+    participant C as Client
+    participant MB as MessageBus
+    participant CM as Connection
+    participant TWS as TWS/Gateway
+    
+    U->>C: API Call (e.g., req_contract_details)
+    C->>C: Generate Request ID
+    C->>C: Encode Request
+    C->>MB: Send Request Message
+    MB->>MB: Create Response Channel
+    MB->>CM: Forward Request
+    CM->>TWS: Send via TCP Socket
+    TWS-->>CM: Response Message(s)
+    CM-->>MB: Parse Response
+    MB-->>MB: Route by Request ID
+    MB-->>C: Send to Response Channel
+    C-->>C: Decode Response
+    C-->>U: Return Result
+```
+
+### Message Routing Patterns
+
 1. **Requests with IDs**: MessageBus creates dedicated channels for responses
 2. **Requests without IDs**: MessageBus uses shared channels for responses
 3. **Order-based requests**: Special handling for order tracking
 
 ## Module Structure
+
+```mermaid
+graph TD
+    ModRoot[module/mod.rs<br/>Public Types & Exports]
+    Common[module/common/<br/>Shared Logic]
+    SyncImpl[module/sync.rs<br/>Sync Implementation]
+    AsyncImpl[module/async.rs<br/>Async Implementation]
+    
+    ModRoot -->|Types| Common
+    ModRoot -->|#cfg feature=sync| SyncImpl
+    ModRoot -->|#cfg feature=async| AsyncImpl
+    
+    Common --> Encoders[encoders.rs<br/>Message Encoding]
+    Common --> Decoders[decoders.rs<br/>Message Decoding]
+    Common --> TestData[test_data.rs<br/>Test Fixtures]
+    
+    SyncImpl -->|uses| Common
+    AsyncImpl -->|uses| Common
+    
+    style ModRoot fill:#fff9c4
+    style Common fill:#f0f4c3
+    style SyncImpl fill:#dcedc8
+    style AsyncImpl fill:#c5e1a5
+```
 
 Each API module follows a consistent structure:
 
