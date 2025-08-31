@@ -24,7 +24,7 @@ fn main() {
             1.days(),
             HistoricalBarSize::Hour,
             HistoricalWhatToShow::Trades,
-            true,
+            TradingHours::Regular,
         )
         .expect("historical data request failed");
 

@@ -10,6 +10,7 @@ use clap::{arg, Command};
 
 use ibapi::contracts::Contract;
 use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
+use ibapi::market_data::TradingHours;
 use ibapi::Client;
 
 fn main() {
@@ -30,7 +31,7 @@ fn main() {
 
     // to use WhatToShow::AdjustedLast, use historical_data() with None for interval_end
     let historical_data = client
-        .historical_data(&contract, None, 7.days(), BarSize::Day, WhatToShow::AdjustedLast, true)
+        .historical_data(&contract, None, 7.days(), BarSize::Day, WhatToShow::AdjustedLast, TradingHours::Regular)
         .expect("historical data request failed");
 
     println!("start_date: {}, end_date: {}", historical_data.start, historical_data.end);

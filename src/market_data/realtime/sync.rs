@@ -9,6 +9,7 @@ use crate::{Client, Error};
 
 use super::common::{decoders, encoders};
 use super::{Bar, BarSize, BidAsk, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, Trade, WhatToShow};
+use crate::market_data::TradingHours;
 
 // Requests realtime bars.
 pub(crate) fn realtime_bars(
@@ -16,7 +17,7 @@ pub(crate) fn realtime_bars(
     contract: &Contract,
     bar_size: &BarSize,
     what_to_show: &WhatToShow,
-    use_rth: bool,
+    trading_hours: TradingHours,
     options: Vec<TagValue>,
 ) -> Result<Subscription<Bar>, Error> {
     let builder = client.request();
@@ -26,7 +27,7 @@ pub(crate) fn realtime_bars(
         contract,
         bar_size,
         what_to_show,
-        use_rth,
+        trading_hours.use_rth(),
         options,
     )?;
 
@@ -179,6 +180,7 @@ mod tests {
     use super::*;
     use crate::contracts::tick_types::TickType;
     use crate::contracts::{ComboLeg, Contract, DeltaNeutralContract, SecurityType};
+    use crate::market_data::TradingHours;
     use crate::messages::OutgoingMessages;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
@@ -238,10 +240,10 @@ mod tests {
         };
         let bar_size = BarSize::Sec5;
         let what_to_show = WhatToShow::Trades;
-        let use_rth = true;
+        let trading_hours = TradingHours::Regular;
 
         // Test subscription creation
-        let bars = client.realtime_bars(&contract, bar_size, what_to_show, use_rth);
+        let bars = client.realtime_bars(&contract, bar_size, what_to_show, trading_hours);
 
         // Test receiving data
         let bars = bars.expect("Failed to create realtime bars subscription");
@@ -275,7 +277,7 @@ mod tests {
         assert_eq!(request[0], OutgoingMessages::RequestRealTimeBars.to_field(), "Wrong message type");
         assert_eq!(request[1], "8", "Wrong version");
         assert_eq!(request[16], what_to_show.to_field(), "Wrong what to show value");
-        assert_eq!(request[17], use_rth.to_field(), "Wrong use RTH flag");
+        assert_eq!(request[17], trading_hours.use_rth().to_field(), "Wrong use RTH flag");
     }
 
     #[test]

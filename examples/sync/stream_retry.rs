@@ -8,7 +8,7 @@
 
 use ibapi::contracts::Contract;
 use ibapi::market_data::realtime::{BarSize, WhatToShow};
-use ibapi::{Client, Error};
+use ibapi::{market_data::TradingHours, Client, Error};
 
 fn main() {
     env_logger::init();
@@ -21,7 +21,7 @@ fn main() {
     loop {
         // Request real-time bars data with 5-second intervals
         let subscription = client
-            .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+            .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended)
             .expect("realtime bars request failed!");
 
         for bar in &subscription {

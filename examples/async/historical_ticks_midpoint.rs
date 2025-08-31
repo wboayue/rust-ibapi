@@ -21,6 +21,7 @@ use std::sync::Arc;
 
 use ibapi::{
     contracts::{Contract, SecurityType},
+    market_data::TradingHours,
     Client,
 };
 use time::macros::datetime;
@@ -48,10 +49,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start = datetime!(2024-01-05 15:00 UTC);
     let end = datetime!(2024-01-05 15:05 UTC);
     let number_of_ticks = 1000; // Max 1000 ticks per request
-    let use_rth = false; // Include all hours for forex
+    let trading_hours = TradingHours::Extended; // Include all hours for forex
 
     let mut tick_subscription = client
-        .historical_ticks_mid_point(&contract, Some(start), Some(end), number_of_ticks, use_rth)
+        .historical_ticks_mid_point(&contract, Some(start), Some(end), number_of_ticks, trading_hours)
         .await?;
 
     println!("Time range: {} to {}", start, end);

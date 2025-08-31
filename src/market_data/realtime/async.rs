@@ -9,6 +9,7 @@ use crate::{Client, Error};
 
 use super::common::{decoders, encoders};
 use super::{Bar, BarSize, BidAsk, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, Trade, WhatToShow};
+use crate::market_data::TradingHours;
 
 // === DataStream implementations ===
 
@@ -163,7 +164,7 @@ pub async fn realtime_bars(
     contract: &Contract,
     bar_size: &BarSize,
     what_to_show: &WhatToShow,
-    use_rth: bool,
+    trading_hours: TradingHours,
     options: Vec<TagValue>,
 ) -> Result<Subscription<Bar>, Error> {
     let builder = client.request();
@@ -173,7 +174,7 @@ pub async fn realtime_bars(
         contract,
         bar_size,
         what_to_show,
-        use_rth,
+        trading_hours.use_rth(),
         options,
     )?;
 
@@ -382,10 +383,10 @@ mod tests {
         };
         let bar_size = BarSize::Sec5;
         let what_to_show = WhatToShow::Trades;
-        let use_rth = true;
+        let trading_hours = TradingHours::Regular;
 
         // Test subscription creation
-        let mut bars = realtime_bars(&client, &contract, &bar_size, &what_to_show, use_rth, vec![])
+        let mut bars = realtime_bars(&client, &contract, &bar_size, &what_to_show, trading_hours, vec![])
             .await
             .expect("Failed to create realtime bars subscription");
 
@@ -425,7 +426,7 @@ mod tests {
         assert_eq!(request.fields[0], OutgoingMessages::RequestRealTimeBars.to_field(), "Wrong message type");
         assert_eq!(request.fields[1], "8", "Wrong version");
         assert_eq!(request.fields[16], what_to_show.to_field(), "Wrong what to show value");
-        assert_eq!(request.fields[17], use_rth.to_field(), "Wrong use RTH flag");
+        assert_eq!(request.fields[17], trading_hours.use_rth().to_field(), "Wrong use RTH flag");
     }
 
     #[tokio::test]

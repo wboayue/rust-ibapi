@@ -6,9 +6,8 @@
 //! cargo run --features sync --example historical_data_options
 //! ```
 
-use ibapi::contracts::{Contract, SecurityType};
-use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
-use ibapi::Client;
+use ibapi::market_data::historical::ToDuration;
+use ibapi::prelude::*;
 
 // This example demonstrates how to request historical data for an options contract.
 // Historical data is not available to expired options contracts.
@@ -21,7 +20,14 @@ fn main() {
     let contract = build_contract();
 
     let historical_data = client
-        .historical_data(&contract, None, 10.days(), BarSize::Hour, WhatToShow::AdjustedLast, true)
+        .historical_data(
+            &contract,
+            None,
+            10.days(),
+            HistoricalBarSize::Hour,
+            HistoricalWhatToShow::AdjustedLast,
+            TradingHours::Regular,
+        )
         .expect("historical data request failed");
 
     println!("start: {:?}, end: {:?}", historical_data.start, historical_data.end);

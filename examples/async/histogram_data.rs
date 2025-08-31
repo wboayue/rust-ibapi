@@ -19,7 +19,11 @@
 
 use std::sync::Arc;
 
-use ibapi::{contracts::Contract, market_data::historical::BarSize, Client};
+use ibapi::{
+    contracts::Contract,
+    market_data::{historical::BarSize, TradingHours},
+    Client,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -31,16 +35,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test different contracts and periods
     let test_cases = vec![
-        ("AAPL", Contract::stock("AAPL"), BarSize::Week, true, "1 week RTH"),
-        ("SPY", Contract::stock("SPY"), BarSize::Day, true, "1 day RTH"),
-        ("TSLA", Contract::stock("TSLA"), BarSize::Week, false, "1 week all hours"),
+        ("AAPL", Contract::stock("AAPL"), BarSize::Week, TradingHours::Regular, "1 week RTH"),
+        ("SPY", Contract::stock("SPY"), BarSize::Day, TradingHours::Regular, "1 day RTH"),
+        ("TSLA", Contract::stock("TSLA"), BarSize::Week, TradingHours::Extended, "1 week all hours"),
     ];
 
-    for (symbol, contract, period, use_rth, description) in test_cases {
+    for (symbol, contract, period, trading_hours, description) in test_cases {
         println!("\n{symbol} Histogram ({description}):");
-        println!("Period: {period:?}, RTH only: {use_rth}");
+        println!("Period: {period:?}, Trading hours: {trading_hours:?}");
 
-        match client.histogram_data(&contract, use_rth, period).await {
+        match client.histogram_data(&contract, trading_hours, period).await {
             Ok(histogram) => {
                 if histogram.is_empty() {
                     println!("No histogram data available");

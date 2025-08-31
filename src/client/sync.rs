@@ -20,7 +20,7 @@ use crate::contracts::{Contract, OptionComputation, SecurityType};
 use crate::errors::Error;
 use crate::market_data::historical::{self, HistogramEntry};
 use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, WhatToShow};
-use crate::market_data::MarketDataType;
+use crate::market_data::{MarketDataType, TradingHours};
 use crate::messages::{OutgoingMessages, RequestMessage};
 use crate::news::NewsArticle;
 use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, OrderUpdate, Orders, PlaceOrder};
@@ -918,14 +918,19 @@ impl Client {
     ///
     /// let contract = Contract::stock("MSFT");
     /// let what_to_show = WhatToShow::Trades;
-    /// let use_rth = true;
+    /// let trading_hours = TradingHours::Regular;
     ///
-    /// let result = client.head_timestamp(&contract, what_to_show, use_rth).expect("head timestamp failed");
+    /// let result = client.head_timestamp(&contract, what_to_show, trading_hours).expect("head timestamp failed");
     ///
     /// print!("head_timestamp: {result:?}");
     /// ```
-    pub fn head_timestamp(&self, contract: &Contract, what_to_show: historical::WhatToShow, use_rth: bool) -> Result<OffsetDateTime, Error> {
-        historical::head_timestamp(self, contract, what_to_show, use_rth)
+    pub fn head_timestamp(
+        &self,
+        contract: &Contract,
+        what_to_show: historical::WhatToShow,
+        trading_hours: TradingHours,
+    ) -> Result<OffsetDateTime, Error> {
+        historical::head_timestamp(self, contract, what_to_show, trading_hours)
     }
 
     /// Requests interval of historical data ending at specified time for [Contract].
@@ -968,9 +973,9 @@ impl Client {
         duration: historical::Duration,
         bar_size: historical::BarSize,
         what_to_show: historical::WhatToShow,
-        use_rth: bool,
+        trading_hours: TradingHours,
     ) -> Result<historical::HistoricalData, Error> {
-        historical::historical_data(self, contract, interval_end, duration, bar_size, Some(what_to_show), use_rth)
+        historical::historical_data(self, contract, interval_end, duration, bar_size, Some(what_to_show), trading_hours)
     }
 
     /// Requests [Schedule](historical::Schedule) for an interval of given duration
@@ -1050,7 +1055,7 @@ impl Client {
     /// * `start`    - Start time. Either start time or end time is specified.
     /// * `end`      - End time. Either start time or end time is specified.
     /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
-    /// * `use_rth`         - Data from regular trading hours (true), or all available hours (false)
+    /// * `trading_hours`   - Regular trading hours only, or include extended hours
     /// * `ignore_size`     - A filter only used when the source price is Bid_Ask
     ///
     /// # Examples
@@ -1079,10 +1084,10 @@ impl Client {
         start: Option<OffsetDateTime>,
         end: Option<OffsetDateTime>,
         number_of_ticks: i32,
-        use_rth: bool,
+        trading_hours: TradingHours,
         ignore_size: bool,
     ) -> Result<historical::TickSubscription<historical::TickBidAsk>, Error> {
-        historical::historical_ticks_bid_ask(self, contract, start, end, number_of_ticks, use_rth, ignore_size)
+        historical::historical_ticks_bid_ask(self, contract, start, end, number_of_ticks, trading_hours, ignore_size)
     }
 
     /// Requests historical time & sales data (Midpoint) for an instrument.
@@ -1092,7 +1097,7 @@ impl Client {
     /// * `start`    - Start time. Either start time or end time is specified.
     /// * `end`      - End time. Either start time or end time is specified.
     /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
-    /// * `use_rth`         - Data from regular trading hours (true), or all available hours (false)
+    /// * `trading_hours`   - Regular trading hours only, or include extended hours
     ///
     /// # Examples
     ///
@@ -1107,7 +1112,7 @@ impl Client {
     /// let contract = Contract::stock("TSLA");
     ///
     /// let ticks = client
-    ///     .historical_ticks_mid_point(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, true)
+    ///     .historical_ticks_mid_point(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, TradingHours::Regular)
     ///     .expect("historical ticks request failed");
     ///
     /// for tick in ticks {
@@ -1120,9 +1125,9 @@ impl Client {
         start: Option<OffsetDateTime>,
         end: Option<OffsetDateTime>,
         number_of_ticks: i32,
-        use_rth: bool,
+        trading_hours: TradingHours,
     ) -> Result<historical::TickSubscription<historical::TickMidpoint>, Error> {
-        historical::historical_ticks_mid_point(self, contract, start, end, number_of_ticks, use_rth)
+        historical::historical_ticks_mid_point(self, contract, start, end, number_of_ticks, trading_hours)
     }
 
     /// Requests historical time & sales data (Trades) for an instrument.
@@ -1132,7 +1137,7 @@ impl Client {
     /// * `start`    - Start time. Either start time or end time is specified.
     /// * `end`      - End time. Either start time or end time is specified.
     /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
-    /// * `use_rth`         - Data from regular trading hours (true), or all available hours (false)
+    /// * `trading_hours`   - Regular trading hours only, or include extended hours
     ///
     /// # Examples
     ///
@@ -1147,7 +1152,7 @@ impl Client {
     /// let contract = Contract::stock("TSLA");
     ///
     /// let ticks = client
-    ///     .historical_ticks_trade(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, true)
+    ///     .historical_ticks_trade(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, TradingHours::Regular)
     ///     .expect("historical ticks request failed");
     ///
     /// for tick in ticks {
@@ -1160,9 +1165,9 @@ impl Client {
         start: Option<OffsetDateTime>,
         end: Option<OffsetDateTime>,
         number_of_ticks: i32,
-        use_rth: bool,
+        trading_hours: TradingHours,
     ) -> Result<historical::TickSubscription<historical::TickLast>, Error> {
-        historical::historical_ticks_trade(self, contract, start, end, number_of_ticks, use_rth)
+        historical::historical_ticks_trade(self, contract, start, end, number_of_ticks, trading_hours)
     }
 
     /// Requests data histogram of specified contract.
@@ -1193,8 +1198,13 @@ impl Client {
     ///     println!("{item:?}");
     /// }
     /// ```
-    pub fn histogram_data(&self, contract: &Contract, use_rth: bool, period: historical::BarSize) -> Result<Vec<HistogramEntry>, Error> {
-        historical::histogram_data(self, contract, use_rth, period)
+    pub fn histogram_data(
+        &self,
+        contract: &Contract,
+        trading_hours: TradingHours,
+        period: historical::BarSize,
+    ) -> Result<Vec<HistogramEntry>, Error> {
+        historical::histogram_data(self, contract, trading_hours, period)
     }
 
     // === Realtime Market Data ===
@@ -1220,8 +1230,14 @@ impl Client {
     ///     println!("bar[{i}]: {bar:?}");
     /// }
     /// ```
-    pub fn realtime_bars(&self, contract: &Contract, bar_size: BarSize, what_to_show: WhatToShow, use_rth: bool) -> Result<Subscription<Bar>, Error> {
-        realtime::realtime_bars(self, contract, &bar_size, &what_to_show, use_rth, Vec::default())
+    pub fn realtime_bars(
+        &self,
+        contract: &Contract,
+        bar_size: BarSize,
+        what_to_show: WhatToShow,
+        trading_hours: TradingHours,
+    ) -> Result<Subscription<Bar>, Error> {
+        realtime::realtime_bars(self, contract, &bar_size, &what_to_show, trading_hours, Vec::default())
     }
 
     /// Requests tick by tick AllLast ticks.
@@ -1957,7 +1973,7 @@ pub use crate::subscriptions::SharesChannel;
 mod tests {
     use std::sync::Arc;
 
-    use super::Client;
+    use super::{Client, TradingHours};
     use crate::client::common::tests::*;
     use crate::{connection::ConnectionMetadata, stubs::MessageBusStub};
 
@@ -2372,7 +2388,7 @@ mod tests {
                 &contract,
                 crate::market_data::realtime::BarSize::Sec5,
                 crate::market_data::realtime::WhatToShow::Trades,
-                false,
+                TradingHours::Extended,
             )
             .expect("Failed to create subscription");
 
@@ -3564,10 +3580,10 @@ mod tests {
         let contract = Contract::stock("AAPL");
         let bar_size = BarSize::Sec5;
         let what_to_show = WhatToShow::Trades;
-        let use_rth = false;
+        let trading_hours = TradingHours::Extended;
 
         let subscription = client
-            .realtime_bars(&contract, bar_size, what_to_show, use_rth)
+            .realtime_bars(&contract, bar_size, what_to_show, trading_hours)
             .expect("Failed to request realtime bars");
 
         let mut bars = Vec::new();
@@ -3941,10 +3957,10 @@ mod tests {
 
         let contract = Contract::stock("AAPL");
         let what_to_show = WhatToShow::Trades;
-        let use_rth = true;
+        let trading_hours = TradingHours::Regular;
 
         let timestamp = client
-            .head_timestamp(&contract, what_to_show, use_rth)
+            .head_timestamp(&contract, what_to_show, trading_hours)
             .expect("Failed to get head timestamp");
 
         // Verify the timestamp is as expected (2024-01-15 09:30:00)
@@ -3975,10 +3991,10 @@ mod tests {
         let duration = Duration::days(1);
         let bar_size = BarSize::Min5;
         let what_to_show = WhatToShow::Trades;
-        let use_rth = true;
+        let trading_hours = TradingHours::Regular;
 
         let bars = client
-            .historical_data(&contract, Some(end_date_time), duration, bar_size, what_to_show, use_rth)
+            .historical_data(&contract, Some(end_date_time), duration, bar_size, what_to_show, trading_hours)
             .expect("Failed to get historical data");
 
         // Bars are in the HistoricalData struct
@@ -4052,10 +4068,10 @@ mod tests {
         let contract = Contract::stock("AAPL");
         let start_date_time = datetime!(2024-01-22 09:30:00).assume_utc();
         let number_of_ticks = 100;
-        let use_rth = true;
+        let trading_hours = TradingHours::Regular;
 
         let ticks = client
-            .historical_ticks_bid_ask(&contract, Some(start_date_time), None, number_of_ticks, use_rth, false)
+            .historical_ticks_bid_ask(&contract, Some(start_date_time), None, number_of_ticks, trading_hours, false)
             .expect("Failed to get historical ticks bid/ask");
 
         // Collect ticks from the subscription
@@ -4097,10 +4113,10 @@ mod tests {
         let contract = Contract::stock("AAPL");
         let start_date_time = datetime!(2024-01-22 09:30:00).assume_utc();
         let number_of_ticks = 100;
-        let use_rth = true;
+        let trading_hours = TradingHours::Regular;
 
         let ticks = client
-            .historical_ticks_mid_point(&contract, Some(start_date_time), None, number_of_ticks, use_rth)
+            .historical_ticks_mid_point(&contract, Some(start_date_time), None, number_of_ticks, trading_hours)
             .expect("Failed to get historical ticks midpoint");
 
         // Collect ticks from the subscription
@@ -4133,10 +4149,10 @@ mod tests {
         let contract = Contract::stock("AAPL");
         let start_date_time = datetime!(2024-01-22 09:30:00).assume_utc();
         let number_of_ticks = 100;
-        let use_rth = true;
+        let trading_hours = TradingHours::Regular;
 
         let ticks = client
-            .historical_ticks_trade(&contract, Some(start_date_time), None, number_of_ticks, use_rth)
+            .historical_ticks_trade(&contract, Some(start_date_time), None, number_of_ticks, trading_hours)
             .expect("Failed to get historical ticks trade");
 
         // Collect ticks from the subscription
@@ -4172,10 +4188,12 @@ mod tests {
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
         let contract = Contract::stock("AAPL");
-        let use_rth = true;
+        let trading_hours = TradingHours::Regular;
         let period = BarSize::Day;
 
-        let entries = client.histogram_data(&contract, use_rth, period).expect("Failed to get histogram data");
+        let entries = client
+            .histogram_data(&contract, trading_hours, period)
+            .expect("Failed to get histogram data");
 
         assert_eq!(entries.len(), 3, "Should receive 3 entries");
 

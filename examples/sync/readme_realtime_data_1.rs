@@ -17,7 +17,7 @@ fn main() {
     // Request real-time bars data for AAPL with 5-second intervals
     let contract = Contract::stock("AAPL");
     let subscription = client
-        .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
+        .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
         .expect("realtime bars request failed!");
 
     for bar in subscription {

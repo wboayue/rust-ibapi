@@ -25,7 +25,7 @@ fn main() {
         let handle = thread::spawn(move || {
             let contract = Contract::stock(symbol);
             let subscription = client
-                .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
+                .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
                 .expect("realtime bars request failed!");
 
             for bar in subscription {

@@ -19,7 +19,7 @@
 
 use std::sync::Arc;
 
-use ibapi::{contracts::Contract, Client};
+use ibapi::{contracts::Contract, market_data::TradingHours, Client};
 use time::macros::datetime;
 
 #[tokio::main]
@@ -40,9 +40,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start = Some(start_time);
     let end = Some(end_time);
     let number_of_ticks = 1000; // Max 1000 ticks per request
-    let use_rth = true; // Only regular trading hours
+    let trading_hours = TradingHours::Regular; // Only regular trading hours
 
-    let mut tick_subscription = client.historical_ticks_trade(&contract, start, end, number_of_ticks, use_rth).await?;
+    let mut tick_subscription = client
+        .historical_ticks_trade(&contract, start, end, number_of_ticks, trading_hours)
+        .await?;
 
     println!("Time range: {} to {}", start_time, end_time);
     println!("\nTime                     | Price    | Size   | Exchange | Conditions");
