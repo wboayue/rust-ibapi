@@ -159,30 +159,34 @@ impl Client {
     }
 
     /// Send a request with a specific request ID
-    pub async fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
+    pub(crate) async fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
         // Use atomic subscribe + send
         self.message_bus.send_request(request_id, message).await
     }
 
     /// Send a shared request (no ID)
-    pub async fn send_shared_request(&self, message_type: OutgoingMessages, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
+    pub(crate) async fn send_shared_request(
+        &self,
+        message_type: OutgoingMessages,
+        message: RequestMessage,
+    ) -> Result<AsyncInternalSubscription, Error> {
         // Use atomic subscribe + send
         self.message_bus.send_shared_request(message_type, message).await
     }
 
     /// Send an order request
-    pub async fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
+    pub(crate) async fn send_order(&self, order_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
         // Use atomic subscribe + send
         self.message_bus.send_order_request(order_id, message).await
     }
 
     /// Create order update subscription
-    pub async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
+    pub(crate) async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error> {
         self.message_bus.create_order_update_subscription().await
     }
 
     /// Send a message without expecting a response
-    pub async fn send_message(&self, message: RequestMessage) -> Result<(), Error> {
+    pub(crate) async fn send_message(&self, message: RequestMessage) -> Result<(), Error> {
         self.message_bus.send_message(message).await
     }
 
