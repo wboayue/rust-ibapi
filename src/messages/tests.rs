@@ -115,10 +115,10 @@ fn response_message_parse_test_cases() -> Vec<ResponseMessageParseTestCase> {
         },
         ResponseMessageParseTestCase {
             name: "parse_double",
-            input: "1\03.14159\0456\0",
+            input: "1\03.14567\0456\0",
             field_index: 1,
             parse_type: ParseType::Double,
-            expected: ParseResult::Double(3.14159),
+            expected: ParseResult::Double(3.14567),
         },
         ResponseMessageParseTestCase {
             name: "parse_double_zero",
@@ -684,7 +684,7 @@ fn test_response_message_is_shutdown() {
 
 #[test]
 fn test_response_message_encode_decode_roundtrip() {
-    let original = ResponseMessage::from("1\0test\0123\03.14\0");
+    let original = ResponseMessage::from("1\0test\0123\03.456\0");
     let encoded = original.encode();
     let decoded = ResponseMessage::from(&encoded);
 
