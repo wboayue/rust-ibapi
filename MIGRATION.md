@@ -8,7 +8,7 @@ Version 2.x introduces first-class async support! You can now choose between syn
 
 ## Breaking Changes
 
-### Explicit Feature Selection Required
+### 1. Explicit Feature Selection Required
 
 In v2.x, you must explicitly choose between `sync` and `async` features. There is no longer a default feature.
 
@@ -30,20 +30,68 @@ ibapi = { version = "2.0", features = ["sync"] }
 ibapi = { version = "2.0", features = ["async"] }
 ```
 
-### Why This Change?
+#### Why This Change?
 
 1. **Clarity**: Makes it explicit which execution model you're using
 2. **Smaller binaries**: Only includes the dependencies you actually need  
 3. **Clean separation**: Sync and async are truly independent implementations
 4. **Future flexibility**: Allows for divergent optimizations per mode
 
-### Compilation Errors
+#### Compilation Errors
 
 If you upgrade without specifying a feature, you'll see:
 ```
 error: Either 'sync' or 'async' feature must be enabled.
        Use: features = ["sync"] or features = ["async"]
 ```
+
+### 2. TradingHours Enum Replaces Boolean Parameters
+
+All market data methods that previously used `use_rth: bool` now use the `TradingHours` enum for better type safety and clarity.
+
+#### Before (v1.x)
+```rust
+use ibapi::Client;
+
+let client = Client::connect("127.0.0.1:4002", 100)?;
+let contract = Contract::stock("AAPL");
+
+// Old API with boolean parameter
+let bars = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, true)?;  // true for RTH
+let data = client.historical_data(&contract, None, 1.days(), BarSize::Hour, WhatToShow::Trades, false)?;  // false for extended hours
+```
+
+#### After (v2.x)
+```rust
+use ibapi::Client;
+use ibapi::market_data::TradingHours;
+
+let client = Client::connect("127.0.0.1:4002", 100)?;
+let contract = Contract::stock("AAPL");
+
+// New API with TradingHours enum
+let bars = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Regular)?;
+let data = client.historical_data(&contract, None, 1.days(), BarSize::Hour, WhatToShow::Trades, TradingHours::Extended)?;
+```
+
+#### Affected Methods
+
+The following methods now use `TradingHours` instead of `use_rth: bool`:
+
+- `Client::realtime_bars()`
+- `Client::head_timestamp()`
+- `Client::historical_data()`
+- `Client::historical_ticks_bid_ask()`
+- `Client::historical_ticks_mid_point()`
+- `Client::historical_ticks_trade()`
+- `Client::histogram_data()`
+
+#### Why This Change?
+
+1. **Type safety**: Can't accidentally pass the wrong boolean value
+2. **Self-documenting**: `TradingHours::Regular` is clearer than `true`
+3. **Future extensibility**: Easy to add more trading hour options if needed
+4. **IDE support**: Better autocomplete and documentation
 
 ## Quick Migration Steps
 

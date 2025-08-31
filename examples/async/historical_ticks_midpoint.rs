@@ -19,11 +19,7 @@
 
 use std::sync::Arc;
 
-use ibapi::{
-    contracts::{Contract, SecurityType},
-    market_data::TradingHours,
-    Client,
-};
+use ibapi::prelude::*;
 use time::macros::datetime;
 
 #[tokio::main]

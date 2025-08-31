@@ -19,7 +19,7 @@
 
 use std::sync::Arc;
 
-use ibapi::{contracts::Contract, Client};
+use ibapi::prelude::*;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();

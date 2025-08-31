@@ -19,11 +19,7 @@
 
 use std::sync::Arc;
 
-use ibapi::{
-    contracts::Contract,
-    market_data::{historical::BarSize, TradingHours},
-    Client,
-};
+use ibapi::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -35,9 +31,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test different contracts and periods
     let test_cases = vec![
-        ("AAPL", Contract::stock("AAPL"), BarSize::Week, TradingHours::Regular, "1 week RTH"),
-        ("SPY", Contract::stock("SPY"), BarSize::Day, TradingHours::Regular, "1 day RTH"),
-        ("TSLA", Contract::stock("TSLA"), BarSize::Week, TradingHours::Extended, "1 week all hours"),
+        (
+            "AAPL",
+            Contract::stock("AAPL"),
+            HistoricalBarSize::Week,
+            TradingHours::Regular,
+            "1 week RTH",
+        ),
+        ("SPY", Contract::stock("SPY"), HistoricalBarSize::Day, TradingHours::Regular, "1 day RTH"),
+        (
+            "TSLA",
+            Contract::stock("TSLA"),
+            HistoricalBarSize::Week,
+            TradingHours::Extended,
+            "1 week all hours",
+        ),
     ];
 
     for (symbol, contract, period, trading_hours, description) in test_cases {

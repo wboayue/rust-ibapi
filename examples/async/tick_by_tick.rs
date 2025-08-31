@@ -19,7 +19,7 @@
 
 use std::sync::Arc;
 
-use ibapi::{contracts::Contract, Client};
+use ibapi::prelude::*;
 use time::macros::format_description;
 
 #[tokio::main]

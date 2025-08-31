@@ -17,10 +17,7 @@
 
 use clap::{arg, Command};
 
-use ibapi::contracts::Contract;
-use ibapi::market_data::historical::WhatToShow;
-use ibapi::market_data::TradingHours;
-use ibapi::Client;
+use ibapi::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -39,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::connect(connection_string, 100).await?;
 
     let contract = Contract::stock(stock_symbol);
-    let what_to_show = WhatToShow::Trades;
+    let what_to_show = HistoricalWhatToShow::Trades;
     let trading_hours = TradingHours::Regular;
 
     let head_timestamp = client.head_timestamp(&contract, what_to_show, trading_hours).await?;
