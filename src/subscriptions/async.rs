@@ -385,9 +385,7 @@ mod tests {
             internal,
             176,
             message_bus,
-            |_version, _msg| {
-                Ok("decoded".to_string())
-            },
+            |_version, _msg| Ok("decoded".to_string()),
             Some(1),
             None,
             Some(OutgoingMessages::RequestMarketData),
@@ -422,12 +420,12 @@ mod tests {
     #[tokio::test]
     async fn test_subscription_new_from_receiver() {
         let (tx, rx) = mpsc::unbounded_channel();
-        
+
         let mut subscription = Subscription::new(rx);
-        
+
         // Send test data
         tx.send(Ok("test".to_string())).unwrap();
-        
+
         let result = subscription.next().await;
         assert!(result.is_some());
         assert_eq!(result.unwrap().unwrap(), "test");
@@ -511,10 +509,10 @@ mod tests {
 
         // Cancel the subscription
         subscription.cancel().await;
-        
+
         // Verify cancelled flag is set
         assert!(subscription.cancelled.load(Ordering::Relaxed));
-        
+
         // Cancel again should be a no-op
         subscription.cancel().await;
     }
@@ -578,12 +576,12 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     #[should_panic(expected = "Cannot clone pre-decoded subscriptions")]
     async fn test_subscription_inner_clone_panic() {
         let (_tx, rx) = mpsc::unbounded_channel::<Result<String, Error>>();
         let subscription = Subscription::new(rx);
-        
+
         // This should panic because PreDecoded subscriptions can't be cloned
         let _ = subscription.inner.clone();
     }
@@ -617,12 +615,12 @@ mod tests {
     async fn test_subscription_new_from_internal_simple() {
         // Define a simple decoder type
         struct TestDecoder;
-        
+
         impl StreamDecoder<String> for TestDecoder {
             fn decode(_server_version: i32, _msg: &mut ResponseMessage) -> Result<String, Error> {
                 Ok("decoded".to_string())
             }
-            
+
             fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
                 let mut msg = RequestMessage::new();
                 msg.push_field(&OutgoingMessages::CancelMarketData);
@@ -634,11 +632,7 @@ mod tests {
         let (_tx, rx) = broadcast::channel(100);
         let internal = AsyncInternalSubscription::new(rx);
 
-        let subscription: Subscription<String> = Subscription::new_from_internal_simple::<TestDecoder>(
-            internal,
-            176,
-            message_bus,
-        );
+        let subscription: Subscription<String> = Subscription::new_from_internal_simple::<TestDecoder>(internal, 176, message_bus);
 
         assert!(subscription.cancel_fn.is_some());
     }

@@ -743,7 +743,12 @@ fn test_field_based_parser() {
         let parser = FieldBasedParser::new(test_case.fields);
         let result = parser.parse(&test_case.input);
 
-        assert_eq!(result.len(), test_case.expected_count, "Test '{}' failed: wrong field count", test_case.name);
+        assert_eq!(
+            result.len(),
+            test_case.expected_count,
+            "Test '{}' failed: wrong field count",
+            test_case.name
+        );
 
         for (field, (expected_name, expected_value)) in result.iter().zip(test_case.expected_values.iter()) {
             assert_eq!(field.name, *expected_name, "Test '{}' failed: wrong field name", test_case.name);
@@ -795,8 +800,7 @@ fn test_timestamp_parser() {
 
         let has_parsed_timestamp = result.iter().any(|f| f.name == "timestamp_parsed");
         assert_eq!(
-            has_parsed_timestamp,
-            test_case.expect_parsed_timestamp,
+            has_parsed_timestamp, test_case.expect_parsed_timestamp,
             "Test '{}' failed: timestamp parsing expectation mismatch",
             test_case.name
         );
@@ -837,12 +841,7 @@ fn test_message_parser_registry() {
             name: "request_pnl",
             msg_type: OutgoingMessages::RequestPnL,
             input: vec!["92", "456", "DU12345", ""],
-            expected_fields: vec![
-                ("message_type", "92"),
-                ("request_id", "456"),
-                ("account", "DU12345"),
-                ("model_code", ""),
-            ],
+            expected_fields: vec![("message_type", "92"), ("request_id", "456"), ("account", "DU12345"), ("model_code", "")],
         },
     ];
 
@@ -1091,11 +1090,7 @@ fn test_response_message_next_methods_edge_cases() {
 
     for test_case in test_cases {
         let mut message = ResponseMessage::from(test_case.input);
-        assert!(
-            (test_case.test_fn)(&mut message),
-            "Test '{}' failed",
-            test_case.name
-        );
+        assert!((test_case.test_fn)(&mut message), "Test '{}' failed", test_case.name);
     }
 }
 
@@ -1146,13 +1141,13 @@ fn test_channel_mappings_completeness() {
 
     // Test specific known mappings
     let mappings = CHANNEL_MAPPINGS;
-    
+
     // Find RequestPositions mapping
     let positions_mapping = mappings
         .iter()
         .find(|m| matches!(m.request, OutgoingMessages::RequestPositions))
         .expect("RequestPositions mapping should exist");
-    
+
     assert_eq!(positions_mapping.responses.len(), 2);
     assert!(positions_mapping.responses.contains(&IncomingMessages::Position));
     assert!(positions_mapping.responses.contains(&IncomingMessages::PositionEnd));
@@ -1162,7 +1157,7 @@ fn test_channel_mappings_completeness() {
         .iter()
         .find(|m| matches!(m.request, OutgoingMessages::RequestAccountData))
         .expect("RequestAccountData mapping should exist");
-    
+
     assert_eq!(account_data_mapping.responses.len(), 4);
     assert!(account_data_mapping.responses.contains(&IncomingMessages::AccountValue));
     assert!(account_data_mapping.responses.contains(&IncomingMessages::PortfolioValue));
@@ -1203,12 +1198,8 @@ fn test_notice_edge_cases() {
     for test_case in test_cases {
         let message = ResponseMessage::from(test_case.input);
         let notice = Notice::from(&message);
-        
-        assert_eq!(
-            notice.code, test_case.expected_code,
-            "Test '{}' failed: wrong error code",
-            test_case.name
-        );
+
+        assert_eq!(notice.code, test_case.expected_code, "Test '{}' failed: wrong error code", test_case.name);
         assert_eq!(
             notice.message, test_case.expected_message,
             "Test '{}' failed: wrong error message",
@@ -1231,12 +1222,7 @@ fn test_all_incoming_message_conversions() {
     ];
 
     for (value, expected) in test_cases {
-        assert_eq!(
-            IncomingMessages::from(value),
-            expected,
-            "Failed for value {}",
-            value
-        );
+        assert_eq!(IncomingMessages::from(value), expected, "Failed for value {}", value);
     }
 }
 
@@ -1267,27 +1253,22 @@ fn test_encode_length_edge_cases() {
     let x255 = "x".repeat(255);
     let x256 = "x".repeat(256);
     let x1000 = "x".repeat(1000);
-    
+
     let test_cases = vec![
-        ("", 4),                        // Empty string
-        ("x", 5),                       // Single character
-        (x255.as_str(), 259),           // 255 characters
-        (x256.as_str(), 260),           // 256 characters
-        (x1000.as_str(), 1004),         // 1000 characters
+        ("", 4),                // Empty string
+        ("x", 5),               // Single character
+        (x255.as_str(), 259),   // 255 characters
+        (x256.as_str(), 260),   // 256 characters
+        (x1000.as_str(), 1004), // 1000 characters
     ];
 
     for (input, expected_len) in test_cases {
         let encoded = encode_length(input);
         assert_eq!(encoded.len(), expected_len);
-        
+
         // Verify the encoded length is correct
         let length_bytes = &encoded[0..4];
-        let decoded_length = u32::from_be_bytes([
-            length_bytes[0],
-            length_bytes[1],
-            length_bytes[2],
-            length_bytes[3],
-        ]);
+        let decoded_length = u32::from_be_bytes([length_bytes[0], length_bytes[1], length_bytes[2], length_bytes[3]]);
         assert_eq!(decoded_length as usize, input.len());
     }
 }
@@ -1295,19 +1276,19 @@ fn test_encode_length_edge_cases() {
 #[test]
 fn test_response_message_access_patterns() {
     let message = ResponseMessage::from("5\0123\0field2\0field3\0field4\0");
-    
+
     // Test order_id for OpenOrder message
     assert_eq!(message.order_id(), Some(123));
-    
+
     // Test message_type
     assert_eq!(message.message_type(), IncomingMessages::OpenOrder);
-    
+
     // Test multiple peeks don't change state
     assert_eq!(message.peek_string(2), "field2");
     assert_eq!(message.peek_string(2), "field2");
     assert_eq!(message.peek_int(1).unwrap(), 123);
     assert_eq!(message.peek_int(1).unwrap(), 123);
-    
+
     // Test len and is_empty
     assert_eq!(message.len(), 5);
     assert!(!message.is_empty());
@@ -1321,7 +1302,7 @@ fn test_response_message_fields_modification() {
     assert_eq!(message.fields[0], "1");
     assert_eq!(message.fields[1], "2");
     assert_eq!(message.fields[2], "3");
-    
+
     // Test that we can read fields correctly after creation
     message.i = 0;
     assert_eq!(message.next_int().unwrap(), 1);
@@ -1334,7 +1315,7 @@ fn test_incoming_messages_equality() {
     // Test that IncomingMessages enum variants are properly comparable
     assert_eq!(IncomingMessages::TickPrice, IncomingMessages::TickPrice);
     assert_ne!(IncomingMessages::TickPrice, IncomingMessages::TickSize);
-    
+
     // Test with from conversion
     assert_eq!(IncomingMessages::from(1), IncomingMessages::TickPrice);
     assert_eq!(IncomingMessages::from(2), IncomingMessages::TickSize);
@@ -1345,7 +1326,7 @@ fn test_incoming_messages_equality() {
 #[test]
 fn test_outgoing_messages_from_str_comprehensive() {
     use std::str::FromStr;
-    
+
     // Table-driven test for all OutgoingMessages variants
     let test_cases = vec![
         ("1", OutgoingMessages::RequestMarketData),
@@ -1429,12 +1410,12 @@ fn test_outgoing_messages_from_str_comprehensive() {
         ("103", OutgoingMessages::CancelWshEventData),
         ("104", OutgoingMessages::RequestUserInfo),
     ];
-    
+
     for (input, expected) in test_cases {
         let result = OutgoingMessages::from_str(input).unwrap();
         assert_eq!(result, expected, "Failed to parse '{}' as {:?}", input, expected);
     }
-    
+
     // Test invalid cases
     assert!(OutgoingMessages::from_str("105").is_err());
     assert!(OutgoingMessages::from_str("999").is_err());
@@ -1450,7 +1431,7 @@ fn test_request_id_index_comprehensive() {
     assert_eq!(request_id_index(IncomingMessages::TickEFP), Some(2));
     assert_eq!(request_id_index(IncomingMessages::TickReqParams), Some(1));
     assert_eq!(request_id_index(IncomingMessages::TickSnapshotEnd), Some(2));
-    
+
     // Test message types without request_id
     assert_eq!(request_id_index(IncomingMessages::ManagedAccounts), None);
     assert_eq!(request_id_index(IncomingMessages::NextValidId), None);
@@ -1462,28 +1443,28 @@ fn test_response_message_error_paths() {
     // Test empty message type detection
     let empty_msg = ResponseMessage::default();
     assert_eq!(empty_msg.message_type(), IncomingMessages::NotValid);
-    
+
     // Test parsing errors for optional types
     let mut msg = ResponseMessage::from("test\0not_a_number\0");
     msg.i = 1;
     assert!(msg.next_optional_int().is_err());
-    
+
     msg.i = 1;
     assert!(msg.next_optional_long().is_err());
-    
+
     msg.i = 1;
     assert!(msg.next_optional_double().is_err());
-    
+
     // Test empty timestamp error
     let mut msg = ResponseMessage::from("test\0\0");
     msg.i = 1;
     assert!(msg.next_date_time().is_err());
-    
+
     // Test invalid timestamp parsing
     let mut msg = ResponseMessage::from("test\0not_a_timestamp\0");
     msg.i = 1;
     assert!(msg.next_date_time().is_err());
-    
+
     // Test timestamp conversion error (out of range)
     let mut msg = ResponseMessage::from("test\099999999999999999999\0");
     msg.i = 1;
@@ -1498,19 +1479,19 @@ fn test_response_message_special_double_values() {
     msg.i = 1;
     let result = msg.next_optional_double().unwrap();
     assert_eq!(result, Some(f64::INFINITY));
-    
+
     // Test parsing empty as 0.0
     let mut msg = ResponseMessage::from("test\0\0");
     msg.i = 1;
     let result = msg.next_double().unwrap();
     assert_eq!(result, 0.0);
-    
+
     // Test parsing "0" as 0.0
     let mut msg = ResponseMessage::from("test\00\0");
     msg.i = 1;
     let result = msg.next_double().unwrap();
     assert_eq!(result, 0.0);
-    
+
     // Test parsing "0.0" as 0.0
     let mut msg = ResponseMessage::from("test\00.0\0");
     msg.i = 1;
