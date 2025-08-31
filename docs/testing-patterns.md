@@ -2,18 +2,80 @@
 
 This document describes the testing patterns and infrastructure used in the rust-ibapi crate, with a focus on the MockGateway pattern for integration testing.
 
+## Testing Strategy
+
+```mermaid
+graph LR
+    Change[Code Change]
+    
+    subgraph "Test Both Modes"
+        TestSync[cargo test<br/>--features sync]
+        TestAsync[cargo test<br/>--features async]
+    end
+    
+    subgraph "Quality Checks"
+        ClippySync[cargo clippy<br/>--features sync]
+        ClippyAsync[cargo clippy<br/>--features async]
+        Format[cargo fmt]
+    end
+    
+    subgraph "Test Types"
+        Unit[Unit Tests<br/>Individual functions]
+        Integration[Integration Tests<br/>API workflows]
+        Mock[MockGateway Tests<br/>Protocol verification]
+    end
+    
+    Change --> TestSync
+    Change --> TestAsync
+    TestSync --> ClippySync
+    TestAsync --> ClippyAsync
+    ClippySync --> Format
+    ClippyAsync --> Format
+    
+    TestSync --> Unit
+    TestSync --> Integration
+    TestSync --> Mock
+    
+    TestAsync --> Unit
+    TestAsync --> Integration
+    TestAsync --> Mock
+    
+    Format --> PR[Pull Request ✓]
+    
+    style Change fill:#ffd54f
+    style PR fill:#aed581
+```
+
 ## MockGateway Integration Testing Pattern
 
 The MockGateway pattern provides a robust framework for testing Client methods without requiring a real IB Gateway/TWS connection. This pattern is implemented in `src/client/common.rs` and ensures consistent, reliable testing across both sync and async implementations.
 
 ### Architecture Overview
 
-```
-┌─────────────┐       TCP Socket       ┌──────────────┐
-│   Client    │ ◄──────────────────────► │ MockGateway  │
-│  (under     │                         │  (simulated  │
-│   test)     │                         │   IB server) │
-└─────────────┘                         └──────────────┘
+```mermaid
+graph LR
+    subgraph "Test Environment"
+        Client[Client<br/>Under Test]
+        MockGateway[MockGateway<br/>Simulated Server]
+        TestData[Test Data<br/>Fixtures]
+    end
+    
+    subgraph "Verification"
+        Requests[Captured<br/>Requests]
+        Responses[Expected<br/>Responses]
+        Assertions[Test<br/>Assertions]
+    end
+    
+    Client <-->|TCP Socket| MockGateway
+    TestData -->|Provides| MockGateway
+    MockGateway -->|Records| Requests
+    MockGateway -->|Sends| Responses
+    Requests --> Assertions
+    Responses --> Assertions
+    
+    style Client fill:#bbdefb
+    style MockGateway fill:#c5e1a5
+    style Assertions fill:#ffccbc
 ```
 
 ### Key Components
