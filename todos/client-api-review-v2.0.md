@@ -4,7 +4,7 @@
 
 This document provides a comprehensive review of the public API for the client module in rust-ibapi, identifying opportunities for breaking changes that would improve type safety, ergonomics, and adherence to Rust idioms for the v2.0 release.
 
-**Last Updated**: 2025-08-31 - Updated to reflect TradingHours enum implementation and current API status
+**Last Updated**: 2025-08-31 - Updated to reflect TradingHours enum implementation and async client visibility fixes
 
 ## Key Findings
 
@@ -126,24 +126,20 @@ pub fn positions(&self) -> Result<Subscription<PositionUpdate>, Error>
 
 ### 7. Async/Sync API Divergence
 
-**⚠️ STILL AN ISSUE - Major Issues**:
-1. Async client has additional internal methods exposed as public:
-   - `send_request()`, `send_shared_request()`, `send_order()`, `send_message()`
-   - These should be `pub(crate)` not `pub`
+**✅ FIXED - Internal Method Visibility**:
+- Changed async client's internal methods to `pub(crate)`:
+  - `send_request()`, `send_shared_request()`, `send_order()`, `send_message()`, `create_order_update_subscription()`
+  - These are now properly hidden from the public API
 
-2. Method naming inconsistency:
-   - Async has both `place_order()` and `submit_order()` methods
-   - Sync only has `place_order()`
+**✅ RESOLVED - Method Naming**:
+- Both sync and async correctly have both `place_order()` and `submit_order()` methods
+- `submit_order()` - sends order without subscription for updates
+- `place_order()` - sends order with subscription for updates
+- This is intentional API design, not an inconsistency
 
-3. Different method signatures between sync and async
-   - Async uses fully qualified paths (e.g., `crate::orders::Order`)
-   - Sync uses imported types
-
-**Recommendation**: 
-- Change visibility of internal methods to `pub(crate)`
-- Remove duplicate `submit_order()` method or standardize on one
-- Ensure API parity between sync and async
-- Use consistent type imports
+**Remaining Minor Issues**:
+- Different method signatures between sync and async (fully qualified paths vs imported types)
+- Could be standardized for consistency but not critical
 
 ### 8. Connection Management
 
@@ -197,15 +193,15 @@ impl Client {
 
 ### High Priority (Must Fix for v2.0)
 1. ⚠️ Hide internal implementation details (builder traits, ID generators)
-2. ⚠️ Fix async client's exposed internal methods - **Still an issue**
+2. ✅ Fix async client's exposed internal methods - **FIXED**
 3. ⚠️ Standardize error handling with categorized errors - **Current single Error enum still in use**
-4. ⚠️ Ensure API parity between sync and async - **submit_order vs place_order inconsistency**
+4. ✅ Ensure API parity between sync and async - **Both have submit_order and place_order with correct semantics**
 
 ### Medium Priority (Should Fix)
 1. ⚠️ Implement proper builder pattern for Client construction
 2. ✅ Replace string parameters with type-safe enums - **Partially done with TradingHours**
 3. ⚠️ Standardize return types for similar operations
-4. ⚠️ Fix method naming inconsistencies - **Still has issues**
+4. ✅ Fix method naming inconsistencies - **Major issues resolved**
 
 ### Low Priority (Nice to Have)
 1. Add connection configuration options
