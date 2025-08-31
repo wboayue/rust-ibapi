@@ -100,10 +100,116 @@ mod tests {
             _ => panic!("Expected Error"),
         }
     }
+
+    #[test]
+    fn test_response_context_default() {
+        let context = ResponseContext::default();
+        assert!(!context.is_smart_depth);
+        assert!(context.request_type.is_none());
+    }
+
+    #[test]
+    fn test_response_context_clone() {
+        let context = ResponseContext {
+            is_smart_depth: true,
+            request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
+        };
+
+        let cloned = context.clone();
+        assert_eq!(context, cloned);
+        assert_eq!(cloned.is_smart_depth, true);
+        assert_eq!(cloned.request_type, Some(crate::messages::OutgoingMessages::RequestMarketData));
+    }
+
+    #[test]
+    fn test_response_context_equality() {
+        struct TestCase {
+            name: &'static str,
+            context1: ResponseContext,
+            context2: ResponseContext,
+            expected: bool,
+        }
+
+        let test_cases = vec![
+            TestCase {
+                name: "default_contexts_equal",
+                context1: ResponseContext::default(),
+                context2: ResponseContext::default(),
+                expected: true,
+            },
+            TestCase {
+                name: "same_values_equal",
+                context1: ResponseContext {
+                    is_smart_depth: true,
+                    request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
+                },
+                context2: ResponseContext {
+                    is_smart_depth: true,
+                    request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
+                },
+                expected: true,
+            },
+            TestCase {
+                name: "different_smart_depth",
+                context1: ResponseContext {
+                    is_smart_depth: true,
+                    request_type: None,
+                },
+                context2: ResponseContext {
+                    is_smart_depth: false,
+                    request_type: None,
+                },
+                expected: false,
+            },
+            TestCase {
+                name: "different_request_type",
+                context1: ResponseContext {
+                    is_smart_depth: false,
+                    request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
+                },
+                context2: ResponseContext {
+                    is_smart_depth: false,
+                    request_type: Some(crate::messages::OutgoingMessages::CancelMarketData),
+                },
+                expected: false,
+            },
+            TestCase {
+                name: "one_none_one_some",
+                context1: ResponseContext {
+                    is_smart_depth: false,
+                    request_type: None,
+                },
+                context2: ResponseContext {
+                    is_smart_depth: false,
+                    request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
+                },
+                expected: false,
+            },
+        ];
+
+        for tc in test_cases {
+            assert_eq!(tc.context1 == tc.context2, tc.expected, "test case '{}' failed", tc.name);
+        }
+    }
+
+    #[test]
+    fn test_response_context_debug_format() {
+        let context = ResponseContext {
+            is_smart_depth: true,
+            request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
+        };
+
+        let debug_str = format!("{:?}", context);
+        assert!(debug_str.contains("ResponseContext"));
+        assert!(debug_str.contains("is_smart_depth"));
+        assert!(debug_str.contains("true"));
+        assert!(debug_str.contains("request_type"));
+        assert!(debug_str.contains("Some"));
+    }
 }
 
 /// Context information for response handling
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ResponseContext {
     /// Type of the original request that initiated this subscription
     pub request_type: Option<OutgoingMessages>,

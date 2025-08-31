@@ -1,11 +1,4 @@
 //! Common types and traits for builders
 
-use crate::messages::OutgoingMessages;
-
-/// Context for response handling
-#[derive(Debug, Clone, Default)]
-#[allow(dead_code)]
-pub struct ResponseContext {
-    pub is_smart_depth: bool,
-    pub request_type: Option<OutgoingMessages>,
-}
+// Common module doesn't define any types currently as ResponseContext
+// is defined in subscriptions::common and used by both sync and async builders

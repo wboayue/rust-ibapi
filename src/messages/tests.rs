@@ -1,8 +1,176 @@
 use crate::contracts::{ComboLegOpenClose, SecurityType};
 #[cfg(feature = "sync")]
 use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A};
+use time::macros::datetime;
 
 use super::*;
+
+// Table-driven test data structures
+struct EncodeLengthTestCase {
+    message: &'static str,
+    expected_length: usize,
+}
+
+struct ResponseMessageParseTestCase {
+    name: &'static str,
+    input: &'static str,
+    field_index: usize,
+    parse_type: ParseType,
+    expected: ParseResult,
+}
+
+enum ParseType {
+    Int,
+    OptionalInt,
+    Long,
+    OptionalLong,
+    Double,
+    OptionalDouble,
+    String,
+    Bool,
+    DateTime,
+}
+
+enum ParseResult {
+    Int(i32),
+    OptionalInt(Option<i32>),
+    Long(i64),
+    OptionalLong(Option<i64>),
+    Double(f64),
+    OptionalDouble(Option<f64>),
+    String(String),
+    Bool(bool),
+    DateTime(Result<time::OffsetDateTime, ()>),
+    Error,
+}
+
+// Test data that can be shared between sync and async tests
+fn encode_length_test_cases() -> Vec<EncodeLengthTestCase> {
+    vec![
+        EncodeLengthTestCase {
+            message: "hello",
+            expected_length: 9, // 4 bytes for length + 5 bytes for "hello"
+        },
+        EncodeLengthTestCase {
+            message: "",
+            expected_length: 4, // 4 bytes for length + 0 bytes for empty string
+        },
+        EncodeLengthTestCase {
+            message: "a\0b\0c",
+            expected_length: 9, // 4 bytes for length + 5 bytes for "a\0b\0c"
+        },
+    ]
+}
+
+fn response_message_parse_test_cases() -> Vec<ResponseMessageParseTestCase> {
+    vec![
+        ResponseMessageParseTestCase {
+            name: "parse_valid_int",
+            input: "1\0123\0456\0",
+            field_index: 1,
+            parse_type: ParseType::Int,
+            expected: ParseResult::Int(123),
+        },
+        ResponseMessageParseTestCase {
+            name: "parse_invalid_int",
+            input: "1\0abc\0456\0",
+            field_index: 1,
+            parse_type: ParseType::Int,
+            expected: ParseResult::Error,
+        },
+        ResponseMessageParseTestCase {
+            name: "parse_optional_int_present",
+            input: "1\0123\0456\0",
+            field_index: 1,
+            parse_type: ParseType::OptionalInt,
+            expected: ParseResult::OptionalInt(Some(123)),
+        },
+        ResponseMessageParseTestCase {
+            name: "parse_optional_int_empty",
+            input: "1\0\0456\0",
+            field_index: 1,
+            parse_type: ParseType::OptionalInt,
+            expected: ParseResult::OptionalInt(None),
+        },
+        ResponseMessageParseTestCase {
+            name: "parse_optional_int_unset",
+            input: "1\02147483647\0456\0",
+            field_index: 1,
+            parse_type: ParseType::OptionalInt,
+            expected: ParseResult::OptionalInt(None),
+        },
+        ResponseMessageParseTestCase {
+            name: "parse_long",
+            input: "1\09876543210\0456\0",
+            field_index: 1,
+            parse_type: ParseType::Long,
+            expected: ParseResult::Long(9876543210),
+        },
+        ResponseMessageParseTestCase {
+            name: "parse_optional_long_unset",
+            input: "1\09223372036854775807\0456\0",
+            field_index: 1,
+            parse_type: ParseType::OptionalLong,
+            expected: ParseResult::OptionalLong(None),
+        },
+        ResponseMessageParseTestCase {
+            name: "parse_double",
+            input: "1\03.14567\0456\0",
+            field_index: 1,
+            parse_type: ParseType::Double,
+            expected: ParseResult::Double(3.14567),
+        },
+        ResponseMessageParseTestCase {
+            name: "parse_double_zero",
+            input: "1\00\0456\0",
+            field_index: 1,
+            parse_type: ParseType::Double,
+            expected: ParseResult::Double(0.0),
+        },
+        ResponseMessageParseTestCase {
+            name: "parse_optional_double_infinity",
+            input: "1\0Infinity\0456\0",
+            field_index: 1,
+            parse_type: ParseType::OptionalDouble,
+            expected: ParseResult::OptionalDouble(Some(f64::INFINITY)),
+        },
+        ResponseMessageParseTestCase {
+            name: "parse_optional_double_unset",
+            input: "1\01.7976931348623157E308\0456\0",
+            field_index: 1,
+            parse_type: ParseType::OptionalDouble,
+            expected: ParseResult::OptionalDouble(None),
+        },
+        ResponseMessageParseTestCase {
+            name: "parse_string",
+            input: "1\0hello world\0456\0",
+            field_index: 1,
+            parse_type: ParseType::String,
+            expected: ParseResult::String("hello world".to_string()),
+        },
+        ResponseMessageParseTestCase {
+            name: "parse_bool_true",
+            input: "1\01\0456\0",
+            field_index: 1,
+            parse_type: ParseType::Bool,
+            expected: ParseResult::Bool(true),
+        },
+        ResponseMessageParseTestCase {
+            name: "parse_bool_false",
+            input: "1\00\0456\0",
+            field_index: 1,
+            parse_type: ParseType::Bool,
+            expected: ParseResult::Bool(false),
+        },
+        ResponseMessageParseTestCase {
+            name: "parse_datetime",
+            input: "1\01609459200\0456\0", // 2021-01-01 00:00:00 UTC
+            field_index: 1,
+            parse_type: ParseType::DateTime,
+            expected: ParseResult::DateTime(Ok(datetime!(2021-01-01 00:00:00 UTC))),
+        },
+    ]
+}
 
 #[test]
 fn test_message_encodes_bool() {
@@ -295,4 +463,230 @@ fn test_notice() {
     assert_eq!(notice.code, 2107);
     assert_eq!(notice.message, "HMDS data farm connection is inactive.");
     assert_eq!(format!("{notice}"), "[2107] HMDS data farm connection is inactive.");
+}
+
+#[test]
+fn test_encode_length() {
+    for test_case in encode_length_test_cases() {
+        let encoded = encode_length(test_case.message);
+        assert_eq!(encoded.len(), test_case.expected_length, "Failed for message: {:?}", test_case.message);
+
+        // Verify the length bytes are correct
+        let length_bytes = &encoded[0..4];
+        let length = u32::from_be_bytes([length_bytes[0], length_bytes[1], length_bytes[2], length_bytes[3]]);
+        assert_eq!(
+            length as usize,
+            test_case.message.len(),
+            "Incorrect length encoding for message: {:?}",
+            test_case.message
+        );
+    }
+}
+
+#[test]
+fn test_response_message_parsing() {
+    for test_case in response_message_parse_test_cases() {
+        let mut message = ResponseMessage::from(test_case.input);
+        message.i = test_case.field_index;
+
+        match (&test_case.parse_type, &test_case.expected) {
+            (ParseType::Int, ParseResult::Int(expected)) => match message.next_int() {
+                Ok(val) => assert_eq!(val, *expected, "Test '{}' failed", test_case.name),
+                Err(e) => panic!("Test '{}' failed: expected {:?}, got error: {:?}", test_case.name, expected, e),
+            },
+            (ParseType::Int, ParseResult::Error) => {
+                assert!(message.next_int().is_err(), "Test '{}' failed: expected error", test_case.name);
+            }
+            (ParseType::OptionalInt, ParseResult::OptionalInt(expected)) => match message.next_optional_int() {
+                Ok(val) => assert_eq!(val, *expected, "Test '{}' failed", test_case.name),
+                Err(e) => panic!("Test '{}' failed: expected {:?}, got error: {:?}", test_case.name, expected, e),
+            },
+            (ParseType::Long, ParseResult::Long(expected)) => match message.next_long() {
+                Ok(val) => assert_eq!(val, *expected, "Test '{}' failed", test_case.name),
+                Err(e) => panic!("Test '{}' failed: expected {:?}, got error: {:?}", test_case.name, expected, e),
+            },
+            (ParseType::OptionalLong, ParseResult::OptionalLong(expected)) => match message.next_optional_long() {
+                Ok(val) => assert_eq!(val, *expected, "Test '{}' failed", test_case.name),
+                Err(e) => panic!("Test '{}' failed: expected {:?}, got error: {:?}", test_case.name, expected, e),
+            },
+            (ParseType::Double, ParseResult::Double(expected)) => match message.next_double() {
+                Ok(val) => assert!(
+                    (val - expected).abs() < f64::EPSILON,
+                    "Test '{}' failed: expected {:?}, got {:?}",
+                    test_case.name,
+                    expected,
+                    val
+                ),
+                Err(e) => panic!("Test '{}' failed: expected {:?}, got error: {:?}", test_case.name, expected, e),
+            },
+            (ParseType::OptionalDouble, ParseResult::OptionalDouble(expected)) => match (message.next_optional_double(), expected) {
+                (Ok(Some(val)), Some(exp)) if exp.is_infinite() => {
+                    assert!(
+                        val.is_infinite() && val.is_sign_positive() == exp.is_sign_positive(),
+                        "Test '{}' failed: expected {:?}, got {:?}",
+                        test_case.name,
+                        expected,
+                        val
+                    );
+                }
+                (Ok(Some(val)), Some(exp)) => {
+                    assert!(
+                        (val - exp).abs() < f64::EPSILON,
+                        "Test '{}' failed: expected {:?}, got {:?}",
+                        test_case.name,
+                        expected,
+                        val
+                    );
+                }
+                (Ok(None), None) => {}
+                (result, exp) => panic!("Test '{}' failed: expected {:?}, got {:?}", test_case.name, exp, result),
+            },
+            (ParseType::String, ParseResult::String(expected)) => match message.next_string() {
+                Ok(val) => assert_eq!(val, *expected, "Test '{}' failed", test_case.name),
+                Err(e) => panic!("Test '{}' failed: expected {:?}, got error: {:?}", test_case.name, expected, e),
+            },
+            (ParseType::Bool, ParseResult::Bool(expected)) => match message.next_bool() {
+                Ok(val) => assert_eq!(val, *expected, "Test '{}' failed", test_case.name),
+                Err(e) => panic!("Test '{}' failed: expected {:?}, got error: {:?}", test_case.name, expected, e),
+            },
+            (ParseType::DateTime, ParseResult::DateTime(expected)) => match (message.next_date_time(), expected) {
+                (Ok(val), Ok(exp)) => {
+                    assert_eq!(val, *exp, "Test '{}' failed", test_case.name);
+                }
+                (Err(_), Err(_)) => {}
+                (result, exp) => panic!("Test '{}' failed: expected {:?}, got {:?}", test_case.name, exp, result),
+            },
+            _ => panic!("Test case type mismatch"),
+        }
+    }
+}
+
+#[test]
+fn test_response_message_boundary_conditions() {
+    // Test reading past end of message
+    let mut message = ResponseMessage::from("1\02\0");
+    message.i = 3; // Beyond the last field
+
+    assert!(message.next_int().is_err());
+    assert!(message.next_optional_int().is_err());
+    assert!(message.next_long().is_err());
+    assert!(message.next_optional_long().is_err());
+    assert!(message.next_double().is_err());
+    assert!(message.next_optional_double().is_err());
+    assert!(message.next_string().is_err());
+    assert!(message.next_bool().is_err());
+    assert!(message.next_date_time().is_err());
+}
+
+#[test]
+fn test_response_message_peek_operations() {
+    let message = ResponseMessage::from("1\0123\0abc\0456\0");
+
+    // Test peek_int
+    assert_eq!(message.peek_int(1).unwrap(), 123);
+    assert_eq!(message.peek_int(3).unwrap(), 456);
+    assert!(message.peek_int(2).is_err()); // "abc" is not an int
+    assert!(message.peek_int(4).is_err()); // Out of bounds (only 4 fields, indices 0-3)
+
+    // Test peek_string
+    assert_eq!(message.peek_string(2), "abc");
+    assert_eq!(message.peek_string(0), "1");
+}
+
+#[test]
+fn test_response_message_skip() {
+    let mut message = ResponseMessage::from("1\02\03\04\0");
+
+    assert_eq!(message.i, 0);
+    message.skip();
+    assert_eq!(message.i, 1);
+
+    assert_eq!(message.next_int().unwrap(), 2);
+    assert_eq!(message.i, 2);
+
+    message.skip();
+    assert_eq!(message.i, 3);
+
+    assert_eq!(message.next_int().unwrap(), 4);
+}
+
+#[test]
+fn test_response_message_special_fields() {
+    // OpenOrder message (message type 5) - order_id is at index 1
+    let open_order = ResponseMessage::from("5\0123\0field2\0field3\0");
+    assert_eq!(open_order.order_id(), Some(123));
+    assert_eq!(open_order.execution_id(), None);
+
+    // OrderStatus message (message type 3) - order_id is at index 1
+    let order_status = ResponseMessage::from("3\0456\0field2\0field3\0");
+    assert_eq!(order_status.order_id(), Some(456));
+
+    // ExecutionData message (message type 11) - order_id is at index 2, execution_id at index 14
+    let mut exec_fields = vec!["11"];
+    for i in 1..=14 {
+        if i == 2 {
+            exec_fields.push("789"); // order_id at index 2
+        } else if i == 14 {
+            exec_fields.push("exec789"); // execution_id at index 14
+        } else {
+            exec_fields.push("field");
+        }
+    }
+    let exec_message = ResponseMessage::from(&exec_fields.join("\0"));
+    assert_eq!(exec_message.order_id(), Some(789));
+    assert_eq!(exec_message.execution_id(), Some("exec789".to_string()));
+
+    // CommissionsReport message (message type 59) - execution_id at index 2
+    let commission_message = ResponseMessage::from("59\0field1\0exec123\0");
+    assert_eq!(commission_message.execution_id(), Some("exec123".to_string()));
+}
+
+#[test]
+fn test_request_message_index() {
+    let message = RequestMessage {
+        fields: vec!["field0".to_string(), "field1".to_string(), "field2".to_string()],
+    };
+
+    assert_eq!(message[0], "field0");
+    assert_eq!(message[1], "field1");
+    assert_eq!(message[2], "field2");
+}
+
+#[test]
+#[should_panic]
+fn test_request_message_index_out_of_bounds() {
+    let message = RequestMessage {
+        fields: vec!["field0".to_string()],
+    };
+
+    let _ = &message[1]; // Should panic
+}
+
+#[test]
+fn test_response_message_is_empty() {
+    let empty_message = ResponseMessage::default();
+    assert!(empty_message.is_empty());
+    assert_eq!(empty_message.len(), 0);
+
+    let non_empty_message = ResponseMessage::from("1\02\03\0");
+    assert!(!non_empty_message.is_empty());
+    assert_eq!(non_empty_message.len(), 3);
+}
+
+#[test]
+fn test_response_message_is_shutdown() {
+    let shutdown_message = ResponseMessage::from("-2\0");
+    assert!(shutdown_message.is_shutdown());
+
+    let normal_message = ResponseMessage::from("1\0");
+    assert!(!normal_message.is_shutdown());
+}
+
+#[test]
+fn test_response_message_encode_decode_roundtrip() {
+    let original = ResponseMessage::from("1\0test\0123\03.456\0");
+    let encoded = original.encode();
+    let decoded = ResponseMessage::from(&encoded);
+
+    assert_eq!(original.fields, decoded.fields);
 }
