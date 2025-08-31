@@ -670,7 +670,7 @@ impl ResponseMessage {
     }
 
     pub fn peek_int(&self, i: usize) -> Result<i32, Error> {
-        if self.i >= self.fields.len() {
+        if i >= self.fields.len() {
             return Err(Error::Simple("expected int and found end of message".into()));
         }
 
