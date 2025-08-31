@@ -20,7 +20,7 @@
 
 use std::sync::Arc;
 
-use ibapi::{contracts::Contract, Client};
+use ibapi::{contracts::Contract, market_data::TradingHours, Client};
 use time::format_description::well_known::Rfc3339;
 use time::{Duration, OffsetDateTime};
 
@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             &contract, None, // Start time (None = use number_of_ticks)
             None, // End time (None = now)
             100,  // Number of ticks
-            true, // Use RTH
+            TradingHours::Regular, // Use RTH
         )
         .await?;
 
@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(start_time),
             Some(end_time),
             0,    // 0 = get all ticks in range
-            true, // Use RTH
+            TradingHours::Regular, // Use RTH
         )
         .await?;
 
@@ -110,7 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             &contract, None,  // Start time
             None,  // End time
             50,    // Number of ticks
-            true,  // Use RTH
+            TradingHours::Regular,  // Use RTH
             false, // Don't ignore size
         )
         .await?;
@@ -149,7 +149,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             &contract, None, // Start time
             None, // End time
             30,   // Number of ticks
-            true, // Use RTH
+            TradingHours::Regular, // Use RTH
         )
         .await?;
 

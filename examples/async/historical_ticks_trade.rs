@@ -109,7 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 2: Get most recent trades (no start time)
     println!("\n\nExample 2: Most recent {} trades", 20);
-    let mut recent_trades = client.historical_ticks_trade(&contract, None, None, 20, true).await?;
+    let mut recent_trades = client.historical_ticks_trade(&contract, None, None, 20, TradingHours::Regular).await?;
 
     println!("\nTime                     | Price    | Size");
     println!("-------------------------|----------|------");

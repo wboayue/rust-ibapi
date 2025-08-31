@@ -22,6 +22,7 @@ use std::sync::Arc;
 use ibapi::{
     contracts::Contract,
     market_data::realtime::{BarSize, WhatToShow},
+    market_data::TradingHours,
     Client,
 };
 
@@ -44,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             &contract,
             BarSize::Sec5,      // 5-second bars
             WhatToShow::Trades, // Trade data
-            true,               // Use regular trading hours
+            TradingHours::Regular, // Use regular trading hours
         )
         .await?;
     println!("Real-time bars subscription created");

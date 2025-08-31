@@ -568,6 +568,7 @@ impl Client {
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
     /// use ibapi::market_data::realtime::{BarSize, WhatToShow};
+    /// use ibapi::market_data::TradingHours;
     /// use futures::StreamExt;
     ///
     /// #[tokio::main]
@@ -576,7 +577,7 @@ impl Client {
     ///
     ///     let contract = Contract::stock("TSLA");
     ///     let mut subscription = client
-    ///         .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+    ///         .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended)
     ///         .await
     ///         .expect("request failed");
     ///
@@ -807,7 +808,7 @@ impl Client {
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///
-    ///     let market_data_type = MarketDataType::Live;
+    ///     let market_data_type = MarketDataType::Realtime;
     ///     client.switch_market_data_type(market_data_type).await.expect("request failed");
     ///     println!("market data switched: {market_data_type:?}");
     /// }
@@ -824,6 +825,7 @@ impl Client {
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
     /// use ibapi::market_data::historical::WhatToShow;
+    /// use ibapi::market_data::TradingHours;
     ///
     /// #[tokio::main]
     /// async fn main() {
@@ -871,6 +873,7 @@ impl Client {
     /// use ibapi::contracts::Contract;
     /// use ibapi::Client;
     /// use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
+    /// use ibapi::market_data::TradingHours;
     ///
     /// #[tokio::main]
     /// async fn main() {
@@ -968,6 +971,7 @@ impl Client {
     /// use time::macros::datetime;
     /// use ibapi::contracts::Contract;
     /// use ibapi::Client;
+    /// use ibapi::market_data::TradingHours;
     ///
     /// #[tokio::main]
     /// async fn main() {
@@ -1057,6 +1061,7 @@ impl Client {
     /// use ibapi::contracts::Contract;
     /// use ibapi::Client;
     /// use ibapi::market_data::historical::BarSize;
+    /// use ibapi::market_data::TradingHours;
     ///
     /// #[tokio::main]
     /// async fn main() {

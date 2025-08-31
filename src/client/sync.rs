@@ -913,6 +913,7 @@ impl Client {
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
     /// use ibapi::market_data::historical::{self, WhatToShow};
+    /// use ibapi::market_data::TradingHours;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -951,13 +952,14 @@ impl Client {
     /// use ibapi::contracts::Contract;
     /// use ibapi::Client;
     /// use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
+    /// use ibapi::market_data::TradingHours;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("TSLA");
     ///
     /// let historical_data = client
-    ///     .historical_data(&contract, Some(datetime!(2023-04-15 0:00 UTC)), 7.days(), BarSize::Day, WhatToShow::Trades, true)
+    ///     .historical_data(&contract, Some(datetime!(2023-04-15 0:00 UTC)), 7.days(), BarSize::Day, WhatToShow::Trades, TradingHours::Regular)
     ///     .expect("historical data request failed");
     ///
     /// println!("start_date: {}, end_date: {}", historical_data.start, historical_data.end);
@@ -1065,13 +1067,14 @@ impl Client {
     ///
     /// use ibapi::contracts::Contract;
     /// use ibapi::Client;
+    /// use ibapi::market_data::TradingHours;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("TSLA");
     ///
     /// let ticks = client
-    ///     .historical_ticks_bid_ask(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, true, false)
+    ///     .historical_ticks_bid_ask(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, TradingHours::Regular, false)
     ///     .expect("historical ticks request failed");
     ///
     /// for tick in ticks {
@@ -1106,6 +1109,7 @@ impl Client {
     ///
     /// use ibapi::contracts::Contract;
     /// use ibapi::Client;
+    /// use ibapi::market_data::TradingHours;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -1146,6 +1150,7 @@ impl Client {
     ///
     /// use ibapi::contracts::Contract;
     /// use ibapi::Client;
+    /// use ibapi::market_data::TradingHours;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -1174,7 +1179,7 @@ impl Client {
     ///
     /// # Arguments
     /// * `contract`  - [Contract] to retrieve [Histogram Entries](historical::HistogramEntry) for.
-    /// * `use_rth`   - Data from regular trading hours (true), or all available hours (false).
+    /// * `trading_hours` - Regular trading hours only, or include extended hours.
     /// * `period`    - The time period of each histogram bar (e.g., `BarSize::Day`, `BarSize::Week`, `BarSize::Month`).
     ///
     /// # Examples
@@ -1185,13 +1190,14 @@ impl Client {
     /// use ibapi::contracts::Contract;
     /// use ibapi::Client;
     /// use ibapi::market_data::historical::BarSize;
+    /// use ibapi::market_data::TradingHours;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("GM");
     ///
     /// let histogram = client
-    ///     .histogram_data(&contract, true, BarSize::Week)
+    ///     .histogram_data(&contract, TradingHours::Regular, BarSize::Week)
     ///     .expect("histogram request failed");
     ///
     /// for item in &histogram {
@@ -1220,11 +1226,12 @@ impl Client {
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
     /// use ibapi::market_data::realtime::{BarSize, WhatToShow};
+    /// use ibapi::market_data::TradingHours;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("TSLA");
-    /// let subscription = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false).expect("request failed");
+    /// let subscription = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended).expect("request failed");
     ///
     /// for (i, bar) in subscription.iter().enumerate().take(60) {
     ///     println!("bar[{i}]: {bar:?}");
@@ -1383,7 +1390,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let market_data_type = MarketDataType::Live;
+    /// let market_data_type = MarketDataType::Realtime;
     /// client.switch_market_data_type(market_data_type).expect("request failed");
     /// println!("market data switched: {market_data_type:?}");
     /// ```
@@ -1945,6 +1952,7 @@ impl Debug for Client {
 /// ```no_run
 /// use ibapi::contracts::Contract;
 /// use ibapi::market_data::realtime::{BarSize, WhatToShow};
+/// use ibapi::market_data::TradingHours;
 /// use ibapi::Client;
 ///
 /// let connection_url = "127.0.0.1:4002";
@@ -1953,7 +1961,7 @@ impl Debug for Client {
 /// // Request real-time bars data for AAPL with 5-second intervals
 /// let contract = Contract::stock("AAPL");
 /// let subscription = client
-///     .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)
+///     .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended)
 ///     .expect("realtime bars request failed!");
 ///
 /// // Use the subscription as a blocking iterator

@@ -110,7 +110,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Use end time only to get most recent data
     let start2 = None;
     let end2 = None; // Current time
-    let mut tick_subscription2 = client.historical_ticks_mid_point(&contract2, start2, end2, 100, true).await?;
+    let mut tick_subscription2 = client
+        .historical_ticks_mid_point(&contract2, start2, end2, 100, TradingHours::Regular)
+        .await?;
 
     println!("\nLast 10 midpoint ticks for AAPL:");
     println!("Time                     | Midpoint Price");
