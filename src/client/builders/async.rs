@@ -661,4 +661,63 @@ mod tests {
             );
         }
     }
+
+    #[tokio::test]
+    async fn test_request_builder_send_raw() {
+        let (client, _gateway) = create_test_client().await;
+
+        let builder = client.request_with_id(123);
+        let mut message = RequestMessage::new();
+        message.push_field(&OutgoingMessages::RequestCurrentTime);
+
+        // This test verifies that send_raw is callable
+        let result = builder.send_raw(message).await;
+
+        // The mock gateway will accept the message and return a subscription
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_shared_request_builder_send_raw() {
+        let (client, _gateway) = create_test_client().await;
+
+        let builder = client.shared_request(OutgoingMessages::RequestManagedAccounts);
+        let mut message = RequestMessage::new();
+        message.push_field(&OutgoingMessages::RequestManagedAccounts);
+
+        let result = builder.send_raw(message).await;
+
+        // The mock gateway will accept the message and return a subscription
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_order_request_builder_check_version() {
+        let (client, _gateway) = create_test_client().await;
+
+        // Test successful version check (client version is 100)
+        let builder = client.order_request_with_id(456);
+        let result = builder.check_version(90, "test_feature").await;
+        assert!(result.is_ok());
+
+        // Test failed version check
+        let builder = client.order_request_with_id(457);
+        let result = builder.check_version(200, "future_feature").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_order_request_builder_send() {
+        let (client, _gateway) = create_test_client().await;
+
+        let builder = client.order_request_with_id(789);
+        let mut message = RequestMessage::new();
+        message.push_field(&OutgoingMessages::PlaceOrder);
+
+        // This tests the send method is callable
+        let result = builder.send(message).await;
+
+        // The mock gateway will accept the order and return a subscription
+        assert!(result.is_ok());
+    }
 }
