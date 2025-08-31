@@ -309,3 +309,322 @@ impl<T> Drop for Subscription<T> {
 // Note: Stream trait implementation removed because tokio's broadcast::Receiver
 // doesn't provide poll_recv. Users should use the async next() method instead.
 // If Stream is needed, users can convert using futures::stream::unfold.
+
+#[cfg(all(test, feature = "async"))]
+mod tests {
+    use super::*;
+    use crate::market_data::realtime::Bar;
+    use crate::messages::OutgoingMessages;
+    use crate::stubs::MessageBusStub;
+    use std::sync::RwLock;
+    use time::OffsetDateTime;
+    use tokio::sync::{broadcast, mpsc};
+
+    #[tokio::test]
+    async fn test_subscription_with_decoder() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec!["1|9000|20241231 12:00:00|100.5|101.0|100.0|100.25|1000|100.2|5|0".to_string()],
+        });
+
+        let (tx, rx) = broadcast::channel(100);
+        let internal = AsyncInternalSubscription::new(rx.resubscribe());
+
+        let subscription: Subscription<Bar> = Subscription::with_decoder(
+            internal,
+            176,
+            message_bus,
+            |_server_version, _msg| {
+                let bar = Bar {
+                    date: OffsetDateTime::now_utc(),
+                    open: 100.5,
+                    high: 101.0,
+                    low: 100.0,
+                    close: 100.25,
+                    volume: 1000.0,
+                    wap: 100.2,
+                    count: 5,
+                };
+                Ok(bar)
+            },
+            Some(9000),
+            None,
+            Some(OutgoingMessages::RequestRealTimeBars),
+            ResponseContext::default(),
+        );
+
+        // Send a test message
+        let msg = ResponseMessage::from("1\09000\020241231 12:00:00\0100.5\0101.0\0100.0\0100.25\01000\0100.2\05\00");
+        tx.send(msg).unwrap();
+
+        // Test that we can receive the decoded message
+        let mut sub = subscription;
+        let result = sub.next().await;
+        assert!(result.is_some());
+        let bar = result.unwrap().unwrap();
+        assert_eq!(bar.open, 100.5);
+        assert_eq!(bar.high, 101.0);
+    }
+
+    #[tokio::test]
+    async fn test_subscription_new_with_decoder() {
+        let message_bus = Arc::new(MessageBusStub::default());
+        let (_tx, rx) = broadcast::channel(100);
+        let internal = AsyncInternalSubscription::new(rx);
+
+        let subscription: Subscription<String> = Subscription::new_with_decoder(
+            internal,
+            176,
+            message_bus,
+            |_version, _msg| Ok("decoded".to_string()),
+            Some(1),
+            None,
+            Some(OutgoingMessages::RequestMarketData),
+            ResponseContext::default(),
+        );
+
+        assert_eq!(subscription.request_id, Some(1));
+        assert_eq!(subscription._message_type, Some(OutgoingMessages::RequestMarketData));
+    }
+
+    #[tokio::test]
+    async fn test_subscription_with_decoder_components() {
+        let message_bus = Arc::new(MessageBusStub::default());
+        let (_tx, rx) = broadcast::channel(100);
+        let internal = AsyncInternalSubscription::new(rx);
+
+        let subscription: Subscription<i32> = Subscription::with_decoder_components(
+            internal,
+            176,
+            message_bus,
+            |_version, _msg| Ok(42),
+            Some(100),
+            Some(200),
+            Some(OutgoingMessages::RequestPositions),
+            ResponseContext::default(),
+        );
+
+        assert_eq!(subscription.request_id, Some(100));
+        assert_eq!(subscription.order_id, Some(200));
+    }
+
+    #[tokio::test]
+    async fn test_subscription_new_from_receiver() {
+        let (tx, rx) = mpsc::unbounded_channel();
+
+        let mut subscription = Subscription::new(rx);
+
+        // Send test data
+        tx.send(Ok("test".to_string())).unwrap();
+
+        let result = subscription.next().await;
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().unwrap(), "test");
+    }
+
+    #[tokio::test]
+    async fn test_subscription_next_with_error() {
+        let message_bus = Arc::new(MessageBusStub::default());
+        let (tx, rx) = broadcast::channel(100);
+        let internal = AsyncInternalSubscription::new(rx);
+
+        let mut subscription: Subscription<String> = Subscription::with_decoder(
+            internal,
+            176,
+            message_bus,
+            |_version, _msg| Err(Error::Simple("decode error".into())),
+            None,
+            None,
+            None,
+            ResponseContext::default(),
+        );
+
+        // Send a message that will trigger the error
+        let msg = ResponseMessage::from("test\0");
+        tx.send(msg).unwrap();
+
+        let result = subscription.next().await;
+        assert!(result.is_some());
+        assert!(result.unwrap().is_err());
+    }
+
+    #[tokio::test]
+    async fn test_subscription_next_end_of_stream() {
+        let message_bus = Arc::new(MessageBusStub::default());
+        let (tx, rx) = broadcast::channel(100);
+        let internal = AsyncInternalSubscription::new(rx);
+
+        let mut subscription: Subscription<String> = Subscription::with_decoder(
+            internal,
+            176,
+            message_bus,
+            |_version, _msg| Err(Error::EndOfStream),
+            None,
+            None,
+            None,
+            ResponseContext::default(),
+        );
+
+        // Send a message that will trigger end of stream
+        let msg = ResponseMessage::from("test\0");
+        tx.send(msg).unwrap();
+
+        let result = subscription.next().await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_subscription_cancel() {
+        let message_bus = Arc::new(MessageBusStub::default());
+        let (_tx, rx) = broadcast::channel(100);
+        let internal = AsyncInternalSubscription::new(rx);
+
+        // Mock cancel function
+        let cancel_fn: CancelFn = Box::new(|_version, _id, _ctx| {
+            let mut msg = RequestMessage::new();
+            msg.push_field(&OutgoingMessages::CancelMarketData);
+            Ok(msg)
+        });
+
+        let mut subscription: Subscription<String> = Subscription::with_decoder(
+            internal,
+            176,
+            message_bus.clone(),
+            |_version, _msg| Ok("test".to_string()),
+            Some(123),
+            None,
+            Some(OutgoingMessages::RequestMarketData),
+            ResponseContext::default(),
+        );
+        subscription.cancel_fn = Some(Arc::new(cancel_fn));
+
+        // Cancel the subscription
+        subscription.cancel().await;
+
+        // Verify cancelled flag is set
+        assert!(subscription.cancelled.load(Ordering::Relaxed));
+
+        // Cancel again should be a no-op
+        subscription.cancel().await;
+    }
+
+    #[tokio::test]
+    async fn test_subscription_clone() {
+        let message_bus = Arc::new(MessageBusStub::default());
+        let (_tx, rx) = broadcast::channel(100);
+        let internal = AsyncInternalSubscription::new(rx);
+
+        let subscription: Subscription<String> = Subscription::with_decoder(
+            internal,
+            176,
+            message_bus,
+            |_version, _msg| Ok("test".to_string()),
+            Some(456),
+            Some(789),
+            Some(OutgoingMessages::RequestPositions),
+            ResponseContext {
+                is_smart_depth: true,
+                request_type: Some(OutgoingMessages::RequestPositions),
+            },
+        );
+
+        let cloned = subscription.clone();
+        assert_eq!(cloned.request_id, Some(456));
+        assert_eq!(cloned.order_id, Some(789));
+        assert_eq!(cloned._message_type, Some(OutgoingMessages::RequestPositions));
+        assert!(cloned.response_context.is_smart_depth);
+    }
+
+    #[tokio::test]
+    async fn test_subscription_drop_with_cancel() {
+        let message_bus = Arc::new(MessageBusStub::default());
+        let (_tx, rx) = broadcast::channel(100);
+        let internal = AsyncInternalSubscription::new(rx);
+
+        // Mock cancel function
+        let cancel_fn: CancelFn = Box::new(|_version, _id, _ctx| {
+            let mut msg = RequestMessage::new();
+            msg.push_field(&OutgoingMessages::CancelMarketData);
+            Ok(msg)
+        });
+
+        {
+            let mut subscription: Subscription<String> = Subscription::with_decoder(
+                internal,
+                176,
+                message_bus.clone(),
+                |_version, _msg| Ok("test".to_string()),
+                Some(999),
+                None,
+                Some(OutgoingMessages::RequestMarketData),
+                ResponseContext::default(),
+            );
+            subscription.cancel_fn = Some(Arc::new(cancel_fn));
+            // Subscription will be dropped here and should send cancel message
+        }
+
+        // Give async task time to execute
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "Cannot clone pre-decoded subscriptions")]
+    async fn test_subscription_inner_clone_panic() {
+        let (_tx, rx) = mpsc::unbounded_channel::<Result<String, Error>>();
+        let subscription = Subscription::new(rx);
+
+        // This should panic because PreDecoded subscriptions can't be cloned
+        let _ = subscription.inner.clone();
+    }
+
+    #[tokio::test]
+    async fn test_subscription_with_context() {
+        let message_bus = Arc::new(MessageBusStub::default());
+        let (_tx, rx) = broadcast::channel(100);
+        let internal = AsyncInternalSubscription::new(rx);
+
+        let context = ResponseContext {
+            is_smart_depth: true,
+            request_type: Some(OutgoingMessages::RequestMarketDepth),
+        };
+
+        let subscription: Subscription<String> = Subscription::with_decoder(
+            internal,
+            176,
+            message_bus,
+            |_version, _msg| Ok("test".to_string()),
+            None,
+            None,
+            None,
+            context.clone(),
+        );
+
+        assert_eq!(subscription.response_context, context);
+    }
+
+    #[tokio::test]
+    async fn test_subscription_new_from_internal_simple() {
+        // Define a simple decoder type
+        struct TestDecoder;
+
+        impl StreamDecoder<String> for TestDecoder {
+            fn decode(_server_version: i32, _msg: &mut ResponseMessage) -> Result<String, Error> {
+                Ok("decoded".to_string())
+            }
+
+            fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
+                let mut msg = RequestMessage::new();
+                msg.push_field(&OutgoingMessages::CancelMarketData);
+                Ok(msg)
+            }
+        }
+
+        let message_bus = Arc::new(MessageBusStub::default());
+        let (_tx, rx) = broadcast::channel(100);
+        let internal = AsyncInternalSubscription::new(rx);
+
+        let subscription: Subscription<String> = Subscription::new_from_internal_simple::<TestDecoder>(internal, 176, message_bus);
+
+        assert!(subscription.cancel_fn.is_some());
+    }
+}
