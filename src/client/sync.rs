@@ -3493,7 +3493,7 @@ mod tests {
         let mut has_last_price = false;
         let mut has_last_size = false;
         let mut has_volume = false;
-        let mut _has_snapshot_end = false;
+        let mut has_snapshot_end = false;
 
         for tick in subscription {
             tick_count += 1;
@@ -3541,7 +3541,7 @@ mod tests {
                     // Ignore string ticks like LastTimestamp
                 }
                 TickTypes::SnapshotEnd => {
-                    _has_snapshot_end = true;
+                    has_snapshot_end = true;
                     break; // Snapshot complete
                 }
                 _ => {}
@@ -3559,8 +3559,7 @@ mod tests {
         assert!(has_last_price, "Should receive last price");
         assert!(has_last_size, "Should receive last size");
         assert!(has_volume, "Should receive volume");
-        // TODO: SnapshotEnd message not being routed properly in tests - see TODO.md
-        // assert!(has_snapshot_end, "Should receive snapshot end");
+        assert!(has_snapshot_end, "Should receive snapshot end");
 
         let requests = gateway.requests();
         // Verify request format: RequestMarketData(1), version(11), request_id, contract_id,

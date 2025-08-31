@@ -792,8 +792,8 @@ pub mod tests {
                 // type(45), version(6), request_id, tick_type(8=volume), value
                 "45\06\09000\08\01500000\0".to_string(),
                 // TickSnapshotEnd - for snapshot requests
-                // type(17), version(1), request_id
-                "17\01\09000\0".to_string(),
+                // type(57), version(1), request_id
+                "57\01\09000\0".to_string(),
             ],
         );
 
