@@ -20,11 +20,7 @@
 
 use std::sync::Arc;
 
-use ibapi::{
-    contracts::Contract,
-    market_data::historical::{BarSize, ToDuration, WhatToShow},
-    Client,
-};
+use ibapi::prelude::*;
 use time::OffsetDateTime;
 
 #[tokio::main]
@@ -41,7 +37,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 1: Get the earliest available data timestamp
     println!("=== Head Timestamp ===");
-    let head_timestamp = client.head_timestamp(&contract, WhatToShow::Trades, true).await?;
+    let head_timestamp = client
+        .head_timestamp(&contract, HistoricalWhatToShow::Trades, TradingHours::Regular)
+        .await?;
     println!("Earliest available historical data: {head_timestamp:?}");
 
     // Example 2: Get recent intraday data (5-minute bars for last day)
@@ -51,10 +49,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .historical_data(
             &contract,
             Some(end_date),
-            1.days(),                 // Duration: 1 day
-            BarSize::Min5,            // 5-minute bars
-            Some(WhatToShow::Trades), // Trade data
-            true,                     // Use regular trading hours
+            1.days(),                           // Duration: 1 day
+            HistoricalBarSize::Min5,            // 5-minute bars
+            Some(HistoricalWhatToShow::Trades), // Trade data
+            TradingHours::Regular,              // Use regular trading hours
         )
         .await?;
 
@@ -97,10 +95,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .historical_data(
             &contract,
             Some(end_date),
-            1.months(),               // Duration: 1 month
-            BarSize::Day,             // Daily bars
-            Some(WhatToShow::Trades), // Trade data
-            true,                     // Use regular trading hours
+            1.months(),                         // Duration: 1 month
+            HistoricalBarSize::Day,             // Daily bars
+            Some(HistoricalWhatToShow::Trades), // Trade data
+            TradingHours::Regular,              // Use regular trading hours
         )
         .await?;
 
@@ -122,7 +120,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Bid data (last 1 day)
     let bid_data = client
-        .historical_data(&contract, Some(end_date), 1.days(), BarSize::Min, Some(WhatToShow::Bid), true)
+        .historical_data(
+            &contract,
+            Some(end_date),
+            1.days(),
+            HistoricalBarSize::Min,
+            Some(HistoricalWhatToShow::Bid),
+            TradingHours::Regular,
+        )
         .await?;
     println!("Bid bars (1-min): {} bars", bid_data.bars.len());
     if let Some(bar) = bid_data.bars.first() {
@@ -137,7 +142,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Ask data (last 1 day)
     let ask_data = client
-        .historical_data(&contract, Some(end_date), 1.days(), BarSize::Min, Some(WhatToShow::Ask), true)
+        .historical_data(
+            &contract,
+            Some(end_date),
+            1.days(),
+            HistoricalBarSize::Min,
+            Some(HistoricalWhatToShow::Ask),
+            TradingHours::Regular,
+        )
         .await?;
     println!("Ask bars (1-min): {} bars", ask_data.bars.len());
     if let Some(bar) = ask_data.bars.first() {
@@ -152,7 +164,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 5: Get histogram data
     println!("\n=== Histogram Data ===");
-    let histogram = client.histogram_data(&contract, true, BarSize::Day).await?;
+    let histogram = client.histogram_data(&contract, TradingHours::Regular, HistoricalBarSize::Day).await?;
 
     println!("Histogram entries: {}", histogram.len());
     for entry in histogram.iter().take(5) {

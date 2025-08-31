@@ -11,15 +11,21 @@ use crate::{Client, Error, MAX_RETRIES};
 
 use super::common::{decoders, encoders};
 use super::{BarSize, Duration, HistogramEntry, HistoricalData, Schedule, TickBidAsk, TickDecoder, TickLast, TickMidpoint, WhatToShow};
+use crate::market_data::TradingHours;
 
 // === Public API Functions ===
 
 /// Returns the timestamp of earliest available historical data for a contract and data type.
-pub async fn head_timestamp(client: &Client, contract: &Contract, what_to_show: WhatToShow, use_rth: bool) -> Result<OffsetDateTime, Error> {
+pub async fn head_timestamp(
+    client: &Client,
+    contract: &Contract,
+    what_to_show: WhatToShow,
+    trading_hours: TradingHours,
+) -> Result<OffsetDateTime, Error> {
     check_version(client.server_version(), Features::HEAD_TIMESTAMP)?;
 
     let builder = client.request();
-    let request = encoders::encode_request_head_timestamp(builder.request_id(), contract, what_to_show, use_rth)?;
+    let request = encoders::encode_request_head_timestamp(builder.request_id(), contract, what_to_show, trading_hours.use_rth())?;
     let mut subscription = builder.send_raw(request).await?;
 
     match subscription.next().await {
@@ -28,7 +34,7 @@ pub async fn head_timestamp(client: &Client, contract: &Contract, what_to_show: 
         Some(Err(e)) => Err(e),
         None => {
             // Connection might have been reset, retry
-            Box::pin(head_timestamp(client, contract, what_to_show, use_rth)).await
+            Box::pin(head_timestamp(client, contract, what_to_show, trading_hours)).await
         }
     }
 }
@@ -42,7 +48,7 @@ pub async fn historical_data(
     duration: Duration,
     bar_size: BarSize,
     what_to_show: Option<WhatToShow>,
-    use_rth: bool,
+    trading_hours: TradingHours,
 ) -> Result<HistoricalData, Error> {
     if !contract.trading_class.is_empty() || contract.contract_id > 0 {
         check_version(client.server_version(), Features::TRADING_CLASS)?;
@@ -68,7 +74,7 @@ pub async fn historical_data(
             duration,
             bar_size,
             what_to_show,
-            use_rth,
+            trading_hours.use_rth(),
             false,
             Vec::<crate::contracts::TagValue>::default(),
         )?;
@@ -146,7 +152,7 @@ pub async fn historical_ticks_bid_ask(
     start: Option<OffsetDateTime>,
     end: Option<OffsetDateTime>,
     number_of_ticks: i32,
-    use_rth: bool,
+    trading_hours: TradingHours,
     ignore_size: bool,
 ) -> Result<TickSubscription<TickBidAsk>, Error> {
     check_version(client.server_version(), Features::HISTORICAL_TICKS)?;
@@ -159,7 +165,7 @@ pub async fn historical_ticks_bid_ask(
         end,
         number_of_ticks,
         WhatToShow::BidAsk,
-        use_rth,
+        trading_hours.use_rth(),
         ignore_size,
     )?;
     let subscription = builder.send_raw(request).await?;
@@ -174,7 +180,7 @@ pub async fn historical_ticks_mid_point(
     start: Option<OffsetDateTime>,
     end: Option<OffsetDateTime>,
     number_of_ticks: i32,
-    use_rth: bool,
+    trading_hours: TradingHours,
 ) -> Result<TickSubscription<TickMidpoint>, Error> {
     check_version(client.server_version(), Features::HISTORICAL_TICKS)?;
 
@@ -186,7 +192,7 @@ pub async fn historical_ticks_mid_point(
         end,
         number_of_ticks,
         WhatToShow::MidPoint,
-        use_rth,
+        trading_hours.use_rth(),
         false,
     )?;
     let subscription = builder.send_raw(request).await?;
@@ -201,7 +207,7 @@ pub async fn historical_ticks_trade(
     start: Option<OffsetDateTime>,
     end: Option<OffsetDateTime>,
     number_of_ticks: i32,
-    use_rth: bool,
+    trading_hours: TradingHours,
 ) -> Result<TickSubscription<TickLast>, Error> {
     check_version(client.server_version(), Features::HISTORICAL_TICKS)?;
 
@@ -213,7 +219,7 @@ pub async fn historical_ticks_trade(
         end,
         number_of_ticks,
         WhatToShow::Trades,
-        use_rth,
+        trading_hours.use_rth(),
         false,
     )?;
     let subscription = builder.send_raw(request).await?;
@@ -222,12 +228,17 @@ pub async fn historical_ticks_trade(
 }
 
 /// Requests histogram data for a contract.
-pub async fn histogram_data(client: &Client, contract: &Contract, use_rth: bool, period: BarSize) -> Result<Vec<HistogramEntry>, Error> {
+pub async fn histogram_data(
+    client: &Client,
+    contract: &Contract,
+    trading_hours: TradingHours,
+    period: BarSize,
+) -> Result<Vec<HistogramEntry>, Error> {
     check_version(client.server_version(), Features::HISTOGRAM)?;
 
     loop {
         let builder = client.request();
-        let request = encoders::encode_request_histogram_data(builder.request_id(), contract, use_rth, period)?;
+        let request = encoders::encode_request_histogram_data(builder.request_id(), contract, trading_hours.use_rth(), period)?;
         let mut subscription = builder.send_raw(request).await?;
 
         match subscription.next().await {
@@ -338,9 +349,9 @@ mod tests {
             ..Contract::default()
         };
         let what_to_show = WhatToShow::Trades;
-        let use_rth = true;
+        let trading_hours = TradingHours::Regular;
 
-        let result = head_timestamp(&client, &contract, what_to_show, use_rth).await;
+        let result = head_timestamp(&client, &contract, what_to_show, trading_hours).await;
         assert!(result.is_ok(), "head_timestamp should succeed");
 
         let timestamp = result.unwrap();
@@ -369,7 +380,7 @@ mod tests {
         assert_eq!(request.fields[12], contract.local_symbol, "message.local_symbol");
         assert_eq!(request.fields[13], contract.trading_class, "message.trading_class");
         assert_eq!(request.fields[14], contract.include_expired.to_field(), "message.include_expired");
-        assert_eq!(request.fields[15], use_rth.to_field(), "message.use_rth");
+        assert_eq!(request.fields[15], trading_hours.use_rth().to_field(), "message.use_rth");
         assert_eq!(request.fields[16], what_to_show.to_field(), "message.what_to_show");
         assert_eq!(request.fields[17], "2", "message.date_format");
     }
@@ -390,10 +401,10 @@ mod tests {
             last_trade_date_or_contract_month: "202303".to_owned(),
             ..Contract::default()
         };
-        let use_rth = true;
+        let trading_hours = TradingHours::Regular;
         let period = BarSize::Day;
 
-        let result = histogram_data(&client, &contract, use_rth, period).await;
+        let result = histogram_data(&client, &contract, trading_hours, period).await;
         assert!(result.is_ok(), "histogram_data should succeed");
 
         let entries = result.unwrap();
@@ -438,7 +449,7 @@ mod tests {
         assert_eq!(request.fields[12], contract.local_symbol, "message.local_symbol");
         assert_eq!(request.fields[13], contract.trading_class, "message.trading_class");
         assert_eq!(request.fields[14], contract.include_expired.to_field(), "message.include_expired");
-        assert_eq!(request.fields[15], use_rth.to_field(), "message.use_rth");
+        assert_eq!(request.fields[15], trading_hours.use_rth().to_field(), "message.use_rth");
         assert_eq!(request.fields[16], period.to_field(), "message.duration");
     }
 
@@ -468,9 +479,9 @@ mod tests {
         let duration = Duration::seconds(3600);
         let bar_size = BarSize::Min30;
         let what_to_show = Some(WhatToShow::Trades);
-        let use_rth = true;
+        let trading_hours = TradingHours::Regular;
 
-        let result = historical_data(&client, &contract, end_date, duration, bar_size, what_to_show, use_rth).await;
+        let result = historical_data(&client, &contract, end_date, duration, bar_size, what_to_show, trading_hours).await;
         assert!(result.is_ok(), "historical_data should succeed");
 
         let data = result.unwrap();
@@ -527,7 +538,7 @@ mod tests {
         };
         contract.trading_class = "ES".to_string(); // Requires TRADING_CLASS version
 
-        let result = historical_data(&client, &contract, None, Duration::days(1), BarSize::Hour, None, true).await;
+        let result = historical_data(&client, &contract, None, Duration::days(1), BarSize::Hour, None, TradingHours::Regular).await;
         assert!(result.is_err(), "Should fail version check");
         let err_msg = result.unwrap_err().to_string();
         assert!(
@@ -552,7 +563,7 @@ mod tests {
             Duration::days(1),
             BarSize::Day,
             Some(WhatToShow::AdjustedLast),
-            true,
+            TradingHours::Regular,
         )
         .await;
 
@@ -580,7 +591,7 @@ mod tests {
             ..Contract::default()
         };
 
-        let result = historical_data(&client, &contract, None, Duration::days(1), BarSize::Hour, None, true).await;
+        let result = historical_data(&client, &contract, None, Duration::days(1), BarSize::Hour, None, TradingHours::Regular).await;
         assert!(result.is_err(), "Should fail with error response");
         assert!(
             result.unwrap_err().to_string().contains("No market data permissions"),
@@ -605,7 +616,7 @@ mod tests {
             ..Contract::default()
         };
 
-        let result = historical_data(&client, &contract, None, Duration::days(1), BarSize::Hour, None, true).await;
+        let result = historical_data(&client, &contract, None, Duration::days(1), BarSize::Hour, None, TradingHours::Regular).await;
         assert!(result.is_err(), "Should fail with unexpected response");
         matches!(result.unwrap_err(), Error::UnexpectedResponse(_));
     }
@@ -667,7 +678,7 @@ mod tests {
             ..Contract::default()
         };
 
-        let mut subscription = historical_ticks_bid_ask(&client, &contract, None, None, 3, true, false)
+        let mut subscription = historical_ticks_bid_ask(&client, &contract, None, None, 3, TradingHours::Regular, false)
             .await
             .expect("Failed to create tick subscription");
 
@@ -721,7 +732,7 @@ mod tests {
             ..Contract::default()
         };
 
-        let mut subscription = historical_ticks_bid_ask(&client, &contract, None, None, 3, true, false)
+        let mut subscription = historical_ticks_bid_ask(&client, &contract, None, None, 3, TradingHours::Regular, false)
             .await
             .expect("Failed to create tick subscription");
 
@@ -760,10 +771,10 @@ mod tests {
         let start = Some(datetime!(2023-03-15 09:00:00 UTC));
         let end = Some(datetime!(2023-03-15 10:00:00 UTC));
         let number_of_ticks = 1;
-        let use_rth = true;
+        let trading_hours = TradingHours::Regular;
         let ignore_size = false;
 
-        let mut subscription = historical_ticks_bid_ask(&client, &contract, start, end, number_of_ticks, use_rth, ignore_size)
+        let mut subscription = historical_ticks_bid_ask(&client, &contract, start, end, number_of_ticks, trading_hours, ignore_size)
             .await
             .expect("Failed to create bid/ask tick subscription");
 
@@ -803,7 +814,7 @@ mod tests {
         assert_eq!(request.fields[16], end.to_field(), "message.end");
         assert_eq!(request.fields[17], number_of_ticks.to_field(), "message.number_of_ticks");
         assert_eq!(request.fields[18], "BID_ASK", "message.what_to_show");
-        assert_eq!(request.fields[19], use_rth.to_field(), "message.use_rth");
+        assert_eq!(request.fields[19], trading_hours.use_rth().to_field(), "message.use_rth");
         assert_eq!(request.fields[20], "0", "message.ignore_size"); // false = 0
         assert_eq!(request.fields[21], "", "message.misc_options");
     }
@@ -829,7 +840,7 @@ mod tests {
             ..Contract::default()
         };
 
-        let mut subscription = historical_ticks_mid_point(&client, &contract, None, None, 1, true)
+        let mut subscription = historical_ticks_mid_point(&client, &contract, None, None, 1, TradingHours::Regular)
             .await
             .expect("Failed to create midpoint tick subscription");
 
@@ -865,7 +876,7 @@ mod tests {
             ..Contract::default()
         };
 
-        let mut subscription = historical_ticks_trade(&client, &contract, None, None, 1, true)
+        let mut subscription = historical_ticks_trade(&client, &contract, None, None, 1, TradingHours::Regular)
             .await
             .expect("Failed to create trade tick subscription");
 
@@ -905,7 +916,16 @@ mod tests {
             last_trade_date_or_contract_month: "202303".to_owned(),
             ..Contract::default()
         };
-        let result = historical_data(&client, &contract, None, Duration::seconds(3600), BarSize::Hour, None, true).await;
+        let result = historical_data(
+            &client,
+            &contract,
+            None,
+            Duration::seconds(3600),
+            BarSize::Hour,
+            None,
+            TradingHours::Regular,
+        )
+        .await;
 
         assert!(result.is_ok(), "historical_data should succeed with timezone");
         let data = result.unwrap();

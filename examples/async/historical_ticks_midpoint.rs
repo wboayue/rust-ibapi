@@ -19,10 +19,7 @@
 
 use std::sync::Arc;
 
-use ibapi::{
-    contracts::{Contract, SecurityType},
-    Client,
-};
+use ibapi::prelude::*;
 use time::macros::datetime;
 
 #[tokio::main]
@@ -48,10 +45,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start = datetime!(2024-01-05 15:00 UTC);
     let end = datetime!(2024-01-05 15:05 UTC);
     let number_of_ticks = 1000; // Max 1000 ticks per request
-    let use_rth = false; // Include all hours for forex
+    let trading_hours = TradingHours::Extended; // Include all hours for forex
 
     let mut tick_subscription = client
-        .historical_ticks_mid_point(&contract, Some(start), Some(end), number_of_ticks, use_rth)
+        .historical_ticks_mid_point(&contract, Some(start), Some(end), number_of_ticks, trading_hours)
         .await?;
 
     println!("Time range: {} to {}", start, end);
@@ -109,7 +106,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Use end time only to get most recent data
     let start2 = None;
     let end2 = None; // Current time
-    let mut tick_subscription2 = client.historical_ticks_mid_point(&contract2, start2, end2, 100, true).await?;
+    let mut tick_subscription2 = client
+        .historical_ticks_mid_point(&contract2, start2, end2, 100, TradingHours::Regular)
+        .await?;
 
     println!("\nLast 10 midpoint ticks for AAPL:");
     println!("Time                     | Midpoint Price");

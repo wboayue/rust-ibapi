@@ -39,6 +39,8 @@ cargo run --features async --example async_connect
 
 > **🚧 Work in Progress**: Version 2.0 is currently under active development and includes significant architectural improvements, async/await support, and enhanced features. The current release (1.x) remains stable and production-ready.
 
+> **📚 Migrating from v1.x?** See the [Migration Guide](MIGRATION.md) for detailed instructions on upgrading to v2.0.
+
 If you encounter any issues or require a missing feature, please review the [issues list](https://github.com/wboayue/rust-ibapi/issues) before submitting a new one.
 
 ## Available APIs

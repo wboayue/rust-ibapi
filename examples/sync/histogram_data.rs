@@ -6,9 +6,7 @@
 //! cargo run --features sync --example histogram_data
 //! ```
 
-use ibapi::contracts::Contract;
-use ibapi::market_data::historical::BarSize;
-use ibapi::Client;
+use ibapi::prelude::*;
 
 fn main() {
     env_logger::init();
@@ -17,7 +15,9 @@ fn main() {
 
     let contract = Contract::stock("GM");
 
-    let histogram = client.histogram_data(&contract, true, BarSize::Week).expect("histogram request failed");
+    let histogram = client
+        .histogram_data(&contract, TradingHours::Regular, HistoricalBarSize::Week)
+        .expect("histogram request failed");
 
     for item in &histogram {
         println!("{item:?}");

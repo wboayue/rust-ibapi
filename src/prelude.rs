@@ -27,9 +27,8 @@ pub use crate::contracts::{Contract, SecurityType};
 pub use crate::market_data::historical::{BarSize as HistoricalBarSize, ToDuration, WhatToShow as HistoricalWhatToShow};
 
 // Market data types - realtime
-#[cfg(feature = "sync")]
 pub use crate::market_data::realtime::{BarSize as RealtimeBarSize, TickTypes, WhatToShow as RealtimeWhatToShow};
-pub use crate::market_data::MarketDataType;
+pub use crate::market_data::{MarketDataType, TradingHours};
 
 // Order types
 #[cfg(feature = "sync")]

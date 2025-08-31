@@ -9,9 +9,8 @@
 use clap::{arg, Command};
 use time::macros::datetime;
 
-use ibapi::contracts::Contract;
-use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
-use ibapi::Client;
+use ibapi::market_data::historical::ToDuration;
+use ibapi::prelude::*;
 
 fn main() {
     env_logger::init();
@@ -34,9 +33,9 @@ fn main() {
             &contract,
             Some(datetime!(2023-04-11 20:00 UTC)),
             1.days(),
-            BarSize::Hour,
-            WhatToShow::Trades,
-            true,
+            HistoricalBarSize::Hour,
+            HistoricalWhatToShow::Trades,
+            TradingHours::Regular,
         )
         .expect("historical data request failed");
 

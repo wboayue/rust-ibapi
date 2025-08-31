@@ -19,11 +19,7 @@
 
 use std::sync::Arc;
 
-use ibapi::{
-    contracts::Contract,
-    market_data::realtime::{BarSize, WhatToShow},
-    Client,
-};
+use ibapi::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -42,9 +38,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let realtime_bars = client
         .realtime_bars(
             &contract,
-            BarSize::Sec5,      // 5-second bars
-            WhatToShow::Trades, // Trade data
-            true,               // Use regular trading hours
+            RealtimeBarSize::Sec5,      // 5-second bars
+            RealtimeWhatToShow::Trades, // Trade data
+            TradingHours::Regular,      // Use regular trading hours
         )
         .await?;
     println!("Real-time bars subscription created");
