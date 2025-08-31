@@ -313,21 +313,12 @@ impl<T> Drop for Subscription<T> {
 #[cfg(all(test, feature = "async"))]
 mod tests {
     use super::*;
-    use crate::client::common::tests::setup_connect;
-    use crate::client::r#async::Client;
     use crate::market_data::realtime::Bar;
     use crate::messages::OutgoingMessages;
     use crate::stubs::MessageBusStub;
     use std::sync::RwLock;
     use time::OffsetDateTime;
     use tokio::sync::{broadcast, mpsc};
-
-    // Test helper to create a mock client
-    async fn create_test_client() -> Client {
-        let gateway = setup_connect();
-        let address = gateway.address();
-        Client::connect(&address, 100).await.expect("Client connection should succeed")
-    }
 
     #[tokio::test]
     async fn test_subscription_with_decoder() {
