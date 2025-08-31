@@ -690,3 +690,830 @@ fn test_response_message_encode_decode_roundtrip() {
 
     assert_eq!(original.fields, decoded.fields);
 }
+
+// Table-driven tests for parser_registry module
+#[test]
+fn test_field_based_parser() {
+    use super::parser_registry::{FieldBasedParser, FieldDef, MessageParser};
+
+    struct TestCase {
+        name: &'static str,
+        fields: Vec<FieldDef>,
+        input: Vec<&'static str>,
+        expected_count: usize,
+        expected_values: Vec<(&'static str, &'static str)>,
+    }
+
+    let test_cases = vec![
+        TestCase {
+            name: "basic_parsing",
+            fields: vec![
+                FieldDef::new(0, "message_type"),
+                FieldDef::new(1, "version"),
+                FieldDef::new(2, "request_id"),
+            ],
+            input: vec!["49", "1", "12345"],
+            expected_count: 3,
+            expected_values: vec![("message_type", "49"), ("version", "1"), ("request_id", "12345")],
+        },
+        TestCase {
+            name: "missing_fields",
+            fields: vec![FieldDef::new(0, "field1"), FieldDef::new(1, "field2"), FieldDef::new(5, "field6")],
+            input: vec!["val1", "val2"],
+            expected_count: 2,
+            expected_values: vec![("field1", "val1"), ("field2", "val2")],
+        },
+        TestCase {
+            name: "empty_input",
+            fields: vec![FieldDef::new(0, "field1")],
+            input: vec![],
+            expected_count: 0,
+            expected_values: vec![],
+        },
+        TestCase {
+            name: "with_transform",
+            fields: vec![FieldDef::new(0, "upper").with_transform(|s| s.to_uppercase())],
+            input: vec!["hello"],
+            expected_count: 1,
+            expected_values: vec![("upper", "HELLO")],
+        },
+    ];
+
+    for test_case in test_cases {
+        let parser = FieldBasedParser::new(test_case.fields);
+        let result = parser.parse(&test_case.input);
+
+        assert_eq!(result.len(), test_case.expected_count, "Test '{}' failed: wrong field count", test_case.name);
+
+        for (field, (expected_name, expected_value)) in result.iter().zip(test_case.expected_values.iter()) {
+            assert_eq!(field.name, *expected_name, "Test '{}' failed: wrong field name", test_case.name);
+            assert_eq!(field.value, *expected_value, "Test '{}' failed: wrong field value", test_case.name);
+        }
+    }
+}
+
+#[test]
+fn test_timestamp_parser() {
+    use super::parser_registry::{FieldBasedParser, FieldDef, MessageParser, TimestampParser};
+
+    struct TestCase {
+        name: &'static str,
+        base_fields: Vec<FieldDef>,
+        timestamp_index: usize,
+        input: Vec<&'static str>,
+        expect_parsed_timestamp: bool,
+    }
+
+    let test_cases = vec![
+        TestCase {
+            name: "valid_timestamp",
+            base_fields: vec![FieldDef::new(0, "message_type"), FieldDef::new(1, "timestamp")],
+            timestamp_index: 1,
+            input: vec!["49", "1609459200"], // 2021-01-01 00:00:00 UTC
+            expect_parsed_timestamp: true,
+        },
+        TestCase {
+            name: "invalid_timestamp",
+            base_fields: vec![FieldDef::new(0, "message_type"), FieldDef::new(1, "timestamp")],
+            timestamp_index: 1,
+            input: vec!["49", "not_a_timestamp"],
+            expect_parsed_timestamp: false,
+        },
+        TestCase {
+            name: "missing_timestamp_field",
+            base_fields: vec![FieldDef::new(0, "message_type")],
+            timestamp_index: 3,
+            input: vec!["49"],
+            expect_parsed_timestamp: false,
+        },
+    ];
+
+    for test_case in test_cases {
+        let base_parser = FieldBasedParser::new(test_case.base_fields);
+        let parser = TimestampParser::new(base_parser, test_case.timestamp_index);
+        let result = parser.parse(&test_case.input);
+
+        let has_parsed_timestamp = result.iter().any(|f| f.name == "timestamp_parsed");
+        assert_eq!(
+            has_parsed_timestamp,
+            test_case.expect_parsed_timestamp,
+            "Test '{}' failed: timestamp parsing expectation mismatch",
+            test_case.name
+        );
+    }
+}
+
+#[test]
+fn test_message_parser_registry() {
+    use super::parser_registry::MessageParserRegistry;
+
+    struct TestCase {
+        name: &'static str,
+        msg_type: OutgoingMessages,
+        input: Vec<&'static str>,
+        expected_fields: Vec<(&'static str, &'static str)>,
+    }
+
+    let test_cases = vec![
+        TestCase {
+            name: "request_current_time",
+            msg_type: OutgoingMessages::RequestCurrentTime,
+            input: vec!["49", "1"],
+            expected_fields: vec![("message_type", "49"), ("version", "1")],
+        },
+        TestCase {
+            name: "request_account_summary",
+            msg_type: OutgoingMessages::RequestAccountSummary,
+            input: vec!["62", "1", "123", "All", "NetLiquidation"],
+            expected_fields: vec![
+                ("message_type", "62"),
+                ("version", "1"),
+                ("request_id", "123"),
+                ("group", "All"),
+                ("tags", "NetLiquidation"),
+            ],
+        },
+        TestCase {
+            name: "request_pnl",
+            msg_type: OutgoingMessages::RequestPnL,
+            input: vec!["92", "456", "DU12345", ""],
+            expected_fields: vec![
+                ("message_type", "92"),
+                ("request_id", "456"),
+                ("account", "DU12345"),
+                ("model_code", ""),
+            ],
+        },
+    ];
+
+    let registry = MessageParserRegistry::new();
+
+    for test_case in test_cases {
+        let result = registry.parse_request(test_case.msg_type, &test_case.input);
+
+        assert_eq!(
+            result.len(),
+            test_case.expected_fields.len(),
+            "Test '{}' failed: wrong field count",
+            test_case.name
+        );
+
+        for (field, (expected_name, expected_value)) in result.iter().zip(test_case.expected_fields.iter()) {
+            assert_eq!(field.name, *expected_name, "Test '{}' failed: wrong field name", test_case.name);
+            assert_eq!(field.value, *expected_value, "Test '{}' failed: wrong field value", test_case.name);
+        }
+    }
+}
+
+#[test]
+fn test_response_parser_registry() {
+    use super::parser_registry::MessageParserRegistry;
+
+    struct TestCase {
+        name: &'static str,
+        msg_type: IncomingMessages,
+        input: Vec<&'static str>,
+        min_expected_fields: usize,
+    }
+
+    let test_cases = vec![
+        TestCase {
+            name: "error_message",
+            msg_type: IncomingMessages::Error,
+            input: vec!["4", "2", "-1", "2107", "HMDS data farm connection is inactive."],
+            min_expected_fields: 5,
+        },
+        TestCase {
+            name: "managed_accounts",
+            msg_type: IncomingMessages::ManagedAccounts,
+            input: vec!["15", "1", "DU12345,DU67890"],
+            min_expected_fields: 3,
+        },
+        TestCase {
+            name: "position",
+            msg_type: IncomingMessages::Position,
+            input: vec![
+                "61", "3", "DU12345", "12345", "AAPL", "STK", "", "0", "", "", "NASDAQ", "USD", "AAPL", "NMS", "100", "150.50",
+            ],
+            min_expected_fields: 16,
+        },
+        TestCase {
+            name: "pnl_single",
+            msg_type: IncomingMessages::PnLSingle,
+            input: vec!["95", "123", "100", "50.25", "75.50", "125.75", "10000"],
+            min_expected_fields: 7,
+        },
+    ];
+
+    let registry = MessageParserRegistry::new();
+
+    for test_case in test_cases {
+        let result = registry.parse_response(test_case.msg_type, &test_case.input);
+
+        assert!(
+            result.len() >= test_case.min_expected_fields,
+            "Test '{}' failed: expected at least {} fields, got {}",
+            test_case.name,
+            test_case.min_expected_fields,
+            result.len()
+        );
+    }
+}
+
+#[test]
+fn test_parse_generic_message() {
+    use super::parser_registry::parse_generic_message;
+
+    struct TestCase {
+        name: &'static str,
+        input: Vec<&'static str>,
+        expected_fields: Vec<(&'static str, &'static str)>,
+    }
+
+    let test_cases = vec![
+        TestCase {
+            name: "simple_message",
+            input: vec!["100", "field1", "field2", "field3"],
+            expected_fields: vec![
+                ("message_type", "100"),
+                ("field_2", "field1"),
+                ("field_3", "field2"),
+                ("field_4", "field3"),
+            ],
+        },
+        TestCase {
+            name: "message_with_trailing_empty",
+            input: vec!["200", "value", ""],
+            expected_fields: vec![("message_type", "200"), ("field_2", "value")],
+        },
+        TestCase {
+            name: "single_field",
+            input: vec!["300"],
+            expected_fields: vec![("message_type", "300")],
+        },
+    ];
+
+    for test_case in test_cases {
+        let result = parse_generic_message(&test_case.input);
+
+        assert_eq!(
+            result.len(),
+            test_case.expected_fields.len(),
+            "Test '{}' failed: wrong field count",
+            test_case.name
+        );
+
+        for (field, (expected_name, expected_value)) in result.iter().zip(test_case.expected_fields.iter()) {
+            assert_eq!(field.name, *expected_name, "Test '{}' failed: wrong field name", test_case.name);
+            assert_eq!(field.value, *expected_value, "Test '{}' failed: wrong field value", test_case.name);
+        }
+    }
+}
+
+#[test]
+fn test_custom_parser_registration() {
+    use super::parser_registry::{MessageParser, MessageParserRegistry};
+
+    struct CustomParser;
+    impl MessageParser for CustomParser {
+        fn parse(&self, _parts: &[&str]) -> Vec<super::parser_registry::ParsedField> {
+            vec![super::parser_registry::ParsedField {
+                name: "custom".to_string(),
+                value: "parser".to_string(),
+            }]
+        }
+    }
+
+    let mut registry = MessageParserRegistry::new();
+
+    // Register custom parsers
+    registry.register_request_parser(OutgoingMessages::RequestGlobalCancel, Box::new(CustomParser));
+    registry.register_response_parser(IncomingMessages::NewsArticle, Box::new(CustomParser));
+
+    // Test custom request parser
+    let result = registry.parse_request(OutgoingMessages::RequestGlobalCancel, &["58"]);
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].name, "custom");
+    assert_eq!(result[0].value, "parser");
+
+    // Test custom response parser
+    let result = registry.parse_response(IncomingMessages::NewsArticle, &["83"]);
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].name, "custom");
+    assert_eq!(result[0].value, "parser");
+}
+
+// Tests for error conditions and edge cases
+#[test]
+fn test_response_message_next_methods_edge_cases() {
+    struct TestCase {
+        name: &'static str,
+        input: &'static str,
+        test_fn: fn(&mut ResponseMessage) -> bool,
+    }
+
+    let test_cases = vec![
+        TestCase {
+            name: "empty_message",
+            input: "",
+            test_fn: |msg| msg.next_int().is_err(),
+        },
+        TestCase {
+            name: "single_null_terminator",
+            input: "\0",
+            test_fn: |msg| {
+                msg.i = 0;
+                let result = msg.next_string();
+                result.is_ok() && result.unwrap().is_empty()
+            },
+        },
+        TestCase {
+            name: "multiple_null_terminators",
+            input: "\0\0\0",
+            test_fn: |msg| {
+                msg.i = 0;
+                let result = msg.next_string();
+                result.is_ok() && result.unwrap().is_empty()
+            },
+        },
+        TestCase {
+            name: "malformed_int",
+            input: "not_an_int\0",
+            test_fn: |msg| {
+                msg.i = 0;
+                msg.next_int().is_err()
+            },
+        },
+        TestCase {
+            name: "malformed_long",
+            input: "not_a_long\0",
+            test_fn: |msg| {
+                msg.i = 0;
+                msg.next_long().is_err()
+            },
+        },
+        TestCase {
+            name: "malformed_double",
+            input: "not_a_double\0",
+            test_fn: |msg| {
+                msg.i = 0;
+                msg.next_double().is_err()
+            },
+        },
+        TestCase {
+            name: "malformed_bool",
+            input: "2\0",
+            test_fn: |msg| {
+                msg.i = 0;
+                // next_bool returns Ok(false) for any non-"1" value
+                let result = msg.next_bool();
+                result.is_ok() && !result.unwrap()
+            },
+        },
+        TestCase {
+            name: "overflow_int",
+            input: "99999999999999999999\0",
+            test_fn: |msg| {
+                msg.i = 0;
+                msg.next_int().is_err()
+            },
+        },
+        TestCase {
+            name: "negative_timestamp",
+            input: "-1000\0",
+            test_fn: |msg| {
+                msg.i = 0;
+                // Negative timestamps are valid (dates before 1970)
+                msg.next_date_time().is_ok()
+            },
+        },
+    ];
+
+    for test_case in test_cases {
+        let mut message = ResponseMessage::from(test_case.input);
+        assert!(
+            (test_case.test_fn)(&mut message),
+            "Test '{}' failed",
+            test_case.name
+        );
+    }
+}
+
+#[test]
+fn test_request_message_push_field_edge_cases() {
+    // Test with very large numbers
+    let mut message = RequestMessage::new();
+    message.push_field(&i32::MAX);
+    message.push_field(&i32::MIN);
+    message.push_field(&format!("{}", i64::MAX).as_str());
+    message.push_field(&format!("{}", i64::MIN).as_str());
+    assert_eq!(message.fields.len(), 4);
+
+    // Test with special floats
+    let mut message = RequestMessage::new();
+    message.push_field(&f64::INFINITY);
+    message.push_field(&f64::NEG_INFINITY);
+    message.push_field(&f64::NAN);
+    assert_eq!(message.fields.len(), 3);
+
+    // Test with empty strings
+    let mut message = RequestMessage::new();
+    message.push_field(&"");
+    message.push_field(&Some(""));
+    message.push_field(&Option::<&str>::None);
+    assert_eq!(message.encode(), "\0\0\0");
+
+    // Test with strings containing special characters
+    let mut message = RequestMessage::new();
+    message.push_field(&"hello\nworld");
+    message.push_field(&"tab\there");
+    message.push_field(&"null\0byte"); // This should only encode up to the null byte
+    assert_eq!(message.fields.len(), 3);
+}
+
+#[test]
+fn test_channel_mappings_completeness() {
+    use super::shared_channel_configuration::CHANNEL_MAPPINGS;
+
+    // Verify that each mapping has at least one response
+    for mapping in CHANNEL_MAPPINGS {
+        assert!(
+            !mapping.responses.is_empty(),
+            "Channel mapping for {:?} has no responses",
+            mapping.request
+        );
+    }
+
+    // Test specific known mappings
+    let mappings = CHANNEL_MAPPINGS;
+    
+    // Find RequestPositions mapping
+    let positions_mapping = mappings
+        .iter()
+        .find(|m| matches!(m.request, OutgoingMessages::RequestPositions))
+        .expect("RequestPositions mapping should exist");
+    
+    assert_eq!(positions_mapping.responses.len(), 2);
+    assert!(positions_mapping.responses.contains(&IncomingMessages::Position));
+    assert!(positions_mapping.responses.contains(&IncomingMessages::PositionEnd));
+
+    // Find RequestAccountData mapping
+    let account_data_mapping = mappings
+        .iter()
+        .find(|m| matches!(m.request, OutgoingMessages::RequestAccountData))
+        .expect("RequestAccountData mapping should exist");
+    
+    assert_eq!(account_data_mapping.responses.len(), 4);
+    assert!(account_data_mapping.responses.contains(&IncomingMessages::AccountValue));
+    assert!(account_data_mapping.responses.contains(&IncomingMessages::PortfolioValue));
+    assert!(account_data_mapping.responses.contains(&IncomingMessages::AccountDownloadEnd));
+    assert!(account_data_mapping.responses.contains(&IncomingMessages::AccountUpdateTime));
+}
+
+#[test]
+fn test_notice_edge_cases() {
+    struct TestCase {
+        name: &'static str,
+        input: &'static str,
+        expected_code: i32,
+        expected_message: &'static str,
+    }
+
+    let test_cases = vec![
+        TestCase {
+            name: "normal_error",
+            input: "4\02\0-1\02107\0HMDS data farm connection is inactive.\0",
+            expected_code: 2107,
+            expected_message: "HMDS data farm connection is inactive.",
+        },
+        TestCase {
+            name: "empty_message",
+            input: "4\02\0-1\01000\0\0",
+            expected_code: 1000,
+            expected_message: "",
+        },
+        TestCase {
+            name: "negative_code",
+            input: "4\02\0-1\0-500\0Negative error code\0",
+            expected_code: -500,
+            expected_message: "Negative error code",
+        },
+    ];
+
+    for test_case in test_cases {
+        let message = ResponseMessage::from(test_case.input);
+        let notice = Notice::from(&message);
+        
+        assert_eq!(
+            notice.code, test_case.expected_code,
+            "Test '{}' failed: wrong error code",
+            test_case.name
+        );
+        assert_eq!(
+            notice.message, test_case.expected_message,
+            "Test '{}' failed: wrong error message",
+            test_case.name
+        );
+    }
+}
+
+#[test]
+fn test_all_incoming_message_conversions() {
+    // Test boundary values and ensure all message types are covered
+    let test_cases = vec![
+        (0, IncomingMessages::NotValid),
+        (1, IncomingMessages::TickPrice),
+        (108, IncomingMessages::NotValid),
+        (109, IncomingMessages::NotValid),
+        (i32::MAX, IncomingMessages::NotValid),
+        (i32::MIN, IncomingMessages::NotValid),
+        (-1, IncomingMessages::NotValid),
+    ];
+
+    for (value, expected) in test_cases {
+        assert_eq!(
+            IncomingMessages::from(value),
+            expected,
+            "Failed for value {}",
+            value
+        );
+    }
+}
+
+#[test]
+fn test_outgoing_message_display() {
+    // Test Display implementation for OutgoingMessages
+    let test_cases = vec![
+        (OutgoingMessages::RequestMarketData, "1"),
+        (OutgoingMessages::CancelMarketData, "2"),
+        (OutgoingMessages::PlaceOrder, "3"),
+        (OutgoingMessages::CancelOrder, "4"),
+        (OutgoingMessages::RequestOpenOrders, "5"),
+        (OutgoingMessages::RequestIds, "8"),
+        (OutgoingMessages::RequestCurrentTime, "49"),
+        (OutgoingMessages::RequestAccountSummary, "62"),
+        (OutgoingMessages::RequestPnL, "92"),
+        (OutgoingMessages::RequestUserInfo, "104"),
+    ];
+
+    for (msg, expected) in test_cases {
+        assert_eq!(format!("{}", msg), expected);
+    }
+}
+
+#[test]
+fn test_encode_length_edge_cases() {
+    // Test with various sizes
+    let x255 = "x".repeat(255);
+    let x256 = "x".repeat(256);
+    let x1000 = "x".repeat(1000);
+    
+    let test_cases = vec![
+        ("", 4),                        // Empty string
+        ("x", 5),                       // Single character
+        (x255.as_str(), 259),           // 255 characters
+        (x256.as_str(), 260),           // 256 characters
+        (x1000.as_str(), 1004),         // 1000 characters
+    ];
+
+    for (input, expected_len) in test_cases {
+        let encoded = encode_length(input);
+        assert_eq!(encoded.len(), expected_len);
+        
+        // Verify the encoded length is correct
+        let length_bytes = &encoded[0..4];
+        let decoded_length = u32::from_be_bytes([
+            length_bytes[0],
+            length_bytes[1],
+            length_bytes[2],
+            length_bytes[3],
+        ]);
+        assert_eq!(decoded_length as usize, input.len());
+    }
+}
+
+#[test]
+fn test_response_message_access_patterns() {
+    let message = ResponseMessage::from("5\0123\0field2\0field3\0field4\0");
+    
+    // Test order_id for OpenOrder message
+    assert_eq!(message.order_id(), Some(123));
+    
+    // Test message_type
+    assert_eq!(message.message_type(), IncomingMessages::OpenOrder);
+    
+    // Test multiple peeks don't change state
+    assert_eq!(message.peek_string(2), "field2");
+    assert_eq!(message.peek_string(2), "field2");
+    assert_eq!(message.peek_int(1).unwrap(), 123);
+    assert_eq!(message.peek_int(1).unwrap(), 123);
+    
+    // Test len and is_empty
+    assert_eq!(message.len(), 5);
+    assert!(!message.is_empty());
+}
+
+#[test]
+fn test_response_message_fields_modification() {
+    // Test that ResponseMessage handles field modification correctly
+    let mut message = ResponseMessage::from("1\02\03\0");
+    assert_eq!(message.fields.len(), 3);
+    assert_eq!(message.fields[0], "1");
+    assert_eq!(message.fields[1], "2");
+    assert_eq!(message.fields[2], "3");
+    
+    // Test that we can read fields correctly after creation
+    message.i = 0;
+    assert_eq!(message.next_int().unwrap(), 1);
+    assert_eq!(message.next_int().unwrap(), 2);
+    assert_eq!(message.next_int().unwrap(), 3);
+}
+
+#[test]
+fn test_incoming_messages_equality() {
+    // Test that IncomingMessages enum variants are properly comparable
+    assert_eq!(IncomingMessages::TickPrice, IncomingMessages::TickPrice);
+    assert_ne!(IncomingMessages::TickPrice, IncomingMessages::TickSize);
+    
+    // Test with from conversion
+    assert_eq!(IncomingMessages::from(1), IncomingMessages::TickPrice);
+    assert_eq!(IncomingMessages::from(2), IncomingMessages::TickSize);
+    assert_ne!(IncomingMessages::from(1), IncomingMessages::from(2));
+}
+
+// Additional tests for comprehensive FromStr coverage of OutgoingMessages
+#[test]
+fn test_outgoing_messages_from_str_comprehensive() {
+    use std::str::FromStr;
+    
+    // Table-driven test for all OutgoingMessages variants
+    let test_cases = vec![
+        ("1", OutgoingMessages::RequestMarketData),
+        ("2", OutgoingMessages::CancelMarketData),
+        ("3", OutgoingMessages::PlaceOrder),
+        ("4", OutgoingMessages::CancelOrder),
+        ("5", OutgoingMessages::RequestOpenOrders),
+        ("6", OutgoingMessages::RequestAccountData),
+        ("7", OutgoingMessages::RequestExecutions),
+        ("8", OutgoingMessages::RequestIds),
+        ("9", OutgoingMessages::RequestContractData),
+        ("10", OutgoingMessages::RequestMarketDepth),
+        ("11", OutgoingMessages::CancelMarketDepth),
+        ("12", OutgoingMessages::RequestNewsBulletins),
+        ("13", OutgoingMessages::CancelNewsBulletin),
+        ("14", OutgoingMessages::ChangeServerLog),
+        ("15", OutgoingMessages::RequestAutoOpenOrders),
+        ("16", OutgoingMessages::RequestAllOpenOrders),
+        ("17", OutgoingMessages::RequestManagedAccounts),
+        ("18", OutgoingMessages::RequestFA),
+        ("19", OutgoingMessages::ReplaceFA),
+        ("20", OutgoingMessages::RequestHistoricalData),
+        ("21", OutgoingMessages::ExerciseOptions),
+        ("22", OutgoingMessages::RequestScannerSubscription),
+        ("23", OutgoingMessages::CancelScannerSubscription),
+        ("24", OutgoingMessages::RequestScannerParameters),
+        ("25", OutgoingMessages::CancelHistoricalData),
+        ("49", OutgoingMessages::RequestCurrentTime),
+        ("50", OutgoingMessages::RequestRealTimeBars),
+        ("51", OutgoingMessages::CancelRealTimeBars),
+        ("52", OutgoingMessages::RequestFundamentalData),
+        ("53", OutgoingMessages::CancelFundamentalData),
+        ("54", OutgoingMessages::ReqCalcImpliedVolat),
+        ("55", OutgoingMessages::ReqCalcOptionPrice),
+        ("56", OutgoingMessages::CancelImpliedVolatility),
+        ("57", OutgoingMessages::CancelOptionPrice),
+        ("58", OutgoingMessages::RequestGlobalCancel),
+        ("59", OutgoingMessages::RequestMarketDataType),
+        ("61", OutgoingMessages::RequestPositions),
+        ("62", OutgoingMessages::RequestAccountSummary),
+        ("63", OutgoingMessages::CancelAccountSummary),
+        ("64", OutgoingMessages::CancelPositions),
+        ("65", OutgoingMessages::VerifyRequest),
+        ("66", OutgoingMessages::VerifyMessage),
+        ("67", OutgoingMessages::QueryDisplayGroups),
+        ("68", OutgoingMessages::SubscribeToGroupEvents),
+        ("69", OutgoingMessages::UpdateDisplayGroup),
+        ("70", OutgoingMessages::UnsubscribeFromGroupEvents),
+        ("71", OutgoingMessages::StartApi),
+        ("72", OutgoingMessages::VerifyAndAuthRequest),
+        ("73", OutgoingMessages::VerifyAndAuthMessage),
+        ("74", OutgoingMessages::RequestPositionsMulti),
+        ("75", OutgoingMessages::CancelPositionsMulti),
+        ("76", OutgoingMessages::RequestAccountUpdatesMulti),
+        ("77", OutgoingMessages::CancelAccountUpdatesMulti),
+        ("78", OutgoingMessages::RequestSecurityDefinitionOptionalParameters),
+        ("79", OutgoingMessages::RequestSoftDollarTiers),
+        ("80", OutgoingMessages::RequestFamilyCodes),
+        ("81", OutgoingMessages::RequestMatchingSymbols),
+        ("82", OutgoingMessages::RequestMktDepthExchanges),
+        ("83", OutgoingMessages::RequestSmartComponents),
+        ("84", OutgoingMessages::RequestNewsArticle),
+        ("85", OutgoingMessages::RequestNewsProviders),
+        ("86", OutgoingMessages::RequestHistoricalNews),
+        ("87", OutgoingMessages::RequestHeadTimestamp),
+        ("88", OutgoingMessages::RequestHistogramData),
+        ("89", OutgoingMessages::CancelHistogramData),
+        ("90", OutgoingMessages::CancelHeadTimestamp),
+        ("91", OutgoingMessages::RequestMarketRule),
+        ("92", OutgoingMessages::RequestPnL),
+        ("93", OutgoingMessages::CancelPnL),
+        ("94", OutgoingMessages::RequestPnLSingle),
+        ("95", OutgoingMessages::CancelPnLSingle),
+        ("96", OutgoingMessages::RequestHistoricalTicks),
+        ("97", OutgoingMessages::RequestTickByTickData),
+        ("98", OutgoingMessages::CancelTickByTickData),
+        ("99", OutgoingMessages::RequestCompletedOrders),
+        ("100", OutgoingMessages::RequestWshMetaData),
+        ("101", OutgoingMessages::CancelWshMetaData),
+        ("102", OutgoingMessages::RequestWshEventData),
+        ("103", OutgoingMessages::CancelWshEventData),
+        ("104", OutgoingMessages::RequestUserInfo),
+    ];
+    
+    for (input, expected) in test_cases {
+        let result = OutgoingMessages::from_str(input).unwrap();
+        assert_eq!(result, expected, "Failed to parse '{}' as {:?}", input, expected);
+    }
+    
+    // Test invalid cases
+    assert!(OutgoingMessages::from_str("105").is_err());
+    assert!(OutgoingMessages::from_str("999").is_err());
+    assert!(OutgoingMessages::from_str("-1").is_err());
+    assert!(OutgoingMessages::from_str("abc").is_err());
+    assert!(OutgoingMessages::from_str("").is_err());
+}
+
+#[test]
+fn test_request_id_index_comprehensive() {
+    // Test message types with request_id at different indices
+    assert_eq!(request_id_index(IncomingMessages::MarketDepthL2), Some(2));
+    assert_eq!(request_id_index(IncomingMessages::TickEFP), Some(2));
+    assert_eq!(request_id_index(IncomingMessages::TickReqParams), Some(1));
+    assert_eq!(request_id_index(IncomingMessages::TickSnapshotEnd), Some(2));
+    
+    // Test message types without request_id
+    assert_eq!(request_id_index(IncomingMessages::ManagedAccounts), None);
+    assert_eq!(request_id_index(IncomingMessages::NextValidId), None);
+    assert_eq!(request_id_index(IncomingMessages::CurrentTime), None);
+}
+
+#[test]
+fn test_response_message_error_paths() {
+    // Test empty message type detection
+    let empty_msg = ResponseMessage::default();
+    assert_eq!(empty_msg.message_type(), IncomingMessages::NotValid);
+    
+    // Test parsing errors for optional types
+    let mut msg = ResponseMessage::from("test\0not_a_number\0");
+    msg.i = 1;
+    assert!(msg.next_optional_int().is_err());
+    
+    msg.i = 1;
+    assert!(msg.next_optional_long().is_err());
+    
+    msg.i = 1;
+    assert!(msg.next_optional_double().is_err());
+    
+    // Test empty timestamp error
+    let mut msg = ResponseMessage::from("test\0\0");
+    msg.i = 1;
+    assert!(msg.next_date_time().is_err());
+    
+    // Test invalid timestamp parsing
+    let mut msg = ResponseMessage::from("test\0not_a_timestamp\0");
+    msg.i = 1;
+    assert!(msg.next_date_time().is_err());
+    
+    // Test timestamp conversion error (out of range)
+    let mut msg = ResponseMessage::from("test\099999999999999999999\0");
+    msg.i = 1;
+    let result = msg.next_date_time();
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_response_message_special_double_values() {
+    // Test parsing Infinity
+    let mut msg = ResponseMessage::from("test\0Infinity\0");
+    msg.i = 1;
+    let result = msg.next_optional_double().unwrap();
+    assert_eq!(result, Some(f64::INFINITY));
+    
+    // Test parsing empty as 0.0
+    let mut msg = ResponseMessage::from("test\0\0");
+    msg.i = 1;
+    let result = msg.next_double().unwrap();
+    assert_eq!(result, 0.0);
+    
+    // Test parsing "0" as 0.0
+    let mut msg = ResponseMessage::from("test\00\0");
+    msg.i = 1;
+    let result = msg.next_double().unwrap();
+    assert_eq!(result, 0.0);
+    
+    // Test parsing "0.0" as 0.0
+    let mut msg = ResponseMessage::from("test\00.0\0");
+    msg.i = 1;
+    let result = msg.next_double().unwrap();
+    assert_eq!(result, 0.0);
+}
