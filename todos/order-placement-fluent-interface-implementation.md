@@ -41,6 +41,7 @@ Different order types are available for different products:
 ### Basic Usage Examples
 
 ```rust
+// No import needed - order() method is directly available on Client
 // Simple market order
 let order_id: OrderId = client.order(&contract)
     .buy(100)
@@ -1235,40 +1236,113 @@ pub fn validate_stop_price(
 }
 ```
 
-#### 4. Client Extension Methods
+#### 4. Client Direct Methods
 
 ```rust
-// src/orders/builder/common.rs
+// In src/client/sync.rs
 
 use crate::contracts::Contract;
+use crate::orders::builder::{OrderBuilder, OrderId, BracketOrderIds};
 
-/// Extension trait for Client to provide fluent order API
-pub trait OrderBuilderExt {
-    type Builder;
-    
+impl Client {
     /// Start building an order for the given contract
-    fn order<'a>(&'a self, contract: &'a Contract) -> Self::Builder;
-}
-
-// Sync implementation
-#[cfg(feature = "sync")]
-impl OrderBuilderExt for crate::client::sync::Client {
-    type Builder = OrderBuilder<'_, Self>;
-    
-    fn order<'a>(&'a self, contract: &'a Contract) -> Self::Builder {
+    /// 
+    /// This is the primary API for creating orders, providing a fluent interface
+    /// that guides you through the order creation process.
+    /// 
+    /// # Example
+    /// ```rust
+    /// let order_id = client.order(&contract)
+    ///     .buy(100)
+    ///     .limit(50.0)
+    ///     .submit()?;
+    /// ```
+    pub fn order<'a>(&'a self, contract: &'a Contract) -> OrderBuilder<'a, Self> {
         OrderBuilder::new(self, contract)
+    }
+    
+    /// Submit multiple OCA (One-Cancels-All) orders
+    /// 
+    /// When one order in the group is filled, all others are automatically cancelled.
+    /// 
+    /// # Example
+    /// ```rust
+    /// let orders = vec![
+    ///     client.order(&contract1).buy(100).limit(50.0).oca_group("MyOCA", 1).build()?,
+    ///     client.order(&contract2).buy(100).limit(45.0).oca_group("MyOCA", 1).build()?,
+    /// ];
+    /// let order_ids = client.submit_oca_orders(orders)?;
+    /// ```
+    pub fn submit_oca_orders(&self, orders: Vec<Order>) -> Result<Vec<OrderId>, Error> {
+        let mut order_ids = Vec::new();
+        let base_id = self.next_order_id();
+        
+        for (i, order) in orders.iter().enumerate() {
+            let order_id = base_id + i as i32;
+            order_ids.push(OrderId::new(order_id));
+            // Note: contract would need to be stored in Order or passed separately
+            // This is a simplified example - actual implementation would need adjustment
+            self.submit_order(order_id, &order.contract, order)?;
+        }
+        
+        Ok(order_ids)
     }
 }
 
-// Async implementation
-#[cfg(feature = "async")]
-impl OrderBuilderExt for crate::client::r#async::Client {
-    type Builder = OrderBuilder<'_, Self>;
-    
-    fn order<'a>(&'a self, contract: &'a Contract) -> Self::Builder {
+// In src/client/async.rs
+
+use crate::contracts::Contract;
+use crate::orders::builder::{OrderBuilder, OrderId, BracketOrderIds};
+
+impl Client {
+    /// Start building an order for the given contract
+    /// 
+    /// This is the primary API for creating orders, providing a fluent interface
+    /// that guides you through the order creation process.
+    /// 
+    /// # Example
+    /// ```rust
+    /// let order_id = client.order(&contract)
+    ///     .buy(100)
+    ///     .limit(50.0)
+    ///     .submit().await?;
+    /// ```
+    pub fn order<'a>(&'a self, contract: &'a Contract) -> OrderBuilder<'a, Self> {
         OrderBuilder::new(self, contract)
     }
+    
+    /// Submit multiple OCA (One-Cancels-All) orders
+    /// 
+    /// When one order in the group is filled, all others are automatically cancelled.
+    /// 
+    /// # Example
+    /// ```rust
+    /// let orders = vec![
+    ///     client.order(&contract1).buy(100).limit(50.0).oca_group("MyOCA", 1).build()?,
+    ///     client.order(&contract2).buy(100).limit(45.0).oca_group("MyOCA", 1).build()?,
+    /// ];
+    /// let order_ids = client.submit_oca_orders(orders).await?;
+    /// ```
+    pub async fn submit_oca_orders(&self, orders: Vec<Order>) -> Result<Vec<OrderId>, Error> {
+        let mut order_ids = Vec::new();
+        let base_id = self.next_order_id().await;
+        
+        for (i, order) in orders.iter().enumerate() {
+            let order_id = base_id + i as i32;
+            order_ids.push(OrderId::new(order_id));
+            // Note: contract would need to be stored in Order or passed separately
+            // This is a simplified example - actual implementation would need adjustment
+            self.submit_order(order_id, &order.contract, order).await?;
+        }
+        
+        Ok(order_ids)
+    }
 }
+
+#### 5. Submit Methods on OrderBuilder
+
+```rust
+// In src/orders/builder/order_builder.rs
 
 // Sync submit implementation
 #[cfg(feature = "sync")]
@@ -1671,7 +1745,7 @@ mod tests {
 #[cfg(test)]
 mod integration_tests {
     use rust_ibapi::contracts::Contract;
-    use rust_ibapi::orders::builder::OrderBuilderExt;
+    // No need to import extension trait - order() is directly on Client
     
     #[test]
     #[cfg(feature = "sync")]
@@ -1722,11 +1796,12 @@ mod integration_tests {
 5. Write tests for advanced features
 
 ### Phase 4: Client Integration (Week 4)
-1. Add OrderBuilderExt trait
-2. Implement sync submit methods
-3. Implement async submit methods
-4. Create integration tests
-5. Update documentation and examples
+1. Add direct order() method to Client structs
+2. Implement sync submit methods on OrderBuilder
+3. Implement async submit methods on OrderBuilder
+4. Implement submit_oca_orders() helper method
+5. Create integration tests
+6. Update documentation and examples
 
 ### Phase 5: Documentation and Polish (Week 5)
 1. Write comprehensive documentation
