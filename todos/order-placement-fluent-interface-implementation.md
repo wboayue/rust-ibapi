@@ -4,6 +4,28 @@
 
 This document provides a comprehensive design and implementation plan for adding a fluent interface to the order placement API in rust-ibapi. The fluent interface will provide a more intuitive, type-safe, and discoverable API for creating and submitting orders while maintaining full backward compatibility with the existing API.
 
+## Important Notes and Limitations
+
+### Exchange-Specific Features
+- **Hidden Orders**: Only work for NASDAQ-routed orders. Will have no effect on other exchanges.
+- **Block Orders**: Specific to ISE exchange for options (minimum 50 contracts).
+- **Box Top Orders**: Only available on BOX exchange.
+- **Midprice Orders**: Requires TWS 975+ and only works for US stocks with Smart routing.
+
+### Product-Specific Order Types
+Different order types are available for different products:
+- **Stocks (STK)**: Most order types supported
+- **Options (OPT)**: Supports auction orders, block orders, volatility orders
+- **Futures (FUT)**: Supports market with protection, stop with protection
+- **Forex (CASH)**: Supports cash quantity orders instead of share quantity
+- **Bonds (BOND)**: Limited order type support
+
+### Order Type Requirements
+- **Discretionary Orders**: Only for stocks (STK)
+- **Sweep to Fill**: Only for CFD, STK, WAR
+- **Pegged Orders**: Varies by type (see specific method documentation)
+- **Volatility Orders**: Only for US options (FOP, OPT)
+
 ## Design Goals
 
 1. **Better Discoverability**: IDE autocomplete guides users through available options
@@ -37,7 +59,25 @@ let order_id: OrderId = client.order(&contract)
     .buy(100)
     .limit(50.0)
     .outside_rth()
-    .hidden()
+    .hidden()  // Note: Only works for NASDAQ-routed orders
+    .submit()?;
+
+// Market if Touched order
+let order_id: OrderId = client.order(&contract)
+    .buy(100)
+    .market_if_touched(45.0)  // Trigger when price drops to 45
+    .submit()?;
+
+// Discretionary order with hidden price improvement
+let order_id: OrderId = client.order(&contract)
+    .buy(100)
+    .discretionary(50.0, 0.10)  // Limit 50.0 with 0.10 discretion
+    .submit()?;
+
+// Sweep to Fill for fast execution
+let order_id: OrderId = client.order(&contract)
+    .sell(500)
+    .sweep_to_fill(49.95)
     .submit()?;
 
 // Bracket order (creates parent + take profit + stop loss orders)
@@ -53,6 +93,13 @@ let bracket_ids: BracketOrderIds = client.order(&contract)
 println!("Parent order: {}", bracket_ids.parent);
 println!("Take profit order: {}", bracket_ids.take_profit);
 println!("Stop loss order: {}", bracket_ids.stop_loss);
+
+// One-Cancels-All (OCA) order group
+let oca_orders = vec![
+    client.order(&contract1).buy(100).limit(50.0).oca_group("MyOCA", 1).build()?,
+    client.order(&contract2).buy(100).limit(45.0).oca_group("MyOCA", 1).build()?,
+];
+let order_ids = client.submit_oca_orders(oca_orders)?;
 
 // What-if order (for margin/commission calculation)
 let analysis = client.order(&contract)
@@ -245,49 +292,138 @@ impl TimeInForce {
     }
 }
 
-/// Order types
+/// Order types supported by Interactive Brokers
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OrderType {
+    // Basic Orders
     Market,
     Limit,
     Stop,
     StopLimit,
+    
+    // Trailing Orders
     TrailingStop,
     TrailingStopLimit,
+    
+    // Time-based Orders
     MarketOnClose,
     LimitOnClose,
     MarketOnOpen,
     LimitOnOpen,
+    AtAuction,  // MTL with AUC time in force
+    
+    // Touched Orders
+    MarketIfTouched,
+    LimitIfTouched,
+    
+    // Protected Orders
+    MarketWithProtection,
+    StopWithProtection,
+    
+    // Market Variants
+    MarketToLimit,
+    Midprice,
+    
+    // Pegged Orders
     PeggedToMarket,
     PeggedToStock,
     PeggedToMidpoint,
+    PeggedToBenchmark,
+    PegBest,
+    
+    // Relative Orders
+    Relative,
+    PassiveRelative,
+    
+    // Special Orders
     Volatility,
     BoxTop,
     AuctionLimit,
     AuctionRelative,
+    
+    // Combo Orders (special handling required)
+    ComboLimit,
+    ComboMarket,
+    RelativeLimitCombo,
+    RelativeMarketCombo,
 }
 
 impl OrderType {
     pub fn as_str(&self) -> &str {
         match self {
+            // Basic Orders
             Self::Market => "MKT",
             Self::Limit => "LMT",
             Self::Stop => "STP",
             Self::StopLimit => "STP LMT",
+            
+            // Trailing Orders
             Self::TrailingStop => "TRAIL",
             Self::TrailingStopLimit => "TRAIL LIMIT",
+            
+            // Time-based Orders
             Self::MarketOnClose => "MOC",
             Self::LimitOnClose => "LOC",
             Self::MarketOnOpen => "MKT",
             Self::LimitOnOpen => "LMT",
+            Self::AtAuction => "MTL",
+            
+            // Touched Orders
+            Self::MarketIfTouched => "MIT",
+            Self::LimitIfTouched => "LIT",
+            
+            // Protected Orders
+            Self::MarketWithProtection => "MKT PRT",
+            Self::StopWithProtection => "STP PRT",
+            
+            // Market Variants
+            Self::MarketToLimit => "MTL",
+            Self::Midprice => "MIDPRICE",
+            
+            // Pegged Orders
             Self::PeggedToMarket => "PEG MKT",
             Self::PeggedToStock => "PEG STK",
             Self::PeggedToMidpoint => "PEG MID",
+            Self::PeggedToBenchmark => "PEG BENCH",
+            Self::PegBest => "PEG BEST",
+            
+            // Relative Orders
+            Self::Relative => "REL",
+            Self::PassiveRelative => "PASSV REL",
+            
+            // Special Orders
             Self::Volatility => "VOL",
             Self::BoxTop => "BOX TOP",
             Self::AuctionLimit => "LMT",
             Self::AuctionRelative => "REL",
+            
+            // Combo Orders
+            Self::ComboLimit => "LMT",
+            Self::ComboMarket => "MKT",
+            Self::RelativeLimitCombo => "REL + LMT",
+            Self::RelativeMarketCombo => "REL + MKT",
         }
+    }
+    
+    /// Returns true if this order type requires a limit price
+    pub fn requires_limit_price(&self) -> bool {
+        matches!(self, 
+            Self::Limit | Self::StopLimit | Self::LimitOnClose | 
+            Self::LimitOnOpen | Self::LimitIfTouched | Self::AuctionLimit |
+            Self::ComboLimit | Self::RelativeLimitCombo | Self::AtAuction |
+            Self::Midprice | Self::TrailingStopLimit
+        )
+    }
+    
+    /// Returns true if this order type requires a stop/aux price
+    pub fn requires_aux_price(&self) -> bool {
+        matches!(self,
+            Self::Stop | Self::StopLimit | Self::MarketIfTouched |
+            Self::LimitIfTouched | Self::StopWithProtection |
+            Self::TrailingStop | Self::TrailingStopLimit |
+            Self::Relative | Self::PassiveRelative | Self::AuctionRelative |
+            Self::PeggedToMarket
+        )
     }
 }
 
@@ -348,7 +484,7 @@ pub struct OrderBuilder<'a, C> {
     stop_price: Option<f64>,   // Store raw value, validate in build()
     time_in_force: TimeInForce,
     outside_rth: bool,
-    hidden: bool,
+    hidden: bool,  // Note: Only works for NASDAQ-routed orders
     transmit: bool,
     parent_id: Option<i32>,
     oca_group: Option<String>,
@@ -360,14 +496,58 @@ pub struct OrderBuilder<'a, C> {
     algo_strategy: Option<String>,
     algo_params: Vec<TagValue>,
     what_if: bool,
+    
     // Advanced fields
     discretionary_amt: Option<f64>,
     trailing_percent: Option<f64>,
     trail_stop_price: Option<f64>,  // Store raw value, validate in build()
+    limit_price_offset: Option<f64>,  // For trailing stop limit orders
     volatility: Option<f64>,
     volatility_type: Option<i32>,
     delta: Option<f64>,
     aux_price: Option<f64>,
+    
+    // Special order flags
+    sweep_to_fill: bool,
+    block_order: bool,
+    not_held: bool,
+    all_or_none: bool,
+    
+    // Pegged order fields
+    min_trade_qty: Option<i32>,
+    min_compete_size: Option<i32>,
+    compete_against_best_offset: Option<f64>,
+    mid_offset_at_whole: Option<f64>,
+    mid_offset_at_half: Option<f64>,
+    
+    // Reference contract fields (for pegged to benchmark)
+    reference_contract_id: Option<i32>,
+    reference_exchange: Option<String>,
+    stock_ref_price: Option<f64>,
+    stock_range_lower: Option<f64>,
+    stock_range_upper: Option<f64>,
+    reference_change_amount: Option<f64>,
+    pegged_change_amount: Option<f64>,
+    is_pegged_change_amount_decrease: bool,
+    
+    // Combo order fields
+    order_combo_legs: Vec<OrderComboLeg>,
+    smart_combo_routing_params: Vec<TagValue>,
+    
+    // Cash quantity for FX orders
+    cash_qty: Option<f64>,
+    
+    // Manual order time
+    manual_order_time: Option<String>,
+    
+    // Auction strategy
+    auction_strategy: Option<i32>,
+    
+    // Starting price for certain order types
+    starting_price: Option<f64>,
+    
+    // Hedge type for FX hedge orders
+    hedge_type: Option<String>,
 }
 
 impl<'a, C> OrderBuilder<'a, C> {
@@ -398,10 +578,35 @@ impl<'a, C> OrderBuilder<'a, C> {
             discretionary_amt: None,
             trailing_percent: None,
             trail_stop_price: None,
+            limit_price_offset: None,
             volatility: None,
             volatility_type: None,
             delta: None,
             aux_price: None,
+            sweep_to_fill: false,
+            block_order: false,
+            not_held: false,
+            all_or_none: false,
+            min_trade_qty: None,
+            min_compete_size: None,
+            compete_against_best_offset: None,
+            mid_offset_at_whole: None,
+            mid_offset_at_half: None,
+            reference_contract_id: None,
+            reference_exchange: None,
+            stock_ref_price: None,
+            stock_range_lower: None,
+            stock_range_upper: None,
+            reference_change_amount: None,
+            pegged_change_amount: None,
+            is_pegged_change_amount_decrease: false,
+            order_combo_legs: Vec::new(),
+            smart_combo_routing_params: Vec::new(),
+            cash_qty: None,
+            manual_order_time: None,
+            auction_strategy: None,
+            starting_price: None,
+            hedge_type: None,
         }
     }
 
@@ -456,6 +661,99 @@ impl<'a, C> OrderBuilder<'a, C> {
         self.order_type = Some(OrderType::TrailingStop);
         self.trailing_percent = Some(trailing_percent);
         self.trail_stop_price = Some(stop_price.into());
+        self
+    }
+    
+    /// Create a trailing stop limit order
+    pub fn trailing_stop_limit(mut self, trailing_percent: f64, stop_price: impl Into<f64>, limit_offset: f64) -> Self {
+        self.order_type = Some(OrderType::TrailingStopLimit);
+        self.trailing_percent = Some(trailing_percent);
+        self.trail_stop_price = Some(stop_price.into());
+        self.limit_price_offset = Some(limit_offset);
+        self
+    }
+    
+    /// Market if Touched - triggers market order when price is touched
+    /// For buy orders, triggers when price falls to or below the trigger price.
+    /// For sell orders, triggers when price rises to or above the trigger price.
+    pub fn market_if_touched(mut self, trigger_price: impl Into<f64>) -> Self {
+        self.order_type = Some(OrderType::MarketIfTouched);
+        self.aux_price = Some(trigger_price.into());
+        self
+    }
+    
+    /// Limit if Touched - triggers limit order when price is touched
+    pub fn limit_if_touched(mut self, trigger_price: impl Into<f64>, limit_price: impl Into<f64>) -> Self {
+        self.order_type = Some(OrderType::LimitIfTouched);
+        self.aux_price = Some(trigger_price.into());
+        self.limit_price = Some(limit_price.into());
+        self
+    }
+    
+    /// Market to Limit - starts as market order, remainder becomes limit
+    pub fn market_to_limit(mut self) -> Self {
+        self.order_type = Some(OrderType::MarketToLimit);
+        self
+    }
+    
+    /// Discretionary order - limit order with hidden discretionary amount
+    /// Products: STK
+    pub fn discretionary(mut self, limit_price: impl Into<f64>, discretionary_amt: f64) -> Self {
+        self.order_type = Some(OrderType::Limit);
+        self.limit_price = Some(limit_price.into());
+        self.discretionary_amt = Some(discretionary_amt);
+        self
+    }
+    
+    /// Sweep to Fill - prioritizes speed of execution over price
+    /// Products: CFD, STK, WAR
+    pub fn sweep_to_fill(mut self, limit_price: impl Into<f64>) -> Self {
+        self.order_type = Some(OrderType::Limit);
+        self.limit_price = Some(limit_price.into());
+        self.sweep_to_fill = true;
+        self
+    }
+    
+    /// Block order - for large volume option orders (min 50 contracts)
+    /// Products: OPT (ISE exchange)
+    pub fn block(mut self, limit_price: impl Into<f64>) -> Self {
+        self.order_type = Some(OrderType::Limit);
+        self.limit_price = Some(limit_price.into());
+        self.block_order = true;
+        self
+    }
+    
+    /// Midprice order - fills at midpoint between bid/ask or better
+    /// Requires TWS 975+. Smart-routing to US stocks only.
+    pub fn midprice(mut self, price_cap: impl Into<f64>) -> Self {
+        self.order_type = Some(OrderType::Midprice);
+        self.limit_price = Some(price_cap.into());
+        self
+    }
+    
+    /// Relative/Pegged-to-Primary - seeks more aggressive price than NBBO
+    /// Products: CFD, STK, OPT, FUT
+    pub fn relative(mut self, offset: f64, price_cap: Option<f64>) -> Self {
+        self.order_type = Some(OrderType::Relative);
+        self.aux_price = Some(offset);
+        self.limit_price = price_cap;
+        self
+    }
+    
+    /// Passive Relative - seeks less aggressive price than NBBO
+    /// Products: STK, WAR
+    pub fn passive_relative(mut self, offset: f64) -> Self {
+        self.order_type = Some(OrderType::PassiveRelative);
+        self.aux_price = Some(offset);
+        self
+    }
+    
+    /// At Auction - for pre-market opening period execution
+    /// Products: FUT, STK
+    pub fn at_auction(mut self, price: impl Into<f64>) -> Self {
+        self.order_type = Some(OrderType::AtAuction);
+        self.limit_price = Some(price.into());
+        self.time_in_force = TimeInForce::Auction;
         self
     }
     
@@ -521,7 +819,10 @@ impl<'a, C> OrderBuilder<'a, C> {
     
     // Order attributes
     
-    /// Hide order from market depth
+    /// Hide order from market depth (only works for NASDAQ-routed orders)
+    /// 
+    /// This option only applies to orders routed to the NASDAQ exchange.
+    /// It will have no effect on orders routed to other exchanges.
     pub fn hidden(mut self) -> Self {
         self.hidden = true;
         self
@@ -1478,11 +1779,38 @@ Users can migrate gradually:
 
 ## Future Enhancements
 
+### Phase 1 - Near Term
+1. **Specialized Combo Order Builder**: Dedicated builder for complex combo orders
+   ```rust
+   let combo = client.combo_order()
+       .add_leg(contract1, Action::Buy, 100, Some(50.0))
+       .add_leg(contract2, Action::Sell, 100, Some(45.0))
+       .non_guaranteed()
+       .submit()?;
+   ```
+
+2. **OCA Order Group Builder**: Simplified API for One-Cancels-All orders
+   ```rust
+   let oca_group = client.oca_group("MyGroup")
+       .add(order1)
+       .add(order2)
+       .oca_type(OCAType::CancelWithBlock)
+       .submit_all()?;
+   ```
+
+3. **Additional Order Types**: Support for remaining specialized orders
+   - Adjustable orders (attach_adjustable_to_stop, etc.)
+   - Pegged to Benchmark orders
+   - FX Hedge orders
+   - IBKRATS orders
+
+### Phase 2 - Long Term
 1. **Macro support**: Declarative order creation with macros
 2. **Template orders**: Save and reuse common order configurations
 3. **Strategy builders**: Higher-level strategy abstractions
 4. **Real-time validation**: Validate against market data
 5. **Order modification builder**: Fluent API for modifying existing orders
+6. **Conditional Order Builder**: Complex conditional order chains
 
 ## Conclusion
 
