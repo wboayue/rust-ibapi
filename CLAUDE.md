@@ -81,7 +81,7 @@ cargo clippy --features async
 # Run all tests
 just test
 
-# Generate coverage report
+# Generate coverage report (opens HTML report in browser)
 just cover
 ```
 

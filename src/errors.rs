@@ -8,6 +8,7 @@ use thiserror::Error;
 
 use crate::market_data::historical::HistoricalParseError;
 use crate::messages::{ResponseMessage, CODE_INDEX, MESSAGE_INDEX};
+use crate::orders::builder::ValidationError;
 
 /// The main error type for IBAPI operations.
 ///
@@ -112,6 +113,24 @@ impl From<ResponseMessage> for Error {
 impl<T> From<std::sync::PoisonError<T>> for Error {
     fn from(err: std::sync::PoisonError<T>) -> Error {
         Error::Poison(format!("Mutex poison error: {err}"))
+    }
+}
+
+impl From<ValidationError> for Error {
+    fn from(err: ValidationError) -> Self {
+        match err {
+            ValidationError::InvalidQuantity(q) => Error::InvalidArgument(format!("Invalid quantity: {}", q)),
+            ValidationError::InvalidPrice(p) => Error::InvalidArgument(format!("Invalid price: {}", p)),
+            ValidationError::MissingRequiredField(field) => Error::InvalidArgument(format!("Missing required field: {}", field)),
+            ValidationError::InvalidCombination(msg) => Error::InvalidArgument(format!("Invalid combination: {}", msg)),
+            ValidationError::InvalidStopPrice { stop, current } => {
+                Error::InvalidArgument(format!("Invalid stop price {} for current price {}", stop, current))
+            }
+            ValidationError::InvalidLimitPrice { limit, current } => {
+                Error::InvalidArgument(format!("Invalid limit price {} for current price {}", limit, current))
+            }
+            ValidationError::InvalidBracketOrder(msg) => Error::InvalidArgument(format!("Invalid bracket order: {}", msg)),
+        }
     }
 }
 
