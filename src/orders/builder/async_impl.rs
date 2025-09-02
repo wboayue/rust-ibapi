@@ -2,7 +2,9 @@ use super::{BracketOrderBuilder, BracketOrderIds, OrderBuilder, OrderId};
 use crate::client::r#async::Client;
 use crate::errors::Error;
 use crate::orders;
-use futures::StreamExt;
+
+#[cfg(test)]
+mod tests;
 
 impl<'a> OrderBuilder<'a, Client> {
     /// Submit the order asynchronously
@@ -88,7 +90,7 @@ impl Client {
     /// # Example
     /// ```no_run
     /// use ibapi::Client;
-    /// use ibapi::contracts::Contract;
+    /// use ibapi::contracts::{Contract, SecurityType};
     ///
     /// #[tokio::main]
     /// async fn main() {
@@ -96,13 +98,13 @@ impl Client {
     ///     
     ///     let mut contract1 = Contract::default();
     ///     contract1.symbol = "AAPL".to_string();
-    ///     contract1.sec_type = "STK".to_string();
+    ///     contract1.security_type = SecurityType::Stock;
     ///     contract1.exchange = "SMART".to_string();
     ///     contract1.currency = "USD".to_string();
     ///     
     ///     let mut contract2 = Contract::default();
     ///     contract2.symbol = "MSFT".to_string();
-    ///     contract2.sec_type = "STK".to_string();
+    ///     contract2.security_type = SecurityType::Stock;
     ///     contract2.exchange = "SMART".to_string();
     ///     contract2.currency = "USD".to_string();
     ///

@@ -4,6 +4,9 @@ use crate::contracts::Contract;
 use crate::market_data::TradingHours;
 use crate::orders::{Action, Order, OrderComboLeg, OrderCondition, TagValue};
 
+#[cfg(test)]
+mod tests;
+
 /// Builder for creating orders with a fluent interface
 ///
 /// All validation is deferred to the build() method to ensure
@@ -743,79 +746,5 @@ impl<'a, C> BracketOrderBuilder<'a, C> {
         stop_loss_order.transmit = true;
 
         Ok(vec![parent, take_profit_order, stop_loss_order])
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn create_test_contract() -> Contract {
-        let mut contract = Contract::default();
-        contract.symbol = "AAPL".to_string();
-        contract.security_type = crate::contracts::SecurityType::Stock;
-        contract.exchange = "SMART".to_string();
-        contract.currency = "USD".to_string();
-        contract
-    }
-
-    fn create_test_builder() -> OrderBuilder<'static, ()> {
-        let contract = Box::leak(Box::new(create_test_contract()));
-        let client = Box::leak(Box::new(()));
-        OrderBuilder::new(client, contract)
-    }
-
-    #[test]
-    fn test_simple_market_buy() {
-        let builder = create_test_builder().buy(100).market();
-
-        let order = builder.build().unwrap();
-        assert_eq!(order.action, Action::Buy);
-        assert_eq!(order.total_quantity, 100.0);
-        assert_eq!(order.order_type, "MKT");
-    }
-
-    #[test]
-    fn test_limit_sell_with_tif() {
-        let builder = create_test_builder().sell(200).limit(150.50).good_till_cancel();
-
-        let order = builder.build().unwrap();
-        assert_eq!(order.action, Action::Sell);
-        assert_eq!(order.total_quantity, 200.0);
-        assert_eq!(order.order_type, "LMT");
-        assert_eq!(order.limit_price, Some(150.50));
-        assert_eq!(order.tif, "GTC");
-    }
-
-    #[test]
-    fn test_stop_limit_order() {
-        let builder = create_test_builder().buy(100).stop_limit(45.0, 45.50).outside_rth();
-
-        let order = builder.build().unwrap();
-        assert_eq!(order.order_type, "STP LMT");
-        assert_eq!(order.aux_price, Some(45.0));
-        assert_eq!(order.limit_price, Some(45.50));
-        assert!(order.outside_rth);
-    }
-
-    #[test]
-    fn test_invalid_quantity() {
-        let builder = create_test_builder().buy(-100).market();
-
-        let result = builder.build();
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), ValidationError::InvalidQuantity(_)));
-    }
-
-    #[test]
-    fn test_missing_required_fields() {
-        let builder = create_test_builder();
-        assert!(builder.build().is_err());
-
-        let builder = create_test_builder().buy(100);
-        assert!(builder.build().is_err());
-
-        let builder = create_test_builder().market();
-        assert!(builder.build().is_err());
     }
 }

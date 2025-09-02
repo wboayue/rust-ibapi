@@ -21,7 +21,7 @@ use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::contracts::Contract;
 use crate::market_data::TradingHours;
-use crate::orders::{BracketOrderIds, OrderBuilder, OrderId};
+use crate::orders::OrderBuilder;
 use crate::subscriptions::Subscription;
 
 /// Asynchronous TWS API Client
@@ -157,14 +157,14 @@ impl Client {
     /// # Example
     /// ```no_run
     /// use ibapi::Client;
-    /// use ibapi::contracts::Contract;
+    /// use ibapi::contracts::{Contract, SecurityType};
     ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///     let mut contract = Contract::default();
     ///     contract.symbol = "AAPL".to_string();
-    ///     contract.sec_type = "STK".to_string();
+    ///     contract.security_type = SecurityType::Stock;
     ///     contract.exchange = "SMART".to_string();
     ///     contract.currency = "USD".to_string();
     ///     
