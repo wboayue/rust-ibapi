@@ -281,6 +281,8 @@ fn main() {
 
 ### Placing Orders
 
+For a comprehensive guide on all supported order types and their usage, see the [Order Types Guide](docs/order-types.md).
+
 #### Sync Example
 
 ```rust
@@ -292,19 +294,25 @@ pub fn main() {
 
     let contract = Contract::stock("AAPL");
 
-    // Creates a market order to purchase 100 shares
-    let order_id = client.next_order_id();
-    let order = order_builder::market_order(Action::Buy, 100.0);
+    // Create and submit a market order to purchase 100 shares using the fluent API
+    let order_id = client.order(&contract)
+        .buy(100)
+        .market()
+        .submit()
+        .expect("order submission failed!");
 
-    let subscription = client.place_order(order_id, &contract, &order).expect("place order request failed!");
+    println!("Order submitted with ID: {}", order_id);
 
-    for event in &subscription {
-        if let PlaceOrder::ExecutionData(data) = event {
-            println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
-        } else {
-            println!("{:?}", event);
-        }
-    }
+    // Example of a more complex order: limit order with time in force
+    let order_id = client.order(&contract)
+        .sell(50)
+        .limit(150.00)
+        .good_till_cancel()
+        .outside_rth()
+        .submit()
+        .expect("order submission failed!");
+
+    println!("Limit order submitted with ID: {}", order_id);
 }
 ```
 
@@ -312,7 +320,6 @@ pub fn main() {
 
 ```rust
 use ibapi::prelude::*;
-use futures::StreamExt;
 
 #[tokio::main]
 async fn main() {
@@ -321,19 +328,29 @@ async fn main() {
 
     let contract = Contract::stock("AAPL");
 
-    // Creates a market order to purchase 100 shares
-    let order_id = client.next_order_id();
-    let order = order_builder::market_order(Action::Buy, 100.0);
+    // Create and submit a market order to purchase 100 shares using the fluent API
+    let order_id = client.order(&contract)
+        .buy(100)
+        .market()
+        .submit()
+        .await
+        .expect("order submission failed!");
 
-    let mut subscription = client.place_order(order_id, &contract, &order).await.expect("place order request failed!");
+    println!("Order submitted with ID: {}", order_id);
 
-    while let Some(event) = subscription.next().await {
-        if let PlaceOrder::ExecutionData(data) = event {
-            println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
-        } else {
-            println!("{:?}", event);
-        }
-    }
+    // Example of a bracket order: entry with take profit and stop loss
+    let bracket_ids = client.order(&contract)
+        .buy(100)
+        .bracket()
+        .entry_limit(150.00)
+        .take_profit(160.00)
+        .stop_loss(145.00)
+        .submit_all()
+        .await
+        .expect("bracket order submission failed!");
+
+    println!("Bracket order IDs - Parent: {}, TP: {}, SL: {}", 
+             bracket_ids.parent, bracket_ids.take_profit, bracket_ids.stop_loss);
 }
 ```
 

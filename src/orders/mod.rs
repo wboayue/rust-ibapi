@@ -33,8 +33,14 @@
 // Common implementation modules
 pub(crate) mod common;
 
-// Re-export order builder
+// Builder module for fluent API
+pub mod builder;
+
+// Re-export order builder functions
 pub use common::order_builder;
+
+// Re-export builder types
+pub use builder::{BracketOrderBuilder, BracketOrderIds, OrderBuilder, OrderId};
 
 use std::convert::From;
 use std::fmt::Debug;

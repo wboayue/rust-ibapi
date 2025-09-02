@@ -23,7 +23,7 @@ use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescriptio
 use crate::market_data::{MarketDataType, TradingHours};
 use crate::messages::{OutgoingMessages, RequestMessage};
 use crate::news::NewsArticle;
-use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, OrderUpdate, Orders, PlaceOrder};
+use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, OrderBuilder, OrderUpdate, Orders, PlaceOrder};
 use crate::scanner::ScannerData;
 use crate::subscriptions::Subscription;
 use crate::transport::{InternalSubscription, MessageBus, TcpMessageBus, TcpSocket};
@@ -139,6 +139,32 @@ impl Client {
     /// Sets the current value of order ID.
     pub(crate) fn set_next_order_id(&self, order_id: i32) {
         self.id_manager.set_order_id(order_id);
+    }
+
+    /// Start building an order for the given contract
+    ///
+    /// This is the primary API for creating orders, providing a fluent interface
+    /// that guides you through the order creation process.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::{Contract, SecurityType};
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let mut contract = Contract::default();
+    /// contract.symbol = "AAPL".to_string();
+    /// contract.security_type = SecurityType::Stock;
+    /// contract.exchange = "SMART".to_string();
+    /// contract.currency = "USD".to_string();
+    ///
+    /// let order_id = client.order(&contract)
+    ///     .buy(100)
+    ///     .limit(50.0)
+    ///     .submit().expect("order submission failed");
+    /// ```
+    pub fn order<'a>(&'a self, contract: &'a Contract) -> OrderBuilder<'a, Self> {
+        OrderBuilder::new(self, contract)
     }
 
     /// Returns the version of the TWS API server to which the client is connected.
