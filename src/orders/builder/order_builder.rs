@@ -541,12 +541,12 @@ impl<'a, C> OrderBuilder<'a, C> {
         }
 
         // Build the order
-        let mut order = Order::default();
-
-        // Set basic fields
-        order.action = action;
-        order.total_quantity = quantity.value();
-        order.order_type = order_type.as_str().to_string();
+        let mut order = Order {
+            action,
+            total_quantity: quantity.value(),
+            order_type: order_type.as_str().to_string(),
+            ..Default::default()
+        };
 
         // Set prices
         if let Some(price) = limit_price {
@@ -660,6 +660,78 @@ impl<'a, C> OrderBuilder<'a, C> {
             order.mid_offset_at_half = Some(offset);
         }
 
+        // Set conditions
+        if !self.conditions.is_empty() {
+            order.conditions = self.conditions;
+        }
+
+        // Set reference contract fields for pegged to benchmark orders
+        if let Some(id) = self.reference_contract_id {
+            order.reference_contract_id = id;
+        }
+
+        if let Some(exchange) = self.reference_exchange {
+            order.reference_exchange = exchange;
+        }
+
+        if let Some(price) = self.stock_ref_price {
+            order.stock_ref_price = Some(price);
+        }
+
+        if let Some(lower) = self.stock_range_lower {
+            order.stock_range_lower = Some(lower);
+        }
+
+        if let Some(upper) = self.stock_range_upper {
+            order.stock_range_upper = Some(upper);
+        }
+
+        if let Some(amount) = self.reference_change_amount {
+            order.reference_change_amount = Some(amount);
+        }
+
+        if let Some(amount) = self.pegged_change_amount {
+            order.pegged_change_amount = Some(amount);
+        }
+
+        if self.is_pegged_change_amount_decrease {
+            order.is_pegged_change_amount_decrease = true;
+        }
+
+        // Set combo order fields
+        if !self.order_combo_legs.is_empty() {
+            order.order_combo_legs = self.order_combo_legs;
+        }
+
+        if !self.smart_combo_routing_params.is_empty() {
+            order.smart_combo_routing_params = self.smart_combo_routing_params;
+        }
+
+        // Set cash quantity for FX orders
+        if let Some(qty) = self.cash_qty {
+            order.cash_qty = Some(qty);
+        }
+
+        // Set manual order time
+        if let Some(time) = self.manual_order_time {
+            order.manual_order_time = time;
+        }
+
+        // Set auction strategy
+        if let Some(strategy) = self.auction_strategy {
+            order.auction_strategy = Some(strategy);
+        }
+
+        // Set starting price
+        if let Some(price) = self.starting_price {
+            order.starting_price = Some(price);
+        }
+
+        // Set hedge type
+        if let Some(hedge_type) = self.hedge_type {
+            order.hedge_type = hedge_type;
+        }
+
         Ok(order)
     }
 }
@@ -728,22 +800,26 @@ impl<'a, C> BracketOrderBuilder<'a, C> {
         parent.transmit = false;
 
         // Build take profit order
-        let mut take_profit_order = Order::default();
-        take_profit_order.action = parent.action.reverse();
-        take_profit_order.order_type = "LMT".to_string();
-        take_profit_order.total_quantity = parent.total_quantity;
-        take_profit_order.limit_price = Some(take_profit.value());
-        take_profit_order.parent_id = parent.order_id;
-        take_profit_order.transmit = false;
+        let take_profit_order = Order {
+            action: parent.action.reverse(),
+            order_type: "LMT".to_string(),
+            total_quantity: parent.total_quantity,
+            limit_price: Some(take_profit.value()),
+            parent_id: parent.order_id,
+            transmit: false,
+            ..Default::default()
+        };
 
         // Build stop loss order
-        let mut stop_loss_order = Order::default();
-        stop_loss_order.action = parent.action.reverse();
-        stop_loss_order.order_type = "STP".to_string();
-        stop_loss_order.total_quantity = parent.total_quantity;
-        stop_loss_order.aux_price = Some(stop_loss.value());
-        stop_loss_order.parent_id = parent.order_id;
-        stop_loss_order.transmit = true;
+        let stop_loss_order = Order {
+            action: parent.action.reverse(),
+            order_type: "STP".to_string(),
+            total_quantity: parent.total_quantity,
+            aux_price: Some(stop_loss.value()),
+            parent_id: parent.order_id,
+            transmit: true,
+            ..Default::default()
+        };
 
         Ok(vec![parent, take_profit_order, stop_loss_order])
     }

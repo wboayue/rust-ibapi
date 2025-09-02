@@ -4,12 +4,13 @@ use crate::market_data::TradingHours;
 use crate::orders::Action;
 
 fn create_test_contract() -> Contract {
-    let mut contract = Contract::default();
-    contract.symbol = "TEST".to_string();
-    contract.security_type = crate::contracts::SecurityType::Stock;
-    contract.exchange = "SMART".to_string();
-    contract.currency = "USD".to_string();
-    contract
+    Contract {
+        symbol: "TEST".to_string(),
+        security_type: crate::contracts::SecurityType::Stock,
+        exchange: "SMART".to_string(),
+        currency: "USD".to_string(),
+        ..Default::default()
+    }
 }
 
 struct MockClient;

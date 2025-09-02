@@ -9,12 +9,13 @@ mod sync_integration_tests {
     use crate::orders::Action;
 
     fn create_stock_contract(symbol: &str) -> Contract {
-        let mut contract = Contract::default();
-        contract.symbol = symbol.to_string();
-        contract.security_type = crate::contracts::SecurityType::Stock;
-        contract.exchange = "SMART".to_string();
-        contract.currency = "USD".to_string();
-        contract
+        Contract {
+            symbol: symbol.to_string(),
+            security_type: crate::contracts::SecurityType::Stock,
+            exchange: "SMART".to_string(),
+            currency: "USD".to_string(),
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -85,12 +86,13 @@ mod async_integration_tests {
     use crate::orders::Action;
 
     fn create_stock_contract(symbol: &str) -> Contract {
-        let mut contract = Contract::default();
-        contract.symbol = symbol.to_string();
-        contract.security_type = crate::contracts::SecurityType::Stock;
-        contract.exchange = "SMART".to_string();
-        contract.currency = "USD".to_string();
-        contract
+        Contract {
+            symbol: symbol.to_string(),
+            security_type: crate::contracts::SecurityType::Stock,
+            exchange: "SMART".to_string(),
+            currency: "USD".to_string(),
+            ..Default::default()
+        }
     }
 
     #[tokio::test]
@@ -129,15 +131,26 @@ pub mod mock_client {
         use crate::orders::{Order, PlaceOrder};
         use std::sync::{Arc, Mutex};
 
+        #[allow(dead_code)]
+        type OcaOrderList = Vec<Vec<(Contract, Order)>>;
+
         /// Mock client for testing OrderBuilder
+        #[allow(dead_code)]
         pub struct MockOrderClient {
             next_order_id: Arc<Mutex<i32>>,
             submitted_orders: Arc<Mutex<Vec<(i32, Contract, Order)>>>,
             place_order_responses: Arc<Mutex<Vec<Vec<PlaceOrder>>>>,
             submit_order_responses: Arc<Mutex<Vec<Result<(), Error>>>>,
-            oca_orders: Arc<Mutex<Vec<Vec<(Contract, Order)>>>>,
+            oca_orders: Arc<Mutex<OcaOrderList>>,
         }
 
+        impl Default for MockOrderClient {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
+
+        #[allow(dead_code)]
         impl MockOrderClient {
             pub fn new() -> Self {
                 Self {
@@ -213,7 +226,7 @@ pub mod async_mock_client {
     pub mod mock {
         use crate::contracts::Contract;
         use crate::errors::Error;
-        use crate::orders::{Order, OrderData, OrderState, OrderStatus, OrderUpdate, PlaceOrder};
+        use crate::orders::{Order, OrderUpdate, PlaceOrder};
         use futures::stream::{self, Stream};
         use std::pin::Pin;
         use std::sync::{Arc, Mutex};
@@ -225,6 +238,12 @@ pub mod async_mock_client {
             place_order_responses: Arc<Mutex<Vec<Vec<PlaceOrder>>>>,
             submit_order_responses: Arc<Mutex<Vec<Result<(), Error>>>>,
             order_update_streams: Arc<Mutex<Vec<Vec<OrderUpdate>>>>,
+        }
+
+        impl Default for AsyncMockClient {
+            fn default() -> Self {
+                Self::new()
+            }
         }
 
         impl AsyncMockClient {

@@ -4,12 +4,13 @@ mod order_builder_tests {
     use ibapi::orders::{Action, OrderBuilder};
 
     fn create_stock_contract(symbol: &str) -> Contract {
-        let mut contract = Contract::default();
-        contract.symbol = symbol.to_string();
-        contract.security_type = ibapi::contracts::SecurityType::Stock;
-        contract.exchange = "SMART".to_string();
-        contract.currency = "USD".to_string();
-        contract
+        Contract {
+            symbol: symbol.to_string(),
+            security_type: ibapi::contracts::SecurityType::Stock,
+            exchange: "SMART".to_string(),
+            currency: "USD".to_string(),
+            ..Default::default()
+        }
     }
 
     #[test]

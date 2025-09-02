@@ -7,12 +7,13 @@ use futures::{Stream, StreamExt};
 use std::pin::Pin;
 
 fn create_stock_contract(symbol: &str) -> Contract {
-    let mut contract = Contract::default();
-    contract.symbol = symbol.to_string();
-    contract.security_type = crate::contracts::SecurityType::Stock;
-    contract.exchange = "SMART".to_string();
-    contract.currency = "USD".to_string();
-    contract
+    Contract {
+        symbol: symbol.to_string(),
+        security_type: crate::contracts::SecurityType::Stock,
+        exchange: "SMART".to_string(),
+        currency: "USD".to_string(),
+        ..Default::default()
+    }
 }
 
 // Mock the orders module functions for testing
@@ -147,12 +148,14 @@ async fn test_async_order_analyze() {
     let contract = create_stock_contract("AAPL");
 
     // Set up a custom response for what-if analysis
-    let mut order_state = OrderState::default();
-    order_state.commission = Some(2.50);
-    order_state.initial_margin_before = Some(20000.00);
-    order_state.initial_margin_after = Some(25000.00);
-    order_state.maintenance_margin_before = Some(15000.00);
-    order_state.maintenance_margin_after = Some(18000.00);
+    let order_state = OrderState {
+        commission: Some(2.50),
+        initial_margin_before: Some(20000.00),
+        initial_margin_after: Some(25000.00),
+        maintenance_margin_before: Some(15000.00),
+        maintenance_margin_after: Some(18000.00),
+        ..Default::default()
+    };
 
     client.add_place_order_response(vec![PlaceOrder::OpenOrder(OrderData {
         order_id: 100,

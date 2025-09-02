@@ -41,6 +41,7 @@ pub fn validate_bracket_prices(action: Option<&Action>, entry: f64, take_profit:
 }
 
 /// Validates stop price relative to current market price
+#[cfg(test)]
 pub fn validate_stop_price(action: &Action, stop_price: f64, current_price: Option<f64>) -> Result<(), ValidationError> {
     if let Some(current) = current_price {
         match action {
