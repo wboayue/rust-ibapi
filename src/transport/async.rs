@@ -224,7 +224,6 @@ impl AsyncTcpMessageBus {
 
         // Start cleanup task
         let request_channels = message_bus.request_channels.clone();
-        let shared_channel_receivers = message_bus.shared_channel_receivers.clone();
         let order_channels = message_bus.order_channels.clone();
 
         task::spawn(async move {
@@ -242,8 +241,9 @@ impl AsyncTcpMessageBus {
                         debug!("Cleaned up order channel for ID: {order_id}");
                     }
                     CleanupSignal::Shared(message_type) => {
-                        let mut channels = shared_channel_receivers.write().await;
-                        channels.remove(&message_type);
+                        // Shared channels are persistent and should not be removed
+                        // They are created at initialization and reused across multiple requests
+                        debug!("Subscription for shared channel {:?} ended (channel remains active)", message_type);
                     }
                 }
             }
