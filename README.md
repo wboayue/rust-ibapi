@@ -20,10 +20,15 @@ The rust-ibapi library requires you to explicitly choose between synchronous (th
 You must specify exactly one feature when using this crate:
 
 ```toml
-# In Cargo.toml, choose one:
+# From crates.io (Note: v2.0 not yet published, use GitHub for now):
 ibapi = { version = "2.0", features = ["sync"] }   # For synchronous API
 # OR
 ibapi = { version = "2.0", features = ["async"] }  # For asynchronous API
+
+# From GitHub (recommended until v2.0 is published):
+ibapi = { git = "https://github.com/wboayue/rust-ibapi", features = ["sync"] }
+# OR
+ibapi = { git = "https://github.com/wboayue/rust-ibapi", features = ["async"] }
 ```
 
 ```bash
