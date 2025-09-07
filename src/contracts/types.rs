@@ -89,38 +89,60 @@ impl fmt::Display for Exchange {
     }
 }
 
-/// Strongly typed currency enum
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum Currency {
-    #[default]
-    USD,
-    EUR,
-    GBP,
-    JPY,
-    CHF,
-    CAD,
-    AUD,
-    Custom(String),
-}
+/// Currency identifier
+/// 
+/// IBKR supports trading in many currencies worldwide. This type provides a lightweight
+/// wrapper around currency codes with constants for commonly used currencies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Currency(pub &'static str);
 
 impl Currency {
+    /// Create a new currency from a static string
+    pub const fn new(s: &'static str) -> Self {
+        Currency(s)
+    }
+
+    /// Get the currency code as a string slice
     pub fn as_str(&self) -> &str {
-        match self {
-            Currency::USD => "USD",
-            Currency::EUR => "EUR",
-            Currency::GBP => "GBP",
-            Currency::JPY => "JPY",
-            Currency::CHF => "CHF",
-            Currency::CAD => "CAD",
-            Currency::AUD => "AUD",
-            Currency::Custom(s) => s,
-        }
+        self.0
+    }
+
+    // Common currency constants
+    pub const USD: Currency = Currency("USD");
+    pub const EUR: Currency = Currency("EUR");
+    pub const GBP: Currency = Currency("GBP");
+    pub const JPY: Currency = Currency("JPY");
+    pub const CHF: Currency = Currency("CHF");
+    pub const CAD: Currency = Currency("CAD");
+    pub const AUD: Currency = Currency("AUD");
+    pub const NZD: Currency = Currency("NZD");
+    pub const HKD: Currency = Currency("HKD");
+    pub const SGD: Currency = Currency("SGD");
+    pub const CNH: Currency = Currency("CNH");  // Offshore RMB
+    pub const KRW: Currency = Currency("KRW");
+    pub const SEK: Currency = Currency("SEK");
+    pub const NOK: Currency = Currency("NOK");
+    pub const DKK: Currency = Currency("DKK");
+    pub const MXN: Currency = Currency("MXN");
+    pub const INR: Currency = Currency("INR");
+    pub const ZAR: Currency = Currency("ZAR");
+}
+
+impl Default for Currency {
+    fn default() -> Self {
+        Currency::USD
+    }
+}
+
+impl From<&'static str> for Currency {
+    fn from(s: &'static str) -> Self {
+        Currency(s)
     }
 }
 
 impl fmt::Display for Currency {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str())
+        write!(f, "{}", self.0)
     }
 }
 

@@ -242,7 +242,7 @@ fn test_currency_display() {
     assert_eq!(Currency::USD.to_string(), "USD");
     assert_eq!(Currency::EUR.to_string(), "EUR");
     assert_eq!(Currency::JPY.to_string(), "JPY");
-    assert_eq!(Currency::Custom("XXX".to_string()).to_string(), "XXX");
+    assert_eq!(Currency("XXX").to_string(), "XXX");
 }
 
 #[test]
