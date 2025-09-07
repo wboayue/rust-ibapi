@@ -379,22 +379,34 @@ impl fmt::Display for ContractMonth {
 }
 
 /// CUSIP identifier
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Cusip(pub &'static str);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Cusip(pub String);
 
 impl Cusip {
-    pub const fn new(s: &'static str) -> Self {
-        Cusip(s)
+    pub fn new(s: impl Into<String>) -> Self {
+        Cusip(s.into())
     }
 
     pub fn as_str(&self) -> &str {
-        self.0
+        &self.0
     }
 }
 
-impl From<&'static str> for Cusip {
-    fn from(s: &'static str) -> Self {
+impl From<&str> for Cusip {
+    fn from(s: &str) -> Self {
+        Cusip(s.to_string())
+    }
+}
+
+impl From<String> for Cusip {
+    fn from(s: String) -> Self {
         Cusip(s)
+    }
+}
+
+impl From<&String> for Cusip {
+    fn from(s: &String) -> Self {
+        Cusip(s.clone())
     }
 }
 
@@ -405,22 +417,34 @@ impl fmt::Display for Cusip {
 }
 
 /// ISIN identifier
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Isin(pub &'static str);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Isin(pub String);
 
 impl Isin {
-    pub const fn new(s: &'static str) -> Self {
-        Isin(s)
+    pub fn new(s: impl Into<String>) -> Self {
+        Isin(s.into())
     }
 
     pub fn as_str(&self) -> &str {
-        self.0
+        &self.0
     }
 }
 
-impl From<&'static str> for Isin {
-    fn from(s: &'static str) -> Self {
+impl From<&str> for Isin {
+    fn from(s: &str) -> Self {
+        Isin(s.to_string())
+    }
+}
+
+impl From<String> for Isin {
+    fn from(s: String) -> Self {
         Isin(s)
+    }
+}
+
+impl From<&String> for Isin {
+    fn from(s: &String) -> Self {
+        Isin(s.clone())
     }
 }
 

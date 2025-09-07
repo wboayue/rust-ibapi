@@ -302,6 +302,61 @@ impl Contract {
         }
     }
 
+    /// Create a bond contract with CUSIP identifier
+    ///
+    /// # Example
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// // US Treasury bond by CUSIP
+    /// let bond = Contract::bond_cusip("912810RN0");
+    /// ```
+    pub fn bond_cusip(cusip: impl Into<String>) -> Contract {
+        let cusip_str = cusip.into();
+        Contract {
+            symbol: cusip_str.clone(),
+            security_type: SecurityType::Bond,
+            security_id_type: "CUSIP".to_string(),
+            security_id: cusip_str,
+            exchange: "SMART".to_string(),
+            currency: "USD".to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// Create a bond contract with ISIN identifier
+    ///
+    /// # Example
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// // European bond by ISIN
+    /// let bond = Contract::bond_isin("DE0001102309");
+    /// ```
+    pub fn bond_isin(isin: impl Into<String>) -> Contract {
+        let isin_str = isin.into();
+        // Determine currency from ISIN country code (first 2 chars)
+        let currency = match isin_str.get(0..2) {
+            Some("US") | Some("CA") => "USD",
+            Some("GB") => "GBP",
+            Some("JP") => "JPY",
+            Some("CH") => "CHF",
+            Some("AU") => "AUD",
+            Some("DE") | Some("FR") | Some("IT") | Some("ES") | Some("NL") | Some("BE") => "EUR",
+            _ => "USD", // Default to USD
+        };
+
+        Contract {
+            symbol: isin_str.clone(),
+            security_type: SecurityType::Bond,
+            security_id_type: "ISIN".to_string(),
+            security_id: isin_str,
+            exchange: "SMART".to_string(),
+            currency: currency.to_string(),
+            ..Default::default()
+        }
+    }
+
     /// Create a bond contract with CUSIP or ISIN identifier
     ///
     /// # Example

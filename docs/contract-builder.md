@@ -228,16 +228,16 @@ let custom = Contract::index("VIX");  // Defaults to SMART/USD
 Bond contracts can be created using CUSIP or ISIN identifiers.
 
 ```rust
-use ibapi::contracts::{Contract, BondIdentifier, Cusip, Isin};
+use ibapi::contracts::Contract;
 
 // US Treasury bond by CUSIP
-let treasury = Contract::bond(BondIdentifier::Cusip(Cusip("912810RN0")));
+let treasury = Contract::bond_cusip("912810RN0");
 
 // European bond by ISIN
-let euro_bond = Contract::bond(BondIdentifier::Isin(Isin("DE0001102309")));
+let euro_bond = Contract::bond_isin("DE0001102309");
 
 // Corporate bond by CUSIP
-let corporate = Contract::bond(BondIdentifier::Cusip(Cusip("037833100")));  // Apple bond
+let corporate = Contract::bond_cusip("037833100");  // Apple bond
 ```
 
 The bond builder automatically:
