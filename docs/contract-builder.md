@@ -59,21 +59,33 @@ use ibapi::contracts::{Contract, Exchange, ExpirationDate};
 
 // Call option
 let call = Contract::call("AAPL")
-    .strike(150.0)?  // Returns Result - validates positive strike
+    .strike(150.0)  // Validates positive strike price
     .expires_on(2024, 12, 20)
     .build();
 
 // Put option with custom exchange
 let put = Contract::put("SPY")
-    .strike(450.0)?
+    .strike(450.0)
     .expires(ExpirationDate::new(2024, 3, 15))
     .on_exchange(Exchange::Cboe)
     .multiplier(100)
     .build();
 
+// Weekly options (expires next Friday)
+let weekly_call = Contract::call("QQQ")
+    .strike(400.0)
+    .expires_weekly()
+    .build();
+
+// Monthly options (third Friday of the month)
+let monthly_put = Contract::put("IWM")
+    .strike(200.0)
+    .expires_monthly()
+    .build();
+
 // Note: These won't compile (type safety!)
 // let invalid = Contract::call("AAPL").build();  // Missing strike and expiry
-// let invalid = Contract::call("AAPL").strike(150.0)?.build();  // Missing expiry
+// let invalid = Contract::call("AAPL").strike(150.0).build();  // Missing expiry
 ```
 
 ### Futures
@@ -83,12 +95,17 @@ Futures contracts with automatic multiplier detection for common symbols.
 ```rust
 use ibapi::contracts::{Contract, ContractMonth, Exchange};
 
-// Futures with specific expiration
-let es_futures = Contract::futures("ES")
-    .expires_in(ContractMonth::new(2024, 3))
+// Front month contract (next expiring)
+let es_front = Contract::futures("ES")
+    .front_month()
     .build();  // Multiplier auto-set to 50 for ES
 
-// Futures with specific month
+// Next quarterly expiration (Mar/Jun/Sep/Dec)
+let nq_quarter = Contract::futures("NQ")
+    .next_quarter()
+    .build();  // Multiplier auto-set to 50 for NQ
+
+// Futures with specific expiration
 let cl_futures = Contract::futures("CL")
     .expires_in(ContractMonth::new(2024, 6))
     .build();  // Multiplier auto-set to 1000 for CL
@@ -166,6 +183,28 @@ let ftse = Contract::index("FTSE");
 let custom = Contract::index("VIX");  // Defaults to SMART/USD
 ```
 
+### Bonds
+
+Bond contracts can be created using CUSIP or ISIN identifiers.
+
+```rust
+use ibapi::contracts::{Contract, BondIdentifier, Cusip, Isin};
+
+// US Treasury bond by CUSIP
+let treasury = Contract::bond(BondIdentifier::Cusip(Cusip::new("912810RN0")));
+
+// European bond by ISIN
+let euro_bond = Contract::bond(BondIdentifier::Isin(Isin::new("DE0001102309")));
+
+// Corporate bond by CUSIP
+let corporate = Contract::bond(BondIdentifier::Cusip(Cusip::new("037833100")));  // Apple bond
+```
+
+The bond builder automatically:
+- Sets the correct security ID type (CUSIP or ISIN)
+- Determines currency based on ISIN country code
+- Uses SMART exchange routing
+
 ### Spreads and Combos
 
 Complex multi-leg strategies with type-safe leg construction.
@@ -184,18 +223,25 @@ let vertical = Contract::spread()
     .in_currency(Currency::USD)
     .build()?;
 
-// Custom multi-leg spread
+// Iron condor using convenience method
 let iron_condor = Contract::spread()
-    .add_leg(10001, Action::Buy)   // Long put
+    .iron_condor(
+        10001,  // Long put
+        10002,  // Short put
+        10003,  // Short call
+        10004   // Long call
+    )
+    .build()?;
+
+// Custom multi-leg spread
+let butterfly = Contract::spread()
+    .add_leg(30001, Action::Buy)   // Buy 1 lower strike
         .ratio(1)
         .done()
-    .add_leg(10002, Action::Sell)  // Short put
-        .ratio(1)
+    .add_leg(30002, Action::Sell)  // Sell 2 middle strike
+        .ratio(2)
         .done()
-    .add_leg(10003, Action::Sell)  // Short call
-        .ratio(1)
-        .done()
-    .add_leg(10004, Action::Buy)   // Long call
+    .add_leg(30003, Action::Buy)   // Buy 1 higher strike
         .ratio(1)
         .done()
     .on_exchange(Exchange::Smart)
@@ -261,7 +307,7 @@ use ibapi::contracts::{Contract, Missing, Symbol, Strike, ExpirationDate};
 
 // The option builder tracks which fields are set using phantom types
 let builder1: OptionBuilder<Symbol, Missing, Missing> = Contract::call("AAPL");
-let builder2: OptionBuilder<Symbol, Strike, Missing> = builder1.strike(150.0)?;
+let builder2: OptionBuilder<Symbol, Strike, Missing> = builder1.strike(150.0);
 let builder3: OptionBuilder<Symbol, Strike, ExpirationDate> = builder2.expires_on(2024, 12, 20);
 let contract = builder3.build();  // Build only available when all required fields are set
 ```
@@ -335,12 +381,12 @@ fn create_contracts() -> Result<(), Box<dyn std::error::Error>> {
     
     // Option chain
     let call = Contract::call("MSFT")
-        .strike(400.0)?
+        .strike(400.0)
         .expires_on(2024, 12, 20)
         .build();
     
     let put = Contract::put("MSFT")
-        .strike(380.0)?
+        .strike(380.0)
         .expires_on(2024, 12, 20)
         .build();
     
@@ -384,6 +430,49 @@ fn create_contracts() -> Result<(), Box<dyn std::error::Error>> {
 3. **Use strong types**: Prefer `Exchange::Smart` over `Exchange::Custom("SMART".to_string())`
 4. **Leverage defaults**: Don't specify values that match the defaults
 5. **Handle errors appropriately**: Strike validation and spread building return `Result`
+
+## Recent V2 Improvements
+
+The V2 Contract Builder API has been enhanced with several production-ready features:
+
+### New Convenience Methods
+
+**Options:**
+- `expires_weekly()` - Automatically calculates next Friday expiration
+- `expires_monthly()` - Automatically calculates third Friday of the month
+
+**Futures:**
+- `front_month()` - Gets the next expiring contract month
+- `next_quarter()` - Gets the next quarterly expiration (Mar/Jun/Sep/Dec)
+
+**Spreads:**
+- `iron_condor()` - Convenience method for creating iron condor spreads
+
+### New Contract Types
+
+**Bonds:**
+- Support for CUSIP and ISIN identifiers
+- Automatic currency detection from ISIN country codes
+- `Contract::bond(BondIdentifier::Cusip(cusip))` or `Contract::bond(BondIdentifier::Isin(isin))`
+
+### API Improvements
+
+**Strike Price Validation:**
+- No longer returns `Result` from the builder method
+- Cleaner API: `.strike(150.0)` instead of `.strike(150.0)?`
+- Runtime validation ensures positive strike prices
+
+**Date Utilities:**
+- Smart date calculations for options expiration
+- Automatic handling of weekends and holidays logic
+- Time zone aware calculations
+
+### Type Safety Enhancements
+
+All builders now use the type-state pattern consistently:
+- Compile-time enforcement of required fields
+- No runtime surprises from missing data
+- IDE autocomplete shows only valid methods at each step
 
 ## API Reference
 
