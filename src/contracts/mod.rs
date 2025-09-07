@@ -981,14 +981,14 @@ mod tests {
                     contract_id: 12345,
                     ratio: 1,
                     action: "BUY".to_string(),
-                    exchange: Exchange::from("SMART"),
+                    exchange: "SMART".to_string(),
                     ..Default::default()
                 },
                 ComboLeg {
                     contract_id: 67890,
                     ratio: 1,
                     action: "SELL".to_string(),
-                    exchange: Exchange::from("SMART"),
+                    exchange: "SMART".to_string(),
                     ..Default::default()
                 },
             ],

@@ -65,7 +65,6 @@ pub async fn record_response(message: String) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{Currency, Exchange, Symbol};
     use crate::trace::common::storage::async_ops;
     use serial_test::serial;
 

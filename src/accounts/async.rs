@@ -146,7 +146,6 @@ pub async fn server_time(client: &Client) -> Result<OffsetDateTime, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{Currency, Exchange, Symbol};
     use crate::testdata::responses;
 
     use crate::common::test_utils::helpers::*;

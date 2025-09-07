@@ -361,7 +361,7 @@ mod tests {
             security_type: SecurityType::Future,
             exchange: Exchange::from("CME"),
             currency: Currency::from("USD"),
-            local_symbol: Symbol::from("ESU5"),
+            local_symbol: "ESU5".to_string(),
             ..Default::default()
         };
         let mut order = order_builder::limit_order(Action::Buy, 1.0, 5800.0);
@@ -570,7 +570,7 @@ mod tests {
             security_type: SecurityType::Future,
             exchange: Exchange::from("CME"),
             currency: Currency::from("USD"),
-            local_symbol: Symbol::from("ESU5"),
+            local_symbol: "ESU5".to_string(),
             ..Default::default()
         };
         let mut order = order_builder::limit_order(Action::Buy, 1.0, 5800.0);

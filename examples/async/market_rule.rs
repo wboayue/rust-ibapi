@@ -1,5 +1,5 @@
 #![allow(clippy::uninlined_format_args)]
-use ibapi::contracts::{Contract, SecurityType};
+use ibapi::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use ibapi::Client;
 
 #[tokio::main]
@@ -11,10 +11,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // First, get contract details to find market rule IDs
     let contract = Contract {
-        symbol: "ES".to_string(),
+        symbol: Symbol::from("ES"),
         security_type: SecurityType::Future,
-        exchange: "CME".to_string(),
-        currency: "USD".to_string(),
+        exchange: Exchange::from("CME"),
+        currency: Currency::from("USD"),
         last_trade_date_or_contract_month: "202503".to_string(),
         ..Default::default()
     };

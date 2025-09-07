@@ -66,7 +66,6 @@ pub(crate) async fn scanner_subscription(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{Currency, Exchange, Symbol};
     use crate::contracts::{Exchange, SecurityType, Symbol};
     use crate::orders::TagValue;
     use crate::server_versions;

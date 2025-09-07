@@ -1,5 +1,5 @@
 #![allow(clippy::uninlined_format_args)]
-use ibapi::contracts::{Contract, SecurityType};
+use ibapi::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use ibapi::Client;
 
 #[tokio::main]
@@ -11,10 +11,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create an option contract
     let contract = Contract {
-        symbol: "AAPL".to_string(),
+        symbol: Symbol::from("AAPL"),
         security_type: SecurityType::Option,
-        exchange: "SMART".to_string(),
-        currency: "USD".to_string(),
+        exchange: Exchange::from("SMART"),
+        currency: Currency::from("USD"),
         strike: 150.0,
         right: "C".to_string(),                                    // Call option
         last_trade_date_or_contract_month: "20250117".to_string(), // January 17, 2025

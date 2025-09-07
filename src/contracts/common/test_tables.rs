@@ -412,7 +412,7 @@ pub fn stream_decoder_test_cases() -> Vec<StreamDecoderTestCase> {
             name: "valid option chain",
             message: "75\09000\0SMART\0265598\0100\00\02\020230120\020230217\03\050\055\060\0",
             expected_result: StreamDecoderResult::OptionChain {
-                exchange: Exchange::from("SMART"),
+                exchange: "SMART".to_string(),
                 underlying_conid: 265598,
             },
         },

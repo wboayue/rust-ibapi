@@ -32,10 +32,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create contract for highly liquid forex pair
     let contract = Contract {
-        symbol: "EUR".to_string(),
+        symbol: Symbol::from("EUR"),
         security_type: SecurityType::ForexPair,
-        currency: "USD".to_string(),
-        exchange: "IDEALPRO".to_string(),
+        currency: Currency::from("USD"),
+        exchange: Exchange::from("IDEALPRO"),
         ..Default::default()
     };
 

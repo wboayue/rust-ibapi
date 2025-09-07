@@ -313,7 +313,6 @@ impl<T> Drop for Subscription<T> {
 #[cfg(all(test, feature = "async"))]
 mod tests {
     use super::*;
-    use crate::contracts::{Currency, Exchange, Symbol};
     use crate::market_data::realtime::Bar;
     use crate::messages::OutgoingMessages;
     use crate::stubs::MessageBusStub;
