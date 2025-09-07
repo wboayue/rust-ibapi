@@ -123,7 +123,7 @@ fn test_order_analysis_default() {
         initial_margin: Some(1000.0),
         maintenance_margin: Some(800.0),
         commission: Some(1.5),
-        commission_currency: "USD".to_string(),
+        commission_currency: Currency::from("USD"),
         warning_text: String::new(),
     };
 

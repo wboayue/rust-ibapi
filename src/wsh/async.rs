@@ -90,6 +90,7 @@ pub async fn wsh_event_data_by_filter(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contracts::{Symbol, Exchange, Currency};
     use crate::stubs::MessageBusStub;
     use crate::wsh::common::test_data::{self};
     use std::sync::{Arc, RwLock};

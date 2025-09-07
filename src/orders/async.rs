@@ -331,6 +331,7 @@ pub async fn exercise_options(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contracts::{Symbol, Exchange, Currency};
     use crate::contracts::{Contract, SecurityType};
     use crate::stubs::MessageBusStub;
     // use crate::testdata::responses;  // No order responses defined yet
@@ -356,11 +357,11 @@ mod tests {
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
         let contract = Contract {
-            symbol: "ES".to_string(),
+            symbol: Symbol::from("ES"),
             security_type: SecurityType::Future,
-            exchange: "CME".to_string(),
-            currency: "USD".to_string(),
-            local_symbol: "ESU5".to_string(),
+            exchange: Exchange::from("CME"),
+            currency: Currency::from("USD"),
+            local_symbol: Symbol::from("ESU5"),
             ..Default::default()
         };
         let mut order = order_builder::limit_order(Action::Buy, 1.0, 5800.0);
@@ -565,11 +566,11 @@ mod tests {
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
         let contract = Contract {
-            symbol: "ES".to_string(),
+            symbol: Symbol::from("ES"),
             security_type: SecurityType::Future,
-            exchange: "CME".to_string(),
-            currency: "USD".to_string(),
-            local_symbol: "ESU5".to_string(),
+            exchange: Exchange::from("CME"),
+            currency: Currency::from("USD"),
+            local_symbol: Symbol::from("ESU5"),
             ..Default::default()
         };
         let mut order = order_builder::limit_order(Action::Buy, 1.0, 5800.0);
@@ -595,10 +596,10 @@ mod tests {
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
         let contract = Contract {
-            symbol: "ES".to_string(),
+            symbol: Symbol::from("ES"),
             security_type: SecurityType::FuturesOption,
-            exchange: "CME".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("CME"),
+            currency: Currency::from("USD"),
             last_trade_date_or_contract_month: "20250919".to_string(),
             strike: 5800.0,
             right: "C".to_string(),

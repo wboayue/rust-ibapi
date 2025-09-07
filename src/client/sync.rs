@@ -3293,9 +3293,9 @@ mod tests {
             client_id: Some(CLIENT_ID),
             account_code: "DU1234567".to_string(),
             time: "".to_string(),          // Empty means all time
-            symbol: "".to_string(),        // Empty means all symbols
+            symbol: Symbol::from(""),        // Empty means all symbols
             security_type: "".to_string(), // Empty means all types
-            exchange: "".to_string(),      // Empty means all exchanges
+            exchange: Exchange::from(""),      // Empty means all exchanges
             side: "".to_string(),          // Empty means all sides
         };
 
@@ -3409,7 +3409,7 @@ mod tests {
             multiplier: "100".to_string(),
             exchange: Exchange::from("CBOE"),
             currency: Currency::from("USD"),
-            local_symbol: "SPY240126C00450000".to_string(),
+            local_symbol: Symbol::from("SPY240126C00450000"),
             trading_class: "SPY".to_string(),
             ..Default::default()
         };
