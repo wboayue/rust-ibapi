@@ -39,32 +39,32 @@ impl fmt::Display for Symbol {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum Exchange {
     #[default]
-    Smart,
-    Nasdaq,
-    Nyse,
-    Cboe,
-    Globex,
-    Idealpro,
-    Paxos,
-    Eurex,
-    Lse,
-    Tsej,
+    SMART,
+    NASDAQ,
+    NYSE,
+    CBOE,
+    GLOBEX,
+    IDEALPRO,
+    PAXOS,
+    EUREX,
+    LSE,
+    TSEJ,
     Custom(String),
 }
 
 impl Exchange {
     pub fn as_str(&self) -> &str {
         match self {
-            Exchange::Smart => "SMART",
-            Exchange::Nasdaq => "NASDAQ",
-            Exchange::Nyse => "NYSE",
-            Exchange::Cboe => "CBOE",
-            Exchange::Globex => "GLOBEX",
-            Exchange::Idealpro => "IDEALPRO",
-            Exchange::Paxos => "PAXOS",
-            Exchange::Eurex => "EUREX",
-            Exchange::Lse => "LSE",
-            Exchange::Tsej => "TSEJ",
+            Exchange::SMART => "SMART",
+            Exchange::NASDAQ => "NASDAQ",
+            Exchange::NYSE => "NYSE",
+            Exchange::CBOE => "CBOE",
+            Exchange::GLOBEX => "GLOBEX",
+            Exchange::IDEALPRO => "IDEALPRO",
+            Exchange::PAXOS => "PAXOS",
+            Exchange::EUREX => "EUREX",
+            Exchange::LSE => "LSE",
+            Exchange::TSEJ => "TSEJ",
             Exchange::Custom(s) => s,
         }
     }

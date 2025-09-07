@@ -13,9 +13,9 @@ fn test_stock_builder_basic() {
 #[test]
 fn test_stock_builder_customization() {
     let stock = Contract::stock("7203")
-        .on_exchange(Exchange::Tsej)
+        .on_exchange(Exchange::TSEJ)
         .in_currency(Currency::JPY)
-        .primary(Exchange::Tsej)
+        .primary(Exchange::TSEJ)
         .trading_class("TOPIX")
         .build();
 
@@ -43,7 +43,7 @@ fn test_put_option_builder() {
     let put = Contract::put("SPY")
         .strike(450.0)
         .expires(ExpirationDate::new(2024, 3, 15))
-        .on_exchange(Exchange::Cboe)
+        .on_exchange(Exchange::CBOE)
         .in_currency(Currency::USD)
         .multiplier(100)
         .build();
@@ -75,7 +75,7 @@ fn test_invalid_strike_price() {
 fn test_futures_builder_with_manual_expiry() {
     let futures = Contract::futures("ES")
         .expires_in(ContractMonth::new(2024, 3))
-        .on_exchange(Exchange::Globex)
+        .on_exchange(Exchange::GLOBEX)
         .in_currency(Currency::USD)
         .multiplier(50)
         .build();
@@ -109,7 +109,7 @@ fn test_futures_multiplier() {
 fn test_forex_builder() {
     let forex = Contract::forex(Currency::EUR, Currency::USD)
         .amount(100_000)
-        .on_exchange(Exchange::Idealpro)
+        .on_exchange(Exchange::IDEALPRO)
         .build();
 
     assert_eq!(forex.symbol, "EUR.USD");
@@ -120,7 +120,7 @@ fn test_forex_builder() {
 
 #[test]
 fn test_crypto_builder() {
-    let btc = Contract::crypto("BTC").on_exchange(Exchange::Paxos).in_currency(Currency::USD).build();
+    let btc = Contract::crypto("BTC").on_exchange(Exchange::PAXOS).in_currency(Currency::USD).build();
 
     assert_eq!(btc.symbol, "BTC");
     assert_eq!(btc.security_type, SecurityType::Crypto);
@@ -161,7 +161,7 @@ fn test_spread_builder_calendar() {
     let spread = Contract::spread()
         .calendar(12345, 67890)
         .in_currency(Currency::USD)
-        .on_exchange(Exchange::Smart)
+        .on_exchange(Exchange::SMART)
         .build()
         .unwrap();
 
@@ -194,7 +194,7 @@ fn test_spread_builder_custom_legs() {
     let spread = Contract::spread()
         .add_leg(10001, Action::Buy)
         .ratio(2)
-        .on_exchange(Exchange::Cboe)
+        .on_exchange(Exchange::CBOE)
         .done()
         .add_leg(10002, Action::Sell)
         .ratio(3)
@@ -231,9 +231,9 @@ fn test_spread_builder_empty_fails() {
 
 #[test]
 fn test_exchange_display() {
-    assert_eq!(Exchange::Smart.to_string(), "SMART");
-    assert_eq!(Exchange::Nasdaq.to_string(), "NASDAQ");
-    assert_eq!(Exchange::Cboe.to_string(), "CBOE");
+    assert_eq!(Exchange::SMART.to_string(), "SMART");
+    assert_eq!(Exchange::NASDAQ.to_string(), "NASDAQ");
+    assert_eq!(Exchange::CBOE.to_string(), "CBOE");
     assert_eq!(Exchange::Custom("TEST".to_string()).to_string(), "TEST");
 }
 
@@ -290,13 +290,13 @@ fn test_contract_month_formatting() {
 
 #[test]
 fn test_default_implementations() {
-    assert_eq!(Exchange::default(), Exchange::Smart);
+    assert_eq!(Exchange::default(), Exchange::SMART);
     assert_eq!(Currency::default(), Currency::USD);
 
     let spread = SpreadBuilder::default();
     assert!(spread.legs.is_empty());
     assert_eq!(spread.currency, Currency::USD);
-    assert_eq!(spread.exchange, Exchange::Smart);
+    assert_eq!(spread.exchange, Exchange::SMART);
 }
 
 #[test]

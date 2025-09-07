@@ -102,7 +102,7 @@ let contract = Contract::stock("TSLA").build();
 
 // Stock with customization
 let contract = Contract::stock("7203")
-    .on_exchange(Exchange::Tsej)
+    .on_exchange(Exchange::TSEJ)
     .in_currency(Currency::JPY)
     .build();
 ```

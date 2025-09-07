@@ -73,7 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     thread::sleep(Duration::from_millis(100));
 
     let contract = Contract::stock(symbol)
-        .on_exchange(ibapi::contracts::Exchange::Smart)
+        .on_exchange(ibapi::contracts::Exchange::SMART)
         .in_currency(ibapi::contracts::Currency::USD)
         .build();
 

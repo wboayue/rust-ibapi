@@ -18,7 +18,7 @@ impl StockBuilder<Missing> {
     pub fn new(symbol: impl Into<Symbol>) -> StockBuilder<Symbol> {
         StockBuilder {
             symbol: symbol.into(),
-            exchange: Exchange::Smart,
+            exchange: Exchange::SMART,
             currency: Currency::USD,
             primary_exchange: None,
             trading_class: None,
@@ -80,7 +80,7 @@ impl OptionBuilder<Missing, Missing, Missing> {
             right: OptionRight::Call,
             strike: Missing,
             expiry: Missing,
-            exchange: Exchange::Smart,
+            exchange: Exchange::SMART,
             currency: Currency::USD,
             multiplier: 100,
         }
@@ -92,7 +92,7 @@ impl OptionBuilder<Missing, Missing, Missing> {
             right: OptionRight::Put,
             strike: Missing,
             expiry: Missing,
-            exchange: Exchange::Smart,
+            exchange: Exchange::SMART,
             currency: Currency::USD,
             multiplier: 100,
         }
@@ -191,7 +191,7 @@ impl FuturesBuilder<Missing, Missing> {
         FuturesBuilder {
             symbol: symbol.into(),
             contract_month: Missing,
-            exchange: Exchange::Globex,
+            exchange: Exchange::GLOBEX,
             currency: Currency::USD,
             multiplier: None,
         }
@@ -261,7 +261,7 @@ impl ForexBuilder {
     pub fn new(base: Currency, quote: Currency) -> Self {
         ForexBuilder {
             pair: format!("{}.{}", base, quote),
-            exchange: Exchange::Idealpro,
+            exchange: Exchange::IDEALPRO,
             amount: 20_000,
         }
     }
@@ -299,7 +299,7 @@ impl CryptoBuilder {
     pub fn new(symbol: impl Into<Symbol>) -> Self {
         CryptoBuilder {
             symbol: symbol.into(),
-            exchange: Exchange::Paxos,
+            exchange: Exchange::PAXOS,
             currency: Currency::USD,
         }
     }
@@ -346,7 +346,7 @@ impl SpreadBuilder {
         SpreadBuilder {
             legs: Vec::new(),
             currency: Currency::USD,
-            exchange: Exchange::Smart,
+            exchange: Exchange::SMART,
         }
     }
 }

@@ -12,9 +12,9 @@ fn main() {
 
     // Stock with customization
     let toyota = Contract::stock("7203")
-        .on_exchange(Exchange::Tsej)
+        .on_exchange(Exchange::TSEJ)
         .in_currency(Currency::JPY)
-        .primary(Exchange::Tsej)
+        .primary(Exchange::TSEJ)
         .build();
     println!("International stock: {:?} on {}", toyota.symbol, toyota.exchange);
 
@@ -29,7 +29,7 @@ fn main() {
     let put = Contract::put("SPY")
         .strike(450.0)
         .expires(ExpirationDate::new(2024, 3, 15))
-        .on_exchange(Exchange::Cboe)
+        .on_exchange(Exchange::CBOE)
         .build();
     println!("Put option: {} {} strike {}", put.symbol, put.right, put.strike);
 
@@ -49,7 +49,7 @@ fn main() {
     println!("Forex: {}", eur_usd.symbol);
 
     // Cryptocurrency
-    let btc = Contract::crypto("BTC").on_exchange(Exchange::Paxos).build();
+    let btc = Contract::crypto("BTC").on_exchange(Exchange::PAXOS).build();
     println!("Crypto: {} on {}", btc.symbol, btc.exchange);
 
     // Index contract

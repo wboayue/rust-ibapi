@@ -16,7 +16,7 @@ let stock = Contract::stock("AAPL").build();
 
 // Stock with customization
 let intl_stock = Contract::stock("7203")
-    .on_exchange(Exchange::Tsej)
+    .on_exchange(Exchange::TSEJ)
     .in_currency(Currency::JPY)
     .build();
 

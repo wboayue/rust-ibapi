@@ -287,10 +287,10 @@ impl Contract {
     /// ```
     pub fn index(symbol: &str) -> Contract {
         let (exchange, currency) = match symbol {
-            "SPX" | "NDX" | "DJI" | "RUT" => (Exchange::Cboe, Currency::USD),
-            "DAX" => (Exchange::Eurex, Currency::EUR),
-            "FTSE" => (Exchange::Lse, Currency::GBP),
-            _ => (Exchange::Smart, Currency::USD),
+            "SPX" | "NDX" | "DJI" | "RUT" => (Exchange::CBOE, Currency::USD),
+            "DAX" => (Exchange::EUREX, Currency::EUR),
+            "FTSE" => (Exchange::LSE, Currency::GBP),
+            _ => (Exchange::SMART, Currency::USD),
         };
 
         Contract {
@@ -713,7 +713,7 @@ mod tests {
         assert_eq!(stock.exchange, "SMART", "stock.exchange");
 
         // Test stock with customization
-        let toyota = Contract::stock("7203").on_exchange(Exchange::Tsej).in_currency(Currency::JPY).build();
+        let toyota = Contract::stock("7203").on_exchange(Exchange::TSEJ).in_currency(Currency::JPY).build();
         assert_eq!(toyota.symbol, "7203");
         assert_eq!(toyota.exchange, "TSEJ");
         assert_eq!(toyota.currency, "JPY");

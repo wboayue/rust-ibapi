@@ -20,7 +20,7 @@ let aapl = Contract::stock("AAPL").build();
 
 // Stock with customization
 let toyota = Contract::stock("7203")
-    .on_exchange(Exchange::Tsej)
+    .on_exchange(Exchange::TSEJ)
     .in_currency(Currency::JPY)
     .build();
 ```
@@ -67,7 +67,7 @@ let call = Contract::call("AAPL")
 let put = Contract::put("SPY")
     .strike(450.0)
     .expires(ExpirationDate::new(2024, 3, 15))
-    .on_exchange(Exchange::Cboe)
+    .on_exchange(Exchange::CBOE)
     .multiplier(100)
     .build();
 
@@ -142,7 +142,7 @@ let eur_usd = Contract::forex(Currency::EUR, Currency::USD)
 // GBP/JPY with custom exchange
 let gbp_jpy = Contract::forex(Currency::GBP, Currency::JPY)
     .amount(50_000)
-    .on_exchange(Exchange::Idealpro)
+    .on_exchange(Exchange::IDEALPRO)
     .build();
 ```
 
@@ -160,7 +160,7 @@ let btc = Contract::crypto("BTC")
 // Ethereum with custom settings
 let eth = Contract::crypto("ETH")
     .in_currency(Currency::EUR)
-    .on_exchange(Exchange::Paxos)
+    .on_exchange(Exchange::PAXOS)
     .build();
 ```
 
@@ -245,7 +245,7 @@ let butterfly = Contract::spread()
     .add_leg(30003, Action::Buy)   // Buy 1 higher strike
         .ratio(1)
         .done()
-    .on_exchange(Exchange::Smart)
+    .on_exchange(Exchange::SMART)
     .build()?;
 
 // Ratio spread with different quantities
@@ -255,7 +255,7 @@ let ratio_spread = Contract::spread()
         .done()
     .add_leg(20002, Action::Sell)
         .ratio(2)
-        .on_exchange(Exchange::Cboe)
+        .on_exchange(Exchange::CBOE)
         .done()
     .build()?;
 ```
@@ -269,7 +269,7 @@ The V2 API uses strong types instead of strings to prevent errors:
 ```rust
 use ibapi::contracts::Exchange;
 
-let exchange = Exchange::Smart;        // Smart routing
+let exchange = Exchange::SMART;        // Smart routing
 let exchange = Exchange::Nasdaq;       // NASDAQ
 let exchange = Exchange::Cboe;         // CBOE
 let exchange = Exchange::Globex;       // CME Globex
