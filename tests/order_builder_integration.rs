@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod order_builder_tests {
-    use ibapi::contracts::{Contract, Symbol, Exchange, Currency};
+    use ibapi::contracts::{Contract, Currency, Exchange, Symbol};
     use ibapi::orders::{Action, OrderBuilder};
 
     fn create_stock_contract(symbol: &str) -> Contract {

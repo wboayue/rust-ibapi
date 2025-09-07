@@ -1937,7 +1937,7 @@ impl Client {
 mod tests {
     use super::Client;
     use crate::client::common::tests::*;
-    use crate::contracts::{Symbol, Exchange, Currency};
+    use crate::contracts::{Currency, Exchange, Symbol};
     use crate::market_data::TradingHours;
 
     const CLIENT_ID: i32 = 100;
@@ -3155,9 +3155,9 @@ mod tests {
             client_id: Some(CLIENT_ID),
             account_code: "DU1234567".to_string(),
             time: "".to_string(),          // Empty means all time
-            symbol: Symbol::from(""),        // Empty means all symbols
+            symbol: Symbol::from(""),      // Empty means all symbols
             security_type: "".to_string(), // Empty means all types
-            exchange: Exchange::from(""),      // Empty means all exchanges
+            exchange: Exchange::from(""),  // Empty means all exchanges
             side: "".to_string(),          // Empty means all sides
         };
 

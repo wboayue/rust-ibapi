@@ -191,8 +191,8 @@ pub async fn option_chain(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{Symbol, Exchange, Currency};
     use crate::contracts::common::test_tables::*;
+    use crate::contracts::{Currency, Exchange, Symbol};
     use crate::messages::ResponseMessage;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;

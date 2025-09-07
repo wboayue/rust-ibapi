@@ -191,8 +191,8 @@ pub(crate) async fn broad_tape_news(client: &Client, provider_code: &str) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{Symbol, Exchange, Currency};
     use crate::contracts::Contract;
+    use crate::contracts::{Currency, Exchange, Symbol};
     use crate::news::ArticleType;
     use crate::stubs::MessageBusStub;
     use crate::{server_versions, Client};

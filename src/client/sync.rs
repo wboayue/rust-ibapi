@@ -3293,9 +3293,9 @@ mod tests {
             client_id: Some(CLIENT_ID),
             account_code: "DU1234567".to_string(),
             time: "".to_string(),          // Empty means all time
-            symbol: Symbol::from(""),        // Empty means all symbols
+            symbol: Symbol::from(""),      // Empty means all symbols
             security_type: "".to_string(), // Empty means all types
-            exchange: Exchange::from(""),      // Empty means all exchanges
+            exchange: Exchange::from(""),  // Empty means all exchanges
             side: "".to_string(),          // Empty means all sides
         };
 

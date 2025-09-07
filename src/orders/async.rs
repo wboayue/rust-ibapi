@@ -331,8 +331,8 @@ pub async fn exercise_options(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{Symbol, Exchange, Currency};
     use crate::contracts::{Contract, SecurityType};
+    use crate::contracts::{Currency, Exchange, Symbol};
     use crate::stubs::MessageBusStub;
     // use crate::testdata::responses;  // No order responses defined yet
     use crate::{server_versions, Client};
