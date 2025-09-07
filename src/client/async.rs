@@ -3155,9 +3155,9 @@ mod tests {
             client_id: Some(CLIENT_ID),
             account_code: "DU1234567".to_string(),
             time: "".to_string(),          // Empty means all time
-            symbol: "".to_string(),      // Empty means all symbols
+            symbol: "".to_string(),        // Empty means all symbols
             security_type: "".to_string(), // Empty means all types
-            exchange: "".to_string(),  // Empty means all exchanges
+            exchange: "".to_string(),      // Empty means all exchanges
             side: "".to_string(),          // Empty means all sides
         };
 
