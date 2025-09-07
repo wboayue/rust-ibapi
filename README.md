@@ -125,7 +125,7 @@ let weekly = Contract::put("SPY")
 // Futures with smart defaults
 let es = Contract::futures("ES")
     .front_month()  // Next expiring contract
-    .build(); // Multiplier automatically set to 50
+    .build();
 
 // Quarterly futures
 let nq = Contract::futures("NQ")

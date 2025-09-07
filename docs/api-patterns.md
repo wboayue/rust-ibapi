@@ -22,22 +22,22 @@ let intl_stock = Contract::stock("7203")
 
 // Option builder - enforces required fields at compile time
 let option = Contract::call("AAPL")
-    .strike(150.0)?  // Required - returns Result
+    .strike(150.0)  // Required - validates positive value
     .expires_on(2024, 12, 20)  // Required
     .build();  // Only available when all required fields are set
 
 // This won't compile - missing required fields:
 // let invalid = Contract::call("AAPL").build();  // Error: build() not available
 
-// Futures with auto-multiplier
+// Futures with smart defaults
 let futures = Contract::futures("ES")
     .expires_in(ContractMonth::new(2024, 3))
-    .build();  // Multiplier automatically set to 50 for ES
+    .build();
 ```
 
 The contract builder pattern provides:
 - **Type-state tracking**: Required fields enforced at compile time
-- **Smart defaults**: Automatic exchange, currency, and multiplier selection
+- **Smart defaults**: Sensible defaults for common use cases
 - **Strong typing**: Enums for exchanges, currencies, and option rights
 - **Zero invalid states**: Can't build incomplete contracts
 
