@@ -180,7 +180,7 @@ fn main() {
     let connection_url = "127.0.0.1:4002";
     let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
 
     let historical_data = client
         .historical_data(
@@ -212,7 +212,7 @@ async fn main() {
     let connection_url = "127.0.0.1:4002";
     let client = Client::connect(connection_url, 100).await.expect("connection to TWS failed!");
 
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
 
     let historical_data = client
         .historical_data(
@@ -246,7 +246,7 @@ fn main() {
     let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 
     // Request real-time bars data for AAPL with 5-second intervals
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
     let subscription = client
         .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
         .expect("realtime bars request failed!");
@@ -270,7 +270,7 @@ async fn main() {
     let client = Client::connect(connection_url, 100).await.expect("connection to TWS failed!");
 
     // Request real-time bars data for AAPL with 5-second intervals
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
     let mut subscription = client
         .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
         .await
@@ -314,8 +314,8 @@ fn main() {
     let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 
     // Request real-time bars data for AAPL with 5-second intervals
-    let contract_aapl = Contract::stock("AAPL");
-    let contract_nvda = Contract::stock("NVDA");
+    let contract_aapl = Contract::stock("AAPL").build();
+    let contract_nvda = Contract::stock("NVDA").build();
 
     let subscription_aapl = client
         .realtime_bars(&contract_aapl, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
@@ -345,7 +345,7 @@ pub fn main() {
     let connection_url = "127.0.0.1:4002";
     let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
 
     // Create and submit a market order to purchase 100 shares using the fluent API
     let order_id = client.order(&contract)
@@ -379,7 +379,7 @@ async fn main() {
     let connection_url = "127.0.0.1:4002";
     let client = Client::connect(connection_url, 100).await.expect("connection to TWS failed!");
 
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
 
     // Create and submit a market order to purchase 100 shares using the fluent API
     let order_id = client.order(&contract)
@@ -426,7 +426,7 @@ fn main() {
     for symbol in symbols {
         let client = Arc::clone(&client);
         let handle = thread::spawn(move || {
-            let contract = Contract::stock(symbol);
+            let contract = Contract::stock(symbol).build();
             let subscription = client
                 .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
                 .expect("realtime bars request failed!");
@@ -460,7 +460,7 @@ fn main() {
             let connection_url = "127.0.0.1:4002";
             let client = Client::connect(connection_url, client_id).expect("connection to TWS failed!");
 
-            let contract = Contract::stock(symbol);
+            let contract = Contract::stock(symbol).build();
             let subscription = client
                 .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
                 .expect("realtime bars request failed!");
@@ -490,7 +490,7 @@ fn main() {
     let connection_url = "127.0.0.1:4002";
     let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
 
     loop {
         // Request real-time bars data with 5-second intervals
