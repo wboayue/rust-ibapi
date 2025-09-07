@@ -20,7 +20,6 @@ The V2 Contract Builder API provides a type-safe, ergonomic way to create contra
 - [Error Handling](#error-handling)
 - [Migration from V1](#migration-from-v1)
 - [Best Practices](#best-practices)
-- [Recent V2 Improvements](#recent-v2-improvements)
 
 ## Key Features
 
@@ -33,15 +32,15 @@ The V2 Contract Builder API provides a type-safe, ergonomic way to create contra
 ## Quick Start
 
 ```rust
-use ibapi::contracts::{Contract, Exchange, Currency};
+use ibapi::contracts::Contract;
 
 // Simple stock contract
 let aapl = Contract::stock("AAPL").build();
 
 // Stock with customization
 let toyota = Contract::stock("7203")
-    .on_exchange(Exchange::TSEJ)
-    .in_currency(Currency::JPY)
+    .on_exchange("TSEJ")
+    .in_currency("JPY")
     .build();
 ```
 
@@ -52,16 +51,16 @@ let toyota = Contract::stock("7203")
 The simplest contract type. Defaults to SMART routing and USD currency.
 
 ```rust
-use ibapi::contracts::{Contract, Exchange, Currency};
+use ibapi::contracts::Contract;
 
 // Basic stock - uses SMART routing and USD
 let stock = Contract::stock("AAPL").build();
 
 // European stock - disambiguate which listing we want
 let european_stock = Contract::stock("SAN")
-    .on_exchange(Exchange::SMART)  // Use SMART routing for best execution
-    .primary(Exchange("IBIS"))     // But we want the IBIS listing (not Madrid, etc.)
-    .in_currency(Currency::EUR)
+    .on_exchange("SMART")  // Use SMART routing for best execution
+    .primary("IBIS")       // But we want the IBIS listing (not Madrid, etc.)
+    .in_currency("EUR")
     .build();
 
 // Stock with trading class
@@ -79,21 +78,21 @@ Common patterns:
 ```rust
 // US stock - usually no primary_exchange needed
 let us_stock = Contract::stock("AAPL")
-    .on_exchange(Exchange::SMART)  // Route via SMART (default)
+    .on_exchange("SMART")  // Route via SMART (default)
     .build();
 
 // Dual-listed stock - specify which listing
 let dual_listed = Contract::stock("BMW")
-    .on_exchange(Exchange::SMART)  // Route via SMART for best price
-    .primary(Exchange("IBIS"))     // We want the German listing, not another
-    .in_currency(Currency::EUR)
+    .on_exchange("SMART")  // Route via SMART for best price
+    .primary("IBIS")       // We want the German listing, not another
+    .in_currency("EUR")
     .build();
 
 // Direct routing to specific exchange
 let direct_route = Contract::stock("BMW")
-    .on_exchange(Exchange("IBIS")) // Route directly to IBIS
-    .primary(Exchange("IBIS"))     // And it's the IBIS listing we want
-    .in_currency(Currency::EUR)
+    .on_exchange("IBIS")   // Route directly to IBIS
+    .primary("IBIS")       // And it's the IBIS listing we want
+    .in_currency("EUR")
     .build();
 ```
 
@@ -102,7 +101,7 @@ let direct_route = Contract::stock("BMW")
 Options require strike price and expiration date. The builder enforces these at compile time.
 
 ```rust
-use ibapi::contracts::{Contract, Exchange, ExpirationDate};
+use ibapi::contracts::{Contract, ExpirationDate};
 
 // Call option
 let call = Contract::call("AAPL")
@@ -114,7 +113,7 @@ let call = Contract::call("AAPL")
 let put = Contract::put("SPY")
     .strike(450.0)
     .expires(ExpirationDate::new(2024, 3, 15))
-    .on_exchange(Exchange::CBOE)
+    .on_exchange("CBOE")
     .multiplier(100)
     .build();
 
@@ -140,7 +139,7 @@ let monthly_put = Contract::put("IWM")
 Futures contracts with flexible expiration options.
 
 ```rust
-use ibapi::contracts::{Contract, ContractMonth, Exchange};
+use ibapi::contracts::{Contract, ContractMonth};
 
 // Front month contract (next expiring)
 let es_front = Contract::futures("ES")
@@ -160,7 +159,7 @@ let cl_futures = Contract::futures("CL")
 // Custom futures on specific exchange
 let zc_futures = Contract::futures("ZC")
     .expires_in(ContractMonth::new(2024, 12))
-    .on_exchange(Exchange("ECBOT"))
+    .on_exchange("ECBOT")
     .build();
 ```
 
@@ -171,17 +170,17 @@ let zc_futures = Contract::futures("ZC")
 Foreign exchange pairs with automatic pair formatting.
 
 ```rust
-use ibapi::contracts::{Contract, Currency, Exchange};
+use ibapi::contracts::Contract;
 
 // EUR/USD pair
-let eur_usd = Contract::forex(Currency::EUR, Currency::USD)
+let eur_usd = Contract::forex("EUR", "USD")
     .amount(100_000)
     .build();
 
 // GBP/JPY with custom exchange
-let gbp_jpy = Contract::forex(Currency::GBP, Currency::JPY)
+let gbp_jpy = Contract::forex("GBP", "JPY")
     .amount(50_000)
-    .on_exchange(Exchange::IDEALPRO)
+    .on_exchange("IDEALPRO")
     .build();
 ```
 
@@ -190,7 +189,7 @@ let gbp_jpy = Contract::forex(Currency::GBP, Currency::JPY)
 Digital assets with Paxos as the default exchange.
 
 ```rust
-use ibapi::contracts::{Contract, Currency, Exchange};
+use ibapi::contracts::Contract;
 
 // Bitcoin
 let btc = Contract::crypto("BTC")
@@ -198,8 +197,8 @@ let btc = Contract::crypto("BTC")
 
 // Ethereum with custom settings
 let eth = Contract::crypto("ETH")
-    .in_currency(Currency::EUR)
-    .on_exchange(Exchange::PAXOS)
+    .in_currency("EUR")
+    .on_exchange("PAXOS")
     .build();
 ```
 
@@ -250,7 +249,7 @@ The bond builder automatically:
 Complex multi-leg strategies with type-safe leg construction.
 
 ```rust
-use ibapi::contracts::{Contract, LegAction, Exchange};
+use ibapi::contracts::{Contract, LegAction};
 
 // Vertical spread
 let vertical = Contract::spread()
@@ -292,19 +291,24 @@ IBKR supports 160+ exchanges worldwide. The Exchange type provides constants for
 ```rust
 use ibapi::contracts::Exchange;
 
-// Common exchange constants
-let exchange = Exchange::SMART;        // Smart routing
-let exchange = Exchange::NASDAQ;       // NASDAQ
-let exchange = Exchange::NYSE;         // NYSE
-let exchange = Exchange::CBOE;         // CBOE
-let exchange = Exchange::GLOBEX;       // CME Globex
-let exchange = Exchange::IDEALPRO;     // Forex
-let exchange = Exchange::PAXOS;        // Crypto
+// Create exchanges from string literals
+let exchange = Exchange::from("SMART");        // Smart routing
+let exchange = Exchange::from("NASDAQ");       // NASDAQ
+let exchange = Exchange::from("NYSE");         // NYSE
+let exchange = Exchange::from("CBOE");         // CBOE
+let exchange = Exchange::from("GLOBEX");       // CME Globex
+let exchange = Exchange::from("IDEALPRO");     // Forex
+let exchange = Exchange::from("PAXOS");        // Crypto
 
 // Any other exchange code
-let exchange = Exchange("ARCA");       // NYSE Arca
-let exchange = Exchange("IBIS");       // XETRA
-let exchange = Exchange("SEHK");       // Hong Kong
+let exchange = Exchange::from("ARCA");         // NYSE Arca
+let exchange = Exchange::from("IBIS");         // XETRA
+let exchange = Exchange::from("SEHK");         // Hong Kong
+
+// Builder methods accept string literals directly
+let contract = Contract::stock("AAPL")
+    .on_exchange("NASDAQ")  // String literal converted automatically
+    .build();
 ```
 
 ### Currencies
@@ -314,21 +318,26 @@ IBKR supports trading in many currencies. The Currency type provides constants f
 ```rust
 use ibapi::contracts::Currency;
 
-// Major currency constants
-let currency = Currency::USD;          // US Dollar
-let currency = Currency::EUR;          // Euro
-let currency = Currency::GBP;          // British Pound
-let currency = Currency::JPY;          // Japanese Yen
-let currency = Currency::CHF;          // Swiss Franc
-let currency = Currency::CAD;          // Canadian Dollar
-let currency = Currency::AUD;          // Australian Dollar
-let currency = Currency::HKD;          // Hong Kong Dollar
-let currency = Currency::CNH;          // Offshore RMB
+// Create currencies from string literals
+let currency = Currency::from("USD");          // US Dollar
+let currency = Currency::from("EUR");          // Euro
+let currency = Currency::from("GBP");          // British Pound
+let currency = Currency::from("JPY");          // Japanese Yen
+let currency = Currency::from("CHF");          // Swiss Franc
+let currency = Currency::from("CAD");          // Canadian Dollar
+let currency = Currency::from("AUD");          // Australian Dollar
+let currency = Currency::from("HKD");          // Hong Kong Dollar
+let currency = Currency::from("CNH");          // Offshore RMB
 
 // Any other currency code
-let currency = Currency("SEK");        // Swedish Krona
-let currency = Currency("NOK");        // Norwegian Krone
-let currency = Currency("INR");        // Indian Rupee
+let currency = Currency::from("SEK");          // Swedish Krona
+let currency = Currency::from("NOK");          // Norwegian Krone
+let currency = Currency::from("INR");          // Indian Rupee
+
+// Builder methods accept string literals directly
+let contract = Contract::stock("7203")
+    .in_currency("JPY")  // String literal converted automatically
+    .build();
 ```
 
 ### Option Rights
@@ -401,7 +410,7 @@ let contract = Contract::stock("AAPL").build();
 
 1. **Entry Points**: Use `Contract::stock()`, `Contract::call()`, etc. instead of `ContractBuilder::new()`
 2. **Type Safety**: Required fields enforced at compile time
-3. **Strong Types**: Use `Exchange::SMART` instead of `"SMART"`
+3. **Strong Types**: Use `Exchange::from("SMART")` for type safety or pass string literals directly to builder methods
 4. **Smart Defaults**: Less boilerplate for common cases
 5. **No Runtime Validation**: Invalid states prevented by the type system
 
@@ -409,18 +418,7 @@ let contract = Contract::stock("AAPL").build();
 
 1. **Use specific entry points**: Start with `Contract::stock()`, `Contract::call()`, etc. for clarity
 2. **Let the compiler help**: Missing required fields will be caught at compile time
-3. **Use strong types**: Prefer `Exchange::SMART` constant over `Exchange("SMART")`
+3. **Flexible types**: Builder methods accept string literals directly (e.g., `.on_exchange("SMART")`), or use `Exchange::from("SMART")` for explicit type creation
 4. **Leverage defaults**: Don't specify values that match the defaults
 5. **Handle errors appropriately**: Strike validation and spread building return `Result`
 
-## API Reference
-
-For complete API documentation, run:
-```bash
-cargo doc --open
-```
-
-The contract builder modules are located at:
-- `ibapi::contracts::builders` - Builder implementations
-- `ibapi::contracts::types` - Strong type definitions
-- `ibapi::contracts` - Contract struct and factory methods

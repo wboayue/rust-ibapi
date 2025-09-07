@@ -9,15 +9,15 @@ The library provides unified builder patterns to simplify common operations in b
 The V2 contract builder API uses type-state patterns to ensure compile-time safety:
 
 ```rust
-use ibapi::contracts::{Contract, Exchange, Currency};
+use ibapi::contracts::{Contract, ContractMonth};
 
 // Stock builder - simple with defaults
 let stock = Contract::stock("AAPL").build();
 
 // Stock with customization
 let intl_stock = Contract::stock("7203")
-    .on_exchange(Exchange::TSEJ)
-    .in_currency(Currency::JPY)
+    .on_exchange("TSEJ")
+    .in_currency("JPY")
     .build();
 
 // Option builder - enforces required fields at compile time
@@ -38,7 +38,7 @@ let futures = Contract::futures("ES")
 The contract builder pattern provides:
 - **Type-state tracking**: Required fields enforced at compile time
 - **Smart defaults**: Sensible defaults for common use cases
-- **Strong typing**: Enums for exchanges, currencies, and option rights
+- **Strong typing**: Type-safe wrappers for exchanges, currencies, and option rights
 - **Zero invalid states**: Can't build incomplete contracts
 
 For comprehensive documentation, see the [Contract Builder Guide](contract-builder.md).
