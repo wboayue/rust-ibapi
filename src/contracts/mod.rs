@@ -210,7 +210,6 @@ impl Contract {
     ///
     /// let call = Contract::call("AAPL")
     ///     .strike(150.0)
-    ///     .unwrap()
     ///     .expires_on(2024, 12, 20)
     ///     .build();
     /// ```
@@ -227,7 +226,6 @@ impl Contract {
     ///
     /// let put = Contract::put("SPY")
     ///     .strike(450.0)
-    ///     .unwrap()
     ///     .expires_on(2024, 12, 20)
     ///     .build();
     /// ```
@@ -361,7 +359,7 @@ impl Contract {
     ///
     /// let spread = Contract::spread()
     ///     .calendar(12345, 67890)
-    ///     .build()?;
+    ///     .build();
     /// ```
     pub fn spread() -> SpreadBuilder {
         SpreadBuilder::new()
