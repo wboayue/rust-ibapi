@@ -237,21 +237,13 @@ impl<M> FuturesBuilder<Symbol, M> {
 
 impl FuturesBuilder<Symbol, ContractMonth> {
     pub fn build(self) -> Contract {
-        // Auto-set multiplier based on symbol if not specified
-        let multiplier = self.multiplier.unwrap_or_else(|| match self.symbol.as_str() {
-            "ES" | "NQ" => 50,
-            "YM" => 5,
-            "CL" => 1000,
-            _ => 1,
-        });
-
         Contract {
             symbol: self.symbol.to_string(),
             security_type: SecurityType::Future,
             last_trade_date_or_contract_month: self.contract_month.to_string(),
             exchange: self.exchange.to_string(),
             currency: self.currency.to_string(),
-            multiplier: multiplier.to_string(),
+            multiplier: self.multiplier.map(|m| m.to_string()).unwrap_or_default(),
             ..Default::default()
         }
     }

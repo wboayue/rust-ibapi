@@ -98,33 +98,34 @@ use ibapi::contracts::{Contract, ContractMonth, Exchange};
 // Front month contract (next expiring)
 let es_front = Contract::futures("ES")
     .front_month()
-    .build();  // Multiplier auto-set to 50 for ES
+    .build();
 
 // Next quarterly expiration (Mar/Jun/Sep/Dec)
 let nq_quarter = Contract::futures("NQ")
     .next_quarter()
-    .build();  // Multiplier auto-set to 50 for NQ
+    .build();
 
 // Futures with specific expiration
 let cl_futures = Contract::futures("CL")
     .expires_in(ContractMonth::new(2024, 6))
-    .build();  // Multiplier auto-set to 1000 for CL
+    .build();
 
-// Custom futures with manual multiplier
-let custom_futures = Contract::futures("ZC")
+// Custom futures on specific exchange
+let zc_futures = Contract::futures("ZC")
     .expires_in(ContractMonth::new(2024, 12))
     .on_exchange(Exchange::Custom("ECBOT".to_string()))
-    .multiplier(50)  // Override auto-multiplier
+    .build();
+
+// Only specify multiplier when needed for special cases
+let custom_contract = Contract::futures("CUSTOM")
+    .expires_in(ContractMonth::new(2024, 9))
+    .multiplier(100)  // Explicitly set for non-standard contracts
     .build();
 ```
 
-#### Auto-Multiplier Rules
+#### Multiplier Settings
 
-The futures builder automatically sets multipliers for common contracts:
-- ES, NQ: 50
-- YM: 5  
-- CL: 1000
-- Others: 1 (default)
+The futures builder leaves the multiplier field empty by default, allowing the TWS API to use the correct multiplier for each contract. Only specify a multiplier explicitly when needed for non-standard contracts using the `.multiplier()` method.
 
 ### Forex
 

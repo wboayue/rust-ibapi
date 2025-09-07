@@ -89,26 +89,20 @@ fn test_futures_builder_with_manual_expiry() {
 }
 
 #[test]
-fn test_futures_auto_multiplier() {
-    // ES should get 50
+fn test_futures_multiplier() {
+    // Default: no multiplier set (empty string)
     let es = Contract::futures("ES").expires_in(ContractMonth::new(2024, 3)).build();
-    assert_eq!(es.multiplier, "50");
+    assert_eq!(es.multiplier, "");
 
-    // NQ should get 50
     let nq = Contract::futures("NQ").expires_in(ContractMonth::new(2024, 3)).build();
-    assert_eq!(nq.multiplier, "50");
+    assert_eq!(nq.multiplier, "");
 
-    // YM should get 5
-    let ym = Contract::futures("YM").expires_in(ContractMonth::new(2024, 3)).build();
-    assert_eq!(ym.multiplier, "5");
+    // Explicit multiplier is used when specified
+    let custom = Contract::futures("ES").expires_in(ContractMonth::new(2024, 3)).multiplier(50).build();
+    assert_eq!(custom.multiplier, "50");
 
-    // CL should get 1000
-    let cl = Contract::futures("CL").expires_in(ContractMonth::new(2024, 3)).build();
+    let cl = Contract::futures("CL").expires_in(ContractMonth::new(2024, 3)).multiplier(1000).build();
     assert_eq!(cl.multiplier, "1000");
-
-    // Unknown should get 1
-    let unknown = Contract::futures("XYZ").expires_in(ContractMonth::new(2024, 3)).build();
-    assert_eq!(unknown.multiplier, "1");
 }
 
 #[test]

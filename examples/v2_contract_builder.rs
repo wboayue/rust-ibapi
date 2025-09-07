@@ -34,11 +34,11 @@ fn main() {
     println!("Put option: {} {} strike {}", put.symbol, put.right, put.strike);
 
     // Futures contract with auto-calculated multiplier
-    let es_futures = Contract::futures("ES").expires_in(ContractMonth::new(2024, 3)).build(); // Multiplier automatically set to 50 for ES
-    println!("Futures: {} multiplier {}", es_futures.symbol, es_futures.multiplier);
+    let es_futures = Contract::futures("ES").expires_in(ContractMonth::new(2024, 3)).build();
+    println!("Futures: {} multiplier '{}'", es_futures.symbol, es_futures.multiplier);
 
     // Futures with specific month
-    let cl_futures = Contract::futures("CL").expires_in(ContractMonth::new(2024, 6)).build(); // Multiplier automatically set to 1000 for CL
+    let cl_futures = Contract::futures("CL").expires_in(ContractMonth::new(2024, 6)).multiplier(1000).build();
     println!(
         "Futures: {} multiplier {} expiry {}",
         cl_futures.symbol, cl_futures.multiplier, cl_futures.last_trade_date_or_contract_month
