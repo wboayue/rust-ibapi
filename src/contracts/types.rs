@@ -35,44 +35,57 @@ impl fmt::Display for Symbol {
     }
 }
 
-/// Strongly typed exchange enum
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum Exchange {
-    #[default]
-    SMART,
-    NASDAQ,
-    NYSE,
-    CBOE,
-    GLOBEX,
-    IDEALPRO,
-    PAXOS,
-    EUREX,
-    LSE,
-    TSEJ,
-    Custom(String),
-}
+/// Exchange identifier
+/// 
+/// IBKR supports 160+ exchanges worldwide. This type provides a lightweight wrapper
+/// around exchange codes with constants for commonly used exchanges.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Exchange(pub &'static str);
 
 impl Exchange {
+    /// Create a new exchange from a static string
+    pub const fn new(s: &'static str) -> Self {
+        Exchange(s)
+    }
+
+    /// Get the exchange code as a string slice
     pub fn as_str(&self) -> &str {
-        match self {
-            Exchange::SMART => "SMART",
-            Exchange::NASDAQ => "NASDAQ",
-            Exchange::NYSE => "NYSE",
-            Exchange::CBOE => "CBOE",
-            Exchange::GLOBEX => "GLOBEX",
-            Exchange::IDEALPRO => "IDEALPRO",
-            Exchange::PAXOS => "PAXOS",
-            Exchange::EUREX => "EUREX",
-            Exchange::LSE => "LSE",
-            Exchange::TSEJ => "TSEJ",
-            Exchange::Custom(s) => s,
-        }
+        self.0
+    }
+
+    // Common exchange constants
+    pub const SMART: Exchange = Exchange("SMART");
+    pub const NASDAQ: Exchange = Exchange("NASDAQ");
+    pub const NYSE: Exchange = Exchange("NYSE");
+    pub const CBOE: Exchange = Exchange("CBOE");
+    pub const GLOBEX: Exchange = Exchange("GLOBEX");
+    pub const IDEALPRO: Exchange = Exchange("IDEALPRO");
+    pub const PAXOS: Exchange = Exchange("PAXOS");
+    pub const EUREX: Exchange = Exchange("EUREX");
+    pub const LSE: Exchange = Exchange("LSE");
+    pub const TSEJ: Exchange = Exchange("TSEJ");
+    pub const ARCA: Exchange = Exchange("ARCA");
+    pub const ISLAND: Exchange = Exchange("ISLAND");
+    pub const CME: Exchange = Exchange("CME");
+    pub const ICE: Exchange = Exchange("ICE");
+    pub const BATS: Exchange = Exchange("BATS");
+}
+
+impl Default for Exchange {
+    fn default() -> Self {
+        Exchange::SMART
+    }
+}
+
+impl From<&'static str> for Exchange {
+    fn from(s: &'static str) -> Self {
+        Exchange(s)
     }
 }
 
 impl fmt::Display for Exchange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str())
+        write!(f, "{}", self.0)
     }
 }
 

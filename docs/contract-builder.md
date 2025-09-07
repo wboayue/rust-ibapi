@@ -39,9 +39,9 @@ let stock = Contract::stock("AAPL").build();
 
 // International stock with specific exchange
 let european_stock = Contract::stock("SAN")
-    .on_exchange(Exchange::Custom("IBIS".to_string()))
+    .on_exchange(Exchange("IBIS"))
     .in_currency(Currency::EUR)
-    .primary(Exchange::Custom("IBIS".to_string()))
+    .primary(Exchange("IBIS"))
     .build();
 
 // Stock with trading class
@@ -113,7 +113,7 @@ let cl_futures = Contract::futures("CL")
 // Custom futures on specific exchange
 let zc_futures = Contract::futures("ZC")
     .expires_in(ContractMonth::new(2024, 12))
-    .on_exchange(Exchange::Custom("ECBOT".to_string()))
+    .on_exchange(Exchange("ECBOT"))
     .build();
 
 // Only specify multiplier when needed for special cases
@@ -275,7 +275,7 @@ let exchange = Exchange::Cboe;         // CBOE
 let exchange = Exchange::Globex;       // CME Globex
 let exchange = Exchange::Idealpro;     // Forex
 let exchange = Exchange::Paxos;        // Crypto
-let exchange = Exchange::Custom("ARCA".to_string());  // Custom exchange
+let exchange = Exchange("ARCA");  // Other exchanges supported
 ```
 
 ### Currencies
@@ -428,7 +428,7 @@ fn create_contracts() -> Result<(), Box<dyn std::error::Error>> {
 
 1. **Use specific entry points**: Start with `Contract::stock()`, `Contract::call()`, etc. for clarity
 2. **Let the compiler help**: Missing required fields will be caught at compile time
-3. **Use strong types**: Prefer `Exchange::Smart` over `Exchange::Custom("SMART".to_string())`
+3. **Use strong types**: Prefer `Exchange::SMART` constant over `Exchange("SMART")`
 4. **Leverage defaults**: Don't specify values that match the defaults
 5. **Handle errors appropriately**: Strike validation and spread building return `Result`
 

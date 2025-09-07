@@ -234,7 +234,7 @@ fn test_exchange_display() {
     assert_eq!(Exchange::SMART.to_string(), "SMART");
     assert_eq!(Exchange::NASDAQ.to_string(), "NASDAQ");
     assert_eq!(Exchange::CBOE.to_string(), "CBOE");
-    assert_eq!(Exchange::Custom("TEST".to_string()).to_string(), "TEST");
+    assert_eq!(Exchange("TEST").to_string(), "TEST");
 }
 
 #[test]
