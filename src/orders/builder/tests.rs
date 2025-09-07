@@ -4,16 +4,16 @@
 #[cfg(all(test, feature = "sync"))]
 mod sync_integration_tests {
     use super::mock_client::mock::MockOrderClient;
-    use crate::contracts::Contract;
+    use crate::contracts::{Contract, Currency, Exchange, Symbol};
     use crate::orders::builder::OrderBuilder;
     use crate::orders::Action;
 
     fn create_stock_contract(symbol: &str) -> Contract {
         Contract {
-            symbol: symbol.to_string(),
+            symbol: Symbol::from(symbol),
             security_type: crate::contracts::SecurityType::Stock,
-            exchange: "SMART".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("SMART"),
+            currency: Currency::from("USD"),
             ..Default::default()
         }
     }
@@ -81,16 +81,16 @@ mod sync_integration_tests {
 #[cfg(all(test, feature = "async"))]
 mod async_integration_tests {
     use super::async_mock_client::mock::AsyncMockClient;
-    use crate::contracts::Contract;
+    use crate::contracts::{Contract, Currency, Exchange, Symbol};
     use crate::orders::builder::OrderBuilder;
     use crate::orders::Action;
 
     fn create_stock_contract(symbol: &str) -> Contract {
         Contract {
-            symbol: symbol.to_string(),
+            symbol: Symbol::from(symbol),
             security_type: crate::contracts::SecurityType::Stock,
-            exchange: "SMART".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("SMART"),
+            currency: Currency::from("USD"),
             ..Default::default()
         }
     }

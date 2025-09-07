@@ -323,7 +323,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-        let contract = Contract::stock("TSLA");
+        let contract = Contract::stock("TSLA").build();
         let results = contract_news(&client, &contract, &["BZ", "DJ"]).await;
         assert!(results.is_ok(), "failed to request contract news: {}", results.err().unwrap());
 
@@ -414,7 +414,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-        let contract = Contract::stock("TSLA");
+        let contract = Contract::stock("TSLA").build();
         let mut subscription = client.contract_news(&contract, &["BZ"]).await.unwrap();
 
         // Read one message to ensure subscription is active

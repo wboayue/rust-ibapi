@@ -9,9 +9,9 @@
 use clap::{arg, ArgMatches, Command};
 use log::{debug, info};
 
-use ibapi::contracts::Contract;
-use ibapi::orders::{self, order_builder, PlaceOrder};
-use ibapi::Client;
+use ibapi::contracts::Currency;
+use ibapi::orders;
+use ibapi::prelude::*;
 
 fn main() {
     env_logger::init();
@@ -39,8 +39,8 @@ fn main() {
 
     info!("Connected {client:?}");
 
-    let mut contract = Contract::stock(stock_symbol);
-    contract.currency = "USD".to_string();
+    let mut contract = Contract::stock(stock_symbol.as_str()).build();
+    contract.currency = Currency::from("USD");
     debug!("contract template {contract:?}");
 
     let order_id = client.next_order_id();

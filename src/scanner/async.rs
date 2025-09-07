@@ -66,7 +66,7 @@ pub(crate) async fn scanner_subscription(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::SecurityType;
+    use crate::contracts::{Exchange, SecurityType, Symbol};
     use crate::orders::TagValue;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
@@ -157,23 +157,23 @@ mod tests {
         // Verify first scanner data entry
         let first = &scanner_data[0];
         assert_eq!(first.rank, 0);
-        assert_eq!(first.contract_details.contract.symbol, "SVMH");
+        assert_eq!(first.contract_details.contract.symbol, Symbol::from("SVMH"));
         assert_eq!(first.contract_details.contract.security_type, SecurityType::Stock);
-        assert_eq!(first.contract_details.contract.exchange, "SMART");
+        assert_eq!(first.contract_details.contract.exchange, Exchange::from("SMART"));
 
         // Verify second scanner data entry
         let second = &scanner_data[1];
         assert_eq!(second.rank, 1);
-        assert_eq!(second.contract_details.contract.symbol, "GTI");
+        assert_eq!(second.contract_details.contract.symbol, Symbol::from("GTI"));
         assert_eq!(second.contract_details.contract.security_type, SecurityType::Stock);
-        assert_eq!(second.contract_details.contract.exchange, "SMART");
+        assert_eq!(second.contract_details.contract.exchange, Exchange::from("SMART"));
 
         // Verify third scanner data entry
         let third = &scanner_data[2];
         assert_eq!(third.rank, 2);
-        assert_eq!(third.contract_details.contract.symbol, "LITM");
+        assert_eq!(third.contract_details.contract.symbol, Symbol::from("LITM"));
         assert_eq!(third.contract_details.contract.security_type, SecurityType::Stock);
-        assert_eq!(third.contract_details.contract.exchange, "SMART");
+        assert_eq!(third.contract_details.contract.exchange, Exchange::from("SMART"));
 
         // Verify request parameters were encoded correctly
         {

@@ -1,6 +1,6 @@
 //! Table-driven test data for contracts module tests
 
-use crate::contracts::{Contract, ContractDetails, SecurityType};
+use crate::contracts::{Contract, ContractDetails, Currency, Exchange, SecurityType, Symbol};
 use crate::messages::OutgoingMessages;
 use crate::server_versions;
 
@@ -95,10 +95,10 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
         ContractDetailsTestCase {
             name: "stock contract details",
             contract: Contract {
-                symbol: "TSLA".to_string(),
+                symbol: Symbol::from("TSLA"),
                 security_type: SecurityType::Stock,
-                exchange: "SMART".to_string(),
-                currency: "USD".to_string(),
+                exchange: Exchange::from("SMART"),
+                currency: Currency::from("USD"),
                 ..Default::default()
             },
             response_messages: vec![
@@ -108,9 +108,9 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
             expected_request: "9|8|9000|0|TSLA|STK||0|||SMART||USD|||0|||",
             expected_count: 1,
             validations: Box::new(|contracts| {
-                assert_eq!(contracts[0].contract.symbol, "TSLA");
+                assert_eq!(contracts[0].contract.symbol, Symbol::from("TSLA"));
                 assert_eq!(contracts[0].contract.security_type, SecurityType::Stock);
-                assert_eq!(contracts[0].contract.currency, "USD");
+                assert_eq!(contracts[0].contract.currency, Currency::from("USD"));
                 assert_eq!(contracts[0].contract.contract_id, 459200101);
                 assert_eq!(contracts[0].long_name, "TESLA INC");
                 assert_eq!(contracts[0].industry, "Consumer, Cyclical");
@@ -124,11 +124,11 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
         ContractDetailsTestCase {
             name: "future contract details",
             contract: Contract {
-                symbol: "ES".to_string(),
+                symbol: Symbol::from("ES"),
                 security_type: SecurityType::Future,
-                exchange: "CME".to_string(),
+                exchange: Exchange::from("CME"),
                 last_trade_date_or_contract_month: "202406".to_string(),
-                currency: "USD".to_string(),
+                currency: Currency::from("USD"),
                 ..Default::default()
             },
             response_messages: vec![
@@ -138,9 +138,9 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
             expected_request: "9|8|9000|0|ES|FUT|202406|0|||CME||USD|||0|||",
             expected_count: 1,
             validations: Box::new(|contracts| {
-                assert_eq!(contracts[0].contract.symbol, "ES");
+                assert_eq!(contracts[0].contract.symbol, Symbol::from("ES"));
                 assert_eq!(contracts[0].contract.security_type, SecurityType::Future);
-                assert_eq!(contracts[0].contract.exchange, "CME");
+                assert_eq!(contracts[0].contract.exchange, Exchange::from("CME"));
                 assert_eq!(contracts[0].contract.contract_id, 551318584);
                 assert_eq!(contracts[0].contract.multiplier, "50");
                 assert_eq!(contracts[0].contract.last_trade_date_or_contract_month, "20240621");
@@ -151,10 +151,10 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
         ContractDetailsTestCase {
             name: "bond contract details",
             contract: Contract {
-                symbol: "TLT".to_string(),
+                symbol: Symbol::from("TLT"),
                 security_type: SecurityType::Bond,
-                exchange: "SMART".to_string(),
-                currency: "USD".to_string(),
+                exchange: Exchange::from("SMART"),
+                currency: Currency::from("USD"),
                 ..Default::default()
             },
             response_messages: vec![
@@ -164,26 +164,26 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
             expected_request: "9|8|9000|0|TLT|BOND||0|||SMART||USD|||0|||",
             expected_count: 1,
             validations: Box::new(|contracts| {
-                assert_eq!(contracts[0].contract.symbol, "TLT");
+                assert_eq!(contracts[0].contract.symbol, Symbol::from("TLT"));
                 assert_eq!(contracts[0].contract.security_type, SecurityType::Bond);
-                assert_eq!(contracts[0].contract.currency, "USD");
+                assert_eq!(contracts[0].contract.currency, Currency::from("USD"));
                 assert_eq!(contracts[0].contract.contract_id, 12345);
                 assert_eq!(contracts[0].long_name, "US Treasury Bond");
                 assert_eq!(contracts[0].industry, "Government");
                 // Note: Bond-specific fields (cusip, coupon, maturity, etc.) are not currently
                 // decoded by the contract details decoder and will be empty/default values
                 assert_eq!(contracts[0].contract.last_trade_date_or_contract_month, "20420815");
-                assert_eq!(contracts[0].contract.exchange, "SMART");
+                assert_eq!(contracts[0].contract.exchange, Exchange::from("SMART"));
                 assert_eq!(contracts[0].market_name, "US Treasury Bond");
             }),
         },
         ContractDetailsTestCase {
             name: "stock contract details - multiple exchanges",
             contract: Contract {
-                symbol: "AAPL".to_string(),
+                symbol: Symbol::from("AAPL"),
                 security_type: SecurityType::Stock,
-                exchange: "SMART".to_string(),
-                currency: "USD".to_string(),
+                exchange: Exchange::from("SMART"),
+                currency: Currency::from("USD"),
                 ..Default::default()
             },
             response_messages: vec![
@@ -196,15 +196,15 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
             validations: Box::new(|contracts| {
                 assert_eq!(contracts.len(), 2);
                 // First contract (SMART routing)
-                assert_eq!(contracts[0].contract.symbol, "AAPL");
+                assert_eq!(contracts[0].contract.symbol, Symbol::from("AAPL"));
                 assert_eq!(contracts[0].contract.security_type, SecurityType::Stock);
-                assert_eq!(contracts[0].contract.exchange, "SMART");
-                assert_eq!(contracts[0].contract.primary_exchange, "NASDAQ");
+                assert_eq!(contracts[0].contract.exchange, Exchange::from("SMART"));
+                assert_eq!(contracts[0].contract.primary_exchange, Exchange::from("NASDAQ"));
                 // Second contract (NYSE)
-                assert_eq!(contracts[1].contract.symbol, "AAPL");
+                assert_eq!(contracts[1].contract.symbol, Symbol::from("AAPL"));
                 assert_eq!(contracts[1].contract.security_type, SecurityType::Stock);
-                assert_eq!(contracts[1].contract.exchange, "NYSE");
-                assert_eq!(contracts[1].contract.primary_exchange, "NYSE");
+                assert_eq!(contracts[1].contract.exchange, Exchange::from("NYSE"));
+                assert_eq!(contracts[1].contract.primary_exchange, Exchange::from("NYSE"));
                 // Both should have same contract ID
                 assert_eq!(contracts[0].contract.contract_id, 265598);
                 assert_eq!(contracts[1].contract.contract_id, 265598);
@@ -212,7 +212,7 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
         },
         ContractDetailsTestCase {
             name: "TSLA contract details - multiple exchanges (sync_tests)",
-            contract: Contract::stock("TSLA"),
+            contract: Contract::stock("TSLA").build(),
             response_messages: vec![
                 "10\09001\0TSLA\0STK\0\00\0\0SMART\0USD\0TSLA\0NMS\0NMS\076792991\00.01\0\0ACTIVETIM,AD,ADJUST,ALERT,ALGO,ALLOC,AON,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DARKONLY,DARKPOLL,DAY,DEACT,DEACTDIS,DEACTEOD,DIS,DUR,GAT,GTC,GTD,GTT,HID,IBKRATS,ICE,IMB,IOC,LIT,LMT,LOC,MIDPX,MIT,MKT,MOC,MTL,NGCOMB,NODARK,NONALGO,OCA,OPG,OPGREROUT,PEGBENCH,PEGMID,POSTATS,POSTONLY,PREOPGRTH,PRICECHK,REL,REL2MID,RELPCTOFS,RPI,RTH,SCALE,SCALEODD,SCALERST,SIZECHK,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,SWEEP,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF\0SMART,AMEX,NYSE,CBOE,PHLX,ISE,CHX,ARCA,ISLAND,DRCTEDGE,BEX,BATS,EDGEA,CSFBALGO,JEFFALGO,BYX,IEX,EDGX,FOXRIVER,PEARL,NYSENAT,LTSE,MEMX,PSX\01\00\0TESLA INC\0NASDAQ\0\0Consumer, Cyclical\0Auto Manufacturers\0Auto-Cars/Light Trucks\0US/Eastern\020221229:0400-20221229:2000;20221230:0400-20221230:2000;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0400-20230103:2000\020221229:0930-20221229:1600;20221230:0930-20221230:1600;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0930-20230103:1600\0\00\01\0ISIN\0US88160R1014\01\0\0\026,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26\0\0COMMON\01\01\0100\0\0".to_string(),
                 "10\09001\0TSLA\0STK\0\00\0\0AMEX\0USD\0TSLA\0NMS\0NMS\076792991\00.01\0\0ACTIVETIM,AD,ADJUST,ALERT,ALLOC,AVGCOST,BASKET,BENCHPX,CASHQTY,COND,CONDORDER,DAY,DEACT,DEACTDIS,DEACTEOD,GAT,GTC,GTD,GTT,HID,IOC,LIT,LMT,MIT,MKT,MTL,NGCOMB,NONALGO,OCA,PEGBENCH,SCALE,SCALERST,SNAPMID,SNAPMKT,SNAPREL,STP,STPLMT,TRAIL,TRAILLIT,TRAILLMT,TRAILMIT,WHATIF\0SMART,AMEX,NYSE,CBOE,PHLX,ISE,CHX,ARCA,ISLAND,DRCTEDGE,BEX,BATS,EDGEA,CSFBALGO,JEFFALGO,BYX,IEX,EDGX,FOXRIVER,PEARL,NYSENAT,LTSE,MEMX,PSX\01\00\0TESLA INC\0NASDAQ\0\0Consumer, Cyclical\0Auto Manufacturers\0Auto-Cars/Light Trucks\0US/Eastern\020221229:0700-20221229:2000;20221230:0700-20221230:2000;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0700-20230103:2000\020221229:0700-20221229:2000;20221230:0700-20221230:2000;20221231:CLOSED;20230101:CLOSED;20230102:CLOSED;20230103:0700-20230103:2000\0\00\01\0ISIN\0US88160R1014\01\0\0\026,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26,26\0\0COMMON\01\01\0100\0\0".to_string(),
@@ -222,11 +222,11 @@ pub fn contract_details_test_cases() -> Vec<ContractDetailsTestCase> {
             expected_count: 2,
             validations: Box::new(|contracts| {
                 assert_eq!(contracts.len(), 2);
-                assert_eq!(contracts[0].contract.exchange, "SMART");
-                assert_eq!(contracts[1].contract.exchange, "AMEX");
-                assert_eq!(contracts[0].contract.symbol, "TSLA");
+                assert_eq!(contracts[0].contract.exchange, Exchange::from("SMART"));
+                assert_eq!(contracts[1].contract.exchange, Exchange::from("AMEX"));
+                assert_eq!(contracts[0].contract.symbol, Symbol::from("TSLA"));
                 assert_eq!(contracts[0].contract.security_type, SecurityType::Stock);
-                assert_eq!(contracts[0].contract.currency, "USD");
+                assert_eq!(contracts[0].contract.currency, Currency::from("USD"));
                 assert_eq!(contracts[0].contract.contract_id, 76792991);
                 assert_eq!(contracts[1].contract.contract_id, 76792991);
                 assert_eq!(contracts[0].order_types.len(), 70);
@@ -291,13 +291,13 @@ pub fn option_calculation_test_cases() -> Vec<OptionCalculationTestCase> {
         OptionCalculationTestCase {
             name: "calculate option price",
             contract: Contract {
-                symbol: "AAPL".to_string(),
+                symbol: Symbol::from("AAPL"),
                 security_type: SecurityType::Option,
                 last_trade_date_or_contract_month: "20231215".to_string(),
                 strike: 150.0,
                 right: "C".to_string(),
-                exchange: "SMART".to_string(),
-                currency: "USD".to_string(),
+                exchange: Exchange::from("SMART"),
+                currency: Currency::from("USD"),
                 multiplier: "100".to_string(),
                 ..Default::default()
             },
@@ -312,13 +312,13 @@ pub fn option_calculation_test_cases() -> Vec<OptionCalculationTestCase> {
         OptionCalculationTestCase {
             name: "calculate implied volatility",
             contract: Contract {
-                symbol: "AAPL".to_string(),
+                symbol: Symbol::from("AAPL"),
                 security_type: SecurityType::Option,
                 last_trade_date_or_contract_month: "20231215".to_string(),
                 strike: 150.0,
                 right: "C".to_string(),
-                exchange: "SMART".to_string(),
-                currency: "USD".to_string(),
+                exchange: Exchange::from("SMART"),
+                currency: Currency::from("USD"),
                 multiplier: "100".to_string(),
                 ..Default::default()
             },
@@ -358,10 +358,10 @@ pub fn verify_contract_test_cases() -> Vec<VerifyContractTestCase> {
         VerifyContractTestCase {
             name: "valid contract",
             contract: Contract {
-                symbol: "AAPL".to_string(),
+                symbol: Symbol::from("AAPL"),
                 security_type: SecurityType::Stock,
-                exchange: "SMART".to_string(),
-                currency: "USD".to_string(),
+                exchange: Exchange::from("SMART"),
+                currency: Currency::from("USD"),
                 ..Default::default()
             },
             server_version: server_versions::SIZE_RULES,
@@ -371,10 +371,10 @@ pub fn verify_contract_test_cases() -> Vec<VerifyContractTestCase> {
         VerifyContractTestCase {
             name: "contract with security_id - old server",
             contract: Contract {
-                symbol: "AAPL".to_string(),
+                symbol: Symbol::from("AAPL"),
                 security_type: SecurityType::Stock,
-                exchange: "SMART".to_string(),
-                currency: "USD".to_string(),
+                exchange: Exchange::from("SMART"),
+                currency: Currency::from("USD"),
                 security_id: "US0378331005".to_string(),
                 security_id_type: "ISIN".to_string(),
                 ..Default::default()
@@ -386,10 +386,10 @@ pub fn verify_contract_test_cases() -> Vec<VerifyContractTestCase> {
         VerifyContractTestCase {
             name: "contract with trading class - old server",
             contract: Contract {
-                symbol: "AAPL".to_string(),
+                symbol: Symbol::from("AAPL"),
                 security_type: SecurityType::Stock,
-                exchange: "SMART".to_string(),
-                currency: "USD".to_string(),
+                exchange: Exchange::from("SMART"),
+                currency: Currency::from("USD"),
                 trading_class: "AAPL".to_string(),
                 ..Default::default()
             },
@@ -534,7 +534,7 @@ pub fn contract_details_error_test_cases() -> Vec<ContractDetailsErrorTestCase> 
     vec![
         ContractDetailsErrorTestCase {
             name: "error message from server",
-            contract: Contract::stock("INVALID"),
+            contract: Contract::stock("INVALID").build(),
             response_messages: vec!["4|2|9000|200|Invalid contract|".to_string()],
             should_error: true,
             error_contains: Some("Invalid contract"),
@@ -542,7 +542,7 @@ pub fn contract_details_error_test_cases() -> Vec<ContractDetailsErrorTestCase> 
         },
         ContractDetailsErrorTestCase {
             name: "empty response (no contracts found)",
-            contract: Contract::stock("NOEXIST"),
+            contract: Contract::stock("NOEXIST").build(),
             response_messages: vec!["52|1|9000||".to_string()],
             should_error: false,
             error_contains: None,

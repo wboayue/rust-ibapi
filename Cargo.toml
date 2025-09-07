@@ -622,10 +622,6 @@ required-features = ["sync"]
 name = "test_order_flow"
 path = "examples/test_order_flow.rs"
 required-features = ["sync"]
-[[example]]
-name = "contract_builder"
-path = "examples/contract_builder.rs"
-required-features = ["sync"]
 
 [[example]]
 name = "trace_test"

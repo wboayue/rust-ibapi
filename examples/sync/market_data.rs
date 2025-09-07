@@ -6,7 +6,7 @@
 //! cargo run --features sync --example market_data
 //! ```
 
-use ibapi::{contracts::Contract, market_data::realtime::TickTypes, Client};
+use ibapi::prelude::*;
 
 // This example demonstrates how to request realtime market data for a contract.
 
@@ -15,7 +15,7 @@ fn main() {
 
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
 
     // https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#available-tick-types
     let generic_ticks = &["233", "293"];

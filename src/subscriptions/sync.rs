@@ -110,7 +110,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::stock("AAPL").build();
     /// let subscription = client.market_data(&contract, &["233"], false, false).expect("market data request failed");
     ///
     /// // Process data blocking until the next value is available
@@ -216,7 +216,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::stock("AAPL").build();
     /// let subscription = client.market_data(&contract, &["233"], false, false).expect("market data request failed");
     ///
     /// // Poll for data without blocking
@@ -253,7 +253,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::stock("AAPL").build();
     /// let subscription = client.market_data(&contract, &["233"], false, false).expect("market data request failed");
     ///
     /// // Wait up to 5 seconds for data

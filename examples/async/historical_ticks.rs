@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Connected to IB Gateway");
 
     // Create a stock contract
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
     println!("Requesting historical tick data for {}\n", contract.symbol);
 
     // Example 1: Get last 100 trades

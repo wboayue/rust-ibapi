@@ -192,6 +192,7 @@ pub async fn option_chain(
 mod tests {
     use super::*;
     use crate::contracts::common::test_tables::*;
+    use crate::contracts::{Currency, Exchange, Symbol};
     use crate::messages::ResponseMessage;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
@@ -492,7 +493,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
-        let contract = Contract::stock("TSLA");
+        let contract = Contract::stock("TSLA").build();
 
         let results = client.contract_details(&contract).await;
 
@@ -505,14 +506,14 @@ mod tests {
         let contracts: Vec<ContractDetails> = results.unwrap();
         assert_eq!(2, contracts.len());
 
-        assert_eq!(contracts[0].contract.exchange, "SMART");
-        assert_eq!(contracts[1].contract.exchange, "AMEX");
+        assert_eq!(contracts[0].contract.exchange, Exchange::from("SMART"));
+        assert_eq!(contracts[1].contract.exchange, Exchange::from("AMEX"));
 
-        assert_eq!(contracts[0].contract.symbol, "TSLA");
+        assert_eq!(contracts[0].contract.symbol, Symbol::from("TSLA"));
         assert_eq!(contracts[0].contract.security_type, SecurityType::Stock);
-        assert_eq!(contracts[0].contract.currency, "USD");
+        assert_eq!(contracts[0].contract.currency, Currency::from("USD"));
         assert_eq!(contracts[0].contract.contract_id, 76792991);
-        assert_eq!(contracts[0].contract.primary_exchange, "NASDAQ");
+        assert_eq!(contracts[0].contract.primary_exchange, Exchange::from("NASDAQ"));
         assert_eq!(contracts[0].long_name, "TESLA INC");
         assert_eq!(contracts[0].stock_type, "COMMON");
         assert_eq!(contracts[0].min_size, 1.0);
@@ -536,10 +537,10 @@ mod tests {
 
         // Create a bond contract
         let contract = Contract {
-            symbol: "TLT".to_string(),
+            symbol: Symbol::from("TLT"),
             security_type: SecurityType::Bond,
-            exchange: "SMART".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("SMART"),
+            currency: Currency::from("USD"),
             ..Default::default()
         };
 
@@ -556,9 +557,9 @@ mod tests {
         assert_eq!(1, contracts.len());
 
         // Check basic contract fields
-        assert_eq!(contracts[0].contract.symbol, "TLT");
+        assert_eq!(contracts[0].contract.symbol, Symbol::from("TLT"));
         assert_eq!(contracts[0].contract.security_type, SecurityType::Bond);
-        assert_eq!(contracts[0].contract.currency, "USD");
+        assert_eq!(contracts[0].contract.currency, Currency::from("USD"));
         assert_eq!(contracts[0].contract.contract_id, 12345);
 
         // Check bond-specific fields
@@ -587,11 +588,11 @@ mod tests {
 
         // Create a future contract
         let contract = Contract {
-            symbol: "ES".to_string(),
+            symbol: Symbol::from("ES"),
             security_type: SecurityType::Future,
             last_trade_date_or_contract_month: "202506".to_string(),
-            exchange: "GLOBEX".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("GLOBEX"),
+            currency: Currency::from("USD"),
             ..Default::default()
         };
 
@@ -608,9 +609,9 @@ mod tests {
         assert_eq!(1, contracts.len());
 
         // Check basic contract fields
-        assert_eq!(contracts[0].contract.symbol, "ES");
+        assert_eq!(contracts[0].contract.symbol, Symbol::from("ES"));
         assert_eq!(contracts[0].contract.security_type, SecurityType::Future);
-        assert_eq!(contracts[0].contract.currency, "USD");
+        assert_eq!(contracts[0].contract.currency, Currency::from("USD"));
         assert_eq!(contracts[0].contract.contract_id, 620731015);
 
         // Check future-specific fields
@@ -618,7 +619,7 @@ mod tests {
         assert_eq!(contracts[0].contract.multiplier, "50");
         assert_eq!(contracts[0].contract.local_symbol, "ESM5");
         assert_eq!(contracts[0].contract.trading_class, "ES");
-        assert_eq!(contracts[0].contract.exchange, "CME");
+        assert_eq!(contracts[0].contract.exchange, Exchange::from("CME"));
         assert_eq!(contracts[0].min_tick, 0.25);
         assert_eq!(contracts[0].market_name, "ES");
         assert_eq!(contracts[0].contract_month, "202506");

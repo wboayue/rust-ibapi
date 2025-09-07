@@ -307,7 +307,7 @@ pub fn exercise_options(
 mod tests {
     use std::sync::{Arc, RwLock};
 
-    use crate::contracts::{ComboLeg, Contract, SecurityType};
+    use crate::contracts::{ComboLeg, Contract, Currency, Exchange, SecurityType, Symbol};
     use crate::orders::{Action, Liquidity};
     use crate::stubs::MessageBusStub;
 
@@ -332,10 +332,10 @@ mod tests {
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
         let contract = Contract {
-            symbol: "TSLA".to_owned(),
+            symbol: Symbol::from("TSLA"),
             security_type: SecurityType::Stock,
-            exchange: "SMART".to_owned(),
-            currency: "USD".to_owned(),
+            exchange: Exchange::from("SMART"),
+            currency: Currency::from("USD"),
             ..Contract::default()
         };
 
@@ -363,7 +363,7 @@ mod tests {
             let order_state = &open_order.order_state;
 
             assert_eq!(contract.contract_id, 76792991, "contract.contract_id");
-            assert_eq!(contract.symbol, "TSLA", "contract.symbol");
+            assert_eq!(contract.symbol, Symbol::from("TSLA"), "contract.symbol");
             assert_eq!(contract.security_type, SecurityType::Stock, "contract.security_type");
             assert_eq!(
                 contract.last_trade_date_or_contract_month, "",
@@ -372,8 +372,8 @@ mod tests {
             assert_eq!(contract.strike, 0.0, "contract.strike");
             assert_eq!(contract.right, "?", "contract.right");
             assert_eq!(contract.multiplier, "", "contract.multiplier");
-            assert_eq!(contract.exchange, "SMART", "contract.exchange");
-            assert_eq!(contract.currency, "USD", "contract.currency");
+            assert_eq!(contract.exchange, Exchange::from("SMART"), "contract.exchange");
+            assert_eq!(contract.currency, Currency::from("USD"), "contract.currency");
             assert_eq!(contract.local_symbol, "TSLA", "contract.local_symbol");
             assert_eq!(contract.trading_class, "NMS", "contract.trading_class");
 
@@ -524,7 +524,7 @@ mod tests {
             assert_eq!(execution_data.request_id, -1, "execution_data.request_id");
             assert_eq!(execution.order_id, 13, "execution.order_id");
             assert_eq!(contract.contract_id, 76792991, "contract.contract_id");
-            assert_eq!(contract.symbol, "TSLA", "contract.symbol");
+            assert_eq!(contract.symbol, Symbol::from("TSLA"), "contract.symbol");
             assert_eq!(contract.security_type, SecurityType::Stock, "contract.security_type");
             assert_eq!(
                 contract.last_trade_date_or_contract_month, "",
@@ -533,8 +533,8 @@ mod tests {
             assert_eq!(contract.strike, 0.0, "contract.strike");
             assert_eq!(contract.right, "", "contract.right");
             assert_eq!(contract.multiplier, "", "contract.multiplier");
-            assert_eq!(contract.exchange, "ISLAND", "contract.exchange");
-            assert_eq!(contract.currency, "USD", "contract.currency");
+            assert_eq!(contract.exchange, Exchange::from("ISLAND"), "contract.exchange");
+            assert_eq!(contract.currency, Currency::from("USD"), "contract.currency");
             assert_eq!(contract.local_symbol, "TSLA", "contract.local_symbol");
             assert_eq!(contract.trading_class, "NMS", "contract.trading_class");
             assert_eq!(execution.execution_id, "00025b46.63f8f39c.01.01", "execution.execution_id");
@@ -714,7 +714,7 @@ mod tests {
             let order_state = &order_data.order_state;
 
             assert_eq!(contract.contract_id, 265598, "contract.contract_id");
-            assert_eq!(contract.symbol, "AAPL", "contract.symbol");
+            assert_eq!(contract.symbol, Symbol::from("AAPL"), "contract.symbol");
             assert_eq!(contract.security_type, SecurityType::Stock, "contract.security_type");
             assert_eq!(
                 contract.last_trade_date_or_contract_month, "",
@@ -723,8 +723,8 @@ mod tests {
             assert_eq!(contract.strike, 0.0, "contract.strike");
             assert_eq!(contract.right, "", "contract.right");
             assert_eq!(contract.multiplier, "", "contract.multiplier");
-            assert_eq!(contract.exchange, "SMART", "contract.exchange");
-            assert_eq!(contract.currency, "USD", "contract.currency");
+            assert_eq!(contract.exchange, Exchange::from("SMART"), "contract.exchange");
+            assert_eq!(contract.currency, Currency::from("USD"), "contract.currency");
             assert_eq!(contract.local_symbol, "AAPL", "contract.local_symbol");
             assert_eq!(contract.trading_class, "NMS", "contract.trading_class");
             assert_eq!(order.action, Action::Buy, "order.action");
@@ -918,8 +918,8 @@ mod tests {
         let order_id = 12;
         let contract = Contract {
             security_type: SecurityType::Future,
-            exchange: "EUREX".to_owned(),
-            currency: "EUR".to_owned(),
+            exchange: Exchange::from("EUREX"),
+            currency: Currency::from("EUR"),
             local_symbol: "FGBL MAR 23".to_owned(),
             last_trade_date_or_contract_month: "202303".to_owned(),
             ..Contract::default()
@@ -966,10 +966,10 @@ mod tests {
             };
 
             Contract {
-                symbol: "WTI".to_owned(), // WTI,COIL spread. Symbol can be defined as first leg symbol ("WTI") or currency ("USD").
+                symbol: Symbol::from("WTI"), // WTI,COIL spread. Symbol can be defined as first leg symbol ("WTI") or currency ("USD").
                 security_type: SecurityType::Spread,
-                currency: "USD".to_owned(),
-                exchange: "SMART".to_owned(),
+                currency: Currency::from("USD"),
+                exchange: Exchange::from("SMART"),
                 combo_legs: vec![leg_1, leg_2],
                 ..Contract::default()
             }
@@ -998,10 +998,10 @@ mod tests {
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
         let contract = Contract {
-            symbol: "AAPL".to_owned(),
+            symbol: Symbol::from("AAPL"),
             security_type: SecurityType::Stock,
-            exchange: "SMART".to_owned(),
-            currency: "USD".to_owned(),
+            exchange: Exchange::from("SMART"),
+            currency: Currency::from("USD"),
             ..Contract::default()
         };
 
@@ -1042,7 +1042,7 @@ mod tests {
         // First event: OpenOrder
         if let Some(OrderUpdate::OpenOrder(open_order)) = notifications.next() {
             assert_eq!(open_order.order_id, 13, "open_order.order_id");
-            assert_eq!(open_order.contract.symbol, "TSLA", "contract.symbol");
+            assert_eq!(open_order.contract.symbol, Symbol::from("TSLA"), "contract.symbol");
             assert_eq!(open_order.order.action, Action::Buy, "order.action");
             assert_eq!(open_order.order.total_quantity, 100.0, "order.total_quantity");
             assert_eq!(open_order.order_state.status, "PreSubmitted", "order_state.status");

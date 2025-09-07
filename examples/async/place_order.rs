@@ -6,9 +6,8 @@
 //! 2. Monitor order status through the individual order subscription
 //! 3. Handle multiple concurrent orders with separate subscriptions
 
-use ibapi::contracts::{Contract, SecurityType};
-use ibapi::orders::{order_builder, place_order, Action, PlaceOrder};
-use ibapi::Client;
+use ibapi::orders::{order_builder, place_order};
+use ibapi::prelude::*;
 use std::error::Error;
 
 #[tokio::main]
@@ -21,10 +20,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a contract for Apple stock
     let contract = Contract {
-        symbol: "AAPL".to_string(),
+        symbol: Symbol::from("AAPL"),
         security_type: SecurityType::Stock,
-        exchange: "SMART".to_string(),
-        currency: "USD".to_string(),
+        exchange: Exchange::from("SMART"),
+        currency: Currency::from("USD"),
         ..Default::default()
     };
 

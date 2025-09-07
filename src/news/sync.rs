@@ -279,7 +279,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
-        let contract = Contract::stock("TSLA");
+        let contract = Contract::stock("TSLA").build();
         let results = contract_news(&client, &contract, &["BZ", "DJ"]);
         assert!(results.is_ok(), "failed to request contract news: {}", results.err().unwrap());
 

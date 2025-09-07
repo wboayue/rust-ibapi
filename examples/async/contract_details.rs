@@ -1,6 +1,5 @@
 #![allow(clippy::uninlined_format_args)]
-use ibapi::contracts::{Contract, SecurityType};
-use ibapi::Client;
+use ibapi::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -11,10 +10,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a contract for Apple stock
     let contract = Contract {
-        symbol: "AAPL".to_string(),
+        symbol: Symbol::from("AAPL"),
         security_type: SecurityType::Stock,
-        exchange: "SMART".to_string(),
-        currency: "USD".to_string(),
+        exchange: Exchange::from("SMART"),
+        currency: Currency::from("USD"),
         ..Default::default()
     };
 

@@ -448,7 +448,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let what_to_show = WhatToShow::Trades;
         let trading_hours = TradingHours::Regular;
 
@@ -502,7 +502,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let trading_hours = TradingHours::Regular;
         let period = BarSize::Day;
 
@@ -538,7 +538,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let interval_end = datetime!(2023-04-15 16:31:22 UTC);
         let duration = 2.days();
         let bar_size = BarSize::Hour;
@@ -617,7 +617,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::HISTORICAL_SCHEDULE);
 
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let end_date = datetime!(2023-04-15 16:31:22 UTC);
         let duration = 7.days();
 
@@ -683,7 +683,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let start = Some(datetime!(2023-04-01 09:30:00 UTC));
         let end = Some(datetime!(2023-04-01 16:00:00 UTC));
         let number_of_ticks = 10;
@@ -709,7 +709,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let start = Some(datetime!(2023-04-01 09:30:00 UTC));
         let end = Some(datetime!(2023-04-01 16:00:00 UTC));
         let number_of_ticks = 10;
@@ -734,7 +734,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let start = Some(datetime!(2023-04-01 09:30:00 UTC));
         let end = Some(datetime!(2023-04-01 16:00:00 UTC));
         let number_of_ticks = 10;
@@ -762,7 +762,7 @@ mod tests {
         let client = Client::stubbed(message_bus, server_versions::TRADING_CLASS - 1);
 
         // Create a contract with trading_class set
-        let mut contract = Contract::stock("MSFT");
+        let mut contract = Contract::stock("MSFT").build();
         contract.trading_class = "CLASS".to_string();
 
         let end_date = datetime!(2023-04-15 16:31:22 UTC);
@@ -783,7 +783,7 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let end_date = Some(datetime!(2023-04-15 16:31:22 UTC));
         let duration = 2.days();
         let bar_size = BarSize::Hour;
@@ -813,7 +813,7 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let duration = 2.days();
         let bar_size = BarSize::Hour;
         let what_to_show = WhatToShow::Trades;
@@ -835,7 +835,7 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let duration = 2.days();
         let bar_size = BarSize::Hour;
         let what_to_show = WhatToShow::Trades;
@@ -865,7 +865,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let number_of_ticks = 10;
         let trading_hours = TradingHours::Regular;
 
@@ -898,7 +898,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let number_of_ticks = 10;
         let trading_hours = TradingHours::Regular;
 
@@ -933,7 +933,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let tick_subscription = client
             .historical_ticks_trade(&contract, None, None, 10, TradingHours::Regular)
             .expect("historical ticks trade request failed");
@@ -958,7 +958,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let tick_subscription = client
             .historical_ticks_bid_ask(&contract, None, None, 10, TradingHours::Regular, false)
             .expect("historical ticks bid_ask request failed");
@@ -989,7 +989,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
 
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let tick_subscription = client
             .historical_ticks_mid_point(&contract, None, None, 10, TradingHours::Regular)
             .expect("historical ticks mid_point request failed");
@@ -1020,7 +1020,7 @@ mod tests {
         let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         client.time_zone = Some(time_tz::timezones::db::america::NEW_YORK);
 
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let interval_end = datetime!(2023-04-15 16:00:00 UTC);
         let duration = 2.days();
         let bar_size = BarSize::Day;

@@ -45,7 +45,48 @@ error: Either 'sync' or 'async' feature must be enabled.
        Use: features = ["sync"] or features = ["async"]
 ```
 
-### 2. TradingHours Enum Replaces Boolean Parameters
+### 2. New Contract Builder API (v2)
+
+The contract creation API has been completely redesigned for better type safety and ergonomics.
+
+#### Before (v1.x)
+```rust
+use ibapi::contracts::Contract;
+
+// Old API - less type safe
+let contract = Contract {
+    symbol: "AAPL".to_string(),
+    security_type: "STK".to_string(),
+    exchange: "SMART".to_string(),
+    currency: "USD".to_string(),
+    ..Default::default()
+};
+```
+
+#### After (v2.x)
+```rust
+use ibapi::contracts::Contract;
+
+// New API - type-safe builder pattern
+let contract = Contract::stock("AAPL").build();
+
+// With customization
+let contract = Contract::stock("7203")
+    .on_exchange("TSEJ")
+    .in_currency("JPY")
+    .build();
+```
+
+#### Key Improvements
+
+1. **Type-safe builders**: Separate builders for each contract type
+2. **Required fields enforced**: Can't build invalid contracts
+3. **Smart defaults**: Less boilerplate for common cases
+4. **Better discovery**: IDE autocomplete guides you
+
+For detailed migration instructions, see the [Contract Builder Guide](docs/contract-builder.md).
+
+### 3. TradingHours Enum Replaces Boolean Parameters
 
 All market data methods that previously used `use_rth: bool` now use the `TradingHours` enum for better type safety and clarity.
 
@@ -54,7 +95,7 @@ All market data methods that previously used `use_rth: bool` now use the `Tradin
 use ibapi::Client;
 
 let client = Client::connect("127.0.0.1:4002", 100)?;
-let contract = Contract::stock("AAPL");
+let contract = Contract::stock("AAPL").build();
 
 // Old API with boolean parameter
 let bars = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, true)?;  // true for RTH
@@ -67,7 +108,7 @@ use ibapi::Client;
 use ibapi::market_data::TradingHours;
 
 let client = Client::connect("127.0.0.1:4002", 100)?;
-let contract = Contract::stock("AAPL");
+let contract = Contract::stock("AAPL").build();
 
 // New API with TradingHours enum
 let bars = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Regular)?;
@@ -97,19 +138,34 @@ The following methods now use `TradingHours` instead of `use_rth: bool`:
 
 ### For Existing v1.x Users
 
-All v1.x users were using the synchronous API. Your code remains unchanged:
+All v1.x users were using the synchronous API. You'll need to make minor updates:
 
-```rust
-use ibapi::Client;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = Client::connect("127.0.0.1:4002", 100)?;
-    let time = client.server_time()?;
-    // ... rest of your code works exactly the same
-}
+1. **Update Cargo.toml** - add explicit feature selection:
+```toml
+[dependencies]
+ibapi = { version = "2.0", features = ["sync"] }
 ```
 
-Just update your `Cargo.toml`:
+2. **Update contract creation** - use the new builder API:
+```rust
+// Old (v1.x)
+let contract = Contract::stock("AAPL");
+
+// New (v2.x)
+let contract = Contract::stock("AAPL").build();
+```
+
+3. **Update trading hours parameters** - use enum instead of bool:
+```rust
+// Old (v1.x)
+client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, true)?;
+
+// New (v2.x)
+use ibapi::market_data::TradingHours;
+client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Regular)?;
+```
+
+Your updated code:
 ```toml
 [dependencies]
 ibapi = { version = "2.0", features = ["sync"] }
@@ -184,9 +240,11 @@ ibapi.workspace = true
 
 While migrating, you might want to take advantage of new features:
 
-1. **Improved async support**: Pre-created broadcast channels eliminate race conditions
-2. **Trace functionality**: Record interactions when debug logging is enabled
-3. **Better error messages**: More descriptive errors throughout
+1. **Async support**: Choose between sync and async implementations
+2. **Type-safe contract builder**: New builder API with compile-time validation
+3. **Improved type safety**: TradingHours enum replaces boolean parameters
+4. **Trace functionality**: Record interactions when debug logging is enabled
+5. **Better error messages**: More descriptive errors throughout
 
 ## Getting Help
 
@@ -196,10 +254,11 @@ While migrating, you might want to take advantage of new features:
 
 ## Summary
 
-For most users, migration is as simple as:
+Migration from v1.x to v2.x requires these changes:
 
-1. Update version to `2.0`
-2. Add `features = ["sync"]` to your dependency
-3. Run `cargo build` to verify
+1. **Update Cargo.toml**: Add `features = ["sync"]` to your dependency
+2. **Update contract creation**: Add `.build()` to contract factory methods
+3. **Update trading hours**: Replace `bool` with `TradingHours` enum
+4. **Run `cargo build`** to catch any remaining issues
 
-That's it! Your existing code should work without modifications.
+The changes are minimal and mostly mechanical - your application logic remains the same!

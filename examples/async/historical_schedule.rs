@@ -20,7 +20,7 @@
 use std::sync::Arc;
 
 use ibapi::{
-    contracts::{Contract, SecurityType},
+    contracts::{Contract, Currency, Exchange, SecurityType, Symbol},
     market_data::historical::ToDuration,
     Client,
 };
@@ -36,15 +36,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create different contract types
     let contracts = vec![
-        ("AAPL", Contract::stock("AAPL"), "NASDAQ"),
-        ("SPY", Contract::stock("SPY"), "NYSE"),
+        ("AAPL", Contract::stock("AAPL").build(), "NASDAQ"),
+        ("SPY", Contract::stock("SPY").build(), "NYSE"),
         (
             "GC",
             Contract {
-                symbol: "GC".to_string(),
+                symbol: Symbol::from("GC"),
                 security_type: SecurityType::Future,
-                exchange: "COMEX".to_string(),
-                currency: "USD".to_string(),
+                exchange: Exchange::from("COMEX"),
+                currency: Currency::from("USD"),
                 last_trade_date_or_contract_month: "202502".to_string(),
                 ..Default::default()
             },
@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example with specific date range
     println!("\n\nSpecific date range example (Thanksgiving week 2023):");
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
     let end_date = Some(datetime!(2023-11-26 00:00 UTC));
     let duration = 7.days();
 

@@ -21,7 +21,7 @@ fn main() {
             let connection_url = "127.0.0.1:4002";
             let client = Client::connect(connection_url, client_id).expect("connection to TWS failed!");
 
-            let contract = Contract::stock(symbol);
+            let contract = Contract::stock(symbol).build();
             let subscription = client
                 .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
                 .expect("realtime bars request failed!");

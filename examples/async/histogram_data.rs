@@ -33,15 +33,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let test_cases = vec![
         (
             "AAPL",
-            Contract::stock("AAPL"),
+            Contract::stock("AAPL").build(),
             HistoricalBarSize::Week,
             TradingHours::Regular,
             "1 week RTH",
         ),
-        ("SPY", Contract::stock("SPY"), HistoricalBarSize::Day, TradingHours::Regular, "1 day RTH"),
+        (
+            "SPY",
+            Contract::stock("SPY").build(),
+            HistoricalBarSize::Day,
+            TradingHours::Regular,
+            "1 day RTH",
+        ),
         (
             "TSLA",
-            Contract::stock("TSLA"),
+            Contract::stock("TSLA").build(),
             HistoricalBarSize::Week,
             TradingHours::Extended,
             "1 week all hours",

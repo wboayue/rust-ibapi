@@ -1,4 +1,5 @@
-pub(crate) mod contract_builder;
+// contract_builder module is deprecated - using new V2 builders instead
+// pub(crate) mod contract_builder;
 pub(crate) mod decoders;
 pub(crate) mod encoders;
 pub(crate) mod stream_decoders;

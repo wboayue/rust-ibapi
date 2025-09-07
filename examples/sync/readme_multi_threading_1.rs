@@ -23,7 +23,7 @@ fn main() {
     for symbol in symbols {
         let client = Arc::clone(&client);
         let handle = thread::spawn(move || {
-            let contract = Contract::stock(symbol);
+            let contract = Contract::stock(symbol).build();
             let subscription = client
                 .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
                 .expect("realtime bars request failed!");

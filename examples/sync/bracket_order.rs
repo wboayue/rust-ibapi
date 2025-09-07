@@ -45,7 +45,7 @@ fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
     let parent_id = client.next_valid_order_id().expect("error getting next order id");
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
 
     if let Err(e) = place_bracket_order(&client, &contract, parent_id) {
         eprintln!("Failed to place bracket order: {e}");

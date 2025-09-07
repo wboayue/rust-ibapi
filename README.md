@@ -92,23 +92,51 @@ async fn main() {
 
 ### Creating Contracts
 
-Here's how to create a stock contract for TSLA using the [stock](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.stock) helper function (same for both sync and async):
+The library provides a powerful type-safe contract builder API. Here's how to create a stock contract for TSLA:
 
 ```rust
 use ibapi::prelude::*;
 
-// Create a contract for TSLA stock (default currency: USD, exchange: SMART)
-let contract = Contract::stock("TSLA");
+// Simple stock contract with defaults (USD, SMART routing)
+let contract = Contract::stock("TSLA").build();
+
+// Stock with customization - accepts string literals directly
+let contract = Contract::stock("7203")
+    .on_exchange("TSEJ")
+    .in_currency("JPY")
+    .build();
 ```
 
-The [stock](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.stock), [futures](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.futures), and [crypto](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.crypto) methods provide shortcuts for defining contracts with reasonable defaults that can be modified after creation.
+The builder API provides type-safe construction for all contract types with compile-time validation:
 
-For contracts requiring custom configurations:
+```rust
+// Options - required fields enforced at compile time
+let option = Contract::call("AAPL")
+    .strike(150.0)
+    .expires_on(2024, 12, 20)
+    .build();
+
+// Futures with convenience methods
+let futures = Contract::futures("ES")
+    .front_month()  // Next expiring contract
+    .build();
+
+// Forex pairs
+let forex = Contract::forex("EUR", "USD").build();
+
+// Bonds - simplified API for CUSIP and ISIN
+let treasury = Contract::bond_cusip("912810RN0");
+let euro_bond = Contract::bond_isin("DE0001102309");
+```
+
+See the [Contract Builder Guide](docs/contract-builder.md) for comprehensive documentation on all contract types.
+
+For lower-level control, you can also create contracts directly:
 
 ```rust
 use ibapi::prelude::*;
 
-// Create a fully specified contract for TSLA stock
+// Create a fully specified contract
 Contract {
     symbol: "TSLA".to_string(),
     security_type: SecurityType::Stock,
@@ -132,7 +160,7 @@ fn main() {
     let connection_url = "127.0.0.1:4002";
     let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
 
     let historical_data = client
         .historical_data(
@@ -164,7 +192,7 @@ async fn main() {
     let connection_url = "127.0.0.1:4002";
     let client = Client::connect(connection_url, 100).await.expect("connection to TWS failed!");
 
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
 
     let historical_data = client
         .historical_data(
@@ -198,7 +226,7 @@ fn main() {
     let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 
     // Request real-time bars data for AAPL with 5-second intervals
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
     let subscription = client
         .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
         .expect("realtime bars request failed!");
@@ -222,7 +250,7 @@ async fn main() {
     let client = Client::connect(connection_url, 100).await.expect("connection to TWS failed!");
 
     // Request real-time bars data for AAPL with 5-second intervals
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
     let mut subscription = client
         .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
         .await
@@ -266,8 +294,8 @@ fn main() {
     let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 
     // Request real-time bars data for AAPL with 5-second intervals
-    let contract_aapl = Contract::stock("AAPL");
-    let contract_nvda = Contract::stock("NVDA");
+    let contract_aapl = Contract::stock("AAPL").build();
+    let contract_nvda = Contract::stock("NVDA").build();
 
     let subscription_aapl = client
         .realtime_bars(&contract_aapl, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
@@ -297,7 +325,7 @@ pub fn main() {
     let connection_url = "127.0.0.1:4002";
     let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
 
     // Create and submit a market order to purchase 100 shares using the fluent API
     let order_id = client.order(&contract)
@@ -331,7 +359,7 @@ async fn main() {
     let connection_url = "127.0.0.1:4002";
     let client = Client::connect(connection_url, 100).await.expect("connection to TWS failed!");
 
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
 
     // Create and submit a market order to purchase 100 shares using the fluent API
     let order_id = client.order(&contract)
@@ -378,7 +406,7 @@ fn main() {
     for symbol in symbols {
         let client = Arc::clone(&client);
         let handle = thread::spawn(move || {
-            let contract = Contract::stock(symbol);
+            let contract = Contract::stock(symbol).build();
             let subscription = client
                 .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
                 .expect("realtime bars request failed!");
@@ -412,7 +440,7 @@ fn main() {
             let connection_url = "127.0.0.1:4002";
             let client = Client::connect(connection_url, client_id).expect("connection to TWS failed!");
 
-            let contract = Contract::stock(symbol);
+            let contract = Contract::stock(symbol).build();
             let subscription = client
                 .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
                 .expect("realtime bars request failed!");
@@ -442,7 +470,7 @@ fn main() {
     let connection_url = "127.0.0.1:4002";
     let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
 
     loop {
         // Request real-time bars data with 5-second intervals

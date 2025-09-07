@@ -149,14 +149,10 @@ impl Client {
     /// # Example
     /// ```no_run
     /// use ibapi::Client;
-    /// use ibapi::contracts::{Contract, SecurityType};
+    /// use ibapi::contracts::Contract;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    /// let mut contract = Contract::default();
-    /// contract.symbol = "AAPL".to_string();
-    /// contract.security_type = SecurityType::Stock;
-    /// contract.exchange = "SMART".to_string();
-    /// contract.currency = "USD".to_string();
+    /// let contract = Contract::stock("AAPL").build();
     ///
     /// let order_id = client.order(&contract)
     ///     .buy(100)
@@ -457,7 +453,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("TSLA");
+    /// let contract = Contract::stock("TSLA").build();
     /// let results = client.contract_details(&contract).expect("request failed");
     /// for contract_detail in results {
     ///     println!("contract: {contract_detail:?}");
@@ -752,12 +748,16 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
-    /// use ibapi::orders::{order_builder, Action, PlaceOrder};
+    /// use ibapi::orders::PlaceOrder;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("MSFT");
-    /// let order = order_builder::market_order(Action::Buy, 100.0);
+    /// let contract = Contract::stock("MSFT").build();
+    /// let order = client.order(&contract)
+    ///     .buy(100)
+    ///     .market()
+    ///     .build_order()
+    ///     .expect("failed to build order");
     /// let order_id = client.next_order_id();
     ///
     /// let events = client.place_order(order_id, &contract, &order).expect("request failed");
@@ -799,14 +799,16 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
-    /// use ibapi::orders::{order_builder, Action};
     ///
     /// # fn main() -> Result<(), ibapi::Error> {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100)?;
     ///
-    /// let contract = Contract::stock("MSFT");
-    /// let order = order_builder::market_order(Action::Buy, 100.0);
+    /// let contract = Contract::stock("MSFT").build();
+    /// let order = client.order(&contract)
+    ///     .buy(100)
+    ///     .market()
+    ///     .build_order()?;
     /// let order_id = client.next_order_id();
     ///
     /// // Submit order without waiting for confirmation
@@ -943,7 +945,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("MSFT");
+    /// let contract = Contract::stock("MSFT").build();
     /// let what_to_show = WhatToShow::Trades;
     /// let trading_hours = TradingHours::Regular;
     ///
@@ -982,7 +984,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("TSLA");
+    /// let contract = Contract::stock("TSLA").build();
     ///
     /// let historical_data = client
     ///     .historical_data(&contract, Some(datetime!(2023-04-15 0:00 UTC)), 7.days(), BarSize::Day, WhatToShow::Trades, TradingHours::Regular)
@@ -1024,7 +1026,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("GM");
+    /// let contract = Contract::stock("GM").build();
     ///
     /// let historical_data = client
     ///     .historical_schedules(&contract, datetime!(2023-04-15 0:00 UTC), 30.days())
@@ -1060,7 +1062,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("GM");
+    /// let contract = Contract::stock("GM").build();
     ///
     /// let historical_data = client
     ///     .historical_schedules_ending_now(&contract, 30.days())
@@ -1097,7 +1099,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("TSLA");
+    /// let contract = Contract::stock("TSLA").build();
     ///
     /// let ticks = client
     ///     .historical_ticks_bid_ask(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, TradingHours::Regular, false)
@@ -1139,7 +1141,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("TSLA");
+    /// let contract = Contract::stock("TSLA").build();
     ///
     /// let ticks = client
     ///     .historical_ticks_mid_point(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, TradingHours::Regular)
@@ -1180,7 +1182,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("TSLA");
+    /// let contract = Contract::stock("TSLA").build();
     ///
     /// let ticks = client
     ///     .historical_ticks_trade(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, TradingHours::Regular)
@@ -1220,7 +1222,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("GM");
+    /// let contract = Contract::stock("GM").build();
     ///
     /// let histogram = client
     ///     .histogram_data(&contract, TradingHours::Regular, BarSize::Week)
@@ -1256,7 +1258,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("TSLA");
+    /// let contract = Contract::stock("TSLA").build();
     /// let subscription = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended).expect("request failed");
     ///
     /// for (i, bar) in subscription.iter().enumerate().take(60) {
@@ -1288,7 +1290,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::stock("AAPL").build();
     /// let number_of_ticks = 10; // Request a small number of ticks for the example
     /// let ignore_size = false;
     ///
@@ -1323,7 +1325,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::stock("AAPL").build();
     /// let number_of_ticks = 10; // Request a small number of ticks for the example
     /// let ignore_size = false;
     ///
@@ -1358,7 +1360,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::stock("AAPL").build();
     /// let number_of_ticks = 10; // Request a small number of ticks for the example
     /// let ignore_size = false;
     ///
@@ -1388,7 +1390,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::stock("AAPL").build();
     /// let number_of_ticks = 10; // Request a small number of ticks for the example
     /// let ignore_size = false;
     ///
@@ -1440,7 +1442,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::stock("AAPL").build();
     ///
     /// let subscription = client.market_depth(&contract, 5, true).expect("error requesting market depth");
     /// for row in &subscription {
@@ -1505,7 +1507,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::stock("AAPL").build();
     ///
     /// // https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#available-tick-types
     /// let generic_ticks = &["233", "293"];
@@ -1675,7 +1677,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::stock("AAPL").build();
     /// let provider_codes = ["DJ-N"];
     ///
     /// let subscription = client.contract_news(&contract, &provider_codes).expect("request contract news failed");
@@ -1985,7 +1987,7 @@ impl Debug for Client {
 /// let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 ///
 /// // Request real-time bars data for AAPL with 5-second intervals
-/// let contract = Contract::stock("AAPL");
+/// let contract = Contract::stock("AAPL").build();
 /// let subscription = client
 ///     .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended)
 ///     .expect("realtime bars request failed!");
@@ -2009,6 +2011,7 @@ mod tests {
 
     use super::{Client, TradingHours};
     use crate::client::common::tests::*;
+    use crate::contracts::{Currency, Exchange, Symbol};
     use crate::{connection::ConnectionMetadata, stubs::MessageBusStub};
 
     const CLIENT_ID: i32 = 100;
@@ -2078,7 +2081,7 @@ mod tests {
             match position_update {
                 crate::accounts::PositionUpdate::Position(position) => {
                     assert_eq!(position.account, "DU1234567");
-                    assert_eq!(position.contract.symbol, "AAPL");
+                    assert_eq!(position.contract.symbol, Symbol::from("AAPL"));
                     assert_eq!(position.position, 500.0);
                     assert_eq!(position.average_cost, 150.25);
                     position_count += 1;
@@ -2112,13 +2115,13 @@ mod tests {
                     position_count += 1;
                     if position_count == 1 {
                         assert_eq!(position.account, "DU1234567");
-                        assert_eq!(position.contract.symbol, "AAPL");
+                        assert_eq!(position.contract.symbol, Symbol::from("AAPL"));
                         assert_eq!(position.position, 500.0);
                         assert_eq!(position.average_cost, 150.25);
                         assert_eq!(position.model_code, "MODEL1");
                     } else if position_count == 2 {
                         assert_eq!(position.account, "DU1234568");
-                        assert_eq!(position.contract.symbol, "GOOGL");
+                        assert_eq!(position.contract.symbol, Symbol::from("GOOGL"));
                         assert_eq!(position.position, 200.0);
                         assert_eq!(position.average_cost, 2500.00);
                         assert_eq!(position.model_code, "MODEL1");
@@ -2242,7 +2245,7 @@ mod tests {
                     value_count += 1;
                 }
                 crate::accounts::AccountUpdate::PortfolioValue(portfolio) => {
-                    assert_eq!(portfolio.contract.symbol, "AAPL");
+                    assert_eq!(portfolio.contract.symbol, Symbol::from("AAPL"));
                     assert_eq!(portfolio.position, 500.0);
                     assert_eq!(portfolio.market_price, 151.50);
                     assert_eq!(portfolio.market_value, 75750.00);
@@ -2368,21 +2371,21 @@ mod tests {
 
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = crate::contracts::Contract::stock("AAPL");
+        let contract = crate::contracts::Contract::stock("AAPL").build();
         let details = client.contract_details(&contract).expect("Failed to get contract details");
 
         assert_eq!(details.len(), 1);
         let detail = &details[0];
 
         // Verify contract fields
-        assert_eq!(detail.contract.symbol, "AAPL");
+        assert_eq!(detail.contract.symbol, Symbol::from("AAPL"));
         assert_eq!(detail.contract.security_type, crate::contracts::SecurityType::Stock);
-        assert_eq!(detail.contract.currency, "USD");
-        assert_eq!(detail.contract.exchange, "NASDAQ");
+        assert_eq!(detail.contract.currency, Currency::from("USD"));
+        assert_eq!(detail.contract.exchange, Exchange::from("NASDAQ"));
         assert_eq!(detail.contract.local_symbol, "AAPL");
         assert_eq!(detail.contract.trading_class, "AAPL");
         assert_eq!(detail.contract.contract_id, 265598);
-        assert_eq!(detail.contract.primary_exchange, "NASDAQ");
+        assert_eq!(detail.contract.primary_exchange, Exchange::from("NASDAQ"));
 
         // Verify contract details fields
         assert_eq!(detail.market_name, "NMS");
@@ -2416,7 +2419,7 @@ mod tests {
         let client = Client::stubbed(message_bus.clone(), 100);
 
         // Create a subscription using realtime bars as an example
-        let contract = crate::contracts::Contract::stock("AAPL");
+        let contract = crate::contracts::Contract::stock("AAPL").build();
         let subscription = client
             .realtime_bars(
                 &contract,
@@ -2459,10 +2462,10 @@ mod tests {
 
         // First contract description
         assert_eq!(contract_descriptions[0].contract.contract_id, 265598);
-        assert_eq!(contract_descriptions[0].contract.symbol, "AAPL");
+        assert_eq!(contract_descriptions[0].contract.symbol, Symbol::from("AAPL"));
         assert_eq!(contract_descriptions[0].contract.security_type, crate::contracts::SecurityType::Stock);
-        assert_eq!(contract_descriptions[0].contract.primary_exchange, "NASDAQ");
-        assert_eq!(contract_descriptions[0].contract.currency, "USD");
+        assert_eq!(contract_descriptions[0].contract.primary_exchange, Exchange::from("NASDAQ"));
+        assert_eq!(contract_descriptions[0].contract.currency, Currency::from("USD"));
         assert_eq!(contract_descriptions[0].derivative_security_types.len(), 2);
         assert_eq!(contract_descriptions[0].derivative_security_types[0], "OPT");
         assert_eq!(contract_descriptions[0].derivative_security_types[1], "WAR");
@@ -2471,10 +2474,10 @@ mod tests {
 
         // Second contract description
         assert_eq!(contract_descriptions[1].contract.contract_id, 276821);
-        assert_eq!(contract_descriptions[1].contract.symbol, "MSFT");
+        assert_eq!(contract_descriptions[1].contract.symbol, Symbol::from("MSFT"));
         assert_eq!(contract_descriptions[1].contract.security_type, crate::contracts::SecurityType::Stock);
-        assert_eq!(contract_descriptions[1].contract.primary_exchange, "NASDAQ");
-        assert_eq!(contract_descriptions[1].contract.currency, "USD");
+        assert_eq!(contract_descriptions[1].contract.primary_exchange, Exchange::from("NASDAQ"));
+        assert_eq!(contract_descriptions[1].contract.currency, Currency::from("USD"));
         assert_eq!(contract_descriptions[1].derivative_security_types.len(), 1);
         assert_eq!(contract_descriptions[1].derivative_security_types[0], "OPT");
         assert_eq!(contract_descriptions[1].contract.description, "Microsoft Corporation");
@@ -2529,10 +2532,10 @@ mod tests {
 
         // Create an option contract
         let contract = crate::contracts::Contract {
-            symbol: "AAPL".to_string(),
+            symbol: Symbol::from("AAPL"),
             security_type: crate::contracts::SecurityType::Option,
-            exchange: "SMART".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("SMART"),
+            currency: Currency::from("USD"),
             last_trade_date_or_contract_month: "20250120".to_string(),
             strike: 100.0,
             right: "C".to_string(),
@@ -2583,10 +2586,10 @@ mod tests {
 
         // Create an option contract
         let contract = crate::contracts::Contract {
-            symbol: "MSFT".to_string(),
+            symbol: Symbol::from("MSFT"),
             security_type: crate::contracts::SecurityType::Option,
-            exchange: "SMART".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("SMART"),
+            currency: Currency::from("USD"),
             last_trade_date_or_contract_month: "20250220".to_string(),
             strike: 105.0,
             right: "P".to_string(), // Put option
@@ -2704,7 +2707,7 @@ mod tests {
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
         // Create a stock contract
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
 
         // Create a market order
         let order = order_builder::market_order(Action::Buy, 100.0);
@@ -2766,7 +2769,7 @@ mod tests {
                 PlaceOrder::OpenOrder(order_data) => {
                     _open_order_count += 1;
                     assert_eq!(order_data.order_id, order_id);
-                    assert_eq!(order_data.contract.symbol, "AAPL");
+                    assert_eq!(order_data.contract.symbol, Symbol::from("AAPL"));
                     assert_eq!(order_data.contract.contract_id, 265598);
                     assert_eq!(order_data.order.action, Action::Buy);
                     assert_eq!(order_data.order.total_quantity, 100.0);
@@ -2776,7 +2779,7 @@ mod tests {
                 PlaceOrder::ExecutionData(exec_data) => {
                     execution_count += 1;
                     assert_eq!(exec_data.execution.order_id, order_id);
-                    assert_eq!(exec_data.contract.symbol, "AAPL");
+                    assert_eq!(exec_data.contract.symbol, Symbol::from("AAPL"));
                     assert_eq!(exec_data.execution.shares, 100.0);
                     assert_eq!(exec_data.execution.price, 150.25);
                 }
@@ -2824,7 +2827,7 @@ mod tests {
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
         // Create a stock contract
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
 
         // Create a market order
         let order = order_builder::market_order(Action::Buy, 100.0);
@@ -2881,7 +2884,7 @@ mod tests {
                     OrderUpdate::OpenOrder(order_data) => {
                         _open_order_count += 1;
                         assert_eq!(order_data.order_id, order_id);
-                        assert_eq!(order_data.contract.symbol, "AAPL");
+                        assert_eq!(order_data.contract.symbol, Symbol::from("AAPL"));
                         assert_eq!(order_data.contract.contract_id, 265598);
                         assert_eq!(order_data.order.action, Action::Buy);
                         assert_eq!(order_data.order.total_quantity, 100.0);
@@ -2891,7 +2894,7 @@ mod tests {
                     OrderUpdate::ExecutionData(exec_data) => {
                         execution_count += 1;
                         assert_eq!(exec_data.execution.order_id, order_id);
-                        assert_eq!(exec_data.contract.symbol, "AAPL");
+                        assert_eq!(exec_data.contract.symbol, Symbol::from("AAPL"));
                         assert_eq!(exec_data.execution.shares, 100.0);
                         assert_eq!(exec_data.execution.price, 150.25);
                     }
@@ -2960,7 +2963,7 @@ mod tests {
         // Verify first order (AAPL)
         let order1 = &orders[0];
         assert_eq!(order1.order_id, 1001);
-        assert_eq!(order1.contract.symbol, "AAPL");
+        assert_eq!(order1.contract.symbol, Symbol::from("AAPL"));
         assert_eq!(order1.contract.security_type, crate::contracts::SecurityType::Stock);
         assert_eq!(order1.order.action, Action::Buy);
         assert_eq!(order1.order.total_quantity, 100.0);
@@ -2970,7 +2973,7 @@ mod tests {
         // Verify second order (MSFT)
         let order2 = &orders[1];
         assert_eq!(order2.order_id, 1002);
-        assert_eq!(order2.contract.symbol, "MSFT");
+        assert_eq!(order2.contract.symbol, Symbol::from("MSFT"));
         assert_eq!(order2.contract.security_type, crate::contracts::SecurityType::Stock);
         assert_eq!(order2.order.action, Action::Sell);
         assert_eq!(order2.order.total_quantity, 50.0);
@@ -3020,7 +3023,7 @@ mod tests {
         // Verify first order (TSLA from client 101)
         let order1 = &orders[0];
         assert_eq!(order1.order_id, 2001);
-        assert_eq!(order1.contract.symbol, "TSLA");
+        assert_eq!(order1.contract.symbol, Symbol::from("TSLA"));
         assert_eq!(order1.contract.security_type, crate::contracts::SecurityType::Stock);
         assert_eq!(order1.order.action, Action::Buy);
         assert_eq!(order1.order.total_quantity, 10.0);
@@ -3031,7 +3034,7 @@ mod tests {
         // Verify second order (AMZN from client 102)
         let order2 = &orders[1];
         assert_eq!(order2.order_id, 2002);
-        assert_eq!(order2.contract.symbol, "AMZN");
+        assert_eq!(order2.contract.symbol, Symbol::from("AMZN"));
         assert_eq!(order2.order.action, Action::Sell);
         assert_eq!(order2.order.total_quantity, 5.0);
         assert_eq!(order2.order.order_type, "MKT");
@@ -3040,7 +3043,7 @@ mod tests {
         // Verify third order (GOOGL from current client 100)
         let order3 = &orders[2];
         assert_eq!(order3.order_id, 1003);
-        assert_eq!(order3.contract.symbol, "GOOGL");
+        assert_eq!(order3.contract.symbol, Symbol::from("GOOGL"));
         assert_eq!(order3.order.action, Action::Buy);
         assert_eq!(order3.order.total_quantity, 20.0);
         assert_eq!(order3.order.order_type, "LMT");
@@ -3105,7 +3108,7 @@ mod tests {
         // Verify the order (FB from TWS)
         let order = &orders[0];
         assert_eq!(order.order_id, 3001);
-        assert_eq!(order.contract.symbol, "FB");
+        assert_eq!(order.contract.symbol, Symbol::from("FB"));
         assert_eq!(order.contract.security_type, crate::contracts::SecurityType::Stock);
         assert_eq!(order.order.action, crate::orders::Action::Buy);
         assert_eq!(order.order.total_quantity, 50.0);
@@ -3158,7 +3161,7 @@ mod tests {
         let order1 = &orders[0];
         // CompletedOrder messages don't have order_id in the message, defaults to -1
         assert_eq!(order1.order_id, -1);
-        assert_eq!(order1.contract.symbol, "ES");
+        assert_eq!(order1.contract.symbol, Symbol::from("ES"));
         assert_eq!(order1.contract.security_type, crate::contracts::SecurityType::Future);
         assert_eq!(order1.order.action, Action::Buy);
         assert_eq!(order1.order.total_quantity, 1.0);
@@ -3169,7 +3172,7 @@ mod tests {
         // Verify second completed order (AAPL)
         let order2 = &orders[1];
         assert_eq!(order2.order_id, -1); // CompletedOrder messages don't have order_id
-        assert_eq!(order2.contract.symbol, "AAPL");
+        assert_eq!(order2.contract.symbol, Symbol::from("AAPL"));
         assert_eq!(order2.contract.security_type, crate::contracts::SecurityType::Stock);
         assert_eq!(order2.order.action, Action::Buy);
         assert_eq!(order2.order.total_quantity, 100.0);
@@ -3325,7 +3328,7 @@ mod tests {
         let exec1 = &execution_data[0];
         assert_eq!(exec1.request_id, 9000);
         assert_eq!(exec1.execution.order_id, 1001);
-        assert_eq!(exec1.contract.symbol, "AAPL");
+        assert_eq!(exec1.contract.symbol, Symbol::from("AAPL"));
         assert_eq!(exec1.contract.security_type, SecurityType::Stock);
         assert_eq!(exec1.execution.execution_id, "000e1a2b.67890abc.01.01");
         assert_eq!(exec1.execution.side, "BOT");
@@ -3342,7 +3345,7 @@ mod tests {
         let exec2 = &execution_data[1];
         assert_eq!(exec2.request_id, 9000);
         assert_eq!(exec2.execution.order_id, 1002);
-        assert_eq!(exec2.contract.symbol, "ES");
+        assert_eq!(exec2.contract.symbol, Symbol::from("ES"));
         assert_eq!(exec2.contract.security_type, SecurityType::Future);
         assert_eq!(exec2.execution.execution_id, "000e1a2b.67890def.02.01");
         assert_eq!(exec2.execution.side, "SLD");
@@ -3359,7 +3362,7 @@ mod tests {
         let exec3 = &execution_data[2];
         assert_eq!(exec3.request_id, 9000);
         assert_eq!(exec3.execution.order_id, 1003);
-        assert_eq!(exec3.contract.symbol, "SPY");
+        assert_eq!(exec3.contract.symbol, Symbol::from("SPY"));
         assert_eq!(exec3.contract.security_type, SecurityType::Option);
         assert_eq!(exec3.execution.execution_id, "000e1a2b.67890ghi.03.01");
         assert_eq!(exec3.execution.side, "BOT");
@@ -3398,14 +3401,14 @@ mod tests {
         // Create option contract for SPY
         let contract = Contract {
             contract_id: 123456789,
-            symbol: "SPY".to_string(),
+            symbol: Symbol::from("SPY"),
             security_type: SecurityType::Option,
             last_trade_date_or_contract_month: "20240126".to_string(),
             strike: 450.0,
             right: "C".to_string(), // Call option
             multiplier: "100".to_string(),
-            exchange: "CBOE".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("CBOE"),
+            currency: Currency::from("USD"),
             local_symbol: "SPY240126C00450000".to_string(),
             trading_class: "SPY".to_string(),
             ..Default::default()
@@ -3454,7 +3457,7 @@ mod tests {
         // Verify open order
         let open_order = &open_orders[0];
         assert_eq!(open_order.order.order_id, 90);
-        assert_eq!(open_order.contract.symbol, "SPY");
+        assert_eq!(open_order.contract.symbol, Symbol::from("SPY"));
         assert_eq!(open_order.contract.security_type, SecurityType::Option);
         assert_eq!(open_order.order.order_type, "EXERCISE");
 
@@ -3502,7 +3505,7 @@ mod tests {
         let gateway = setup_market_data();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let generic_ticks = vec!["100", "101", "104"]; // Option volume, option open interest, historical volatility
         let snapshot = true;
         let regulatory_snapshot = false;
@@ -3610,7 +3613,7 @@ mod tests {
         let gateway = setup_realtime_bars();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let bar_size = BarSize::Sec5;
         let what_to_show = WhatToShow::Trades;
         let trading_hours = TradingHours::Extended;
@@ -3673,7 +3676,7 @@ mod tests {
         let gateway = setup_tick_by_tick_last();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let number_of_ticks = 0;
         let ignore_size = false;
 
@@ -3728,7 +3731,7 @@ mod tests {
         let gateway = setup_tick_by_tick_all_last();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let number_of_ticks = 0;
         let ignore_size = false;
 
@@ -3777,7 +3780,7 @@ mod tests {
         let gateway = setup_tick_by_tick_bid_ask();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let number_of_ticks = 0;
         let ignore_size = false;
 
@@ -3828,7 +3831,7 @@ mod tests {
         let gateway = setup_tick_by_tick_midpoint();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let number_of_ticks = 0;
         let ignore_size = false;
 
@@ -3864,7 +3867,7 @@ mod tests {
         let gateway = setup_market_depth();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let num_rows = 5;
         let is_smart_depth = false;
 
@@ -3988,7 +3991,7 @@ mod tests {
         let gateway = setup_head_timestamp();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let what_to_show = WhatToShow::Trades;
         let trading_hours = TradingHours::Regular;
 
@@ -4019,7 +4022,7 @@ mod tests {
         let gateway = setup_historical_data();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let end_date_time = datetime!(2024-01-22 16:00:00).assume_utc();
         let duration = Duration::days(1);
         let bar_size = BarSize::Min5;
@@ -4071,7 +4074,7 @@ mod tests {
         let gateway = setup_historical_schedules();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let duration = Duration::days(1);
         let end_date_time = datetime!(2024-01-22 16:00:00).assume_utc();
 
@@ -4098,7 +4101,7 @@ mod tests {
         let gateway = setup_historical_ticks_bid_ask();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let start_date_time = datetime!(2024-01-22 09:30:00).assume_utc();
         let number_of_ticks = 100;
         let trading_hours = TradingHours::Regular;
@@ -4143,7 +4146,7 @@ mod tests {
         let gateway = setup_historical_ticks_mid_point();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let start_date_time = datetime!(2024-01-22 09:30:00).assume_utc();
         let number_of_ticks = 100;
         let trading_hours = TradingHours::Regular;
@@ -4179,7 +4182,7 @@ mod tests {
         let gateway = setup_historical_ticks_trade();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let start_date_time = datetime!(2024-01-22 09:30:00).assume_utc();
         let number_of_ticks = 100;
         let trading_hours = TradingHours::Regular;
@@ -4220,7 +4223,7 @@ mod tests {
         let gateway = setup_histogram_data();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let trading_hours = TradingHours::Regular;
         let period = BarSize::Day;
 
@@ -4467,11 +4470,11 @@ mod tests {
         // Verify scan data details
         assert_eq!(scan_data[0].rank, 1);
         assert_eq!(scan_data[0].contract_details.contract.contract_id, 1234);
-        assert_eq!(scan_data[0].contract_details.contract.symbol, "AAPL");
+        assert_eq!(scan_data[0].contract_details.contract.symbol, Symbol::from("AAPL"));
 
         assert_eq!(scan_data[1].rank, 2);
         assert_eq!(scan_data[1].contract_details.contract.contract_id, 5678);
-        assert_eq!(scan_data[1].contract_details.contract.symbol, "GOOGL");
+        assert_eq!(scan_data[1].contract_details.contract.symbol, Symbol::from("GOOGL"));
 
         // Verify the request was sent correctly
         let requests = gateway.requests();
@@ -4531,7 +4534,7 @@ mod tests {
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
         // Create a contract for the request
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let provider_codes = &["DJ-RT", "BRFG"];
 
         // Request contract news

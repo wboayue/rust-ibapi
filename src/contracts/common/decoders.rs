@@ -1,4 +1,9 @@
-use crate::{contracts::tick_types::TickType, contracts::SecurityType, messages::ResponseMessage, server_versions, Error};
+use crate::{
+    contracts::tick_types::TickType,
+    contracts::{Currency, Exchange, SecurityType, Symbol},
+    messages::ResponseMessage,
+    server_versions, Error,
+};
 
 use super::super::{Contract, ContractDescription, ContractDetails, MarketRule, OptionChain, OptionComputation, PriceIncrement, TagValue};
 
@@ -17,13 +22,13 @@ pub(in crate::contracts) fn decode_contract_details(server_version: i32, message
 
     let mut contract = ContractDetails::default();
 
-    contract.contract.symbol = message.next_string()?;
+    contract.contract.symbol = Symbol::from(message.next_string()?);
     contract.contract.security_type = SecurityType::from(&message.next_string()?);
     read_last_trade_date(&mut contract, &message.next_string()?, false)?;
     contract.contract.strike = message.next_double()?;
     contract.contract.right = message.next_string()?;
-    contract.contract.exchange = message.next_string()?;
-    contract.contract.currency = message.next_string()?;
+    contract.contract.exchange = Exchange::from(message.next_string()?);
+    contract.contract.currency = Currency::from(message.next_string()?);
     contract.contract.local_symbol = message.next_string()?;
     contract.market_name = message.next_string()?;
     contract.contract.trading_class = message.next_string()?;
@@ -44,7 +49,7 @@ pub(in crate::contracts) fn decode_contract_details(server_version: i32, message
     if message_version >= 5 {
         //        https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EDecoder.cs#L1626
         contract.long_name = message.next_string()?;
-        contract.contract.primary_exchange = message.next_string()?;
+        contract.contract.primary_exchange = Exchange::from(message.next_string()?);
     }
     if message_version >= 6 {
         contract.contract_month = message.next_string()?;
@@ -150,10 +155,10 @@ pub(in crate::contracts) fn decode_contract_descriptions(
     for _ in 0..contract_descriptions_count {
         let mut contract = Contract {
             contract_id: message.next_int()?,
-            symbol: message.next_string()?,
+            symbol: Symbol::from(message.next_string()?),
             security_type: SecurityType::from(&message.next_string()?),
-            primary_exchange: message.next_string()?,
-            currency: message.next_string()?,
+            primary_exchange: Exchange::from(message.next_string()?),
+            currency: Currency::from(message.next_string()?),
             ..Default::default()
         };
 
@@ -464,17 +469,22 @@ mod tests {
 
         // First contract
         assert_eq!(descriptions[0].contract.contract_id, 12345, "descriptions[0].contract.contract_id");
-        assert_eq!(descriptions[0].contract.symbol, "AAPL", "descriptions[0].contract.symbol");
+        assert_eq!(descriptions[0].contract.symbol, Symbol::from("AAPL"), "descriptions[0].contract.symbol");
         assert_eq!(
             descriptions[0].contract.security_type,
             SecurityType::Stock,
             "descriptions[0].contract.security_type"
         );
         assert_eq!(
-            descriptions[0].contract.primary_exchange, "NASDAQ",
+            descriptions[0].contract.primary_exchange,
+            Exchange::from("NASDAQ"),
             "descriptions[0].contract.primary_exchange"
         );
-        assert_eq!(descriptions[0].contract.currency, "USD", "descriptions[0].contract.currency");
+        assert_eq!(
+            descriptions[0].contract.currency,
+            Currency::from("USD"),
+            "descriptions[0].contract.currency"
+        );
         assert_eq!(
             descriptions[0].derivative_security_types.len(),
             2,
@@ -493,17 +503,22 @@ mod tests {
 
         // Second contract
         assert_eq!(descriptions[1].contract.contract_id, 67890, "descriptions[1].contract.contract_id");
-        assert_eq!(descriptions[1].contract.symbol, "MSFT", "descriptions[1].contract.symbol");
+        assert_eq!(descriptions[1].contract.symbol, Symbol::from("MSFT"), "descriptions[1].contract.symbol");
         assert_eq!(
             descriptions[1].contract.security_type,
             SecurityType::Stock,
             "descriptions[1].contract.security_type"
         );
         assert_eq!(
-            descriptions[1].contract.primary_exchange, "NASDAQ",
+            descriptions[1].contract.primary_exchange,
+            Exchange::from("NASDAQ"),
             "descriptions[1].contract.primary_exchange"
         );
-        assert_eq!(descriptions[1].contract.currency, "USD", "descriptions[1].contract.currency");
+        assert_eq!(
+            descriptions[1].contract.currency,
+            Currency::from("USD"),
+            "descriptions[1].contract.currency"
+        );
         assert_eq!(
             descriptions[1].derivative_security_types.len(),
             1,
@@ -537,12 +552,12 @@ mod tests {
         let contract_details = decode_contract_details(server_versions::SIZE_RULES, &mut message).expect("error decoding contract details");
 
         // Assert
-        assert_eq!(contract_details.contract.symbol, "AAPL", "contract.symbol");
+        assert_eq!(contract_details.contract.symbol, Symbol::from("AAPL"), "contract.symbol");
         assert_eq!(contract_details.contract.security_type, SecurityType::Stock, "contract.security_type");
         assert_eq!(contract_details.contract.strike, 0.0, "contract.strike");
         assert_eq!(contract_details.contract.right, "", "contract.right");
-        assert_eq!(contract_details.contract.exchange, "SMART", "contract.exchange");
-        assert_eq!(contract_details.contract.currency, "USD", "contract.currency");
+        assert_eq!(contract_details.contract.exchange, Exchange::from("SMART"), "contract.exchange");
+        assert_eq!(contract_details.contract.currency, Currency::from("USD"), "contract.currency");
         assert_eq!(contract_details.contract.local_symbol, "AAPL", "contract.local_symbol");
         assert_eq!(contract_details.market_name, "Apple Inc.", "market_name");
         assert_eq!(contract_details.contract.trading_class, "AAPL", "contract.trading_class");
@@ -568,7 +583,11 @@ mod tests {
         assert_eq!(contract_details.price_magnifier, 1000, "price_magnifier");
         assert_eq!(contract_details.under_contract_id, 0, "under_contract_id");
         assert_eq!(contract_details.long_name, "Apple Inc.", "long_name");
-        assert_eq!(contract_details.contract.primary_exchange, "NASDAQ", "contract.primary_exchange");
+        assert_eq!(
+            contract_details.contract.primary_exchange,
+            Exchange::from("NASDAQ"),
+            "contract.primary_exchange"
+        );
         assert_eq!(contract_details.contract_month, "JUN23", "contract_month");
         assert_eq!(contract_details.industry, "TECHNOLOGY", "industry");
         assert_eq!(contract_details.category, "ELECTRONICS", "category");

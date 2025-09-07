@@ -323,7 +323,7 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{Contract, SecurityType};
+    use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
     use crate::messages::OutgoingMessages;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
@@ -341,10 +341,10 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::BOND_ISSUERID);
         let contract = Contract {
-            symbol: "GBL".to_owned(),
+            symbol: Symbol::from("GBL"),
             security_type: SecurityType::Future,
-            exchange: "EUREX".to_owned(),
-            currency: "EUR".to_owned(),
+            exchange: Exchange::from("EUREX"),
+            currency: Currency::from("EUR"),
             last_trade_date_or_contract_month: "202303".to_owned(),
             ..Contract::default()
         };
@@ -365,7 +365,7 @@ mod tests {
         assert_eq!(request.fields[0], OutgoingMessages::RequestHeadTimestamp.to_field(), "message.type");
         assert_eq!(request.fields[1], "9000", "message.request_id");
         assert_eq!(request.fields[2], contract.contract_id.to_field(), "message.contract_id");
-        assert_eq!(request.fields[3], contract.symbol, "message.symbol");
+        assert_eq!(request.fields[3], contract.symbol.to_field(), "message.symbol");
         assert_eq!(request.fields[4], contract.security_type.to_field(), "message.security_type");
         assert_eq!(
             request.fields[5], contract.last_trade_date_or_contract_month,
@@ -374,9 +374,9 @@ mod tests {
         assert_eq!(request.fields[6], contract.strike.to_field(), "message.strike");
         assert_eq!(request.fields[7], contract.right, "message.right");
         assert_eq!(request.fields[8], contract.multiplier, "message.multiplier");
-        assert_eq!(request.fields[9], contract.exchange, "message.exchange");
-        assert_eq!(request.fields[10], contract.primary_exchange, "message.primary_exchange");
-        assert_eq!(request.fields[11], contract.currency, "message.currency");
+        assert_eq!(request.fields[9], contract.exchange.to_field(), "message.exchange");
+        assert_eq!(request.fields[10], contract.primary_exchange.to_field(), "message.primary_exchange");
+        assert_eq!(request.fields[11], contract.currency.to_field(), "message.currency");
         assert_eq!(request.fields[12], contract.local_symbol, "message.local_symbol");
         assert_eq!(request.fields[13], contract.trading_class, "message.trading_class");
         assert_eq!(request.fields[14], contract.include_expired.to_field(), "message.include_expired");
@@ -394,10 +394,10 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::REQ_HISTOGRAM);
         let contract = Contract {
-            symbol: "GBL".to_owned(),
+            symbol: Symbol::from("GBL"),
             security_type: SecurityType::Future,
-            exchange: "EUREX".to_owned(),
-            currency: "EUR".to_owned(),
+            exchange: Exchange::from("EUREX"),
+            currency: Currency::from("EUR"),
             last_trade_date_or_contract_month: "202303".to_owned(),
             ..Contract::default()
         };
@@ -434,7 +434,7 @@ mod tests {
         );
         assert_eq!(request.fields[1], "9000", "message.request_id");
         assert_eq!(request.fields[2], contract.contract_id.to_field(), "message.contract_id");
-        assert_eq!(request.fields[3], contract.symbol, "message.symbol");
+        assert_eq!(request.fields[3], contract.symbol.to_field(), "message.symbol");
         assert_eq!(request.fields[4], contract.security_type.to_field(), "message.security_type");
         assert_eq!(
             request.fields[5], contract.last_trade_date_or_contract_month,
@@ -443,9 +443,9 @@ mod tests {
         assert_eq!(request.fields[6], contract.strike.to_field(), "message.strike");
         assert_eq!(request.fields[7], contract.right, "message.right");
         assert_eq!(request.fields[8], contract.multiplier, "message.multiplier");
-        assert_eq!(request.fields[9], contract.exchange, "message.exchange");
-        assert_eq!(request.fields[10], contract.primary_exchange, "message.primary_exchange");
-        assert_eq!(request.fields[11], contract.currency, "message.currency");
+        assert_eq!(request.fields[9], contract.exchange.to_field(), "message.exchange");
+        assert_eq!(request.fields[10], contract.primary_exchange.to_field(), "message.primary_exchange");
+        assert_eq!(request.fields[11], contract.currency.to_field(), "message.currency");
         assert_eq!(request.fields[12], contract.local_symbol, "message.local_symbol");
         assert_eq!(request.fields[13], contract.trading_class, "message.trading_class");
         assert_eq!(request.fields[14], contract.include_expired.to_field(), "message.include_expired");
@@ -468,10 +468,10 @@ mod tests {
         client.time_zone = Some(time_tz::timezones::db::UTC);
 
         let contract = Contract {
-            symbol: "GBL".to_owned(),
+            symbol: Symbol::from("GBL"),
             security_type: SecurityType::Future,
-            exchange: "EUREX".to_owned(),
-            currency: "EUR".to_owned(),
+            exchange: Exchange::from("EUREX"),
+            currency: Currency::from("EUR"),
             last_trade_date_or_contract_month: "202303".to_owned(),
             ..Contract::default()
         };
@@ -529,10 +529,10 @@ mod tests {
         let client = Client::stubbed(message_bus, server_versions::TRADING_CLASS - 1);
 
         let mut contract = Contract {
-            symbol: "GBL".to_owned(),
+            symbol: Symbol::from("GBL"),
             security_type: SecurityType::Future,
-            exchange: "EUREX".to_owned(),
-            currency: "EUR".to_owned(),
+            exchange: Exchange::from("EUREX"),
+            currency: Currency::from("EUR"),
             last_trade_date_or_contract_month: "202303".to_owned(),
             ..Contract::default()
         };
@@ -553,7 +553,7 @@ mod tests {
         let message_bus = Arc::new(MessageBusStub::default());
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let end_date = Some(datetime!(2023-03-15 16:00:00 UTC));
 
         let result = historical_data(
@@ -583,10 +583,10 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
         let contract = Contract {
-            symbol: "GBL".to_owned(),
+            symbol: Symbol::from("GBL"),
             security_type: SecurityType::Future,
-            exchange: "EUREX".to_owned(),
-            currency: "EUR".to_owned(),
+            exchange: Exchange::from("EUREX"),
+            currency: Currency::from("EUR"),
             last_trade_date_or_contract_month: "202303".to_owned(),
             ..Contract::default()
         };
@@ -608,10 +608,10 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
         let contract = Contract {
-            symbol: "GBL".to_owned(),
+            symbol: Symbol::from("GBL"),
             security_type: SecurityType::Future,
-            exchange: "EUREX".to_owned(),
-            currency: "EUR".to_owned(),
+            exchange: Exchange::from("EUREX"),
+            currency: Currency::from("EUR"),
             last_trade_date_or_contract_month: "202303".to_owned(),
             ..Contract::default()
         };
@@ -632,7 +632,7 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus.clone(), server_versions::BOND_ISSUERID);
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let end_date = Some(datetime!(2023-03-15 16:00:00 UTC));
         let duration = Duration::days(3);
 
@@ -670,10 +670,10 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
         let contract = Contract {
-            symbol: "GBL".to_owned(),
+            symbol: Symbol::from("GBL"),
             security_type: SecurityType::Future,
-            exchange: "EUREX".to_owned(),
-            currency: "EUR".to_owned(),
+            exchange: Exchange::from("EUREX"),
+            currency: Currency::from("EUR"),
             last_trade_date_or_contract_month: "202303".to_owned(),
             ..Contract::default()
         };
@@ -724,10 +724,10 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
         let contract = Contract {
-            symbol: "GBL".to_owned(),
+            symbol: Symbol::from("GBL"),
             security_type: SecurityType::Future,
-            exchange: "EUREX".to_owned(),
-            currency: "EUR".to_owned(),
+            exchange: Exchange::from("EUREX"),
+            currency: Currency::from("EUR"),
             last_trade_date_or_contract_month: "202303".to_owned(),
             ..Contract::default()
         };
@@ -761,10 +761,10 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
         let contract = Contract {
-            symbol: "GBL".to_owned(),
+            symbol: Symbol::from("GBL"),
             security_type: SecurityType::Future,
-            exchange: "EUREX".to_owned(),
-            currency: "EUR".to_owned(),
+            exchange: Exchange::from("EUREX"),
+            currency: Currency::from("EUR"),
             last_trade_date_or_contract_month: "202303".to_owned(),
             ..Contract::default()
         };
@@ -795,7 +795,7 @@ mod tests {
         assert_eq!(request.fields[0], OutgoingMessages::RequestHistoricalTicks.to_field(), "message.type");
         assert_eq!(request.fields[1], "9000", "message.request_id");
         assert_eq!(request.fields[2], contract.contract_id.to_field(), "message.contract_id");
-        assert_eq!(request.fields[3], contract.symbol, "message.symbol");
+        assert_eq!(request.fields[3], contract.symbol.to_field(), "message.symbol");
         assert_eq!(request.fields[4], contract.security_type.to_field(), "message.security_type");
         assert_eq!(
             request.fields[5], contract.last_trade_date_or_contract_month,
@@ -804,9 +804,9 @@ mod tests {
         assert_eq!(request.fields[6], contract.strike.to_field(), "message.strike");
         assert_eq!(request.fields[7], contract.right, "message.right");
         assert_eq!(request.fields[8], contract.multiplier, "message.multiplier");
-        assert_eq!(request.fields[9], contract.exchange, "message.exchange");
-        assert_eq!(request.fields[10], contract.primary_exchange, "message.primary_exchange");
-        assert_eq!(request.fields[11], contract.currency, "message.currency");
+        assert_eq!(request.fields[9], contract.exchange.to_field(), "message.exchange");
+        assert_eq!(request.fields[10], contract.primary_exchange.to_field(), "message.primary_exchange");
+        assert_eq!(request.fields[11], contract.currency.to_field(), "message.currency");
         assert_eq!(request.fields[12], contract.local_symbol, "message.local_symbol");
         assert_eq!(request.fields[13], contract.trading_class, "message.trading_class");
         assert_eq!(request.fields[14], contract.include_expired.to_field(), "message.include_expired");
@@ -832,10 +832,10 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
         let contract = Contract {
-            symbol: "GBL".to_owned(),
+            symbol: Symbol::from("GBL"),
             security_type: SecurityType::Future,
-            exchange: "EUREX".to_owned(),
-            currency: "EUR".to_owned(),
+            exchange: Exchange::from("EUREX"),
+            currency: Currency::from("EUR"),
             last_trade_date_or_contract_month: "202303".to_owned(),
             ..Contract::default()
         };
@@ -868,10 +868,10 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
         let contract = Contract {
-            symbol: "GBL".to_owned(),
+            symbol: Symbol::from("GBL"),
             security_type: SecurityType::Future,
-            exchange: "EUREX".to_owned(),
-            currency: "EUR".to_owned(),
+            exchange: Exchange::from("EUREX"),
+            currency: Currency::from("EUR"),
             last_trade_date_or_contract_month: "202303".to_owned(),
             ..Contract::default()
         };
@@ -909,10 +909,10 @@ mod tests {
         client.time_zone = Some(time_tz::timezones::db::america::NEW_YORK);
 
         let contract = Contract {
-            symbol: "GBL".to_owned(),
+            symbol: Symbol::from("GBL"),
             security_type: SecurityType::Future,
-            exchange: "EUREX".to_owned(),
-            currency: "EUR".to_owned(),
+            exchange: Exchange::from("EUREX"),
+            currency: Currency::from("EUR"),
             last_trade_date_or_contract_month: "202303".to_owned(),
             ..Contract::default()
         };

@@ -86,3 +86,8 @@ just cover
 ```
 
 For detailed information on any topic, refer to the linked documentation files above.
+
+## Git Commit Guidelines
+
+- DO NOT include "Generated with Claude Code" or similar attribution in commit messages
+- Keep commit messages focused on the technical changes and their purpose
