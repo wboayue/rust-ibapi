@@ -304,6 +304,54 @@ impl Contract {
         }
     }
 
+    /// Create a bond contract with CUSIP or ISIN identifier
+    ///
+    /// # Example
+    /// ```
+    /// use ibapi::contracts::{Contract, BondIdentifier, Cusip, Isin};
+    ///
+    /// // US Treasury bond by CUSIP
+    /// let bond = Contract::bond(BondIdentifier::Cusip(Cusip::new("912810RN0")));
+    ///
+    /// // European bond by ISIN
+    /// let bond = Contract::bond(BondIdentifier::Isin(Isin::new("DE0001102309")));
+    /// ```
+    pub fn bond(identifier: BondIdentifier) -> Contract {
+        match identifier {
+            BondIdentifier::Cusip(cusip) => Contract {
+                symbol: cusip.to_string(),
+                security_type: SecurityType::Bond,
+                security_id_type: "CUSIP".to_string(),
+                security_id: cusip.to_string(),
+                exchange: "SMART".to_string(),
+                currency: "USD".to_string(),
+                ..Default::default()
+            },
+            BondIdentifier::Isin(isin) => {
+                // Determine currency from ISIN country code (first 2 chars)
+                let currency = match isin.as_str().get(0..2) {
+                    Some("US") | Some("CA") => "USD",
+                    Some("GB") => "GBP",
+                    Some("JP") => "JPY",
+                    Some("CH") => "CHF",
+                    Some("AU") => "AUD",
+                    Some("DE") | Some("FR") | Some("IT") | Some("ES") | Some("NL") | Some("BE") => "EUR",
+                    _ => "USD", // Default to USD
+                };
+
+                Contract {
+                    symbol: isin.to_string(),
+                    security_type: SecurityType::Bond,
+                    security_id_type: "ISIN".to_string(),
+                    security_id: isin.to_string(),
+                    exchange: "SMART".to_string(),
+                    currency: currency.to_string(),
+                    ..Default::default()
+                }
+            }
+        }
+    }
+
     /// Creates a spread/combo contract builder.
     ///
     /// # Examples
@@ -673,7 +721,7 @@ mod tests {
         assert_eq!(toyota.currency, "JPY");
 
         // Test call option builder
-        let call = Contract::call("AAPL").strike(150.0).unwrap().expires_on(2023, 12, 15).build();
+        let call = Contract::call("AAPL").strike(150.0).expires_on(2023, 12, 15).build();
         assert_eq!(call.symbol, "AAPL");
         assert_eq!(call.security_type, SecurityType::Option);
         assert_eq!(call.strike, 150.0);
@@ -681,7 +729,7 @@ mod tests {
         assert_eq!(call.last_trade_date_or_contract_month, "20231215");
 
         // Test put option builder
-        let put = Contract::put("SPY").strike(450.0).unwrap().expires_on(2024, 1, 19).build();
+        let put = Contract::put("SPY").strike(450.0).expires_on(2024, 1, 19).build();
         assert_eq!(put.symbol, "SPY");
         assert_eq!(put.right, "P");
         assert_eq!(put.strike, 450.0);

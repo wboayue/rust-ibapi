@@ -101,17 +101,16 @@ impl OptionBuilder<Missing, Missing, Missing> {
 
 // Can only set strike when symbol is present
 impl<E> OptionBuilder<Symbol, Missing, E> {
-    pub fn strike(self, price: f64) -> Result<OptionBuilder<Symbol, Strike, E>, String> {
-        let strike = Strike::new(price)?;
-        Ok(OptionBuilder {
+    pub fn strike(self, price: f64) -> OptionBuilder<Symbol, Strike, E> {
+        OptionBuilder {
             symbol: self.symbol,
             right: self.right,
-            strike,
+            strike: Strike::new_unchecked(price),
             expiry: self.expiry,
             exchange: self.exchange,
             currency: self.currency,
             multiplier: self.multiplier,
-        })
+        }
     }
 }
 
@@ -131,6 +130,14 @@ impl<S> OptionBuilder<Symbol, S, Missing> {
 
     pub fn expires_on(self, year: u16, month: u8, day: u8) -> OptionBuilder<Symbol, S, ExpirationDate> {
         self.expires(ExpirationDate::new(year, month, day))
+    }
+
+    pub fn expires_weekly(self) -> OptionBuilder<Symbol, S, ExpirationDate> {
+        self.expires(ExpirationDate::next_friday())
+    }
+
+    pub fn expires_monthly(self) -> OptionBuilder<Symbol, S, ExpirationDate> {
+        self.expires(ExpirationDate::third_friday_of_month())
     }
 }
 
@@ -200,6 +207,14 @@ impl FuturesBuilder<Symbol, Missing> {
             currency: self.currency,
             multiplier: self.multiplier,
         }
+    }
+
+    pub fn front_month(self) -> FuturesBuilder<Symbol, ContractMonth> {
+        self.expires_in(ContractMonth::front())
+    }
+
+    pub fn next_quarter(self) -> FuturesBuilder<Symbol, ContractMonth> {
+        self.expires_in(ContractMonth::next_quarter())
     }
 }
 
@@ -371,6 +386,18 @@ impl SpreadBuilder {
     /// Vertical spread convenience method
     pub fn vertical(self, long_id: i32, short_id: i32) -> Self {
         self.add_leg(long_id, Action::Buy).done().add_leg(short_id, Action::Sell).done()
+    }
+
+    /// Iron condor spread convenience method
+    pub fn iron_condor(self, long_put_id: i32, short_put_id: i32, short_call_id: i32, long_call_id: i32) -> Self {
+        self.add_leg(long_put_id, Action::Buy)
+            .done()
+            .add_leg(short_put_id, Action::Sell)
+            .done()
+            .add_leg(short_call_id, Action::Sell)
+            .done()
+            .add_leg(long_call_id, Action::Buy)
+            .done()
     }
 
     pub fn in_currency(mut self, currency: Currency) -> Self {

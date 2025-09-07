@@ -1,6 +1,7 @@
 //! Strong types for contract building with validation.
 
 use std::fmt;
+use time::{Date, Duration, Month, OffsetDateTime, Weekday};
 
 /// Strong type for trading symbols with validation
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -145,6 +146,11 @@ impl Strike {
         }
     }
 
+    /// Create a strike price, panicking if invalid (for internal use in builders)
+    pub(crate) fn new_unchecked(price: f64) -> Self {
+        Strike::new(price).expect("Strike price must be positive")
+    }
+
     pub fn value(&self) -> f64 {
         self.0
     }
@@ -163,14 +169,78 @@ impl ExpirationDate {
         ExpirationDate { year, month, day }
     }
 
-    pub fn to_string(&self) -> String {
-        format!("{:04}{:02}{:02}", self.year, self.month, self.day)
+    /// Helper to calculate days until next Friday from a given weekday
+    fn days_until_friday(from_weekday: Weekday) -> i64 {
+        match from_weekday {
+            Weekday::Saturday => 6,
+            Weekday::Sunday => 5,
+            Weekday::Monday => 4,
+            Weekday::Tuesday => 3,
+            Weekday::Wednesday => 2,
+            Weekday::Thursday => 1,
+            Weekday::Friday => 0,
+        }
+    }
+
+    /// Get the next Friday from today
+    pub fn next_friday() -> Self {
+        let today = OffsetDateTime::now_utc().date();
+        let days_to_add = match today.weekday() {
+            Weekday::Friday => 7, // If today is Friday, get next Friday
+            other => Self::days_until_friday(other),
+        };
+        let next_friday = today + Duration::days(days_to_add);
+
+        ExpirationDate {
+            year: next_friday.year() as u16,
+            month: next_friday.month() as u8,
+            day: next_friday.day(),
+        }
+    }
+
+    /// Get the third Friday of the current month (standard monthly options expiration)
+    pub fn third_friday_of_month() -> Self {
+        let now = OffsetDateTime::now_utc();
+        let year = now.year();
+        let month = now.month();
+
+        // Find the first day of the month
+        let first_of_month = Date::from_calendar_date(year, month, 1).expect("Valid date");
+
+        // Find the first Friday, then add 14 days to get third Friday
+        let days_to_first_friday = Self::days_until_friday(first_of_month.weekday());
+        let third_friday = first_of_month + Duration::days(days_to_first_friday + 14);
+
+        // If we've passed this month's third Friday, get next month's
+        if now.date() > third_friday {
+            let next_month = if month == Month::December {
+                Date::from_calendar_date(year + 1, Month::January, 1)
+            } else {
+                Date::from_calendar_date(year, month.next(), 1)
+            }
+            .expect("Valid date");
+
+            let days_to_first_friday_next = Self::days_until_friday(next_month.weekday());
+            let third_friday_next = next_month + Duration::days(days_to_first_friday_next + 14);
+
+            ExpirationDate {
+                year: third_friday_next.year() as u16,
+                month: third_friday_next.month() as u8,
+                day: third_friday_next.day(),
+            }
+        } else {
+            ExpirationDate {
+                year: third_friday.year() as u16,
+                month: third_friday.month() as u8,
+                day: third_friday.day(),
+            }
+        }
     }
 }
 
 impl fmt::Display for ExpirationDate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{:04}{:02}{:02}", self.year, self.month, self.day)
     }
 }
 
@@ -186,14 +256,84 @@ impl ContractMonth {
         ContractMonth { year, month }
     }
 
-    pub fn to_string(&self) -> String {
-        format!("{:04}{:02}", self.year, self.month)
+    /// Get the front month contract (next expiring)
+    pub fn front() -> Self {
+        let now = OffsetDateTime::now_utc();
+        let current_year = now.year() as u16;
+        let current_month = now.month() as u8;
+        let current_day = now.day();
+
+        // Futures typically expire around the third Friday of the month
+        // If we're past the 15th, assume current month has expired
+        if current_day > 15 {
+            if current_month == 12 {
+                ContractMonth::new(current_year + 1, 1)
+            } else {
+                ContractMonth::new(current_year, current_month + 1)
+            }
+        } else {
+            ContractMonth::new(current_year, current_month)
+        }
+    }
+
+    /// Get the next quarterly contract month (Mar, Jun, Sep, Dec)
+    pub fn next_quarter() -> Self {
+        let now = OffsetDateTime::now_utc();
+        let current_year = now.year() as u16;
+        let current_month = now.month() as u8;
+        let current_day = now.day();
+
+        // Find next quarterly month
+        let next_quarter_month = match current_month {
+            1 | 2 => 3,
+            3 => {
+                if current_day > 15 {
+                    6
+                } else {
+                    3
+                }
+            }
+            4 | 5 => 6,
+            6 => {
+                if current_day > 15 {
+                    9
+                } else {
+                    6
+                }
+            }
+            7 | 8 => 9,
+            9 => {
+                if current_day > 15 {
+                    12
+                } else {
+                    9
+                }
+            }
+            10 | 11 => 12,
+            12 => {
+                if current_day > 15 {
+                    3
+                } else {
+                    12
+                }
+            }
+            _ => 3,
+        };
+
+        // Adjust year if we wrapped around
+        let year = if current_month == 12 && next_quarter_month == 3 {
+            current_year + 1
+        } else {
+            current_year
+        };
+
+        ContractMonth::new(year, next_quarter_month)
     }
 }
 
 impl fmt::Display for ContractMonth {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{:04}{:02}", self.year, self.month)
     }
 }
 

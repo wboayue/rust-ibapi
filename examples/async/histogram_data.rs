@@ -38,7 +38,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             TradingHours::Regular,
             "1 week RTH",
         ),
-        ("SPY", Contract::stock("SPY").build(), HistoricalBarSize::Day, TradingHours::Regular, "1 day RTH"),
+        (
+            "SPY",
+            Contract::stock("SPY").build(),
+            HistoricalBarSize::Day,
+            TradingHours::Regular,
+            "1 day RTH",
+        ),
         (
             "TSLA",
             Contract::stock("TSLA").build(),

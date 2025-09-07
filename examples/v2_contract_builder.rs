@@ -24,8 +24,10 @@ fn main() {
         .expect("Valid strike price")
         .expires_on(2024, 12, 20)
         .build();
-    println!("Call option: {} {} strike {} exp {}", 
-        call.symbol, call.right, call.strike, call.last_trade_date_or_contract_month);
+    println!(
+        "Call option: {} {} strike {} exp {}",
+        call.symbol, call.right, call.strike, call.last_trade_date_or_contract_month
+    );
 
     // Put option with custom exchange
     let put = Contract::put("SPY")
@@ -37,28 +39,22 @@ fn main() {
     println!("Put option: {} {} strike {}", put.symbol, put.right, put.strike);
 
     // Futures contract with auto-calculated multiplier
-    let es_futures = Contract::futures("ES")
-        .expires_in(ContractMonth::new(2024, 3))
-        .build(); // Multiplier automatically set to 50 for ES
+    let es_futures = Contract::futures("ES").expires_in(ContractMonth::new(2024, 3)).build(); // Multiplier automatically set to 50 for ES
     println!("Futures: {} multiplier {}", es_futures.symbol, es_futures.multiplier);
 
     // Futures with specific month
-    let cl_futures = Contract::futures("CL")
-        .expires_in(ContractMonth::new(2024, 6))
-        .build(); // Multiplier automatically set to 1000 for CL
-    println!("Futures: {} multiplier {} expiry {}", 
-        cl_futures.symbol, cl_futures.multiplier, cl_futures.last_trade_date_or_contract_month);
+    let cl_futures = Contract::futures("CL").expires_in(ContractMonth::new(2024, 6)).build(); // Multiplier automatically set to 1000 for CL
+    println!(
+        "Futures: {} multiplier {} expiry {}",
+        cl_futures.symbol, cl_futures.multiplier, cl_futures.last_trade_date_or_contract_month
+    );
 
     // Forex pair
-    let eur_usd = Contract::forex(Currency::EUR, Currency::USD)
-        .amount(100_000)
-        .build();
+    let eur_usd = Contract::forex(Currency::EUR, Currency::USD).amount(100_000).build();
     println!("Forex: {}", eur_usd.symbol);
 
     // Cryptocurrency
-    let btc = Contract::crypto("BTC")
-        .on_exchange(Exchange::Paxos)
-        .build();
+    let btc = Contract::crypto("BTC").on_exchange(Exchange::Paxos).build();
     println!("Crypto: {} on {}", btc.symbol, btc.exchange);
 
     // Index contract
@@ -87,6 +83,6 @@ fn main() {
     // Demonstrating type safety - these would fail at compile time:
     // let invalid_call = Contract::call("AAPL").build(); // Won't compile - missing strike and expiry
     // let invalid_futures = Contract::futures("ES").build(); // Won't compile - missing expiry
-    
+
     println!("\nAll contracts created successfully using V2 API!");
 }
