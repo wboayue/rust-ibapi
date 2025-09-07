@@ -1,14 +1,14 @@
 #[cfg(test)]
 mod order_builder_tests {
-    use ibapi::contracts::Contract;
+    use ibapi::contracts::{Contract, Symbol, Exchange, Currency};
     use ibapi::orders::{Action, OrderBuilder};
 
     fn create_stock_contract(symbol: &str) -> Contract {
         Contract {
-            symbol: symbol.to_string(),
+            symbol: Symbol::from(symbol),
             security_type: ibapi::contracts::SecurityType::Stock,
-            exchange: "SMART".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("SMART"),
+            currency: Currency::from("USD"),
             ..Default::default()
         }
     }
