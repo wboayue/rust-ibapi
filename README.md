@@ -131,19 +131,19 @@ let euro_bond = Contract::bond_isin("DE0001102309");
 
 See the [Contract Builder Guide](docs/contract-builder.md) for comprehensive documentation on all contract types.
 
-For lower-level control, you can also create contracts directly:
+For lower-level control, you can also create contracts directly using the type wrappers:
 
 ```rust
 use ibapi::prelude::*;
 
-// Create a fully specified contract
-Contract {
-    symbol: "TSLA".to_string(),
+// Create a contract directly using the struct and type wrappers
+let contract = Contract {
+    symbol: Symbol::from("TSLA"),
     security_type: SecurityType::Stock,
-    currency: "USD".to_string(),
-    exchange: "SMART".to_string(),
+    currency: Currency::from("USD"),
+    exchange: Exchange::from("SMART"),
     ..Default::default()
-}
+};
 ```
 
 For a complete list of contract attributes, explore the [Contract documentation](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html).
