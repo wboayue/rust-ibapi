@@ -3,28 +3,22 @@
 use std::fmt;
 use time::{Date, Duration, Month, OffsetDateTime, Weekday};
 
-/// Strong type for trading symbols with validation
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Symbol(String);
+/// Strong type for trading symbols
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Symbol(pub &'static str);
 
 impl Symbol {
-    pub fn new(s: impl Into<String>) -> Self {
-        Symbol(s.into())
+    pub const fn new(s: &'static str) -> Self {
+        Symbol(s)
     }
 
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0
     }
 }
 
-impl From<&str> for Symbol {
-    fn from(s: &str) -> Self {
-        Symbol(s.to_string())
-    }
-}
-
-impl From<String> for Symbol {
-    fn from(s: String) -> Self {
+impl From<&'static str> for Symbol {
+    fn from(s: &'static str) -> Self {
         Symbol(s)
     }
 }
