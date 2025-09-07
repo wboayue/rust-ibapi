@@ -293,28 +293,48 @@ The V2 API uses strong types instead of strings to prevent errors:
 
 ### Exchanges
 
+IBKR supports 160+ exchanges worldwide. The Exchange type provides constants for common exchanges and supports any exchange code.
+
 ```rust
 use ibapi::contracts::Exchange;
 
+// Common exchange constants
 let exchange = Exchange::SMART;        // Smart routing
-let exchange = Exchange::Nasdaq;       // NASDAQ
-let exchange = Exchange::Cboe;         // CBOE
-let exchange = Exchange::Globex;       // CME Globex
-let exchange = Exchange::Idealpro;     // Forex
-let exchange = Exchange::Paxos;        // Crypto
-let exchange = Exchange("ARCA");  // Other exchanges supported
+let exchange = Exchange::NASDAQ;       // NASDAQ
+let exchange = Exchange::NYSE;         // NYSE
+let exchange = Exchange::CBOE;         // CBOE
+let exchange = Exchange::GLOBEX;       // CME Globex
+let exchange = Exchange::IDEALPRO;     // Forex
+let exchange = Exchange::PAXOS;        // Crypto
+
+// Any other exchange code
+let exchange = Exchange("ARCA");       // NYSE Arca
+let exchange = Exchange("IBIS");       // XETRA
+let exchange = Exchange("SEHK");       // Hong Kong
 ```
 
 ### Currencies
 
+IBKR supports trading in many currencies. The Currency type provides constants for major currencies and supports any currency code.
+
 ```rust
 use ibapi::contracts::Currency;
 
-let currency = Currency::USD;
-let currency = Currency::EUR;
-let currency = Currency::GBP;
-let currency = Currency::JPY;
-let currency = Currency::Custom("SEK".to_string());  // Custom currency
+// Major currency constants
+let currency = Currency::USD;          // US Dollar
+let currency = Currency::EUR;          // Euro
+let currency = Currency::GBP;          // British Pound
+let currency = Currency::JPY;          // Japanese Yen
+let currency = Currency::CHF;          // Swiss Franc
+let currency = Currency::CAD;          // Canadian Dollar
+let currency = Currency::AUD;          // Australian Dollar
+let currency = Currency::HKD;          // Hong Kong Dollar
+let currency = Currency::CNH;          // Offshore RMB
+
+// Any other currency code
+let currency = Currency("SEK");        // Swedish Krona
+let currency = Currency("NOK");        // Norwegian Krone
+let currency = Currency("INR");        // Indian Rupee
 ```
 
 ### Option Rights
@@ -387,7 +407,7 @@ let contract = Contract::stock("AAPL").build();
 
 1. **Entry Points**: Use `Contract::stock()`, `Contract::call()`, etc. instead of `ContractBuilder::new()`
 2. **Type Safety**: Required fields enforced at compile time
-3. **Strong Types**: Use `Exchange::Smart` instead of `"SMART"`
+3. **Strong Types**: Use `Exchange::SMART` instead of `"SMART"`
 4. **Smart Defaults**: Less boilerplate for common cases
 5. **No Runtime Validation**: Invalid states prevented by the type system
 
@@ -404,7 +424,7 @@ use ibapi::contracts::{
 fn create_contracts() -> Result<(), Box<dyn std::error::Error>> {
     // Equity
     let stock = Contract::stock("MSFT")
-        .on_exchange(Exchange::Nasdaq)
+        .on_exchange(Exchange::NASDAQ)
         .build();
     
     // Option chain
