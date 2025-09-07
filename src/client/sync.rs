@@ -149,14 +149,10 @@ impl Client {
     /// # Example
     /// ```no_run
     /// use ibapi::Client;
-    /// use ibapi::contracts::{Contract, SecurityType};
+    /// use ibapi::contracts::Contract;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    /// let mut contract = Contract::default();
-    /// contract.symbol = "AAPL".to_string();
-    /// contract.security_type = SecurityType::Stock;
-    /// contract.exchange = "SMART".to_string();
-    /// contract.currency = "USD".to_string();
+    /// let contract = Contract::stock("AAPL").build();
     ///
     /// let order_id = client.order(&contract)
     ///     .buy(100)
@@ -752,12 +748,16 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
-    /// use ibapi::orders::{order_builder, Action, PlaceOrder};
+    /// use ibapi::orders::PlaceOrder;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("MSFT").build();
-    /// let order = order_builder::market_order(Action::Buy, 100.0);
+    /// let order = client.order(&contract)
+    ///     .buy(100)
+    ///     .market()
+    ///     .build_order()
+    ///     .expect("failed to build order");
     /// let order_id = client.next_order_id();
     ///
     /// let events = client.place_order(order_id, &contract, &order).expect("request failed");
@@ -799,14 +799,16 @@ impl Client {
     /// ```no_run
     /// use ibapi::Client;
     /// use ibapi::contracts::Contract;
-    /// use ibapi::orders::{order_builder, Action};
     ///
     /// # fn main() -> Result<(), ibapi::Error> {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100)?;
     ///
     /// let contract = Contract::stock("MSFT").build();
-    /// let order = order_builder::market_order(Action::Buy, 100.0);
+    /// let order = client.order(&contract)
+    ///     .buy(100)
+    ///     .market()
+    ///     .build_order()?;
     /// let order_id = client.next_order_id();
     ///
     /// // Submit order without waiting for confirmation

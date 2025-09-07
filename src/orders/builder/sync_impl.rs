@@ -91,21 +91,12 @@ impl Client {
     /// # Example
     /// ```no_run
     /// use ibapi::Client;
-    /// use ibapi::contracts::{Contract, SecurityType};
+    /// use ibapi::contracts::Contract;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let mut contract1 = Contract::default();
-    /// contract1.symbol = "AAPL".to_string();
-    /// contract1.security_type = SecurityType::Stock;
-    /// contract1.exchange = "SMART".to_string();
-    /// contract1.currency = "USD".to_string();
-    ///
-    /// let mut contract2 = Contract::default();
-    /// contract2.symbol = "MSFT".to_string();
-    /// contract2.security_type = SecurityType::Stock;
-    /// contract2.exchange = "SMART".to_string();
-    /// contract2.currency = "USD".to_string();
+    /// let contract1 = Contract::stock("AAPL").build();
+    /// let contract2 = Contract::stock("MSFT").build();
     ///
     /// let order1 = client.order(&contract1)
     ///     .buy(100)

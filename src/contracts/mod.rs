@@ -452,11 +452,11 @@ impl Contract {
     /// # Examples
     ///
     /// ```
-    /// use ibapi::contracts::Contract;
+    /// use ibapi::contracts::{Contract, Symbol, Exchange};
     ///
     /// let news = Contract::news("BRFG");
-    /// assert_eq!(news.symbol, "BRFG:BRFG_ALL");
-    /// assert_eq!(news.exchange, "BRFG");
+    /// assert_eq!(news.symbol, Symbol::from("BRFG:BRFG_ALL"));
+    /// assert_eq!(news.exchange, Exchange::from("BRFG"));
     /// ```
     pub fn news(provider_code: &str) -> Contract {
         Contract {
@@ -480,10 +480,10 @@ impl Contract {
     /// # Examples
     ///
     /// ```
-    /// use ibapi::contracts::Contract;
+    /// use ibapi::contracts::{Contract, Symbol};
     ///
     /// let call = Contract::option("AAPL", "20240119", 150.0, "C");
-    /// assert_eq!(call.symbol, "AAPL");
+    /// assert_eq!(call.symbol, Symbol::from("AAPL"));
     /// assert_eq!(call.strike, 150.0);
     /// assert_eq!(call.right, "C");
     /// ```

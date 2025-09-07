@@ -157,16 +157,12 @@ impl Client {
     /// # Example
     /// ```no_run
     /// use ibapi::Client;
-    /// use ibapi::contracts::{Contract, SecurityType};
+    /// use ibapi::contracts::Contract;
     ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///     let mut contract = Contract::default();
-    ///     contract.symbol = "AAPL".to_string();
-    ///     contract.security_type = SecurityType::Stock;
-    ///     contract.exchange = "SMART".to_string();
-    ///     contract.currency = "USD".to_string();
+    ///     let contract = Contract::stock("AAPL").build();
     ///     
     ///     let order_id = client.order(&contract)
     ///         .buy(100)
@@ -1492,22 +1488,21 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::Client;
-    /// use ibapi::contracts::{Contract, SecurityType};
-    /// use ibapi::orders::{order_builder, Action};
+    /// use ibapi::contracts::Contract;
     ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///     
-    ///     let mut contract = Contract::default();
-    ///     contract.symbol = "AAPL".to_string();
-    ///     contract.security_type = SecurityType::Stock;
-    ///     contract.exchange = "SMART".to_string();
-    ///     contract.currency = "USD".to_string();
+    ///     let contract = Contract::stock("AAPL").build();
     ///     
-    ///     let order = order_builder::limit_order(Action::Buy, 100.0, 150.0);
+    ///     let order = client.order(&contract)
+    ///         .buy(100)
+    ///         .limit(150.0)
+    ///         .build_order()
+    ///         .expect("failed to build order");
+    ///     
     ///     let order_id = client.next_order_id();
-    ///     
     ///     client.submit_order(order_id, &contract, &order).await.expect("failed to submit order");
     /// }
     /// ```
@@ -1530,22 +1525,22 @@ impl Client {
     /// ```no_run
     /// use futures::StreamExt;
     /// use ibapi::Client;
-    /// use ibapi::contracts::{Contract, SecurityType};
-    /// use ibapi::orders::{order_builder, PlaceOrder, Action};
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::orders::PlaceOrder;
     ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///     
-    ///     let mut contract = Contract::default();
-    ///     contract.symbol = "AAPL".to_string();
-    ///     contract.security_type = SecurityType::Stock;
-    ///     contract.exchange = "SMART".to_string();
-    ///     contract.currency = "USD".to_string();
+    ///     let contract = Contract::stock("AAPL").build();
     ///     
-    ///     let order = order_builder::limit_order(Action::Buy, 100.0, 150.0);
+    ///     let order = client.order(&contract)
+    ///         .buy(100)
+    ///         .limit(150.0)
+    ///         .build_order()
+    ///         .expect("failed to build order");
+    ///     
     ///     let order_id = client.next_order_id();
-    ///     
     ///     let mut subscription = client.place_order(order_id, &contract, &order).await
     ///         .expect("failed to place order");
     ///         
