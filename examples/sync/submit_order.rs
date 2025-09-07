@@ -72,7 +72,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Give the monitoring thread time to start
     thread::sleep(Duration::from_millis(100));
 
-    let contract = Contract::stock(symbol).on_exchange(ibapi::contracts::Exchange::Smart).in_currency(ibapi::contracts::Currency::USD).build();
+    let contract = Contract::stock(symbol)
+        .on_exchange(ibapi::contracts::Exchange::Smart)
+        .in_currency(ibapi::contracts::Currency::USD)
+        .build();
 
     // Place a series of buy and sell orders
     let order_quantities = [
