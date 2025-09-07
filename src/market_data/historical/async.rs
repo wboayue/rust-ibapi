@@ -553,7 +553,7 @@ mod tests {
         let message_bus = Arc::new(MessageBusStub::default());
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let end_date = Some(datetime!(2023-03-15 16:00:00 UTC));
 
         let result = historical_data(
@@ -632,7 +632,7 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus.clone(), server_versions::BOND_ISSUERID);
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let end_date = Some(datetime!(2023-03-15 16:00:00 UTC));
         let duration = Duration::days(3);
 

@@ -13,7 +13,7 @@ fn main() {
 
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
-    let contract = Contract::stock("GM");
+    let contract = Contract::stock("GM").build();
 
     let histogram = client
         .histogram_data(&contract, TradingHours::Regular, HistoricalBarSize::Week)

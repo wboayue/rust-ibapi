@@ -544,7 +544,7 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let generic_ticks = &["100", "101", "104", "106"]; // Option Volume, OI, Historical Vol, Implied Vol
         let snapshot = false;
         let regulatory_snapshot = false;
@@ -598,7 +598,7 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::PRICE_BASED_VOLATILITY);
-        let mut contract = Contract::stock("AAPL");
+        let mut contract = Contract::stock("AAPL").build();
         contract.security_type = SecurityType::Spread;
         contract.combo_legs = vec![ComboLeg {
             contract_id: 12345,
@@ -631,7 +631,7 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, server_versions::PRICE_BASED_VOLATILITY);
-        let mut contract = Contract::stock("AAPL");
+        let mut contract = Contract::stock("AAPL").build();
         contract.delta_neutral_contract = Some(DeltaNeutralContract {
             contract_id: 12345,
             delta: 0.5,

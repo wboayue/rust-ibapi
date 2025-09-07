@@ -15,7 +15,7 @@ fn main() {
 
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
     let provider_codes = ["DJ-N"];
 
     let subscription = client.contract_news(&contract, &provider_codes).expect("request contract news failed");

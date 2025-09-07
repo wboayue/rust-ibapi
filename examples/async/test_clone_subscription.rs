@@ -13,7 +13,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Connected successfully!");
 
     // Create a stock contract
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
 
     // Request market data
     let subscription = client.market_data(&contract, &[], false, false).await?;

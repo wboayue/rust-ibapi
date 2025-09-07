@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::connect("127.0.0.1:4002", 105).await?;
     println!("Connected to IB Gateway");
 
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
 
     // Make 3 sequential calls to head_timestamp
     for i in 1..=3 {

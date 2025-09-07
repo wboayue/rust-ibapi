@@ -176,7 +176,7 @@ mod tests {
     #[test]
     fn test_encode_request_head_timestamp() {
         let request_id = 9000;
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let what_to_show = WhatToShow::Trades;
         let use_rth = false;
 
@@ -208,7 +208,7 @@ mod tests {
     #[test]
     fn test_encode_request_historical_data() {
         let request_id = 9000;
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let end_date = Some(datetime!(2023-04-10 14:00 UTC));
         let duration = 30.days();
         let bar_size = BarSize::Day;
@@ -293,7 +293,7 @@ mod tests {
     #[test]
     fn test_encode_request_historical_ticks() {
         let request_id = 9000;
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let start: Option<OffsetDateTime> = Some(datetime!(2023-04-10 14:00 UTC));
         let end: Option<OffsetDateTime> = None;
         let what_to_show = WhatToShow::Trades;
@@ -334,7 +334,7 @@ mod tests {
     #[test]
     fn test_encode_request_histogram_data() {
         let request_id = 3000;
-        let contract = Contract::stock("MSFT");
+        let contract = Contract::stock("MSFT").build();
         let period = BarSize::Week;
         let use_rth = true;
 

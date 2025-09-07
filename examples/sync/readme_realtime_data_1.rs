@@ -15,7 +15,7 @@ fn main() {
     let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 
     // Request real-time bars data for AAPL with 5-second intervals
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
     let subscription = client
         .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
         .expect("realtime bars request failed!");

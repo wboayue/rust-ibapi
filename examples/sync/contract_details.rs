@@ -18,7 +18,7 @@ fn main() -> anyhow::Result<()> {
     println!("connection_time: {:?}", client.connection_time());
     println!("next_order_id: {}", client.next_order_id());
 
-    let contract = Contract::stock("MSFT");
+    let contract = Contract::stock("MSFT").build();
 
     let results = client.contract_details(&contract)?;
     for contract in results {

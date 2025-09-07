@@ -457,7 +457,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("TSLA");
+    /// let contract = Contract::stock("TSLA").build();
     /// let results = client.contract_details(&contract).expect("request failed");
     /// for contract_detail in results {
     ///     println!("contract: {contract_detail:?}");
@@ -756,7 +756,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("MSFT");
+    /// let contract = Contract::stock("MSFT").build();
     /// let order = order_builder::market_order(Action::Buy, 100.0);
     /// let order_id = client.next_order_id();
     ///
@@ -805,7 +805,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100)?;
     ///
-    /// let contract = Contract::stock("MSFT");
+    /// let contract = Contract::stock("MSFT").build();
     /// let order = order_builder::market_order(Action::Buy, 100.0);
     /// let order_id = client.next_order_id();
     ///
@@ -943,7 +943,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("MSFT");
+    /// let contract = Contract::stock("MSFT").build();
     /// let what_to_show = WhatToShow::Trades;
     /// let trading_hours = TradingHours::Regular;
     ///
@@ -982,7 +982,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("TSLA");
+    /// let contract = Contract::stock("TSLA").build();
     ///
     /// let historical_data = client
     ///     .historical_data(&contract, Some(datetime!(2023-04-15 0:00 UTC)), 7.days(), BarSize::Day, WhatToShow::Trades, TradingHours::Regular)
@@ -1024,7 +1024,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("GM");
+    /// let contract = Contract::stock("GM").build();
     ///
     /// let historical_data = client
     ///     .historical_schedules(&contract, datetime!(2023-04-15 0:00 UTC), 30.days())
@@ -1060,7 +1060,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("GM");
+    /// let contract = Contract::stock("GM").build();
     ///
     /// let historical_data = client
     ///     .historical_schedules_ending_now(&contract, 30.days())
@@ -1097,7 +1097,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("TSLA");
+    /// let contract = Contract::stock("TSLA").build();
     ///
     /// let ticks = client
     ///     .historical_ticks_bid_ask(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, TradingHours::Regular, false)
@@ -1139,7 +1139,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("TSLA");
+    /// let contract = Contract::stock("TSLA").build();
     ///
     /// let ticks = client
     ///     .historical_ticks_mid_point(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, TradingHours::Regular)
@@ -1180,7 +1180,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("TSLA");
+    /// let contract = Contract::stock("TSLA").build();
     ///
     /// let ticks = client
     ///     .historical_ticks_trade(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, TradingHours::Regular)
@@ -1220,7 +1220,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("GM");
+    /// let contract = Contract::stock("GM").build();
     ///
     /// let histogram = client
     ///     .histogram_data(&contract, TradingHours::Regular, BarSize::Week)
@@ -1256,7 +1256,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("TSLA");
+    /// let contract = Contract::stock("TSLA").build();
     /// let subscription = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended).expect("request failed");
     ///
     /// for (i, bar) in subscription.iter().enumerate().take(60) {
@@ -1288,7 +1288,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::stock("AAPL").build();
     /// let number_of_ticks = 10; // Request a small number of ticks for the example
     /// let ignore_size = false;
     ///
@@ -1323,7 +1323,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::stock("AAPL").build();
     /// let number_of_ticks = 10; // Request a small number of ticks for the example
     /// let ignore_size = false;
     ///
@@ -1358,7 +1358,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::stock("AAPL").build();
     /// let number_of_ticks = 10; // Request a small number of ticks for the example
     /// let ignore_size = false;
     ///
@@ -1388,7 +1388,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::stock("AAPL").build();
     /// let number_of_ticks = 10; // Request a small number of ticks for the example
     /// let ignore_size = false;
     ///
@@ -1440,7 +1440,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::stock("AAPL").build();
     ///
     /// let subscription = client.market_depth(&contract, 5, true).expect("error requesting market depth");
     /// for row in &subscription {
@@ -1505,7 +1505,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::stock("AAPL").build();
     ///
     /// // https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#available-tick-types
     /// let generic_ticks = &["233", "293"];
@@ -1675,7 +1675,7 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
-    /// let contract = Contract::stock("AAPL");
+    /// let contract = Contract::stock("AAPL").build();
     /// let provider_codes = ["DJ-N"];
     ///
     /// let subscription = client.contract_news(&contract, &provider_codes).expect("request contract news failed");
@@ -1985,7 +1985,7 @@ impl Debug for Client {
 /// let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 ///
 /// // Request real-time bars data for AAPL with 5-second intervals
-/// let contract = Contract::stock("AAPL");
+/// let contract = Contract::stock("AAPL").build();
 /// let subscription = client
 ///     .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended)
 ///     .expect("realtime bars request failed!");
@@ -2368,7 +2368,7 @@ mod tests {
 
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = crate::contracts::Contract::stock("AAPL");
+        let contract = crate::contracts::Contract::stock("AAPL").build();
         let details = client.contract_details(&contract).expect("Failed to get contract details");
 
         assert_eq!(details.len(), 1);
@@ -2416,7 +2416,7 @@ mod tests {
         let client = Client::stubbed(message_bus.clone(), 100);
 
         // Create a subscription using realtime bars as an example
-        let contract = crate::contracts::Contract::stock("AAPL");
+        let contract = crate::contracts::Contract::stock("AAPL").build();
         let subscription = client
             .realtime_bars(
                 &contract,
@@ -2704,7 +2704,7 @@ mod tests {
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
         // Create a stock contract
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
 
         // Create a market order
         let order = order_builder::market_order(Action::Buy, 100.0);
@@ -2824,7 +2824,7 @@ mod tests {
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
         // Create a stock contract
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
 
         // Create a market order
         let order = order_builder::market_order(Action::Buy, 100.0);
@@ -3502,7 +3502,7 @@ mod tests {
         let gateway = setup_market_data();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let generic_ticks = vec!["100", "101", "104"]; // Option volume, option open interest, historical volatility
         let snapshot = true;
         let regulatory_snapshot = false;
@@ -3610,7 +3610,7 @@ mod tests {
         let gateway = setup_realtime_bars();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let bar_size = BarSize::Sec5;
         let what_to_show = WhatToShow::Trades;
         let trading_hours = TradingHours::Extended;
@@ -3673,7 +3673,7 @@ mod tests {
         let gateway = setup_tick_by_tick_last();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let number_of_ticks = 0;
         let ignore_size = false;
 
@@ -3728,7 +3728,7 @@ mod tests {
         let gateway = setup_tick_by_tick_all_last();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let number_of_ticks = 0;
         let ignore_size = false;
 
@@ -3777,7 +3777,7 @@ mod tests {
         let gateway = setup_tick_by_tick_bid_ask();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let number_of_ticks = 0;
         let ignore_size = false;
 
@@ -3828,7 +3828,7 @@ mod tests {
         let gateway = setup_tick_by_tick_midpoint();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let number_of_ticks = 0;
         let ignore_size = false;
 
@@ -3864,7 +3864,7 @@ mod tests {
         let gateway = setup_market_depth();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let num_rows = 5;
         let is_smart_depth = false;
 
@@ -3988,7 +3988,7 @@ mod tests {
         let gateway = setup_head_timestamp();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let what_to_show = WhatToShow::Trades;
         let trading_hours = TradingHours::Regular;
 
@@ -4019,7 +4019,7 @@ mod tests {
         let gateway = setup_historical_data();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let end_date_time = datetime!(2024-01-22 16:00:00).assume_utc();
         let duration = Duration::days(1);
         let bar_size = BarSize::Min5;
@@ -4071,7 +4071,7 @@ mod tests {
         let gateway = setup_historical_schedules();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let duration = Duration::days(1);
         let end_date_time = datetime!(2024-01-22 16:00:00).assume_utc();
 
@@ -4098,7 +4098,7 @@ mod tests {
         let gateway = setup_historical_ticks_bid_ask();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let start_date_time = datetime!(2024-01-22 09:30:00).assume_utc();
         let number_of_ticks = 100;
         let trading_hours = TradingHours::Regular;
@@ -4143,7 +4143,7 @@ mod tests {
         let gateway = setup_historical_ticks_mid_point();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let start_date_time = datetime!(2024-01-22 09:30:00).assume_utc();
         let number_of_ticks = 100;
         let trading_hours = TradingHours::Regular;
@@ -4179,7 +4179,7 @@ mod tests {
         let gateway = setup_historical_ticks_trade();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let start_date_time = datetime!(2024-01-22 09:30:00).assume_utc();
         let number_of_ticks = 100;
         let trading_hours = TradingHours::Regular;
@@ -4220,7 +4220,7 @@ mod tests {
         let gateway = setup_histogram_data();
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let trading_hours = TradingHours::Regular;
         let period = BarSize::Day;
 
@@ -4531,7 +4531,7 @@ mod tests {
         let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
 
         // Create a contract for the request
-        let contract = Contract::stock("AAPL");
+        let contract = Contract::stock("AAPL").build();
         let provider_codes = &["DJ-RT", "BRFG"];
 
         // Request contract news

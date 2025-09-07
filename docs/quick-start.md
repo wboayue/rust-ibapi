@@ -135,11 +135,28 @@ cargo run --features async
 
 ## Common Operations
 
+### Creating Contracts
+
+The library provides a type-safe contract builder API:
+
+```rust
+// Simple stock contract
+let stock = Contract::stock("AAPL").build();
+
+// Option with required fields enforced at compile time
+let option = Contract::call("AAPL")
+    .strike(150.0)?
+    .expires_on(2024, 12, 20)
+    .build();
+```
+
+For detailed documentation on creating all contract types, see the [Contract Builder Guide](contract-builder.md).
+
 ### Requesting Market Data
 
 ```rust
 // Define a stock contract
-let contract = Contract::stock("AAPL");
+let contract = Contract::stock("AAPL").build();
 
 // Request real-time bars (sync)
 let subscription = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, false)?;

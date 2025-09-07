@@ -1039,7 +1039,7 @@ mod tests {
     #[test]
     fn test_bus_send_order_request() -> Result<(), Error> {
         let order = order_builder::market_order(Action::Buy, 100.0);
-        let contract = &Contract::stock("AAPL");
+        let contract = &Contract::stock("AAPL").build();
         let request = encode_place_order(176, 5, contract, &order)?;
 
         let events = vec![
@@ -1161,7 +1161,7 @@ mod tests {
 
     #[test]
     fn test_send_request_after_disconnect() -> Result<(), Error> {
-        let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL"))?;
+        let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL").build())?;
 
         let expected_response = &format!("10|9000|{AAPL_CONTRACT_RESPONSE}");
 
@@ -1197,7 +1197,7 @@ mod tests {
     // the waiter should receive Error::ConnectionReset
     #[test]
     fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
-        let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL"))?;
+        let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL").build())?;
 
         let events = vec![
             Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
@@ -1229,7 +1229,7 @@ mod tests {
     // the waiter should receive Error::ConnectionReset
     #[test]
     fn test_request_during_disconnect_raises_error() -> Result<(), Error> {
-        let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL"))?;
+        let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL").build())?;
 
         let events = vec![
             Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
@@ -1259,7 +1259,7 @@ mod tests {
 
     #[test]
     fn test_contract_details_disconnect_raises_error() -> Result<(), Error> {
-        let contract = &Contract::stock("AAPL");
+        let contract = &Contract::stock("AAPL").build();
 
         let packet = encode_request_contract_data(173, 9000, contract)?;
 

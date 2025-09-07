@@ -18,8 +18,16 @@ use crate::messages::RequestMessage;
 use crate::messages::ResponseMessage;
 use crate::{Error, ToField};
 
+// Re-export V2 API types
+pub use builders::*;
+pub use types::*;
+
 // Common implementation modules
 mod common;
+
+// V2 API modules
+pub mod builders;
+pub mod types;
 
 // Feature-specific implementations
 #[cfg(feature = "sync")]
@@ -173,74 +181,142 @@ pub struct Contract {
 }
 
 impl Contract {
-    /// Creates a stock contract from the specified symbol.
+    /// Creates a stock contract builder.
     ///
-    /// Currency defaults to USD and exchange defaults to SMART.
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::{Contract, Exchange, Currency};
+    ///
+    /// // Simple stock
+    /// let aapl = Contract::stock("AAPL").build();
+    ///
+    /// // Stock with customization
+    /// let toyota = Contract::stock("7203")
+    ///     .on_exchange(Exchange::Tsej)
+    ///     .in_currency(Currency::JPY)
+    ///     .build();
+    /// ```
+    pub fn stock(symbol: impl Into<Symbol>) -> StockBuilder<Symbol> {
+        StockBuilder::new(symbol)
+    }
+
+    /// Creates a call option contract builder.
     ///
     /// # Examples
     ///
     /// ```
     /// use ibapi::contracts::Contract;
     ///
-    /// let aapl = Contract::stock("AAPL");
-    /// assert_eq!(aapl.symbol, "AAPL");
-    /// assert_eq!(aapl.currency, "USD");
-    /// assert_eq!(aapl.exchange, "SMART");
+    /// let call = Contract::call("AAPL")
+    ///     .strike(150.0)
+    ///     .unwrap()
+    ///     .expires_on(2024, 12, 20)
+    ///     .build();
     /// ```
-    pub fn stock(symbol: &str) -> Contract {
+    pub fn call(symbol: impl Into<Symbol>) -> OptionBuilder<Symbol, Missing, Missing> {
+        OptionBuilder::call(symbol)
+    }
+
+    /// Creates a put option contract builder.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let put = Contract::put("SPY")
+    ///     .strike(450.0)
+    ///     .unwrap()
+    ///     .expires_on(2024, 12, 20)
+    ///     .build();
+    /// ```
+    pub fn put(symbol: impl Into<Symbol>) -> OptionBuilder<Symbol, Missing, Missing> {
+        OptionBuilder::put(symbol)
+    }
+
+    /// Creates a futures contract builder.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::{Contract, ContractMonth};
+    ///
+    /// let es = Contract::futures("ES")
+    ///     .expires_in(ContractMonth::new(2024, 3))
+    ///     .build();
+    /// ```
+    pub fn futures(symbol: impl Into<Symbol>) -> FuturesBuilder<Symbol, Missing> {
+        FuturesBuilder::new(symbol)
+    }
+
+    /// Creates a forex contract builder.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::{Contract, Currency};
+    ///
+    /// let eur_usd = Contract::forex(Currency::EUR, Currency::USD)
+    ///     .amount(100_000)
+    ///     .build();
+    /// ```
+    pub fn forex(base: Currency, quote: Currency) -> ForexBuilder {
+        ForexBuilder::new(base, quote)
+    }
+
+    /// Creates a crypto contract builder.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let btc = Contract::crypto("BTC").build();
+    /// ```
+    pub fn crypto(symbol: impl Into<Symbol>) -> CryptoBuilder {
+        CryptoBuilder::new(symbol)
+    }
+
+    /// Creates an index contract.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::Contract;
+    ///
+    /// let spx = Contract::index("SPX");
+    /// ```
+    pub fn index(symbol: &str) -> Contract {
+        let (exchange, currency) = match symbol {
+            "SPX" | "NDX" | "DJI" | "RUT" => (Exchange::Cboe, Currency::USD),
+            "DAX" => (Exchange::Eurex, Currency::EUR),
+            "FTSE" => (Exchange::Lse, Currency::GBP),
+            _ => (Exchange::Smart, Currency::USD),
+        };
+
         Contract {
             symbol: symbol.to_string(),
-            security_type: SecurityType::Stock,
-            currency: "USD".to_string(),
-            exchange: "SMART".to_string(),
+            security_type: SecurityType::Index,
+            exchange: exchange.to_string(),
+            currency: currency.to_string(),
             ..Default::default()
         }
     }
 
-    /// Creates a futures contract from the specified symbol.
-    ///
-    /// Currency defaults to USD.
+    /// Creates a spread/combo contract builder.
     ///
     /// # Examples
     ///
     /// ```
-    /// use ibapi::contracts::Contract;
+    /// use ibapi::contracts::{Contract, Action};
     ///
-    /// let es = Contract::futures("ES");
-    /// assert_eq!(es.symbol, "ES");
-    /// assert_eq!(es.currency, "USD");
+    /// let spread = Contract::spread()
+    ///     .calendar(12345, 67890)
+    ///     .build()?;
     /// ```
-    pub fn futures(symbol: &str) -> Contract {
-        Contract {
-            symbol: symbol.to_string(),
-            security_type: SecurityType::Future,
-            currency: "USD".to_string(),
-            ..Default::default()
-        }
-    }
-
-    /// Creates a cryptocurrency contract from the specified symbol.
-    ///
-    /// Currency defaults to USD and exchange defaults to PAXOS.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use ibapi::contracts::Contract;
-    ///
-    /// let btc = Contract::crypto("BTC");
-    /// assert_eq!(btc.symbol, "BTC");
-    /// assert_eq!(btc.currency, "USD");
-    /// assert_eq!(btc.exchange, "PAXOS");
-    /// ```
-    pub fn crypto(symbol: &str) -> Contract {
-        Contract {
-            symbol: symbol.to_string(),
-            security_type: SecurityType::Crypto,
-            currency: "USD".to_string(),
-            exchange: "PAXOS".to_string(),
-            ..Default::default()
-        }
+    pub fn spread() -> SpreadBuilder {
+        SpreadBuilder::new()
     }
 
     /// Creates a news contract from the specified provider code.
@@ -283,15 +359,17 @@ impl Contract {
     /// assert_eq!(call.strike, 150.0);
     /// assert_eq!(call.right, "C");
     /// ```
+    /// Creates a simple option contract (for backward compatibility).
+    /// For new code, use Contract::call() or Contract::put() builders instead.
     pub fn option(symbol: &str, expiration_date: &str, strike: f64, right: &str) -> Contract {
         Contract {
             symbol: symbol.into(),
             security_type: SecurityType::Option,
             exchange: "SMART".into(),
             currency: "USD".into(),
-            last_trade_date_or_contract_month: expiration_date.into(), // Expiry date (YYYYMMDD)
+            last_trade_date_or_contract_month: expiration_date.into(),
             strike,
-            right: right.into(), // Option type: "C" for Call, "P" for Put
+            right: right.into(),
             ..Default::default()
         }
     }
@@ -572,54 +650,68 @@ pub(crate) fn decode_option_computation(server_version: i32, message: &mut Respo
     common::decoders::decode_option_computation(server_version, message)
 }
 
-// Re-export ContractBuilder
-pub use common::contract_builder::ContractBuilder;
+// ContractBuilder is deprecated - use the new builder methods on Contract instead
+// e.g., Contract::stock(), Contract::call(), Contract::put(), etc.
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_contract_constructors() {
-        // Test stock constructor
-        let stock = Contract::stock("AAPL");
+    fn test_v2_builders() {
+        // Test stock builder
+        let stock = Contract::stock("AAPL").build();
         assert_eq!(stock.symbol, "AAPL", "stock.symbol");
         assert_eq!(stock.security_type, SecurityType::Stock, "stock.security_type");
         assert_eq!(stock.currency, "USD", "stock.currency");
         assert_eq!(stock.exchange, "SMART", "stock.exchange");
 
-        // Test futures constructor
-        let futures = Contract::futures("ES");
-        assert_eq!(futures.symbol, "ES", "futures.symbol");
-        assert_eq!(futures.security_type, SecurityType::Future, "futures.security_type");
-        assert_eq!(futures.currency, "USD", "futures.currency");
-        assert_eq!(futures.exchange, "", "futures.exchange");
+        // Test stock with customization
+        let toyota = Contract::stock("7203").on_exchange(Exchange::Tsej).in_currency(Currency::JPY).build();
+        assert_eq!(toyota.symbol, "7203");
+        assert_eq!(toyota.exchange, "TSEJ");
+        assert_eq!(toyota.currency, "JPY");
 
-        // Test crypto constructor
-        let crypto = Contract::crypto("BTC");
-        assert_eq!(crypto.symbol, "BTC", "crypto.symbol");
-        assert_eq!(crypto.security_type, SecurityType::Crypto, "crypto.security_type");
-        assert_eq!(crypto.currency, "USD", "crypto.currency");
-        assert_eq!(crypto.exchange, "PAXOS", "crypto.exchange");
+        // Test call option builder
+        let call = Contract::call("AAPL").strike(150.0).unwrap().expires_on(2023, 12, 15).build();
+        assert_eq!(call.symbol, "AAPL");
+        assert_eq!(call.security_type, SecurityType::Option);
+        assert_eq!(call.strike, 150.0);
+        assert_eq!(call.right, "C");
+        assert_eq!(call.last_trade_date_or_contract_month, "20231215");
 
-        // Test news constructor
+        // Test put option builder
+        let put = Contract::put("SPY").strike(450.0).unwrap().expires_on(2024, 1, 19).build();
+        assert_eq!(put.symbol, "SPY");
+        assert_eq!(put.right, "P");
+        assert_eq!(put.strike, 450.0);
+
+        // Test crypto builder
+        let btc = Contract::crypto("BTC").build();
+        assert_eq!(btc.symbol, "BTC");
+        assert_eq!(btc.security_type, SecurityType::Crypto);
+        assert_eq!(btc.currency, "USD");
+        assert_eq!(btc.exchange, "PAXOS");
+
+        // Test index
+        let spx = Contract::index("SPX");
+        assert_eq!(spx.symbol, "SPX");
+        assert_eq!(spx.security_type, SecurityType::Index);
+        assert_eq!(spx.exchange, "CBOE");
+        assert_eq!(spx.currency, "USD");
+
+        // Test news constructor (unchanged)
         let news = Contract::news("BZ");
-        assert_eq!(news.symbol, "BZ:BZ_ALL", "news.symbol");
-        assert_eq!(news.security_type, SecurityType::News, "news.security_type");
-        assert_eq!(news.exchange, "BZ", "news.exchange");
+        assert_eq!(news.symbol, "BZ:BZ_ALL");
+        assert_eq!(news.security_type, SecurityType::News);
+        assert_eq!(news.exchange, "BZ");
 
-        // Test option constructor
+        // Test backward compatibility with option constructor
         let option = Contract::option("AAPL", "20231215", 150.0, "C");
-        assert_eq!(option.symbol, "AAPL", "option.symbol");
-        assert_eq!(option.security_type, SecurityType::Option, "option.security_type");
-        assert_eq!(
-            option.last_trade_date_or_contract_month, "20231215",
-            "option.last_trade_date_or_contract_month"
-        );
-        assert_eq!(option.strike, 150.0, "option.strike");
-        assert_eq!(option.right, "C", "option.right");
-        assert_eq!(option.exchange, "SMART", "option.exchange");
-        assert_eq!(option.currency, "USD", "option.currency");
+        assert_eq!(option.symbol, "AAPL");
+        assert_eq!(option.security_type, SecurityType::Option);
+        assert_eq!(option.strike, 150.0);
+        assert_eq!(option.right, "C");
     }
 
     #[test]
@@ -723,7 +815,7 @@ mod tests {
     #[test]
     fn test_is_bag() {
         // Test with a regular stock contract (not a bag/spread)
-        let stock_contract = Contract::stock("AAPL");
+        let stock_contract = Contract::stock("AAPL").build();
         assert!(!stock_contract.is_bag(), "Stock contract should not be a bag");
 
         // Test with a regular option contract (not a bag/spread)
@@ -731,7 +823,12 @@ mod tests {
         assert!(!option_contract.is_bag(), "Option contract should not be a bag");
 
         // Test with a futures contract (not a bag/spread)
-        let futures_contract = Contract::futures("ES");
+        // Using the simple factory method for futures that requires adding expiry
+        let futures_contract = Contract {
+            symbol: "ES".to_string(),
+            security_type: SecurityType::Future,
+            ..Default::default()
+        };
         assert!(!futures_contract.is_bag(), "Futures contract should not be a bag");
 
         // Test with a contract that is a bag/spread

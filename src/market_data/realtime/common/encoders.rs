@@ -207,7 +207,7 @@ mod tests {
 
     /// Helper function to create a basic test contract
     fn create_test_contract() -> Contract {
-        Contract::stock("AAPL")
+        Contract::stock("AAPL").build()
     }
 
     #[cfg(test)]

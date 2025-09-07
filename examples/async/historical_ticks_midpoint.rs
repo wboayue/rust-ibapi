@@ -101,7 +101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 2: Request recent midpoint ticks (last hour)
     println!("\n\nExample 2: Recent midpoint ticks (last hour)");
-    let contract2 = Contract::stock("AAPL");
+    let contract2 = Contract::stock("AAPL").build();
 
     // Use end time only to get most recent data
     let start2 = None;

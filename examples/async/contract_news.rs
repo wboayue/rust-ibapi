@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Subscribing to Contract News ===");
 
     // Create a contract to monitor news for
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
 
     // Specify news providers to subscribe to (empty means all)
     let provider_codes = &["BRFG", "DJNL"];

@@ -1,0 +1,327 @@
+use super::*;
+use crate::contracts::{Contract, SecurityType};
+
+#[test]
+fn test_stock_builder_basic() {
+    let stock = Contract::stock("AAPL").build();
+    assert_eq!(stock.symbol, "AAPL");
+    assert_eq!(stock.security_type, SecurityType::Stock);
+    assert_eq!(stock.exchange, "SMART");
+    assert_eq!(stock.currency, "USD");
+}
+
+#[test]
+fn test_stock_builder_customization() {
+    let stock = Contract::stock("7203")
+        .on_exchange(Exchange::Tsej)
+        .in_currency(Currency::JPY)
+        .primary(Exchange::Tsej)
+        .trading_class("TOPIX")
+        .build();
+    
+    assert_eq!(stock.symbol, "7203");
+    assert_eq!(stock.exchange, "TSEJ");
+    assert_eq!(stock.currency, "JPY");
+    assert_eq!(stock.primary_exchange, "TSEJ");
+    assert_eq!(stock.trading_class, "TOPIX");
+}
+
+#[test]
+fn test_call_option_builder() {
+    let call = Contract::call("AAPL")
+        .strike(150.0)
+        .unwrap()
+        .expires_on(2024, 12, 20)
+        .build();
+    
+    assert_eq!(call.symbol, "AAPL");
+    assert_eq!(call.security_type, SecurityType::Option);
+    assert_eq!(call.strike, 150.0);
+    assert_eq!(call.right, "C");
+    assert_eq!(call.last_trade_date_or_contract_month, "20241220");
+    assert_eq!(call.multiplier, "100");
+}
+
+#[test]
+fn test_put_option_builder() {
+    let put = Contract::put("SPY")
+        .strike(450.0)
+        .unwrap()
+        .expires(ExpirationDate::new(2024, 3, 15))
+        .on_exchange(Exchange::Cboe)
+        .in_currency(Currency::USD)
+        .multiplier(100)
+        .build();
+    
+    assert_eq!(put.symbol, "SPY");
+    assert_eq!(put.security_type, SecurityType::Option);
+    assert_eq!(put.strike, 450.0);
+    assert_eq!(put.right, "P");
+    assert_eq!(put.last_trade_date_or_contract_month, "20240315");
+    assert_eq!(put.exchange, "CBOE");
+    assert_eq!(put.multiplier, "100");
+}
+
+#[test]
+fn test_invalid_strike_price() {
+    let result = Strike::new(-10.0);
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err(), "Strike price must be positive");
+    
+    let result = Strike::new(0.0);
+    assert!(result.is_err());
+    
+    let result = Strike::new(100.0);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().value(), 100.0);
+}
+
+#[test]
+fn test_futures_builder_with_manual_expiry() {
+    let futures = Contract::futures("ES")
+        .expires_in(ContractMonth::new(2024, 3))
+        .on_exchange(Exchange::Globex)
+        .in_currency(Currency::USD)
+        .multiplier(50)
+        .build();
+    
+    assert_eq!(futures.symbol, "ES");
+    assert_eq!(futures.security_type, SecurityType::Future);
+    assert_eq!(futures.last_trade_date_or_contract_month, "202403");
+    assert_eq!(futures.exchange, "GLOBEX");
+    assert_eq!(futures.currency, "USD");
+    assert_eq!(futures.multiplier, "50");
+}
+
+#[test]
+fn test_futures_auto_multiplier() {
+    // ES should get 50
+    let es = Contract::futures("ES")
+        .expires_in(ContractMonth::new(2024, 3))
+        .build();
+    assert_eq!(es.multiplier, "50");
+    
+    // NQ should get 50
+    let nq = Contract::futures("NQ")
+        .expires_in(ContractMonth::new(2024, 3))
+        .build();
+    assert_eq!(nq.multiplier, "50");
+    
+    // YM should get 5
+    let ym = Contract::futures("YM")
+        .expires_in(ContractMonth::new(2024, 3))
+        .build();
+    assert_eq!(ym.multiplier, "5");
+    
+    // CL should get 1000
+    let cl = Contract::futures("CL")
+        .expires_in(ContractMonth::new(2024, 3))
+        .build();
+    assert_eq!(cl.multiplier, "1000");
+    
+    // Unknown should get 1
+    let unknown = Contract::futures("XYZ")
+        .expires_in(ContractMonth::new(2024, 3))
+        .build();
+    assert_eq!(unknown.multiplier, "1");
+}
+
+#[test]
+fn test_forex_builder() {
+    let forex = Contract::forex(Currency::EUR, Currency::USD)
+        .amount(100_000)
+        .on_exchange(Exchange::Idealpro)
+        .build();
+    
+    assert_eq!(forex.symbol, "EUR.USD");
+    assert_eq!(forex.security_type, SecurityType::ForexPair);
+    assert_eq!(forex.exchange, "IDEALPRO");
+    assert_eq!(forex.currency, "USD");
+}
+
+#[test]
+fn test_crypto_builder() {
+    let btc = Contract::crypto("BTC")
+        .on_exchange(Exchange::Paxos)
+        .in_currency(Currency::USD)
+        .build();
+    
+    assert_eq!(btc.symbol, "BTC");
+    assert_eq!(btc.security_type, SecurityType::Crypto);
+    assert_eq!(btc.exchange, "PAXOS");
+    assert_eq!(btc.currency, "USD");
+}
+
+#[test]
+fn test_index_contract() {
+    // SPX should get CBOE and USD
+    let spx = Contract::index("SPX");
+    assert_eq!(spx.symbol, "SPX");
+    assert_eq!(spx.security_type, SecurityType::Index);
+    assert_eq!(spx.exchange, "CBOE");
+    assert_eq!(spx.currency, "USD");
+    
+    // DAX should get EUREX and EUR
+    let dax = Contract::index("DAX");
+    assert_eq!(dax.symbol, "DAX");
+    assert_eq!(dax.exchange, "EUREX");
+    assert_eq!(dax.currency, "EUR");
+    
+    // FTSE should get LSE and GBP
+    let ftse = Contract::index("FTSE");
+    assert_eq!(ftse.symbol, "FTSE");
+    assert_eq!(ftse.exchange, "LSE");
+    assert_eq!(ftse.currency, "GBP");
+    
+    // Unknown should get SMART and USD
+    let unknown = Contract::index("XYZ");
+    assert_eq!(unknown.symbol, "XYZ");
+    assert_eq!(unknown.exchange, "SMART");
+    assert_eq!(unknown.currency, "USD");
+}
+
+#[test]
+fn test_spread_builder_calendar() {
+    let spread = Contract::spread()
+        .calendar(12345, 67890)
+        .in_currency(Currency::USD)
+        .on_exchange(Exchange::Smart)
+        .build()
+        .unwrap();
+    
+    assert_eq!(spread.security_type, SecurityType::Spread);
+    assert_eq!(spread.combo_legs.len(), 2);
+    assert_eq!(spread.combo_legs[0].contract_id, 12345);
+    assert_eq!(spread.combo_legs[0].action, "BUY");
+    assert_eq!(spread.combo_legs[0].ratio, 1);
+    assert_eq!(spread.combo_legs[1].contract_id, 67890);
+    assert_eq!(spread.combo_legs[1].action, "SELL");
+    assert_eq!(spread.combo_legs[1].ratio, 1);
+    assert_eq!(spread.currency, "USD");
+    assert_eq!(spread.exchange, "SMART");
+}
+
+#[test]
+fn test_spread_builder_vertical() {
+    let spread = Contract::spread()
+        .vertical(11111, 22222)
+        .build()
+        .unwrap();
+    
+    assert_eq!(spread.security_type, SecurityType::Spread);
+    assert_eq!(spread.combo_legs.len(), 2);
+    assert_eq!(spread.combo_legs[0].contract_id, 11111);
+    assert_eq!(spread.combo_legs[0].action, "BUY");
+    assert_eq!(spread.combo_legs[1].contract_id, 22222);
+    assert_eq!(spread.combo_legs[1].action, "SELL");
+}
+
+#[test]
+fn test_spread_builder_custom_legs() {
+    let spread = Contract::spread()
+        .add_leg(10001, Action::Buy)
+        .ratio(2)
+        .on_exchange(Exchange::Cboe)
+        .done()
+        .add_leg(10002, Action::Sell)
+        .ratio(3)
+        .done()
+        .add_leg(10003, Action::Buy)
+        .ratio(1)
+        .done()
+        .build()
+        .unwrap();
+    
+    assert_eq!(spread.security_type, SecurityType::Spread);
+    assert_eq!(spread.combo_legs.len(), 3);
+    
+    assert_eq!(spread.combo_legs[0].contract_id, 10001);
+    assert_eq!(spread.combo_legs[0].action, "BUY");
+    assert_eq!(spread.combo_legs[0].ratio, 2);
+    assert_eq!(spread.combo_legs[0].exchange, "CBOE");
+    
+    assert_eq!(spread.combo_legs[1].contract_id, 10002);
+    assert_eq!(spread.combo_legs[1].action, "SELL");
+    assert_eq!(spread.combo_legs[1].ratio, 3);
+    
+    assert_eq!(spread.combo_legs[2].contract_id, 10003);
+    assert_eq!(spread.combo_legs[2].action, "BUY");
+    assert_eq!(spread.combo_legs[2].ratio, 1);
+}
+
+#[test]
+fn test_spread_builder_empty_fails() {
+    let result = Contract::spread().build();
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().to_string(), "error occurred: Spread must have at least one leg");
+}
+
+#[test]
+fn test_exchange_display() {
+    assert_eq!(Exchange::Smart.to_string(), "SMART");
+    assert_eq!(Exchange::Nasdaq.to_string(), "NASDAQ");
+    assert_eq!(Exchange::Cboe.to_string(), "CBOE");
+    assert_eq!(Exchange::Custom("TEST".to_string()).to_string(), "TEST");
+}
+
+#[test]
+fn test_currency_display() {
+    assert_eq!(Currency::USD.to_string(), "USD");
+    assert_eq!(Currency::EUR.to_string(), "EUR");
+    assert_eq!(Currency::JPY.to_string(), "JPY");
+    assert_eq!(Currency::Custom("XXX".to_string()).to_string(), "XXX");
+}
+
+#[test]
+fn test_option_right_display() {
+    assert_eq!(OptionRight::Call.to_string(), "C");
+    assert_eq!(OptionRight::Put.to_string(), "P");
+}
+
+#[test]
+fn test_action_display() {
+    assert_eq!(Action::Buy.to_string(), "BUY");
+    assert_eq!(Action::Sell.to_string(), "SELL");
+}
+
+#[test]
+fn test_symbol_conversion() {
+    let symbol = Symbol::new("AAPL");
+    assert_eq!(symbol.as_str(), "AAPL");
+    assert_eq!(symbol.to_string(), "AAPL");
+    
+    let symbol: Symbol = "MSFT".into();
+    assert_eq!(symbol.as_str(), "MSFT");
+    
+    let symbol: Symbol = String::from("TSLA").into();
+    assert_eq!(symbol.as_str(), "TSLA");
+}
+
+#[test]
+fn test_expiration_date_formatting() {
+    let date = ExpirationDate::new(2024, 12, 20);
+    assert_eq!(date.to_string(), "20241220");
+    
+    let date = ExpirationDate::new(2025, 1, 5);
+    assert_eq!(date.to_string(), "20250105");
+}
+
+#[test]
+fn test_contract_month_formatting() {
+    let month = ContractMonth::new(2024, 3);
+    assert_eq!(month.to_string(), "202403");
+    
+    let month = ContractMonth::new(2025, 12);
+    assert_eq!(month.to_string(), "202512");
+}
+
+#[test]
+fn test_default_implementations() {
+    assert_eq!(Exchange::default(), Exchange::Smart);
+    assert_eq!(Currency::default(), Currency::USD);
+    
+    let spread = SpreadBuilder::default();
+    assert!(spread.legs.is_empty());
+    assert_eq!(spread.currency, Currency::USD);
+    assert_eq!(spread.exchange, Exchange::Smart);
+}

@@ -92,23 +92,49 @@ async fn main() {
 
 ### Creating Contracts
 
-Here's how to create a stock contract for TSLA using the [stock](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.stock) helper function (same for both sync and async):
+The library provides a powerful type-safe contract builder API. Here's how to create a stock contract for TSLA:
 
 ```rust
 use ibapi::prelude::*;
 
-// Create a contract for TSLA stock (default currency: USD, exchange: SMART)
-let contract = Contract::stock("TSLA");
+// Simple stock contract with defaults (USD, SMART routing)
+let contract = Contract::stock("TSLA").build();
+
+// Stock with customization
+let contract = Contract::stock("7203")
+    .on_exchange(Exchange::Tsej)
+    .in_currency(Currency::JPY)
+    .build();
 ```
 
-The [stock](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.stock), [futures](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.futures), and [crypto](https://docs.rs/ibapi/latest/ibapi/contracts/struct.Contract.html#method.crypto) methods provide shortcuts for defining contracts with reasonable defaults that can be modified after creation.
+The builder API provides type-safe construction for all contract types:
 
-For contracts requiring custom configurations:
+```rust
+// Options - enforces required fields at compile time
+let call = Contract::call("AAPL")
+    .strike(150.0)?
+    .expires_on(2024, 12, 20)
+    .build();
+
+// Futures with auto-multiplier
+let es = Contract::futures("ES")
+    .expires_in(ContractMonth::new(2024, 3))
+    .build(); // Multiplier automatically set to 50
+
+// Forex pairs
+let eur_usd = Contract::forex(Currency::EUR, Currency::USD)
+    .amount(100_000)
+    .build();
+```
+
+For comprehensive documentation on creating all contract types including stocks, options, futures, forex, crypto, and complex spreads, see the [Contract Builder Guide](docs/contract-builder.md).
+
+For lower-level control, you can also create contracts directly:
 
 ```rust
 use ibapi::prelude::*;
 
-// Create a fully specified contract for TSLA stock
+// Create a fully specified contract
 Contract {
     symbol: "TSLA".to_string(),
     security_type: SecurityType::Stock,

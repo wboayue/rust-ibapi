@@ -16,7 +16,7 @@ fn main() {
     let connection_url = "127.0.0.1:4002";
     let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
 
-    let contract = Contract::stock("AAPL");
+    let contract = Contract::stock("AAPL").build();
 
     loop {
         // Request real-time bars data with 5-second intervals

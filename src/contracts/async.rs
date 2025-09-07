@@ -492,7 +492,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
-        let contract = Contract::stock("TSLA");
+        let contract = Contract::stock("TSLA").build();
 
         let results = client.contract_details(&contract).await;
 
