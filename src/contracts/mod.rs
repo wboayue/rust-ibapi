@@ -193,7 +193,7 @@ impl Contract {
     ///
     /// // Stock with customization
     /// let toyota = Contract::stock("7203")
-    ///     .on_exchange(Exchange::Tsej)
+    ///     .on_exchange(Exchange::TSEJ)
     ///     .in_currency(Currency::JPY)
     ///     .build();
     /// ```
