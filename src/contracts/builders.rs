@@ -336,7 +336,7 @@ pub struct SpreadBuilder {
 #[derive(Debug, Clone)]
 pub struct Leg {
     contract_id: i32,
-    action: Action,
+    action: LegAction,
     ratio: i32,
     exchange: Option<Exchange>,
 }
@@ -358,7 +358,7 @@ impl Default for SpreadBuilder {
 }
 
 impl SpreadBuilder {
-    pub fn add_leg(self, contract_id: i32, action: Action) -> LegBuilder {
+    pub fn add_leg(self, contract_id: i32, action: LegAction) -> LegBuilder {
         LegBuilder {
             parent: self,
             leg: Leg {
@@ -372,23 +372,23 @@ impl SpreadBuilder {
 
     /// Calendar spread convenience method
     pub fn calendar(self, near_id: i32, far_id: i32) -> Self {
-        self.add_leg(near_id, Action::Buy).done().add_leg(far_id, Action::Sell).done()
+        self.add_leg(near_id, LegAction::Buy).done().add_leg(far_id, LegAction::Sell).done()
     }
 
     /// Vertical spread convenience method
     pub fn vertical(self, long_id: i32, short_id: i32) -> Self {
-        self.add_leg(long_id, Action::Buy).done().add_leg(short_id, Action::Sell).done()
+        self.add_leg(long_id, LegAction::Buy).done().add_leg(short_id, LegAction::Sell).done()
     }
 
     /// Iron condor spread convenience method
     pub fn iron_condor(self, long_put_id: i32, short_put_id: i32, short_call_id: i32, long_call_id: i32) -> Self {
-        self.add_leg(long_put_id, Action::Buy)
+        self.add_leg(long_put_id, LegAction::Buy)
             .done()
-            .add_leg(short_put_id, Action::Sell)
+            .add_leg(short_put_id, LegAction::Sell)
             .done()
-            .add_leg(short_call_id, Action::Sell)
+            .add_leg(short_call_id, LegAction::Sell)
             .done()
-            .add_leg(long_call_id, Action::Buy)
+            .add_leg(long_call_id, LegAction::Buy)
             .done()
     }
 

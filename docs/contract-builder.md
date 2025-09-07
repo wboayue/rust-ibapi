@@ -238,7 +238,7 @@ The bond builder automatically:
 Complex multi-leg strategies with type-safe leg construction.
 
 ```rust
-use ibapi::contracts::{Contract, Action, Currency, Exchange};
+use ibapi::contracts::{Contract, LegAction, Currency, Exchange};
 
 // Calendar spread (buy near, sell far)
 let calendar = Contract::spread()
@@ -263,13 +263,13 @@ let iron_condor = Contract::spread()
 
 // Custom multi-leg spread
 let butterfly = Contract::spread()
-    .add_leg(30001, Action::Buy)   // Buy 1 lower strike
+    .add_leg(30001, LegAction::Buy)   // Buy 1 lower strike
         .ratio(1)
         .done()
-    .add_leg(30002, Action::Sell)  // Sell 2 middle strike
+    .add_leg(30002, LegAction::Sell)  // Sell 2 middle strike
         .ratio(2)
         .done()
-    .add_leg(30003, Action::Buy)   // Buy 1 higher strike
+    .add_leg(30003, LegAction::Buy)   // Buy 1 higher strike
         .ratio(1)
         .done()
     .on_exchange(Exchange::SMART)
@@ -277,10 +277,10 @@ let butterfly = Contract::spread()
 
 // Ratio spread with different quantities
 let ratio_spread = Contract::spread()
-    .add_leg(20001, Action::Buy)
+    .add_leg(20001, LegAction::Buy)
         .ratio(1)
         .done()
-    .add_leg(20002, Action::Sell)
+    .add_leg(20002, LegAction::Sell)
         .ratio(2)
         .on_exchange(Exchange::CBOE)
         .done()
@@ -418,7 +418,7 @@ Here's a comprehensive example showing various contract types:
 ```rust
 use ibapi::contracts::{
     Contract, Exchange, Currency, OptionRight, 
-    ExpirationDate, ContractMonth, Action
+    ExpirationDate, ContractMonth, LegAction
 };
 
 fn create_contracts() -> Result<(), Box<dyn std::error::Error>> {
@@ -456,13 +456,13 @@ fn create_contracts() -> Result<(), Box<dyn std::error::Error>> {
     
     // Complex spread
     let butterfly = Contract::spread()
-        .add_leg(50001, Action::Buy)
+        .add_leg(50001, LegAction::Buy)
             .ratio(1)
             .done()
-        .add_leg(50002, Action::Sell)
+        .add_leg(50002, LegAction::Sell)
             .ratio(2)
             .done()
-        .add_leg(50003, Action::Buy)
+        .add_leg(50003, LegAction::Buy)
             .ratio(1)
             .done()
         .build()?;

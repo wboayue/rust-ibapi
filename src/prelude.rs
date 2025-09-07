@@ -22,6 +22,9 @@ pub use crate::Error;
 
 // Contract types
 pub use crate::contracts::{Contract, SecurityType};
+pub use crate::contracts::{
+    BondIdentifier, ContractMonth, Currency, Cusip, Exchange, ExpirationDate, Isin, LegAction, OptionRight, Strike, Symbol,
+};
 
 // Market data types - historical
 pub use crate::market_data::historical::{BarSize as HistoricalBarSize, ToDuration, WhatToShow as HistoricalWhatToShow};

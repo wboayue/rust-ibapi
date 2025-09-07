@@ -192,14 +192,14 @@ fn test_spread_builder_vertical() {
 #[test]
 fn test_spread_builder_custom_legs() {
     let spread = Contract::spread()
-        .add_leg(10001, Action::Buy)
+        .add_leg(10001, LegAction::Buy)
         .ratio(2)
         .on_exchange(Exchange::CBOE)
         .done()
-        .add_leg(10002, Action::Sell)
+        .add_leg(10002, LegAction::Sell)
         .ratio(3)
         .done()
-        .add_leg(10003, Action::Buy)
+        .add_leg(10003, LegAction::Buy)
         .ratio(1)
         .done()
         .build()
@@ -253,8 +253,8 @@ fn test_option_right_display() {
 
 #[test]
 fn test_action_display() {
-    assert_eq!(Action::Buy.to_string(), "BUY");
-    assert_eq!(Action::Sell.to_string(), "SELL");
+    assert_eq!(LegAction::Buy.to_string(), "BUY");
+    assert_eq!(LegAction::Sell.to_string(), "SELL");
 }
 
 #[test]

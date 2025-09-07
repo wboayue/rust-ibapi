@@ -425,23 +425,23 @@ pub enum BondIdentifier {
     Isin(Isin),
 }
 
-/// Trading action for spreads
+/// Trading action for spread/combo legs
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Action {
+pub enum LegAction {
     Buy,
     Sell,
 }
 
-impl Action {
+impl LegAction {
     pub fn as_str(&self) -> &str {
         match self {
-            Action::Buy => "BUY",
-            Action::Sell => "SELL",
+            LegAction::Buy => "BUY",
+            LegAction::Sell => "SELL",
         }
     }
 }
 
-impl fmt::Display for Action {
+impl fmt::Display for LegAction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_str())
     }

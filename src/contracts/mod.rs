@@ -355,7 +355,7 @@ impl Contract {
     /// # Examples
     ///
     /// ```
-    /// use ibapi::contracts::{Contract, Action};
+    /// use ibapi::contracts::{Contract, LegAction};
     ///
     /// let spread = Contract::spread()
     ///     .calendar(12345, 67890)
