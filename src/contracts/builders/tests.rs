@@ -304,3 +304,70 @@ fn test_default_implementations() {
     assert_eq!(spread.currency, Currency::USD);
     assert_eq!(spread.exchange, Exchange::Smart);
 }
+
+#[test]
+fn test_iron_condor_spread() {
+    let spread = Contract::spread()
+        .iron_condor(100, 105, 110, 115)
+        .build()
+        .expect("Failed to build iron condor");
+
+    assert_eq!(spread.security_type, SecurityType::Spread);
+    assert_eq!(spread.combo_legs.len(), 4);
+
+    // Verify leg structure: Buy 100 Put, Sell 105 Put, Sell 110 Call, Buy 115 Call
+    let legs = &spread.combo_legs;
+
+    // First leg: Buy 100 Put
+    assert_eq!(legs[0].contract_id, 100);
+    assert_eq!(legs[0].action, "BUY");
+    assert_eq!(legs[0].ratio, 1);
+
+    // Second leg: Sell 105 Put
+    assert_eq!(legs[1].contract_id, 105);
+    assert_eq!(legs[1].action, "SELL");
+    assert_eq!(legs[1].ratio, 1);
+
+    // Third leg: Sell 110 Call
+    assert_eq!(legs[2].contract_id, 110);
+    assert_eq!(legs[2].action, "SELL");
+    assert_eq!(legs[2].ratio, 1);
+
+    // Fourth leg: Buy 115 Call
+    assert_eq!(legs[3].contract_id, 115);
+    assert_eq!(legs[3].action, "BUY");
+    assert_eq!(legs[3].ratio, 1);
+}
+
+#[test]
+fn test_option_convenience_date_methods() {
+    // Test expires_weekly - should set next Friday
+    let weekly_option = Contract::call("SPY").strike(450.0).expires_weekly().build();
+
+    // Weekly expiration should be set
+    assert!(!weekly_option.last_trade_date_or_contract_month.is_empty());
+    // Should be a Friday date in format YYYYMMDD
+    assert_eq!(weekly_option.last_trade_date_or_contract_month.len(), 8);
+
+    // Test expires_monthly - should set third Friday of month
+    let monthly_option = Contract::put("AAPL").strike(150.0).expires_monthly().build();
+
+    // Monthly expiration should be set
+    assert!(!monthly_option.last_trade_date_or_contract_month.is_empty());
+    assert_eq!(monthly_option.last_trade_date_or_contract_month.len(), 8);
+
+    // Test front_month for futures
+    let front_month_future = Contract::futures("ES").front_month().build();
+
+    // Front month should be set (actual value depends on current date)
+    assert!(!front_month_future.last_trade_date_or_contract_month.is_empty());
+    // Should be in YYYYMM format for futures
+    assert_eq!(front_month_future.last_trade_date_or_contract_month.len(), 6);
+
+    // Test next_quarter for futures
+    let next_quarter_future = Contract::futures("ES").next_quarter().build();
+
+    // Next quarter should be set
+    assert!(!next_quarter_future.last_trade_date_or_contract_month.is_empty());
+    assert_eq!(next_quarter_future.last_trade_date_or_contract_month.len(), 6);
+}
