@@ -37,16 +37,43 @@ use ibapi::contracts::{Contract, Exchange, Currency};
 // Basic stock - uses SMART routing and USD
 let stock = Contract::stock("AAPL").build();
 
-// International stock with specific exchange
+// European stock - disambiguate which listing we want
 let european_stock = Contract::stock("SAN")
-    .on_exchange(Exchange("IBIS"))
+    .on_exchange(Exchange::SMART)  // Use SMART routing for best execution
+    .primary(Exchange("IBIS"))     // But we want the IBIS listing (not Madrid, etc.)
     .in_currency(Currency::EUR)
-    .primary(Exchange("IBIS"))
     .build();
 
 // Stock with trading class
 let stock_with_class = Contract::stock("IBKR")
     .trading_class("NMS")
+    .build();
+```
+
+#### Exchange vs Primary Exchange
+
+- **`on_exchange()`** - Where to route your order (e.g., SMART, NASDAQ, NYSE)
+- **`primary()`** - Which listing of the stock you want (for disambiguation)
+
+Common patterns:
+```rust
+// US stock - usually no primary_exchange needed
+let us_stock = Contract::stock("AAPL")
+    .on_exchange(Exchange::SMART)  // Route via SMART (default)
+    .build();
+
+// Dual-listed stock - specify which listing
+let dual_listed = Contract::stock("BMW")
+    .on_exchange(Exchange::SMART)  // Route via SMART for best price
+    .primary(Exchange("IBIS"))     // We want the German listing, not another
+    .in_currency(Currency::EUR)
+    .build();
+
+// Direct routing to specific exchange
+let direct_route = Contract::stock("BMW")
+    .on_exchange(Exchange("IBIS")) // Route directly to IBIS
+    .primary(Exchange("IBIS"))     // And it's the IBIS listing we want
+    .in_currency(Currency::EUR)
     .build();
 ```
 
