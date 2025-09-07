@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = Client::connect(connection_string, 100).await?;
 
-    let contract = Contract::stock(stock_symbol);
+    let contract = Contract::stock(stock_symbol.as_str()).build();
     let what_to_show = HistoricalWhatToShow::Trades;
     let trading_hours = TradingHours::Regular;
 

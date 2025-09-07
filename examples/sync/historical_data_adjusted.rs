@@ -27,7 +27,7 @@ fn main() {
 
     let client = Client::connect(connection_string, 100).expect("connection failed");
 
-    let contract = Contract::stock(stock_symbol);
+    let contract = Contract::stock(stock_symbol.as_str()).build();
 
     // to use WhatToShow::AdjustedLast, use historical_data() with None for interval_end
     let historical_data = client

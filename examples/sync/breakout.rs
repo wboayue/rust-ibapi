@@ -20,7 +20,7 @@ fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).unwrap();
 
     let symbol = "TSLA";
-    let contract = Contract::stock(symbol); // defaults to USD and SMART exchange.
+    let contract = Contract::stock(symbol).build(); // defaults to USD and SMART exchange.
 
     let bars = client
         .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended)

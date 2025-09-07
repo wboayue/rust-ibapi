@@ -41,7 +41,7 @@ fn main() {
     let client = Client::connect(connection_string, 100).expect("connection failed");
 
     let interval_start = parse_interval(interval_raw);
-    let contract = Contract::stock(stock_symbol);
+    let contract = Contract::stock(stock_symbol.as_str()).build();
 
     let ticks = client
         .historical_ticks_trade(&contract, Some(interval_start), None, *number_of_ticks, TradingHours::Regular)

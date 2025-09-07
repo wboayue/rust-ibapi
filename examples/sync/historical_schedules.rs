@@ -27,7 +27,7 @@ fn main() {
 
     let client = Client::connect(connection_string, 100).expect("connection failed");
 
-    let contract = Contract::stock(stock_symbol);
+    let contract = Contract::stock(stock_symbol.as_str()).build();
 
     let schedule = client
         .historical_schedules(&contract, datetime!(2023-04-15 0:00 UTC), 7.days())

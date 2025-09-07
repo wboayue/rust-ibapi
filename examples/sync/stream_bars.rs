@@ -53,10 +53,18 @@ fn main() -> anyhow::Result<()> {
 
 fn extract_contract(matches: &ArgMatches) -> Option<Contract> {
     if let Some(symbol) = matches.get_one::<String>("stock") {
-        Some(Contract::stock(&symbol.to_uppercase()))
+        Some(Contract::stock(symbol.to_uppercase()).build())
     } else {
-        matches
-            .get_one::<String>("futures")
-            .map(|symbol| Contract::futures(&symbol.to_uppercase()))
+        matches.get_one::<String>("futures").map(|symbol| {
+            // For futures, we'd normally need an expiry date
+            // This is a simplified example - you'd typically parse the expiry from the symbol
+            Contract {
+                symbol: symbol.to_uppercase(),
+                security_type: ibapi::contracts::SecurityType::Future,
+                exchange: "GLOBEX".to_string(),
+                currency: "USD".to_string(),
+                ..Default::default()
+            }
+        })
     }
 }

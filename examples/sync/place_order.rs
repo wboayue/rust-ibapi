@@ -39,7 +39,7 @@ fn main() {
 
     info!("Connected {client:?}");
 
-    let mut contract = Contract::stock(stock_symbol);
+    let mut contract = Contract::stock(stock_symbol.as_str()).build();
     contract.currency = "USD".to_string();
     debug!("contract template {contract:?}");
 

@@ -28,7 +28,7 @@ fn main() {
 
     let client = Client::connect(connection_string, 100).expect("connection failed");
 
-    let contract = Contract::stock(stock_symbol);
+    let contract = Contract::stock(stock_symbol.as_str()).build();
     let what_to_show = WhatToShow::Trades;
     let trading_hours = TradingHours::Regular;
 

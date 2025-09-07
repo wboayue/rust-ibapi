@@ -10,7 +10,7 @@
 //! - Commission reports
 //! - System messages
 
-use ibapi::{contracts::ContractBuilder, prelude::*};
+use ibapi::prelude::*;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Give the monitoring thread time to start
     thread::sleep(Duration::from_millis(100));
 
-    let contract = ContractBuilder::stock(symbol, "SMART", "USD").build().expect("invalid contract");
+    let contract = Contract::stock(symbol).on_exchange(ibapi::contracts::Exchange::Smart).in_currency(ibapi::contracts::Currency::USD).build();
 
     // Place a series of buy and sell orders
     let order_quantities = [
