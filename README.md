@@ -100,10 +100,10 @@ use ibapi::prelude::*;
 // Simple stock contract with defaults (USD, SMART routing)
 let contract = Contract::stock("TSLA").build();
 
-// Stock with customization
+// Stock with customization - accepts string literals directly
 let contract = Contract::stock("7203")
-    .on_exchange(Exchange::TSEJ)
-    .in_currency(Currency::JPY)
+    .on_exchange("TSEJ")
+    .in_currency("JPY")
     .build();
 ```
 
@@ -122,7 +122,11 @@ let futures = Contract::futures("ES")
     .build();
 
 // Forex pairs
-let forex = Contract::forex(Currency::EUR, Currency::USD).build();
+let forex = Contract::forex("EUR", "USD").build();
+
+// Bonds - simplified API for CUSIP and ISIN
+let treasury = Contract::bond_cusip("912810RN0");
+let euro_bond = Contract::bond_isin("DE0001102309");
 ```
 
 See the [Contract Builder Guide](docs/contract-builder.md) for comprehensive documentation on all contract types.

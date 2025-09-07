@@ -193,8 +193,8 @@ impl Contract {
     ///
     /// // Stock with customization
     /// let toyota = Contract::stock("7203")
-    ///     .on_exchange(Exchange::TSEJ)
-    ///     .in_currency(Currency::JPY)
+    ///     .on_exchange("TSEJ")
+    ///     .in_currency("JPY")
     ///     .build();
     /// ```
     pub fn stock(symbol: impl Into<Symbol>) -> StockBuilder<Symbol> {
@@ -255,11 +255,11 @@ impl Contract {
     /// ```
     /// use ibapi::contracts::{Contract, Currency};
     ///
-    /// let eur_usd = Contract::forex(Currency::EUR, Currency::USD)
+    /// let eur_usd = Contract::forex("EUR", "USD")
     ///     .amount(100_000)
     ///     .build();
     /// ```
-    pub fn forex(base: Currency, quote: Currency) -> ForexBuilder {
+    pub fn forex(base: impl Into<Currency>, quote: impl Into<Currency>) -> ForexBuilder {
         ForexBuilder::new(base, quote)
     }
 
@@ -286,11 +286,11 @@ impl Contract {
     /// let spx = Contract::index("SPX");
     /// ```
     pub fn index(symbol: &str) -> Contract {
-        let (exchange, currency) = match symbol {
-            "SPX" | "NDX" | "DJI" | "RUT" => (Exchange::CBOE, Currency::USD),
-            "DAX" => (Exchange::EUREX, Currency::EUR),
-            "FTSE" => (Exchange::LSE, Currency::GBP),
-            _ => (Exchange::SMART, Currency::USD),
+        let (exchange, currency): (Exchange, Currency) = match symbol {
+            "SPX" | "NDX" | "DJI" | "RUT" => ("CBOE".into(), "USD".into()),
+            "DAX" => ("EUREX".into(), "EUR".into()),
+            "FTSE" => ("LSE".into(), "GBP".into()),
+            _ => ("SMART".into(), "USD".into()),
         };
 
         Contract {
@@ -768,7 +768,7 @@ mod tests {
         assert_eq!(stock.exchange, "SMART", "stock.exchange");
 
         // Test stock with customization
-        let toyota = Contract::stock("7203").on_exchange(Exchange::TSEJ).in_currency(Currency::JPY).build();
+        let toyota = Contract::stock("7203").on_exchange("TSEJ").in_currency("JPY").build();
         assert_eq!(toyota.symbol, "7203");
         assert_eq!(toyota.exchange, "TSEJ");
         assert_eq!(toyota.currency, "JPY");

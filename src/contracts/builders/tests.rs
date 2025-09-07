@@ -13,9 +13,9 @@ fn test_stock_builder_basic() {
 #[test]
 fn test_stock_builder_customization() {
     let stock = Contract::stock("7203")
-        .on_exchange(Exchange::TSEJ)
-        .in_currency(Currency::JPY)
-        .primary(Exchange::TSEJ)
+        .on_exchange("TSEJ")
+        .in_currency("JPY")
+        .primary("TSEJ")
         .trading_class("TOPIX")
         .build();
 
@@ -43,8 +43,8 @@ fn test_put_option_builder() {
     let put = Contract::put("SPY")
         .strike(450.0)
         .expires(ExpirationDate::new(2024, 3, 15))
-        .on_exchange(Exchange::CBOE)
-        .in_currency(Currency::USD)
+        .on_exchange("CBOE")
+        .in_currency("USD")
         .multiplier(100)
         .build();
 
@@ -75,8 +75,8 @@ fn test_invalid_strike_price() {
 fn test_futures_builder_with_manual_expiry() {
     let futures = Contract::futures("ES")
         .expires_in(ContractMonth::new(2024, 3))
-        .on_exchange(Exchange::GLOBEX)
-        .in_currency(Currency::USD)
+        .on_exchange("GLOBEX")
+        .in_currency("USD")
         .multiplier(50)
         .build();
 
@@ -107,10 +107,7 @@ fn test_futures_multiplier() {
 
 #[test]
 fn test_forex_builder() {
-    let forex = Contract::forex(Currency::EUR, Currency::USD)
-        .amount(100_000)
-        .on_exchange(Exchange::IDEALPRO)
-        .build();
+    let forex = Contract::forex("EUR", "USD").amount(100_000).on_exchange("IDEALPRO").build();
 
     assert_eq!(forex.symbol, "EUR.USD");
     assert_eq!(forex.security_type, SecurityType::ForexPair);
@@ -120,7 +117,7 @@ fn test_forex_builder() {
 
 #[test]
 fn test_crypto_builder() {
-    let btc = Contract::crypto("BTC").on_exchange(Exchange::PAXOS).in_currency(Currency::USD).build();
+    let btc = Contract::crypto("BTC").on_exchange("PAXOS").in_currency(Currency::USD).build();
 
     assert_eq!(btc.symbol, "BTC");
     assert_eq!(btc.security_type, SecurityType::Crypto);
@@ -160,8 +157,8 @@ fn test_index_contract() {
 fn test_spread_builder_calendar() {
     let spread = Contract::spread()
         .calendar(12345, 67890)
-        .in_currency(Currency::USD)
-        .on_exchange(Exchange::SMART)
+        .in_currency("USD")
+        .on_exchange("SMART")
         .build()
         .unwrap();
 
@@ -194,7 +191,7 @@ fn test_spread_builder_custom_legs() {
     let spread = Contract::spread()
         .add_leg(10001, LegAction::Buy)
         .ratio(2)
-        .on_exchange(Exchange::CBOE)
+        .on_exchange("CBOE")
         .done()
         .add_leg(10002, LegAction::Sell)
         .ratio(3)
@@ -231,18 +228,18 @@ fn test_spread_builder_empty_fails() {
 
 #[test]
 fn test_exchange_display() {
-    assert_eq!(Exchange::SMART.to_string(), "SMART");
-    assert_eq!(Exchange::NASDAQ.to_string(), "NASDAQ");
-    assert_eq!(Exchange::CBOE.to_string(), "CBOE");
-    assert_eq!(Exchange("TEST").to_string(), "TEST");
+    assert_eq!(Exchange("SMART".to_string()).to_string(), "SMART");
+    assert_eq!(Exchange("NASDAQ".to_string()).to_string(), "NASDAQ");
+    assert_eq!(Exchange("CBOE".to_string()).to_string(), "CBOE");
+    assert_eq!(Exchange("TEST".to_string()).to_string(), "TEST");
 }
 
 #[test]
 fn test_currency_display() {
-    assert_eq!(Currency::USD.to_string(), "USD");
-    assert_eq!(Currency::EUR.to_string(), "EUR");
-    assert_eq!(Currency::JPY.to_string(), "JPY");
-    assert_eq!(Currency("XXX").to_string(), "XXX");
+    assert_eq!(Currency("USD".to_string()).to_string(), "USD");
+    assert_eq!(Currency("EUR".to_string()).to_string(), "EUR");
+    assert_eq!(Currency("JPY".to_string()).to_string(), "JPY");
+    assert_eq!(Currency("XXX".to_string()).to_string(), "XXX");
 }
 
 #[test]
@@ -290,13 +287,13 @@ fn test_contract_month_formatting() {
 
 #[test]
 fn test_default_implementations() {
-    assert_eq!(Exchange::default(), Exchange::SMART);
-    assert_eq!(Currency::default(), Currency::USD);
+    assert_eq!(Exchange::default().as_str(), "SMART");
+    assert_eq!(Currency::default().as_str(), "USD");
 
     let spread = SpreadBuilder::default();
     assert!(spread.legs.is_empty());
-    assert_eq!(spread.currency, Currency::USD);
-    assert_eq!(spread.exchange, Exchange::SMART);
+    assert_eq!(spread.currency.as_str(), "USD");
+    assert_eq!(spread.exchange.as_str(), "SMART");
 }
 
 #[test]

@@ -3,7 +3,7 @@
 //! This example shows how to use the new type-safe contract builders
 //! to create various types of contracts.
 
-use ibapi::contracts::{Contract, ContractMonth, Currency, Exchange, ExpirationDate, LegAction};
+use ibapi::contracts::{Contract, ContractMonth, ExpirationDate, LegAction};
 
 fn main() {
     // Simple stock contract
@@ -11,11 +11,7 @@ fn main() {
     println!("Stock: {:?}", aapl.symbol);
 
     // Stock with customization
-    let toyota = Contract::stock("7203")
-        .on_exchange(Exchange::TSEJ)
-        .in_currency(Currency::JPY)
-        .primary(Exchange::TSEJ)
-        .build();
+    let toyota = Contract::stock("7203").on_exchange("TSEJ").in_currency("JPY").primary("TSEJ").build();
     println!("International stock: {:?} on {}", toyota.symbol, toyota.exchange);
 
     // Call option - type-safe with required fields
@@ -29,7 +25,7 @@ fn main() {
     let put = Contract::put("SPY")
         .strike(450.0)
         .expires(ExpirationDate::new(2024, 3, 15))
-        .on_exchange(Exchange::CBOE)
+        .on_exchange("CBOE")
         .build();
     println!("Put option: {} {} strike {}", put.symbol, put.right, put.strike);
 
@@ -45,11 +41,11 @@ fn main() {
     );
 
     // Forex pair
-    let eur_usd = Contract::forex(Currency::EUR, Currency::USD).amount(100_000).build();
+    let eur_usd = Contract::forex("EUR", "USD").amount(100_000).build();
     println!("Forex: {}", eur_usd.symbol);
 
     // Cryptocurrency
-    let btc = Contract::crypto("BTC").on_exchange(Exchange::PAXOS).build();
+    let btc = Contract::crypto("BTC").on_exchange("PAXOS").build();
     println!("Crypto: {} on {}", btc.symbol, btc.exchange);
 
     // Index contract

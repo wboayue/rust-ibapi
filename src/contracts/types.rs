@@ -44,48 +44,43 @@ impl fmt::Display for Symbol {
 /// Exchange identifier
 ///
 /// IBKR supports 160+ exchanges worldwide. This type provides a lightweight wrapper
-/// around exchange codes with constants for commonly used exchanges.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Exchange(pub &'static str);
+/// around exchange codes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Exchange(pub String);
 
 impl Exchange {
-    /// Create a new exchange from a static string
-    pub const fn new(s: &'static str) -> Self {
-        Exchange(s)
+    /// Create a new exchange
+    pub fn new(s: impl Into<String>) -> Self {
+        Exchange(s.into())
     }
 
     /// Get the exchange code as a string slice
     pub fn as_str(&self) -> &str {
-        self.0
+        &self.0
     }
-
-    // Common exchange constants
-    pub const SMART: Exchange = Exchange("SMART");
-    pub const NASDAQ: Exchange = Exchange("NASDAQ");
-    pub const NYSE: Exchange = Exchange("NYSE");
-    pub const CBOE: Exchange = Exchange("CBOE");
-    pub const GLOBEX: Exchange = Exchange("GLOBEX");
-    pub const IDEALPRO: Exchange = Exchange("IDEALPRO");
-    pub const PAXOS: Exchange = Exchange("PAXOS");
-    pub const EUREX: Exchange = Exchange("EUREX");
-    pub const LSE: Exchange = Exchange("LSE");
-    pub const TSEJ: Exchange = Exchange("TSEJ");
-    pub const ARCA: Exchange = Exchange("ARCA");
-    pub const ISLAND: Exchange = Exchange("ISLAND");
-    pub const CME: Exchange = Exchange("CME");
-    pub const ICE: Exchange = Exchange("ICE");
-    pub const BATS: Exchange = Exchange("BATS");
 }
 
 impl Default for Exchange {
     fn default() -> Self {
-        Exchange::SMART
+        Exchange("SMART".to_string())
     }
 }
 
-impl From<&'static str> for Exchange {
-    fn from(s: &'static str) -> Self {
+impl From<&str> for Exchange {
+    fn from(s: &str) -> Self {
+        Exchange(s.to_string())
+    }
+}
+
+impl From<String> for Exchange {
+    fn from(s: String) -> Self {
         Exchange(s)
+    }
+}
+
+impl From<&String> for Exchange {
+    fn from(s: &String) -> Self {
+        Exchange(s.clone())
     }
 }
 
@@ -98,51 +93,43 @@ impl fmt::Display for Exchange {
 /// Currency identifier
 ///
 /// IBKR supports trading in many currencies worldwide. This type provides a lightweight
-/// wrapper around currency codes with constants for commonly used currencies.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Currency(pub &'static str);
+/// wrapper around currency codes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Currency(pub String);
 
 impl Currency {
-    /// Create a new currency from a static string
-    pub const fn new(s: &'static str) -> Self {
-        Currency(s)
+    /// Create a new currency
+    pub fn new(s: impl Into<String>) -> Self {
+        Currency(s.into())
     }
 
     /// Get the currency code as a string slice
     pub fn as_str(&self) -> &str {
-        self.0
+        &self.0
     }
-
-    // Common currency constants
-    pub const USD: Currency = Currency("USD");
-    pub const EUR: Currency = Currency("EUR");
-    pub const GBP: Currency = Currency("GBP");
-    pub const JPY: Currency = Currency("JPY");
-    pub const CHF: Currency = Currency("CHF");
-    pub const CAD: Currency = Currency("CAD");
-    pub const AUD: Currency = Currency("AUD");
-    pub const NZD: Currency = Currency("NZD");
-    pub const HKD: Currency = Currency("HKD");
-    pub const SGD: Currency = Currency("SGD");
-    pub const CNH: Currency = Currency("CNH"); // Offshore RMB
-    pub const KRW: Currency = Currency("KRW");
-    pub const SEK: Currency = Currency("SEK");
-    pub const NOK: Currency = Currency("NOK");
-    pub const DKK: Currency = Currency("DKK");
-    pub const MXN: Currency = Currency("MXN");
-    pub const INR: Currency = Currency("INR");
-    pub const ZAR: Currency = Currency("ZAR");
 }
 
 impl Default for Currency {
     fn default() -> Self {
-        Currency::USD
+        Currency("USD".to_string())
     }
 }
 
-impl From<&'static str> for Currency {
-    fn from(s: &'static str) -> Self {
+impl From<&str> for Currency {
+    fn from(s: &str) -> Self {
+        Currency(s.to_string())
+    }
+}
+
+impl From<String> for Currency {
+    fn from(s: String) -> Self {
         Currency(s)
+    }
+}
+
+impl From<&String> for Currency {
+    fn from(s: &String) -> Self {
+        Currency(s.clone())
     }
 }
 

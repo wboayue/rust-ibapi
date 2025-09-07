@@ -18,8 +18,8 @@ impl StockBuilder<Missing> {
     pub fn new(symbol: impl Into<Symbol>) -> StockBuilder<Symbol> {
         StockBuilder {
             symbol: symbol.into(),
-            exchange: Exchange::SMART,
-            currency: Currency::USD,
+            exchange: "SMART".into(),
+            currency: "USD".into(),
             primary_exchange: None,
             trading_class: None,
         }
@@ -27,18 +27,18 @@ impl StockBuilder<Missing> {
 }
 
 impl StockBuilder<Symbol> {
-    pub fn on_exchange(mut self, exchange: Exchange) -> Self {
-        self.exchange = exchange;
+    pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
+        self.exchange = exchange.into();
         self
     }
 
-    pub fn in_currency(mut self, currency: Currency) -> Self {
-        self.currency = currency;
+    pub fn in_currency(mut self, currency: impl Into<Currency>) -> Self {
+        self.currency = currency.into();
         self
     }
 
-    pub fn primary(mut self, exchange: Exchange) -> Self {
-        self.primary_exchange = Some(exchange);
+    pub fn primary(mut self, exchange: impl Into<Exchange>) -> Self {
+        self.primary_exchange = Some(exchange.into());
         self
     }
 
@@ -80,8 +80,8 @@ impl OptionBuilder<Missing, Missing, Missing> {
             right: OptionRight::Call,
             strike: Missing,
             expiry: Missing,
-            exchange: Exchange::SMART,
-            currency: Currency::USD,
+            exchange: "SMART".into(),
+            currency: "USD".into(),
             multiplier: 100,
         }
     }
@@ -92,8 +92,8 @@ impl OptionBuilder<Missing, Missing, Missing> {
             right: OptionRight::Put,
             strike: Missing,
             expiry: Missing,
-            exchange: Exchange::SMART,
-            currency: Currency::USD,
+            exchange: "SMART".into(),
+            currency: "USD".into(),
             multiplier: 100,
         }
     }
@@ -143,13 +143,13 @@ impl<S> OptionBuilder<Symbol, S, Missing> {
 
 // Optional setters available at any stage when symbol is present
 impl<S, E> OptionBuilder<Symbol, S, E> {
-    pub fn on_exchange(mut self, exchange: Exchange) -> Self {
-        self.exchange = exchange;
+    pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
+        self.exchange = exchange.into();
         self
     }
 
-    pub fn in_currency(mut self, currency: Currency) -> Self {
-        self.currency = currency;
+    pub fn in_currency(mut self, currency: impl Into<Currency>) -> Self {
+        self.currency = currency.into();
         self
     }
 
@@ -191,8 +191,8 @@ impl FuturesBuilder<Missing, Missing> {
         FuturesBuilder {
             symbol: symbol.into(),
             contract_month: Missing,
-            exchange: Exchange::GLOBEX,
-            currency: Currency::USD,
+            exchange: "GLOBEX".into(),
+            currency: "USD".into(),
             multiplier: None,
         }
     }
@@ -219,13 +219,13 @@ impl FuturesBuilder<Symbol, Missing> {
 }
 
 impl<M> FuturesBuilder<Symbol, M> {
-    pub fn on_exchange(mut self, exchange: Exchange) -> Self {
-        self.exchange = exchange;
+    pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
+        self.exchange = exchange.into();
         self
     }
 
-    pub fn in_currency(mut self, currency: Currency) -> Self {
-        self.currency = currency;
+    pub fn in_currency(mut self, currency: impl Into<Currency>) -> Self {
+        self.currency = currency.into();
         self
     }
 
@@ -258,10 +258,12 @@ pub struct ForexBuilder {
 }
 
 impl ForexBuilder {
-    pub fn new(base: Currency, quote: Currency) -> Self {
+    pub fn new(base: impl Into<Currency>, quote: impl Into<Currency>) -> Self {
+        let base = base.into();
+        let quote = quote.into();
         ForexBuilder {
             pair: format!("{}.{}", base, quote),
-            exchange: Exchange::IDEALPRO,
+            exchange: "IDEALPRO".into(),
             amount: 20_000,
         }
     }
@@ -271,8 +273,8 @@ impl ForexBuilder {
         self
     }
 
-    pub fn on_exchange(mut self, exchange: Exchange) -> Self {
-        self.exchange = exchange;
+    pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
+        self.exchange = exchange.into();
         self
     }
 
@@ -299,18 +301,18 @@ impl CryptoBuilder {
     pub fn new(symbol: impl Into<Symbol>) -> Self {
         CryptoBuilder {
             symbol: symbol.into(),
-            exchange: Exchange::PAXOS,
-            currency: Currency::USD,
+            exchange: "PAXOS".into(),
+            currency: "USD".into(),
         }
     }
 
-    pub fn on_exchange(mut self, exchange: Exchange) -> Self {
-        self.exchange = exchange;
+    pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
+        self.exchange = exchange.into();
         self
     }
 
-    pub fn in_currency(mut self, currency: Currency) -> Self {
-        self.currency = currency;
+    pub fn in_currency(mut self, currency: impl Into<Currency>) -> Self {
+        self.currency = currency.into();
         self
     }
 
@@ -345,8 +347,8 @@ impl SpreadBuilder {
     pub fn new() -> Self {
         SpreadBuilder {
             legs: Vec::new(),
-            currency: Currency::USD,
-            exchange: Exchange::SMART,
+            currency: "USD".into(),
+            exchange: "SMART".into(),
         }
     }
 }
@@ -392,13 +394,13 @@ impl SpreadBuilder {
             .done()
     }
 
-    pub fn in_currency(mut self, currency: Currency) -> Self {
-        self.currency = currency;
+    pub fn in_currency(mut self, currency: impl Into<Currency>) -> Self {
+        self.currency = currency.into();
         self
     }
 
-    pub fn on_exchange(mut self, exchange: Exchange) -> Self {
-        self.exchange = exchange;
+    pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
+        self.exchange = exchange.into();
         self
     }
 
@@ -441,8 +443,8 @@ impl LegBuilder {
         self
     }
 
-    pub fn on_exchange(mut self, exchange: Exchange) -> Self {
-        self.leg.exchange = Some(exchange);
+    pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
+        self.leg.exchange = Some(exchange.into());
         self
     }
 
