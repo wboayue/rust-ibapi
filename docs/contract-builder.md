@@ -117,7 +117,7 @@ let monthly_put = Contract::put("IWM")
 
 ### Futures
 
-Futures contracts with automatic multiplier detection for common symbols.
+Futures contracts with flexible expiration options.
 
 ```rust
 use ibapi::contracts::{Contract, ContractMonth, Exchange};
@@ -152,7 +152,7 @@ let custom_contract = Contract::futures("CUSTOM")
 
 #### Multiplier Settings
 
-The futures builder leaves the multiplier field empty by default, allowing the TWS API to use the correct multiplier for each contract. Only specify a multiplier explicitly when needed for non-standard contracts using the `.multiplier()` method.
+The futures builder leaves the multiplier field empty by default, allowing the TWS API to determine the correct multiplier for each contract. You can explicitly set the multiplier using `.multiplier()` when needed.
 
 ### Forex
 
