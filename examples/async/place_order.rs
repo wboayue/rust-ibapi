@@ -6,9 +6,8 @@
 //! 2. Monitor order status through the individual order subscription
 //! 3. Handle multiple concurrent orders with separate subscriptions
 
-use ibapi::contracts::{Contract, SecurityType};
-use ibapi::orders::{order_builder, place_order, Action, PlaceOrder};
-use ibapi::Client;
+use ibapi::orders::{order_builder, place_order};
+use ibapi::prelude::*;
 use std::error::Error;
 
 #[tokio::main]

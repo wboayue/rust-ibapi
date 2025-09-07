@@ -4,22 +4,34 @@ use std::fmt;
 use time::{Date, Duration, Month, OffsetDateTime, Weekday};
 
 /// Strong type for trading symbols
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Symbol(pub &'static str);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Symbol(pub String);
 
 impl Symbol {
-    pub const fn new(s: &'static str) -> Self {
-        Symbol(s)
+    pub fn new(s: impl Into<String>) -> Self {
+        Symbol(s.into())
     }
 
     pub fn as_str(&self) -> &str {
-        self.0
+        &self.0
     }
 }
 
-impl From<&'static str> for Symbol {
-    fn from(s: &'static str) -> Self {
+impl From<&str> for Symbol {
+    fn from(s: &str) -> Self {
+        Symbol(s.to_string())
+    }
+}
+
+impl From<String> for Symbol {
+    fn from(s: String) -> Self {
         Symbol(s)
+    }
+}
+
+impl From<&String> for Symbol {
+    fn from(s: &String) -> Self {
+        Symbol(s.clone())
     }
 }
 

@@ -266,7 +266,7 @@ fn test_symbol_conversion() {
     let symbol: Symbol = "MSFT".into();
     assert_eq!(symbol.as_str(), "MSFT");
 
-    let symbol: Symbol = Symbol("TSLA");
+    let symbol: Symbol = Symbol("TSLA".to_string());
     assert_eq!(symbol.as_str(), "TSLA");
 }
 

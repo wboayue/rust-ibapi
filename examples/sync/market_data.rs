@@ -6,7 +6,7 @@
 //! cargo run --features sync --example market_data
 //! ```
 
-use ibapi::{contracts::Contract, market_data::realtime::TickTypes, Client};
+use ibapi::prelude::*;
 
 // This example demonstrates how to request realtime market data for a contract.
 

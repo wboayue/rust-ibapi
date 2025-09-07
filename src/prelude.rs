@@ -21,10 +21,8 @@ pub use crate::Client;
 pub use crate::Error;
 
 // Contract types
+pub use crate::contracts::{BondIdentifier, ContractMonth, Currency, Cusip, Exchange, ExpirationDate, Isin, LegAction, OptionRight, Strike, Symbol};
 pub use crate::contracts::{Contract, SecurityType};
-pub use crate::contracts::{
-    BondIdentifier, ContractMonth, Currency, Cusip, Exchange, ExpirationDate, Isin, LegAction, OptionRight, Strike, Symbol,
-};
 
 // Market data types - historical
 pub use crate::market_data::historical::{BarSize as HistoricalBarSize, ToDuration, WhatToShow as HistoricalWhatToShow};
@@ -36,6 +34,9 @@ pub use crate::market_data::{MarketDataType, TradingHours};
 // Order types
 #[cfg(feature = "sync")]
 pub use crate::orders::{order_builder, Action, ExecutionFilter, OrderUpdate, Orders, PlaceOrder};
+
+#[cfg(feature = "async")]
+pub use crate::orders::{order_builder, Action, PlaceOrder};
 
 // Account types
 pub use crate::accounts::{

@@ -3,7 +3,7 @@
 //! This example shows how to use the new type-safe contract builders
 //! to create various types of contracts.
 
-use ibapi::contracts::{Action, Contract, ContractMonth, Currency, Exchange, ExpirationDate};
+use ibapi::contracts::{Contract, ContractMonth, Currency, Exchange, ExpirationDate, LegAction};
 
 fn main() {
     // Simple stock contract
@@ -65,10 +65,10 @@ fn main() {
 
     // Custom spread with individual legs
     let custom_spread = Contract::spread()
-        .add_leg(11111, Action::Buy)
+        .add_leg(11111, LegAction::Buy)
         .ratio(2)
         .done()
-        .add_leg(22222, Action::Sell)
+        .add_leg(22222, LegAction::Sell)
         .ratio(1)
         .done()
         .build()

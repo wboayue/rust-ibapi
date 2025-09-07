@@ -107,49 +107,25 @@ let contract = Contract::stock("7203")
     .build();
 ```
 
-The builder API provides type-safe construction for all contract types:
+The builder API provides type-safe construction for all contract types with compile-time validation:
 
 ```rust
-// Options - enforces required fields at compile time
-let call = Contract::call("AAPL")
-    .strike(150.0)  // Validates positive strike price
+// Options - required fields enforced at compile time
+let option = Contract::call("AAPL")
+    .strike(150.0)
     .expires_on(2024, 12, 20)
     .build();
 
-// Options with convenience methods
-let weekly = Contract::put("SPY")
-    .strike(450.0)
-    .expires_weekly()  // Next Friday expiration
-    .build();
-
-// Futures with smart defaults
-let es = Contract::futures("ES")
+// Futures with convenience methods
+let futures = Contract::futures("ES")
     .front_month()  // Next expiring contract
     .build();
 
-// Quarterly futures
-let nq = Contract::futures("NQ")
-    .next_quarter()  // Next Mar/Jun/Sep/Dec expiration
-    .build();
-
 // Forex pairs
-let eur_usd = Contract::forex(Currency::EUR, Currency::USD)
-    .amount(100_000)
-    .build();
-
-// Bonds by CUSIP or ISIN
-let bond = Contract::bond(BondIdentifier::Cusip(Cusip("912810RN0")));
-
-// Index with smart defaults
-let spx = Contract::index("SPX");  // Auto-configures CBOE exchange, USD
-
-// Spreads with convenience methods
-let iron_condor = Contract::spread()
-    .iron_condor(put_long_id, put_short_id, call_short_id, call_long_id)
-    .build()?;
+let forex = Contract::forex(Currency::EUR, Currency::USD).build();
 ```
 
-For comprehensive documentation on creating all contract types including stocks, options, futures, forex, crypto, and complex spreads, see the [Contract Builder Guide](docs/contract-builder.md).
+See the [Contract Builder Guide](docs/contract-builder.md) for comprehensive documentation on all contract types.
 
 For lower-level control, you can also create contracts directly:
 

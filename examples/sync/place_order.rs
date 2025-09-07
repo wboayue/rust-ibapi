@@ -9,9 +9,8 @@
 use clap::{arg, ArgMatches, Command};
 use log::{debug, info};
 
-use ibapi::contracts::Contract;
-use ibapi::orders::{self, order_builder, PlaceOrder};
-use ibapi::Client;
+use ibapi::orders;
+use ibapi::prelude::*;
 
 fn main() {
     env_logger::init();

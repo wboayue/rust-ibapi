@@ -2,6 +2,26 @@
 
 The V2 Contract Builder API provides a type-safe, ergonomic way to create contracts for various financial instruments. It leverages Rust's type system to prevent invalid contracts at compile time while offering an intuitive, discoverable interface.
 
+## Table of Contents
+
+- [Key Features](#key-features)
+- [Quick Start](#quick-start)
+- [Contract Types](#contract-types)
+  - [Stocks](#stocks)
+  - [Options](#options)
+  - [Futures](#futures)
+  - [Forex](#forex)
+  - [Cryptocurrency](#cryptocurrency)
+  - [Index](#index)
+  - [Bonds](#bonds)
+  - [Spreads and Combos](#spreads-and-combos)
+- [Strong Types](#strong-types)
+- [Type-State Pattern](#type-state-pattern)
+- [Error Handling](#error-handling)
+- [Migration from V1](#migration-from-v1)
+- [Best Practices](#best-practices)
+- [Recent V2 Improvements](#recent-v2-improvements)
+
 ## Key Features
 
 - **Type Safety**: Required fields are enforced at compile time
@@ -142,17 +162,9 @@ let zc_futures = Contract::futures("ZC")
     .expires_in(ContractMonth::new(2024, 12))
     .on_exchange(Exchange("ECBOT"))
     .build();
-
-// Only specify multiplier when needed for special cases
-let custom_contract = Contract::futures("CUSTOM")
-    .expires_in(ContractMonth::new(2024, 9))
-    .multiplier(100)  // Explicitly set for non-standard contracts
-    .build();
 ```
 
-#### Multiplier Settings
-
-The futures builder leaves the multiplier field empty by default, allowing the TWS API to determine the correct multiplier for each contract. You can explicitly set the multiplier using `.multiplier()` when needed.
+**Note:** The futures builder leaves the multiplier field empty by default, allowing TWS to determine the correct value. Use `.multiplier()` only when needed for non-standard contracts.
 
 ### Forex
 
@@ -204,7 +216,7 @@ let spx = Contract::index("SPX");
 // DAX - automatically uses EUREX exchange and EUR
 let dax = Contract::index("DAX");
 
-// FTSE - automatically uses LSE exchange and GBP  
+// FTSE - automatically uses FTSE exchange and GBP  
 let ftse = Contract::index("FTSE");
 
 // Custom index
@@ -238,17 +250,11 @@ The bond builder automatically:
 Complex multi-leg strategies with type-safe leg construction.
 
 ```rust
-use ibapi::contracts::{Contract, LegAction, Currency, Exchange};
-
-// Calendar spread (buy near, sell far)
-let calendar = Contract::spread()
-    .calendar(12345, 67890)  // Contract IDs for near and far legs
-    .build()?;
+use ibapi::contracts::{Contract, LegAction, Exchange};
 
 // Vertical spread
 let vertical = Contract::spread()
     .vertical(11111, 22222)  // Long and short contract IDs
-    .in_currency(Currency::USD)
     .build()?;
 
 // Iron condor using convenience method
@@ -261,7 +267,7 @@ let iron_condor = Contract::spread()
     )
     .build()?;
 
-// Custom multi-leg spread
+// Custom butterfly spread
 let butterfly = Contract::spread()
     .add_leg(30001, LegAction::Buy)   // Buy 1 lower strike
         .ratio(1)
@@ -271,18 +277,6 @@ let butterfly = Contract::spread()
         .done()
     .add_leg(30003, LegAction::Buy)   // Buy 1 higher strike
         .ratio(1)
-        .done()
-    .on_exchange(Exchange::SMART)
-    .build()?;
-
-// Ratio spread with different quantities
-let ratio_spread = Contract::spread()
-    .add_leg(20001, LegAction::Buy)
-        .ratio(1)
-        .done()
-    .add_leg(20002, LegAction::Sell)
-        .ratio(2)
-        .on_exchange(Exchange::CBOE)
         .done()
     .build()?;
 ```
@@ -411,66 +405,6 @@ let contract = Contract::stock("AAPL").build();
 4. **Smart Defaults**: Less boilerplate for common cases
 5. **No Runtime Validation**: Invalid states prevented by the type system
 
-## Complete Example
-
-Here's a comprehensive example showing various contract types:
-
-```rust
-use ibapi::contracts::{
-    Contract, Exchange, Currency, OptionRight, 
-    ExpirationDate, ContractMonth, LegAction
-};
-
-fn create_contracts() -> Result<(), Box<dyn std::error::Error>> {
-    // Equity
-    let stock = Contract::stock("MSFT")
-        .on_exchange(Exchange::NASDAQ)
-        .build();
-    
-    // Option chain
-    let call = Contract::call("MSFT")
-        .strike(400.0)
-        .expires_on(2024, 12, 20)
-        .build();
-    
-    let put = Contract::put("MSFT")
-        .strike(380.0)
-        .expires_on(2024, 12, 20)
-        .build();
-    
-    // Futures
-    let futures = Contract::futures("NQ")
-        .expires_in(ContractMonth::new(2024, 6))
-        .build();
-    
-    // Forex
-    let forex = Contract::forex(Currency::EUR, Currency::USD)
-        .amount(100_000)
-        .build();
-    
-    // Crypto
-    let crypto = Contract::crypto("ETH").build();
-    
-    // Index
-    let index = Contract::index("NDX");
-    
-    // Complex spread
-    let butterfly = Contract::spread()
-        .add_leg(50001, LegAction::Buy)
-            .ratio(1)
-            .done()
-        .add_leg(50002, LegAction::Sell)
-            .ratio(2)
-            .done()
-        .add_leg(50003, LegAction::Buy)
-            .ratio(1)
-            .done()
-        .build()?;
-    
-    Ok(())
-}
-```
-
 ## Best Practices
 
 1. **Use specific entry points**: Start with `Contract::stock()`, `Contract::call()`, etc. for clarity
@@ -478,49 +412,6 @@ fn create_contracts() -> Result<(), Box<dyn std::error::Error>> {
 3. **Use strong types**: Prefer `Exchange::SMART` constant over `Exchange("SMART")`
 4. **Leverage defaults**: Don't specify values that match the defaults
 5. **Handle errors appropriately**: Strike validation and spread building return `Result`
-
-## Recent V2 Improvements
-
-The V2 Contract Builder API has been enhanced with several production-ready features:
-
-### New Convenience Methods
-
-**Options:**
-- `expires_weekly()` - Automatically calculates next Friday expiration
-- `expires_monthly()` - Automatically calculates third Friday of the month
-
-**Futures:**
-- `front_month()` - Gets the next expiring contract month
-- `next_quarter()` - Gets the next quarterly expiration (Mar/Jun/Sep/Dec)
-
-**Spreads:**
-- `iron_condor()` - Convenience method for creating iron condor spreads
-
-### New Contract Types
-
-**Bonds:**
-- Support for CUSIP and ISIN identifiers
-- Automatic currency detection from ISIN country codes
-- `Contract::bond(BondIdentifier::Cusip(cusip))` or `Contract::bond(BondIdentifier::Isin(isin))`
-
-### API Improvements
-
-**Strike Price Validation:**
-- No longer returns `Result` from the builder method
-- Cleaner API: `.strike(150.0)` instead of `.strike(150.0)?`
-- Runtime validation ensures positive strike prices
-
-**Date Utilities:**
-- Smart date calculations for options expiration
-- Automatic handling of weekends and holidays logic
-- Time zone aware calculations
-
-### Type Safety Enhancements
-
-All builders now use the type-state pattern consistently:
-- Compile-time enforcement of required fields
-- No runtime surprises from missing data
-- IDE autocomplete shows only valid methods at each step
 
 ## API Reference
 

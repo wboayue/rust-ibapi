@@ -6,8 +6,7 @@
 //! cargo run --features sync --example contract_details
 //! ```
 
-use ibapi::contracts::Contract;
-use ibapi::Client;
+use ibapi::prelude::*;
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();
