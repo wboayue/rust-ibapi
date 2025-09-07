@@ -138,7 +138,7 @@ let eur_usd = Contract::forex(Currency::EUR, Currency::USD)
     .build();
 
 // Bonds by CUSIP or ISIN
-let bond = Contract::bond(BondIdentifier::Cusip(Cusip::new("912810RN0")));
+let bond = Contract::bond(BondIdentifier::Cusip(Cusip("912810RN0")));
 
 // Index with smart defaults
 let spx = Contract::index("SPX");  // Auto-configures CBOE exchange, USD
