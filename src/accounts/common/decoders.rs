@@ -1,4 +1,4 @@
-use crate::contracts::{Contract, SecurityType};
+use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::messages::ResponseMessage;
 use crate::{server_versions, Error};
 
@@ -17,14 +17,14 @@ pub(crate) fn decode_position(message: &mut ResponseMessage) -> Result<Position,
     };
 
     position.contract.contract_id = message.next_int()?;
-    position.contract.symbol = message.next_string()?;
+    position.contract.symbol = Symbol::from(message.next_string()?);
     position.contract.security_type = SecurityType::from(&message.next_string()?);
     position.contract.last_trade_date_or_contract_month = message.next_string()?;
     position.contract.strike = message.next_double()?;
     position.contract.right = message.next_string()?;
     position.contract.multiplier = message.next_string()?;
-    position.contract.exchange = message.next_string()?;
-    position.contract.currency = message.next_string()?;
+    position.contract.exchange = Exchange::from(message.next_string()?);
+    position.contract.currency = Currency::from(message.next_string()?);
     position.contract.local_symbol = message.next_string()?;
 
     if message_version >= 2 {
@@ -51,14 +51,14 @@ pub(crate) fn decode_position_multi(message: &mut ResponseMessage) -> Result<Pos
     };
 
     position.contract.contract_id = message.next_int()?;
-    position.contract.symbol = message.next_string()?;
+    position.contract.symbol = Symbol::from(message.next_string()?);
     position.contract.security_type = SecurityType::from(&message.next_string()?);
     position.contract.last_trade_date_or_contract_month = message.next_string()?;
     position.contract.strike = message.next_double()?;
     position.contract.right = message.next_string()?;
     position.contract.multiplier = message.next_string()?;
-    position.contract.exchange = message.next_string()?;
-    position.contract.currency = message.next_string()?;
+    position.contract.exchange = Exchange::from(message.next_string()?);
+    position.contract.currency = Currency::from(message.next_string()?);
     position.contract.local_symbol = message.next_string()?;
     position.contract.trading_class = message.next_string()?;
 
@@ -171,19 +171,23 @@ pub(crate) fn decode_account_portfolio_value(server_version: i32, message: &mut 
     let message_version = message.next_int()?;
 
     let mut contract = Contract::default();
+    // For older message versions, primary_exchange should be empty, not default "SMART"
+    if message_version < 7 {
+        contract.primary_exchange = Exchange::from("");
+    }
     if message_version >= 6 {
         contract.contract_id = message.next_int()?;
     }
-    contract.symbol = message.next_string()?;
+    contract.symbol = Symbol::from(message.next_string()?);
     contract.security_type = SecurityType::from(&message.next_string()?);
     contract.last_trade_date_or_contract_month = message.next_string()?;
     contract.strike = message.next_double()?;
     contract.right = message.next_string()?;
     if message_version >= 7 {
         contract.multiplier = message.next_string()?;
-        contract.primary_exchange = message.next_string()?;
+        contract.primary_exchange = Exchange::from(message.next_string()?);
     }
-    contract.currency = message.next_string()?;
+    contract.currency = Currency::from(message.next_string()?);
     if message_version >= 2 {
         contract.local_symbol = message.next_string()?;
     }
@@ -208,7 +212,7 @@ pub(crate) fn decode_account_portfolio_value(server_version: i32, message: &mut 
         portfolio_value.account = Some(message.next_string()?);
     }
     if message_version == 6 && server_version == 39 {
-        portfolio_value.contract.primary_exchange = message.next_string()?
+        portfolio_value.contract.primary_exchange = Exchange::from(message.next_string()?)
     }
 
     Ok(portfolio_value)
@@ -241,7 +245,12 @@ pub(crate) fn decode_account_multi_value(message: &mut ResponseMessage) -> Resul
 
 #[cfg(test)]
 mod tests {
-    use crate::{accounts::AccountSummaryTags, server_versions, testdata::responses};
+    use crate::{
+        accounts::AccountSummaryTags,
+        contracts::{Currency, Exchange, Symbol},
+        server_versions,
+        testdata::responses,
+    };
 
     #[test]
     fn test_decode_positions() {
@@ -251,7 +260,7 @@ mod tests {
 
         assert_eq!(position.account, "DU1234567", "position.account");
         assert_eq!(position.contract.contract_id, 76792991, "position.contract.contract_id");
-        assert_eq!(position.contract.symbol, "TSLA", "position.contract.symbol");
+        assert_eq!(position.contract.symbol, Symbol::from("TSLA"), "position.contract.symbol");
         assert_eq!(
             position.contract.security_type,
             super::SecurityType::Stock,
@@ -264,8 +273,8 @@ mod tests {
         assert_eq!(position.contract.strike, 0.0, "position.contract.strike");
         assert_eq!(position.contract.right, "", "position.contract.right");
         assert_eq!(position.contract.multiplier, "", "position.contract.multiplier");
-        assert_eq!(position.contract.exchange, "NASDAQ", "position.contract.exchange");
-        assert_eq!(position.contract.currency, "USD", "position.contract.currency");
+        assert_eq!(position.contract.exchange, Exchange::from("NASDAQ"), "position.contract.exchange");
+        assert_eq!(position.contract.currency, Currency::from("USD"), "position.contract.currency");
         assert_eq!(position.contract.local_symbol, "TSLA", "position.contract.local_symbol");
         assert_eq!(position.contract.trading_class, "NMS", "position.contract.trading_class");
         assert_eq!(position.position, 500.0, "position.position");
@@ -285,7 +294,7 @@ mod tests {
         // Assert
         assert_eq!(result.account, "DU123", "account");
         assert_eq!(result.contract.contract_id, 123, "contract.contract_id");
-        assert_eq!(result.contract.symbol, "SYM", "contract.symbol");
+        assert_eq!(result.contract.symbol, Symbol::from("SYM"), "contract.symbol");
         assert_eq!(
             result.contract.security_type,
             crate::contracts::SecurityType::Stock,
@@ -298,8 +307,8 @@ mod tests {
         assert_eq!(result.contract.strike, 0.0, "contract.strike");
         assert_eq!(result.contract.right, "P", "contract.right");
         assert_eq!(result.contract.multiplier, "MULT", "contract.multiplier");
-        assert_eq!(result.contract.exchange, "EXCH", "contract.exchange");
-        assert_eq!(result.contract.currency, "USD", "contract.currency");
+        assert_eq!(result.contract.exchange, Exchange::from("EXCH"), "contract.exchange");
+        assert_eq!(result.contract.currency, Currency::from("USD"), "contract.currency");
         assert_eq!(result.contract.local_symbol, "LOCSYM", "contract.local_symbol");
         assert_eq!(result.position, 100.0, "position");
         assert_eq!(result.contract.trading_class, "", "contract.trading_class should be empty for v1");
@@ -320,7 +329,7 @@ mod tests {
         // Assert
         assert_eq!(result.account, "DU123", "account");
         assert_eq!(result.contract.contract_id, 123, "contract.contract_id");
-        assert_eq!(result.contract.symbol, "SYM", "contract.symbol");
+        assert_eq!(result.contract.symbol, Symbol::from("SYM"), "contract.symbol");
         assert_eq!(
             result.contract.security_type,
             crate::contracts::SecurityType::Stock,
@@ -333,8 +342,8 @@ mod tests {
         assert_eq!(result.contract.strike, 0.0, "contract.strike");
         assert_eq!(result.contract.right, "P", "contract.right");
         assert_eq!(result.contract.multiplier, "MULT", "contract.multiplier");
-        assert_eq!(result.contract.exchange, "EXCH", "contract.exchange");
-        assert_eq!(result.contract.currency, "USD", "contract.currency");
+        assert_eq!(result.contract.exchange, Exchange::from("EXCH"), "contract.exchange");
+        assert_eq!(result.contract.currency, Currency::from("USD"), "contract.currency");
         assert_eq!(result.contract.local_symbol, "LOCSYM", "contract.local_symbol");
         assert_eq!(result.contract.trading_class, "TRDCLS", "contract.trading_class");
         assert_eq!(result.position, 100.0, "position");
@@ -350,7 +359,7 @@ mod tests {
 
         assert_eq!(position.account, "DU1234567", "position.account");
         assert_eq!(position.contract.contract_id, 76792991, "position.contract.contract_id");
-        assert_eq!(position.contract.symbol, "TSLA", "position.contract.symbol");
+        assert_eq!(position.contract.symbol, Symbol::from("TSLA"), "position.contract.symbol");
         assert_eq!(
             position.contract.security_type,
             super::SecurityType::Stock,
@@ -363,8 +372,8 @@ mod tests {
         assert_eq!(position.contract.strike, 0.0, "position.contract.strike");
         assert_eq!(position.contract.right, "", "position.contract.right");
         assert_eq!(position.contract.multiplier, "", "position.contract.multiplier");
-        assert_eq!(position.contract.exchange, "NASDAQ", "position.contract.exchange");
-        assert_eq!(position.contract.currency, "USD", "position.contract.currency");
+        assert_eq!(position.contract.exchange, Exchange::from("NASDAQ"), "position.contract.exchange");
+        assert_eq!(position.contract.currency, Currency::from("USD"), "position.contract.currency");
         assert_eq!(position.contract.local_symbol, "TSLA", "position.contract.local_symbol");
         assert_eq!(position.contract.trading_class, "NMS", "position.contract.trading_class");
         assert_eq!(position.position, 500.0, "position.position");
@@ -990,7 +999,7 @@ mod tests {
                 .unwrap_or_else(|e| panic!("Test case '{}' failed decoding: {:?}", tc.name, e));
 
             assert_eq!(result.contract.contract_id, tc.expected_contract_id, "Case: {} - contract_id", tc.name);
-            assert_eq!(result.contract.symbol, tc.expected_symbol, "Case: {} - symbol", tc.name);
+            assert_eq!(result.contract.symbol, Symbol::from(tc.expected_symbol), "Case: {} - symbol", tc.name);
             assert_eq!(result.contract.security_type, tc.expected_sec_type, "Case: {} - sec_type", tc.name);
             assert_eq!(
                 result.contract.last_trade_date_or_contract_month, tc.expected_expiry,
@@ -1003,18 +1012,25 @@ mod tests {
 
             if tc.message_version >= 6 && tc.server_version == 39 {
                 assert_eq!(
-                    result.contract.primary_exchange, tc.expected_primary_exchange,
+                    result.contract.primary_exchange,
+                    Exchange::from(tc.expected_primary_exchange),
                     "Case: {} - primary_exchange (sv39 override)",
                     tc.name
                 );
             } else {
                 assert_eq!(
-                    result.contract.primary_exchange, tc.expected_primary_exchange,
+                    result.contract.primary_exchange,
+                    Exchange::from(tc.expected_primary_exchange),
                     "Case: {} - primary_exchange",
                     tc.name
                 );
             }
-            assert_eq!(result.contract.currency, tc.expected_currency, "Case: {} - currency", tc.name);
+            assert_eq!(
+                result.contract.currency,
+                Currency::from(tc.expected_currency),
+                "Case: {} - currency",
+                tc.name
+            );
             assert_eq!(result.contract.local_symbol, tc.expected_local_symbol, "Case: {} - local_symbol", tc.name);
             assert_eq!(
                 result.contract.trading_class, tc.expected_trading_class,

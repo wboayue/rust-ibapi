@@ -1,4 +1,4 @@
-use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, DeltaNeutralContract, SecurityType, TagValue};
+use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, Currency, DeltaNeutralContract, Exchange, SecurityType, Symbol, TagValue};
 use crate::messages::ResponseMessage;
 use crate::orders::{
     Action, CommissionReport, ExecutionData, Liquidity, Order, OrderComboLeg, OrderCondition, OrderData, OrderOpenClose, OrderState, OrderStatus,
@@ -46,7 +46,7 @@ impl OrderDecoder {
         let contract = &mut self.contract;
 
         contract.contract_id = message.next_int()?;
-        contract.symbol = message.next_string()?;
+        contract.symbol = Symbol::from(message.next_string()?);
 
         let security_type = message.next_string()?;
         contract.security_type = SecurityType::from(&security_type);
@@ -55,8 +55,8 @@ impl OrderDecoder {
         contract.strike = message.next_double()?;
         contract.right = message.next_string()?;
         contract.multiplier = message.next_string()?;
-        contract.exchange = message.next_string()?;
-        contract.currency = message.next_string()?;
+        contract.exchange = Exchange::from(message.next_string()?);
+        contract.currency = Currency::from(message.next_string()?);
         contract.local_symbol = message.next_string()?;
         contract.trading_class = message.next_string()?;
 
@@ -790,15 +790,15 @@ pub(crate) fn decode_execution_data(server_version: i32, message: &mut ResponseM
     execution_data.request_id = message.next_int()?;
     execution.order_id = message.next_int()?;
     contract.contract_id = message.next_int()?;
-    contract.symbol = message.next_string()?;
+    contract.symbol = Symbol::from(message.next_string()?);
     let secutity_type = message.next_string()?;
     contract.security_type = SecurityType::from(&secutity_type);
     contract.last_trade_date_or_contract_month = message.next_string()?;
     contract.strike = message.next_double()?;
     contract.right = message.next_string()?;
     contract.multiplier = message.next_string()?;
-    contract.exchange = message.next_string()?;
-    contract.currency = message.next_string()?;
+    contract.exchange = Exchange::from(message.next_string()?);
+    contract.currency = Currency::from(message.next_string()?);
     contract.local_symbol = message.next_string()?;
     contract.trading_class = message.next_string()?;
     execution.execution_id = message.next_string()?;

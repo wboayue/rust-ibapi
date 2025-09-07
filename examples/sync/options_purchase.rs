@@ -7,7 +7,7 @@
 //! ```
 
 use ibapi::{
-    contracts::{Contract, SecurityType},
+    contracts::{Contract, Currency, Exchange, SecurityType, Symbol},
     orders::{self, order_builder, PlaceOrder},
     Client,
 };
@@ -49,10 +49,10 @@ fn main() {
 
 fn create_option_contract(symbol: &str, strike: f64, right: &str, last_trade_date_or_contract_month: &str) -> Contract {
     Contract {
-        symbol: symbol.to_owned(),
+        symbol: Symbol::from(symbol),
         security_type: SecurityType::Option,
-        exchange: "SMART".to_owned(),
-        currency: "USD".to_owned(),
+        exchange: Exchange::from("SMART"),
+        currency: Currency::from("USD"),
         last_trade_date_or_contract_month: last_trade_date_or_contract_month.to_owned(),
         strike,
         right: right.to_owned(),

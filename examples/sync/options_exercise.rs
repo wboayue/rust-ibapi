@@ -7,7 +7,7 @@
 //! ```
 
 use ibapi::{
-    contracts::{Contract, SecurityType},
+    contracts::{Contract, Currency, Exchange, SecurityType, Symbol},
     orders::ExerciseAction,
     Client,
 };
@@ -39,10 +39,10 @@ fn main() {
             println!("Using option from chain: SPY {} Call, Strike: {}", expiration, strike);
 
             Contract {
-                symbol: "SPY".to_owned(),
+                symbol: Symbol::from("SPY"),
                 security_type: SecurityType::Option,
-                exchange: chain.exchange.clone(),
-                currency: "USD".to_owned(),
+                exchange: Exchange::from(chain.exchange.clone()),
+                currency: Currency::from("USD"),
                 last_trade_date_or_contract_month: expiration.clone(),
                 strike,
                 right: "C".to_owned(),
@@ -54,10 +54,10 @@ fn main() {
             println!("No option chain data available, using hardcoded contract");
             // Fallback to hardcoded contract
             Contract {
-                symbol: "SPY".to_owned(),
+                symbol: Symbol::from("SPY"),
                 security_type: SecurityType::Option,
-                exchange: "SMART".to_owned(),
-                currency: "USD".to_owned(),
+                exchange: Exchange::from("SMART"),
+                currency: Currency::from("USD"),
                 last_trade_date_or_contract_month: "20250117".to_owned(),
                 strike: 500.0, // More reasonable strike for SPY
                 right: "C".to_owned(),
@@ -69,10 +69,10 @@ fn main() {
         println!("Could not get option chain, using hardcoded contract");
         // Fallback to hardcoded contract
         Contract {
-            symbol: "SPY".to_owned(),
+            symbol: Symbol::from("SPY"),
             security_type: SecurityType::Option,
-            exchange: "SMART".to_owned(),
-            currency: "USD".to_owned(),
+            exchange: Exchange::from("SMART"),
+            currency: Currency::from("USD"),
             last_trade_date_or_contract_month: "20250117".to_owned(),
             strike: 550.0,
             right: "C".to_owned(),

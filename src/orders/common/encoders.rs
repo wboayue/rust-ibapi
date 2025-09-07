@@ -366,7 +366,7 @@ pub(crate) fn encode_place_order(server_version: i32, order_id: i32, contract: &
     }
 
     if server_version >= server_versions::PEGBEST_PEGMID_OFFSETS {
-        if contract.exchange == "IBKRATS" {
+        if contract.exchange.as_str() == "IBKRATS" {
             message.push_field(&order.min_trade_qty);
         }
         let mut send_mid_offsets = false;

@@ -1,4 +1,4 @@
-use crate::contracts::Contract;
+use crate::contracts::{Contract, Currency, Exchange, Symbol};
 use crate::errors::Error;
 use crate::orders::builder::tests::async_mock_client::mock::AsyncMockClient;
 use crate::orders::builder::{BracketOrderBuilder, BracketOrderIds, OrderBuilder, OrderId};
@@ -8,10 +8,10 @@ use std::pin::Pin;
 
 fn create_stock_contract(symbol: &str) -> Contract {
     Contract {
-        symbol: symbol.to_string(),
+        symbol: Symbol::from(symbol),
         security_type: crate::contracts::SecurityType::Stock,
-        exchange: "SMART".to_string(),
-        currency: "USD".to_string(),
+        exchange: Exchange::from("SMART"),
+        currency: Currency::from("USD"),
         ..Default::default()
     }
 }

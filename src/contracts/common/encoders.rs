@@ -1,5 +1,4 @@
-use super::super::Contract;
-use super::super::SecurityType;
+use super::super::{Contract, SecurityType};
 use crate::messages::OutgoingMessages;
 use crate::messages::RequestMessage;
 use crate::{server_versions, Error};
@@ -34,7 +33,7 @@ pub(crate) fn encode_request_contract_data(server_version: i32, request_id: i32,
         packet.push_field(&contract.exchange);
         packet.push_field(&contract.primary_exchange);
     } else if server_version >= server_versions::LINKING {
-        if !contract.primary_exchange.is_empty() && (contract.exchange == "BEST" || contract.exchange == "SMART") {
+        if !contract.primary_exchange.is_empty() && (contract.exchange.as_str() == "BEST" || contract.exchange.as_str() == "SMART") {
             packet.push_field(&format!("{}:{}", contract.exchange, contract.primary_exchange));
         } else {
             packet.push_field(&contract.exchange);
@@ -174,7 +173,7 @@ pub(in crate::contracts) fn encode_request_option_chain(
 
 #[cfg(test)]
 mod tests {
-    use crate::contracts::{Contract, SecurityType};
+    use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
     use crate::messages::{OutgoingMessages, RequestMessage};
     use crate::{server_versions, ToField};
 
@@ -186,15 +185,15 @@ mod tests {
 
         let contract = Contract {
             contract_id: 12345,
-            symbol: "AAPL".to_string(),
+            symbol: Symbol::from("AAPL"),
             security_type: SecurityType::Stock,
             last_trade_date_or_contract_month: "".to_string(),
             strike: 0.0,
             right: "".to_string(),
             multiplier: "".to_string(),
-            exchange: "SMART".to_string(),
-            primary_exchange: "NASDAQ".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("SMART"),
+            primary_exchange: Exchange::from("NASDAQ"),
+            currency: Currency::from("USD"),
             local_symbol: "AAPL".to_string(),
             trading_class: "".to_string(),
             include_expired: false,
@@ -210,7 +209,7 @@ mod tests {
         assert_eq!(message[1], message_version.to_field(), "message.version");
         assert_eq!(message[2], request_id.to_field(), "message.request_id");
         assert_eq!(message[3], contract.contract_id.to_field(), "message.contract_id");
-        assert_eq!(message[4], contract.symbol, "message.symbol");
+        assert_eq!(message[4], contract.symbol.to_field(), "message.symbol");
         assert_eq!(message[5], contract.security_type.to_field(), "message.security_type");
         assert_eq!(
             message[6], contract.last_trade_date_or_contract_month,
@@ -219,9 +218,9 @@ mod tests {
         assert_eq!(message[7], contract.strike.to_field(), "message.strike");
         assert_eq!(message[8], contract.right, "message.right");
         assert_eq!(message[9], contract.multiplier, "message.multiplier");
-        assert_eq!(message[10], contract.exchange, "message.exchange");
-        assert_eq!(message[11], contract.primary_exchange, "message.primary_exchange");
-        assert_eq!(message[12], contract.currency, "message.currency");
+        assert_eq!(message[10], contract.exchange.to_field(), "message.exchange");
+        assert_eq!(message[11], contract.primary_exchange.to_field(), "message.primary_exchange");
+        assert_eq!(message[12], contract.currency.to_field(), "message.currency");
         assert_eq!(message[13], contract.local_symbol, "message.local_symbol");
         assert_eq!(message[14], contract.trading_class, "message.trading_class");
         assert_eq!(message[15], contract.include_expired.to_field(), "message.include_expired");
@@ -260,15 +259,15 @@ mod tests {
 
         let contract = Contract {
             contract_id: 67890,
-            symbol: "AAPL".to_string(),
+            symbol: Symbol::from("AAPL"),
             security_type: SecurityType::Option,
             last_trade_date_or_contract_month: "20231215".to_string(),
             strike: 150.0,
             right: "C".to_string(),
             multiplier: "100".to_string(),
-            exchange: "SMART".to_string(),
-            primary_exchange: "CBOE".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("SMART"),
+            primary_exchange: Exchange::from("CBOE"),
+            currency: Currency::from("USD"),
             local_symbol: "AAPL  231215C00150000".to_string(),
             trading_class: "AAPL".to_string(),
             include_expired: false,
@@ -290,7 +289,7 @@ mod tests {
 
         // Assert contract fields (index 3 to 14)
         assert_eq!(message[3], contract.contract_id.to_field(), "message.contract_id");
-        assert_eq!(message[4], contract.symbol, "message.symbol");
+        assert_eq!(message[4], contract.symbol.to_field(), "message.symbol");
         assert_eq!(message[5], contract.security_type.to_field(), "message.security_type");
         assert_eq!(
             message[6], contract.last_trade_date_or_contract_month,
@@ -299,9 +298,9 @@ mod tests {
         assert_eq!(message[7], contract.strike.to_field(), "message.strike");
         assert_eq!(message[8], contract.right, "message.right");
         assert_eq!(message[9], contract.multiplier, "message.multiplier");
-        assert_eq!(message[10], contract.exchange, "message.exchange");
-        assert_eq!(message[11], contract.primary_exchange, "message.primary_exchange");
-        assert_eq!(message[12], contract.currency, "message.currency");
+        assert_eq!(message[10], contract.exchange.to_field(), "message.exchange");
+        assert_eq!(message[11], contract.primary_exchange.to_field(), "message.primary_exchange");
+        assert_eq!(message[12], contract.currency.to_field(), "message.currency");
         assert_eq!(message[13], contract.local_symbol, "message.local_symbol");
         assert_eq!(message[14], contract.trading_class, "message.trading_class");
 
@@ -316,15 +315,15 @@ mod tests {
         let request_id = 4000;
         let contract = Contract {
             contract_id: 67890,
-            symbol: "AAPL".to_string(),
+            symbol: Symbol::from("AAPL"),
             security_type: SecurityType::Option,
             last_trade_date_or_contract_month: "20231215".to_string(),
             strike: 150.0,
             right: "C".to_string(),
             multiplier: "100".to_string(),
-            exchange: "SMART".to_string(),
-            primary_exchange: "CBOE".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("SMART"),
+            primary_exchange: Exchange::from("CBOE"),
+            currency: Currency::from("USD"),
             local_symbol: "AAPL  231215C00150000".to_string(),
             trading_class: "AAPL".to_string(),
             include_expired: false,
@@ -346,7 +345,7 @@ mod tests {
 
         // Assert contract fields (index 3 to 14)
         assert_eq!(message[3], contract.contract_id.to_field(), "message.contract_id");
-        assert_eq!(message[4], contract.symbol, "message.symbol");
+        assert_eq!(message[4], contract.symbol.to_field(), "message.symbol");
         assert_eq!(message[5], contract.security_type.to_field(), "message.security_type");
         assert_eq!(
             message[6], contract.last_trade_date_or_contract_month,
@@ -355,9 +354,9 @@ mod tests {
         assert_eq!(message[7], contract.strike.to_field(), "message.strike");
         assert_eq!(message[8], contract.right, "message.right");
         assert_eq!(message[9], contract.multiplier, "message.multiplier");
-        assert_eq!(message[10], contract.exchange, "message.exchange");
-        assert_eq!(message[11], contract.primary_exchange, "message.primary_exchange");
-        assert_eq!(message[12], contract.currency, "message.currency");
+        assert_eq!(message[10], contract.exchange.to_field(), "message.exchange");
+        assert_eq!(message[11], contract.primary_exchange.to_field(), "message.primary_exchange");
+        assert_eq!(message[12], contract.currency.to_field(), "message.currency");
         assert_eq!(message[13], contract.local_symbol, "message.local_symbol");
         assert_eq!(message[14], contract.trading_class, "message.trading_class");
 
@@ -372,15 +371,15 @@ mod tests {
 
         let contract = Contract {
             contract_id: 12345,
-            symbol: "AAPL".to_string(),
+            symbol: Symbol::from("AAPL"),
             security_type: SecurityType::Stock,
             last_trade_date_or_contract_month: "".to_string(),
             strike: 0.0,
             right: "".to_string(),
             multiplier: "".to_string(),
-            exchange: "SMART".to_string(),
-            primary_exchange: "NASDAQ".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("SMART"),
+            primary_exchange: Exchange::from("NASDAQ"),
+            currency: Currency::from("USD"),
             local_symbol: "AAPL".to_string(),
             trading_class: "AAPL".to_string(),
             include_expired: false,
@@ -395,7 +394,7 @@ mod tests {
         super::encode_contract(server_version, &mut message, &contract);
 
         assert_eq!(message[0], contract.contract_id.to_field(), "message.contract_id");
-        assert_eq!(message[1], contract.symbol, "message.symbol");
+        assert_eq!(message[1], contract.symbol.to_field(), "message.symbol");
         assert_eq!(message[2], contract.security_type.to_field(), "message.security_type");
         assert_eq!(
             message[3], contract.last_trade_date_or_contract_month,
@@ -404,9 +403,9 @@ mod tests {
         assert_eq!(message[4], contract.strike.to_field(), "message.strike");
         assert_eq!(message[5], contract.right, "message.right");
         assert_eq!(message[6], contract.multiplier, "message.multiplier");
-        assert_eq!(message[7], contract.exchange, "message.exchange");
-        assert_eq!(message[8], contract.primary_exchange, "message.primary_exchange");
-        assert_eq!(message[9], contract.currency, "message.currency");
+        assert_eq!(message[7], contract.exchange.to_field(), "message.exchange");
+        assert_eq!(message[8], contract.primary_exchange.to_field(), "message.primary_exchange");
+        assert_eq!(message[9], contract.currency.to_field(), "message.currency");
         assert_eq!(message[10], contract.local_symbol, "message.local_symbol");
         assert_eq!(message[11], contract.trading_class, "message.trading_class");
     }

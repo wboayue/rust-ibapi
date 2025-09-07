@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use clap::{arg, ArgMatches, Command};
 
-use ibapi::contracts::Contract;
+use ibapi::contracts::{Contract, Currency, Exchange, Symbol};
 use ibapi::market_data::realtime::{BarSize, WhatToShow};
 use ibapi::market_data::TradingHours;
 use ibapi::Client;
@@ -59,10 +59,10 @@ fn extract_contract(matches: &ArgMatches) -> Option<Contract> {
             // For futures, we'd normally need an expiry date
             // This is a simplified example - you'd typically parse the expiry from the symbol
             Contract {
-                symbol: symbol.to_uppercase(),
+                symbol: Symbol::from(symbol.to_uppercase()),
                 security_type: ibapi::contracts::SecurityType::Future,
-                exchange: "GLOBEX".to_string(),
-                currency: "USD".to_string(),
+                exchange: Exchange::from("GLOBEX"),
+                currency: Currency::from("USD"),
                 ..Default::default()
             }
         })

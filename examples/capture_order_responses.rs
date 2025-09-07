@@ -1,6 +1,6 @@
 //! Captures raw order response messages from TWS for test data generation
 
-use ibapi::contracts::Contract;
+use ibapi::contracts::{Contract, Currency, Exchange, Symbol};
 use ibapi::orders::{order_builder, Action, PlaceOrder};
 use ibapi::Client;
 use std::env;
@@ -21,10 +21,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create an ES futures order (trades 24/7)
     let contract = Contract {
-        symbol: "ES".to_string(),
+        symbol: Symbol::from("ES"),
         security_type: ibapi::contracts::SecurityType::Future,
-        exchange: "CME".to_string(),
-        currency: "USD".to_string(),
+        exchange: Exchange::from("CME"),
+        currency: Currency::from("USD"),
         local_symbol: "ESU5".to_string(), // September 2025 contract
         ..Default::default()
     };

@@ -2009,6 +2009,7 @@ mod tests {
 
     use super::{Client, TradingHours};
     use crate::client::common::tests::*;
+    use crate::contracts::{Currency, Exchange, Symbol};
     use crate::{connection::ConnectionMetadata, stubs::MessageBusStub};
 
     const CLIENT_ID: i32 = 100;
@@ -2078,7 +2079,7 @@ mod tests {
             match position_update {
                 crate::accounts::PositionUpdate::Position(position) => {
                     assert_eq!(position.account, "DU1234567");
-                    assert_eq!(position.contract.symbol, "AAPL");
+                    assert_eq!(position.contract.symbol, Symbol::from("AAPL"));
                     assert_eq!(position.position, 500.0);
                     assert_eq!(position.average_cost, 150.25);
                     position_count += 1;
@@ -2112,13 +2113,13 @@ mod tests {
                     position_count += 1;
                     if position_count == 1 {
                         assert_eq!(position.account, "DU1234567");
-                        assert_eq!(position.contract.symbol, "AAPL");
+                        assert_eq!(position.contract.symbol, Symbol::from("AAPL"));
                         assert_eq!(position.position, 500.0);
                         assert_eq!(position.average_cost, 150.25);
                         assert_eq!(position.model_code, "MODEL1");
                     } else if position_count == 2 {
                         assert_eq!(position.account, "DU1234568");
-                        assert_eq!(position.contract.symbol, "GOOGL");
+                        assert_eq!(position.contract.symbol, Symbol::from("GOOGL"));
                         assert_eq!(position.position, 200.0);
                         assert_eq!(position.average_cost, 2500.00);
                         assert_eq!(position.model_code, "MODEL1");
@@ -2242,7 +2243,7 @@ mod tests {
                     value_count += 1;
                 }
                 crate::accounts::AccountUpdate::PortfolioValue(portfolio) => {
-                    assert_eq!(portfolio.contract.symbol, "AAPL");
+                    assert_eq!(portfolio.contract.symbol, Symbol::from("AAPL"));
                     assert_eq!(portfolio.position, 500.0);
                     assert_eq!(portfolio.market_price, 151.50);
                     assert_eq!(portfolio.market_value, 75750.00);
@@ -2375,14 +2376,14 @@ mod tests {
         let detail = &details[0];
 
         // Verify contract fields
-        assert_eq!(detail.contract.symbol, "AAPL");
+        assert_eq!(detail.contract.symbol, Symbol::from("AAPL"));
         assert_eq!(detail.contract.security_type, crate::contracts::SecurityType::Stock);
-        assert_eq!(detail.contract.currency, "USD");
-        assert_eq!(detail.contract.exchange, "NASDAQ");
+        assert_eq!(detail.contract.currency, Currency::from("USD"));
+        assert_eq!(detail.contract.exchange, Exchange::from("NASDAQ"));
         assert_eq!(detail.contract.local_symbol, "AAPL");
         assert_eq!(detail.contract.trading_class, "AAPL");
         assert_eq!(detail.contract.contract_id, 265598);
-        assert_eq!(detail.contract.primary_exchange, "NASDAQ");
+        assert_eq!(detail.contract.primary_exchange, Exchange::from("NASDAQ"));
 
         // Verify contract details fields
         assert_eq!(detail.market_name, "NMS");
@@ -2459,10 +2460,10 @@ mod tests {
 
         // First contract description
         assert_eq!(contract_descriptions[0].contract.contract_id, 265598);
-        assert_eq!(contract_descriptions[0].contract.symbol, "AAPL");
+        assert_eq!(contract_descriptions[0].contract.symbol, Symbol::from("AAPL"));
         assert_eq!(contract_descriptions[0].contract.security_type, crate::contracts::SecurityType::Stock);
-        assert_eq!(contract_descriptions[0].contract.primary_exchange, "NASDAQ");
-        assert_eq!(contract_descriptions[0].contract.currency, "USD");
+        assert_eq!(contract_descriptions[0].contract.primary_exchange, Exchange::from("NASDAQ"));
+        assert_eq!(contract_descriptions[0].contract.currency, Currency::from("USD"));
         assert_eq!(contract_descriptions[0].derivative_security_types.len(), 2);
         assert_eq!(contract_descriptions[0].derivative_security_types[0], "OPT");
         assert_eq!(contract_descriptions[0].derivative_security_types[1], "WAR");
@@ -2471,10 +2472,10 @@ mod tests {
 
         // Second contract description
         assert_eq!(contract_descriptions[1].contract.contract_id, 276821);
-        assert_eq!(contract_descriptions[1].contract.symbol, "MSFT");
+        assert_eq!(contract_descriptions[1].contract.symbol, Symbol::from("MSFT"));
         assert_eq!(contract_descriptions[1].contract.security_type, crate::contracts::SecurityType::Stock);
-        assert_eq!(contract_descriptions[1].contract.primary_exchange, "NASDAQ");
-        assert_eq!(contract_descriptions[1].contract.currency, "USD");
+        assert_eq!(contract_descriptions[1].contract.primary_exchange, Exchange::from("NASDAQ"));
+        assert_eq!(contract_descriptions[1].contract.currency, Currency::from("USD"));
         assert_eq!(contract_descriptions[1].derivative_security_types.len(), 1);
         assert_eq!(contract_descriptions[1].derivative_security_types[0], "OPT");
         assert_eq!(contract_descriptions[1].contract.description, "Microsoft Corporation");
@@ -2529,10 +2530,10 @@ mod tests {
 
         // Create an option contract
         let contract = crate::contracts::Contract {
-            symbol: "AAPL".to_string(),
+            symbol: Symbol::from("AAPL"),
             security_type: crate::contracts::SecurityType::Option,
-            exchange: "SMART".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("SMART"),
+            currency: Currency::from("USD"),
             last_trade_date_or_contract_month: "20250120".to_string(),
             strike: 100.0,
             right: "C".to_string(),
@@ -2583,10 +2584,10 @@ mod tests {
 
         // Create an option contract
         let contract = crate::contracts::Contract {
-            symbol: "MSFT".to_string(),
+            symbol: Symbol::from("MSFT"),
             security_type: crate::contracts::SecurityType::Option,
-            exchange: "SMART".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("SMART"),
+            currency: Currency::from("USD"),
             last_trade_date_or_contract_month: "20250220".to_string(),
             strike: 105.0,
             right: "P".to_string(), // Put option
@@ -2766,7 +2767,7 @@ mod tests {
                 PlaceOrder::OpenOrder(order_data) => {
                     _open_order_count += 1;
                     assert_eq!(order_data.order_id, order_id);
-                    assert_eq!(order_data.contract.symbol, "AAPL");
+                    assert_eq!(order_data.contract.symbol, Symbol::from("AAPL"));
                     assert_eq!(order_data.contract.contract_id, 265598);
                     assert_eq!(order_data.order.action, Action::Buy);
                     assert_eq!(order_data.order.total_quantity, 100.0);
@@ -2776,7 +2777,7 @@ mod tests {
                 PlaceOrder::ExecutionData(exec_data) => {
                     execution_count += 1;
                     assert_eq!(exec_data.execution.order_id, order_id);
-                    assert_eq!(exec_data.contract.symbol, "AAPL");
+                    assert_eq!(exec_data.contract.symbol, Symbol::from("AAPL"));
                     assert_eq!(exec_data.execution.shares, 100.0);
                     assert_eq!(exec_data.execution.price, 150.25);
                 }
@@ -2881,7 +2882,7 @@ mod tests {
                     OrderUpdate::OpenOrder(order_data) => {
                         _open_order_count += 1;
                         assert_eq!(order_data.order_id, order_id);
-                        assert_eq!(order_data.contract.symbol, "AAPL");
+                        assert_eq!(order_data.contract.symbol, Symbol::from("AAPL"));
                         assert_eq!(order_data.contract.contract_id, 265598);
                         assert_eq!(order_data.order.action, Action::Buy);
                         assert_eq!(order_data.order.total_quantity, 100.0);
@@ -2891,7 +2892,7 @@ mod tests {
                     OrderUpdate::ExecutionData(exec_data) => {
                         execution_count += 1;
                         assert_eq!(exec_data.execution.order_id, order_id);
-                        assert_eq!(exec_data.contract.symbol, "AAPL");
+                        assert_eq!(exec_data.contract.symbol, Symbol::from("AAPL"));
                         assert_eq!(exec_data.execution.shares, 100.0);
                         assert_eq!(exec_data.execution.price, 150.25);
                     }
@@ -2960,7 +2961,7 @@ mod tests {
         // Verify first order (AAPL)
         let order1 = &orders[0];
         assert_eq!(order1.order_id, 1001);
-        assert_eq!(order1.contract.symbol, "AAPL");
+        assert_eq!(order1.contract.symbol, Symbol::from("AAPL"));
         assert_eq!(order1.contract.security_type, crate::contracts::SecurityType::Stock);
         assert_eq!(order1.order.action, Action::Buy);
         assert_eq!(order1.order.total_quantity, 100.0);
@@ -2970,7 +2971,7 @@ mod tests {
         // Verify second order (MSFT)
         let order2 = &orders[1];
         assert_eq!(order2.order_id, 1002);
-        assert_eq!(order2.contract.symbol, "MSFT");
+        assert_eq!(order2.contract.symbol, Symbol::from("MSFT"));
         assert_eq!(order2.contract.security_type, crate::contracts::SecurityType::Stock);
         assert_eq!(order2.order.action, Action::Sell);
         assert_eq!(order2.order.total_quantity, 50.0);
@@ -3020,7 +3021,7 @@ mod tests {
         // Verify first order (TSLA from client 101)
         let order1 = &orders[0];
         assert_eq!(order1.order_id, 2001);
-        assert_eq!(order1.contract.symbol, "TSLA");
+        assert_eq!(order1.contract.symbol, Symbol::from("TSLA"));
         assert_eq!(order1.contract.security_type, crate::contracts::SecurityType::Stock);
         assert_eq!(order1.order.action, Action::Buy);
         assert_eq!(order1.order.total_quantity, 10.0);
@@ -3031,7 +3032,7 @@ mod tests {
         // Verify second order (AMZN from client 102)
         let order2 = &orders[1];
         assert_eq!(order2.order_id, 2002);
-        assert_eq!(order2.contract.symbol, "AMZN");
+        assert_eq!(order2.contract.symbol, Symbol::from("AMZN"));
         assert_eq!(order2.order.action, Action::Sell);
         assert_eq!(order2.order.total_quantity, 5.0);
         assert_eq!(order2.order.order_type, "MKT");
@@ -3040,7 +3041,7 @@ mod tests {
         // Verify third order (GOOGL from current client 100)
         let order3 = &orders[2];
         assert_eq!(order3.order_id, 1003);
-        assert_eq!(order3.contract.symbol, "GOOGL");
+        assert_eq!(order3.contract.symbol, Symbol::from("GOOGL"));
         assert_eq!(order3.order.action, Action::Buy);
         assert_eq!(order3.order.total_quantity, 20.0);
         assert_eq!(order3.order.order_type, "LMT");
@@ -3105,7 +3106,7 @@ mod tests {
         // Verify the order (FB from TWS)
         let order = &orders[0];
         assert_eq!(order.order_id, 3001);
-        assert_eq!(order.contract.symbol, "FB");
+        assert_eq!(order.contract.symbol, Symbol::from("FB"));
         assert_eq!(order.contract.security_type, crate::contracts::SecurityType::Stock);
         assert_eq!(order.order.action, crate::orders::Action::Buy);
         assert_eq!(order.order.total_quantity, 50.0);
@@ -3158,7 +3159,7 @@ mod tests {
         let order1 = &orders[0];
         // CompletedOrder messages don't have order_id in the message, defaults to -1
         assert_eq!(order1.order_id, -1);
-        assert_eq!(order1.contract.symbol, "ES");
+        assert_eq!(order1.contract.symbol, Symbol::from("ES"));
         assert_eq!(order1.contract.security_type, crate::contracts::SecurityType::Future);
         assert_eq!(order1.order.action, Action::Buy);
         assert_eq!(order1.order.total_quantity, 1.0);
@@ -3169,7 +3170,7 @@ mod tests {
         // Verify second completed order (AAPL)
         let order2 = &orders[1];
         assert_eq!(order2.order_id, -1); // CompletedOrder messages don't have order_id
-        assert_eq!(order2.contract.symbol, "AAPL");
+        assert_eq!(order2.contract.symbol, Symbol::from("AAPL"));
         assert_eq!(order2.contract.security_type, crate::contracts::SecurityType::Stock);
         assert_eq!(order2.order.action, Action::Buy);
         assert_eq!(order2.order.total_quantity, 100.0);
@@ -3325,7 +3326,7 @@ mod tests {
         let exec1 = &execution_data[0];
         assert_eq!(exec1.request_id, 9000);
         assert_eq!(exec1.execution.order_id, 1001);
-        assert_eq!(exec1.contract.symbol, "AAPL");
+        assert_eq!(exec1.contract.symbol, Symbol::from("AAPL"));
         assert_eq!(exec1.contract.security_type, SecurityType::Stock);
         assert_eq!(exec1.execution.execution_id, "000e1a2b.67890abc.01.01");
         assert_eq!(exec1.execution.side, "BOT");
@@ -3342,7 +3343,7 @@ mod tests {
         let exec2 = &execution_data[1];
         assert_eq!(exec2.request_id, 9000);
         assert_eq!(exec2.execution.order_id, 1002);
-        assert_eq!(exec2.contract.symbol, "ES");
+        assert_eq!(exec2.contract.symbol, Symbol::from("ES"));
         assert_eq!(exec2.contract.security_type, SecurityType::Future);
         assert_eq!(exec2.execution.execution_id, "000e1a2b.67890def.02.01");
         assert_eq!(exec2.execution.side, "SLD");
@@ -3359,7 +3360,7 @@ mod tests {
         let exec3 = &execution_data[2];
         assert_eq!(exec3.request_id, 9000);
         assert_eq!(exec3.execution.order_id, 1003);
-        assert_eq!(exec3.contract.symbol, "SPY");
+        assert_eq!(exec3.contract.symbol, Symbol::from("SPY"));
         assert_eq!(exec3.contract.security_type, SecurityType::Option);
         assert_eq!(exec3.execution.execution_id, "000e1a2b.67890ghi.03.01");
         assert_eq!(exec3.execution.side, "BOT");
@@ -3398,14 +3399,14 @@ mod tests {
         // Create option contract for SPY
         let contract = Contract {
             contract_id: 123456789,
-            symbol: "SPY".to_string(),
+            symbol: Symbol::from("SPY"),
             security_type: SecurityType::Option,
             last_trade_date_or_contract_month: "20240126".to_string(),
             strike: 450.0,
             right: "C".to_string(), // Call option
             multiplier: "100".to_string(),
-            exchange: "CBOE".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("CBOE"),
+            currency: Currency::from("USD"),
             local_symbol: "SPY240126C00450000".to_string(),
             trading_class: "SPY".to_string(),
             ..Default::default()
@@ -3454,7 +3455,7 @@ mod tests {
         // Verify open order
         let open_order = &open_orders[0];
         assert_eq!(open_order.order.order_id, 90);
-        assert_eq!(open_order.contract.symbol, "SPY");
+        assert_eq!(open_order.contract.symbol, Symbol::from("SPY"));
         assert_eq!(open_order.contract.security_type, SecurityType::Option);
         assert_eq!(open_order.order.order_type, "EXERCISE");
 
@@ -4467,11 +4468,11 @@ mod tests {
         // Verify scan data details
         assert_eq!(scan_data[0].rank, 1);
         assert_eq!(scan_data[0].contract_details.contract.contract_id, 1234);
-        assert_eq!(scan_data[0].contract_details.contract.symbol, "AAPL");
+        assert_eq!(scan_data[0].contract_details.contract.symbol, Symbol::from("AAPL"));
 
         assert_eq!(scan_data[1].rank, 2);
         assert_eq!(scan_data[1].contract_details.contract.contract_id, 5678);
-        assert_eq!(scan_data[1].contract_details.contract.symbol, "GOOGL");
+        assert_eq!(scan_data[1].contract_details.contract.symbol, Symbol::from("GOOGL"));
 
         // Verify the request was sent correctly
         let requests = gateway.requests();

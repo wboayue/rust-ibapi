@@ -50,11 +50,11 @@ impl StockBuilder<Symbol> {
     /// Build the contract - cannot fail for stocks
     pub fn build(self) -> Contract {
         Contract {
-            symbol: self.symbol.to_string(),
+            symbol: self.symbol,
             security_type: SecurityType::Stock,
-            exchange: self.exchange.to_string(),
-            currency: self.currency.to_string(),
-            primary_exchange: self.primary_exchange.map(|e| e.to_string()).unwrap_or_default(),
+            exchange: self.exchange,
+            currency: self.currency,
+            primary_exchange: self.primary_exchange.unwrap_or_else(|| Exchange::from("")),
             trading_class: self.trading_class.unwrap_or_default(),
             ..Default::default()
         }
@@ -163,13 +163,13 @@ impl<S, E> OptionBuilder<Symbol, S, E> {
 impl OptionBuilder<Symbol, Strike, ExpirationDate> {
     pub fn build(self) -> Contract {
         Contract {
-            symbol: self.symbol.to_string(),
+            symbol: self.symbol,
             security_type: SecurityType::Option,
             strike: self.strike.value(),
             right: self.right.to_string(),
             last_trade_date_or_contract_month: self.expiry.to_string(),
-            exchange: self.exchange.to_string(),
-            currency: self.currency.to_string(),
+            exchange: self.exchange,
+            currency: self.currency,
             multiplier: self.multiplier.to_string(),
             ..Default::default()
         }
@@ -238,11 +238,11 @@ impl<M> FuturesBuilder<Symbol, M> {
 impl FuturesBuilder<Symbol, ContractMonth> {
     pub fn build(self) -> Contract {
         Contract {
-            symbol: self.symbol.to_string(),
+            symbol: self.symbol,
             security_type: SecurityType::Future,
             last_trade_date_or_contract_month: self.contract_month.to_string(),
-            exchange: self.exchange.to_string(),
-            currency: self.currency.to_string(),
+            exchange: self.exchange,
+            currency: self.currency,
             multiplier: self.multiplier.map(|m| m.to_string()).unwrap_or_default(),
             ..Default::default()
         }
@@ -280,10 +280,10 @@ impl ForexBuilder {
 
     pub fn build(self) -> Contract {
         Contract {
-            symbol: self.pair,
+            symbol: Symbol::new(self.pair),
             security_type: SecurityType::ForexPair,
-            exchange: self.exchange.to_string(),
-            currency: "USD".to_string(), // Quote currency
+            exchange: self.exchange,
+            currency: "USD".into(), // Quote currency
             ..Default::default()
         }
     }
@@ -318,10 +318,10 @@ impl CryptoBuilder {
 
     pub fn build(self) -> Contract {
         Contract {
-            symbol: self.symbol.to_string(),
+            symbol: self.symbol,
             security_type: SecurityType::Crypto,
-            exchange: self.exchange.to_string(),
-            currency: self.currency.to_string(),
+            exchange: self.exchange,
+            currency: self.currency,
             ..Default::default()
         }
     }
@@ -423,8 +423,8 @@ impl SpreadBuilder {
 
         Ok(Contract {
             security_type: SecurityType::Spread,
-            currency: self.currency.to_string(),
-            exchange: self.exchange.to_string(),
+            currency: self.currency,
+            exchange: self.exchange,
             combo_legs,
             ..Default::default()
         })

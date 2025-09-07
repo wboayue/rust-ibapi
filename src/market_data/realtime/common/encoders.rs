@@ -213,6 +213,7 @@ mod tests {
     #[cfg(test)]
     mod tick_by_tick_tests {
         use super::*;
+        use crate::contracts::{Currency, Exchange, Symbol};
 
         #[test]
         fn test_encode_cancel_tick_by_tick() {
@@ -229,10 +230,10 @@ mod tests {
             let request_id = 9000;
             let server_version = server_versions::TICK_BY_TICK;
             let contract = Contract {
-                symbol: "GBL".to_owned(),
+                symbol: Symbol::from("GBL"),
                 security_type: SecurityType::Future,
-                exchange: "EUREX".to_owned(),
-                currency: "EUR".to_owned(),
+                exchange: Exchange::from("EUREX"),
+                currency: Currency::from("EUR"),
                 last_trade_date_or_contract_month: "202303".to_owned(),
                 ..Contract::default()
             };
@@ -249,15 +250,15 @@ mod tests {
 
             // Verify contract fields
             assert_eq!(message[2], contract.contract_id.to_field(), "Wrong contract ID");
-            assert_eq!(message[3], contract.symbol, "Wrong symbol");
+            assert_eq!(message[3], contract.symbol.to_field(), "Wrong symbol");
             assert_eq!(message[4], contract.security_type.to_field(), "Wrong security type");
             assert_eq!(message[5], contract.last_trade_date_or_contract_month, "Wrong trade date");
             assert_eq!(message[6], contract.strike.to_field(), "Wrong strike price");
             assert_eq!(message[7], contract.right, "Wrong right");
             assert_eq!(message[8], contract.multiplier, "Wrong multiplier");
-            assert_eq!(message[9], contract.exchange, "Wrong exchange");
-            assert_eq!(message[10], contract.primary_exchange, "Wrong primary exchange");
-            assert_eq!(message[11], contract.currency, "Wrong currency");
+            assert_eq!(message[9], contract.exchange.to_field(), "Wrong exchange");
+            assert_eq!(message[10], contract.primary_exchange.to_field(), "Wrong primary exchange");
+            assert_eq!(message[11], contract.currency.to_field(), "Wrong currency");
             assert_eq!(message[12], contract.local_symbol, "Wrong local symbol");
             assert_eq!(message[13], contract.trading_class, "Wrong trading class");
 
@@ -276,10 +277,10 @@ mod tests {
             let request_id = 9000;
             let server_version = server_versions::TICK_BY_TICK - 1; // Version before TICK_BY_TICK
             let contract = Contract {
-                symbol: "GBL".to_owned(),
+                symbol: Symbol::from("GBL"),
                 security_type: SecurityType::Future,
-                exchange: "EUREX".to_owned(),
-                currency: "EUR".to_owned(),
+                exchange: Exchange::from("EUREX"),
+                currency: Currency::from("EUR"),
                 last_trade_date_or_contract_month: "202303".to_owned(),
                 ..Contract::default()
             };
@@ -298,6 +299,7 @@ mod tests {
     #[cfg(test)]
     mod realtime_bars_tests {
         use super::*;
+        use crate::contracts::{Currency, Exchange, Symbol};
 
         #[test]
         fn test_encode_cancel_realtime_bars() {
@@ -315,10 +317,10 @@ mod tests {
             let request_id = 9000;
             let server_version = server_versions::TICK_BY_TICK;
             let contract = Contract {
-                symbol: "GBL".to_owned(),
+                symbol: Symbol::from("GBL"),
                 security_type: SecurityType::Future,
-                exchange: "EUREX".to_owned(),
-                currency: "EUR".to_owned(),
+                exchange: Exchange::from("EUREX"),
+                currency: Currency::from("EUR"),
                 last_trade_date_or_contract_month: "202303".to_owned(),
                 ..Contract::default()
             };
@@ -337,15 +339,15 @@ mod tests {
 
             // Verify contract fields
             assert_eq!(message[3], contract.contract_id.to_field(), "Wrong contract ID");
-            assert_eq!(message[4], contract.symbol, "Wrong symbol");
+            assert_eq!(message[4], contract.symbol.to_field(), "Wrong symbol");
             assert_eq!(message[5], contract.security_type.to_field(), "Wrong security type");
             assert_eq!(message[6], contract.last_trade_date_or_contract_month, "Wrong trade date");
             assert_eq!(message[7], contract.strike.to_field(), "Wrong strike price");
             assert_eq!(message[8], contract.right, "Wrong right");
             assert_eq!(message[9], contract.multiplier, "Wrong multiplier");
-            assert_eq!(message[10], contract.exchange, "Wrong exchange");
-            assert_eq!(message[11], contract.primary_exchange, "Wrong primary exchange");
-            assert_eq!(message[12], contract.currency, "Wrong currency");
+            assert_eq!(message[10], contract.exchange.to_field(), "Wrong exchange");
+            assert_eq!(message[11], contract.primary_exchange.to_field(), "Wrong primary exchange");
+            assert_eq!(message[12], contract.currency.to_field(), "Wrong currency");
             assert_eq!(message[13], contract.local_symbol, "Wrong local symbol");
             assert_eq!(message[14], contract.trading_class, "Wrong trading class");
 
@@ -361,10 +363,10 @@ mod tests {
             let request_id = 9000;
             let server_version = server_versions::TICK_BY_TICK;
             let contract = Contract {
-                symbol: "GBL".to_owned(),
+                symbol: Symbol::from("GBL"),
                 security_type: SecurityType::Future,
-                exchange: "EUREX".to_owned(),
-                currency: "EUR".to_owned(),
+                exchange: Exchange::from("EUREX"),
+                currency: Currency::from("EUR"),
                 last_trade_date_or_contract_month: "202303".to_owned(),
                 ..Contract::default()
             };

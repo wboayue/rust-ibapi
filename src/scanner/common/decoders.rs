@@ -1,4 +1,4 @@
-use crate::contracts::SecurityType;
+use crate::contracts::{Currency, Exchange, SecurityType, Symbol};
 use crate::messages::ResponseMessage;
 use crate::Error;
 
@@ -26,13 +26,13 @@ pub(in crate::scanner) fn decode_scanner_data(mut message: ResponseMessage) -> R
         };
 
         scanner_data.contract_details.contract.contract_id = message.next_int()?;
-        scanner_data.contract_details.contract.symbol = message.next_string()?;
+        scanner_data.contract_details.contract.symbol = Symbol::from(message.next_string()?);
         scanner_data.contract_details.contract.security_type = SecurityType::from(&message.next_string()?);
         scanner_data.contract_details.contract.last_trade_date_or_contract_month = message.next_string()?;
         scanner_data.contract_details.contract.strike = message.next_double()?;
         scanner_data.contract_details.contract.right = message.next_string()?;
-        scanner_data.contract_details.contract.exchange = message.next_string()?;
-        scanner_data.contract_details.contract.currency = message.next_string()?;
+        scanner_data.contract_details.contract.exchange = Exchange::from(message.next_string()?);
+        scanner_data.contract_details.contract.currency = Currency::from(message.next_string()?);
         scanner_data.contract_details.contract.local_symbol = message.next_string()?;
         scanner_data.contract_details.market_name = message.next_string()?;
         scanner_data.contract_details.contract.trading_class = message.next_string()?;

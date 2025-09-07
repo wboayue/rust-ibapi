@@ -1,10 +1,11 @@
 //! Strong types for contract building with validation.
 
+use crate::ToField;
 use std::fmt;
 use time::{Date, Duration, Month, OffsetDateTime, Weekday};
 
 /// Strong type for trading symbols
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Symbol(pub String);
 
 impl Symbol {
@@ -41,11 +42,17 @@ impl fmt::Display for Symbol {
     }
 }
 
+impl ToField for Symbol {
+    fn to_field(&self) -> String {
+        self.0.clone()
+    }
+}
+
 /// Exchange identifier
 ///
 /// IBKR supports 160+ exchanges worldwide. This type provides a lightweight wrapper
 /// around exchange codes.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Exchange(pub String);
 
 impl Exchange {
@@ -57,6 +64,11 @@ impl Exchange {
     /// Get the exchange code as a string slice
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Check if the exchange string is empty
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 
@@ -90,11 +102,17 @@ impl fmt::Display for Exchange {
     }
 }
 
+impl ToField for Exchange {
+    fn to_field(&self) -> String {
+        self.0.clone()
+    }
+}
+
 /// Currency identifier
 ///
 /// IBKR supports trading in many currencies worldwide. This type provides a lightweight
 /// wrapper around currency codes.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Currency(pub String);
 
 impl Currency {
@@ -136,6 +154,12 @@ impl From<&String> for Currency {
 impl fmt::Display for Currency {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl ToField for Currency {
+    fn to_field(&self) -> String {
+        self.0.clone()
     }
 }
 

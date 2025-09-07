@@ -1,6 +1,6 @@
 //! Test complete order flow to capture exact message formats
 
-use ibapi::contracts::Contract;
+use ibapi::contracts::{Contract, Currency, Exchange, Symbol};
 use ibapi::orders::{order_builder, Action};
 use ibapi::Client;
 use std::env;
@@ -21,10 +21,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create an ES futures order
     let contract = Contract {
-        symbol: "ES".to_string(),
+        symbol: Symbol::from("ES"),
         security_type: ibapi::contracts::SecurityType::Future,
-        exchange: "CME".to_string(),
-        currency: "USD".to_string(),
+        exchange: Exchange::from("CME"),
+        currency: Currency::from("USD"),
         local_symbol: "ESU5".to_string(),
         ..Default::default()
     };

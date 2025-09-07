@@ -1,14 +1,14 @@
 use super::*;
-use crate::contracts::Contract;
+use crate::contracts::{Contract, Currency, Exchange, Symbol};
 use crate::market_data::TradingHours;
 use crate::orders::Action;
 
 fn create_test_contract() -> Contract {
     Contract {
-        symbol: "TEST".to_string(),
+        symbol: Symbol::from("TEST"),
         security_type: crate::contracts::SecurityType::Stock,
-        exchange: "SMART".to_string(),
-        currency: "USD".to_string(),
+        exchange: Exchange::from("SMART"),
+        currency: Currency::from("USD"),
         ..Default::default()
     }
 }

@@ -2408,10 +2408,10 @@ mod tests {
 
         // Create an option contract
         let contract = crate::contracts::Contract {
-            symbol: "AAPL".to_string(),
+            symbol: Symbol::from("AAPL"),
             security_type: crate::contracts::SecurityType::Option,
-            exchange: "SMART".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("SMART"),
+            currency: Currency::from("USD"),
             last_trade_date_or_contract_month: "20250120".to_string(),
             strike: 100.0,
             right: "C".to_string(),
@@ -2463,10 +2463,10 @@ mod tests {
 
         // Create an option contract
         let contract = crate::contracts::Contract {
-            symbol: "MSFT".to_string(),
+            symbol: Symbol::from("MSFT"),
             security_type: crate::contracts::SecurityType::Option,
-            exchange: "SMART".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("SMART"),
+            currency: Currency::from("USD"),
             last_trade_date_or_contract_month: "20250220".to_string(),
             strike: 105.0,
             right: "P".to_string(), // Put option
@@ -3256,7 +3256,7 @@ mod tests {
     #[tokio::test]
     async fn test_exercise_options() {
         use crate::client::common::tests::setup_exercise_options;
-        use crate::contracts::{Contract, SecurityType};
+        use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
         use crate::orders::{ExerciseAction, ExerciseOptions};
         use time::macros::datetime;
 
@@ -3269,14 +3269,14 @@ mod tests {
         // Create option contract for SPY
         let contract = Contract {
             contract_id: 123456789,
-            symbol: "SPY".to_string(),
+            symbol: Symbol::from("SPY"),
             security_type: SecurityType::Option,
             last_trade_date_or_contract_month: "20240126".to_string(),
             strike: 450.0,
             right: "C".to_string(), // Call option
             multiplier: "100".to_string(),
-            exchange: "CBOE".to_string(),
-            currency: "USD".to_string(),
+            exchange: Exchange::from("CBOE"),
+            currency: Currency::from("USD"),
             local_symbol: "SPY240126C00450000".to_string(),
             trading_class: "SPY".to_string(),
             ..Default::default()

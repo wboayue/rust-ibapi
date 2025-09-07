@@ -135,13 +135,13 @@ impl SecurityType {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 /// Contract describes an instrument's definition
 pub struct Contract {
     /// The unique IB contract identifier.
     pub contract_id: i32,
     /// The underlying's asset symbol.
-    pub symbol: String,
+    pub symbol: Symbol,
     pub security_type: SecurityType,
     /// The contract's last trading day or contract month (for Options and Futures).
     /// Strings with format YYYYMM will be interpreted as the Contract Month whereas YYYYMMDD will be interpreted as Last Trading Day.
@@ -153,15 +153,15 @@ pub struct Contract {
     /// The instrument's multiplier (i.e. options, futures).
     pub multiplier: String,
     /// The destination exchange.
-    pub exchange: String,
+    pub exchange: Exchange,
     /// The underlying's currency.
-    pub currency: String,
+    pub currency: Currency,
     /// The contract's symbol within its primary exchange For options, this will be the OCC symbol.
     pub local_symbol: String,
     /// The contract's primary exchange.
     /// For smart routed contracts, used to define contract in case of ambiguity.
     /// Should be defined as native exchange of contract, e.g. ISLAND for MSFT For exchanges which contain a period in name, will only be part of exchange name prior to period, i.e. ENEXT for ENEXT.BE.
-    pub primary_exchange: String,
+    pub primary_exchange: Exchange,
     /// The trading class name for this contract. Available in TWS contract description window as well. For example, GBL Dec '13 future's trading class is "FGBL".
     pub trading_class: String,
     /// If set to true, contract details requests and historical data queries can be performed pertaining to expired futures contracts. Expired options or other instrument types are not available.
@@ -178,6 +178,33 @@ pub struct Contract {
 
     pub issuer_id: String,
     pub description: String,
+}
+
+impl Default for Contract {
+    fn default() -> Self {
+        Self {
+            contract_id: 0,
+            symbol: Symbol::default(),
+            security_type: SecurityType::default(),
+            last_trade_date_or_contract_month: String::new(),
+            strike: 0.0,
+            right: String::new(),
+            multiplier: String::new(),
+            exchange: Exchange::default(), // "SMART"
+            currency: Currency::default(),
+            local_symbol: String::new(),
+            primary_exchange: Exchange::from(""), // Empty, not "SMART"
+            trading_class: String::new(),
+            include_expired: false,
+            security_id_type: String::new(),
+            security_id: String::new(),
+            combo_legs_description: String::new(),
+            combo_legs: Vec::new(),
+            delta_neutral_contract: None,
+            issuer_id: String::new(),
+            description: String::new(),
+        }
+    }
 }
 
 impl Contract {
@@ -294,10 +321,10 @@ impl Contract {
         };
 
         Contract {
-            symbol: symbol.to_string(),
+            symbol: Symbol::new(symbol),
             security_type: SecurityType::Index,
-            exchange: exchange.to_string(),
-            currency: currency.to_string(),
+            exchange,
+            currency,
             ..Default::default()
         }
     }
@@ -314,12 +341,12 @@ impl Contract {
     pub fn bond_cusip(cusip: impl Into<String>) -> Contract {
         let cusip_str = cusip.into();
         Contract {
-            symbol: cusip_str.clone(),
+            symbol: Symbol::new(cusip_str.clone()),
             security_type: SecurityType::Bond,
             security_id_type: "CUSIP".to_string(),
             security_id: cusip_str,
-            exchange: "SMART".to_string(),
-            currency: "USD".to_string(),
+            exchange: "SMART".into(),
+            currency: "USD".into(),
             ..Default::default()
         }
     }
@@ -347,12 +374,12 @@ impl Contract {
         };
 
         Contract {
-            symbol: isin_str.clone(),
+            symbol: Symbol::new(isin_str.clone()),
             security_type: SecurityType::Bond,
             security_id_type: "ISIN".to_string(),
             security_id: isin_str,
-            exchange: "SMART".to_string(),
-            currency: currency.to_string(),
+            exchange: "SMART".into(),
+            currency: currency.into(),
             ..Default::default()
         }
     }
@@ -372,12 +399,12 @@ impl Contract {
     pub fn bond(identifier: BondIdentifier) -> Contract {
         match identifier {
             BondIdentifier::Cusip(cusip) => Contract {
-                symbol: cusip.to_string(),
+                symbol: Symbol::new(cusip.to_string()),
                 security_type: SecurityType::Bond,
                 security_id_type: "CUSIP".to_string(),
                 security_id: cusip.to_string(),
-                exchange: "SMART".to_string(),
-                currency: "USD".to_string(),
+                exchange: "SMART".into(),
+                currency: "USD".into(),
                 ..Default::default()
             },
             BondIdentifier::Isin(isin) => {
@@ -393,12 +420,12 @@ impl Contract {
                 };
 
                 Contract {
-                    symbol: isin.to_string(),
+                    symbol: Symbol::new(isin.to_string()),
                     security_type: SecurityType::Bond,
                     security_id_type: "ISIN".to_string(),
                     security_id: isin.to_string(),
-                    exchange: "SMART".to_string(),
-                    currency: currency.to_string(),
+                    exchange: "SMART".into(),
+                    currency: currency.into(),
                     ..Default::default()
                 }
             }
@@ -433,9 +460,9 @@ impl Contract {
     /// ```
     pub fn news(provider_code: &str) -> Contract {
         Contract {
-            symbol: format!("{provider_code}:{provider_code}_ALL"),
+            symbol: Symbol::new(format!("{provider_code}:{provider_code}_ALL")),
             security_type: SecurityType::News,
-            exchange: provider_code.to_string(),
+            exchange: Exchange::from(provider_code),
             ..Default::default()
         }
     }
@@ -762,20 +789,20 @@ mod tests {
     fn test_v2_builders() {
         // Test stock builder
         let stock = Contract::stock("AAPL").build();
-        assert_eq!(stock.symbol, "AAPL", "stock.symbol");
+        assert_eq!(stock.symbol, Symbol::from("AAPL"), "stock.symbol");
         assert_eq!(stock.security_type, SecurityType::Stock, "stock.security_type");
-        assert_eq!(stock.currency, "USD", "stock.currency");
-        assert_eq!(stock.exchange, "SMART", "stock.exchange");
+        assert_eq!(stock.currency, Currency::from("USD"), "stock.currency");
+        assert_eq!(stock.exchange, Exchange::from("SMART"), "stock.exchange");
 
         // Test stock with customization
         let toyota = Contract::stock("7203").on_exchange("TSEJ").in_currency("JPY").build();
-        assert_eq!(toyota.symbol, "7203");
-        assert_eq!(toyota.exchange, "TSEJ");
-        assert_eq!(toyota.currency, "JPY");
+        assert_eq!(toyota.symbol, Symbol::from("7203"));
+        assert_eq!(toyota.exchange, Exchange::from("TSEJ"));
+        assert_eq!(toyota.currency, Currency::from("JPY"));
 
         // Test call option builder
         let call = Contract::call("AAPL").strike(150.0).expires_on(2023, 12, 15).build();
-        assert_eq!(call.symbol, "AAPL");
+        assert_eq!(call.symbol, Symbol::from("AAPL"));
         assert_eq!(call.security_type, SecurityType::Option);
         assert_eq!(call.strike, 150.0);
         assert_eq!(call.right, "C");
@@ -783,33 +810,33 @@ mod tests {
 
         // Test put option builder
         let put = Contract::put("SPY").strike(450.0).expires_on(2024, 1, 19).build();
-        assert_eq!(put.symbol, "SPY");
+        assert_eq!(put.symbol, Symbol::from("SPY"));
         assert_eq!(put.right, "P");
         assert_eq!(put.strike, 450.0);
 
         // Test crypto builder
         let btc = Contract::crypto("BTC").build();
-        assert_eq!(btc.symbol, "BTC");
+        assert_eq!(btc.symbol, Symbol::from("BTC"));
         assert_eq!(btc.security_type, SecurityType::Crypto);
-        assert_eq!(btc.currency, "USD");
-        assert_eq!(btc.exchange, "PAXOS");
+        assert_eq!(btc.currency, Currency::from("USD"));
+        assert_eq!(btc.exchange, Exchange::from("PAXOS"));
 
         // Test index
         let spx = Contract::index("SPX");
-        assert_eq!(spx.symbol, "SPX");
+        assert_eq!(spx.symbol, Symbol::from("SPX"));
         assert_eq!(spx.security_type, SecurityType::Index);
-        assert_eq!(spx.exchange, "CBOE");
-        assert_eq!(spx.currency, "USD");
+        assert_eq!(spx.exchange, Exchange::from("CBOE"));
+        assert_eq!(spx.currency, Currency::from("USD"));
 
         // Test news constructor (unchanged)
         let news = Contract::news("BZ");
-        assert_eq!(news.symbol, "BZ:BZ_ALL");
+        assert_eq!(news.symbol, Symbol::from("BZ:BZ_ALL"));
         assert_eq!(news.security_type, SecurityType::News);
-        assert_eq!(news.exchange, "BZ");
+        assert_eq!(news.exchange, Exchange::from("BZ"));
 
         // Test backward compatibility with option constructor
         let option = Contract::option("AAPL", "20231215", 150.0, "C");
-        assert_eq!(option.symbol, "AAPL");
+        assert_eq!(option.symbol, Symbol::from("AAPL"));
         assert_eq!(option.security_type, SecurityType::Option);
         assert_eq!(option.strike, 150.0);
         assert_eq!(option.right, "C");
@@ -926,7 +953,7 @@ mod tests {
         // Test with a futures contract (not a bag/spread)
         // Using the simple factory method for futures that requires adding expiry
         let futures_contract = Contract {
-            symbol: "ES".to_string(),
+            symbol: Symbol::from("ES"),
             security_type: SecurityType::Future,
             ..Default::default()
         };
