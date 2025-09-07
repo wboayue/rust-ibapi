@@ -36,7 +36,7 @@ impl fmt::Display for Symbol {
 }
 
 /// Exchange identifier
-/// 
+///
 /// IBKR supports 160+ exchanges worldwide. This type provides a lightweight wrapper
 /// around exchange codes with constants for commonly used exchanges.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,7 +90,7 @@ impl fmt::Display for Exchange {
 }
 
 /// Currency identifier
-/// 
+///
 /// IBKR supports trading in many currencies worldwide. This type provides a lightweight
 /// wrapper around currency codes with constants for commonly used currencies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -118,7 +118,7 @@ impl Currency {
     pub const NZD: Currency = Currency("NZD");
     pub const HKD: Currency = Currency("HKD");
     pub const SGD: Currency = Currency("SGD");
-    pub const CNH: Currency = Currency("CNH");  // Offshore RMB
+    pub const CNH: Currency = Currency("CNH"); // Offshore RMB
     pub const KRW: Currency = Currency("KRW");
     pub const SEK: Currency = Currency("SEK");
     pub const NOK: Currency = Currency("NOK");
