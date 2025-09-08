@@ -151,26 +151,6 @@ mod sync_tests {
         assert_eq!(request[MARKET_DATA_SNAPSHOT_IDX], "1", "Snapshot should be true");
         assert_eq!(request[MARKET_DATA_REGULATORY_SNAPSHOT_IDX], "1", "Regulatory snapshot should be true");
     }
-
-    #[test]
-    fn test_market_data_builder_build_alias() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-        });
-        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
-        let contract = Contract::stock("AAPL").build();
-
-        // Test that build() works as an alias for subscribe()
-        let _subscription = client
-            .market_data(&contract)
-            .generic_ticks(&["233"])
-            .build() // Using build() instead of subscribe()
-            .expect("Failed to create subscription");
-
-        let request_messages = message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1, "Should send one request message");
-    }
 }
 
 #[cfg(feature = "async")]
@@ -234,26 +214,5 @@ mod async_tests {
 
         // Check regulatory snapshot is true
         assert_eq!(request[MARKET_DATA_REGULATORY_SNAPSHOT_IDX], "1", "Regulatory snapshot should be true");
-    }
-
-    #[tokio::test]
-    async fn test_market_data_builder_build_alias_async() {
-        let message_bus = Arc::new(MessageBusStub {
-            request_messages: RwLock::new(vec![]),
-            response_messages: vec![],
-        });
-        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
-        let contract = Contract::stock("AAPL").build();
-
-        // Test that build() works as an alias for subscribe()
-        let _subscription = client
-            .market_data(&contract)
-            .generic_ticks(&["100"])
-            .build() // Using build() instead of subscribe()
-            .await
-            .expect("Failed to create subscription");
-
-        let request_messages = message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1, "Should send one request message");
     }
 }

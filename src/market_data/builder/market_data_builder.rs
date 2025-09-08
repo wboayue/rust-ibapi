@@ -113,11 +113,6 @@ impl<'a> MarketDataBuilder<'a, crate::client::Client> {
 
         crate::market_data::realtime::market_data(self.client, self.contract, &generic_ticks, self.snapshot, self.regulatory_snapshot)
     }
-
-    /// Alias for subscribe() for consistency with existing API
-    pub fn build(self) -> Result<Subscription<TickTypes>, Error> {
-        self.subscribe()
-    }
 }
 
 // Async implementation
@@ -153,10 +148,5 @@ impl<'a> MarketDataBuilder<'a, crate::client::r#async::Client> {
         let generic_ticks: Vec<&str> = self.generic_ticks.iter().map(|s| s.as_str()).collect();
 
         crate::market_data::realtime::market_data(self.client, self.contract, &generic_ticks, self.snapshot, self.regulatory_snapshot).await
-    }
-
-    /// Alias for subscribe() for consistency with existing API
-    pub async fn build(self) -> Result<Subscription<TickTypes>, Error> {
-        self.subscribe().await
     }
 }
