@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Handling Subscriptions (Sync)
 ```rust
-let subscription = client.market_data(&contract)?;
+let subscription = client.market_data(&contract).subscribe()?;
 
 for update in subscription.timeout_iter(Duration::from_secs(30)) {
     match update? {
@@ -107,7 +107,7 @@ for update in subscription.timeout_iter(Duration::from_secs(30)) {
 use futures::StreamExt;
 use tokio::time::timeout;
 
-let mut subscription = client.market_data(&contract).await?;
+let mut subscription = client.market_data(&contract).subscribe().await?;
 
 while let Ok(Some(update)) = timeout(
     Duration::from_secs(30),

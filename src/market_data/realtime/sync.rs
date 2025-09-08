@@ -546,11 +546,9 @@ mod tests {
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
         let contract = Contract::stock("AAPL").build();
         let generic_ticks = &["100", "101", "104", "106"]; // Option Volume, OI, Historical Vol, Implied Vol
-        let snapshot = false;
-        let regulatory_snapshot = false;
 
         // Test subscription creation
-        let result = client.market_data(&contract, generic_ticks, snapshot, regulatory_snapshot);
+        let result = client.market_data(&contract).generic_ticks(generic_ticks).subscribe();
 
         // Test receiving data
         let subscription = result.expect("Failed to create market data subscription");
@@ -608,11 +606,9 @@ mod tests {
             ..ComboLeg::default()
         }];
         let generic_ticks: Vec<&str> = vec!["233", "456"];
-        let snapshot = false;
-        let regulatory_snapshot = false;
 
         // Test subscription creation
-        let result = client.market_data(&contract, &generic_ticks, snapshot, regulatory_snapshot);
+        let result = client.market_data(&contract).generic_ticks(&generic_ticks).subscribe();
         assert!(result.is_ok(), "Failed to create market data subscription with combo legs");
 
         // Verify request message was sent
@@ -638,11 +634,9 @@ mod tests {
             price: 100.0,
         });
         let generic_ticks: Vec<&str> = vec![];
-        let snapshot = false;
-        let regulatory_snapshot = false;
 
         // Test subscription creation
-        let result = client.market_data(&contract, &generic_ticks, snapshot, regulatory_snapshot);
+        let result = client.market_data(&contract).generic_ticks(&generic_ticks).subscribe();
         assert!(result.is_ok(), "Failed to create market data subscription with delta neutral");
 
         // Verify request message was sent
@@ -670,11 +664,14 @@ mod tests {
             ..Contract::default()
         };
         let generic_ticks: Vec<&str> = vec![];
-        let snapshot = true;
-        let regulatory_snapshot = true;
 
         // Test subscription creation
-        let result = client.market_data(&contract, &generic_ticks, snapshot, regulatory_snapshot);
+        let result = client
+            .market_data(&contract)
+            .generic_ticks(&generic_ticks)
+            .snapshot()
+            .regulatory_snapshot()
+            .subscribe();
         assert!(result.is_ok(), "Failed to create regulatory snapshot market data subscription");
 
         // Verify request message
@@ -683,7 +680,7 @@ mod tests {
 
         let request = &request_messages[0];
         assert_eq!(request[0], OutgoingMessages::RequestMarketData.to_field(), "Wrong message type");
-        assert_eq!(request[17], regulatory_snapshot.to_field(), "Wrong regulatory snapshot flag");
+        assert_eq!(request[17], "1", "Wrong regulatory snapshot flag");
     }
 
     #[test]
@@ -706,11 +703,9 @@ mod tests {
             ..Contract::default()
         };
         let generic_ticks: Vec<&str> = vec![];
-        let snapshot = false;
-        let regulatory_snapshot = false;
 
         // Test subscription creation
-        let market_data = client.market_data(&contract, &generic_ticks, snapshot, regulatory_snapshot);
+        let market_data = client.market_data(&contract).generic_ticks(&generic_ticks).subscribe();
         let market_data = market_data.expect("Failed to create market data subscription");
 
         // Test receiving data

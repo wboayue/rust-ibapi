@@ -32,12 +32,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let contract = Contract::stock("AAPL").build();
     println!("Subscribing to market data for {}", contract.symbol);
 
-    // Request market data
+    // Request market data using the new fluent API
     // Generic tick list:
     // - 233: RTVolume (last trade price, size, time, volume)
     // - 236: Shortable shares
-    // - 258: Fundamental ratios
-    let market_data = client.market_data(&contract, &["233", "236"], false, false).await?;
+    let market_data = client.market_data(&contract).generic_ticks(&["233", "236"]).subscribe().await?;
     println!("Market data subscription created");
 
     // Process market data stream

@@ -192,7 +192,7 @@ while let Some(position) = positions.next().await {
 
 ### Connection Errors
 ```rust
-match client.market_data(contract) {
+match client.market_data(contract).subscribe() {
     Ok(subscription) => process_data(subscription),
     Err(Error::NotConnected) => {
         // Wait for reconnection
@@ -233,7 +233,7 @@ let handles: Vec<_> = contracts
     .map(|contract| {
         let client = Arc::clone(&client);
         thread::spawn(move || {
-            let data = client.market_data(&contract)?;
+            let data = client.market_data(&contract).subscribe()?;
             process_market_data(data)
         })
     })

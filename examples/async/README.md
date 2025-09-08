@@ -120,7 +120,10 @@ let results = join_all(futures).await;
 ```rust
 use futures::StreamExt;
 
-let mut stream = client.market_data(&contract).await?;
+let mut stream = client.market_data(&contract)
+    .generic_ticks(&["233"])  // RTVolume
+    .subscribe()
+    .await?;
 while let Some(tick) = stream.next().await {
     match tick? {
         Tick::Price(price) => println!("Price: {}", price),

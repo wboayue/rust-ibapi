@@ -18,12 +18,11 @@ fn main() {
     let contract = Contract::stock("AAPL").build();
 
     // https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#available-tick-types
-    let generic_ticks = &["233", "293"];
-    let snapshot = false;
-    let regulatory_snapshot = false;
-
+    // Using the new fluent API for market data subscription
     let subscription = client
-        .market_data(&contract, generic_ticks, snapshot, regulatory_snapshot)
+        .market_data(&contract)
+        .generic_ticks(&["233", "293"]) // RTVolume and Trade Count
+        .subscribe()
         .expect("error requesting market data");
 
     for tick in &subscription {
