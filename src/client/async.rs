@@ -20,6 +20,7 @@ use crate::accounts;
 use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::contracts::Contract;
+use crate::market_data::builder::MarketDataBuilder;
 use crate::market_data::TradingHours;
 use crate::orders::OrderBuilder;
 use crate::subscriptions::Subscription;
@@ -526,62 +527,46 @@ impl Client {
 
     // === Market Data ===
 
-    /// Requests real time market data.
-    /// Returns market data for an instrument either in real time or 10-15 minutes delayed (depending on the market data type specified,
-    /// see `switch_market_data_type`).
+    /// Creates a market data subscription builder with a fluent interface.
+    ///
+    /// This is the preferred way to subscribe to market data, providing a more
+    /// intuitive and discoverable API than the raw method.
     ///
     /// # Arguments
-    /// * `contract` - The Contract for which the data is being requested
-    /// * `generic_ticks` - comma separated ids of the available generic ticks: https://interactivebrokers.github.io/tws-api/tick_types.html
-    /// * `snapshot` - Check to return a single snapshot of Market data and have the market data subscription cancel.
-    /// * `regulatory_snapshot` - snapshot for US stocks requests NBBO snapshots for users which have "US Securities Snapshot Bundle" subscription but not corresponding Network A, B, or C subscription necessary for streaming market data. One-time snapshot of current market price that will incur a fee of 1 cent to the account per snapshot.
+    /// * `contract` - The contract to receive market data for
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::{contracts::Contract, market_data::realtime::TickTypes, Client};
-    /// use futures::StreamExt;
+    /// use ibapi::prelude::*;
+    /// use ibapi::client::r#async::Client;
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
-    ///
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await
+    ///         .expect("connection failed");
     ///     let contract = Contract::stock("AAPL").build();
     ///
-    ///     let generic_ticks = &["233", "293"];
-    ///     let snapshot = false;
-    ///     let regulatory_snapshot = false;
-    ///
-    ///     let mut subscription = client
-    ///         .market_data(&contract, generic_ticks, snapshot, regulatory_snapshot)
+    ///     // Subscribe to real-time streaming data with specific tick types
+    ///     let mut subscription = client.market_data(&contract)
+    ///         .generic_ticks(&["233", "236"])  // RTVolume and Shortable
+    ///         .subscribe()
     ///         .await
-    ///         .expect("error requesting market data");
+    ///         .expect("subscription failed");
     ///
-    ///     while let Some(tick_result) = subscription.next().await {
-    ///         match tick_result {
-    ///             Ok(tick) => match tick {
-    ///                 TickTypes::Price(tick_price) => println!("{tick_price:?}"),
-    ///                 TickTypes::Size(tick_size) => println!("{tick_size:?}"),
-    ///                 TickTypes::String(tick_string) => println!("{tick_string:?}"),
-    ///                 TickTypes::SnapshotEnd => {
-    ///                     println!("Snapshot completed");
-    ///                     break;
-    ///                 }
-    ///                 _ => {}
-    ///             },
+    ///     while let Some(tick) = subscription.next().await {
+    ///         match tick {
+    ///             Ok(TickTypes::Price(price)) => println!("Price: {price:?}"),
+    ///             Ok(TickTypes::Size(size)) => println!("Size: {size:?}"),
+    ///             Ok(TickTypes::SnapshotEnd) => break,
     ///             Err(e) => eprintln!("Error: {e:?}"),
+    ///             _ => {}
     ///         }
     ///     }
     /// }
     /// ```
-    pub async fn market_data(
-        &self,
-        contract: &crate::contracts::Contract,
-        generic_ticks: &[&str],
-        snapshot: bool,
-        regulatory_snapshot: bool,
-    ) -> Result<Subscription<crate::market_data::realtime::TickTypes>, Error> {
-        crate::market_data::realtime::market_data(self, contract, generic_ticks, snapshot, regulatory_snapshot).await
+    pub fn market_data<'a>(&'a self, contract: &'a Contract) -> MarketDataBuilder<'a, Self> {
+        MarketDataBuilder::new(self, contract)
     }
 
     /// Requests real time bars
@@ -3371,11 +3356,12 @@ mod tests {
 
         let contract = Contract::stock("AAPL").build();
         let generic_ticks = vec!["100", "101", "104"]; // Option volume, option open interest, historical volatility
-        let snapshot = true;
-        let regulatory_snapshot = false;
 
         let mut subscription = client
-            .market_data(&contract, &generic_ticks, snapshot, regulatory_snapshot)
+            .market_data(&contract)
+            .generic_ticks(&generic_ticks)
+            .snapshot()
+            .subscribe()
             .await
             .expect("Failed to request market data");
 

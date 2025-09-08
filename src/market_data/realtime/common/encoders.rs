@@ -201,6 +201,47 @@ pub(crate) fn encode_cancel_market_data(request_id: i32) -> Result<RequestMessag
 }
 
 #[cfg(test)]
+pub(crate) mod test_constants {
+    // Market data request message field indexes for non-combo stock contracts
+    pub const MARKET_DATA_MSG_TYPE_IDX: usize = 0;
+    #[allow(dead_code)]
+    pub const MARKET_DATA_VERSION_IDX: usize = 1;
+    #[allow(dead_code)]
+    pub const MARKET_DATA_REQUEST_ID_IDX: usize = 2;
+    #[allow(dead_code)]
+    pub const MARKET_DATA_CONTRACT_ID_IDX: usize = 3;
+    #[allow(dead_code)]
+    pub const MARKET_DATA_SYMBOL_IDX: usize = 4;
+    #[allow(dead_code)]
+    pub const MARKET_DATA_SECURITY_TYPE_IDX: usize = 5;
+    #[allow(dead_code)]
+    pub const MARKET_DATA_EXPIRY_IDX: usize = 6;
+    #[allow(dead_code)]
+    pub const MARKET_DATA_STRIKE_IDX: usize = 7;
+    #[allow(dead_code)]
+    pub const MARKET_DATA_RIGHT_IDX: usize = 8;
+    #[allow(dead_code)]
+    pub const MARKET_DATA_MULTIPLIER_IDX: usize = 9;
+    #[allow(dead_code)]
+    pub const MARKET_DATA_EXCHANGE_IDX: usize = 10;
+    #[allow(dead_code)]
+    pub const MARKET_DATA_PRIMARY_EXCHANGE_IDX: usize = 11;
+    #[allow(dead_code)]
+    pub const MARKET_DATA_CURRENCY_IDX: usize = 12;
+    #[allow(dead_code)]
+    pub const MARKET_DATA_LOCAL_SYMBOL_IDX: usize = 13;
+    #[allow(dead_code)]
+    pub const MARKET_DATA_TRADING_CLASS_IDX: usize = 14;
+    #[allow(dead_code)]
+    pub const MARKET_DATA_HAS_DELTA_NEUTRAL_IDX: usize = 15; // false for stocks
+    pub const MARKET_DATA_GENERIC_TICKS_IDX: usize = 16;
+    pub const MARKET_DATA_SNAPSHOT_IDX: usize = 17;
+    pub const MARKET_DATA_REGULATORY_SNAPSHOT_IDX: usize = 18; // Only for server >= REQ_SMART_COMPONENTS
+    #[allow(dead_code)]
+    pub const MARKET_DATA_OPTIONS_IDX: usize = 19; // Empty string
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{contracts::Contract, contracts::SecurityType, contracts::TagValue, messages::OutgoingMessages, ToField};

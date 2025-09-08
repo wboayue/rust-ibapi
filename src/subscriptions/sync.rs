@@ -111,7 +111,10 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("AAPL").build();
-    /// let subscription = client.market_data(&contract, &["233"], false, false).expect("market data request failed");
+    /// let subscription = client.market_data(&contract)
+    ///     .generic_ticks(&["233"])
+    ///     .subscribe()
+    ///     .expect("market data request failed");
     ///
     /// // Process data blocking until the next value is available
     /// while let Some(data) = subscription.next() {
@@ -217,7 +220,10 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("AAPL").build();
-    /// let subscription = client.market_data(&contract, &["233"], false, false).expect("market data request failed");
+    /// let subscription = client.market_data(&contract)
+    ///     .generic_ticks(&["233"])
+    ///     .subscribe()
+    ///     .expect("market data request failed");
     ///
     /// // Poll for data without blocking
     /// loop {
@@ -254,7 +260,10 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// let contract = Contract::stock("AAPL").build();
-    /// let subscription = client.market_data(&contract, &["233"], false, false).expect("market data request failed");
+    /// let subscription = client.market_data(&contract)
+    ///     .generic_ticks(&["233"])
+    ///     .subscribe()
+    ///     .expect("market data request failed");
     ///
     /// // Wait up to 5 seconds for data
     /// if let Some(data) = subscription.next_timeout(Duration::from_secs(5)) {

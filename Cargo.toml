@@ -598,30 +598,6 @@ name = "readme_place_order"
 path = "examples/sync/readme_place_order.rs"
 required-features = ["sync"]
 
-[[example]]
-name = "capture_order_responses"
-path = "examples/capture_order_responses.rs"
-required-features = ["sync"]
-
-[[example]]
-name = "capture_order_list_responses"
-path = "examples/capture_order_list_responses.rs"
-required-features = ["sync"]
-
-[[example]]
-name = "parse_recorded_messages"
-path = "examples/parse_recorded_messages.rs"
-required-features = ["sync"]
-
-[[example]]
-name = "capture_simple_responses"
-path = "examples/capture_simple_responses.rs"
-required-features = ["sync"]
-
-[[example]]
-name = "test_order_flow"
-path = "examples/test_order_flow.rs"
-required-features = ["sync"]
 
 [[example]]
 name = "trace_test"

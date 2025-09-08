@@ -86,7 +86,59 @@ let contract = Contract::stock("7203")
 
 For detailed migration instructions, see the [Contract Builder Guide](docs/contract-builder.md).
 
-### 3. TradingHours Enum Replaces Boolean Parameters
+### 3. New Market Data Fluent API
+
+The market data subscription API now uses a fluent builder pattern for better discoverability and type safety.
+
+#### Before (v1.x)
+```rust
+use ibapi::Client;
+
+let client = Client::connect("127.0.0.1:4002", 100)?;
+let contract = Contract::stock("AAPL").build();
+
+// Old API with positional parameters
+let subscription = client.market_data(
+    &contract,
+    &["233", "236"],  // generic ticks
+    false,            // snapshot
+    false             // regulatory snapshot
+)?;
+```
+
+#### After (v2.x)
+```rust
+use ibapi::Client;
+
+let client = Client::connect("127.0.0.1:4002", 100)?;
+let contract = Contract::stock("AAPL").build();
+
+// New fluent API - more discoverable and readable
+let subscription = client.market_data(&contract)
+    .generic_ticks(&["233", "236"])
+    .subscribe()?;
+
+// Snapshot mode
+let snapshot = client.market_data(&contract)
+    .snapshot()
+    .subscribe()?;
+
+// With all options
+let subscription = client.market_data(&contract)
+    .generic_ticks(&["233", "236"])
+    .snapshot()
+    .regulatory_snapshot()
+    .subscribe()?;
+```
+
+#### Key Improvements
+
+1. **Fluent interface**: Chain methods for better readability
+2. **Discoverable API**: IDE autocomplete shows available options
+3. **Smart defaults**: Only specify what you need to change
+4. **Self-documenting**: Method names clearly express intent
+
+### 4. TradingHours Enum Replaces Boolean Parameters
 
 All market data methods that previously used `use_rth: bool` now use the `TradingHours` enum for better type safety and clarity.
 
@@ -155,7 +207,18 @@ let contract = Contract::stock("AAPL");
 let contract = Contract::stock("AAPL").build();
 ```
 
-3. **Update trading hours parameters** - use enum instead of bool:
+3. **Update market data subscriptions** - use the fluent API:
+```rust
+// Old (v1.x)
+let subscription = client.market_data(&contract, &["233"], false, false)?;
+
+// New (v2.x)
+let subscription = client.market_data(&contract)
+    .generic_ticks(&["233"])
+    .subscribe()?;
+```
+
+4. **Update trading hours parameters** - use enum instead of bool:
 ```rust
 // Old (v1.x)
 client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, true)?;
@@ -242,9 +305,10 @@ While migrating, you might want to take advantage of new features:
 
 1. **Async support**: Choose between sync and async implementations
 2. **Type-safe contract builder**: New builder API with compile-time validation
-3. **Improved type safety**: TradingHours enum replaces boolean parameters
-4. **Trace functionality**: Record interactions when debug logging is enabled
-5. **Better error messages**: More descriptive errors throughout
+3. **Fluent market data API**: Builder pattern for market data subscriptions
+4. **Improved type safety**: TradingHours enum replaces boolean parameters
+5. **Trace functionality**: Record interactions when debug logging is enabled
+6. **Better error messages**: More descriptive errors throughout
 
 ## Getting Help
 
@@ -258,7 +322,8 @@ Migration from v1.x to v2.x requires these changes:
 
 1. **Update Cargo.toml**: Add `features = ["sync"]` to your dependency
 2. **Update contract creation**: Add `.build()` to contract factory methods
-3. **Update trading hours**: Replace `bool` with `TradingHours` enum
-4. **Run `cargo build`** to catch any remaining issues
+3. **Update market data subscriptions**: Use the new fluent API with `.subscribe()`
+4. **Update trading hours**: Replace `bool` with `TradingHours` enum
+5. **Run `cargo build`** to catch any remaining issues
 
 The changes are minimal and mostly mechanical - your application logic remains the same!

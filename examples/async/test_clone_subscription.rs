@@ -15,8 +15,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a stock contract
     let contract = Contract::stock("AAPL").build();
 
-    // Request market data
-    let subscription = client.market_data(&contract, &[], false, false).await?;
+    // Request market data using the new fluent API
+    let subscription = client.market_data(&contract).subscribe().await?;
 
     // Clone the subscription
     let subscription_clone = subscription.clone();

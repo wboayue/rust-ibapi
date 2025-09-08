@@ -18,8 +18,9 @@ use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, F
 use crate::connection::{sync::Connection, ConnectionMetadata};
 use crate::contracts::{Contract, OptionComputation, SecurityType};
 use crate::errors::Error;
+use crate::market_data::builder::MarketDataBuilder;
 use crate::market_data::historical::{self, HistogramEntry};
-use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, WhatToShow};
+use crate::market_data::realtime::{self, Bar, BarSize, DepthMarketDataDescription, MarketDepths, MidPoint, WhatToShow};
 use crate::market_data::{MarketDataType, TradingHours};
 use crate::messages::{OutgoingMessages, RequestMessage};
 use crate::news::NewsArticle;
@@ -1476,71 +1477,59 @@ impl Client {
 
     /// Requests real time market data.
     ///
-    /// Returns market data for an instrument either in real time or 10-15 minutes delayed data.
+    /// Creates a market data subscription builder with a fluent interface.
+    ///
+    /// This is the preferred way to subscribe to market data, providing a more
+    /// intuitive and discoverable API than the raw method.
     ///
     /// # Arguments
-    ///
-    /// * `contract` - Contract for which the data is being requested.
-    /// * `generic_ticks` - IDs of the available generic ticks:
-    ///   - 100 Option Volume (currently for stocks)
-    ///   - 101 Option Open Interest (currently for stocks)
-    ///   - 104 Historical Volatility (currently for stocks)
-    ///   - 105 Average Option Volume (currently for stocks)
-    ///   - 106 Option Implied Volatility (currently for stocks)
-    ///   - 162 Index Future Premium
-    ///   - 165 Miscellaneous Stats
-    ///   - 221 Mark Price (used in TWS P&L computations)
-    ///   - 225 Auction values (volume, price and imbalance)
-    ///   - 233 RTVolume - contains the last trade price, last trade size, last trade time, total volume, VWAP, and single trade flag.
-    ///   - 236 Shortable
-    ///   - 256 Inventory
-    ///   - 258 Fundamental Ratios
-    ///   - 411 Realtime Historical Volatility
-    ///   - 456 IBDividends
-    /// * `snapshot` - for users with corresponding real time market data subscriptions. A true value will return a one-time snapshot, while a false value will provide streaming data.
-    /// * `regulatory_snapshot` - snapshot for US stocks requests NBBO snapshots for users which have "US Securities Snapshot Bundle" subscription but not corresponding Network A, B, or C subscription necessary for streaming market data. One-time snapshot of current market price that will incur a fee of 1 cent to the account per snapshot.
+    /// * `contract` - The contract to receive market data for
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::{contracts::Contract, market_data::realtime::TickTypes, Client};
+    /// use ibapi::prelude::*;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
     /// let contract = Contract::stock("AAPL").build();
     ///
-    /// // https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#available-tick-types
-    /// let generic_ticks = &["233", "293"];
-    /// let snapshot = false;
-    /// let regulatory_snapshot = false;
-    ///
-    /// let subscription = client
-    ///     .market_data(&contract, generic_ticks, snapshot, regulatory_snapshot)
-    ///     .expect("error requesting market data");
+    /// // Subscribe to real-time streaming data with specific tick types
+    /// let subscription = client.market_data(&contract)
+    ///     .generic_ticks(&["233", "236"])  // RTVolume and Shortable
+    ///     .subscribe()
+    ///     .expect("subscription failed");
     ///
     /// for tick in &subscription {
     ///     match tick {
-    ///         TickTypes::Price(tick_price) => println!("{tick_price:?}"),
-    ///         TickTypes::Size(tick_size) => println!("{tick_size:?}"),
-    ///         TickTypes::PriceSize(tick_price_size) => println!("{tick_price_size:?}"),
-    ///         TickTypes::Generic(tick_generic) => println!("{tick_generic:?}"),
-    ///         TickTypes::String(tick_string) => println!("{tick_string:?}"),
-    ///         TickTypes::EFP(tick_efp) => println!("{tick_efp:?}"),
-    ///         TickTypes::OptionComputation(option_computation) => println!("{option_computation:?}"),
-    ///         TickTypes::RequestParameters(tick_request_parameters) => println!("{tick_request_parameters:?}"),
-    ///         TickTypes::Notice(notice) => println!("{notice:?}"),
+    ///         TickTypes::Price(price) => println!("Price: {price:?}"),
+    ///         TickTypes::Size(size) => println!("Size: {size:?}"),
     ///         TickTypes::SnapshotEnd => subscription.cancel(),
+    ///         _ => {}
     ///     }
     /// }
     /// ```
-    pub fn market_data(
-        &self,
-        contract: &Contract,
-        generic_ticks: &[&str],
-        snapshot: bool,
-        regulatory_snapshot: bool,
-    ) -> Result<Subscription<TickTypes>, Error> {
-        realtime::market_data(self, contract, generic_ticks, snapshot, regulatory_snapshot)
+    ///
+    /// ```no_run
+    /// use ibapi::prelude::*;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("AAPL").build();
+    ///
+    /// // Request a one-time snapshot
+    /// let subscription = client.market_data(&contract)
+    ///     .snapshot()
+    ///     .subscribe()
+    ///     .expect("subscription failed");
+    ///
+    /// for tick in &subscription {
+    ///     if let TickTypes::SnapshotEnd = tick {
+    ///         println!("Snapshot complete");
+    ///         break;
+    ///     }
+    /// }
+    /// ```
+    pub fn market_data<'a>(&'a self, contract: &'a Contract) -> MarketDataBuilder<'a, Self> {
+        MarketDataBuilder::new(self, contract)
     }
 
     // === News ===
@@ -3507,11 +3496,12 @@ mod tests {
 
         let contract = Contract::stock("AAPL").build();
         let generic_ticks = vec!["100", "101", "104"]; // Option volume, option open interest, historical volatility
-        let snapshot = true;
-        let regulatory_snapshot = false;
 
         let subscription = client
-            .market_data(&contract, &generic_ticks, snapshot, regulatory_snapshot)
+            .market_data(&contract)
+            .generic_ticks(&generic_ticks)
+            .snapshot()
+            .subscribe()
             .expect("Failed to request market data");
 
         let mut tick_count = 0;

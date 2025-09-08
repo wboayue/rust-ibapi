@@ -1,5 +1,6 @@
 //! Market data types and functionality
 
+pub mod builder;
 pub mod historical;
 pub mod realtime;
 
