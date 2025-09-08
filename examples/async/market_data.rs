@@ -1,88 +1,155 @@
 #![allow(clippy::uninlined_format_args)]
-//! Async real-time market data example
+//! Async Market Data example
 //!
-//! This example demonstrates how to subscribe to real-time market data using the async API.
+//! This example demonstrates how to subscribe to market data using the async API.
+//! It shows streaming data, snapshots, and builder method chaining.
 //!
 //! # Usage
-//!
-//! Make sure IB Gateway or TWS is running with API connections enabled, then run:
 //!
 //! ```bash
 //! cargo run --features async --example async_market_data
 //! ```
-//!
-//! # Configuration
-//!
-//! - Adjust the connection address if needed (default: 127.0.0.1:4002)
-//! - Change the stock symbol if desired (default: AAPL)
-//! - Modify generic tick list to receive different data types
 
 use std::sync::Arc;
 
 use ibapi::prelude::*;
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
-    // Connect to IB Gateway (port 4002) or TWS (port 7497)
     let client = Arc::new(Client::connect("127.0.0.1:4002", 100).await?);
     println!("Connected to IB Gateway");
 
-    // Create a stock contract
     let contract = Contract::stock("AAPL").build();
-    println!("Subscribing to market data for {}", contract.symbol);
 
-    // Request market data using the new fluent API
-    // Generic tick list:
-    // - 233: RTVolume (last trade price, size, time, volume)
-    // - 236: Shortable shares
-    let market_data = client.market_data(&contract).generic_ticks(&["233", "236"]).subscribe().await?;
-    println!("Market data subscription created");
+    println!("Market Data Examples for AAPL\n");
+    println!("{}", "=".repeat(50));
 
-    // Process market data stream
-    let mut market_data = market_data;
+    // Example 1: Basic streaming with specific tick types
+    example_streaming_with_tick_types(&client, &contract).await?;
+
+    println!("\n{}\n", "=".repeat(50));
+
+    // Example 2: Request a one-time snapshot
+    example_snapshot(&client, &contract).await?;
+
+    println!("\n{}\n", "=".repeat(50));
+
+    // Example 3: Demonstrating builder method chaining
+    example_builder_chaining(&client, &contract).await?;
+
+    println!("\nAll examples completed!");
+    Ok(())
+}
+
+async fn example_streaming_with_tick_types(client: &Arc<Client>, contract: &Contract) -> Result<(), Box<dyn std::error::Error>> {
+    println!("Example 1: Streaming with specific tick types\n");
+
+    // https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#available-tick-types
+    let mut subscription = client
+        .market_data(contract)
+        .generic_ticks(&["233", "236", "293"]) // RTVolume, Shortable, Trade Count
+        .subscribe()
+        .await?;
+
     let mut tick_count = 0;
-
-    while let Some(tick) = market_data.next().await {
-        tick_count += 1;
-        if tick_count > 20 {
-            break;
-        } // Take first 20 ticks for demo
-        match tick? {
-            TickTypes::Price(tick) => {
-                println!("[{}] Price - {}: ${:.2}", tick_count, tick.tick_type, tick.price);
-                if tick.attributes.can_auto_execute {
+    while let Some(result) = subscription.next().await {
+        match result? {
+            TickTypes::Price(price) => {
+                println!("Price - Type: {:?}, Value: ${:.2}", price.tick_type, price.price);
+                if price.attributes.can_auto_execute {
                     println!("  -> Can auto-execute");
                 }
             }
-            TickTypes::Size(tick) => {
-                println!("[{}] Size - {}: {:.0}", tick_count, tick.tick_type, tick.size);
+            TickTypes::Size(size) => {
+                println!("Size - Type: {:?}, Value: {:.0}", size.tick_type, size.size);
             }
-            TickTypes::String(tick) => {
-                println!("[{}] String - {}: {}", tick_count, tick.tick_type, tick.value);
-            }
-            TickTypes::Generic(tick) => {
-                println!("[{}] Generic - {}: {:.2}", tick_count, tick.tick_type, tick.value);
-            }
-            TickTypes::OptionComputation(comp) => {
+            TickTypes::PriceSize(price_size) => {
                 println!(
-                    "[{}] Option - IV: {:.2}%, Delta: {:.3}",
-                    tick_count,
-                    comp.implied_volatility.unwrap_or(0.0) * 100.0,
-                    comp.delta.unwrap_or(0.0)
+                    "PriceSize - PriceType: {:?}, Price: ${:.2}, Size: {:.0}",
+                    price_size.price_tick_type, price_size.price, price_size.size
                 );
             }
-            TickTypes::SnapshotEnd => {
-                println!("[{tick_count}] Snapshot completed");
-                break;
+            TickTypes::String(string) => {
+                println!("String - Type: {:?}, Value: {}", string.tick_type, string.value);
+            }
+            TickTypes::Generic(generic) => {
+                println!("Generic - Type: {:?}, Value: {:.2}", generic.tick_type, generic.value);
             }
             TickTypes::Notice(notice) => {
-                println!("[{}] Notice ({}): {}", tick_count, notice.code, notice.message);
+                println!("Notice - Code: {}, Message: {}", notice.code, notice.message);
+            }
+            _ => {}
+        }
+
+        tick_count += 1;
+        if tick_count >= 10 {
+            println!("\nReceived 10 ticks, cancelling subscription...");
+            subscription.cancel().await;
+            break;
+        }
+    }
+    Ok(())
+}
+
+async fn example_snapshot(client: &Arc<Client>, contract: &Contract) -> Result<(), Box<dyn std::error::Error>> {
+    println!("Example 2: One-time snapshot\n");
+
+    let mut snapshot_subscription = client.market_data(contract).snapshot().subscribe().await?;
+
+    while let Some(result) = snapshot_subscription.next().await {
+        match result? {
+            TickTypes::Price(price) => {
+                println!("Snapshot Price - Type: {:?}, Value: ${:.2}", price.tick_type, price.price);
+            }
+            TickTypes::Size(size) => {
+                println!("Snapshot Size - Type: {:?}, Value: {:.0}", size.tick_type, size.size);
+            }
+            TickTypes::SnapshotEnd => {
+                println!("\nSnapshot completed!");
+                break;
             }
             _ => {}
         }
     }
+    Ok(())
+}
 
-    println!("\nReceived {tick_count} ticks. Example completed!");
+async fn example_builder_chaining(client: &Arc<Client>, contract: &Contract) -> Result<(), Box<dyn std::error::Error>> {
+    println!("Example 3: Builder method chaining\n");
+    println!("Demonstrating how builder methods can be combined and overridden\n");
+
+    // The builder pattern allows chaining multiple configuration methods.
+    // Later method calls override earlier ones for the same setting.
+    let mut subscription = client
+        .market_data(contract)
+        .generic_ticks(&["100", "101", "104"]) // Option Volume, Open Interest, Historical Vol
+        .snapshot() // Initially set to snapshot mode
+        .streaming() // Override to streaming mode (this takes precedence)
+        .subscribe()
+        .await?;
+
+    println!("This subscription is in streaming mode (not snapshot)");
+    println!("Listening for generic ticks...\n");
+
+    let mut tick_count = 0;
+    while let Some(result) = subscription.next().await {
+        match result? {
+            TickTypes::Generic(generic) => {
+                println!("Generic tick - Type: {:?}, Value: {:.2}", generic.tick_type, generic.value);
+                tick_count += 1;
+                if tick_count >= 5 {
+                    println!("\nReceived 5 generic ticks, cancelling...");
+                    subscription.cancel().await;
+                    break;
+                }
+            }
+            TickTypes::Notice(notice) => {
+                println!("Notice - Code: {}, Message: {}", notice.code, notice.message);
+            }
+            _ => {}
+        }
+    }
     Ok(())
 }
