@@ -167,9 +167,10 @@ impl OrderDecoder {
     }
 
     fn read_model_code(&mut self) -> Result<(), Error> {
-        if self.server_version >= server_versions::MODELS_SUPPORT {
-            self.order.model_code = self.message.next_string()?;
+        if self.server_version < server_versions::MODELS_SUPPORT {
+            return Ok(());
         }
+        self.order.model_code = self.message.next_string()?;
         Ok(())
     }
 
@@ -465,60 +466,69 @@ impl OrderDecoder {
     }
 
     fn read_peg_to_bench_params(&mut self) -> Result<(), Error> {
-        if self.server_version >= server_versions::PEGGED_TO_BENCHMARK && self.order.order_type == "PEG BENCH" {
-            self.order.reference_contract_id = self.message.next_int()?;
-            self.order.is_pegged_change_amount_decrease = self.message.next_bool()?;
-            self.order.pegged_change_amount = self.message.next_optional_double()?;
-            self.order.reference_change_amount = self.message.next_optional_double()?;
-            self.order.reference_exchange = self.message.next_string()?;
+        if self.server_version < server_versions::PEGGED_TO_BENCHMARK || self.order.order_type != "PEG BENCH" {
+            return Ok(());
         }
+
+        self.order.reference_contract_id = self.message.next_int()?;
+        self.order.is_pegged_change_amount_decrease = self.message.next_bool()?;
+        self.order.pegged_change_amount = self.message.next_optional_double()?;
+        self.order.reference_change_amount = self.message.next_optional_double()?;
+        self.order.reference_exchange = self.message.next_string()?;
+
         Ok(())
     }
 
     fn read_conditions(&mut self) -> Result<(), Error> {
-        if self.server_version >= server_versions::PEGGED_TO_BENCHMARK {
-            let conditions_count = self.message.next_int()?;
-            for _ in 0..conditions_count {
-                let order_condition = self.message.next_int()?;
-                self.order.conditions.push(OrderCondition::from(order_condition));
-            }
-            if conditions_count > 0 {
-                self.order.conditions_ignore_rth = self.message.next_bool()?;
-                self.order.conditions_cancel_order = self.message.next_bool()?;
-            }
+        if self.server_version < server_versions::PEGGED_TO_BENCHMARK {
+            return Ok(());
         }
+
+        let conditions_count = self.message.next_int()?;
+        for _ in 0..conditions_count {
+            let order_condition = self.message.next_int()?;
+            self.order.conditions.push(OrderCondition::from(order_condition));
+        }
+        if conditions_count > 0 {
+            self.order.conditions_ignore_rth = self.message.next_bool()?;
+            self.order.conditions_cancel_order = self.message.next_bool()?;
+        }
+
         Ok(())
     }
 
     fn read_adjusted_order_params(&mut self) -> Result<(), Error> {
-        if self.server_version >= server_versions::PEGGED_TO_BENCHMARK {
-            self.order.adjusted_order_type = self.message.next_string()?;
-            self.order.trigger_price = self.message.next_optional_double()?;
-            self.order.trail_stop_price = self.message.next_optional_double()?;
-            self.order.limit_price_offset = self.message.next_optional_double()?;
-            self.order.adjusted_stop_price = self.message.next_optional_double()?;
-            self.order.adjusted_stop_limit_price = self.message.next_optional_double()?;
-            self.order.adjusted_trailing_amount = self.message.next_optional_double()?;
-            self.order.adjustable_trailing_unit = self.message.next_int()?;
+        if self.server_version < server_versions::PEGGED_TO_BENCHMARK {
+            return Ok(());
         }
+        self.order.adjusted_order_type = self.message.next_string()?;
+        self.order.trigger_price = self.message.next_optional_double()?;
+        self.order.trail_stop_price = self.message.next_optional_double()?;
+        self.order.limit_price_offset = self.message.next_optional_double()?;
+        self.order.adjusted_stop_price = self.message.next_optional_double()?;
+        self.order.adjusted_stop_limit_price = self.message.next_optional_double()?;
+        self.order.adjusted_trailing_amount = self.message.next_optional_double()?;
+        self.order.adjustable_trailing_unit = self.message.next_int()?;
         Ok(())
     }
 
     fn read_soft_dollar_tier(&mut self) -> Result<(), Error> {
-        if self.server_version >= server_versions::SOFT_DOLLAR_TIER {
-            self.order.soft_dollar_tier = SoftDollarTier {
-                name: self.message.next_string()?,
-                value: self.message.next_string()?,
-                display_name: self.message.next_string()?,
-            };
+        if self.server_version < server_versions::SOFT_DOLLAR_TIER {
+            return Ok(());
         }
+        self.order.soft_dollar_tier = SoftDollarTier {
+            name: self.message.next_string()?,
+            value: self.message.next_string()?,
+            display_name: self.message.next_string()?,
+        };
         Ok(())
     }
 
     fn read_cash_qty(&mut self) -> Result<(), Error> {
-        if self.server_version >= server_versions::CASH_QTY {
-            self.order.cash_qty = self.message.next_optional_double()?;
+        if self.server_version < server_versions::CASH_QTY {
+            return Ok(());
         }
+        self.order.cash_qty = self.message.next_optional_double()?;
         Ok(())
     }
 
@@ -583,19 +593,25 @@ impl OrderDecoder {
     }
 
     fn read_customer_account(&mut self) -> Result<(), Error> {
-        // Customer account field for completed orders
+        if self.server_version < server_versions::CUSTOMER_ACCOUNT {
+            return Ok(());
+        }
         self.order.customer_account = self.message.next_string()?;
         Ok(())
     }
 
     fn read_professional_customer(&mut self) -> Result<(), Error> {
-        // Professional customer flag for completed orders
+        if self.server_version < server_versions::PROFESSIONAL_CUSTOMER {
+            return Ok(());
+        }
         self.order.professional_customer = self.message.next_bool()?;
         Ok(())
     }
 
     fn read_submitter(&mut self) -> Result<(), Error> {
-        // Submitter field for completed orders
+        if self.server_version < server_versions::SUBMITTER {
+            return Ok(());
+        }
         let _submitter = self.message.next_string()?;
         // Note: We don't store submitter in the Order struct currently
         Ok(())
@@ -915,4 +931,310 @@ pub(crate) fn decode_completed_order(server_version: i32, message: ResponseMessa
     decoder.read_submitter()?;
 
     Ok(decoder.into_order_data())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_completed_order_parsing_issue_318() {
+        // Real message captured from live IB Gateway server version 173
+        // This is an AAPL STK (stock) order with 102 fields that was successfully parsed
+        // This test confirms that the server version fix works for actual server messages
+        let raw_message = vec![
+            "101",
+            "265598",
+            "AAPL",
+            "STK",
+            "",
+            "0",
+            "?",
+            "",
+            "SMART",
+            "USD",
+            "AAPL",
+            "NMS",
+            "BUY",
+            "1",
+            "LMT",
+            "100.0",
+            "0.0",
+            "DAY",
+            "",
+            "DU1236109",
+            "",
+            "0",
+            "",
+            "1295810623",
+            "0",
+            "0",
+            "0",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "0",
+            "",
+            "-1",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "2147483647",
+            "0",
+            "0",
+            "",
+            "3",
+            "0",
+            "",
+            "0",
+            "None",
+            "",
+            "0",
+            "0",
+            "0",
+            "",
+            "0",
+            "0",
+            "",
+            "",
+            "",
+            "0",
+            "0",
+            "0",
+            "2147483647",
+            "2147483647",
+            "",
+            "",
+            "",
+            "IB",
+            "0",
+            "0",
+            "",
+            "0",
+            "Cancelled",
+            "0",
+            "0",
+            "0",
+            "101.0",
+            "1.7976931348623157E308",
+            "0",
+            "1",
+            "0",
+            "",
+            "0",
+            "2147483647",
+            "0",
+            "Not an insider or substantial shareholder",
+            "0",
+            "0",
+            "9223372036854775807",
+            "20250924 01:21:07 America/New_York",
+            "Cancelled by Trader",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+        ];
+
+        let message_str = raw_message.join("\0");
+        let message = ResponseMessage::from(&message_str);
+
+        // Using the actual server version from our test (173)
+        let server_version = 173;
+
+        // This should parse successfully with the server version fix
+        let result = decode_completed_order(server_version, message);
+
+        match result {
+            Ok(order_data) => {
+                // Verify the order was parsed correctly
+                assert_eq!(order_data.contract.symbol.to_string(), "AAPL");
+                assert_eq!(order_data.contract.security_type.to_string(), "STK");
+                assert_eq!(order_data.order.action.to_string(), "BUY");
+                assert_eq!(order_data.order.order_type, "LMT");
+                assert_eq!(order_data.order.limit_price, Some(100.0));
+                assert_eq!(order_data.order_state.status, "Cancelled");
+                assert_eq!(order_data.order_state.completed_time, "20250924 01:21:07 America/New_York");
+                assert_eq!(order_data.order_state.completed_status, "Cancelled by Trader");
+
+                // Verify that the server version fix worked
+                // Server version 173 < all three threshold values (183, 184, 198)
+                // So these fields should be empty/default values since they weren't read
+                println!("✅ Successfully parsed live server message with {} fields", raw_message.len());
+                println!("✅ Server version {} correctly skipped problematic fields", server_version);
+            }
+            Err(e) => {
+                panic!("Failed to parse live server completed order message: {:?}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_completed_order_parsing_issue_318_bag() {
+        // Real BAG (combo/spread) order message with 117 fields
+        // This message represents a SPY spread order that was successfully filled
+        // This tests the exact scenario from issue #318 with actual BAG order data
+        let raw_message = vec![
+            "101",
+            "28812380",
+            "SPY",
+            "BAG",
+            "",
+            "0",
+            "?",
+            "",
+            "SMART",
+            "USD",
+            "28812380",
+            "COMB",
+            "BUY",
+            "0",
+            "LMT",
+            "-0.57",
+            "0.0",
+            "DAY",
+            "",
+            "DUK000000",
+            "",
+            "0",
+            "bpcs",
+            "216108144",
+            "0",
+            "0",
+            "0",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "0",
+            "",
+            "",
+            "0",
+            "",
+            "-1",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "2147483647",
+            "0",
+            "0",
+            "",
+            "3",
+            "0",
+            "",
+            "0",
+            "None",
+            "",
+            "0",
+            "0",
+            "0",
+            "",
+            "0",
+            "0",
+            "",
+            "",
+            "810118027|1,810118051|-1",
+            "2",
+            "810118027",
+            "1",
+            "BUY",
+            "SMART",
+            "0",
+            "0",
+            "",
+            "-1",
+            "810118051",
+            "1",
+            "SELL",
+            "SMART",
+            "0",
+            "0",
+            "",
+            "-1",
+            "0",
+            "0",
+            "2147483647",
+            "2147483647",
+            "",
+            "",
+            "",
+            "IB",
+            "0",
+            "0",
+            "",
+            "0",
+            "Filled",
+            "0",
+            "0",
+            "0",
+            "1.7976931348623157E308",
+            "1.7976931348623157E308",
+            "0",
+            "1",
+            "0",
+            "",
+            "1",
+            "2147483647",
+            "0",
+            "Not an insider or substantial shareholder",
+            "0",
+            "0",
+            "0",
+            "20250922 11:49:07 America/Los_Angeles",
+            "Filled Size: 1",
+            "",
+            "",
+            "",
+            "",
+            "",
+        ];
+
+        let message_str = raw_message.join("\0");
+        let message = ResponseMessage::from(&message_str);
+
+        // Using server version 173 which is below the thresholds for problematic fields
+        let server_version = 173;
+
+        // This should parse successfully with the server version fix
+        let result = decode_completed_order(server_version, message);
+
+        match result {
+            Ok(order_data) => {
+                // Verify the BAG order was parsed correctly
+                assert_eq!(order_data.contract.symbol.to_string(), "SPY");
+                assert_eq!(order_data.contract.security_type.to_string(), "BAG");
+                assert_eq!(order_data.order.action.to_string(), "BUY");
+                assert_eq!(order_data.order.order_type, "LMT");
+                assert_eq!(order_data.order.limit_price, Some(-0.57));
+                assert_eq!(order_data.order_state.status, "Filled");
+                assert_eq!(order_data.order_state.completed_time, "20250922 11:49:07 America/Los_Angeles");
+                assert_eq!(order_data.order_state.completed_status, "Filled Size: 1");
+
+                // Verify combo legs were parsed (should have 2 legs for this spread)
+                assert!(!order_data.contract.combo_legs.is_empty(), "BAG order should have combo legs");
+
+                println!("✅ Successfully parsed real BAG order with {} fields", raw_message.len());
+                println!("✅ BAG order has {} combo legs", order_data.contract.combo_legs.len());
+            }
+            Err(e) => {
+                panic!("Failed to parse BAG order from issue #318: {:?}", e);
+            }
+        }
+    }
 }

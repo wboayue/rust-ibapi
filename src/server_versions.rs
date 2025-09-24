@@ -241,3 +241,79 @@ pub const HMDS_MARKET_DATA_IN_SHARES: i32 = 175;
 pub const BOND_ISSUERID: i32 = 176;
 /// Minimum server version for FA profile desupport.
 pub const FA_PROFILE_DESUPPORT: i32 = 177;
+
+pub const PENDING_PRICE_REVISION: i32 = 178;
+
+pub const FUND_DATA_FIELDS: i32 = 179;
+
+pub const MANUAL_ORDER_TIME_EXERCISE_OPTIONS: i32 = 180;
+
+pub const OPEN_ORDER_AD_STRATEGY: i32 = 181;
+
+pub const LAST_TRADE_DATE: i32 = 182;
+
+pub const CUSTOMER_ACCOUNT: i32 = 183;
+
+pub const PROFESSIONAL_CUSTOMER: i32 = 184;
+
+pub const BOND_ACCRUED_INTEREST: i32 = 185;
+
+pub const INELIGIBILITY_REASONS: i32 = 186;
+
+pub const RFQ_FIELDS: i32 = 187;
+
+pub const BOND_TRADING_HOURS: i32 = 188;
+
+pub const INCLUDE_OVERNIGHT: i32 = 189;
+
+pub const UNDO_RFQ_FIELDS: i32 = 190;
+
+pub const PERM_ID_AS_LONG: i32 = 191;
+
+pub const CME_TAGGING_FIELDS: i32 = 192;
+
+pub const CME_TAGGING_FIELDS_IN_OPEN_ORDER: i32 = 193;
+
+pub const ERROR_TIME: i32 = 194;
+
+pub const FULL_ORDER_PREVIEW_FIELDS: i32 = 195;
+
+pub const HISTORICAL_DATA_END: i32 = 196;
+
+pub const CURRENT_TIME_IN_MILLIS: i32 = 197;
+
+pub const SUBMITTER: i32 = 198;
+
+pub const IMBALANCE_ONLY: i32 = 199;
+
+pub const PARAMETRIZED_DAYS_OF_EXECUTIONS: i32 = 200;
+
+pub const PROTOBUF: i32 = 201;
+
+pub const ZERO_STRIKE: i32 = 202;
+
+pub const PROTOBUF_PLACE_ORDER: i32 = 203;
+
+pub const PROTOBUF_COMPLETED_ORDER: i32 = 204;
+
+pub const PROTOBUF_CONTRACT_DATA: i32 = 205;
+
+pub const PROTOBUF_MARKET_DATA: i32 = 206;
+
+pub const PROTOBUF_ACCOUNTS_POSITIONS: i32 = 207;
+
+pub const PROTOBUF_HISTORICAL_DATA: i32 = 208;
+
+pub const PROTOBUF_NEWS_DATA: i32 = 209;
+
+pub const PROTOBUF_SCAN_DATA: i32 = 210;
+
+pub const PROTOBUF_REST_MESSAGES_1: i32 = 211;
+
+pub const PROTOBUF_REST_MESSAGES_2: i32 = 212;
+
+pub const PROTOBUF_REST_MESSAGES_3: i32 = 213;
+
+pub const ADD_Z_SUFFIX_TO_UTC_DATE_TIME: i32 = 214;
+
+pub const CANCEL_CONTRACT_DATA: i32 = 215;
