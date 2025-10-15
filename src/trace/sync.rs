@@ -6,9 +6,9 @@ use crate::trace::common::{storage::sync_ops, Interaction};
 ///
 /// # Example
 /// ```no_run
-/// use ibapi::trace;
+/// use ibapi::trace::blocking;
 ///
-/// if let Some(interaction) = trace::last_interaction() {
+/// if let Some(interaction) = blocking::last_interaction() {
 ///     println!("Last request: {}", interaction.request);
 ///     println!("Responses: {:?}", interaction.responses);
 /// }
@@ -28,9 +28,9 @@ pub fn last_interaction() -> Option<Interaction> {
 ///
 /// # Example
 /// ```no_run
-/// use ibapi::trace;
+/// use ibapi::trace::blocking;
 ///
-/// trace::record_request("REQ|123|AAPL|".to_string());
+/// blocking::record_request("REQ|123|AAPL|".to_string());
 /// ```
 pub fn record_request(message: String) {
     sync_ops::start_new_interaction(message);
@@ -46,11 +46,11 @@ pub fn record_request(message: String) {
 ///
 /// # Example
 /// ```no_run
-/// use ibapi::trace;
+/// use ibapi::trace::blocking;
 ///
-/// trace::record_request("REQ|123|AAPL|".to_string());
-/// trace::record_response("RESP|123|150.00|".to_string());
-/// trace::record_response("RESP|123|151.00|".to_string());
+/// blocking::record_request("REQ|123|AAPL|".to_string());
+/// blocking::record_response("RESP|123|150.00|".to_string());
+/// blocking::record_response("RESP|123|151.00|".to_string());
 /// ```
 pub fn record_response(message: String) {
     sync_ops::add_response_to_current(message);

@@ -556,7 +556,8 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::{contracts::SecurityType, Client};
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::SecurityType;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -1488,7 +1489,9 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::prelude::*;
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::realtime::TickTypes;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("AAPL").build();
@@ -1510,7 +1513,9 @@ impl Client {
     /// ```
     ///
     /// ```no_run
-    /// use ibapi::prelude::*;
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::realtime::TickTypes;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let contract = Contract::stock("AAPL").build();

@@ -37,6 +37,16 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
+
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
+        if context.and_then(|ctx| ctx.request_type) == Some(OutgoingMessages::RequestMarketData) {
+            let request_id =
+                request_id.ok_or_else(|| Error::InvalidArgument("request id required to cancel market data subscription".to_string()))?;
+            realtime::common::encoders::encode_cancel_market_data(request_id)
+        } else {
+            Err(Error::NotImplemented)
+        }
+    }
 }
 
 /// Requests news providers which the user has subscribed to.

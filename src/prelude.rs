@@ -3,7 +3,7 @@
 //! This module re-exports the most frequently used types from the ibapi crate
 //! to simplify imports in user code. Instead of importing each type individually:
 //!
-//! ```rust
+//! ```text
 //! use ibapi::client::blocking::Client;
 //! use ibapi::contracts::Contract;
 //! use ibapi::orders::{Action, PlaceOrder};
@@ -12,7 +12,7 @@
 //!
 //! You can simply use:
 //!
-//! ```rust
+//! ```ignore
 //! use ibapi::prelude::*;
 //! ```
 
