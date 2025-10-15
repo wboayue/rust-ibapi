@@ -15,6 +15,9 @@ exclude = [
     "justfile",
 ]
 
+[package.metadata.docs.rs]
+all-features = true
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
@@ -618,5 +621,4 @@ required-features = ["async"]
 name = "record_interactions"
 path = "examples/record_interactions.rs"
 required-features = ["sync"]
-
 

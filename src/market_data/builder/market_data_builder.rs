@@ -49,7 +49,7 @@ impl<'a, C> MarketDataBuilder<'a, C> {
     /// * "295" - Volume Rate
     /// * "411" - Real-time Historical Volatility
     ///
-    /// See: https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#available-tick-types
+    /// See: <https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#available-tick-types>
     pub fn generic_ticks(mut self, ticks: &[&str]) -> Self {
         self.generic_ticks = ticks.iter().map(|s| s.to_string()).collect();
         self

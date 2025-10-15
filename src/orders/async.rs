@@ -177,7 +177,7 @@ pub async fn submit_order(client: &Client, order_id: i32, contract: &Contract, o
 
 /// Submits an Order.
 /// After the order is submitted correctly, events will be returned concerning the order's activity.
-/// https://interactivebrokers.github.io/tws-api/order_submission.html
+/// <https://interactivebrokers.github.io/tws-api/order_submission.html>
 pub async fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
     verify::verify_order(client, order, order_id)?;
     verify::verify_order_contract(client, contract, order_id)?;

@@ -15,6 +15,7 @@
 //!
 //! For an overview of API usage, refer to the [README](https://github.com/wboayue/rust-ibapi/blob/main/README.md).
 
+#![warn(missing_docs)]
 // Allow octal-looking escapes in string literals (used in test data)
 #![allow(clippy::octal_escapes)]
 #![allow(clippy::bool_assert_comparison)]
