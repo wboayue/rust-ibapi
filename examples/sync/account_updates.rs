@@ -7,7 +7,7 @@
 //! ```
 
 use ibapi::accounts::{types::AccountId, AccountUpdate};
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 
 fn main() {
     env_logger::init();

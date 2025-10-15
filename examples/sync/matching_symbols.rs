@@ -6,7 +6,7 @@
 //! cargo run --features sync --example matching_symbols
 //! ```
 
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 
 fn main() {
     env_logger::init();

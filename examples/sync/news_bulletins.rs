@@ -6,7 +6,7 @@
 //! cargo run --features sync --example news_bulletins
 //! ```
 
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 
 fn main() {
     env_logger::init();

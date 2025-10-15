@@ -8,7 +8,7 @@
 //! cargo run --features sync --example managed_accounts
 //! ```
 
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 
 fn main() {
     env_logger::init();

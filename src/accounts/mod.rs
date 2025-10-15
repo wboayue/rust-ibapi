@@ -258,6 +258,14 @@ mod sync;
 mod r#async;
 
 #[cfg(feature = "sync")]
+pub mod blocking {
+    pub use super::sync::{
+        account_summary, account_updates, account_updates_multi, family_codes, managed_accounts, pnl, pnl_single, positions, positions_multi,
+        server_time,
+    };
+}
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub use sync::{
     account_summary, account_updates, account_updates_multi, family_codes, managed_accounts, pnl, pnl_single, positions, positions_multi, server_time,
 };

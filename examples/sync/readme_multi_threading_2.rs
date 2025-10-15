@@ -6,6 +6,7 @@
 //! cargo run --features sync --example readme_multi_threading_2
 //! ```
 
+use ibapi::client::blocking::Client;
 use std::thread;
 
 use ibapi::prelude::*;

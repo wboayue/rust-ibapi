@@ -26,7 +26,7 @@ use crate::messages::{OutgoingMessages, RequestMessage};
 use crate::news::NewsArticle;
 use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, OrderBuilder, OrderUpdate, Orders, PlaceOrder};
 use crate::scanner::ScannerData;
-use crate::subscriptions::Subscription;
+use crate::subscriptions::sync::Subscription;
 use crate::transport::{InternalSubscription, MessageBus, TcpMessageBus, TcpSocket};
 use crate::wsh::AutoFill;
 use crate::{accounts, contracts, market_data, news, orders, scanner, wsh};
@@ -61,7 +61,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -124,7 +124,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// // Connect to the TWS server at the given address with client ID.
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -134,7 +134,7 @@ impl Client {
     /// println!("next_valid_order_id: {next_valid_order_id}");
     /// ```
     pub fn next_valid_order_id(&self) -> Result<i32, Error> {
-        orders::next_valid_order_id(self)
+        orders::blocking::next_valid_order_id(self)
     }
 
     /// Sets the current value of order ID.
@@ -149,7 +149,7 @@ impl Client {
     ///
     /// # Example
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -170,7 +170,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let server_version = client.server_version();
@@ -193,7 +193,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -214,14 +214,14 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let server_time = client.server_time().expect("error requesting server time");
     /// println!("server time: {server_time:?}");
     /// ```
     pub fn server_time(&self) -> Result<OffsetDateTime, Error> {
-        accounts::server_time(self)
+        accounts::blocking::server_time(self)
     }
 
     /// Subscribes to [PositionUpdate]s for all accessible accounts.
@@ -230,7 +230,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::accounts::PositionUpdate;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -243,7 +243,7 @@ impl Client {
     /// }
     /// ```
     pub fn positions(&self) -> Result<Subscription<PositionUpdate>, Error> {
-        accounts::positions(self)
+        accounts::blocking::positions(self)
     }
 
     /// Subscribes to [PositionUpdateMulti] updates for account and/or model.
@@ -256,7 +256,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -269,7 +269,7 @@ impl Client {
     /// }
     /// ```
     pub fn positions_multi(&self, account: Option<&AccountId>, model_code: Option<&ModelCode>) -> Result<Subscription<PositionUpdateMulti>, Error> {
-        accounts::positions_multi(self, account, model_code)
+        accounts::blocking::positions_multi(self, account, model_code)
     }
 
     /// Creates subscription for real time daily PnL and unrealized PnL updates.
@@ -281,7 +281,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// use ibapi::accounts::types::AccountId;
@@ -293,7 +293,7 @@ impl Client {
     /// }
     /// ```
     pub fn pnl(&self, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
-        accounts::pnl(self, account, model_code)
+        accounts::blocking::pnl(self, account, model_code)
     }
 
     /// Requests real time updates for daily PnL of individual positions.
@@ -306,7 +306,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -321,7 +321,7 @@ impl Client {
     /// }
     /// ```
     pub fn pnl_single(&self, account: &AccountId, contract_id: ContractId, model_code: Option<&ModelCode>) -> Result<Subscription<PnLSingle>, Error> {
-        accounts::pnl_single(self, account, contract_id, model_code)
+        accounts::blocking::pnl_single(self, account, contract_id, model_code)
     }
 
     /// Requests a specific account’s summary. Subscribes to the account summary as presented in the TWS’ Account Summary tab. Data received is specified by using a specific tags value.
@@ -333,7 +333,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::accounts::AccountSummaryTags;
     /// use ibapi::accounts::types::AccountGroup;
     ///
@@ -347,7 +347,7 @@ impl Client {
     /// }
     /// ```
     pub fn account_summary(&self, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaryResult>, Error> {
-        accounts::account_summary(self, group, tags)
+        accounts::blocking::account_summary(self, group, tags)
     }
 
     /// Subscribes to a specific account’s information and portfolio.
@@ -360,7 +360,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::accounts::AccountUpdate;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -380,7 +380,7 @@ impl Client {
     /// }
     /// ```
     pub fn account_updates(&self, account: &AccountId) -> Result<Subscription<AccountUpdate>, Error> {
-        accounts::account_updates(self, account)
+        accounts::blocking::account_updates(self, account)
     }
 
     /// Requests account updates for account and/or model.
@@ -394,7 +394,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::accounts::AccountUpdateMulti;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -418,7 +418,7 @@ impl Client {
         account: Option<&AccountId>,
         model_code: Option<&ModelCode>,
     ) -> Result<Subscription<AccountUpdateMulti>, Error> {
-        accounts::account_updates_multi(self, account, model_code)
+        accounts::blocking::account_updates_multi(self, account, model_code)
     }
 
     /// Requests the accounts to which the logged user has access to.
@@ -426,7 +426,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -434,7 +434,7 @@ impl Client {
     /// println!("managed accounts: {accounts:?}")
     /// ```
     pub fn managed_accounts(&self) -> Result<Vec<String>, Error> {
-        accounts::managed_accounts(self)
+        accounts::blocking::managed_accounts(self)
     }
 
     // === Contracts ===
@@ -449,7 +449,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -461,12 +461,12 @@ impl Client {
     /// }
     /// ```
     pub fn contract_details(&self, contract: &Contract) -> Result<Vec<contracts::ContractDetails>, Error> {
-        contracts::contract_details(self, contract)
+        contracts::blocking::contract_details(self, contract)
     }
 
     /// Get current [FamilyCode]s for all accessible accounts.
     pub fn family_codes(&self) -> Result<Vec<FamilyCode>, Error> {
-        accounts::family_codes(self)
+        accounts::blocking::family_codes(self)
     }
 
     /// Requests details about a given market rule
@@ -475,7 +475,7 @@ impl Client {
     /// A list of market rule ids can be obtained by invoking [Self::contract_details()] for a particular contract.
     /// The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [contracts::ContractDetails].
     pub fn market_rule(&self, market_rule_id: i32) -> Result<contracts::MarketRule, Error> {
-        contracts::market_rule(self, market_rule_id)
+        contracts::blocking::market_rule(self, market_rule_id)
     }
 
     /// Requests matching stock symbols.
@@ -486,7 +486,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -496,7 +496,7 @@ impl Client {
     /// }
     /// ```
     pub fn matching_symbols(&self, pattern: &str) -> Result<impl Iterator<Item = contracts::ContractDescription>, Error> {
-        Ok(contracts::matching_symbols(self, pattern)?.into_iter())
+        Ok(contracts::blocking::matching_symbols(self, pattern)?.into_iter())
     }
 
     /// Calculates an option’s price based on the provided volatility and its underlying’s price.
@@ -509,7 +509,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -519,7 +519,7 @@ impl Client {
     /// println!("calculation: {calculation:?}");
     /// ```
     pub fn calculate_option_price(&self, contract: &Contract, volatility: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
-        contracts::calculate_option_price(self, contract, volatility, underlying_price)
+        contracts::blocking::calculate_option_price(self, contract, volatility, underlying_price)
     }
 
     /// Calculates the implied volatility based on the hypothetical option price and underlying price.
@@ -532,7 +532,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -542,7 +542,7 @@ impl Client {
     /// println!("calculation: {calculation:?}");
     /// ```
     pub fn calculate_implied_volatility(&self, contract: &Contract, option_price: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
-        contracts::calculate_implied_volatility(self, contract, option_price, underlying_price)
+        contracts::blocking::calculate_implied_volatility(self, contract, option_price, underlying_price)
     }
 
     /// Requests security definition option parameters for viewing a contract’s option chain.
@@ -580,7 +580,7 @@ impl Client {
         security_type: SecurityType,
         contract_id: i32,
     ) -> Result<Subscription<contracts::OptionChain>, Error> {
-        contracts::option_chain(self, symbol, exchange, security_type, contract_id)
+        contracts::blocking::option_chain(self, symbol, exchange, security_type, contract_id)
     }
 
     // === Orders ===
@@ -591,7 +591,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -601,7 +601,7 @@ impl Client {
     /// }
     /// ```
     pub fn all_open_orders(&self) -> Result<Subscription<Orders>, Error> {
-        orders::all_open_orders(self)
+        orders::blocking::all_open_orders(self)
     }
 
     /// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
@@ -612,7 +612,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 0).expect("connection failed");
     ///
@@ -622,7 +622,7 @@ impl Client {
     /// }
     /// ```
     pub fn auto_open_orders(&self, auto_bind: bool) -> Result<Subscription<Orders>, Error> {
-        orders::auto_open_orders(self, auto_bind)
+        orders::blocking::auto_open_orders(self, auto_bind)
     }
 
     /// Cancels an active [Order] placed by the same API client ID.
@@ -634,7 +634,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -645,7 +645,7 @@ impl Client {
     /// }
     /// ```
     pub fn cancel_order(&self, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
-        orders::cancel_order(self, order_id, manual_order_cancel_time)
+        orders::blocking::cancel_order(self, order_id, manual_order_cancel_time)
     }
 
     /// Requests completed [Order]s.
@@ -656,7 +656,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -666,7 +666,7 @@ impl Client {
     /// }
     /// ```
     pub fn completed_orders(&self, api_only: bool) -> Result<Subscription<Orders>, Error> {
-        orders::completed_orders(self, api_only)
+        orders::blocking::completed_orders(self, api_only)
     }
 
     /// Requests current day's (since midnight) executions matching the filter.
@@ -681,7 +681,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::orders::ExecutionFilter;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -697,7 +697,7 @@ impl Client {
     /// }
     /// ```
     pub fn executions(&self, filter: orders::ExecutionFilter) -> Result<Subscription<Executions>, Error> {
-        orders::executions(self, filter)
+        orders::blocking::executions(self, filter)
     }
 
     /// Cancels all open [Order]s.
@@ -705,14 +705,14 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
     /// client.global_cancel().expect("request failed");
     /// ```
     pub fn global_cancel(&self) -> Result<(), Error> {
-        orders::global_cancel(self)
+        orders::blocking::global_cancel(self)
     }
 
     /// Requests all open orders places by this specific API client (identified by the API client id).
@@ -721,7 +721,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -731,7 +731,7 @@ impl Client {
     /// }
     /// ```
     pub fn open_orders(&self) -> Result<Subscription<Orders>, Error> {
-        orders::open_orders(self)
+        orders::blocking::open_orders(self)
     }
 
     /// Places or modifies an [Order].
@@ -747,7 +747,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     /// use ibapi::orders::PlaceOrder;
     ///
@@ -776,7 +776,7 @@ impl Client {
     /// }
     /// ```
     pub fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
-        orders::place_order(self, order_id, contract, order)
+        orders::blocking::place_order(self, order_id, contract, order)
     }
 
     /// Submits or modifies an [Order] without returning a subscription.
@@ -798,7 +798,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     ///
     /// # fn main() -> Result<(), ibapi::Error> {
@@ -831,7 +831,7 @@ impl Client {
     /// # }
     /// ```
     pub fn submit_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<(), Error> {
-        orders::submit_order(self, order_id, contract, order)
+        orders::blocking::submit_order(self, order_id, contract, order)
     }
 
     /// Creates a subscription stream for receiving real-time order updates.
@@ -863,7 +863,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::orders::OrderUpdate;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -908,7 +908,7 @@ impl Client {
     /// This stream provides updates for all orders, not just a specific order.
     /// To track a specific order, filter the updates by order ID.
     pub fn order_update_stream(&self) -> Result<Subscription<OrderUpdate>, Error> {
-        orders::order_update_stream(self)
+        orders::blocking::order_update_stream(self)
     }
 
     /// Exercises an options contract.
@@ -931,7 +931,7 @@ impl Client {
         ovrd: bool,
         manual_order_time: Option<OffsetDateTime>,
     ) -> Result<Subscription<ExerciseOptions>, Error> {
-        orders::exercise_options(self, contract, exercise_action, exercise_quantity, account, ovrd, manual_order_time)
+        orders::blocking::exercise_options(self, contract, exercise_action, exercise_quantity, account, ovrd, manual_order_time)
     }
 
     // === Historical Market Data ===
@@ -939,7 +939,7 @@ impl Client {
     /// Returns the timestamp of earliest available historical data for a contract and data type.
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     /// use ibapi::market_data::historical::{self, WhatToShow};
     /// use ibapi::market_data::TradingHours;
@@ -960,7 +960,7 @@ impl Client {
         what_to_show: historical::WhatToShow,
         trading_hours: TradingHours,
     ) -> Result<OffsetDateTime, Error> {
-        historical::head_timestamp(self, contract, what_to_show, trading_hours)
+        historical::blocking::head_timestamp(self, contract, what_to_show, trading_hours)
     }
 
     /// Requests interval of historical data ending at specified time for [Contract].
@@ -979,7 +979,7 @@ impl Client {
     /// use time::macros::datetime;
     ///
     /// use ibapi::contracts::Contract;
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
     /// use ibapi::market_data::TradingHours;
     ///
@@ -1006,7 +1006,7 @@ impl Client {
         what_to_show: historical::WhatToShow,
         trading_hours: TradingHours,
     ) -> Result<historical::HistoricalData, Error> {
-        historical::historical_data(self, contract, interval_end, duration, bar_size, Some(what_to_show), trading_hours)
+        historical::blocking::historical_data(self, contract, interval_end, duration, bar_size, Some(what_to_show), trading_hours)
     }
 
     /// Requests [Schedule](historical::Schedule) for an interval of given duration
@@ -1022,7 +1022,7 @@ impl Client {
     /// ```no_run
     /// use time::macros::datetime;
     /// use ibapi::contracts::Contract;
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::market_data::historical::ToDuration;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -1045,7 +1045,7 @@ impl Client {
         interval_end: OffsetDateTime,
         duration: historical::Duration,
     ) -> Result<historical::Schedule, Error> {
-        historical::historical_schedule(self, contract, Some(interval_end), duration)
+        historical::blocking::historical_schedule(self, contract, Some(interval_end), duration)
     }
 
     /// Requests [historical::Schedule] for interval ending at current time.
@@ -1058,7 +1058,7 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::contracts::Contract;
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::market_data::historical::ToDuration;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -1076,7 +1076,7 @@ impl Client {
     /// }
     /// ```
     pub fn historical_schedules_ending_now(&self, contract: &Contract, duration: historical::Duration) -> Result<historical::Schedule, Error> {
-        historical::historical_schedule(self, contract, None, duration)
+        historical::blocking::historical_schedule(self, contract, None, duration)
     }
 
     /// Requests historical time & sales data (Bid/Ask) for an instrument.
@@ -1095,7 +1095,7 @@ impl Client {
     /// use time::macros::datetime;
     ///
     /// use ibapi::contracts::Contract;
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::market_data::TradingHours;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -1118,8 +1118,8 @@ impl Client {
         number_of_ticks: i32,
         trading_hours: TradingHours,
         ignore_size: bool,
-    ) -> Result<historical::TickSubscription<historical::TickBidAsk>, Error> {
-        historical::historical_ticks_bid_ask(self, contract, start, end, number_of_ticks, trading_hours, ignore_size)
+    ) -> Result<historical::blocking::TickSubscription<historical::TickBidAsk>, Error> {
+        historical::blocking::historical_ticks_bid_ask(self, contract, start, end, number_of_ticks, trading_hours, ignore_size)
     }
 
     /// Requests historical time & sales data (Midpoint) for an instrument.
@@ -1137,7 +1137,7 @@ impl Client {
     /// use time::macros::datetime;
     ///
     /// use ibapi::contracts::Contract;
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::market_data::TradingHours;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -1159,8 +1159,8 @@ impl Client {
         end: Option<OffsetDateTime>,
         number_of_ticks: i32,
         trading_hours: TradingHours,
-    ) -> Result<historical::TickSubscription<historical::TickMidpoint>, Error> {
-        historical::historical_ticks_mid_point(self, contract, start, end, number_of_ticks, trading_hours)
+    ) -> Result<historical::blocking::TickSubscription<historical::TickMidpoint>, Error> {
+        historical::blocking::historical_ticks_mid_point(self, contract, start, end, number_of_ticks, trading_hours)
     }
 
     /// Requests historical time & sales data (Trades) for an instrument.
@@ -1178,7 +1178,7 @@ impl Client {
     /// use time::macros::datetime;
     ///
     /// use ibapi::contracts::Contract;
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::market_data::TradingHours;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -1200,8 +1200,8 @@ impl Client {
         end: Option<OffsetDateTime>,
         number_of_ticks: i32,
         trading_hours: TradingHours,
-    ) -> Result<historical::TickSubscription<historical::TickLast>, Error> {
-        historical::historical_ticks_trade(self, contract, start, end, number_of_ticks, trading_hours)
+    ) -> Result<historical::blocking::TickSubscription<historical::TickLast>, Error> {
+        historical::blocking::historical_ticks_trade(self, contract, start, end, number_of_ticks, trading_hours)
     }
 
     /// Requests data histogram of specified contract.
@@ -1217,7 +1217,7 @@ impl Client {
     /// use time::macros::datetime;
     //
     /// use ibapi::contracts::Contract;
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::market_data::historical::BarSize;
     /// use ibapi::market_data::TradingHours;
     ///
@@ -1239,7 +1239,7 @@ impl Client {
         trading_hours: TradingHours,
         period: historical::BarSize,
     ) -> Result<Vec<HistogramEntry>, Error> {
-        historical::histogram_data(self, contract, trading_hours, period)
+        historical::blocking::histogram_data(self, contract, trading_hours, period)
     }
 
     // === Realtime Market Data ===
@@ -1252,7 +1252,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     /// use ibapi::market_data::realtime::{BarSize, WhatToShow};
     /// use ibapi::market_data::TradingHours;
@@ -1273,7 +1273,7 @@ impl Client {
         what_to_show: WhatToShow,
         trading_hours: TradingHours,
     ) -> Result<Subscription<Bar>, Error> {
-        realtime::realtime_bars(self, contract, &bar_size, &what_to_show, trading_hours, Vec::default())
+        realtime::blocking::realtime_bars(self, contract, &bar_size, &what_to_show, trading_hours, Vec::default())
     }
 
     /// Requests tick by tick AllLast ticks.
@@ -1286,7 +1286,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -1308,7 +1308,7 @@ impl Client {
         number_of_ticks: i32,
         ignore_size: bool,
     ) -> Result<Subscription<realtime::Trade>, Error> {
-        realtime::tick_by_tick_all_last(self, contract, number_of_ticks, ignore_size)
+        realtime::blocking::tick_by_tick_all_last(self, contract, number_of_ticks, ignore_size)
     }
 
     /// Requests tick by tick BidAsk ticks.
@@ -1321,7 +1321,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -1343,7 +1343,7 @@ impl Client {
         number_of_ticks: i32,
         ignore_size: bool,
     ) -> Result<Subscription<realtime::BidAsk>, Error> {
-        realtime::tick_by_tick_bid_ask(self, contract, number_of_ticks, ignore_size)
+        realtime::blocking::tick_by_tick_bid_ask(self, contract, number_of_ticks, ignore_size)
     }
 
     /// Requests tick by tick Last ticks.
@@ -1356,7 +1356,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -1373,7 +1373,7 @@ impl Client {
     /// }
     /// ```
     pub fn tick_by_tick_last(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<realtime::Trade>, Error> {
-        realtime::tick_by_tick_last(self, contract, number_of_ticks, ignore_size)
+        realtime::blocking::tick_by_tick_last(self, contract, number_of_ticks, ignore_size)
     }
 
     /// Requests tick by tick MidPoint ticks.
@@ -1386,7 +1386,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -1403,7 +1403,7 @@ impl Client {
     /// }
     /// ```
     pub fn tick_by_tick_midpoint(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<MidPoint>, Error> {
-        realtime::tick_by_tick_midpoint(self, contract, number_of_ticks, ignore_size)
+        realtime::blocking::tick_by_tick_midpoint(self, contract, number_of_ticks, ignore_size)
     }
 
     /// Switches market data type returned from request_market_data requests to Live, Frozen, Delayed, or FrozenDelayed.
@@ -1414,7 +1414,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::market_data::{MarketDataType};
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -1424,7 +1424,7 @@ impl Client {
     /// println!("market data switched: {market_data_type:?}");
     /// ```
     pub fn switch_market_data_type(&self, market_data_type: MarketDataType) -> Result<(), Error> {
-        market_data::switch_market_data_type(self, market_data_type)
+        market_data::blocking::switch_market_data_type(self, market_data_type)
     }
 
     /// Requests the contract's market depth (order book).
@@ -1438,7 +1438,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -1455,7 +1455,7 @@ impl Client {
     /// }
     /// ```
     pub fn market_depth(&self, contract: &Contract, number_of_rows: i32, is_smart_depth: bool) -> Result<Subscription<MarketDepths>, Error> {
-        realtime::market_depth(self, contract, number_of_rows, is_smart_depth)
+        realtime::blocking::market_depth(self, contract, number_of_rows, is_smart_depth)
     }
 
     /// Requests venues for which market data is returned to market_depth (those with market makers)
@@ -1463,7 +1463,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let exchanges = client.market_depth_exchanges().expect("error requesting market depth exchanges");
@@ -1472,7 +1472,7 @@ impl Client {
     /// }
     /// ```
     pub fn market_depth_exchanges(&self) -> Result<Vec<DepthMarketDataDescription>, Error> {
-        realtime::market_depth_exchanges(self)
+        realtime::blocking::market_depth_exchanges(self)
     }
 
     /// Requests real time market data.
@@ -1539,7 +1539,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -1549,7 +1549,7 @@ impl Client {
     /// }
     /// ```
     pub fn news_providers(&self) -> Result<Vec<news::NewsProvider>, Error> {
-        news::news_providers(self)
+        news::blocking::news_providers(self)
     }
 
     /// Subscribes to IB's News Bulletins.
@@ -1561,7 +1561,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -1571,7 +1571,7 @@ impl Client {
     /// }
     /// ```
     pub fn news_bulletins(&self, all_messages: bool) -> Result<Subscription<news::NewsBulletin>, Error> {
-        news::news_bulletins(self, all_messages)
+        news::blocking::news_bulletins(self, all_messages)
     }
 
     /// Requests historical news headlines.
@@ -1587,7 +1587,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract; // Or remove if conId is always known
     /// use time::macros::datetime;
     ///
@@ -1623,7 +1623,7 @@ impl Client {
         end_time: OffsetDateTime,
         total_results: u8,
     ) -> Result<Subscription<news::NewsArticle>, Error> {
-        news::historical_news(self, contract_id, provider_codes, start_time, end_time, total_results)
+        news::blocking::historical_news(self, contract_id, provider_codes, start_time, end_time, total_results)
     }
 
     /// Requests news article body given articleId.
@@ -1636,7 +1636,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -1648,7 +1648,7 @@ impl Client {
     /// println!("{article:?}");
     /// ```
     pub fn news_article(&self, provider_code: &str, article_id: &str) -> Result<news::NewsArticleBody, Error> {
-        news::news_article(self, provider_code, article_id)
+        news::blocking::news_article(self, provider_code, article_id)
     }
 
     /// Requests realtime contract specific news
@@ -1661,7 +1661,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -1675,7 +1675,7 @@ impl Client {
     /// }
     /// ```
     pub fn contract_news(&self, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<NewsArticle>, Error> {
-        news::contract_news(self, contract, provider_codes)
+        news::blocking::contract_news(self, contract, provider_codes)
     }
 
     /// Requests realtime BroadTape News
@@ -1687,7 +1687,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -1699,7 +1699,7 @@ impl Client {
     /// }
     /// ```
     pub fn broad_tape_news(&self, provider_code: &str) -> Result<Subscription<NewsArticle>, Error> {
-        news::broad_tape_news(self, provider_code)
+        news::blocking::broad_tape_news(self, provider_code)
     }
 
     // === Scanner ===
@@ -1709,7 +1709,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::scanner::ScannerSubscription;
     /// use ibapi::orders::TagValue; // Or ensure common::TagValue is the correct path
     ///
@@ -1754,7 +1754,7 @@ impl Client {
     /// };
     /// ```
     pub fn scanner_parameters(&self) -> Result<String, Error> {
-        scanner::scanner_parameters(self)
+        scanner::blocking::scanner_parameters(self)
     }
 
     /// Starts a subscription to market scan results based on the provided parameters.
@@ -1762,7 +1762,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::scanner::ScannerSubscription;
     /// use ibapi::orders::TagValue;
     ///
@@ -1811,7 +1811,7 @@ impl Client {
         subscription: &scanner::ScannerSubscription,
         filter: &Vec<orders::TagValue>,
     ) -> Result<Subscription<Vec<ScannerData>>, Error> {
-        scanner::scanner_subscription(self, subscription, filter)
+        scanner::blocking::scanner_subscription(self, subscription, filter)
     }
 
     // == Wall Street Horizon
@@ -1821,7 +1821,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -1829,7 +1829,7 @@ impl Client {
     /// println!("{metadata:?}");
     /// ```
     pub fn wsh_metadata(&self) -> Result<wsh::WshMetadata, Error> {
-        wsh::wsh_metadata(self)
+        wsh::blocking::wsh_metadata(self)
     }
 
     /// Requests event data for a specified contract from the Wall Street Horizons (WSH) calendar.
@@ -1845,7 +1845,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -1861,7 +1861,7 @@ impl Client {
         limit: Option<i32>,
         auto_fill: Option<AutoFill>,
     ) -> Result<wsh::WshEventData, Error> {
-        wsh::wsh_event_data_by_contract(self, contract_id, start_date, end_date, limit, auto_fill)
+        wsh::blocking::wsh_event_data_by_contract(self, contract_id, start_date, end_date, limit, auto_fill)
     }
 
     /// Requests event data from the Wall Street Horizons (WSH) calendar using a JSON filter.
@@ -1875,7 +1875,7 @@ impl Client {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -1891,7 +1891,7 @@ impl Client {
         limit: Option<i32>,
         auto_fill: Option<AutoFill>,
     ) -> Result<Subscription<wsh::WshEventData>, Error> {
-        wsh::wsh_event_data_by_filter(self, filter, limit, auto_fill)
+        wsh::blocking::wsh_event_data_by_filter(self, filter, limit, auto_fill)
     }
 
     // == Internal Use ==
@@ -1970,7 +1970,7 @@ impl Debug for Client {
 /// use ibapi::contracts::Contract;
 /// use ibapi::market_data::realtime::{BarSize, WhatToShow};
 /// use ibapi::market_data::TradingHours;
-/// use ibapi::Client;
+/// use ibapi::client::blocking::Client;
 ///
 /// let connection_url = "127.0.0.1:4002";
 /// let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");

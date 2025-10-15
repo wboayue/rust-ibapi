@@ -4,11 +4,12 @@ use std::sync::Arc;
 
 use super::common::{decoders, encoders};
 use super::*;
-use crate::client::{ResponseContext, SharesChannel, StreamDecoder, Subscription};
+use crate::client::blocking::{SharesChannel, Subscription};
+use crate::client::{ResponseContext, StreamDecoder};
 use crate::contracts::Contract;
 use crate::market_data::realtime;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
-use crate::{server_versions, Client, Error};
+use crate::{client::sync::Client, server_versions, Error};
 
 impl SharesChannel for Vec<NewsProvider> {}
 
@@ -154,9 +155,10 @@ pub(crate) fn broad_tape_news(client: &Client, provider_code: &str) -> Result<Su
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::blocking::Client;
     use crate::contracts::Contract;
     use crate::news::ArticleType;
-    use crate::{server_versions, stubs::MessageBusStub, Client};
+    use crate::{server_versions, stubs::MessageBusStub};
     use std::sync::{Arc, RwLock};
     use time::macros::datetime;
 

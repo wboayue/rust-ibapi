@@ -12,7 +12,7 @@ error: no feature specified. Enable either 'sync' or 'async' feature
 ```
 
 **Solution:**
-You must specify exactly one feature flag:
+If you've disabled default features, add one back explicitly:
 ```bash
 cargo build --features sync
 # OR
@@ -27,13 +27,9 @@ error: features 'sync' and 'async' are mutually exclusive
 ```
 
 **Solution:**
-Use only one feature flag, not both:
+Update to the latest `rust-ibapi`—current releases allow both features to be enabled together. If you still see this error, ensure `Cargo.lock` is refreshed:
 ```bash
-# Wrong
-cargo build --features "sync async"
-
-# Correct - choose one
-cargo build --features sync
+cargo update -p ibapi
 ```
 
 ## Connection Issues

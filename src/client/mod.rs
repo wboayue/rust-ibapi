@@ -11,22 +11,35 @@ pub mod sync;
 #[cfg(feature = "async")]
 pub mod r#async;
 
-// Re-export the appropriate Client based on feature
 #[cfg(feature = "sync")]
-pub use sync::Client;
+pub mod blocking {
+    pub use super::sync::Client;
+    pub(crate) use crate::client::builders::blocking::{ClientRequestBuilders, SubscriptionBuilderExt};
+    pub use crate::subscriptions::sync::{
+        SharesChannel, Subscription, SubscriptionIter, SubscriptionOwnedIter, SubscriptionTimeoutIter, SubscriptionTryIter,
+    };
+}
 
+// Re-export the appropriate Client based on feature selection
 #[cfg(feature = "async")]
 pub use r#async::Client;
-
-// Re-export subscription types from subscriptions module
-#[cfg(feature = "sync")]
-pub use crate::subscriptions::{SharesChannel, Subscription};
+#[cfg(all(feature = "sync", not(feature = "async")))]
+pub use sync::Client;
 
 #[cfg(feature = "sync")]
 pub(crate) use crate::subscriptions::{ResponseContext, StreamDecoder};
 
-#[cfg(feature = "async")]
-pub use crate::subscriptions::Subscription;
+#[cfg(all(feature = "sync", not(feature = "async")))]
+pub use crate::subscriptions::sync::Subscription;
 
-// Re-export builder traits (internal use only)
-pub(crate) use builders::{ClientRequestBuilders, SubscriptionBuilderExt};
+#[cfg(feature = "async")]
+pub use crate::subscriptions::r#async::Subscription;
+
+#[cfg(feature = "sync")]
+pub use crate::subscriptions::sync::SharesChannel;
+
+#[cfg(all(feature = "sync", feature = "async"))]
+pub(crate) use builders::r#async::{ClientRequestBuilders, SubscriptionBuilderExt};
+
+#[cfg(all(not(feature = "sync"), feature = "async"))]
+pub(crate) use builders::r#async::{ClientRequestBuilders, SubscriptionBuilderExt};

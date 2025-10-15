@@ -60,6 +60,11 @@ impl AutoFill {
 
 // Re-export API functions based on active feature
 #[cfg(feature = "sync")]
+pub mod blocking {
+    pub(crate) use super::sync::{wsh_event_data_by_contract, wsh_event_data_by_filter, wsh_metadata};
+}
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub use sync::{wsh_event_data_by_contract, wsh_event_data_by_filter, wsh_metadata};
 
 #[cfg(feature = "async")]

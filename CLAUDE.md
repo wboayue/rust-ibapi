@@ -6,22 +6,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The rust-ibapi crate is a Rust implementation of the Interactive Brokers TWS API with both synchronous and asynchronous support.
 
-**Important:** You MUST choose exactly ONE feature flag:
-- `--features sync` for synchronous (thread-based) execution
-- `--features async` for asynchronous (tokio-based) execution
-
-These features are mutually exclusive.
+**Important:** The async client is enabled by default. You can opt into the blocking client with `--features sync`, and the two features may be combined:
+- `cargo build` (default features) exposes the async client as `client::Client`
+- `cargo build --no-default-features --features sync` enables only the blocking client
+- `cargo build --no-default-features --features "sync async"` enables both; the blocking API lives under `client::blocking::Client`
 
 ```bash
-# Build with sync support
-cargo build --features sync
+# Build with async support (default)
+cargo build
 
-# Build with async support  
-cargo build --features async
+# Build with sync support only
+cargo build --no-default-features --features sync
 
-# Run tests (test both modes separately)
-cargo test --features sync
-cargo test --features async
+# Build with both clients
+cargo build --no-default-features --features "sync async"
+
+# Run tests (cover every configuration)
+cargo test
+cargo test --no-default-features --features sync
+cargo test --all-features
 ```
 
 ## Documentation Index
@@ -44,8 +47,8 @@ cargo test --features async
 
 ## Key Points to Remember
 
-1. **Always specify exactly ONE feature**: The crate requires either `sync` OR `async` (mutually exclusive)
-2. **Test both modes separately**: Changes should work for both sync and async implementations
+1. **Be explicit about feature coverage**: Default async, sync-only, and combined builds must compile when touched
+2. **Test each configuration**: Run tests for default, sync-only, and `--all-features`
 3. **Follow module structure**: Use the common pattern for shared logic between sync/async
 4. **Minimal comments**: Keep comments concise, avoid stating the obvious
 5. **Run quality checks**: Before committing, run `cargo fmt`, `cargo clippy --features sync`, and `cargo clippy --features async`
@@ -74,9 +77,10 @@ IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --example <example_name>
 # Format code
 cargo fmt
 
-# Run clippy (both modes separately)
-cargo clippy --features sync
-cargo clippy --features async
+# Run clippy (cover every configuration)
+cargo clippy
+cargo clippy --no-default-features --features sync
+cargo clippy --all-features
 
 # Run all tests
 just test

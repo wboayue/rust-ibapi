@@ -1,57 +1,23 @@
 # Feature Flags
 
-The library requires you to explicitly choose one of two mutually exclusive features.
+`ibapi` ships with the asynchronous client enabled by default. The optional `sync` feature adds the blocking client and can be enabled on its own (after disabling defaults) or alongside the async client.
 
-## Feature Selection Flow
+## Configurations at a Glance
 
-```mermaid
-graph TD
-    Start[cargo build/test/run]
-    Check{Feature specified?}
-    CheckWhich{Which feature?}
-    CheckBoth{Both specified?}
-    Sync[Build with Sync Mode]
-    Async[Build with Async Mode]
-    Error1[❌ Error: No feature specified<br/>Must use --features sync<br/>OR --features async]
-    Error2[❌ Error: Mutually exclusive<br/>Cannot use both features]
-    
-    Start --> Check
-    Check -->|No| Error1
-    Check -->|Yes| CheckBoth
-    CheckBoth -->|Yes| Error2
-    CheckBoth -->|No| CheckWhich
-    CheckWhich -->|--features sync| Sync
-    CheckWhich -->|--features async| Async
-    
-    Sync --> Success1[✓ Thread-based execution]
-    Async --> Success2[✓ Tokio-based execution]
-    
-    style Error1 fill:#ffcdd2
-    style Error2 fill:#ffcdd2
-    style Success1 fill:#c8e6c9
-    style Success2 fill:#c8e6c9
-```
+| Mode | Command | Primary client path | Blocking client path |
+|------|---------|---------------------|----------------------|
+| Default async | `cargo build` | `client::Client` | – |
+| Sync only | `cargo build --no-default-features --features sync` | `client::Client` | – |
+| Async + sync | `cargo build --all-features` (or `--no-default-features --features "sync async"`) | `client::Client` (async) | `client::blocking::Client` |
 
 ## Available Features
 
-- **`sync`**: Traditional synchronous API using threads and crossbeam channels
-- **`async`**: Asynchronous API using tokio and async/await
+- **`async`** (default): Tokio-based, non-blocking client and supporting types.
+- **`sync`**: Threaded client using crossbeam channels, plus blocking subscription helpers.
 
-There is no default feature. You must specify exactly one:
+## Feature Guard Patterns
 
-```bash
-# For sync mode
-cargo build --features sync
-
-# For async mode
-cargo build --features async
-```
-
-If you don't specify a feature, you'll get a helpful compile error explaining how to use the crate.
-
-## Feature Guard Pattern
-
-Since the features are mutually exclusive, you can use simple feature guards:
+Use explicit guards so intent stays clear in each configuration:
 
 ```rust
 #[cfg(feature = "sync")]
@@ -59,71 +25,44 @@ use std::thread;
 
 #[cfg(feature = "async")]
 use tokio::task;
+
+// Code that should only compile when sync is enabled without async
+#[cfg(all(feature = "sync", not(feature = "async")))]
+fn sync_only_behavior() {}
 ```
 
-The crate enforces that exactly one feature is enabled at compile time.
-
-## Module Organization for Features
-
-Each module follows this pattern to support both modes:
-
-```rust
-// mod.rs - Public types (always available)
-pub struct MyType { ... }
-
-// Feature-specific implementations
-#[cfg(feature = "sync")]
-mod sync;
-
-#[cfg(feature = "async")]
-mod r#async;
-
-// Re-export the appropriate implementation
-#[cfg(feature = "sync")]
-pub use sync::my_function;
-
-#[cfg(feature = "async")]
-pub use r#async::my_function;
-```
+The crate enforces that at least one of the two features is enabled; both may be active simultaneously.
 
 ## Usage in Cargo.toml
 
-### For library users:
 ```toml
-# Choose one:
+[dependencies]
+# Default async client
+ibapi = "2.0"
+
+# Sync-only (disable defaults)
+ibapi = { version = "2.0", default-features = false, features = ["sync"] }
+
+# Async + blocking
 ibapi = { version = "2.0", features = ["sync"] }
-# OR
-ibapi = { version = "2.0", features = ["async"] }
-```
-
-### For examples:
-```toml
-[[example]]
-name = "async_market_data"
-path = "examples/async/market_data.rs"
-required-features = ["async"]
-
-[[example]]
-name = "market_data"
-path = "examples/sync/market_data.rs"
-required-features = ["sync"]
 ```
 
 ## Testing with Features
 
-Always test both feature flags:
+Always exercise the configurations your change touches:
 
 ```bash
-# Test sync implementation
-cargo test --features sync
+# Default async build
+cargo test
 
-# Test async implementation
-cargo test --features async
+# Sync-only build
+cargo test --no-default-features --features sync
 
-# Run specific test for both
-cargo test test_name --features sync
-cargo test test_name --features async
+# Combined build
+cargo test --all-features
 ```
+
+Apply the same pattern to `cargo clippy` and other verification commands.
 
 ## Key Differences
 
@@ -135,7 +74,7 @@ cargo test test_name --features async
 - Subscriptions implement `Iterator`
 
 ### Async Mode
-- Uses `tokio` runtime
+- Uses the `tokio` runtime
 - `tokio::sync` primitives
 - Non-blocking I/O with `.await`
 - Returns `Result<T, Error>` (with `.await`)

@@ -100,7 +100,7 @@ impl<S: Stream> Connection<S> {
 
         // Record the request if debug logging is enabled
         if log::log_enabled!(log::Level::Debug) {
-            trace::record_request(encoded.clone());
+            trace::blocking::record_request(encoded.clone());
         }
 
         let length_encoded = crate::messages::encode_length(&encoded);
@@ -116,7 +116,7 @@ impl<S: Stream> Connection<S> {
 
         // Record the response if debug logging is enabled
         if log::log_enabled!(log::Level::Debug) {
-            trace::record_response(raw_string.clone());
+            trace::blocking::record_response(raw_string.clone());
         }
 
         let message = ResponseMessage::from(&raw_string);

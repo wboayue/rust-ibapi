@@ -1,6 +1,6 @@
 //! Test trace functionality
 
-use ibapi::client::Client;
+use ibapi::client::blocking::Client;
 use ibapi::trace;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Server time: {server_time}");
 
     // Check if we captured the interaction
-    if let Some(interaction) = trace::last_interaction() {
+    if let Some(interaction) = trace::blocking::last_interaction() {
         println!("\nCaptured interaction:");
         println!("Request: {}", interaction.request);
         println!("Responses: {} response(s)", interaction.responses.len());

@@ -8,6 +8,7 @@
 //! cargo run --features sync --example market_data
 //! ```
 
+use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
 
 fn main() {

@@ -6,7 +6,7 @@
 //! cargo run --features sync --example wsh_metadata
 //! ```
 
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 
 // This example demonstrates requesting Wall Street Horizon metadata.
 

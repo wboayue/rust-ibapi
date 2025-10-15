@@ -6,8 +6,8 @@
 //! cargo run --features sync --example executions
 //! ```
 
+use ibapi::client::blocking::Client;
 use ibapi::orders::ExecutionFilter;
-use ibapi::Client;
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();

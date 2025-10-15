@@ -1,6 +1,6 @@
 #[cfg(feature = "sync")]
 mod sync_tests {
-    use crate::client::Client;
+    use crate::client::sync::Client;
     use crate::contracts::Contract;
     use crate::market_data::realtime::common::encoders::test_constants::*;
     use crate::stubs::MessageBusStub;

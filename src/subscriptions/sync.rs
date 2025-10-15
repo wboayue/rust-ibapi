@@ -105,7 +105,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -212,7 +212,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     /// use std::thread;
     /// use std::time::Duration;
@@ -253,7 +253,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     /// use std::time::Duration;
     ///
@@ -286,7 +286,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     ///
@@ -314,7 +314,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use std::thread;
     /// use std::time::Duration;
     ///
@@ -353,7 +353,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// # Examples
     ///
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use std::time::Duration;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");

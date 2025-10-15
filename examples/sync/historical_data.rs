@@ -7,6 +7,7 @@
 //! ```
 
 use clap::{arg, Command};
+use ibapi::client::blocking::Client;
 use time::macros::datetime;
 
 use ibapi::market_data::historical::ToDuration;

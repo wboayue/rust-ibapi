@@ -6,7 +6,7 @@
 //! cargo run --features sync --example market_depth_exchanges
 //! ```
 
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 
 // This example demonstrates how to request market depth exchanges.
 

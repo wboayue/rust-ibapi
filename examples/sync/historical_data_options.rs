@@ -6,6 +6,7 @@
 //! cargo run --features sync --example historical_data_options
 //! ```
 
+use ibapi::client::blocking::Client;
 use ibapi::market_data::historical::ToDuration;
 use ibapi::prelude::*;
 

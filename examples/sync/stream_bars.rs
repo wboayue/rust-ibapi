@@ -11,10 +11,10 @@ use std::time::Duration;
 
 use clap::{arg, ArgMatches, Command};
 
+use ibapi::client::blocking::Client;
 use ibapi::contracts::{Contract, Currency, Exchange, Symbol};
 use ibapi::market_data::realtime::{BarSize, WhatToShow};
 use ibapi::market_data::TradingHours;
-use ibapi::Client;
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();

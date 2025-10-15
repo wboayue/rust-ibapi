@@ -6,7 +6,8 @@
 //! cargo run --features sync --example positions
 //! ```
 
-use ibapi::{accounts::PositionUpdate, Client};
+use ibapi::accounts::PositionUpdate;
+use ibapi::client::blocking::Client;
 
 fn main() {
     env_logger::init();
