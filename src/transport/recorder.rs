@@ -10,6 +10,8 @@ use std::env;
 use std::fs;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use log::warn;
+
 use time::macros::format_description;
 use time::OffsetDateTime;
 
@@ -60,7 +62,9 @@ impl MessageRecorder {
         }
 
         let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
-        fs::write(self.request_file(record_id), message.encode().replace('\0', "|")).unwrap();
+        if let Err(err) = fs::write(self.request_file(record_id), message.encode().replace('\0', "|")) {
+            warn!("failed to record request: {err}");
+        }
     }
 
     pub fn record_response(&self, message: &ResponseMessage) {
@@ -69,7 +73,9 @@ impl MessageRecorder {
         }
 
         let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
-        fs::write(self.response_file(record_id), message.encode().replace('\0', "|")).unwrap();
+        if let Err(err) = fs::write(self.response_file(record_id), message.encode().replace('\0', "|")) {
+            warn!("failed to record response: {err}");
+        }
     }
 
     fn request_file(&self, record_id: usize) -> String {

@@ -1,7 +1,10 @@
 use std::sync::RwLock;
 
 #[cfg(feature = "sync")]
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashSet,
+    sync::{Arc, LazyLock, Mutex},
+};
 
 #[cfg(feature = "sync")]
 use crossbeam::channel;
@@ -32,7 +35,7 @@ pub(crate) struct MessageBusStub {
 
 // Separate tracking for order update subscriptions to maintain backward compatibility
 #[cfg(feature = "sync")]
-static ORDER_UPDATE_SUBSCRIPTION_TRACKER: Mutex<Option<usize>> = Mutex::new(None);
+static ORDER_UPDATE_SUBSCRIPTION_TRACKER: LazyLock<Mutex<HashSet<usize>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 
 impl Default for MessageBusStub {
     fn default() -> Self {
@@ -78,12 +81,9 @@ impl MessageBus for MessageBusStub {
         let stub_id = self as *const _ as usize;
 
         let mut tracker = ORDER_UPDATE_SUBSCRIPTION_TRACKER.lock().unwrap();
-        if let Some(existing_id) = *tracker {
-            if existing_id == stub_id {
-                return Err(Error::AlreadySubscribed);
-            }
+        if !tracker.insert(stub_id) {
+            return Err(Error::AlreadySubscribed);
         }
-        *tracker = Some(stub_id);
         drop(tracker); // Release lock early
 
         let (sender, receiver) = channel::unbounded();
@@ -102,6 +102,10 @@ impl MessageBus for MessageBusStub {
 
     fn cancel_order_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
         mock_request(self, Some(request_id), None, packet);
+
+        let stub_id = self as *const _ as usize;
+        ORDER_UPDATE_SUBSCRIPTION_TRACKER.lock().unwrap().remove(&stub_id);
+
         Ok(())
     }
 
