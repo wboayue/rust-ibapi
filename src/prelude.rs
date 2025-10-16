@@ -3,8 +3,9 @@
 //! This module re-exports the most frequently used types from the ibapi crate
 //! to simplify imports in user code. Instead of importing each type individually:
 //!
-//! ```text
-//! use ibapi::client::blocking::Client;
+//! ```rust
+//! # #![allow(unused_imports)]
+//! use ibapi::client::Client;
 //! use ibapi::contracts::Contract;
 //! use ibapi::orders::{Action, PlaceOrder};
 //! use ibapi::market_data::historical::{BarSize, WhatToShow, ToDuration};
@@ -12,7 +13,8 @@
 //!
 //! You can simply use:
 //!
-//! ```ignore
+//! ```rust
+//! # #![allow(unused_imports)]
 //! use ibapi::prelude::*;
 //! ```
 
