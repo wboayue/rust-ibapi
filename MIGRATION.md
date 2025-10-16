@@ -1,329 +1,184 @@
 # Migration Guide: 1.x to 2.x
 
-This guide helps you migrate from rust-ibapi v1.x (last version: v1.2.2) to v2.x.
+This guide walks through the changes required to upgrade from rust-ibapi v1.2.2 to v2.0.0.
 
-## Major New Feature: Async Support
+## Highlights
 
-Version 2.x introduces first-class async support! You can now choose between synchronous (thread-based) and asynchronous (tokio-based) implementations.
+- Async client is production ready and enabled by default.
+- Blocking client remains available; when built alongside async it lives under `client::blocking`.
+- Contracts, market data, and orders now use fluent, type-safe builders.
+- Trading hour configuration uses the `TradingHours` enum instead of bare booleans.
+- Tracing, request helpers, and integration coverage have been expanded for both execution models.
+
+## Choose Your Execution Model
+
+Version 2.0 ships both asynchronous (Tokio) and blocking (threaded) clients. The async client is on by default, so a bare dependency activates it automatically.
+
+| Scenario | Cargo.toml snippet | Primary client type |
+|----------|-------------------|---------------------|
+| Async only (default) | `ibapi = "2.0"` | `ibapi::Client` (async) |
+| Blocking only | `ibapi = { version = "2.0", default-features = false, features = ["sync"] }` | `ibapi::client::blocking::Client` |
+| Both clients | `ibapi = { version = "2.0", default-features = false, features = ["sync", "async"] }` | Async: `ibapi::Client`; Blocking: `ibapi::client::blocking::Client` |
+
+When both features are enabled the top-level `ibapi::Client` continues to refer to the async implementation. Import the blocking client explicitly:
+
+```rust
+use ibapi::Client;                    // async client
+use ibapi::client::blocking::Client;  // blocking client
+```
+
+If you disable default features without opting back into `sync` or `async`, the build fails with a compile error that lists the supported combinations.
 
 ## Breaking Changes
 
-### 1. Explicit Feature Selection Required
+### 1. Blocking API moved under `client::blocking`
 
-In v2.x, you must explicitly choose between `sync` and `async` features. There is no longer a default feature.
+In 1.x the `Client` type was blocking by default. In 2.0 the async client owns the root name and the blocking client, subscriptions, and trace helpers live under a `blocking` module.
 
-#### Before (v1.x)
-```toml
-# Cargo.toml
-[dependencies]
-ibapi = "1.2"  # Only sync was available
-```
-
-#### After (v2.x)
-```toml
-# Cargo.toml
-[dependencies]
-# For synchronous (blocking) API - same behavior as v1.x:
-ibapi = { version = "2.0", features = ["sync"] }
-
-# OR for the new asynchronous API:
-ibapi = { version = "2.0", features = ["async"] }
-```
-
-#### Why This Change?
-
-1. **Clarity**: Makes it explicit which execution model you're using
-2. **Smaller binaries**: Only includes the dependencies you actually need  
-3. **Clean separation**: Sync and async are truly independent implementations
-4. **Future flexibility**: Allows for divergent optimizations per mode
-
-#### Compilation Errors
-
-If you upgrade without specifying a feature, you'll see:
-```
-error: Either 'sync' or 'async' feature must be enabled.
-       Use: features = ["sync"] or features = ["async"]
-```
-
-### 2. New Contract Builder API (v2)
-
-The contract creation API has been completely redesigned for better type safety and ergonomics.
-
-#### Before (v1.x)
 ```rust
-use ibapi::contracts::Contract;
-
-// Old API - less type safe
-let contract = Contract {
-    symbol: "AAPL".to_string(),
-    security_type: "STK".to_string(),
-    exchange: "SMART".to_string(),
-    currency: "USD".to_string(),
-    ..Default::default()
-};
-```
-
-#### After (v2.x)
-```rust
-use ibapi::contracts::Contract;
-
-// New API - type-safe builder pattern
-let contract = Contract::stock("AAPL").build();
-
-// With customization
-let contract = Contract::stock("7203")
-    .on_exchange("TSEJ")
-    .in_currency("JPY")
-    .build();
-```
-
-#### Key Improvements
-
-1. **Type-safe builders**: Separate builders for each contract type
-2. **Required fields enforced**: Can't build invalid contracts
-3. **Smart defaults**: Less boilerplate for common cases
-4. **Better discovery**: IDE autocomplete guides you
-
-For detailed migration instructions, see the [Contract Builder Guide](docs/contract-builder.md).
-
-### 3. New Market Data Fluent API
-
-The market data subscription API now uses a fluent builder pattern for better discoverability and type safety.
-
-#### Before (v1.x)
-```rust
+// v1.x
 use ibapi::Client;
 
+// v2.0 (blocking)
+use ibapi::client::blocking::Client;
 let client = Client::connect("127.0.0.1:4002", 100)?;
-let contract = Contract::stock("AAPL").build();
+```
 
-// Old API with positional parameters
-let subscription = client.market_data(
+Related helpers gained matching namespaces when both features are compiled (for example `trace::blocking::record_request` and `client::blocking::Subscription`). Code that only enables the `sync` feature continues to work without the extra module path.
+
+### 2. Contract builders now require `.build()`
+
+The contract API switched to fluent, type-safe builders. Every builder call must end with `.build()`:
+
+```rust
+// v1.x
+let contract = Contract::stock("AAPL");
+
+// v2.0
+let contract = Contract::stock("AAPL").build();
+let futures = Contract::futures("ES").front_month().build();
+```
+
+This change ensures required fields are set at compile time and prevents partially constructed contracts.
+
+### 3. Market data subscriptions use a fluent builder
+
+`Client::market_data` now returns a builder that configures the subscription before you call `.subscribe()`.
+
+```rust
+// v1.x
+let sub = client.market_data(&contract, &["233"], false, false)?;
+
+// v2.0 (blocking)
+let sub = client.market_data(&contract)
+    .generic_ticks(&["233"])
+    .subscribe()?;
+
+// v2.0 (async)
+let mut sub = client.market_data(&contract)
+    .snapshot()
+    .subscribe()
+    .await?;
+```
+
+Snapshot mode, regulatory snapshots, and streaming toggles are now explicit builder methods, improving readability and discoverability.
+
+### 4. `TradingHours` enum replaces `use_rth` booleans
+
+All APIs that accepted a `bool` for regular versus extended trading hours now take the `TradingHours` enum:
+
+```rust
+// v1.x
+client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, true)?;
+
+// v2.0
+use ibapi::market_data::TradingHours;
+
+client.realtime_bars(
     &contract,
-    &["233", "236"],  // generic ticks
-    false,            // snapshot
-    false             // regulatory snapshot
+    BarSize::Sec5,
+    WhatToShow::Trades,
+    TradingHours::Regular,
 )?;
 ```
 
-#### After (v2.x)
+The enum makes intent explicit, aligns with documentation, and leaves room for additional hour modes.
+
+### 5. Order placement offers a fluent builder (optional but recommended)
+
+You can continue to construct `Order` manually, but the new builder dramatically reduces boilerplate and validates combinations at compile time:
+
 ```rust
-use ibapi::Client;
+use ibapi::orders::order_builder::OrderBuilder;
+use ibapi::orders::Action;
 
-let client = Client::connect("127.0.0.1:4002", 100)?;
-let contract = Contract::stock("AAPL").build();
-
-// New fluent API - more discoverable and readable
-let subscription = client.market_data(&contract)
-    .generic_ticks(&["233", "236"])
-    .subscribe()?;
-
-// Snapshot mode
-let snapshot = client.market_data(&contract)
-    .snapshot()
-    .subscribe()?;
-
-// With all options
-let subscription = client.market_data(&contract)
-    .generic_ticks(&["233", "236"])
-    .snapshot()
-    .regulatory_snapshot()
-    .subscribe()?;
+let order = OrderBuilder::market(Action::Buy, 100).build();
 ```
 
-#### Key Improvements
+Builders exist for market, limit, stop, bracket, and combination orders, mirroring Interactive Brokers terminology.
 
-1. **Fluent interface**: Chain methods for better readability
-2. **Discoverable API**: IDE autocomplete shows available options
-3. **Smart defaults**: Only specify what you need to change
-4. **Self-documenting**: Method names clearly express intent
+### 6. Tracing helpers renamed when async is present
 
-### 4. TradingHours Enum Replaces Boolean Parameters
+If you call the trace API while building both clients, switch to the blocking namespace:
 
-All market data methods that previously used `use_rth: bool` now use the `TradingHours` enum for better type safety and clarity.
-
-#### Before (v1.x)
 ```rust
-use ibapi::Client;
+// v1.x
+trace::record_request("REQ|123|AAPL|".into());
 
-let client = Client::connect("127.0.0.1:4002", 100)?;
-let contract = Contract::stock("AAPL").build();
-
-// Old API with boolean parameter
-let bars = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, true)?;  // true for RTH
-let data = client.historical_data(&contract, None, 1.days(), BarSize::Hour, WhatToShow::Trades, false)?;  // false for extended hours
+// v2.0 (blocking with async feature also enabled)
+trace::blocking::record_request("REQ|123|AAPL|".into());
 ```
 
-#### After (v2.x)
-```rust
-use ibapi::Client;
-use ibapi::market_data::TradingHours;
+Async tracing is available directly as `trace::record_request` and uses asynchronous storage under the hood.
 
-let client = Client::connect("127.0.0.1:4002", 100)?;
-let contract = Contract::stock("AAPL").build();
+## Quick Migration Checklist
 
-// New API with TradingHours enum
-let bars = client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Regular)?;
-let data = client.historical_data(&contract, None, 1.days(), BarSize::Hour, WhatToShow::Trades, TradingHours::Extended)?;
-```
+1. Update your dependency according to the execution model you need.
+2. Adjust imports to use `client::blocking::Client` (and `trace::blocking`, `market_data::blocking`, etc.) when compiling both features.
+3. Add `.build()` to every contract builder chain.
+4. Switch market data calls to the new fluent builder with `.subscribe()`.
+5. Replace `use_rth` booleans with `TradingHours`.
+6. (Optional) Adopt the order builder for new code and tests.
+7. Re-run `cargo fmt`, `cargo clippy --all-targets --all-features`, and your test suite for each feature flag you support.
 
-#### Affected Methods
+## Trying the async client
 
-The following methods now use `TradingHours` instead of `use_rth: bool`:
-
-- `Client::realtime_bars()`
-- `Client::head_timestamp()`
-- `Client::historical_data()`
-- `Client::historical_ticks_bid_ask()`
-- `Client::historical_ticks_mid_point()`
-- `Client::historical_ticks_trade()`
-- `Client::histogram_data()`
-
-#### Why This Change?
-
-1. **Type safety**: Can't accidentally pass the wrong boolean value
-2. **Self-documenting**: `TradingHours::Regular` is clearer than `true`
-3. **Future extensibility**: Easy to add more trading hour options if needed
-4. **IDE support**: Better autocomplete and documentation
-
-## Quick Migration Steps
-
-### For Existing v1.x Users
-
-All v1.x users were using the synchronous API. You'll need to make minor updates:
-
-1. **Update Cargo.toml** - add explicit feature selection:
 ```toml
 [dependencies]
-ibapi = { version = "2.0", features = ["sync"] }
-```
-
-2. **Update contract creation** - use the new builder API:
-```rust
-// Old (v1.x)
-let contract = Contract::stock("AAPL");
-
-// New (v2.x)
-let contract = Contract::stock("AAPL").build();
-```
-
-3. **Update market data subscriptions** - use the fluent API:
-```rust
-// Old (v1.x)
-let subscription = client.market_data(&contract, &["233"], false, false)?;
-
-// New (v2.x)
-let subscription = client.market_data(&contract)
-    .generic_ticks(&["233"])
-    .subscribe()?;
-```
-
-4. **Update trading hours parameters** - use enum instead of bool:
-```rust
-// Old (v1.x)
-client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, true)?;
-
-// New (v2.x)
-use ibapi::market_data::TradingHours;
-client.realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Regular)?;
-```
-
-Your updated code:
-```toml
-[dependencies]
-ibapi = { version = "2.0", features = ["sync"] }
-```
-
-### Trying the New Async API
-
-If you want to try the new async support:
-```toml
-[dependencies]
-ibapi = { version = "2.0", features = ["async"] }
+ibapi = "2.0"
 tokio = { version = "1", features = ["full"] }
 ```
 
 ```rust
-use ibapi::Client;
+use ibapi::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::connect("127.0.0.1:4002", 100).await?;
     let time = client.server_time().await?;
-    // ... async version of your code
+    println!("Server time: {time:?}");
+    Ok(())
 }
 ```
 
-## Feature Comparison
+To exercise both clients in CI, run:
 
-| Feature | v1.x | v2.x |
-|---------|------|------|
-| Default | `sync` | None (must choose) |
-| Sync + Async | `async` overrides `sync` | Not allowed together |
-| Feature guards | `#[cfg(all(feature = "sync", not(feature = "async")))]` | `#[cfg(feature = "sync")]` |
-
-## Common Issues and Solutions
-
-### Issue: Both features enabled
-```toml
-# This will cause a compilation error in v2.x
-ibapi = { version = "2.0", features = ["sync", "async"] }
+```bash
+cargo test                 # async (default)
+cargo test --no-default-features --features sync
+cargo test --all-features  # async + blocking
 ```
 
-**Solution**: Choose one:
-```toml
-ibapi = { version = "2.0", features = ["sync"] }  # OR "async"
-```
+## New capabilities in 2.0
 
-### Issue: Conditional compilation in your code
-If you have code like:
-```rust
-#[cfg(feature = "async")]
-use tokio;
-```
+- Production-ready async client with reconnection helpers and `Client::is_connected()`.
+- Fluent builders for contracts, market data subscriptions, and order placement.
+- Safer trading hour handling via the `TradingHours` enum.
+- Expanded integration tests, recorded fixtures, and improved error messages.
+- Interaction recording that works uniformly in both async and blocking modes.
 
-This will continue to work. However, you no longer need complex patterns like:
-```rust
-#[cfg(all(feature = "sync", not(feature = "async")))]
-```
+## Need help?
 
-### Issue: Workspace dependencies
-If you're using workspace dependencies:
-```toml
-# workspace Cargo.toml
-[workspace.dependencies]
-ibapi = { version = "2.0", features = ["sync"] }
-
-# member Cargo.toml
-[dependencies]
-ibapi.workspace = true
-```
-
-## New Features in v2.x
-
-While migrating, you might want to take advantage of new features:
-
-1. **Async support**: Choose between sync and async implementations
-2. **Type-safe contract builder**: New builder API with compile-time validation
-3. **Fluent market data API**: Builder pattern for market data subscriptions
-4. **Improved type safety**: TradingHours enum replaces boolean parameters
-5. **Trace functionality**: Record interactions when debug logging is enabled
-6. **Better error messages**: More descriptive errors throughout
-
-## Getting Help
-
-- Check examples in `/examples` (sync) and `/examples/async` directories
-- File issues at: https://github.com/wboayue/rust-ibapi/issues
-- See full documentation at: https://docs.rs/ibapi/2.0.0
-
-## Summary
-
-Migration from v1.x to v2.x requires these changes:
-
-1. **Update Cargo.toml**: Add `features = ["sync"]` to your dependency
-2. **Update contract creation**: Add `.build()` to contract factory methods
-3. **Update market data subscriptions**: Use the new fluent API with `.subscribe()`
-4. **Update trading hours**: Replace `bool` with `TradingHours` enum
-5. **Run `cargo build`** to catch any remaining issues
-
-The changes are minimal and mostly mechanical - your application logic remains the same!
+- Examples: `examples/async` and `examples/sync`
+- Documentation: <https://docs.rs/ibapi/2.0.0>
+- Issues: <https://github.com/wboayue/rust-ibapi/issues>

@@ -12,39 +12,42 @@ With this fully featured API, you can retrieve account information, access real-
 
 ## Sync/Async Architecture
 
-The rust-ibapi library requires you to explicitly choose between synchronous (thread-based) and asynchronous (tokio-based) operation modes:
+rust-ibapi ships both asynchronous (Tokio) and blocking (threaded) clients. The async client is enabled by default; opt into the blocking client with the `sync` feature and use both together when you need to mix execution models.
 
-- **sync**: Traditional synchronous API using threads and crossbeam channels
-- **async**: Asynchronous API using tokio tasks and broadcast channels
-
-You must specify exactly one feature when using this crate:
+- **async** *(default)*: Non-blocking client using Tokio tasks and broadcast channels. Available as `ibapi::Client`.
+- **sync**: Blocking client using crossbeam channels. Available as `ibapi::client::blocking::Client` (or `ibapi::Client` when `async` is disabled).
 
 ```toml
-# From crates.io (Note: v2.0 not yet published, use GitHub for now):
-ibapi = { version = "2.0", features = ["sync"] }   # For synchronous API
-# OR
-ibapi = { version = "2.0", features = ["async"] }  # For asynchronous API
+# Async only (default features)
+ibapi = "2.0"
 
-# From GitHub (recommended until v2.0 is published):
-ibapi = { git = "https://github.com/wboayue/rust-ibapi", features = ["sync"] }
-# OR
-ibapi = { git = "https://github.com/wboayue/rust-ibapi", features = ["async"] }
+# Blocking only
+ibapi = { version = "2.0", default-features = false, features = ["sync"] }
+
+# Async + blocking together
+ibapi = { version = "2.0", default-features = false, features = ["sync", "async"] }
 ```
 
 ```bash
-# Build and test examples:
-cargo build --features sync
-cargo test --features sync
+# Async client (default configuration)
+cargo test
+cargo run --example async_connect
 
-# Or for async:
-cargo build --features async
-cargo test --features async
-cargo run --features async --example async_connect
+# Blocking client only
+cargo test --no-default-features --features sync
+
+# Validate both clients together
+cargo test --all-features
 ```
 
-> **🚧 Work in Progress**: Version 2.0 is currently under active development and includes significant architectural improvements, async/await support, and enhanced features. The current release (1.x) remains stable and production-ready.
+When both features are enabled, import the blocking types explicitly:
 
-> **📚 Migrating from v1.x?** See the [Migration Guide](MIGRATION.md) for detailed instructions on upgrading to v2.0.
+```rust
+use ibapi::Client;                    // async client
+use ibapi::client::blocking::Client;  // blocking client
+```
+
+> **📚 Migrating from v1.x?** See the [Migration Guide](MIGRATION.md) for step-by-step upgrade instructions.
 
 If you encounter any issues or require a missing feature, please review the [issues list](https://github.com/wboayue/rust-ibapi/issues) before submitting a new one.
 
@@ -65,6 +68,7 @@ These examples demonstrate key features of the `ibapi` API.
 #### Sync Example
 
 ```rust
+use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
 
 fn main() {
