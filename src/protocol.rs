@@ -66,8 +66,7 @@ impl Features {
     pub const MKT_DEPTH_PRIM_EXCHANGE: ProtocolFeature =
         ProtocolFeature::new("market depth primary exchange", server_versions::MKT_DEPTH_PRIM_EXCHANGE);
     /// Enables querying the list of exchanges that support depth.
-    pub const REQ_MKT_DEPTH_EXCHANGES: ProtocolFeature =
-        ProtocolFeature::new("market depth exchanges", server_versions::REQ_MKT_DEPTH_EXCHANGES);
+    pub const REQ_MKT_DEPTH_EXCHANGES: ProtocolFeature = ProtocolFeature::new("market depth exchanges", server_versions::REQ_MKT_DEPTH_EXCHANGES);
 
     /// Required to perform what-if order evaluations.
     pub const WHAT_IF_ORDERS: ProtocolFeature = ProtocolFeature::new("what-if orders", server_versions::WHAT_IF_ORDERS);
@@ -76,8 +75,7 @@ impl Features {
     /// Allows auto-cancelling parent orders when children fill.
     pub const AUTO_CANCEL_PARENT: ProtocolFeature = ProtocolFeature::new("auto cancel parent", server_versions::AUTO_CANCEL_PARENT);
     /// Adds support for fractional order sizes.
-    pub const FRACTIONAL_SIZE_SUPPORT: ProtocolFeature =
-        ProtocolFeature::new("fractional size support", server_versions::FRACTIONAL_SIZE_SUPPORT);
+    pub const FRACTIONAL_SIZE_SUPPORT: ProtocolFeature = ProtocolFeature::new("fractional size support", server_versions::FRACTIONAL_SIZE_SUPPORT);
     /// Allows specifying cash quantity in place of share size.
     pub const CASH_QTY: ProtocolFeature = ProtocolFeature::new("cash quantity", server_versions::CASH_QTY);
     /// Enables MiFID decision maker and execution trader fields.
@@ -114,32 +112,26 @@ impl Features {
     pub const NEWS_QUERY_ORIGINS: ProtocolFeature = ProtocolFeature::new("news query origins", server_versions::NEWS_QUERY_ORIGINS);
 
     /// Enables sending custom scanner generic options.
-    pub const SCANNER_GENERIC_OPTS: ProtocolFeature =
-        ProtocolFeature::new("scanner generic options", server_versions::SCANNER_GENERIC_OPTS);
+    pub const SCANNER_GENERIC_OPTS: ProtocolFeature = ProtocolFeature::new("scanner generic options", server_versions::SCANNER_GENERIC_OPTS);
 
     /// Adds Wall Street Horizon earnings calendar support.
     pub const WSHE_CALENDAR: ProtocolFeature = ProtocolFeature::new("WSHE Calendar", server_versions::WSHE_CALENDAR);
     /// Enables filtering Wall Street Horizon event data.
-    pub const WSH_EVENT_DATA_FILTERS: ProtocolFeature =
-        ProtocolFeature::new("WSH event data filters", server_versions::WSH_EVENT_DATA_FILTERS);
+    pub const WSH_EVENT_DATA_FILTERS: ProtocolFeature = ProtocolFeature::new("WSH event data filters", server_versions::WSH_EVENT_DATA_FILTERS);
     /// Adds date range filters to Wall Street Horizon queries.
     pub const WSH_EVENT_DATA_FILTERS_DATE: ProtocolFeature =
         ProtocolFeature::new("WSH event data filters with date", server_versions::WSH_EVENT_DATA_FILTERS_DATE);
 
     /// Signals that FA profile configuration is deprecated on the server.
-    pub const FA_PROFILE_DESUPPORT: ProtocolFeature =
-        ProtocolFeature::new("FA profile desupport", server_versions::FA_PROFILE_DESUPPORT);
+    pub const FA_PROFILE_DESUPPORT: ProtocolFeature = ProtocolFeature::new("FA profile desupport", server_versions::FA_PROFILE_DESUPPORT);
     /// Required to request market rule metadata.
     pub const MARKET_RULES: ProtocolFeature = ProtocolFeature::new("market rules", server_versions::MARKET_RULES);
     /// Enables the matching symbols endpoint.
-    pub const REQ_MATCHING_SYMBOLS: ProtocolFeature =
-        ProtocolFeature::new("matching symbols", server_versions::REQ_MATCHING_SYMBOLS);
+    pub const REQ_MATCHING_SYMBOLS: ProtocolFeature = ProtocolFeature::new("matching symbols", server_versions::REQ_MATCHING_SYMBOLS);
     /// Required for implied volatility calculations.
-    pub const REQ_CALC_IMPLIED_VOLAT: ProtocolFeature =
-        ProtocolFeature::new("calculate implied volatility", server_versions::REQ_CALC_IMPLIED_VOLAT);
+    pub const REQ_CALC_IMPLIED_VOLAT: ProtocolFeature = ProtocolFeature::new("calculate implied volatility", server_versions::REQ_CALC_IMPLIED_VOLAT);
     /// Required for option price calculations.
-    pub const REQ_CALC_OPTION_PRICE: ProtocolFeature =
-        ProtocolFeature::new("calculate option price", server_versions::REQ_CALC_OPTION_PRICE);
+    pub const REQ_CALC_OPTION_PRICE: ProtocolFeature = ProtocolFeature::new("calculate option price", server_versions::REQ_CALC_OPTION_PRICE);
     /// Enables requests for option security definition parameters.
     pub const SEC_DEF_OPT_PARAMS_REQ: ProtocolFeature =
         ProtocolFeature::new("security definition option parameters", server_versions::SEC_DEF_OPT_PARAMS_REQ);

@@ -782,6 +782,7 @@ pub struct PriceIncrement {
 
 // Re-export API functions based on active feature
 #[cfg(feature = "sync")]
+/// Blocking contract lookup helpers backed by the synchronous transport.
 pub mod blocking {
     pub(crate) use super::sync::{
         calculate_implied_volatility, calculate_option_price, contract_details, market_rule, matching_symbols, option_chain,

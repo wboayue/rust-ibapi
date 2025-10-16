@@ -760,18 +760,21 @@ impl RequestMessage {
     }
 
     #[cfg(test)]
+    /// Serialize the message as a pipe-delimited string (test helper).
     pub(crate) fn encode_simple(&self) -> String {
         let mut data = self.fields.join("|");
         data.push('|');
         data
     }
     #[cfg(test)]
+    /// Construct a request message from a NUL-delimited string (test helper).
     pub fn from(fields: &str) -> RequestMessage {
         RequestMessage {
             fields: fields.split_terminator('\x00').map(|x| x.to_string()).collect(),
         }
     }
     #[cfg(test)]
+    /// Construct a request message from a pipe-delimited string (test helper).
     pub fn from_simple(fields: &str) -> RequestMessage {
         RequestMessage {
             fields: fields.split_terminator('|').map(|x| x.to_string()).collect(),
@@ -1031,6 +1034,7 @@ impl ResponseMessage {
         }
     }
     #[cfg(test)]
+    /// Build a response message from a pipe-delimited payload (test helper).
     pub fn from_simple(fields: &str) -> ResponseMessage {
         ResponseMessage {
             i: 0,
@@ -1051,6 +1055,7 @@ impl ResponseMessage {
     }
 
     #[cfg(test)]
+    /// Serialize the message into a pipe-delimited format (test helper).
     pub fn encode_simple(&self) -> String {
         let mut data = self.fields.join("|");
         data.push('|');

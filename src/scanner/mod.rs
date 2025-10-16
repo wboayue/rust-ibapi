@@ -106,6 +106,7 @@ pub struct ScannerData {
 
 // Re-export API functions based on active feature
 #[cfg(feature = "sync")]
+/// Blocking scanner APIs layered on top of the synchronous client.
 pub mod blocking {
     pub(crate) use super::sync::{scanner_parameters, scanner_subscription};
 }

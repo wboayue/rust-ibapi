@@ -309,6 +309,7 @@ mod sync;
 #[cfg(feature = "async")]
 mod r#async;
 
+/// Blocking account management API implemented on top of the synchronous client.
 #[cfg(feature = "sync")]
 pub mod blocking {
     pub use super::sync::{

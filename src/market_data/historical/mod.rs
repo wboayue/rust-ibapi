@@ -12,6 +12,7 @@ use crate::{Error, ToField};
 pub(crate) mod common;
 
 #[cfg(feature = "sync")]
+/// Synchronous historical market data API.
 pub mod sync;
 
 /// Async historical market data API.
@@ -509,6 +510,7 @@ impl ToField for Option<WhatToShow> {
 
 // Re-export functions based on active feature
 #[cfg(feature = "sync")]
+/// Blocking historical market data helpers powered by the synchronous transport.
 pub mod blocking {
     pub(crate) use super::sync::*;
 }

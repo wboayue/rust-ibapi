@@ -70,6 +70,7 @@ impl<'a> OrderBuilder<'a, MockOrderClient> {
 
 // Implement submit_all for bracket orders
 impl<'a> BracketOrderBuilder<'a, MockOrderClient> {
+    /// Submit the bracket order trio and return the generated order identifiers.
     pub fn submit_all(self) -> Result<BracketOrderIds, Error> {
         let client = self.parent_builder.client;
         let contract = self.parent_builder.contract;

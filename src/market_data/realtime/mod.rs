@@ -17,6 +17,7 @@ pub(crate) mod common;
 
 // Feature-specific implementations
 #[cfg(feature = "sync")]
+/// Synchronous real-time market data API.
 pub mod sync;
 
 /// Asynchronous real-time market data API.
@@ -486,6 +487,7 @@ pub struct TickRequestParameters {
 
 // Re-export functions based on active feature
 #[cfg(feature = "sync")]
+/// Blocking real-time market data helpers layered on top of the synchronous client.
 pub mod blocking {
     pub(crate) use super::sync::*;
 }

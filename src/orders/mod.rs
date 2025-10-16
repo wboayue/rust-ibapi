@@ -1215,6 +1215,7 @@ mod r#async;
 
 // Re-export API functions based on active feature
 #[cfg(feature = "sync")]
+/// Blocking order management API wrappers on top of the synchronous client.
 pub mod blocking {
     pub(crate) use super::sync::{
         all_open_orders, auto_open_orders, cancel_order, completed_orders, executions, exercise_options, global_cancel, next_valid_order_id,

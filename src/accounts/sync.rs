@@ -14,8 +14,9 @@ use super::*;
 // Implement SharesChannel for PositionUpdate subscription
 impl SharesChannel for Subscription<PositionUpdate> {}
 
-// Subscribes to position updates for all accessible accounts.
-// All positions sent initially, and then only updates as positions change.
+/// Subscribe to streaming position updates for all accessible accounts.
+///
+/// The stream first replays the full position list and then sends incremental updates.
 pub fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
     crate::common::request_helpers::blocking::shared_subscription(
         client,
@@ -25,6 +26,9 @@ pub fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error>
     )
 }
 
+/// Subscribe to streaming position updates scoped by account and model code.
+///
+/// Requires [Features::MODELS_SUPPORT] to be available on the connected gateway.
 pub fn positions_multi(
     client: &Client,
     account: Option<&AccountId>,
@@ -38,7 +42,7 @@ pub fn positions_multi(
     builder.send(request)
 }
 
-// Determine whether an account exists under an account family and find the account family code.
+/// Fetch the account family codes registered with the broker.
 pub fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
     crate::common::request_helpers::blocking::one_shot_request(
         client,
@@ -50,23 +54,16 @@ pub fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
     )
 }
 
-// Creates subscription for real time daily PnL and unrealized PnL updates
-//
-// # Arguments
-// * `client`     - client
-// * `account`    - account for which to receive PnL updates
-// * `model_code` - specify to request PnL updates for a specific model
+/// Subscribe to real-time daily and unrealized PnL updates for an account.
+///
+/// Optionally filter by model code to scope the updates.
 pub fn pnl(client: &Client, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
     crate::common::request_helpers::blocking::request_with_id(client, Features::PNL, |id| encoders::encode_request_pnl(id, account, model_code))
 }
 
-// Requests real time updates for daily PnL of individual positions.
-//
-// # Arguments
-// * `client` - Client
-// * `account` - Account in which position exists
-// * `contract_id` - Contract ID of contract to receive daily PnL updates for. Note: does not return message if invalid conId is entered
-// * `model_code` - Model in which position exists
+/// Subscribe to real-time daily PnL updates for a single contract.
+///
+/// The stream includes realized and unrealized PnL information for the requested position.
 pub fn pnl_single(
     client: &Client,
     account: &AccountId,
@@ -78,18 +75,23 @@ pub fn pnl_single(
     })
 }
 
+/// Subscribe to account summary updates for a group of accounts.
 pub fn account_summary(client: &Client, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaryResult>, Error> {
     crate::common::request_helpers::blocking::request_with_id(client, Features::ACCOUNT_SUMMARY, |id| {
         encoders::encode_request_account_summary(id, group, tags)
     })
 }
 
+/// Subscribe to detailed account updates for a specific account.
 pub fn account_updates(client: &Client, account: &AccountId) -> Result<Subscription<AccountUpdate>, Error> {
     crate::common::request_helpers::blocking::shared_request(client, OutgoingMessages::RequestAccountData, || {
         encoders::encode_request_account_updates(client.server_version(), account)
     })
 }
 
+/// Subscribe to account updates scoped by account and model code.
+///
+/// Requires [Features::MODELS_SUPPORT] to be available on the connected gateway.
 pub fn account_updates_multi(
     client: &Client,
     account: Option<&AccountId>,
@@ -103,6 +105,7 @@ pub fn account_updates_multi(
     builder.send(request)
 }
 
+/// Fetch the list of accounts accessible to the current user.
 pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
     crate::common::request_helpers::blocking::one_shot_with_retry(
         client,
@@ -118,6 +121,7 @@ pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
     )
 }
 
+/// Query the current server time reported by TWS or IB Gateway.
 pub fn server_time(client: &Client) -> Result<OffsetDateTime, Error> {
     crate::common::request_helpers::blocking::one_shot_with_retry(
         client,

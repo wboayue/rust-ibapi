@@ -18,6 +18,7 @@ pub use common::Interaction;
 
 // Re-export API functions based on active feature
 #[cfg(feature = "sync")]
+/// Blocking tracing helpers that wrap the synchronous client.
 pub mod blocking {
     pub use super::sync::{last_interaction, record_request, record_response};
 }
