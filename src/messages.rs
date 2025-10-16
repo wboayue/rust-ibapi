@@ -111,91 +111,176 @@ pub(crate) const MESSAGE_INDEX: usize = 4;
 // Index of message code in the response message
 pub(crate) const CODE_INDEX: usize = 3;
 
+/// Messages emitted by TWS/Gateway over the market data socket.
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub enum IncomingMessages {
+    /// Gateway initiated shutdown.
     Shutdown = -2,
+    /// Unknown or unsupported message id.
     NotValid = -1,
+    /// Tick price update.
     TickPrice = 1,
+    /// Tick size update.
     TickSize = 2,
+    /// Order status update.
     OrderStatus = 3,
+    /// Error (includes request id and code).
     Error = 4,
+    /// Open order description.
     OpenOrder = 5,
+    /// Account value key/value pair.
     AccountValue = 6,
+    /// Portfolio value line.
     PortfolioValue = 7,
+    /// Account update timestamp.
     AccountUpdateTime = 8,
+    /// Next valid order id notification.
     NextValidId = 9,
+    /// Contract details payload.
     ContractData = 10,
+    /// Execution data update.
     ExecutionData = 11,
+    /// Level 1 market depth row update.
     MarketDepth = 12,
+    /// Level 2 market depth row update.
     MarketDepthL2 = 13,
+    /// News bulletin broadcast.
     NewsBulletins = 14,
+    /// List of managed accounts.
     ManagedAccounts = 15,
+    /// Financial advisor configuration data.
     ReceiveFA = 16,
+    /// Historical bar data payload.
     HistoricalData = 17,
+    /// Bond contract details payload.
     BondContractData = 18,
+    /// Scanner parameter definitions.
     ScannerParameters = 19,
+    /// Scanner subscription results.
     ScannerData = 20,
+    /// Option computation tick.
     TickOptionComputation = 21,
+    /// Generic numeric tick (e.g. implied volatility).
     TickGeneric = 45,
+    /// String-valued tick (exchange names, etc.).
     TickString = 46,
+    /// Exchange for Physical tick update.
     TickEFP = 47, //TICK EFP 47
+    /// Current world clock time.
     CurrentTime = 49,
+    /// Real-time bars update.
     RealTimeBars = 50,
+    /// Fundamental data response.
     FundamentalData = 51,
+    /// End marker for contract details batches.
     ContractDataEnd = 52,
+    /// End marker for open order batches.
     OpenOrderEnd = 53,
+    /// End marker for account download.
     AccountDownloadEnd = 54,
+    /// End marker for execution data.
     ExecutionDataEnd = 55,
+    /// Delta-neutral validation response.
     DeltaNeutralValidation = 56,
+    /// End of tick snapshot.
     TickSnapshotEnd = 57,
+    /// Market data type acknowledgment.
     MarketDataType = 58,
+    /// Commissions report payload.
     CommissionsReport = 59,
+    /// Position update.
     Position = 61,
+    /// End marker for position updates.
     PositionEnd = 62,
+    /// Account summary update.
     AccountSummary = 63,
+    /// End marker for account summary stream.
     AccountSummaryEnd = 64,
+    /// API verification challenge.
     VerifyMessageApi = 65,
+    /// API verification completion.
     VerifyCompleted = 66,
+    /// Display group list response.
     DisplayGroupList = 67,
+    /// Display group update.
     DisplayGroupUpdated = 68,
+    /// Auth + verification challenge.
     VerifyAndAuthMessageApi = 69,
+    /// Auth + verification completion.
     VerifyAndAuthCompleted = 70,
+    /// Multi-account position update.
     PositionMulti = 71,
+    /// End marker for multi-account position stream.
     PositionMultiEnd = 72,
+    /// Multi-account account update.
     AccountUpdateMulti = 73,
+    /// End marker for multi-account account stream.
     AccountUpdateMultiEnd = 74,
+    /// Option security definition parameters.
     SecurityDefinitionOptionParameter = 75,
+    /// End marker for option security definition stream.
     SecurityDefinitionOptionParameterEnd = 76,
+    /// Soft dollar tier information.
     SoftDollarTier = 77,
+    /// Family code response.
     FamilyCodes = 78,
+    /// Matching symbol samples.
     SymbolSamples = 79,
+    /// Exchanges offering market depth.
     MktDepthExchanges = 80,
+    /// Tick request parameter info.
     TickReqParams = 81,
+    /// Smart component routing map.
     SmartComponents = 82,
+    /// News article content.
     NewsArticle = 83,
+    /// News headline tick.
     TickNews = 84,
+    /// Available news providers.
     NewsProviders = 85,
+    /// Historical news headlines.
     HistoricalNews = 86,
+    /// End marker for historical news.
     HistoricalNewsEnd = 87,
+    /// Head timestamp for historical data.
     HeadTimestamp = 88,
+    /// Histogram data response.
     HistogramData = 89,
+    /// Streaming historical data update.
     HistoricalDataUpdate = 90,
+    /// Market data request reroute notice.
     RerouteMktDataReq = 91,
+    /// Market depth request reroute notice.
     RerouteMktDepthReq = 92,
+    /// Market rule response.
     MarketRule = 93,
+    /// Account PnL update.
     PnL = 94,
+    /// Single position PnL update.
     PnLSingle = 95,
+    /// Historical tick data (midpoint).
     HistoricalTick = 96,
+    /// Historical tick data (bid/ask).
     HistoricalTickBidAsk = 97,
+    /// Historical tick data (trades).
     HistoricalTickLast = 98,
+    /// Tick-by-tick streaming data.
     TickByTick = 99,
+    /// Order bound notification for API multiple endpoints.
     OrderBound = 100,
+    /// Completed order information.
     CompletedOrder = 101,
+    /// End marker for completed orders.
     CompletedOrdersEnd = 102,
+    /// End marker for FA profile replacement.
     ReplaceFAEnd = 103,
+    /// Wall Street Horizon metadata update.
     WshMetaData = 104,
+    /// Wall Street Horizon event payload.
     WshEventData = 105,
+    /// Historical schedule response.
     HistoricalSchedule = 106,
+    /// User information response.
     UserInfo = 107,
 }
 
@@ -301,6 +386,7 @@ impl FromStr for IncomingMessages {
     }
 }
 
+/// Return the message field index containing the order id, if present.
 pub fn order_id_index(kind: IncomingMessages) -> Option<usize> {
     match kind {
         IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => Some(1),
@@ -309,6 +395,7 @@ pub fn order_id_index(kind: IncomingMessages) -> Option<usize> {
     }
 }
 
+/// Return the message field index containing the request id, if present.
 pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
     match kind {
         IncomingMessages::AccountSummary => Some(2),
@@ -362,88 +449,169 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
     }
 }
 
+/// Outgoing message opcodes understood by TWS/Gateway.
 #[allow(dead_code)]
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
 pub enum OutgoingMessages {
+    /// Request streaming market data (`reqMktData`).
     RequestMarketData = 1,
+    /// Cancel streaming market data (`cancelMktData`).
     CancelMarketData = 2,
+    /// Submit a new order (`placeOrder`).
     PlaceOrder = 3,
+    /// Cancel an existing order (`cancelOrder`).
     CancelOrder = 4,
+    /// Request the current open orders (`reqOpenOrders`).
     RequestOpenOrders = 5,
+    /// Request account value updates (`reqAccountUpdates`).
     RequestAccountData = 6,
+    /// Request execution reports (`reqExecutions`).
     RequestExecutions = 7,
+    /// Request a block of valid order ids (`reqIds`).
     RequestIds = 8,
+    /// Request contract details (`reqContractDetails`).
     RequestContractData = 9,
+    /// Request level-two market depth (`reqMktDepth`).
     RequestMarketDepth = 10,
+    /// Cancel level-two market depth (`cancelMktDepth`).
     CancelMarketDepth = 11,
+    /// Subscribe to news bulletins (`reqNewsBulletins`).
     RequestNewsBulletins = 12,
+    /// Cancel news bulletin subscription (`cancelNewsBulletins`).
     CancelNewsBulletin = 13,
+    /// Change the server log level (`setServerLogLevel`).
     ChangeServerLog = 14,
+    /// Request auto-open orders (`reqAutoOpenOrders`).
     RequestAutoOpenOrders = 15,
+    /// Request all open orders (`reqAllOpenOrders`).
     RequestAllOpenOrders = 16,
+    /// Request managed accounts list (`reqManagedAccts`).
     RequestManagedAccounts = 17,
+    /// Request financial advisor configuration (`requestFA`).
     RequestFA = 18,
+    /// Replace financial advisor configuration (`replaceFA`).
     ReplaceFA = 19,
+    /// Request historical bar data (`reqHistoricalData`).
     RequestHistoricalData = 20,
+    /// Exercise an option contract (`exerciseOptions`).
     ExerciseOptions = 21,
+    /// Subscribe to a market scanner (`reqScannerSubscription`).
     RequestScannerSubscription = 22,
+    /// Cancel a market scanner subscription (`cancelScannerSubscription`).
     CancelScannerSubscription = 23,
+    /// Request scanner parameter definitions (`reqScannerParameters`).
     RequestScannerParameters = 24,
+    /// Cancel an in-flight historical data request (`cancelHistoricalData`).
     CancelHistoricalData = 25,
+    /// Request the current TWS/Gateway time (`reqCurrentTime`).
     RequestCurrentTime = 49,
+    /// Request real-time bars (`reqRealTimeBars`).
     RequestRealTimeBars = 50,
+    /// Cancel real-time bars (`cancelRealTimeBars`).
     CancelRealTimeBars = 51,
+    /// Request fundamental data (`reqFundamentalData`).
     RequestFundamentalData = 52,
+    /// Cancel fundamental data (`cancelFundamentalData`).
     CancelFundamentalData = 53,
+    /// Request implied volatility calculation (`calculateImpliedVolatility`).
     ReqCalcImpliedVolat = 54,
+    /// Request option price calculation (`calculateOptionPrice`).
     ReqCalcOptionPrice = 55,
+    /// Cancel implied volatility calculation (`cancelImpliedVolatility`).
     CancelImpliedVolatility = 56,
+    /// Cancel option price calculation (`cancelCalculateOptionPrice`).
     CancelOptionPrice = 57,
+    /// Issue a global cancel request (`reqGlobalCancel`).
     RequestGlobalCancel = 58,
+    /// Change the active market data type (`reqMarketDataType`).
     RequestMarketDataType = 59,
+    /// Subscribe to position updates (`reqPositions`).
     RequestPositions = 61,
+    /// Subscribe to account summary (`reqAccountSummary`).
     RequestAccountSummary = 62,
+    /// Cancel account summary subscription (`cancelAccountSummary`).
     CancelAccountSummary = 63,
+    /// Cancel position subscription (`cancelPositions`).
     CancelPositions = 64,
+    /// Begin API verification handshake (`verifyRequest`).
     VerifyRequest = 65,
+    /// Respond to verification handshake (`verifyMessage`).
     VerifyMessage = 66,
+    /// Query display groups (`queryDisplayGroups`).
     QueryDisplayGroups = 67,
+    /// Subscribe to display group events (`subscribeToGroupEvents`).
     SubscribeToGroupEvents = 68,
+    /// Update a display group subscription (`updateDisplayGroup`).
     UpdateDisplayGroup = 69,
+    /// Unsubscribe from display group events (`unsubscribeFromGroupEvents`).
     UnsubscribeFromGroupEvents = 70,
+    /// Start the API session (`startApi`).
     StartApi = 71,
+    /// Verification handshake with auth (`verifyAndAuthRequest`).
     VerifyAndAuthRequest = 72,
+    /// Verification message with auth (`verifyAndAuthMessage`).
     VerifyAndAuthMessage = 73,
+    /// Request multi-account/model positions (`reqPositionsMulti`).
     RequestPositionsMulti = 74,
+    /// Cancel multi-account/model positions (`cancelPositionsMulti`).
     CancelPositionsMulti = 75,
+    /// Request multi-account/model updates (`reqAccountUpdatesMulti`).
     RequestAccountUpdatesMulti = 76,
+    /// Cancel multi-account/model updates (`cancelAccountUpdatesMulti`).
     CancelAccountUpdatesMulti = 77,
+    /// Request optional option security parameters (`reqSecDefOptParams`).
     RequestSecurityDefinitionOptionalParameters = 78,
+    /// Request soft-dollar tier definitions (`reqSoftDollarTiers`).
     RequestSoftDollarTiers = 79,
+    /// Request family codes (`reqFamilyCodes`).
     RequestFamilyCodes = 80,
+    /// Request matching symbols (`reqMatchingSymbols`).
     RequestMatchingSymbols = 81,
+    /// Request exchanges that support depth (`reqMktDepthExchanges`).
     RequestMktDepthExchanges = 82,
+    /// Request smart routing component map (`reqSmartComponents`).
     RequestSmartComponents = 83,
+    /// Request detailed news article (`reqNewsArticle`).
     RequestNewsArticle = 84,
+    /// Request available news providers (`reqNewsProviders`).
     RequestNewsProviders = 85,
+    /// Request historical news headlines (`reqHistoricalNews`).
     RequestHistoricalNews = 86,
+    /// Request earliest timestamp for historical data (`reqHeadTimestamp`).
     RequestHeadTimestamp = 87,
+    /// Request histogram snapshot (`reqHistogramData`).
     RequestHistogramData = 88,
+    /// Cancel histogram snapshot (`cancelHistogramData`).
     CancelHistogramData = 89,
+    /// Cancel head timestamp request (`cancelHeadTimestamp`).
     CancelHeadTimestamp = 90,
+    /// Request market rule definition (`reqMarketRule`).
     RequestMarketRule = 91,
+    /// Request account-wide PnL stream (`reqPnL`).
     RequestPnL = 92,
+    /// Cancel account-wide PnL stream (`cancelPnL`).
     CancelPnL = 93,
+    /// Request single-position PnL stream (`reqPnLSingle`).
     RequestPnLSingle = 94,
+    /// Cancel single-position PnL stream (`cancelPnLSingle`).
     CancelPnLSingle = 95,
+    /// Request historical tick data (`reqHistoricalTicks`).
     RequestHistoricalTicks = 96,
+    /// Request tick-by-tick data (`reqTickByTickData`).
     RequestTickByTickData = 97,
+    /// Cancel tick-by-tick data (`cancelTickByTickData`).
     CancelTickByTickData = 98,
+    /// Request completed order history (`reqCompletedOrders`).
     RequestCompletedOrders = 99,
+    /// Request Wall Street Horizon metadata (`reqWshMetaData`).
     RequestWshMetaData = 100,
+    /// Cancel Wall Street Horizon metadata (`cancelWshMetaData`).
     CancelWshMetaData = 101,
+    /// Request Wall Street Horizon event data (`reqWshEventData`).
     RequestWshEventData = 102,
+    /// Cancel Wall Street Horizon event data (`cancelWshEventData`).
     CancelWshEventData = 103,
+    /// Request user information (`reqUserInfo`).
     RequestUserInfo = 104,
 }
 
@@ -550,6 +718,7 @@ impl FromStr for OutgoingMessages {
     }
 }
 
+/// Encode the outbound message length prefix using the IB wire format.
 pub fn encode_length(message: &str) -> Vec<u8> {
     let data = message.as_bytes();
 
@@ -560,12 +729,14 @@ pub fn encode_length(message: &str) -> Vec<u8> {
     packet
 }
 
+/// Builder for outbound TWS/Gateway request messages.
 #[derive(Default, Debug, Clone)]
 pub struct RequestMessage {
     pub(crate) fields: Vec<String>,
 }
 
 impl RequestMessage {
+    /// Create a new empty request message.
     pub fn new() -> Self {
         Self::default()
     }
@@ -576,6 +747,7 @@ impl RequestMessage {
         self
     }
 
+    /// Serialize all fields into the NUL-delimited wire format.
     pub fn encode(&self) -> String {
         let mut data = self.fields.join("\0");
         data.push('\0');
@@ -615,25 +787,32 @@ impl Index<usize> for RequestMessage {
     }
 }
 
+/// Parsed inbound message from TWS/Gateway.
 #[derive(Clone, Default, Debug)]
 pub struct ResponseMessage {
+    /// Cursor index for incremental decoding.
     pub i: usize,
+    /// Raw field buffer backing this message.
     pub fields: Vec<String>,
 }
 
 impl ResponseMessage {
+    /// Number of fields present in the message.
     pub fn len(&self) -> usize {
         self.fields.len()
     }
 
+    /// Returns `true` if the message contains no fields.
     pub fn is_empty(&self) -> bool {
         self.fields.is_empty()
     }
 
+    /// Returns `true` if the message informs about API shutdown.
     pub fn is_shutdown(&self) -> bool {
         self.message_type() == IncomingMessages::Shutdown
     }
 
+    /// Return the discriminator identifying the message payload.
     pub fn message_type(&self) -> IncomingMessages {
         if self.fields.is_empty() {
             IncomingMessages::NotValid
@@ -643,6 +822,7 @@ impl ResponseMessage {
         }
     }
 
+    /// Try to extract the request id from the message.
     pub fn request_id(&self) -> Option<i32> {
         if let Some(i) = request_id_index(self.message_type()) {
             if let Ok(request_id) = self.peek_int(i) {
@@ -652,6 +832,7 @@ impl ResponseMessage {
         None
     }
 
+    /// Try to extract the order id from the message.
     pub fn order_id(&self) -> Option<i32> {
         if let Some(i) = order_id_index(self.message_type()) {
             if let Ok(order_id) = self.peek_int(i) {
@@ -661,6 +842,7 @@ impl ResponseMessage {
         None
     }
 
+    /// Try to extract the execution id from the message.
     pub fn execution_id(&self) -> Option<String> {
         match self.message_type() {
             IncomingMessages::ExecutionData => Some(self.peek_string(14)),
@@ -669,6 +851,7 @@ impl ResponseMessage {
         }
     }
 
+    /// Peek an integer field without advancing the cursor.
     pub fn peek_int(&self, i: usize) -> Result<i32, Error> {
         if i >= self.fields.len() {
             return Err(Error::Simple("expected int and found end of message".into()));
@@ -681,10 +864,12 @@ impl ResponseMessage {
         }
     }
 
+    /// Peek a string field without advancing the cursor.
     pub fn peek_string(&self, i: usize) -> String {
         self.fields[i].to_owned()
     }
 
+    /// Consume and parse the next integer field.
     pub fn next_int(&mut self) -> Result<i32, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::Simple("expected int and found end of message".into()));
@@ -699,6 +884,7 @@ impl ResponseMessage {
         }
     }
 
+    /// Consume the next field returning `None` when unset.
     pub fn next_optional_int(&mut self) -> Result<Option<i32>, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::Simple("expected optional int and found end of message".into()));
@@ -717,6 +903,7 @@ impl ResponseMessage {
         }
     }
 
+    /// Consume the next field as a boolean (`"0"` or `"1"`).
     pub fn next_bool(&mut self) -> Result<bool, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::Simple("expected bool and found end of message".into()));
@@ -728,6 +915,7 @@ impl ResponseMessage {
         Ok(field == "1")
     }
 
+    /// Consume and parse the next i64 field.
     pub fn next_long(&mut self) -> Result<i64, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::Simple("expected long and found end of message".into()));
@@ -742,6 +930,7 @@ impl ResponseMessage {
         }
     }
 
+    /// Consume the next field as an optional i64.
     pub fn next_optional_long(&mut self) -> Result<Option<i64>, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::Simple("expected optional long and found end of message".into()));
@@ -760,6 +949,7 @@ impl ResponseMessage {
         }
     }
 
+    /// Consume the next field and parse it as a UTC timestamp.
     pub fn next_date_time(&mut self) -> Result<OffsetDateTime, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::Simple("expected datetime and found end of message".into()));
@@ -780,6 +970,7 @@ impl ResponseMessage {
         }
     }
 
+    /// Consume the next field as a string.
     pub fn next_string(&mut self) -> Result<String, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::Simple("expected string and found end of message".into()));
@@ -790,6 +981,7 @@ impl ResponseMessage {
         Ok(String::from(field))
     }
 
+    /// Consume and parse the next floating-point field.
     pub fn next_double(&mut self) -> Result<f64, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::Simple("expected double and found end of message".into()));
@@ -808,6 +1000,7 @@ impl ResponseMessage {
         }
     }
 
+    /// Consume the next field as an optional floating-point value.
     pub fn next_optional_double(&mut self) -> Result<Option<f64>, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::Simple("expected optional double and found end of message".into()));
@@ -830,6 +1023,7 @@ impl ResponseMessage {
         }
     }
 
+    /// Build a response message from a NUL-delimited payload.
     pub fn from(fields: &str) -> ResponseMessage {
         ResponseMessage {
             i: 0,
@@ -844,10 +1038,12 @@ impl ResponseMessage {
         }
     }
 
+    /// Advance the cursor past the next field.
     pub fn skip(&mut self) {
         self.i += 1;
     }
 
+    /// Encode the message back into a NUL-delimited string.
     pub fn encode(&self) -> String {
         let mut data = self.fields.join("\0");
         data.push('\0');
@@ -865,12 +1061,15 @@ impl ResponseMessage {
 /// An error message from the TWS API.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Notice {
+    /// Error code reported by TWS.
     pub code: i32,
+    /// Human-readable error message text.
     pub message: String,
 }
 
 impl Notice {
     #[allow(private_interfaces)]
+    /// Construct a notice from a response message.
     pub fn from(message: &ResponseMessage) -> Notice {
         let code = message.peek_int(CODE_INDEX).unwrap_or(-1);
         let message = message.peek_string(MESSAGE_INDEX);

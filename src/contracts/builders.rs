@@ -15,6 +15,7 @@ pub struct StockBuilder<S = Missing> {
 }
 
 impl StockBuilder<Missing> {
+    /// Start building a stock contract for the provided symbol.
     pub fn new(symbol: impl Into<Symbol>) -> StockBuilder<Symbol> {
         StockBuilder {
             symbol: symbol.into(),
@@ -27,21 +28,25 @@ impl StockBuilder<Missing> {
 }
 
 impl StockBuilder<Symbol> {
+    /// Route the order to the specified exchange instead of the default.
     pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
         self.exchange = exchange.into();
         self
     }
 
+    /// Quote the contract in a different currency.
     pub fn in_currency(mut self, currency: impl Into<Currency>) -> Self {
         self.currency = currency.into();
         self
     }
 
+    /// Prefer a specific primary exchange when resolving the contract.
     pub fn primary(mut self, exchange: impl Into<Exchange>) -> Self {
         self.primary_exchange = Some(exchange.into());
         self
     }
 
+    /// Hint the trading class for venues that require it.
     pub fn trading_class(mut self, class: impl Into<String>) -> Self {
         self.trading_class = Some(class.into());
         self
@@ -74,6 +79,7 @@ pub struct OptionBuilder<Symbol = Missing, Strike = Missing, Expiry = Missing> {
 }
 
 impl OptionBuilder<Missing, Missing, Missing> {
+    /// Begin constructing a call option contract for the provided symbol.
     pub fn call(symbol: impl Into<Symbol>) -> OptionBuilder<Symbol, Missing, Missing> {
         OptionBuilder {
             symbol: symbol.into(),
@@ -86,6 +92,7 @@ impl OptionBuilder<Missing, Missing, Missing> {
         }
     }
 
+    /// Begin constructing a put option contract for the provided symbol.
     pub fn put(symbol: impl Into<Symbol>) -> OptionBuilder<Symbol, Missing, Missing> {
         OptionBuilder {
             symbol: symbol.into(),
@@ -101,6 +108,7 @@ impl OptionBuilder<Missing, Missing, Missing> {
 
 // Can only set strike when symbol is present
 impl<E> OptionBuilder<Symbol, Missing, E> {
+    /// Specify the option strike price.
     pub fn strike(self, price: f64) -> OptionBuilder<Symbol, Strike, E> {
         OptionBuilder {
             symbol: self.symbol,
@@ -116,6 +124,7 @@ impl<E> OptionBuilder<Symbol, Missing, E> {
 
 // Can only set expiry when symbol is present
 impl<S> OptionBuilder<Symbol, S, Missing> {
+    /// Provide an explicit expiration date.
     pub fn expires(self, date: ExpirationDate) -> OptionBuilder<Symbol, S, ExpirationDate> {
         OptionBuilder {
             symbol: self.symbol,
@@ -128,14 +137,17 @@ impl<S> OptionBuilder<Symbol, S, Missing> {
         }
     }
 
+    /// Convenience helper to set a specific calendar date.
     pub fn expires_on(self, year: u16, month: u8, day: u8) -> OptionBuilder<Symbol, S, ExpirationDate> {
         self.expires(ExpirationDate::new(year, month, day))
     }
 
+    /// Set the expiry to the next Friday weekly contract.
     pub fn expires_weekly(self) -> OptionBuilder<Symbol, S, ExpirationDate> {
         self.expires(ExpirationDate::next_friday())
     }
 
+    /// Set the expiry to the standard monthly contract.
     pub fn expires_monthly(self) -> OptionBuilder<Symbol, S, ExpirationDate> {
         self.expires(ExpirationDate::third_friday_of_month())
     }
@@ -143,16 +155,19 @@ impl<S> OptionBuilder<Symbol, S, Missing> {
 
 // Optional setters available at any stage when symbol is present
 impl<S, E> OptionBuilder<Symbol, S, E> {
+    /// Route the option to a specific exchange.
     pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
         self.exchange = exchange.into();
         self
     }
 
+    /// Quote the option in a different currency.
     pub fn in_currency(mut self, currency: impl Into<Currency>) -> Self {
         self.currency = currency.into();
         self
     }
 
+    /// Override the contract multiplier (defaults to 100).
     pub fn multiplier(mut self, multiplier: u32) -> Self {
         self.multiplier = multiplier;
         self
@@ -161,6 +176,7 @@ impl<S, E> OptionBuilder<Symbol, S, E> {
 
 // Build only available when all required fields are set
 impl OptionBuilder<Symbol, Strike, ExpirationDate> {
+    /// Finalize the option contract once symbol, strike, and expiry are set.
     pub fn build(self) -> Contract {
         Contract {
             symbol: self.symbol,
@@ -187,6 +203,7 @@ pub struct FuturesBuilder<Symbol = Missing, Month = Missing> {
 }
 
 impl FuturesBuilder<Missing, Missing> {
+    /// Start building a futures contract for the given symbol.
     pub fn new(symbol: impl Into<Symbol>) -> FuturesBuilder<Symbol, Missing> {
         FuturesBuilder {
             symbol: symbol.into(),
@@ -199,6 +216,7 @@ impl FuturesBuilder<Missing, Missing> {
 }
 
 impl FuturesBuilder<Symbol, Missing> {
+    /// Specify the contract month to target for the future.
     pub fn expires_in(self, month: ContractMonth) -> FuturesBuilder<Symbol, ContractMonth> {
         FuturesBuilder {
             symbol: self.symbol,
@@ -209,26 +227,31 @@ impl FuturesBuilder<Symbol, Missing> {
         }
     }
 
+    /// Shortcut for selecting the current front-month contract.
     pub fn front_month(self) -> FuturesBuilder<Symbol, ContractMonth> {
         self.expires_in(ContractMonth::front())
     }
 
+    /// Shortcut for selecting the next quarterly contract.
     pub fn next_quarter(self) -> FuturesBuilder<Symbol, ContractMonth> {
         self.expires_in(ContractMonth::next_quarter())
     }
 }
 
 impl<M> FuturesBuilder<Symbol, M> {
+    /// Route the futures contract to a specific exchange.
     pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
         self.exchange = exchange.into();
         self
     }
 
+    /// Quote the future in a different currency.
     pub fn in_currency(mut self, currency: impl Into<Currency>) -> Self {
         self.currency = currency.into();
         self
     }
 
+    /// Set a custom multiplier value for the contract.
     pub fn multiplier(mut self, value: u32) -> Self {
         self.multiplier = Some(value);
         self
@@ -236,6 +259,7 @@ impl<M> FuturesBuilder<Symbol, M> {
 }
 
 impl FuturesBuilder<Symbol, ContractMonth> {
+    /// Finalize the futures contract once the contract month is chosen.
     pub fn build(self) -> Contract {
         Contract {
             symbol: self.symbol,
@@ -258,6 +282,7 @@ pub struct ForexBuilder {
 }
 
 impl ForexBuilder {
+    /// Create a forex contract using the given base and quote currencies.
     pub fn new(base: impl Into<Currency>, quote: impl Into<Currency>) -> Self {
         let base = base.into();
         let quote = quote.into();
@@ -268,16 +293,19 @@ impl ForexBuilder {
         }
     }
 
+    /// Adjust the standard order amount.
     pub fn amount(mut self, amount: u32) -> Self {
         self.amount = amount;
         self
     }
 
+    /// Route the trade to a different forex venue.
     pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
         self.exchange = exchange.into();
         self
     }
 
+    /// Complete the forex contract definition.
     pub fn build(self) -> Contract {
         Contract {
             symbol: Symbol::new(self.pair),
@@ -298,6 +326,7 @@ pub struct CryptoBuilder {
 }
 
 impl CryptoBuilder {
+    /// Create a crypto contract for the specified symbol (e.g. `BTC`).
     pub fn new(symbol: impl Into<Symbol>) -> Self {
         CryptoBuilder {
             symbol: symbol.into(),
@@ -306,16 +335,19 @@ impl CryptoBuilder {
         }
     }
 
+    /// Route the trade to a specific crypto venue.
     pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
         self.exchange = exchange.into();
         self
     }
 
+    /// Quote the pair in an alternate fiat or stablecoin.
     pub fn in_currency(mut self, currency: impl Into<Currency>) -> Self {
         self.currency = currency.into();
         self
     }
 
+    /// Finish building the crypto contract.
     pub fn build(self) -> Contract {
         Contract {
             symbol: self.symbol,
@@ -335,6 +367,7 @@ pub struct SpreadBuilder {
     exchange: Exchange,
 }
 
+/// Internal representation of a spread leg used by [SpreadBuilder].
 #[derive(Debug, Clone)]
 pub struct Leg {
     contract_id: i32,
@@ -344,6 +377,7 @@ pub struct Leg {
 }
 
 impl SpreadBuilder {
+    /// Create an empty spread builder ready to accept legs.
     pub fn new() -> Self {
         SpreadBuilder {
             legs: Vec::new(),
@@ -360,6 +394,7 @@ impl Default for SpreadBuilder {
 }
 
 impl SpreadBuilder {
+    /// Begin configuring a new leg for the spread.
     pub fn add_leg(self, contract_id: i32, action: LegAction) -> LegBuilder {
         LegBuilder {
             parent: self,
@@ -394,16 +429,19 @@ impl SpreadBuilder {
             .done()
     }
 
+    /// Override the spread currency, useful for non-USD underlyings.
     pub fn in_currency(mut self, currency: impl Into<Currency>) -> Self {
         self.currency = currency.into();
         self
     }
 
+    /// Route the spread order to a specific exchange.
     pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
         self.exchange = exchange.into();
         self
     }
 
+    /// Finalize the spread contract, returning an error if no legs were added.
     pub fn build(self) -> Result<Contract, Error> {
         if self.legs.is_empty() {
             return Err(Error::Simple("Spread must have at least one leg".into()));
@@ -438,16 +476,19 @@ pub struct LegBuilder {
 }
 
 impl LegBuilder {
+    /// Set the contract ratio for the current leg.
     pub fn ratio(mut self, ratio: i32) -> Self {
         self.leg.ratio = ratio;
         self
     }
 
+    /// Target a specific exchange for the leg.
     pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
         self.leg.exchange = Some(exchange.into());
         self
     }
 
+    /// Finish the leg and return control to the parent spread builder.
     pub fn done(mut self) -> SpreadBuilder {
         self.parent.legs.push(self.leg);
         self.parent

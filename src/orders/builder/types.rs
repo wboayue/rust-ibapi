@@ -95,6 +95,7 @@ impl From<[i32; 3]> for BracketOrderIds {
 pub struct Quantity(f64);
 
 impl Quantity {
+    /// Create a validated quantity ensuring it is positive and finite.
     pub fn new(value: f64) -> Result<Self, ValidationError> {
         if value <= 0.0 {
             return Err(ValidationError::InvalidQuantity(value));
@@ -105,6 +106,7 @@ impl Quantity {
         Ok(Self(value))
     }
 
+    /// Access the raw quantity value.
     pub fn value(&self) -> f64 {
         self.0
     }
@@ -115,6 +117,7 @@ impl Quantity {
 pub struct Price(f64);
 
 impl Price {
+    /// Create a validated price ensuring it is non-negative and finite.
     pub fn new(value: f64) -> Result<Self, ValidationError> {
         if value < 0.0 {
             return Err(ValidationError::InvalidPrice(value));
@@ -125,6 +128,7 @@ impl Price {
         Ok(Self(value))
     }
 
+    /// Access the raw price value.
     pub fn value(&self) -> f64 {
         self.0
     }
@@ -133,17 +137,29 @@ impl Price {
 /// Time in force options
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TimeInForce {
+    /// Order is active only for the current trading day.
     Day,
+    /// Order remains active until cancelled.
     GoodTillCancel,
+    /// Order must be filled immediately or cancelled.
     ImmediateOrCancel,
-    GoodTillDate { date: String },
+    /// Order remains active until the specified date (`YYYYMMDD`).
+    GoodTillDate {
+        /// Date at which the order expires.
+        date: String,
+    },
+    /// Order must be filled entirely or cancelled immediately.
     FillOrKill,
+    /// Good-till-crossing (GTX) order type.
     GoodTillCrossing,
+    /// Day-till-cancelled (DTC) order type.
     DayTillCanceled,
+    /// Auction-only order.
     Auction,
 }
 
 impl TimeInForce {
+    /// Return the TWS API string identifier for the time-in-force.
     pub fn as_str(&self) -> &str {
         match self {
             Self::Day => "DAY",
@@ -161,12 +177,16 @@ impl TimeInForce {
 /// Auction type for auction orders
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AuctionType {
+    /// Opening auction strategy.
     Opening,
+    /// Closing auction strategy.
     Closing,
+    /// Volatility auction strategy.
     Volatility,
 }
 
 impl AuctionType {
+    /// Return the numeric strategy identifier used by TWS.
     pub fn to_strategy(&self) -> i32 {
         match self {
             Self::Opening => 1,
@@ -180,59 +200,92 @@ impl AuctionType {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OrderType {
     // Basic Orders
+    /// Market order executed immediately at the best available price.
     Market,
+    /// Limit order with a maximum/minimum execution price.
     Limit,
+    /// Stop order that triggers a market order once the stop price is hit.
     Stop,
+    /// Stop-limit order that triggers a limit order at the stop price.
     StopLimit,
 
     // Trailing Orders
+    /// Trailing stop order with a moving stop offset.
     TrailingStop,
+    /// Trailing stop-limit order with both stop and limit offsets.
     TrailingStopLimit,
 
     // Time-based Orders
+    /// Market-on-close order.
     MarketOnClose,
+    /// Limit-on-close order.
     LimitOnClose,
+    /// Market-on-open order.
     MarketOnOpen,
+    /// Limit-on-open order.
     LimitOnOpen,
+    /// Auction order routed to an exchange auction.
     AtAuction,
 
     // Touched Orders
+    /// Market-if-touched order.
     MarketIfTouched,
+    /// Limit-if-touched order.
     LimitIfTouched,
 
     // Protected Orders
+    /// Market order with price protection.
     MarketWithProtection,
+    /// Stop order with price protection.
     StopWithProtection,
 
     // Market Variants
+    /// Market-to-limit order that becomes a limit order if not filled.
     MarketToLimit,
+    /// Midprice order targeting the NBBO midpoint.
     Midprice,
 
     // Pegged Orders
+    /// Pegged-to-market order following the best quote.
     PeggedToMarket,
+    /// Pegged-to-stock order for option hedging.
     PeggedToStock,
+    /// Pegged-to-midpoint order tracking the midpoint.
     PeggedToMidpoint,
+    /// Pegged-to-benchmark order using a benchmark price.
     PeggedToBenchmark,
+    /// Peg to best order.
     PegBest,
 
     // Relative Orders
+    /// Relative (pegged) order offset from the best price.
     Relative,
+    /// Passive relative order posting liquidity.
     PassiveRelative,
 
     // Special Orders
+    /// Volatility order for options.
     Volatility,
+    /// Box-top order that converts to market at the best price.
     BoxTop,
+    /// Auction limit order.
     AuctionLimit,
+    /// Auction relative (pegged) order.
     AuctionRelative,
 
     // Combo Orders (special handling required)
+    /// Limit order for combo legs.
     ComboLimit,
+    /// Market order for combo legs.
     ComboMarket,
+    /// Relative + limit order for combo legs.
     RelativeLimitCombo,
+    /// Relative + market order for combo legs.
     RelativeMarketCombo,
 }
 
 impl OrderType {
+    /// Return the TWS API string identifier for this order type.
     pub fn as_str(&self) -> &str {
         match self {
             // Basic Orders
@@ -328,12 +381,29 @@ impl OrderType {
 /// Validation errors
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValidationError {
+    /// Quantity must be positive and finite.
     InvalidQuantity(f64),
+    /// Price must be non-negative and finite.
     InvalidPrice(f64),
+    /// Required builder field was not supplied.
     MissingRequiredField(&'static str),
+    /// Combination of inputs violates broker rules.
     InvalidCombination(String),
-    InvalidStopPrice { stop: f64, current: f64 },
-    InvalidLimitPrice { limit: f64, current: f64 },
+    /// Stop price conflicts with current market context.
+    InvalidStopPrice {
+        /// Stop trigger price supplied by caller.
+        stop: f64,
+        /// Reference market price used for validation.
+        current: f64,
+    },
+    /// Limit price conflicts with current market context.
+    InvalidLimitPrice {
+        /// Limit price supplied by caller.
+        limit: f64,
+        /// Reference market price used for validation.
+        current: f64,
+    },
+    /// Bracket order configuration is invalid.
     InvalidBracketOrder(String),
 }
 
@@ -360,10 +430,15 @@ impl std::error::Error for ValidationError {}
 /// Represents the outcome of analyzing an order for margin/commission
 #[derive(Debug, Clone, PartialEq)]
 pub struct OrderAnalysis {
+    /// Initial margin requirement returned by TWS.
     pub initial_margin: Option<f64>,
+    /// Maintenance margin requirement.
     pub maintenance_margin: Option<f64>,
+    /// Estimated commission for the order.
     pub commission: Option<f64>,
+    /// Currency for the commission figures.
     pub commission_currency: String,
+    /// Free-form warnings provided by TWS.
     pub warning_text: String,
 }
 

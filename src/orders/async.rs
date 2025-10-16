@@ -312,6 +312,7 @@ pub async fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subs
     ))
 }
 
+/// Exercise an option contract through the async client API.
 pub async fn exercise_options(
     client: &Client,
     contract: &Contract,

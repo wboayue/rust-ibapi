@@ -36,6 +36,7 @@ mod sync;
 #[cfg(feature = "async")]
 mod r#async;
 
+/// Tick type constants used in option computations and market data.
 pub mod tick_types;
 
 // Models
@@ -111,6 +112,7 @@ impl std::fmt::Display for SecurityType {
 }
 
 impl SecurityType {
+    /// Create a [SecurityType] from an IB symbol code (e.g. `STK`, `OPT`).
     pub fn from(name: &str) -> SecurityType {
         match name {
             "STK" => SecurityType::Stock,
@@ -142,6 +144,7 @@ pub struct Contract {
     pub contract_id: i32,
     /// The underlying's asset symbol.
     pub symbol: Symbol,
+    /// Type of security (stock, option, future, etc.).
     pub security_type: SecurityType,
     /// The contract's last trading day or contract month (for Options and Futures).
     /// Strings with format YYYYMM will be interpreted as the Contract Month whereas YYYYMMDD will be interpreted as Last Trading Day.
@@ -172,11 +175,14 @@ pub struct Contract {
     pub security_id: String,
     /// Description of the combo legs.
     pub combo_legs_description: String,
+    /// Individual legs composing a combo contract.
     pub combo_legs: Vec<ComboLeg>,
     /// Delta and underlying price for Delta-Neutral combo orders. Underlying (STK or FUT), delta and underlying price goes into this attribute.
     pub delta_neutral_contract: Option<DeltaNeutralContract>,
 
+    /// Identifier of the issuer for bonds and structured products.
     pub issuer_id: String,
+    /// Human-readable description provided by TWS.
     pub description: String,
 }
 
@@ -524,8 +530,8 @@ impl Contract {
     }
 }
 
+/// A single component within a combo contract.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-// ComboLeg represents a leg within combo orders.
 pub struct ComboLeg {
     /// The Contract's IB's unique id.
     pub contract_id: i32,
@@ -533,7 +539,7 @@ pub struct ComboLeg {
     pub ratio: i32,
     /// The side (buy or sell) of the leg:
     pub action: String,
-    // The destination exchange to which the order will be routed.
+    /// The destination exchange to which the order will be routed.
     pub exchange: String,
     /// Specifies whether an order is an open or closing order.
     /// For institutional customers to determine if this order is to open or close a position.
@@ -542,7 +548,7 @@ pub struct ComboLeg {
     pub short_sale_slot: i32,
     /// When ShortSaleSlot is 2, this field shall contain the designated location.
     pub designated_location: String,
-    // DOC_TODO.
+    /// Regulation SHO code for the leg (0 = none).
     pub exempt_code: i32,
 }
 
@@ -686,7 +692,9 @@ pub struct ContractDetails {
 /// TagValue is a convenience struct to define key-value pairs.
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct TagValue {
+    /// Name of the tag.
     pub tag: String,
+    /// String representation of the value.
     pub value: String,
 }
 
@@ -726,6 +734,7 @@ pub struct OptionComputation {
     pub underlying_price: Option<f64>,
 }
 
+/// Option chain metadata for a specific underlying security.
 #[derive(Debug, Default)]
 pub struct OptionChain {
     /// The contract ID of the underlying security.
@@ -747,7 +756,9 @@ pub struct OptionChain {
 /// Contract data and list of derivative security types
 #[derive(Debug)]
 pub struct ContractDescription {
+    /// Fully qualified contract metadata.
     pub contract: Contract,
+    /// Derivative security types available for the contract.
     pub derivative_security_types: Vec<String>,
 }
 
@@ -760,9 +771,12 @@ pub struct MarketRule {
     pub price_increments: Vec<PriceIncrement>,
 }
 
+/// Price ladder entry describing the minimum tick between price bands.
 #[derive(Debug, Default)]
 pub struct PriceIncrement {
+    /// Lower inclusive edge where the increment applies.
     pub low_edge: f64,
+    /// Minimum tick size within this price band.
     pub increment: f64,
 }
 
