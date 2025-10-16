@@ -8,7 +8,7 @@
 
 use clap::{arg, Command};
 
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();

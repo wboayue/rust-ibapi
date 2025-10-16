@@ -6,9 +6,10 @@
 //! cargo run --features sync --example stream_retry
 //! ```
 
+use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::market_data::realtime::{BarSize, WhatToShow};
-use ibapi::{market_data::TradingHours, Client, Error};
+use ibapi::{market_data::TradingHours, Error};
 
 fn main() {
     env_logger::init();

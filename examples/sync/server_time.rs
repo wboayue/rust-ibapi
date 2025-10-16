@@ -8,7 +8,7 @@
 //! cargo run --features sync --example server_time
 //! ```
 
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 
 fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");

@@ -15,7 +15,7 @@ impl<'a> OrderBuilder<'a, Client> {
         let contract = self.contract;
         let order_id = client.next_order_id();
         let order = self.build()?;
-        orders::submit_order(client, order_id, contract, &order)?;
+        orders::blocking::submit_order(client, order_id, contract, &order)?;
         Ok(OrderId::new(order_id))
     }
 
@@ -34,7 +34,7 @@ impl<'a> OrderBuilder<'a, Client> {
         let order = self.build()?;
 
         // Submit what-if order and get the response
-        let responses = orders::place_order(client, order_id, contract, &order)?;
+        let responses = orders::blocking::place_order(client, order_id, contract, &order)?;
 
         // Look for the order state in the responses
         for response in responses {
@@ -75,7 +75,7 @@ impl<'a> BracketOrderBuilder<'a, Client> {
                 order.transmit = true;
             }
 
-            orders::submit_order(client, order_id, contract, &order)?;
+            orders::blocking::submit_order(client, order_id, contract, &order)?;
         }
 
         Ok(BracketOrderIds::new(order_ids[0], order_ids[1], order_ids[2]))
@@ -90,7 +90,7 @@ impl Client {
     ///
     /// # Example
     /// ```no_run
-    /// use ibapi::Client;
+    /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
@@ -122,7 +122,7 @@ impl Client {
             let order_id = base_id + i as i32;
             order.order_id = order_id;
             order_ids.push(OrderId::new(order_id));
-            orders::submit_order(self, order_id, &contract, &order)?;
+            orders::blocking::submit_order(self, order_id, &contract, &order)?;
         }
 
         Ok(order_ids)

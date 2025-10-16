@@ -4,10 +4,11 @@ use std::sync::Arc;
 
 use super::common::{decoders, encoders};
 use super::*;
-use crate::client::{ResponseContext, StreamDecoder, Subscription};
+use crate::client::blocking::Subscription;
+use crate::client::{ResponseContext, StreamDecoder};
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::orders::TagValue;
-use crate::{server_versions, Client, Error};
+use crate::{client::sync::Client, server_versions, Error};
 
 impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ScannerData>, Error> {

@@ -6,7 +6,7 @@
 //! cargo run --features sync --example completed_orders
 //! ```
 
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 
 // This example demonstrates how to request completed orders.
 

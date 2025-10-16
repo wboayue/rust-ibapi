@@ -6,7 +6,7 @@
 //! cargo run --features sync --example wsh_event_data_by_contract
 //! ```
 
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 
 // This example demonstrates requesting Wall Street Horizon event data by contract ID.
 

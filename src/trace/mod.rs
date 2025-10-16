@@ -18,6 +18,11 @@ pub use common::Interaction;
 
 // Re-export API functions based on active feature
 #[cfg(feature = "sync")]
+pub mod blocking {
+    pub use super::sync::{last_interaction, record_request, record_response};
+}
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub use sync::{last_interaction, record_request, record_response};
 
 #[cfg(feature = "async")]

@@ -6,6 +6,7 @@
 //! cargo run --features sync --example readme_realtime_data_2
 //! ```
 
+use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
 
 fn main() {

@@ -472,6 +472,11 @@ pub struct TickRequestParameters {
 
 // Re-export functions based on active feature
 #[cfg(feature = "sync")]
+pub mod blocking {
+    pub(crate) use super::sync::*;
+}
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub use sync::*;
 
 #[cfg(feature = "async")]

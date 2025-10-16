@@ -8,11 +8,11 @@
 
 use std::collections::VecDeque;
 
+use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::market_data::realtime::{Bar, BarSize, WhatToShow};
 use ibapi::market_data::TradingHours;
 use ibapi::orders::{order_builder, Action, PlaceOrder};
-use ibapi::Client;
 
 fn main() {
     env_logger::init();

@@ -3,7 +3,9 @@
 // Sync implementations
 #[cfg(feature = "sync")]
 mod sync_helpers {
-    use crate::client::{Client, ClientRequestBuilders, SharesChannel, StreamDecoder, Subscription, SubscriptionBuilderExt};
+    use crate::client::blocking::{ClientRequestBuilders, SharesChannel, Subscription, SubscriptionBuilderExt};
+    use crate::client::sync::Client;
+    use crate::client::StreamDecoder;
     use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
     use crate::protocol::{check_version, ProtocolFeature};
     use crate::Error;
@@ -80,7 +82,7 @@ mod sync_helpers {
         processor: impl Fn(&mut ResponseMessage) -> Result<R, Error>,
         on_none: impl Fn() -> Result<R, Error>,
     ) -> Result<R, Error> {
-        crate::common::retry::retry_on_connection_reset(|| {
+        crate::common::retry::blocking::retry_on_connection_reset(|| {
             let request = encoder()?;
             let subscription = client.shared_request(message_type).send_raw(request)?;
 
@@ -99,7 +101,7 @@ mod sync_helpers {
         processor: impl Fn(&mut ResponseMessage) -> Result<R, Error>,
         on_none: impl Fn() -> Result<R, Error>,
     ) -> Result<R, Error> {
-        crate::common::retry::retry_on_connection_reset(|| {
+        crate::common::retry::blocking::retry_on_connection_reset(|| {
             let request_id = client.next_request_id();
             let request = encoder(request_id)?;
             let subscription = client.send_request(request_id, request)?;
@@ -232,6 +234,12 @@ mod async_helpers {
 
 // Re-export based on feature flags
 #[cfg(feature = "sync")]
+pub mod blocking {
+    pub(crate) use super::sync_helpers::*;
+}
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
+#[allow(unused_imports)]
 pub use sync_helpers::*;
 
 #[cfg(feature = "async")]

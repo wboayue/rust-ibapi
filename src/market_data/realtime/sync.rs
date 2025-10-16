@@ -1,11 +1,12 @@
 use log::debug;
 
-use crate::client::{ClientRequestBuilders, ResponseContext, Subscription};
+use crate::client::blocking::{ClientRequestBuilders, Subscription};
+use crate::client::ResponseContext;
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::orders::TagValue;
 use crate::protocol::{check_version, Features};
-use crate::{Client, Error};
+use crate::{client::sync::Client, Error};
 
 use super::common::{decoders, encoders};
 use super::{Bar, BarSize, BidAsk, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, Trade, WhatToShow};

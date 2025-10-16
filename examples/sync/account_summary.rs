@@ -7,7 +7,7 @@
 //! ```
 
 use ibapi::accounts::{types::AccountGroup, AccountSummaryResult, AccountSummaryTags};
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 
 fn main() {
     env_logger::init();

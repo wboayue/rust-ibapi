@@ -106,6 +106,12 @@ pub struct ScannerData {
 
 // Re-export API functions based on active feature
 #[cfg(feature = "sync")]
+pub mod blocking {
+    pub(crate) use super::sync::{scanner_parameters, scanner_subscription};
+}
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
+#[allow(unused_imports)]
 pub(crate) use sync::{scanner_parameters, scanner_subscription};
 
 #[cfg(feature = "async")]

@@ -6,6 +6,7 @@
 //! cargo run --features sync --example switch_market_data_type
 //! ```
 
+use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
 
 fn main() {

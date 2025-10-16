@@ -42,6 +42,34 @@ pub mod helpers {
         (client, message_bus)
     }
 
+    #[cfg(feature = "sync")]
+    pub fn create_blocking_test_client() -> (crate::client::blocking::Client, Arc<MessageBusStub>) {
+        create_blocking_test_client_with_version(server_versions::SIZE_RULES)
+    }
+
+    #[cfg(feature = "sync")]
+    pub fn create_blocking_test_client_with_version(server_version: i32) -> (crate::client::blocking::Client, Arc<MessageBusStub>) {
+        create_blocking_test_client_with_responses_and_version(vec![], server_version)
+    }
+
+    #[cfg(feature = "sync")]
+    pub fn create_blocking_test_client_with_responses(responses: Vec<String>) -> (crate::client::blocking::Client, Arc<MessageBusStub>) {
+        create_blocking_test_client_with_responses_and_version(responses, server_versions::SIZE_RULES)
+    }
+
+    #[cfg(feature = "sync")]
+    pub fn create_blocking_test_client_with_responses_and_version(
+        responses: Vec<String>,
+        server_version: i32,
+    ) -> (crate::client::blocking::Client, Arc<MessageBusStub>) {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: responses,
+        });
+        let client = crate::client::blocking::Client::stubbed(message_bus.clone(), server_version);
+        (client, message_bus)
+    }
+
     /// Asserts that the request messages match expected values
     pub fn assert_request_messages(message_bus: &MessageBusStub, expected: &[&str]) {
         let request_messages = message_bus.request_messages.read().unwrap();

@@ -1,11 +1,11 @@
 use super::common::{decoders, encoders};
 use super::*;
-use crate::client::{ClientRequestBuilders, Subscription};
+use crate::client::blocking::{ClientRequestBuilders, Subscription};
 use crate::common::request_helpers;
 use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::StreamDecoder;
-use crate::{Client, Error};
+use crate::{client::sync::Client, Error};
 use log::{error, info};
 
 // Requests contract information.
@@ -172,7 +172,7 @@ pub(crate) fn option_chain(
     security_type: SecurityType,
     contract_id: i32,
 ) -> Result<Subscription<OptionChain>, Error> {
-    request_helpers::request_with_id(client, Features::SEC_DEF_OPT_PARAMS_REQ, |request_id| {
+    request_helpers::blocking::request_with_id(client, Features::SEC_DEF_OPT_PARAMS_REQ, |request_id| {
         encoders::encode_request_option_chain(request_id, symbol, exchange, security_type, contract_id)
     })
 }

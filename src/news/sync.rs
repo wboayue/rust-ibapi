@@ -4,11 +4,12 @@ use std::sync::Arc;
 
 use super::common::{decoders, encoders};
 use super::*;
-use crate::client::{ResponseContext, SharesChannel, StreamDecoder, Subscription};
+use crate::client::blocking::{SharesChannel, Subscription};
+use crate::client::{ResponseContext, StreamDecoder};
 use crate::contracts::Contract;
 use crate::market_data::realtime;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
-use crate::{server_versions, Client, Error};
+use crate::{client::sync::Client, server_versions, Error};
 
 impl SharesChannel for Vec<NewsProvider> {}
 
@@ -34,6 +35,16 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
             IncomingMessages::HistoricalNewsEnd => Err(Error::EndOfStream),
             IncomingMessages::TickNews => Ok(decoders::decode_tick_news(message.clone())?),
             _ => Err(Error::UnexpectedResponse(message.clone())),
+        }
+    }
+
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
+        if context.and_then(|ctx| ctx.request_type) == Some(OutgoingMessages::RequestMarketData) {
+            let request_id =
+                request_id.ok_or_else(|| Error::InvalidArgument("request id required to cancel market data subscription".to_string()))?;
+            realtime::common::encoders::encode_cancel_market_data(request_id)
+        } else {
+            Err(Error::NotImplemented)
         }
     }
 }
@@ -154,9 +165,10 @@ pub(crate) fn broad_tape_news(client: &Client, provider_code: &str) -> Result<Su
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::blocking::Client;
     use crate::contracts::Contract;
     use crate::news::ArticleType;
-    use crate::{server_versions, stubs::MessageBusStub, Client};
+    use crate::{server_versions, stubs::MessageBusStub};
     use std::sync::{Arc, RwLock};
     use time::macros::datetime;
 

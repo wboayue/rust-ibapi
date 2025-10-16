@@ -2,11 +2,16 @@
 
 use super::common::{decoders, encoders};
 use super::*;
-use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::OutgoingMessages;
+#[cfg(not(feature = "sync"))]
+use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::orders::TagValue;
-use crate::subscriptions::{ResponseContext, StreamDecoder, Subscription};
+use crate::subscriptions::Subscription;
+#[cfg(not(feature = "sync"))]
+use crate::subscriptions::{ResponseContext, StreamDecoder};
 use crate::{server_versions, Client, Error};
 
+#[cfg(not(feature = "sync"))]
 impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::ScannerData];
 

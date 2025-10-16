@@ -7,7 +7,7 @@
 //! ```
 
 /// Example of connecting to TWS.
-use ibapi::prelude::*;
+use ibapi::client::blocking::Client;
 
 fn main() {
     env_logger::init();

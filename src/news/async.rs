@@ -4,10 +4,16 @@ use super::common::{decoders, encoders};
 use super::*;
 use crate::contracts::Contract;
 use crate::market_data::realtime;
-use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
-use crate::subscriptions::{ResponseContext, StreamDecoder, Subscription};
+use crate::messages::OutgoingMessages;
+#[cfg(not(feature = "sync"))]
+use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
+use crate::subscriptions::ResponseContext;
+#[cfg(not(feature = "sync"))]
+use crate::subscriptions::StreamDecoder;
+use crate::subscriptions::Subscription;
 use crate::{server_versions, Client, Error};
 
+#[cfg(not(feature = "sync"))]
 impl StreamDecoder<NewsBulletin> for NewsBulletin {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::NewsBulletins];
 
@@ -23,6 +29,7 @@ impl StreamDecoder<NewsBulletin> for NewsBulletin {
     }
 }
 
+#[cfg(not(feature = "sync"))]
 impl StreamDecoder<NewsArticle> for NewsArticle {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::HistoricalNews,

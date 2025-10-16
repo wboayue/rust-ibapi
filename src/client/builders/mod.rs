@@ -10,9 +10,8 @@ pub mod r#async;
 
 mod common;
 
-// Re-export builders based on feature
+// Re-export builders based on feature selection
 #[cfg(feature = "sync")]
-pub use sync::{ClientRequestBuilders, SubscriptionBuilderExt};
-
-#[cfg(feature = "async")]
-pub use r#async::{ClientRequestBuilders, SubscriptionBuilderExt};
+pub mod blocking {
+    pub(crate) use super::sync::{ClientRequestBuilders, SubscriptionBuilderExt};
+}

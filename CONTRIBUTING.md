@@ -4,11 +4,13 @@ Thank you for your interest in contributing! This guide will help you get starte
 
 ## Important: Feature Flags
 
-**rust-ibapi requires you to choose exactly ONE feature:**
-- `--features sync` - For synchronous, thread-based execution
-- `--features async` - For asynchronous, tokio-based execution
+`rust-ibapi` enables the asynchronous client by default.
 
-These features are **mutually exclusive**. All commands must specify one.
+- Default build (`cargo build`) uses the async client, available as `client::Client`.
+- Sync-only: `cargo build --no-default-features --features sync` keeps the blocking client on `client::Client`.
+- Combined: `cargo build --no-default-features --features "sync async"` exposes the async client on `client::Client` and the blocking API under `client::blocking::Client`.
+
+Run commands for every configuration that your change touches (default async, sync-only, and combined when applicable).
 
 ## Quick Start
 
@@ -16,16 +18,19 @@ These features are **mutually exclusive**. All commands must specify one.
 2. **Clone** your fork: `git clone https://github.com/<your-username>/rust-ibapi`
 3. **Test** your setup: 
    ```bash
-   cargo test --features sync
-   cargo test --features async
+   cargo test                          # default async client
+   cargo test --no-default-features --features sync
+   cargo test --all-features           # async + blocking
    ```
 4. **Make** your changes
-5. **Verify** both modes work:
+5. **Verify** all modes work:
    ```bash
-   cargo test --features sync
-   cargo test --features async
-   cargo clippy --features sync
-   cargo clippy --features async
+   cargo test
+   cargo test --no-default-features --features sync
+   cargo test --all-features
+   cargo clippy
+   cargo clippy --no-default-features --features sync
+   cargo clippy --all-features
    cargo fmt
    ```
 6. **Submit** a pull request
@@ -184,16 +189,21 @@ The project uses a MockGateway for integration tests:
 
 ### Feature-Specific Code
 
-Since features are mutually exclusive, use simple guards:
+The `sync` and `async` features can be enabled independently or together.
+Use explicit guards so intent is clear:
 
 ```rust
-// For sync-only code
+// For sync-capable code (applies in both sync-only and combined builds)
 #[cfg(feature = "sync")]
 use std::thread;
 
 // For async-only code
 #[cfg(feature = "async")]
 use tokio::task;
+
+// For code that should compile only when sync is enabled without async
+#[cfg(all(feature = "sync", not(feature = "async")))]
+fn sync_only_behavior() { /* ... */ }
 ```
 
 See [Code Style Guidelines](docs/code-style.md) for more details.
@@ -202,7 +212,7 @@ See [Code Style Guidelines](docs/code-style.md) for more details.
 
 ### Before Submitting
 
-1. **Test both modes** - Ensure all tests pass for both features
+1. **Test every mode you touched** - default async, sync-only, and combined (`--all-features`) when relevant
 2. **Run quality checks**:
    ```bash
    cargo fmt --check
@@ -307,10 +317,10 @@ IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --features sync --example exampl
 
 ### Common Issues
 
-- **"no feature specified"** - Add `--features sync` or `--features async`
-- **"mutually exclusive features"** - Use only one feature flag
-- **Tests failing** - Ensure you're testing with the correct feature flag
-- **Clippy warnings** - Run clippy for both features separately
+- **"no feature specified"** - If you disabled default features, add `--features sync` or `--features async`
+- **"mutually exclusive features"** - Update to the latest `main`; older commits required choosing only one feature
+- **Tests failing** - Ensure you're running the suite for every relevant feature combination
+- **Clippy warnings** - Run clippy for default, sync-only, and `--all-features`
 
 For detailed solutions, see the [Troubleshooting Guide](docs/troubleshooting.md).
 

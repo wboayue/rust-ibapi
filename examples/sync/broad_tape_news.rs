@@ -6,7 +6,7 @@
 //! cargo run --features sync --example broad_tape_news
 //! ```
 
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 
 // This example demonstrates how live news for a contract can be requested.
 

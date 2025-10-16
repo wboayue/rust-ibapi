@@ -7,7 +7,8 @@
 //! ```
 
 use clap::{arg, Command};
-use ibapi::{accounts::types::AccountId, Client};
+use ibapi::accounts::types::AccountId;
+use ibapi::client::blocking::Client;
 
 fn main() {
     env_logger::init();

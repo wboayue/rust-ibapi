@@ -6,10 +6,10 @@
 //! cargo run --features sync --example options_purchase
 //! ```
 
+use ibapi::client::blocking::Client;
 use ibapi::{
     contracts::{Contract, Currency, Exchange, SecurityType, Symbol},
     orders::{self, order_builder, PlaceOrder},
-    Client,
 };
 
 fn main() {

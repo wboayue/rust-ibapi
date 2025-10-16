@@ -7,8 +7,8 @@ use crate::client::sync::Client;
 use crate::client::StreamDecoder;
 use crate::errors::Error;
 use crate::messages::{OutgoingMessages, RequestMessage};
+use crate::subscriptions::sync::Subscription;
 use crate::subscriptions::ResponseContext;
-use crate::subscriptions::Subscription;
 use crate::transport::InternalSubscription;
 
 /// Builder for creating requests with IDs
@@ -241,7 +241,7 @@ where
 
 /// Extension trait to add builder methods to Client
 #[allow(dead_code)]
-pub trait ClientRequestBuilders {
+pub(crate) trait ClientRequestBuilders {
     /// Create a request builder with an auto-generated request ID
     fn request(&self) -> RequestBuilder<'_>;
 
@@ -289,7 +289,7 @@ impl ClientRequestBuilders for Client {
 }
 
 /// Extension trait to add subscription builder to Client
-pub trait SubscriptionBuilderExt {
+pub(crate) trait SubscriptionBuilderExt {
     /// Creates a new subscription builder
     fn subscription<T>(&self) -> SubscriptionBuilder<'_, T>
     where

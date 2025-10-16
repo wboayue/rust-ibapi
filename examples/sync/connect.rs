@@ -11,7 +11,7 @@
 //! - Add "127.0.0.1" to "Trusted IPs"
 //! - Default ports: 4001 (live), 4002 (paper)
 
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();

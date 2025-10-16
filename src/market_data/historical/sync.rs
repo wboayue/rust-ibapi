@@ -5,12 +5,12 @@ use std::sync::Mutex;
 use log::{debug, warn};
 use time::OffsetDateTime;
 
-use crate::client::ClientRequestBuilders;
+use crate::client::blocking::ClientRequestBuilders;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::protocol::{check_version, Features};
 use crate::transport::{InternalSubscription, Response};
-use crate::{Client, Error, MAX_RETRIES};
+use crate::{client::sync::Client, Error, MAX_RETRIES};
 
 use super::common::{decoders, encoders};
 use super::{BarSize, Duration, HistogramEntry, HistoricalData, Schedule, TickBidAsk, TickDecoder, TickLast, TickMidpoint, WhatToShow};
@@ -427,13 +427,14 @@ impl<T: TickDecoder<T>> Iterator for TickSubscriptionTimeoutIter<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::blocking::Client;
     use crate::contracts::Contract;
     use crate::market_data::historical::ToDuration;
     use crate::market_data::TradingHours;
     use crate::messages::OutgoingMessages;
+    use crate::server_versions;
     use crate::stubs::MessageBusStub;
     use crate::ToField;
-    use crate::{server_versions, Client};
     use std::sync::{Arc, RwLock};
     use time::macros::{date, datetime};
     use time::OffsetDateTime;

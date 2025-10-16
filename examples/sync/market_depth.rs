@@ -6,8 +6,8 @@
 //! cargo run --features sync --example market_depth
 //! ```
 
+use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
-use ibapi::Client;
 
 // This example demonstrates how to request market depth data.
 

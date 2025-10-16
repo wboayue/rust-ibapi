@@ -7,6 +7,7 @@
 //! ```
 
 use clap::{arg, ArgMatches, Command};
+use ibapi::client::blocking::Client;
 use log::{debug, info};
 
 use ibapi::contracts::Currency;

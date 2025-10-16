@@ -8,7 +8,7 @@
 
 use time::macros::datetime;
 
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 
 fn main() {
     env_logger::init();

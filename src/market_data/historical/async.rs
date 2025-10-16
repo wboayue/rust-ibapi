@@ -40,7 +40,7 @@ pub async fn head_timestamp(
 }
 
 /// Requests historical data for a contract.
-/// https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
+/// <https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration>
 pub async fn historical_data(
     client: &Client,
     contract: &Contract,

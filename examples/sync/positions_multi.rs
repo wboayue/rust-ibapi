@@ -6,9 +6,10 @@
 //! cargo run --features sync --example positions_multi
 //! ```
 
+use ibapi::client::blocking::Client;
 use std::env;
 
-use ibapi::{accounts::types::AccountId, Client};
+use ibapi::accounts::types::AccountId;
 
 pub fn main() {
     env_logger::init();

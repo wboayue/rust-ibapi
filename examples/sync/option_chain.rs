@@ -6,7 +6,8 @@
 //! cargo run --features sync --example option_chain
 //! ```
 
-use ibapi::{contracts::SecurityType, Client};
+use ibapi::client::blocking::Client;
+use ibapi::contracts::SecurityType;
 
 // This example demonstrates requesting option chain data from the TWS.
 

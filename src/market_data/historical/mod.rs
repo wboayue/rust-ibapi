@@ -431,6 +431,12 @@ impl ToField for Option<WhatToShow> {
 
 // Re-export functions based on active feature
 #[cfg(feature = "sync")]
+pub mod blocking {
+    pub(crate) use super::sync::*;
+}
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
+#[allow(unused_imports)]
 pub use sync::*;
 
 #[cfg(feature = "async")]
@@ -466,7 +472,7 @@ impl TickDecoder<TickMidpoint> for TickMidpoint {
 }
 
 // Re-export TickSubscription and iterator types based on active feature
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub use sync::{TickSubscription, TickSubscriptionIter, TickSubscriptionOwnedIter, TickSubscriptionTimeoutIter, TickSubscriptionTryIter};
 
 #[cfg(feature = "async")]
