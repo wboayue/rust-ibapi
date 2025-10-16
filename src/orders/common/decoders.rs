@@ -1047,7 +1047,8 @@ mod tests {
             "",
         ];
 
-        let message_str = raw_message.join("\0");
+        let mut message_str = raw_message.join("\0");
+        message_str.push('\0'); // match real TWS framing which terminates messages with NUL
         let message = ResponseMessage::from(&message_str);
 
         // Using the actual server version from our test (173)
@@ -1205,7 +1206,8 @@ mod tests {
             "",
         ];
 
-        let message_str = raw_message.join("\0");
+        let mut message_str = raw_message.join("\0");
+        message_str.push('\0'); // ensure final empty field is preserved
         let message = ResponseMessage::from(&message_str);
 
         // Using server version 173 which is below the thresholds for problematic fields
