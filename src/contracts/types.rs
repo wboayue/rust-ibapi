@@ -9,10 +9,12 @@ use time::{Date, Duration, Month, OffsetDateTime, Weekday};
 pub struct Symbol(pub String);
 
 impl Symbol {
+    /// Create a symbol from any string-like input.
     pub fn new(s: impl Into<String>) -> Self {
         Symbol(s.into())
     }
 
+    /// Return the raw symbol text.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -166,11 +168,14 @@ impl ToField for Currency {
 /// Option right (Call or Put)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OptionRight {
+    /// Call option right.
     Call,
+    /// Put option right.
     Put,
 }
 
 impl OptionRight {
+    /// Return the single-character representation (`"C"` or `"P"`).
     pub fn as_str(&self) -> &str {
         match self {
             OptionRight::Call => "C",
@@ -190,6 +195,7 @@ impl fmt::Display for OptionRight {
 pub struct Strike(f64);
 
 impl Strike {
+    /// Construct a validated strike price ensuring it is positive.
     pub fn new(price: f64) -> Result<Self, String> {
         if price <= 0.0 {
             Err("Strike price must be positive".to_string())
@@ -203,6 +209,7 @@ impl Strike {
         Strike::new(price).expect("Strike price must be positive")
     }
 
+    /// Access the numeric strike value.
     pub fn value(&self) -> f64 {
         self.0
     }
@@ -217,6 +224,7 @@ pub struct ExpirationDate {
 }
 
 impl ExpirationDate {
+    /// Create an option expiration date from year/month/day components.
     pub fn new(year: u16, month: u8, day: u8) -> Self {
         ExpirationDate { year, month, day }
     }
@@ -304,6 +312,7 @@ pub struct ContractMonth {
 }
 
 impl ContractMonth {
+    /// Construct a futures contract month given year and month.
     pub fn new(year: u16, month: u8) -> Self {
         ContractMonth { year, month }
     }
@@ -394,10 +403,12 @@ impl fmt::Display for ContractMonth {
 pub struct Cusip(pub String);
 
 impl Cusip {
+    /// Create a CUSIP identifier from any string-like value.
     pub fn new(s: impl Into<String>) -> Self {
         Cusip(s.into())
     }
 
+    /// Return the underlying CUSIP text.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -432,10 +443,12 @@ impl fmt::Display for Cusip {
 pub struct Isin(pub String);
 
 impl Isin {
+    /// Create an ISIN identifier from any string-like value.
     pub fn new(s: impl Into<String>) -> Self {
         Isin(s.into())
     }
 
+    /// Return the underlying ISIN text.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -468,18 +481,23 @@ impl fmt::Display for Isin {
 /// Bond identifier type
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BondIdentifier {
+    /// A bond identified by a CUSIP code.
     Cusip(Cusip),
+    /// A bond identified by an ISIN code.
     Isin(Isin),
 }
 
 /// Trading action for spread/combo legs
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LegAction {
+    /// Buy the leg.
     Buy,
+    /// Sell the leg.
     Sell,
 }
 
 impl LegAction {
+    /// Return the string form used by IB (`"BUY"`/`"SELL"`).
     pub fn as_str(&self) -> &str {
         match self {
             LegAction::Buy => "BUY",

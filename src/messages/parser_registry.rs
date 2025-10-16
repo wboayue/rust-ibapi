@@ -10,13 +10,16 @@ use std::collections::HashMap;
 /// Represents a parsed field in a TWS message
 #[derive(Debug, Clone)]
 pub struct ParsedField {
+    /// Human-readable field name.
     pub name: String,
+    /// Field value formatted as a string.
     pub value: String,
 }
 
 /// Field definition for message parsing
 type FieldTransform = Box<dyn Fn(&str) -> String + Send + Sync>;
 
+/// Definition of a message field (index, name, optional transform).
 pub struct FieldDef {
     index: usize,
     name: &'static str,
@@ -24,6 +27,7 @@ pub struct FieldDef {
 }
 
 impl FieldDef {
+    /// Create a new field definition using the provided index and name.
     pub fn new(index: usize, name: &'static str) -> Self {
         Self {
             index,
@@ -32,6 +36,7 @@ impl FieldDef {
         }
     }
 
+    /// Attach a value transformation closure to this field definition.
     pub fn with_transform<F>(mut self, f: F) -> Self
     where
         F: Fn(&str) -> String + Send + Sync + 'static,
@@ -43,6 +48,7 @@ impl FieldDef {
 
 /// Message parser trait
 pub trait MessageParser: Send + Sync {
+    /// Parse a slice of raw fields into structured field/value pairs.
     fn parse(&self, parts: &[&str]) -> Vec<ParsedField>;
 }
 
@@ -52,6 +58,7 @@ pub struct FieldBasedParser {
 }
 
 impl FieldBasedParser {
+    /// Create a parser that maps indices to field definitions.
     pub fn new(fields: Vec<FieldDef>) -> Self {
         Self { fields }
     }
@@ -87,6 +94,7 @@ pub struct TimestampParser {
 }
 
 impl TimestampParser {
+    /// Create a timestamp-aware parser decorating a base parser.
     pub fn new(base_parser: FieldBasedParser, timestamp_index: usize) -> Self {
         Self {
             base_parser,
@@ -122,6 +130,7 @@ pub struct MessageParserRegistry {
 }
 
 impl MessageParserRegistry {
+    /// Create a registry pre-populated with standard parsers.
     pub fn new() -> Self {
         let mut registry = Self {
             request_parsers: HashMap::new(),
@@ -337,6 +346,7 @@ impl MessageParserRegistry {
         );
     }
 
+    /// Parse an outbound message into human-readable fields.
     pub fn parse_request(&self, msg_type: OutgoingMessages, parts: &[&str]) -> Vec<ParsedField> {
         if let Some(parser) = self.request_parsers.get(&msg_type) {
             parser.parse(parts)
@@ -345,6 +355,7 @@ impl MessageParserRegistry {
         }
     }
 
+    /// Parse an inbound message into human-readable fields.
     pub fn parse_response(&self, msg_type: IncomingMessages, parts: &[&str]) -> Vec<ParsedField> {
         if let Some(parser) = self.response_parsers.get(&msg_type) {
             parser.parse(parts)

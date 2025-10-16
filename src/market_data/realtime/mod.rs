@@ -17,8 +17,10 @@ pub(crate) mod common;
 
 // Feature-specific implementations
 #[cfg(feature = "sync")]
+/// Synchronous real-time market data API.
 pub mod sync;
 
+/// Asynchronous real-time market data API.
 #[cfg(feature = "async")]
 pub mod r#async;
 
@@ -232,8 +234,11 @@ impl ToField for WhatToShow {
 /// Market depth data types.
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum MarketDepths {
+    /// Level-1 depth update.
     MarketDepth(MarketDepth),
+    /// Level-2 (per exchange/MPID) depth update.
     MarketDepthL2(MarketDepthL2),
+    /// Informational notice (e.g., depth data unavailable).
     Notice(Notice),
 }
 
@@ -246,9 +251,9 @@ pub struct MarketDepth {
     pub operation: i32,
     /// 0 for ask, 1 for bid
     pub side: i32,
-    // The order's price
+    /// The order's price.
     pub price: f64,
-    // The order's size
+    /// The order's size.
     pub size: f64,
 }
 
@@ -263,9 +268,9 @@ pub struct MarketDepthL2 {
     pub operation: i32,
     /// 0 for ask, 1 for bid
     pub side: i32,
-    // The order's price
+    /// The order's price.
     pub price: f64,
-    // The order's size
+    /// The order's size.
     pub size: f64,
     /// Flag indicating if this is smart depth response (aggregate data from multiple exchanges, v974+)
     pub smart_depth: bool,
@@ -318,15 +323,25 @@ pub struct DepthMarketDataDescription {
 /// Various types of market data ticks.
 #[derive(Debug)]
 pub enum TickTypes {
+    /// Price update tick.
     Price(TickPrice),
+    /// Size update tick.
     Size(TickSize),
+    /// Textual market data message.
     String(TickString),
+    /// Exchange for Physical (EFP) tick.
     EFP(TickEFP),
+    /// Generic numeric tick (e.g., index values).
     Generic(TickGeneric),
+    /// Option computation tick.
     OptionComputation(OptionComputation),
+    /// Snapshot request completed for this ticker.
     SnapshotEnd,
+    /// Warning or informational notice from TWS.
     Notice(Notice),
+    /// Tick-by-tick request parameter information.
     RequestParameters(TickRequestParameters),
+    /// Combined price and size tick.
     PriceSize(TickPriceSize),
 }
 
@@ -472,6 +487,7 @@ pub struct TickRequestParameters {
 
 // Re-export functions based on active feature
 #[cfg(feature = "sync")]
+/// Blocking real-time market data helpers layered on top of the synchronous client.
 pub mod blocking {
     pub(crate) use super::sync::*;
 }

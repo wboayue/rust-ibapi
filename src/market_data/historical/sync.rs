@@ -247,6 +247,7 @@ pub(crate) fn histogram_data(
 
 // TickSubscription and related types
 
+/// Shared subscription handle that decodes historical tick batches as they arrive.
 pub struct TickSubscription<T: TickDecoder<T>> {
     done: AtomicBool,
     messages: InternalSubscription,
@@ -264,14 +265,17 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
         }
     }
 
+    /// Return an iterator that blocks until each tick batch becomes available.
     pub fn iter(&self) -> TickSubscriptionIter<'_, T> {
         TickSubscriptionIter { subscription: self }
     }
 
+    /// Return a non-blocking iterator that yields immediately with cached ticks.
     pub fn try_iter(&self) -> TickSubscriptionTryIter<'_, T> {
         TickSubscriptionTryIter { subscription: self }
     }
 
+    /// Return an iterator that waits up to `duration` for each tick batch.
     pub fn timeout_iter(&self, duration: std::time::Duration) -> TickSubscriptionTimeoutIter<'_, T> {
         TickSubscriptionTimeoutIter {
             subscription: self,
@@ -279,14 +283,17 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
         }
     }
 
+    /// Block until the next tick batch is available.
     pub fn next(&self) -> Option<T> {
         self.next_helper(|| self.messages.next())
     }
 
+    /// Attempt to fetch the next tick batch without blocking.
     pub fn try_next(&self) -> Option<T> {
         self.next_helper(|| self.messages.try_next())
     }
 
+    /// Wait up to `duration` for the next tick batch to arrive.
     pub fn next_timeout(&self, duration: std::time::Duration) -> Option<T> {
         self.next_helper(|| self.messages.next_timeout(duration))
     }

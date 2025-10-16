@@ -113,6 +113,7 @@ pub fn midpoint_match(action: Action, quantity: f64) -> Order {
 // A Midprice order is designed to split the difference between the bid and ask prices, and fill at the current midpoint of
 // the NBBO or better. Set an optional price cap to define the highest price (for a buy order) or the lowest price (for a sell
 // order) you are willing to accept. Requires TWS 975+. Smart-routing to US stocks only.
+/// Construct a midprice order with the supplied cap.
 pub fn midprice(action: Action, quantity: f64, price_cap: f64) -> Order {
     Order {
         action,
@@ -709,6 +710,7 @@ pub fn volatility(action: Action, quantity: f64, volatility_percent: f64, volati
     }
 }
 
+/// Create an FX hedge order tied to the specified parent order id.
 pub fn market_f_hedge(parent_order_id: i32, action: Action) -> Order {
     //FX Hedge orders can only have a quantity of 0
     let mut order = market_order(action, 0.0);
@@ -719,6 +721,7 @@ pub fn market_f_hedge(parent_order_id: i32, action: Action) -> Order {
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Construct a pegged-to-benchmark order referencing another contract.
 pub fn pegged_to_benchmark(
     action: Action,
     quantity: f64,
@@ -808,6 +811,7 @@ pub fn attach_adjustable_to_trail(
     order
 }
 
+/// Build a limit order flagged for "what if" margin calculation.
 pub fn what_if_limit_order(action: Action, quantity: f64, limit_price: f64) -> Order {
     let mut order = limit_order(action, quantity, limit_price);
     order.what_if = true;
@@ -916,6 +920,7 @@ pub fn what_if_limit_order(action: Action, quantity: f64, limit_price: f64) -> O
 
 //     }
 
+/// Build an IBKRATS limit order (not-held with auto-routing).
 pub fn limit_ibkrats(action: Action, quantity: f64, limit_price: f64) -> Order {
     Order {
         action,
@@ -927,6 +932,7 @@ pub fn limit_ibkrats(action: Action, quantity: f64, limit_price: f64) -> Order {
     }
 }
 
+/// Build a limit order while overriding the manual order time field.
 pub fn limit_order_with_manual_order_time(action: Action, quantity: f64, limit_price: f64, manual_order_time: &str) -> Order {
     let mut order = limit_order(action, quantity, limit_price);
     manual_order_time.clone_into(&mut order.manual_order_time);
@@ -934,6 +940,7 @@ pub fn limit_order_with_manual_order_time(action: Action, quantity: f64, limit_p
     order
 }
 
+/// Create a `PEG BEST` order that competes up to the midpoint.
 pub fn peg_best_up_to_mid_order(
     action: Action,
     quantity: f64,
@@ -958,6 +965,7 @@ pub fn peg_best_up_to_mid_order(
     }
 }
 
+/// Create a `PEG BEST` order with a caller-specified competition offset.
 pub fn peg_best_order(
     action: Action,
     quantity: f64,
@@ -979,6 +987,7 @@ pub fn peg_best_order(
     }
 }
 
+/// Create a `PEG MID` order pegged to the NBBO midpoint.
 pub fn peg_mid_order(
     action: Action,
     quantity: f64,

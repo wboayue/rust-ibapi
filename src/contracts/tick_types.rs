@@ -60,88 +60,165 @@ pub enum TickType {
     OptionHistoricalVol = 23,
     /// Implied volatility for options.
     OptionImpliedVol = 24,
+    /// Exchange code from which the option bid quote originated.
     OptionBidExch = 25,
+    /// Exchange code from which the option ask quote originated.
     OptionAskExch = 26,
+    /// Current open interest for call options.
     OptionCallOpenInterest = 27,
+    /// Current open interest for put options.
     OptionPutOpenInterest = 28,
+    /// Trading volume for call options.
     OptionCallVolume = 29,
+    /// Trading volume for put options.
     OptionPutVolume = 30,
+    /// Premium of the index future over fair value.
     IndexFuturePremium = 31,
+    /// Exchange code supplying the top-of-book bid.
     BidExch = 32,
+    /// Exchange code supplying the top-of-book ask.
     AskExch = 33,
+    /// Shares/contracts offered during the auction.
     AuctionVolume = 34,
+    /// Indicative auction clearing price.
     AuctionPrice = 35,
+    /// Imbalance between buy and sell interest in the auction.
     AuctionImbalance = 36,
     /// Mark price (used for margining in futures).
     MarkPrice = 37,
+    /// Bid-side exchange for EFP (Exchange for Physical) computations.
     BidEfpComputation = 38,
+    /// Ask-side exchange for EFP computations.
     AskEfpComputation = 39,
+    /// Last trade exchange for EFP computations.
     LastEfpComputation = 40,
+    /// Opening price exchange for EFP computations.
     OpenEfpComputation = 41,
+    /// High price exchange for EFP computations.
     HighEfpComputation = 42,
+    /// Low price exchange for EFP computations.
     LowEfpComputation = 43,
+    /// Closing price exchange for EFP computations.
     CloseEfpComputation = 44,
+    /// Timestamp (epoch seconds) for the last tick.
     LastTimestamp = 45,
     /// Number of shares available for shorting.
     Shortable = 46,
+    /// Fundamental ratios snapshot (PE, EPS, etc.).
     FundamentalRatios = 47,
+    /// Real-time consolidated volume message.
     RtVolume = 48,
     /// Indicates if trading is halted (0 = not halted, 1 = halted).
     Halted = 49,
+    /// Yield computed from the bid price (fixed income).
     BidYield = 50,
+    /// Yield computed from the ask price (fixed income).
     AskYield = 51,
+    /// Yield of the last trade (fixed income).
     LastYield = 52,
+    /// Custom option computation values supplied by IB.
     CustOptionComputation = 53,
+    /// Number of trades over the reporting interval.
     TradeCount = 54,
+    /// Trades per minute over the interval.
     TradeRate = 55,
+    /// Volume per minute over the interval.
     VolumeRate = 56,
+    /// Last regular trading hours trade details.
     LastRthTrade = 57,
+    /// Real-time historical volatility value.
     RtHistoricalVol = 58,
+    /// Projected dividend information.
     IbDividends = 59,
+    /// Factor multiplier used for bonds.
     BondFactorMultiplier = 60,
+    /// Regulatory imbalance indicator from exchanges.
     RegulatoryImbalance = 61,
+    /// Exchange-issued news headline.
     NewsTick = 62,
+    /// Short-term volume averaged over 3 minutes.
     ShortTermVolume3Min = 63,
+    /// Short-term volume averaged over 5 minutes.
     ShortTermVolume5Min = 64,
+    /// Short-term volume averaged over 10 minutes.
     ShortTermVolume10Min = 65,
+    /// Delayed bid price.
     DelayedBid = 66,
+    /// Delayed ask price.
     DelayedAsk = 67,
+    /// Delayed last traded price.
     DelayedLast = 68,
+    /// Delayed bid size.
     DelayedBidSize = 69,
+    /// Delayed ask size.
     DelayedAskSize = 70,
+    /// Delayed last trade size.
     DelayedLastSize = 71,
+    /// Delayed session high.
     DelayedHigh = 72,
+    /// Delayed session low.
     DelayedLow = 73,
+    /// Delayed volume.
     DelayedVolume = 74,
+    /// Delayed session close.
     DelayedClose = 75,
+    /// Delayed session open.
     DelayedOpen = 76,
+    /// Real-time trade volume (aggregate).
     RtTrdVolume = 77,
+    /// Credit manager mark price.
     CreditmanMarkPrice = 78,
+    /// Credit manager slow mark price.
     CreditmanSlowMarkPrice = 79,
+    /// Delayed option bid computation.
     DelayedBidOption = 80,
+    /// Delayed option ask computation.
     DelayedAskOption = 81,
+    /// Delayed option last computation.
     DelayedLastOption = 82,
+    /// Delayed option model price.
     DelayedModelOption = 83,
+    /// Exchange code for the last trade.
     LastExch = 84,
+    /// Time of the last regular trade.
     LastRegTime = 85,
+    /// Open interest for futures contracts.
     FuturesOpenInterest = 86,
+    /// Average option volume over 90 days.
     AvgOptVolume = 87,
+    /// Timestamp associated with delayed last price.
     DelayedLastTimestamp = 88,
+    /// Number of shares available to short.
     ShortableShares = 89,
+    /// Delayed trading halt status.
     DelayedHalted = 90,
+    /// Reuters mutual fund indicative value.
     Reuters2MutualFunds = 91,
+    /// ETF net asset value (NAV) close.
     EtfNavClose = 92,
+    /// Prior day ETF NAV close.
     EtfNavPriorClose = 93,
+    /// ETF NAV bid.
     EtfNavBid = 94,
+    /// ETF NAV ask.
     EtfNavAsk = 95,
+    /// ETF NAV last.
     EtfNavLast = 96,
+    /// Frozen ETF NAV last value.
     EtfFrozenNavLast = 97,
+    /// Intraday high estimate for ETF NAV.
     EtfNavHigh = 98,
+    /// Intraday low estimate for ETF NAV.
     EtfNavLow = 99,
+    /// Social market analytics sentiment score.
     SocialMarketAnalytics = 100,
+    /// Estimated midpoint for an IPO.
     EstimatedIpoMidpoint = 101,
+    /// Final pricing for an IPO.
     FinalIpoLast = 102,
+    /// Delayed bid yield.
     DelayedYieldBid = 103,
+    /// Delayed ask yield.
     DelayedYieldAsk = 104,
 }
 

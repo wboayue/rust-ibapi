@@ -98,6 +98,7 @@ pub enum Error {
     #[error("AlreadySubscribed")]
     AlreadySubscribed,
 
+    /// Wraps errors parsing historical data parameters.
     #[error("HistoricalParseError: {0}")]
     HistoricalParseError(HistoricalParseError),
 }

@@ -38,36 +38,66 @@ pub struct AccountSummary {
 pub struct AccountSummaryTags {}
 
 impl AccountSummaryTags {
+    /// Identifies the account type (e.g. cash, margin, IRA).
     pub const ACCOUNT_TYPE: &'static str = "AccountType";
+    /// Net liquidation value of the account including cash and positions.
     pub const NET_LIQUIDATION: &'static str = "NetLiquidation";
+    /// Total cash across currencies converted to the base currency.
     pub const TOTAL_CASH_VALUE: &'static str = "TotalCashValue";
+    /// Settled cash available for trading.
     pub const SETTLED_CASH: &'static str = "SettledCash";
+    /// Accrued cash such as interest or dividends due.
     pub const ACCRUED_CASH: &'static str = "AccruedCash";
+    /// Maximum capital available to open new positions.
     pub const BUYING_POWER: &'static str = "BuyingPower";
+    /// Equity with loan value after margin calculations.
     pub const EQUITY_WITH_LOAN_VALUE: &'static str = "EquityWithLoanValue";
+    /// Equity with loan value recorded on the previous trading day.
     pub const PREVIOUS_EQUITY_WITH_LOAN_VALUE: &'static str = "PreviousEquityWithLoanValue";
+    /// Gross market value of all positions.
     pub const GROSS_POSITION_VALUE: &'static str = "GrossPositionValue";
+    /// Regulation-T equity available in the account.
     pub const REQ_T_EQUITY: &'static str = "RegTEquity";
+    /// Regulation-T margin requirement.
     pub const REQ_T_MARGIN: &'static str = "RegTMargin";
+    /// Special Memorandum Account value as defined by Regulation-T.
     pub const SMA: &'static str = "SMA";
+    /// Initial margin requirement for current positions.
     pub const INIT_MARGIN_REQ: &'static str = "InitMarginReq";
+    /// Maintenance margin requirement for current positions.
     pub const MAINT_MARGIN_REQ: &'static str = "MaintMarginReq";
+    /// Funds currently available for trading.
     pub const AVAILABLE_FUNDS: &'static str = "AvailableFunds";
+    /// Excess liquidity above maintenance requirements.
     pub const EXCESS_LIQUIDITY: &'static str = "ExcessLiquidity";
+    /// Cushion percentage representing excess liquidity scaled by equity.
     pub const CUSHION: &'static str = "Cushion";
+    /// Full initial margin requirement across all related accounts.
     pub const FULL_INIT_MARGIN_REQ: &'static str = "FullInitMarginReq";
+    /// Full maintenance margin requirement across all related accounts.
     pub const FULL_MAINT_MARGIN_REQ: &'static str = "FullMaintMarginReq";
+    /// Full funds available for trading across all related accounts.
     pub const FULL_AVAILABLE_FUNDS: &'static str = "FullAvailableFunds";
+    /// Full excess liquidity across all related accounts.
     pub const FULL_EXCESS_LIQUIDITY: &'static str = "FullExcessLiquidity";
+    /// Estimated time of the next margin change event.
     pub const LOOK_AHEAD_NEXT_CHANGE: &'static str = "LookAheadNextChange";
+    /// Projected initial margin requirement at the next change.
     pub const LOOK_AHEAD_INIT_MARGIN_REQ: &'static str = "LookAheadInitMarginReq";
+    /// Projected maintenance margin requirement at the next change.
     pub const LOOK_AHEAD_MAINT_MARGIN_REQ: &'static str = "LookAheadMaintMarginReq";
+    /// Projected funds available for trading at the next change.
     pub const LOOK_AHEAD_AVAILABLE_FUNDS: &'static str = "LookAheadAvailableFunds";
+    /// Projected excess liquidity at the next change.
     pub const LOOK_AHEAD_EXCESS_LIQUIDITY: &'static str = "LookAheadExcessLiquidity";
+    /// Highest pending warning severity for the account.
     pub const HIGHEST_SEVERITY: &'static str = "HighestSeverity";
+    /// Day trades remaining before hitting the PDT limit.
     pub const DAY_TRADES_REMAINING: &'static str = "DayTradesRemaining";
+    /// Effective account leverage based on net liquidation.
     pub const LEVERAGE: &'static str = "Leverage";
 
+    /// Convenience slice containing every supported account summary tag.
     pub const ALL: &'static [&'static str] = &[
         Self::ACCOUNT_TYPE,
         Self::NET_LIQUIDATION,
@@ -101,6 +131,7 @@ impl AccountSummaryTags {
     ];
 }
 
+/// Result of an account summary request emitted by the [Client](crate::client::Client).
 #[derive(Debug)]
 pub enum AccountSummaryResult {
     /// Summary of account details such as net liquidation, cash balance, etc.
@@ -109,6 +140,7 @@ pub enum AccountSummaryResult {
     End,
 }
 
+/// Aggregated profit and loss metrics for the entire account.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct PnL {
     /// DailyPnL for the position
@@ -119,6 +151,7 @@ pub struct PnL {
     pub realized_pnl: Option<f64>,
 }
 
+/// Real-time profit and loss metrics for a single position.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct PnLSingle {
     /// Current size of the position
@@ -133,6 +166,7 @@ pub struct PnLSingle {
     pub value: f64,
 }
 
+/// Open position held within the account.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Position {
     /// Account holding position
@@ -145,6 +179,7 @@ pub struct Position {
     pub average_cost: f64,
 }
 
+/// Messages emitted while streaming position updates.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum PositionUpdate {
@@ -154,13 +189,17 @@ pub enum PositionUpdate {
     PositionEnd,
 }
 
+/// Messages emitted while streaming model-code scoped position updates.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum PositionUpdateMulti {
+    /// Position update scoped to a specific account/model code pair.
     Position(PositionMulti),
+    /// Indicates all positions have been transmitted.
     PositionEnd,
 }
 
+/// Position scoped to a specific account and model code.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct PositionMulti {
     /// Account holding position
@@ -175,6 +214,7 @@ pub struct PositionMulti {
     pub model_code: String,
 }
 
+/// Family code assigned to a group of accounts.
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct FamilyCode {
     /// Account ID for the account family
@@ -183,15 +223,21 @@ pub struct FamilyCode {
     pub family_code: String,
 }
 
+/// Account update events delivered while streaming high-level account data.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum AccountUpdate {
+    /// Key/value update describing an account metric.
     AccountValue(AccountValue),
+    /// Update describing a position's valuation data.
     PortfolioValue(AccountPortfolioValue),
+    /// Timestamp indicating when the account snapshot was generated.
     UpdateTime(AccountUpdateTime),
+    /// Indicates the end of the account update stream.
     End,
 }
 
+/// Single account value update emitted by the API.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct AccountValue {
     /// Key describing the value
@@ -204,6 +250,7 @@ pub struct AccountValue {
     pub account: Option<String>,
 }
 
+/// Aggregated valuation details for a single contract within the account.
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct AccountPortfolioValue {
     /// Contract for the position
@@ -224,18 +271,23 @@ pub struct AccountPortfolioValue {
     pub account: Option<String>,
 }
 
+/// Timestamp wrapper for account update streams.
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct AccountUpdateTime {
     /// Timestamp of the last account update
     pub timestamp: String,
 }
 
+/// Account update events scoped to an account/model code pair.
 #[derive(Debug, PartialEq)]
 pub enum AccountUpdateMulti {
+    /// Key/value update for a specific account/model code pair.
     AccountMultiValue(AccountMultiValue),
+    /// Indicates the end of the scoped account update stream.
     End,
 }
 
+/// Key/value pair returned for a specific account/model code pair.
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct AccountMultiValue {
     /// Account ID
@@ -257,6 +309,7 @@ mod sync;
 #[cfg(feature = "async")]
 mod r#async;
 
+/// Blocking account management API implemented on top of the synchronous client.
 #[cfg(feature = "sync")]
 pub mod blocking {
     pub use super::sync::{

@@ -11,6 +11,7 @@ pub mod sync;
 #[cfg(feature = "async")]
 pub mod r#async;
 
+/// Blocking client bindings for synchronous workflows.
 #[cfg(feature = "sync")]
 pub mod blocking {
     pub use super::sync::Client;

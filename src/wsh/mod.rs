@@ -60,6 +60,7 @@ impl AutoFill {
 
 // Re-export API functions based on active feature
 #[cfg(feature = "sync")]
+/// Blocking WSH helpers utilizing the synchronous transport.
 pub mod blocking {
     pub(crate) use super::sync::{wsh_event_data_by_contract, wsh_event_data_by_filter, wsh_metadata};
 }
