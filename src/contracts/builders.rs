@@ -76,6 +76,8 @@ pub struct OptionBuilder<Symbol = Missing, Strike = Missing, Expiry = Missing> {
     exchange: Exchange,
     currency: Currency,
     multiplier: u32,
+    primary_exchange: Option<Exchange>,
+    trading_class: Option<String>,
 }
 
 impl OptionBuilder<Missing, Missing, Missing> {
@@ -89,6 +91,8 @@ impl OptionBuilder<Missing, Missing, Missing> {
             exchange: "SMART".into(),
             currency: "USD".into(),
             multiplier: 100,
+            primary_exchange: None,
+            trading_class: None,
         }
     }
 
@@ -102,6 +106,8 @@ impl OptionBuilder<Missing, Missing, Missing> {
             exchange: "SMART".into(),
             currency: "USD".into(),
             multiplier: 100,
+            primary_exchange: None,
+            trading_class: None,
         }
     }
 }
@@ -118,6 +124,8 @@ impl<E> OptionBuilder<Symbol, Missing, E> {
             exchange: self.exchange,
             currency: self.currency,
             multiplier: self.multiplier,
+            primary_exchange: self.primary_exchange,
+            trading_class: self.trading_class,
         }
     }
 }
@@ -134,6 +142,8 @@ impl<S> OptionBuilder<Symbol, S, Missing> {
             exchange: self.exchange,
             currency: self.currency,
             multiplier: self.multiplier,
+            primary_exchange: self.primary_exchange,
+            trading_class: self.trading_class,
         }
     }
 
@@ -172,6 +182,18 @@ impl<S, E> OptionBuilder<Symbol, S, E> {
         self.multiplier = multiplier;
         self
     }
+
+    /// Prefer a specific primary exchange when resolving the option.
+    pub fn primary(mut self, exchange: impl Into<Exchange>) -> Self {
+        self.primary_exchange = Some(exchange.into());
+        self
+    }
+
+    /// Hint the trading class used by this contract.
+    pub fn trading_class(mut self, class: impl Into<String>) -> Self {
+        self.trading_class = Some(class.into());
+        self
+    }
 }
 
 // Build only available when all required fields are set
@@ -187,6 +209,8 @@ impl OptionBuilder<Symbol, Strike, ExpirationDate> {
             exchange: self.exchange,
             currency: self.currency,
             multiplier: self.multiplier.to_string(),
+            primary_exchange: self.primary_exchange.unwrap_or_else(|| Exchange::from("")),
+            trading_class: self.trading_class.unwrap_or_default(),
             ..Default::default()
         }
     }

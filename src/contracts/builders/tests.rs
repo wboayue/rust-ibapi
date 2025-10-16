@@ -45,6 +45,8 @@ fn test_put_option_builder() {
         .expires(ExpirationDate::new(2024, 3, 15))
         .on_exchange("CBOE")
         .in_currency("USD")
+        .primary("CBOE")
+        .trading_class("SPXW")
         .multiplier(100)
         .build();
 
@@ -55,6 +57,8 @@ fn test_put_option_builder() {
     assert_eq!(put.last_trade_date_or_contract_month, "20240315");
     assert_eq!(put.exchange, Exchange::from("CBOE"));
     assert_eq!(put.multiplier, "100");
+    assert_eq!(put.primary_exchange, Exchange::from("CBOE"));
+    assert_eq!(put.trading_class, "SPXW");
 }
 
 #[test]
