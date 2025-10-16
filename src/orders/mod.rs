@@ -33,10 +33,10 @@
 // Common implementation modules
 pub(crate) mod common;
 
-// Builder module for fluent API
+/// Fluent builder APIs for constructing orders.
 pub mod builder;
 
-// Re-export order builder functions
+/// Convenience re-export for low-level order builder helpers.
 pub use common::order_builder;
 
 // Re-export builder types
@@ -647,10 +647,12 @@ impl Default for Order {
 }
 
 impl Order {
+    /// Returns `true` if delta-neutral parameters are configured.
     pub fn is_delta_neutral(&self) -> bool {
         !self.delta_neutral_order_type.is_empty()
     }
 
+    /// Returns `true` if scale order parameters are configured.
     pub fn is_scale_order(&self) -> bool {
         match self.scale_price_increment {
             Some(price_increment) => price_increment > 0.0,
@@ -668,7 +670,9 @@ impl Order {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Copy, Serialize, Deserialize)]
 pub enum Action {
     #[default]
+    /// Buy-side order.
     Buy,
+    /// Sell-side order.
     Sell,
     /// SSHORT is only supported for institutional account configured with Long/Short account segments or clearing with a separate account.
     SellShort,
@@ -696,6 +700,7 @@ impl std::fmt::Display for Action {
 }
 
 impl Action {
+    /// Return the logical opposite action (buy ↔ sell).
     pub fn reverse(self) -> Action {
         match self {
             Action::Buy => Action::Sell,
@@ -705,6 +710,7 @@ impl Action {
         }
     }
 
+    /// Parse an action from the TWS string identifier.
     pub fn from(name: &str) -> Self {
         match name {
             "BUY" => Self::Buy,
@@ -770,6 +776,7 @@ impl std::fmt::Display for Rule80A {
 }
 
 impl Rule80A {
+    /// Parse a rule 80A code from its string representation.
     pub fn from(source: &str) -> Option<Self> {
         match source {
             "I" => Some(Rule80A::Individual),
@@ -849,8 +856,11 @@ impl From<i32> for OrderCondition {
 /// Stores Soft Dollar Tier information.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct SoftDollarTier {
+    /// Soft dollar tier name.
     pub name: String,
+    /// Tier identifier value.
     pub value: String,
+    /// User-friendly display name.
     pub display_name: String,
 }
 
@@ -892,7 +902,7 @@ pub struct OrderState {
     pub equity_with_loan_after: Option<f64>,
     /// The order's generated commission.
     pub commission: Option<f64>,
-    // The execution's minimum commission.
+    /// The execution's minimum commission.
     pub minimum_commission: Option<f64>,
     /// The executions maximum commission.
     pub maximum_commission: Option<f64>,
@@ -900,7 +910,9 @@ pub struct OrderState {
     pub commission_currency: String,
     /// If the order is warranted, a descriptive message will be provided.
     pub warning_text: String,
+    /// Timestamp when the order completed execution.
     pub completed_time: String,
+    /// Status value after completion (e.g. `Filled`).
     pub completed_status: String,
 }
 
@@ -910,7 +922,9 @@ pub struct OrderState {
 /// When Action = "BUY" and OpenClose = "C" this will close and existing short position.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum OrderOpenClose {
+    /// Open a new position.
     Open,
+    /// Close an existing position.
     Close,
 }
 
@@ -938,6 +952,7 @@ impl std::fmt::Display for OrderOpenClose {
 }
 
 impl OrderOpenClose {
+    /// Parse an `OrderOpenClose` from the wire-format string.
     pub fn from(source: &str) -> Option<Self> {
         match source {
             "O" => Some(OrderOpenClose::Open),
@@ -1033,7 +1048,7 @@ pub struct Execution {
     pub ev_multiplier: Option<f64>,
     /// model code
     pub model_code: String,
-    // The liquidity type of the execution. Requires TWS 968+ and API v973.05+. Python API specifically requires API v973.06+.
+    /// Liquidity type of the execution (requires TWS 968+ / API v973.05+).
     pub last_liquidity: Liquidity,
 }
 
@@ -1120,7 +1135,9 @@ pub struct OrderStatus {
 /// Enumerates possible results from cancelling an order.
 #[derive(Debug)]
 pub enum CancelOrder {
+    /// Order status information.
     OrderStatus(OrderStatus),
+    /// Informational notice.
     Notice(crate::messages::Notice),
 }
 
@@ -1128,8 +1145,11 @@ pub enum CancelOrder {
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum Orders {
+    /// Detailed order data.
     OrderData(OrderData),
+    /// Order status update.
     OrderStatus(OrderStatus),
+    /// Informational notice.
     Notice(crate::messages::Notice),
 }
 
@@ -1157,8 +1177,11 @@ pub struct ExecutionFilter {
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum Executions {
+    /// Execution data payload.
     ExecutionData(ExecutionData),
+    /// Commission report payload.
     CommissionReport(CommissionReport),
+    /// Informational notice.
     Notice(crate::messages::Notice),
 }
 
@@ -1192,6 +1215,15 @@ mod r#async;
 
 // Re-export API functions based on active feature
 #[cfg(feature = "sync")]
+/// Blocking order management API wrappers on top of the synchronous client.
+pub mod blocking {
+    pub(crate) use super::sync::{
+        all_open_orders, auto_open_orders, cancel_order, completed_orders, executions, exercise_options, global_cancel, next_valid_order_id,
+        open_orders, order_update_stream, place_order, submit_order,
+    };
+}
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub use sync::{
     all_open_orders, auto_open_orders, cancel_order, completed_orders, executions, exercise_options, global_cancel, next_valid_order_id, open_orders,
     order_update_stream, place_order, submit_order,

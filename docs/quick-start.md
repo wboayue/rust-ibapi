@@ -27,10 +27,10 @@ graph LR
     style Async fill:#e3f2fd
 ```
 
-- **`--features sync`** - Traditional synchronous execution using threads
-- **`--features async`** - Modern asynchronous execution using tokio
+- **`async` (default)** - Modern asynchronous execution using tokio
+- **`sync`** - Traditional synchronous client; can be enabled on its own or alongside `async`
 
-These are **mutually exclusive** - you cannot use both.
+When both features are enabled, the async client remains on `client::Client` and the blocking client moves under `client::blocking::Client`.
 
 ## Installation
 
@@ -40,10 +40,14 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-# Choose ONE:
+# Default async client
+ibapi = "2.0"
+
+# Sync-only (disable defaults)
+ibapi = { version = "2.0", default-features = false, features = ["sync"] }
+
+# Async + blocking
 ibapi = { version = "2.0", features = ["sync"] }
-# OR
-ibapi = { version = "2.0", features = ["async"] }
 ```
 
 ### For Development
@@ -53,10 +57,10 @@ ibapi = { version = "2.0", features = ["async"] }
 git clone https://github.com/wboayue/rust-ibapi.git
 cd rust-ibapi
 
-# Verify installation (choose ONE feature)
-cargo build --features sync
-# OR
-cargo build --features async
+# Verify installation
+cargo build                                # default async client
+cargo build --no-default-features --features sync
+cargo build --all-features
 ```
 
 ## Your First Example
@@ -221,13 +225,13 @@ RUST_LOG=debug cargo run --features sync --example market_data
 
 | Example | Description | Command |
 |---------|-------------|---------|
-| `account_summary` | Display account information | `cargo run --features sync --example account_summary` |
-| `market_data` | Stream real-time quotes | `cargo run --features sync --example market_data` |
-| `place_order` | Place a simple order | `cargo run --features sync --example place_order` |
-| `historical_data` | Fetch historical bars | `cargo run --features sync --example historical_data` |
-| `contract_details` | Get contract information | `cargo run --features sync --example contract_details` |
+| `account_summary` | Display account information | `cargo run --no-default-features --features sync --example account_summary` |
+| `market_data` | Stream real-time quotes | `cargo run --no-default-features --features sync --example market_data` |
+| `place_order` | Place a simple order | `cargo run --no-default-features --features sync --example place_order` |
+| `historical_data` | Fetch historical bars | `cargo run --no-default-features --features sync --example historical_data` |
+| `contract_details` | Get contract information | `cargo run --no-default-features --features sync --example contract_details` |
 
-For async versions, use `--features async` and prefix the example name with `async_`.
+For async versions, the default features are sufficient: `cargo run --example async_<name>`.
 
 ## Troubleshooting
 
@@ -237,13 +241,13 @@ For async versions, use `--features async` and prefix the example name with `asy
 ```bash
 error: no feature specified. Enable either 'sync' or 'async' feature
 ```
-**Solution**: Add `--features sync` or `--features async` to your command.
+**Solution**: If you've disabled default features, add `--features sync` or `--features async` to your command.
 
 #### "Mutually exclusive features" Error
 ```bash
 error: features 'sync' and 'async' are mutually exclusive
 ```
-**Solution**: Use only one feature flag, not both.
+**Solution**: Update to the latest release—current versions support enabling both features simultaneously.
 
 #### Connection Refused
 ```bash

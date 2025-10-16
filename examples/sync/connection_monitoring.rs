@@ -3,7 +3,7 @@
 //! This example shows how to monitor the connection status to TWS/IB Gateway
 //! and respond to connection changes.
 
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 use std::thread;
 use std::time::Duration;
 

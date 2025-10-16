@@ -288,7 +288,7 @@ where
 /// Extension trait to add builder methods to Client
 #[async_trait]
 #[allow(dead_code)]
-pub trait ClientRequestBuilders {
+pub(crate) trait ClientRequestBuilders {
     /// Create a request builder with an auto-generated request ID
     fn request(&self) -> RequestBuilder<'_>;
 
@@ -336,7 +336,7 @@ impl ClientRequestBuilders for Client {
 }
 
 /// Extension trait to add subscription builder to Client
-pub trait SubscriptionBuilderExt {
+pub(crate) trait SubscriptionBuilderExt {
     /// Creates a new subscription builder
     fn subscription<T>(&self) -> SubscriptionBuilder<T>
     where

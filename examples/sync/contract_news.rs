@@ -6,7 +6,8 @@
 //! cargo run --features sync --example contract_news
 //! ```
 
-use ibapi::{contracts::Contract, Client};
+use ibapi::client::blocking::Client;
+use ibapi::contracts::Contract;
 
 // This example demonstrates how live news for a contract can be requested.
 

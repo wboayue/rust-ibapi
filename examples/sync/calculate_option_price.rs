@@ -6,8 +6,8 @@
 //! cargo run --features sync --example calculate_option_price
 //! ```
 
+use ibapi::client::blocking::Client;
 use ibapi::contracts::{Contract, SecurityType};
-use ibapi::Client;
 
 fn main() {
     env_logger::init();

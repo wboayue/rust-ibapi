@@ -12,19 +12,26 @@ use crate::{Error, ToField};
 pub(crate) mod common;
 
 #[cfg(feature = "sync")]
+/// Synchronous historical market data API.
 pub mod sync;
 
+/// Async historical market data API.
 #[cfg(feature = "async")]
 pub mod r#async;
 
+/// Errors surfaced while parsing historical market data parameters.
 #[derive(Debug, Error, PartialEq)]
 pub enum HistoricalParseError {
+    /// Unsupported bar size string supplied by the caller.
     #[error("Invalid BarSize input '{0}'")]
     BarSize(String),
+    /// Invalid duration string or unsupported unit.
     #[error("Invalid Duration input '{0}' {1}")]
     Duration(String, String),
+    /// Unsupported `what_to_show` value.
     #[error("Invalid WhatToShow input '{0}'")]
     WhatToShow(String),
+    /// Wrapper for integer parsing errors when reading duration values.
     #[error("ParseIntError '{0}' {1}")]
     ParseIntError(String, ParseIntError),
 }
@@ -52,25 +59,45 @@ pub struct Bar {
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Serialize, Deserialize)]
+/// Request granularity for historical bars.
 pub enum BarSize {
+    /// One-second bars.
     Sec,
+    /// Five-second bars.
     Sec5,
+    /// Fifteen-second bars.
     Sec15,
+    /// Thirty-second bars.
     Sec30,
+    /// One-minute bars.
     Min,
+    /// Two-minute bars.
     Min2,
+    /// Three-minute bars.
     Min3,
+    /// Five-minute bars.
     Min5,
+    /// Fifteen-minute bars.
     Min15,
+    /// Twenty-minute bars.
     Min20,
+    /// Thirty-minute bars.
     Min30,
+    /// One-hour bars.
     Hour,
+    /// Two-hour bars.
     Hour2,
+    /// Three-hour bars.
     Hour3,
+    /// Four-hour bars.
     Hour4,
+    /// Eight-hour bars.
     Hour8,
+    /// One-day bars.
     Day,
+    /// One-week bars.
     Week,
+    /// One-month bars.
     Month,
 }
 
@@ -146,6 +173,7 @@ impl ToField for BarSize {
     }
 }
 
+/// Duration specifier used in historical data requests (e.g. `1 D`).
 #[derive(Clone, Debug, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Duration {
     value: i32,
@@ -153,28 +181,38 @@ pub struct Duration {
 }
 
 impl Duration {
+    /// Convenience constant for a one-second duration.
     pub const SECOND: Self = Self::seconds(1);
+    /// Convenience constant for a one-day duration.
     pub const DAY: Self = Self::days(1);
+    /// Convenience constant for a one-week duration.
     pub const WEEK: Self = Self::weeks(1);
+    /// Convenience constant for a one-month duration.
     pub const MONTH: Self = Self::months(1);
+    /// Convenience constant for a one-year duration.
     pub const YEAR: Self = Self::years(1);
 
+    /// Build a duration described in seconds (`S` unit).
     pub const fn seconds(seconds: i32) -> Self {
         Self { value: seconds, unit: 'S' }
     }
 
+    /// Build a duration described in days (`D` unit).
     pub const fn days(days: i32) -> Self {
         Self { value: days, unit: 'D' }
     }
 
+    /// Build a duration described in weeks (`W` unit).
     pub const fn weeks(weeks: i32) -> Self {
         Self { value: weeks, unit: 'W' }
     }
 
+    /// Build a duration described in months (`M` unit).
     pub const fn months(months: i32) -> Self {
         Self { value: months, unit: 'M' }
     }
 
+    /// Build a duration described in years (`Y` unit).
     pub const fn years(years: i32) -> Self {
         Self { value: years, unit: 'Y' }
     }
@@ -227,11 +265,18 @@ impl ToField for Duration {
         self.to_string()
     }
 }
+
+/// Helper trait to convert integer counts into [`Duration`]s.
 pub trait ToDuration {
+    /// Convert the value into seconds.
     fn seconds(&self) -> Duration;
+    /// Convert the value into days.
     fn days(&self) -> Duration;
+    /// Convert the value into weeks.
     fn weeks(&self) -> Duration;
+    /// Convert the value into months.
     fn months(&self) -> Duration;
+    /// Convert the value into years.
     fn years(&self) -> Duration;
 }
 
@@ -257,31 +302,47 @@ impl ToDuration for i32 {
     }
 }
 
+/// Histogram bucket entry returned from `reqHistogramData`.
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct HistogramEntry {
+    /// Price level represented by the bucket.
     pub price: f64,
+    /// Total size accumulated at this price level.
     pub size: i32,
 }
 
+/// Container for historical bar responses.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct HistoricalData {
+    /// Start timestamp of the requested window.
     pub start: OffsetDateTime,
+    /// End timestamp of the requested window.
     pub end: OffsetDateTime,
+    /// Bar data returned by the request.
     pub bars: Vec<Bar>,
 }
 
+/// Trading schedule describing sessions for a contract.
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Schedule {
+    /// Overall start timestamp for the schedule.
     pub start: OffsetDateTime,
+    /// Overall end timestamp for the schedule.
     pub end: OffsetDateTime,
+    /// Time zone identifier.
     pub time_zone: String,
+    /// Individual trade sessions.
     pub sessions: Vec<Session>,
 }
 
+/// Individual regular or special session entry.
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct Session {
+    /// Calendar date for the session.
     pub reference: Date,
+    /// Session start time.
     pub start: OffsetDateTime,
+    /// Session end time.
     pub end: OffsetDateTime,
 }
 
@@ -313,9 +374,12 @@ pub struct TickBidAsk {
     pub size_ask: i32,
 }
 
+/// Tick attributes accompanying bid/ask historical ticks.
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct TickAttributeBidAsk {
+    /// Indicates whether the bid is past the lower price band.
     pub bid_past_low: bool,
+    /// Indicates whether the ask is past the upper price band.
     pub ask_past_high: bool,
 }
 
@@ -336,23 +400,37 @@ pub struct TickLast {
     pub special_conditions: String,
 }
 
+/// Tick attributes accompanying trade historical ticks.
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
 pub struct TickAttributeLast {
+    /// `true` if the trade occurred outside exchange limits.
     pub past_limit: bool,
+    /// `true` if the trade is from an unreported trade source.
     pub unreported: bool,
 }
 
+/// Enumerates the data payload returned when requesting historical data.
 #[derive(Clone, Debug, Copy, PartialEq, Serialize, Deserialize)]
 pub enum WhatToShow {
+    /// Trade data including OHLC and volume.
     Trades,
+    /// Mid-point prices (average of bid and ask).
     MidPoint,
+    /// Bid quotes only.
     Bid,
+    /// Ask quotes only.
     Ask,
+    /// Bid/ask quote pairs.
     BidAsk,
+    /// Historical volatility computed by IB.
     HistoricalVolatility,
+    /// Option implied volatility.
     OptionImpliedVolatility,
+    /// Exchange fee rates.
     FeeRate,
+    /// Exchange trading schedule metadata.
     Schedule,
+    /// Split-adjusted last price series.
     AdjustedLast,
 }
 
@@ -373,6 +451,7 @@ impl std::fmt::Display for WhatToShow {
     }
 }
 
+/// Error returned when parsing an invalid `WhatToShow` value.
 #[derive(Debug)]
 pub struct WhatToShowParseError;
 
@@ -431,13 +510,23 @@ impl ToField for Option<WhatToShow> {
 
 // Re-export functions based on active feature
 #[cfg(feature = "sync")]
+/// Blocking historical market data helpers powered by the synchronous transport.
+pub mod blocking {
+    pub(crate) use super::sync::*;
+}
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
+#[allow(unused_imports)]
 pub use sync::*;
 
 #[cfg(feature = "async")]
 pub use r#async::*;
 
+/// Trait implemented by historical tick types that can decode IB messages.
 pub trait TickDecoder<T> {
+    /// Message discriminator emitted by TWS for this tick type.
     const MESSAGE_TYPE: IncomingMessages;
+    /// Decode a batch of ticks, returning the payload and an end-of-stream flag.
     fn decode(message: &mut ResponseMessage) -> Result<(Vec<T>, bool), Error>;
 }
 
@@ -466,7 +555,7 @@ impl TickDecoder<TickMidpoint> for TickMidpoint {
 }
 
 // Re-export TickSubscription and iterator types based on active feature
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(feature = "async")))]
 pub use sync::{TickSubscription, TickSubscriptionIter, TickSubscriptionOwnedIter, TickSubscriptionTimeoutIter, TickSubscriptionTryIter};
 
 #[cfg(feature = "async")]

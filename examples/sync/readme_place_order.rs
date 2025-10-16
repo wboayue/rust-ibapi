@@ -6,6 +6,7 @@
 //! cargo run --features sync --example readme_place_order
 //! ```
 
+use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
 
 pub fn main() {

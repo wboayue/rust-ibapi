@@ -76,6 +76,12 @@ mod async_retry {
 
 // Re-export based on feature flags
 #[cfg(feature = "sync")]
+pub mod blocking {
+    pub(crate) use super::sync_retry::*;
+}
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
+#[allow(unused_imports)]
 pub use sync_retry::*;
 
 #[cfg(feature = "async")]
@@ -90,10 +96,12 @@ mod tests {
         use super::*;
         use std::cell::RefCell;
 
+        use crate::common::retry::blocking;
+
         #[test]
         fn test_retry_on_connection_reset_succeeds_first_try() {
             let mut call_count = 0;
-            let result = retry_on_connection_reset(|| {
+            let result = blocking::retry_on_connection_reset(|| {
                 call_count += 1;
                 Ok::<i32, Error>(42)
             });
@@ -106,7 +114,7 @@ mod tests {
         #[test]
         fn test_retry_on_connection_reset_succeeds_after_retry() {
             let call_count = RefCell::new(0);
-            let result = retry_on_connection_reset(|| {
+            let result = blocking::retry_on_connection_reset(|| {
                 *call_count.borrow_mut() += 1;
                 if *call_count.borrow() < 3 {
                     Err(Error::ConnectionReset)
@@ -123,7 +131,7 @@ mod tests {
         #[test]
         fn test_retry_on_connection_reset_exceeds_max_retries() {
             let mut call_count = 0;
-            let result = retry_on_connection_reset(|| {
+            let result = blocking::retry_on_connection_reset(|| {
                 call_count += 1;
                 Err::<i32, Error>(Error::ConnectionReset)
             });
@@ -136,7 +144,7 @@ mod tests {
         #[test]
         fn test_retry_on_connection_reset_other_error() {
             let mut call_count = 0;
-            let result = retry_on_connection_reset(|| {
+            let result = blocking::retry_on_connection_reset(|| {
                 call_count += 1;
                 Err::<i32, Error>(Error::Simple("Other error".to_string()))
             });
@@ -150,7 +158,7 @@ mod tests {
         fn test_retry_with_custom_limit() {
             let call_count = RefCell::new(0);
             let custom_limit = 5;
-            let result = retry_on_connection_reset_with_limit(
+            let result = blocking::retry_on_connection_reset_with_limit(
                 || {
                     *call_count.borrow_mut() += 1;
                     Err::<i32, Error>(Error::ConnectionReset)

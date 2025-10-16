@@ -6,7 +6,7 @@
 //! cargo run --features sync --example wsh_event_data_by_filter
 //! ```
 
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 
 // This example demonstrates requesting Wall Street Horizon event data by filter.
 // This featured does not appear to be released yet.

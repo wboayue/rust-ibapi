@@ -9,8 +9,9 @@
 use anyhow::Ok;
 use clap::builder::PossibleValue;
 use clap::{arg, Command};
+use ibapi::client::blocking::{Client, Subscription};
 
-use ibapi::prelude::*;
+use ibapi::orders::Orders;
 
 fn main() -> anyhow::Result<()> {
     env_logger::init();

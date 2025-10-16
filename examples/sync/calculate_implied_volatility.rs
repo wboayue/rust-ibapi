@@ -6,8 +6,8 @@
 //! cargo run --features sync --example calculate_implied_volatility
 //! ```
 
+use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
-use ibapi::Client;
 
 fn main() {
     env_logger::init();

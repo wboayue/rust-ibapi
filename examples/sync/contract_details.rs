@@ -6,6 +6,7 @@
 //! cargo run --features sync --example contract_details
 //! ```
 
+use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
 
 fn main() -> anyhow::Result<()> {

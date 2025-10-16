@@ -7,12 +7,13 @@
 //! ```
 
 use clap::{arg, Command};
+use ibapi::client::blocking::Client;
 use time::format_description::FormatItem;
 use time::macros::format_description;
 use time::{OffsetDateTime, PrimitiveDateTime};
 
 use ibapi::contracts::Contract;
-use ibapi::{market_data::TradingHours, Client};
+use ibapi::market_data::TradingHours;
 
 fn main() {
     env_logger::init();

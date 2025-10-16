@@ -90,6 +90,7 @@ impl<'a> OrderBuilder<'a, AsyncMockClient> {
 
 // Implement submit_all for bracket orders
 impl<'a> BracketOrderBuilder<'a, AsyncMockClient> {
+    /// Submit the bracket order trio asynchronously and return the generated identifiers.
     pub async fn submit_all(self) -> Result<BracketOrderIds, Error> {
         let client = self.parent_builder.client;
         let contract = self.parent_builder.contract;

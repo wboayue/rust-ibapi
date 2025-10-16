@@ -781,7 +781,7 @@ mod tests {
     use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 
     // Additional imports for connection tests
-    use crate::client::Client;
+    use crate::client::sync::Client;
     use crate::contracts::Contract;
     use crate::messages::{encode_length, OutgoingMessages, RequestMessage};
     use crate::orders::common::encoders::encode_place_order;

@@ -6,6 +6,7 @@
 //! cargo run --features sync --example readme_historical_data
 //! ```
 
+use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
 use time::macros::datetime;
 

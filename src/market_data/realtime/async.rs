@@ -2,9 +2,15 @@ use log::debug;
 
 use crate::client::ClientRequestBuilders;
 use crate::contracts::{Contract, TagValue};
-use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
+use crate::messages::OutgoingMessages;
+#[cfg(not(feature = "sync"))]
+use crate::messages::{IncomingMessages, Notice, ResponseMessage};
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::{ResponseContext, StreamDecoder, Subscription};
+#[cfg(not(feature = "sync"))]
+use crate::subscriptions::ResponseContext;
+#[cfg(not(feature = "sync"))]
+use crate::subscriptions::StreamDecoder;
+use crate::subscriptions::Subscription;
 use crate::{Client, Error};
 
 use super::common::{decoders, encoders};
@@ -13,6 +19,7 @@ use crate::market_data::TradingHours;
 
 // === DataStream implementations ===
 
+#[cfg(not(feature = "sync"))]
 impl StreamDecoder<BidAsk> for BidAsk {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickByTick];
 
@@ -34,6 +41,7 @@ impl StreamDecoder<BidAsk> for BidAsk {
     }
 }
 
+#[cfg(not(feature = "sync"))]
 impl StreamDecoder<MidPoint> for MidPoint {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickByTick];
 
@@ -55,6 +63,7 @@ impl StreamDecoder<MidPoint> for MidPoint {
     }
 }
 
+#[cfg(not(feature = "sync"))]
 impl StreamDecoder<Bar> for Bar {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::RealTimeBars];
 
@@ -72,6 +81,7 @@ impl StreamDecoder<Bar> for Bar {
     }
 }
 
+#[cfg(not(feature = "sync"))]
 impl StreamDecoder<Trade> for Trade {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickByTick];
 
@@ -93,6 +103,7 @@ impl StreamDecoder<Trade> for Trade {
     }
 }
 
+#[cfg(not(feature = "sync"))]
 impl StreamDecoder<MarketDepths> for MarketDepths {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] =
         &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2, IncomingMessages::Error];
@@ -124,6 +135,7 @@ impl StreamDecoder<MarketDepths> for MarketDepths {
     }
 }
 
+#[cfg(not(feature = "sync"))]
 impl StreamDecoder<TickTypes> for TickTypes {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::TickPrice,

@@ -7,9 +7,10 @@ use core::str::FromStr;
 use std::fs;
 use std::path::Path;
 
+use ibapi::accounts::{AccountSummaryResult, PositionUpdate};
+use ibapi::client::blocking::Client;
 use ibapi::messages::parser_registry::{MessageParserRegistry, ParsedField};
 use ibapi::messages::*;
-use ibapi::prelude::*;
 use ibapi::trace;
 use serde::{Deserialize, Serialize};
 
@@ -252,7 +253,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Server time: {server_time}");
 
         // Capture interaction immediately after the call
-        let interaction = trace::last_interaction().ok_or("No interaction captured - ensure debug logging is enabled")?;
+        let interaction = trace::blocking::last_interaction().ok_or("No interaction captured - ensure debug logging is enabled")?;
 
         let record = InteractionRecord {
             name: "server_time".to_string(),
@@ -277,7 +278,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Managed accounts: {accounts:?} (will be sanitized)");
 
         // Capture interaction immediately
-        let interaction = trace::last_interaction().ok_or("No interaction captured - ensure debug logging is enabled")?;
+        let interaction = trace::blocking::last_interaction().ok_or("No interaction captured - ensure debug logging is enabled")?;
 
         let record = InteractionRecord {
             name: "managed_accounts".to_string(),
@@ -319,7 +320,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Finished consuming positions: {position_count}");
 
         // Capture interaction before subscription is dropped
-        let interaction = trace::last_interaction().ok_or("No interaction captured - ensure debug logging is enabled")?;
+        let interaction = trace::blocking::last_interaction().ok_or("No interaction captured - ensure debug logging is enabled")?;
 
         // Drop subscription before creating record to avoid cancel message
         drop(positions);
@@ -360,7 +361,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Finished consuming summaries: {summary_count}");
 
         // Capture interaction before subscription is dropped
-        let interaction = trace::last_interaction().ok_or("No interaction captured - ensure debug logging is enabled")?;
+        let interaction = trace::blocking::last_interaction().ok_or("No interaction captured - ensure debug logging is enabled")?;
 
         // Drop subscription before creating record
         drop(summaries);
@@ -400,7 +401,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::thread::sleep(std::time::Duration::from_millis(100));
 
         // Capture interaction before subscription is dropped
-        let interaction = trace::last_interaction().ok_or("No interaction captured - ensure debug logging is enabled")?;
+        let interaction = trace::blocking::last_interaction().ok_or("No interaction captured - ensure debug logging is enabled")?;
 
         println!("PnL interaction request: {}", interaction.request);
         println!("PnL interaction responses: {} messages", interaction.responses.len());

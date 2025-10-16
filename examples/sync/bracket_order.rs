@@ -6,10 +6,10 @@
 //! cargo run --features sync --example bracket_order
 //! ```
 
+use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::orders::Action;
 use ibapi::orders::{order_builder, PlaceOrder};
-use ibapi::Client;
 use std::thread;
 
 fn place_bracket_order(client: &Client, contract: &Contract, parent_id: i32) -> Result<(), Box<dyn std::error::Error>> {

@@ -1,11 +1,12 @@
 use log::debug;
 
-use crate::client::{ClientRequestBuilders, ResponseContext, Subscription};
+use crate::client::blocking::{ClientRequestBuilders, Subscription};
+use crate::client::ResponseContext;
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::orders::TagValue;
 use crate::protocol::{check_version, Features};
-use crate::{Client, Error};
+use crate::{client::sync::Client, Error};
 
 use super::common::{decoders, encoders};
 use super::{Bar, BarSize, BidAsk, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, Trade, WhatToShow};
@@ -133,7 +134,7 @@ pub(crate) fn market_depth(
     )
 }
 
-// Requests venues for which market data is returned to market_depth (those with market makers)
+/// Fetch the venues that provide market depth data for the connected account.
 pub fn market_depth_exchanges(client: &Client) -> Result<Vec<DepthMarketDataDescription>, Error> {
     check_version(client.server_version(), Features::REQ_MKT_DEPTH_EXCHANGES)?;
 
@@ -154,7 +155,7 @@ pub fn market_depth_exchanges(client: &Client) -> Result<Vec<DepthMarketDataDesc
     }
 }
 
-// Requests real time market data.
+/// Subscribe to streaming level-1 market data for the given contract.
 pub fn market_data(
     client: &Client,
     contract: &Contract,

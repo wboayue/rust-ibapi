@@ -2,15 +2,22 @@
 
 use time::OffsetDateTime;
 
-use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
+use crate::messages::OutgoingMessages;
+#[cfg(not(feature = "sync"))]
+use crate::messages::{IncomingMessages, Notice, ResponseMessage};
 use crate::protocol::{check_version, Features};
-use crate::subscriptions::{StreamDecoder, Subscription};
+#[cfg(not(feature = "sync"))]
+use crate::subscriptions::StreamDecoder;
+use crate::subscriptions::Subscription;
 use crate::{Client, Error};
 
-use super::common::{decoders, encoders, verify};
+#[cfg(not(feature = "sync"))]
+use super::common::decoders;
+use super::common::{encoders, verify};
 use super::*;
 
 // Implement DataStream traits for the order types
+#[cfg(not(feature = "sync"))]
 impl StreamDecoder<PlaceOrder> for PlaceOrder {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::OpenOrder,
@@ -32,6 +39,7 @@ impl StreamDecoder<PlaceOrder> for PlaceOrder {
     }
 }
 
+#[cfg(not(feature = "sync"))]
 impl StreamDecoder<OrderUpdate> for OrderUpdate {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::OpenOrder,
@@ -56,6 +64,7 @@ impl StreamDecoder<OrderUpdate> for OrderUpdate {
     }
 }
 
+#[cfg(not(feature = "sync"))]
 impl StreamDecoder<CancelOrder> for CancelOrder {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::OrderStatus, IncomingMessages::Error];
 
@@ -68,6 +77,7 @@ impl StreamDecoder<CancelOrder> for CancelOrder {
     }
 }
 
+#[cfg(not(feature = "sync"))]
 impl StreamDecoder<Orders> for Orders {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::CompletedOrder,
@@ -92,6 +102,7 @@ impl StreamDecoder<Orders> for Orders {
     }
 }
 
+#[cfg(not(feature = "sync"))]
 impl StreamDecoder<Executions> for Executions {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
         IncomingMessages::ExecutionData,
@@ -111,6 +122,7 @@ impl StreamDecoder<Executions> for Executions {
     }
 }
 
+#[cfg(not(feature = "sync"))]
 impl StreamDecoder<ExerciseOptions> for ExerciseOptions {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus, IncomingMessages::Error];
 
@@ -165,7 +177,7 @@ pub async fn submit_order(client: &Client, order_id: i32, contract: &Contract, o
 
 /// Submits an Order.
 /// After the order is submitted correctly, events will be returned concerning the order's activity.
-/// https://interactivebrokers.github.io/tws-api/order_submission.html
+/// <https://interactivebrokers.github.io/tws-api/order_submission.html>
 pub async fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
     verify::verify_order(client, order, order_id)?;
     verify::verify_order_contract(client, contract, order_id)?;
@@ -300,6 +312,7 @@ pub async fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subs
     ))
 }
 
+/// Exercise an option contract through the async client API.
 pub async fn exercise_options(
     client: &Client,
     contract: &Contract,

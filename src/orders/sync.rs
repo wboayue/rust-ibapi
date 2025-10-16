@@ -2,10 +2,11 @@ use std::sync::Arc;
 
 use super::common::{decoders, encoders, verify};
 use super::{CancelOrder, ExecutionFilter, Executions, ExerciseAction, ExerciseOptions, OrderUpdate, Orders, PlaceOrder};
-use crate::client::{StreamDecoder, Subscription};
+use crate::client::blocking::Subscription;
+use crate::client::StreamDecoder;
 use crate::contracts::Contract;
 use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
-use crate::{server_versions, Client, Error};
+use crate::{client::sync::Client, server_versions, Error};
 use time::OffsetDateTime;
 
 impl StreamDecoder<PlaceOrder> for PlaceOrder {

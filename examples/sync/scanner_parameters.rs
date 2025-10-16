@@ -6,7 +6,7 @@
 //! cargo run --features sync --example scanner_parameters
 //! ```
 
-use ibapi::Client;
+use ibapi::client::blocking::Client;
 
 // This example demonstrates requesting scanner parameters from the TWS.
 

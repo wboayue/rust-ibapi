@@ -8,8 +8,8 @@
 
 use std::time::Duration;
 
+use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
-use ibapi::Client;
 
 // This example demonstrates how to stream tick by tick data for the midpoint price of a contract.
 

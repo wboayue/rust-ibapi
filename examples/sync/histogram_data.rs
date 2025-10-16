@@ -6,6 +6,7 @@
 //! cargo run --features sync --example histogram_data
 //! ```
 
+use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
 
 fn main() {

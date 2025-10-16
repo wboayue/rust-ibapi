@@ -8,9 +8,9 @@
 
 use clap::{arg, Command};
 
+use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::market_data::historical::ToDuration;
-use ibapi::Client;
 
 fn main() {
     env_logger::init();

@@ -9,6 +9,7 @@
 //! ```
 
 use clap::{arg, Command};
+use ibapi::client::blocking::Client;
 
 use ibapi::prelude::*;
 

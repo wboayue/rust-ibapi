@@ -5,12 +5,12 @@ use std::sync::Mutex;
 use log::{debug, warn};
 use time::OffsetDateTime;
 
-use crate::client::ClientRequestBuilders;
+use crate::client::blocking::ClientRequestBuilders;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::protocol::{check_version, Features};
 use crate::transport::{InternalSubscription, Response};
-use crate::{Client, Error, MAX_RETRIES};
+use crate::{client::sync::Client, Error, MAX_RETRIES};
 
 use super::common::{decoders, encoders};
 use super::{BarSize, Duration, HistogramEntry, HistoricalData, Schedule, TickBidAsk, TickDecoder, TickLast, TickMidpoint, WhatToShow};
@@ -247,6 +247,7 @@ pub(crate) fn histogram_data(
 
 // TickSubscription and related types
 
+/// Shared subscription handle that decodes historical tick batches as they arrive.
 pub struct TickSubscription<T: TickDecoder<T>> {
     done: AtomicBool,
     messages: InternalSubscription,
@@ -264,14 +265,17 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
         }
     }
 
+    /// Return an iterator that blocks until each tick batch becomes available.
     pub fn iter(&self) -> TickSubscriptionIter<'_, T> {
         TickSubscriptionIter { subscription: self }
     }
 
+    /// Return a non-blocking iterator that yields immediately with cached ticks.
     pub fn try_iter(&self) -> TickSubscriptionTryIter<'_, T> {
         TickSubscriptionTryIter { subscription: self }
     }
 
+    /// Return an iterator that waits up to `duration` for each tick batch.
     pub fn timeout_iter(&self, duration: std::time::Duration) -> TickSubscriptionTimeoutIter<'_, T> {
         TickSubscriptionTimeoutIter {
             subscription: self,
@@ -279,14 +283,17 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
         }
     }
 
+    /// Block until the next tick batch is available.
     pub fn next(&self) -> Option<T> {
         self.next_helper(|| self.messages.next())
     }
 
+    /// Attempt to fetch the next tick batch without blocking.
     pub fn try_next(&self) -> Option<T> {
         self.next_helper(|| self.messages.try_next())
     }
 
+    /// Wait up to `duration` for the next tick batch to arrive.
     pub fn next_timeout(&self, duration: std::time::Duration) -> Option<T> {
         self.next_helper(|| self.messages.next_timeout(duration))
     }
@@ -427,13 +434,14 @@ impl<T: TickDecoder<T>> Iterator for TickSubscriptionTimeoutIter<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::blocking::Client;
     use crate::contracts::Contract;
     use crate::market_data::historical::ToDuration;
     use crate::market_data::TradingHours;
     use crate::messages::OutgoingMessages;
+    use crate::server_versions;
     use crate::stubs::MessageBusStub;
     use crate::ToField;
-    use crate::{server_versions, Client};
     use std::sync::{Arc, RwLock};
     use time::macros::{date, datetime};
     use time::OffsetDateTime;

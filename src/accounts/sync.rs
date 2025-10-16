@@ -2,10 +2,10 @@
 
 use time::OffsetDateTime;
 
-use crate::client::{ClientRequestBuilders, SharesChannel, Subscription};
+use crate::client::blocking::{ClientRequestBuilders, SharesChannel, Subscription};
 use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
-use crate::{Client, Error};
+use crate::{client::sync::Client, Error};
 
 use super::common::{decoders, encoders};
 use super::types::{AccountGroup, AccountId, ContractId, ModelCode};
@@ -14,10 +14,11 @@ use super::*;
 // Implement SharesChannel for PositionUpdate subscription
 impl SharesChannel for Subscription<PositionUpdate> {}
 
-// Subscribes to position updates for all accessible accounts.
-// All positions sent initially, and then only updates as positions change.
+/// Subscribe to streaming position updates for all accessible accounts.
+///
+/// The stream first replays the full position list and then sends incremental updates.
 pub fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
-    crate::common::request_helpers::shared_subscription(
+    crate::common::request_helpers::blocking::shared_subscription(
         client,
         Features::POSITIONS,
         OutgoingMessages::RequestPositions,
@@ -25,6 +26,9 @@ pub fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error>
     )
 }
 
+/// Subscribe to streaming position updates scoped by account and model code.
+///
+/// Requires [Features::MODELS_SUPPORT] to be available on the connected gateway.
 pub fn positions_multi(
     client: &Client,
     account: Option<&AccountId>,
@@ -38,9 +42,9 @@ pub fn positions_multi(
     builder.send(request)
 }
 
-// Determine whether an account exists under an account family and find the account family code.
+/// Fetch the account family codes registered with the broker.
 pub fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
-    crate::common::request_helpers::one_shot_request(
+    crate::common::request_helpers::blocking::one_shot_request(
         client,
         Features::FAMILY_CODES,
         OutgoingMessages::RequestFamilyCodes,
@@ -50,46 +54,44 @@ pub fn family_codes(client: &Client) -> Result<Vec<FamilyCode>, Error> {
     )
 }
 
-// Creates subscription for real time daily PnL and unrealized PnL updates
-//
-// # Arguments
-// * `client`     - client
-// * `account`    - account for which to receive PnL updates
-// * `model_code` - specify to request PnL updates for a specific model
+/// Subscribe to real-time daily and unrealized PnL updates for an account.
+///
+/// Optionally filter by model code to scope the updates.
 pub fn pnl(client: &Client, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Subscription<PnL>, Error> {
-    crate::common::request_helpers::request_with_id(client, Features::PNL, |id| encoders::encode_request_pnl(id, account, model_code))
+    crate::common::request_helpers::blocking::request_with_id(client, Features::PNL, |id| encoders::encode_request_pnl(id, account, model_code))
 }
 
-// Requests real time updates for daily PnL of individual positions.
-//
-// # Arguments
-// * `client` - Client
-// * `account` - Account in which position exists
-// * `contract_id` - Contract ID of contract to receive daily PnL updates for. Note: does not return message if invalid conId is entered
-// * `model_code` - Model in which position exists
+/// Subscribe to real-time daily PnL updates for a single contract.
+///
+/// The stream includes realized and unrealized PnL information for the requested position.
 pub fn pnl_single(
     client: &Client,
     account: &AccountId,
     contract_id: ContractId,
     model_code: Option<&ModelCode>,
 ) -> Result<Subscription<PnLSingle>, Error> {
-    crate::common::request_helpers::request_with_id(client, Features::REALIZED_PNL, |id| {
+    crate::common::request_helpers::blocking::request_with_id(client, Features::REALIZED_PNL, |id| {
         encoders::encode_request_pnl_single(id, account, contract_id, model_code)
     })
 }
 
+/// Subscribe to account summary updates for a group of accounts.
 pub fn account_summary(client: &Client, group: &AccountGroup, tags: &[&str]) -> Result<Subscription<AccountSummaryResult>, Error> {
-    crate::common::request_helpers::request_with_id(client, Features::ACCOUNT_SUMMARY, |id| {
+    crate::common::request_helpers::blocking::request_with_id(client, Features::ACCOUNT_SUMMARY, |id| {
         encoders::encode_request_account_summary(id, group, tags)
     })
 }
 
+/// Subscribe to detailed account updates for a specific account.
 pub fn account_updates(client: &Client, account: &AccountId) -> Result<Subscription<AccountUpdate>, Error> {
-    crate::common::request_helpers::shared_request(client, OutgoingMessages::RequestAccountData, || {
+    crate::common::request_helpers::blocking::shared_request(client, OutgoingMessages::RequestAccountData, || {
         encoders::encode_request_account_updates(client.server_version(), account)
     })
 }
 
+/// Subscribe to account updates scoped by account and model code.
+///
+/// Requires [Features::MODELS_SUPPORT] to be available on the connected gateway.
 pub fn account_updates_multi(
     client: &Client,
     account: Option<&AccountId>,
@@ -103,8 +105,9 @@ pub fn account_updates_multi(
     builder.send(request)
 }
 
+/// Fetch the list of accounts accessible to the current user.
 pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
-    crate::common::request_helpers::one_shot_with_retry(
+    crate::common::request_helpers::blocking::one_shot_with_retry(
         client,
         OutgoingMessages::RequestManagedAccounts,
         encoders::encode_request_managed_accounts,
@@ -118,8 +121,9 @@ pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
     )
 }
 
+/// Query the current server time reported by TWS or IB Gateway.
 pub fn server_time(client: &Client) -> Result<OffsetDateTime, Error> {
-    crate::common::request_helpers::one_shot_with_retry(
+    crate::common::request_helpers::blocking::one_shot_with_retry(
         client,
         OutgoingMessages::RequestCurrentTime,
         encoders::encode_request_server_time,
@@ -141,14 +145,14 @@ mod tests {
     use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
     use crate::accounts::{AccountSummaryTags, AccountUpdateMulti};
     use crate::testdata::responses;
-    use crate::{server_versions, stubs::MessageBusStub, Client, Error};
+    use crate::{client::blocking::Client, server_versions, stubs::MessageBusStub, Error};
     use std::sync::{Arc, RwLock};
 
     use crate::common::test_utils::helpers::*;
 
     #[test]
     fn test_pnl() {
-        let (client, message_bus) = create_test_client();
+        let (client, message_bus) = create_blocking_test_client();
 
         let account = AccountId(TEST_ACCOUNT.to_string());
         let model_code = Some(ModelCode(TEST_MODEL_CODE.to_string()));
@@ -163,7 +167,7 @@ mod tests {
 
     #[test]
     fn test_pnl_single() {
-        let (client, message_bus) = create_test_client();
+        let (client, message_bus) = create_blocking_test_client();
 
         let account = AccountId(TEST_ACCOUNT.to_string());
         let contract_id = ContractId(TEST_CONTRACT_ID);
@@ -181,7 +185,7 @@ mod tests {
     fn test_positions() {
         use crate::accounts::PositionUpdate;
 
-        let (client, message_bus) = create_test_client_with_responses(vec![responses::POSITION.into(), responses::POSITION_END.into()]);
+        let (client, message_bus) = create_blocking_test_client_with_responses(vec![responses::POSITION.into(), responses::POSITION_END.into()]);
 
         let subscription = client.positions().expect("request positions failed");
 
@@ -252,7 +256,8 @@ mod tests {
     fn test_account_summary() {
         use crate::accounts::AccountSummaryResult;
 
-        let (client, message_bus) = create_test_client_with_responses(vec![responses::ACCOUNT_SUMMARY.into(), responses::ACCOUNT_SUMMARY_END.into()]);
+        let (client, message_bus) =
+            create_blocking_test_client_with_responses(vec![responses::ACCOUNT_SUMMARY.into(), responses::ACCOUNT_SUMMARY_END.into()]);
 
         let group = AccountGroup("All".to_string());
         let tags = &[AccountSummaryTags::ACCOUNT_TYPE];
@@ -290,12 +295,12 @@ mod tests {
     #[test]
     fn test_managed_accounts() {
         // Scenario: Valid response
-        let (client, _) = create_test_client_with_responses(vec![responses::MANAGED_ACCOUNT.into()]);
+        let (client, _) = create_blocking_test_client_with_responses(vec![responses::MANAGED_ACCOUNT.into()]);
         let accounts = client.managed_accounts().expect("request managed accounts failed for valid response");
         assert_eq!(accounts, &[TEST_ACCOUNT, TEST_ACCOUNT_2], "Valid accounts list mismatch");
 
         // Scenario: Empty response string
-        let (client_empty, _) = create_test_client_with_responses(vec!["17|1||".to_string()]); // Empty accounts string
+        let (client_empty, _) = create_blocking_test_client_with_responses(vec!["17|1||".to_string()]); // Empty accounts string
         let accounts_empty = client_empty
             .managed_accounts()
             .expect("request managed accounts failed for empty response");
@@ -306,7 +311,7 @@ mod tests {
         );
 
         // Scenario: No message (subscription.next() returns None)
-        let (client_no_msg, _) = create_test_client();
+        let (client_no_msg, _) = create_blocking_test_client();
         let accounts_no_msg = client_no_msg.managed_accounts().expect("request managed accounts failed for no message");
         assert!(accounts_no_msg.is_empty(), "Accounts list should be empty when no message is received");
     }
@@ -315,7 +320,7 @@ mod tests {
     fn test_managed_accounts_retry() {
         // Test that managed_accounts retries on connection reset
         // Since our stub doesn't simulate actual connection resets, we'll test with valid responses
-        let (client, message_bus) = create_test_client_with_responses(vec![
+        let (client, message_bus) = create_blocking_test_client_with_responses(vec![
             responses::MANAGED_ACCOUNT.into(), // Successful response
         ]);
 
@@ -333,7 +338,7 @@ mod tests {
         // Scenario 1: Success
         let valid_timestamp_str = "1678890000"; // 2023-03-15 14:20:00 UTC
         let expected_datetime = datetime!(2023-03-15 14:20:00 UTC);
-        let (client, message_bus) = create_test_client_with_responses(vec![
+        let (client, message_bus) = create_blocking_test_client_with_responses(vec![
             format!("49|1|{}|", valid_timestamp_str), // IncomingMessages::CurrentTime
         ]);
 
@@ -343,7 +348,7 @@ mod tests {
         assert_request_messages(&message_bus, &["49|1|"]);
 
         // Scenario 2: No response (returns default)
-        let (client_no_resp, message_bus_no_resp) = create_test_client();
+        let (client_no_resp, message_bus_no_resp) = create_blocking_test_client();
         let result_no_resp = client_no_resp.server_time();
         assert!(result_no_resp.is_err(), "Expected Err for no response");
         match result_no_resp.err().unwrap() {
@@ -353,7 +358,7 @@ mod tests {
         assert_request_messages(&message_bus_no_resp, &["49|1|"]);
 
         // Scenario 3: Invalid timestamp format
-        let (client_invalid, message_bus_invalid) = create_test_client_with_responses(vec!["49|1|not_a_timestamp|".into()]);
+        let (client_invalid, message_bus_invalid) = create_blocking_test_client_with_responses(vec!["49|1|not_a_timestamp|".into()]);
         let result_invalid = client_invalid.server_time();
         assert!(result_invalid.is_err(), "Expected Err for invalid timestamp");
         assert_request_messages(&message_bus_invalid, &["49|1|"]);
@@ -366,7 +371,7 @@ mod tests {
         let account_name = AccountId(TEST_ACCOUNT.to_string());
 
         // Create client with account update responses
-        let (client, message_bus) = create_test_client_with_responses(vec![
+        let (client, message_bus) = create_blocking_test_client_with_responses(vec![
             format!("{}|", responses::ACCOUNT_VALUE), // AccountValue with trailing delimiter
             format!("54|1|{}|", TEST_ACCOUNT),        // AccountDownloadEnd
         ]);
@@ -412,7 +417,7 @@ mod tests {
         use crate::accounts::FamilyCode;
 
         // Scenario 1: Success with multiple codes
-        let (client, message_bus) = create_test_client_with_responses(vec!["78|2|ACC1|FC1|ACC2|FC2|".into()]);
+        let (client, message_bus) = create_blocking_test_client_with_responses(vec!["78|2|ACC1|FC1|ACC2|FC2|".into()]);
 
         let result = client.family_codes();
         assert!(result.is_ok(), "Expected Ok, got Err: {:?}", result.err());
@@ -435,14 +440,14 @@ mod tests {
         assert_request_messages(&message_bus, &["80|1|"]);
 
         // Scenario 2: No message received (returns empty vector)
-        let (client_no_msg, message_bus_no_msg) = create_test_client();
+        let (client_no_msg, message_bus_no_msg) = create_blocking_test_client();
         let result_no_msg = client_no_msg.family_codes();
         assert!(result_no_msg.is_ok(), "Expected Ok, got Err: {:?}", result_no_msg.err());
         assert!(result_no_msg.unwrap().is_empty(), "Expected empty vector");
         assert_request_messages(&message_bus_no_msg, &["80|1|"]);
 
         // Scenario 3: Empty family codes list
-        let (client_empty, message_bus_empty) = create_test_client_with_responses(vec![
+        let (client_empty, message_bus_empty) = create_blocking_test_client_with_responses(vec![
             "78|0|".into(), // Zero family codes
         ]);
         let result_empty = client_empty.family_codes();
@@ -505,7 +510,7 @@ mod tests {
         let group = AccountGroup("All".to_string());
 
         for test_case in VERSION_TEST_CASES {
-            let (client, _) = create_test_client_with_version(test_case.required_version - 1);
+            let (client, _) = create_blocking_test_client_with_version(test_case.required_version - 1);
 
             let result = match test_case.function_name {
                 "PnL" => client.pnl(&account, None).map(|_| ()),
@@ -536,9 +541,9 @@ mod tests {
 
         for test_case in managed_accounts_test_cases() {
             let (client, message_bus) = if test_case.responses.is_empty() {
-                create_test_client()
+                create_blocking_test_client()
             } else {
-                create_test_client_with_responses(test_case.responses)
+                create_blocking_test_client_with_responses(test_case.responses)
             };
 
             let accounts = client
@@ -555,9 +560,9 @@ mod tests {
 
         for test_case in server_time_test_cases() {
             let (client, message_bus) = if test_case.responses.is_empty() {
-                create_test_client()
+                create_blocking_test_client()
             } else {
-                create_test_client_with_responses(test_case.responses)
+                create_blocking_test_client_with_responses(test_case.responses)
             };
 
             let result = client.server_time();
@@ -602,7 +607,7 @@ mod tests {
             if test_case.expect_responses {
                 // Create client with mock responses for tests that expect data
                 let (client, message_bus) =
-                    create_test_client_with_responses(vec![responses::ACCOUNT_SUMMARY.into(), responses::ACCOUNT_SUMMARY_END.into()]);
+                    create_blocking_test_client_with_responses(vec![responses::ACCOUNT_SUMMARY.into(), responses::ACCOUNT_SUMMARY_END.into()]);
 
                 let subscription = client
                     .account_summary(&group, &test_case.tags)
@@ -643,7 +648,7 @@ mod tests {
                 }
             } else {
                 // For tests that don't expect responses (like empty tags)
-                let (client, _) = create_test_client();
+                let (client, _) = create_blocking_test_client();
                 let result = client.account_summary(&group, &test_case.tags);
 
                 if test_case.should_succeed {
@@ -660,7 +665,7 @@ mod tests {
         use super::common::test_tables::pnl_parameter_test_cases;
 
         let test_cases = pnl_parameter_test_cases();
-        let (client, message_bus) = create_test_client();
+        let (client, message_bus) = create_blocking_test_client();
         let account = AccountId(TEST_ACCOUNT.to_string());
         let mut subscriptions = Vec::new();
 
@@ -719,7 +724,7 @@ mod tests {
         use super::common::test_tables::contract_id_test_cases;
 
         let test_cases = contract_id_test_cases();
-        let (client, message_bus) = create_test_client();
+        let (client, message_bus) = create_blocking_test_client();
         let account = AccountId(TEST_ACCOUNT.to_string());
         let mut subscriptions = Vec::new();
 
@@ -767,7 +772,8 @@ mod tests {
         use super::common::test_tables::positions_multi_parameter_test_cases;
 
         let test_cases = positions_multi_parameter_test_cases();
-        let (client, message_bus) = create_test_client_with_responses(vec![responses::POSITION_MULTI.into(), responses::POSITION_MULTI_END.into()]);
+        let (client, message_bus) =
+            create_blocking_test_client_with_responses(vec![responses::POSITION_MULTI.into(), responses::POSITION_MULTI_END.into()]);
         let mut subscriptions = Vec::new();
 
         // Create all subscriptions
@@ -835,7 +841,7 @@ mod tests {
         use super::common::test_tables::{subscription_lifecycle_test_cases, SubscriptionType};
 
         let test_cases = subscription_lifecycle_test_cases();
-        let (client, message_bus) = create_test_client();
+        let (client, message_bus) = create_blocking_test_client();
 
         // Test each subscription type individually to avoid lifetime issues
         for test_case in &test_cases {
@@ -927,7 +933,7 @@ mod tests {
         use crate::accounts::AccountUpdate;
 
         // Test continuous account updates stream
-        let (client, message_bus) = create_test_client_with_responses(vec![
+        let (client, message_bus) = create_blocking_test_client_with_responses(vec![
             format!("{}|", responses::ACCOUNT_VALUE),
             format!("{}|", responses::ACCOUNT_VALUE),
             format!("{}|", responses::ACCOUNT_VALUE),
@@ -961,7 +967,7 @@ mod tests {
     #[test]
     fn test_error_propagation() {
         // Test that encoding errors are properly propagated
-        let (_client, _) = create_test_client();
+        let (_client, _) = create_blocking_test_client();
 
         // These tests verify that version checks catch incompatible requests
         // The actual encoding shouldn't fail in normal circumstances since
@@ -969,7 +975,7 @@ mod tests {
         // sending requests to incompatible servers
 
         let account = AccountId(TEST_ACCOUNT.to_string());
-        let old_version_client = create_test_client_with_version(50).0; // Very old version
+        let old_version_client = create_blocking_test_client_with_version(50).0; // Very old version
 
         // All modern features should fail on old servers
         assert!(old_version_client.pnl(&account, None).is_err());

@@ -6,7 +6,8 @@
 //! cargo run --features sync --example scanner_subscription_active_stocks
 //! ```
 
-use ibapi::{scanner, Client};
+use ibapi::client::blocking::Client;
+use ibapi::scanner;
 
 // This example demonstrates setting up a market scanner.
 

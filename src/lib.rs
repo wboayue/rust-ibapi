@@ -15,6 +15,7 @@
 //!
 //! For an overview of API usage, refer to the [README](https://github.com/wboayue/rust-ibapi/blob/main/README.md).
 
+#![warn(missing_docs)]
 // Allow octal-looking escapes in string literals (used in test data)
 #![allow(clippy::octal_escapes)]
 #![allow(clippy::bool_assert_comparison)]
@@ -25,27 +26,12 @@
 // Feature guards
 #[cfg(not(any(feature = "sync", feature = "async")))]
 compile_error!(
-    "You must enable either the 'sync' or 'async' feature to use this crate.\n\
-     \n\
-     For synchronous (thread-based) API:\n\
-         cargo add ibapi --features sync\n\
-     \n\
-     For asynchronous (tokio-based) API:\n\
-         cargo add ibapi --features async\n\
-     \n\
-     In Cargo.toml:\n\
-         ibapi = { version = \"2.0\", features = [\"sync\"] }  # or [\"async\"]\n\
-     \n\
-     Note: The 'sync' and 'async' features are mutually exclusive."
-);
-
-#[cfg(all(feature = "sync", feature = "async"))]
-compile_error!(
-    "The 'sync' and 'async' features are mutually exclusive.\n\
-     Please enable only one of them:\n\
-     \n\
-     For synchronous API: --features sync\n\
-     For asynchronous API: --features async"
+    "You must enable at least one of the 'sync' or 'async' features to use this crate.\n\
+     The 'async' feature is enabled by default; if you disabled default features, be sure to\n\
+     opt back into either API:\n\
+         ibapi = { version = \"2.0\", default-features = false, features = [\"sync\"] }\n\
+         ibapi = { version = \"2.0\", default-features = false, features = [\"async\"] }\n\
+     You may also enable both to access the synchronous API under `client::blocking`."
 );
 
 /// Describes items present in an account.

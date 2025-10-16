@@ -2,11 +2,12 @@
 
 use time::Date;
 
+use crate::client::sync::Client;
+use crate::subscriptions::sync::Subscription;
 use crate::{
-    client::Subscription,
     common::request_helpers,
     protocol::{check_version, Features},
-    Client, Error,
+    Error,
 };
 
 use super::{common::decoders, encoders, AutoFill, WshEventData, WshMetadata};
@@ -14,7 +15,7 @@ use super::{common::decoders, encoders, AutoFill, WshEventData, WshMetadata};
 pub fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
     check_version(client.server_version, Features::WSHE_CALENDAR)?;
 
-    request_helpers::one_shot_request_with_retry(
+    request_helpers::blocking::one_shot_request_with_retry(
         client,
         encoders::encode_request_wsh_metadata,
         |message| decoders::decode_wsh_metadata(message.clone()),
@@ -41,7 +42,7 @@ pub fn wsh_event_data_by_contract(
     }
 
     let server_version = client.server_version;
-    request_helpers::one_shot_request_with_retry(
+    request_helpers::blocking::one_shot_request_with_retry(
         client,
         |request_id| {
             encoders::encode_request_wsh_event_data(
@@ -70,7 +71,7 @@ pub fn wsh_event_data_by_filter(
         check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
     }
 
-    request_helpers::request_with_id(client, Features::WSH_EVENT_DATA_FILTERS, |request_id| {
+    request_helpers::blocking::request_with_id(client, Features::WSH_EVENT_DATA_FILTERS, |request_id| {
         encoders::encode_request_wsh_event_data(
             client.server_version,
             request_id,
