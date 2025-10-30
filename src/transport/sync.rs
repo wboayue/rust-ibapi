@@ -401,6 +401,23 @@ impl<S: Stream> TcpMessageBus<S> {
                     warn!("could not route commission report {message:?}");
                 }
             }
+            IncomingMessages::Error => {
+                // Forward error messages to order update stream
+                let sent_to_update_stream = self.send_order_update(&message);
+
+                // Also try to route to specific order if subscription exists
+                if let Some(order_id) = message.order_id() {
+                    if self.orders.contains(&order_id) {
+                        if let Err(e) = self.orders.send(&order_id, Ok(message)) {
+                            warn!("error routing error message for order_id({order_id}): {e}");
+                        }
+                    } else if !sent_to_update_stream {
+                        info!("order error message has no recipient: {message:?}");
+                    }
+                } else if !sent_to_update_stream {
+                    info!("order error message has no recipient: {message:?}");
+                }
+            }
             _ => (),
         }
     }

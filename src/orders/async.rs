@@ -165,6 +165,7 @@ pub async fn order_update_stream(client: &Client) -> Result<Subscription<OrderUp
 ///
 /// # See Also
 /// * [TWS API Documentation](https://interactivebrokers.github.io/tws-api/order_submission.html)
+/// * IB also recommends [IBKR Campus](https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/)
 pub async fn submit_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<(), Error> {
     verify::verify_order(client, order, order_id)?;
     verify::verify_order_contract(client, contract, order_id)?;
@@ -177,7 +178,10 @@ pub async fn submit_order(client: &Client, order_id: i32, contract: &Contract, o
 
 /// Submits an Order.
 /// After the order is submitted correctly, events will be returned concerning the order's activity.
-/// <https://interactivebrokers.github.io/tws-api/order_submission.html>
+///
+/// # See Also
+/// * [TWS API Documentation](https://interactivebrokers.github.io/tws-api/order_submission.html)
+/// * IB also recommends [IBKR Campus](https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/)
 pub async fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
     verify::verify_order(client, order, order_id)?;
     verify::verify_order_contract(client, contract, order_id)?;
