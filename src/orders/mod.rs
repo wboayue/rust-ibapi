@@ -36,11 +36,20 @@ pub(crate) mod common;
 /// Fluent builder APIs for constructing orders.
 pub mod builder;
 
+/// Order condition types for conditional orders.
+pub mod conditions;
+
 /// Convenience re-export for low-level order builder helpers.
 pub use common::order_builder;
 
 // Re-export builder types
 pub use builder::{BracketOrderBuilder, BracketOrderIds, OrderBuilder, OrderId};
+
+// Re-export condition types and builders
+pub use conditions::{
+    ExecutionCondition, ExecutionConditionBuilder, MarginCondition, MarginConditionBuilder, PercentChangeCondition, PercentChangeConditionBuilder,
+    PriceCondition, PriceConditionBuilder, TimeCondition, TimeConditionBuilder, VolumeCondition, VolumeConditionBuilder,
+};
 
 use std::convert::From;
 use std::fmt::Debug;
@@ -811,25 +820,54 @@ pub struct OrderComboLeg {
 }
 
 /// Order condition types for conditional orders.
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+///
+/// Each variant wraps a specific condition type that defines when the order
+/// should be activated or canceled based on market conditions.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum OrderCondition {
-    /// Price-based condition.
-    Price = 1,
-    /// Time-based condition.
-    Time = 3,
-    /// Margin-based condition.
-    Margin = 4,
-    /// Execution-based condition.
-    Execution = 5,
-    /// Volume-based condition.
-    Volume = 6,
-    /// Percent change condition.
-    PercentChange = 7,
+    /// Price-based condition that triggers when a contract reaches a specified price.
+    Price(PriceCondition),
+    /// Time-based condition that triggers at a specified time.
+    Time(TimeCondition),
+    /// Margin-based condition that triggers when margin cushion percentage changes.
+    Margin(MarginCondition),
+    /// Execution-based condition that triggers when a specific contract is executed.
+    Execution(ExecutionCondition),
+    /// Volume-based condition that triggers when a contract reaches a specified volume.
+    Volume(VolumeCondition),
+    /// Percent change condition that triggers when a contract's price changes by a specified percentage.
+    PercentChange(PercentChangeCondition),
+}
+
+impl OrderCondition {
+    /// Returns the condition type discriminator as used by the TWS API.
+    pub fn condition_type(&self) -> i32 {
+        match self {
+            Self::Price(_) => 1,
+            Self::Time(_) => 3,
+            Self::Margin(_) => 4,
+            Self::Execution(_) => 5,
+            Self::Volume(_) => 6,
+            Self::PercentChange(_) => 7,
+        }
+    }
+
+    /// Returns whether this is a conjunction (AND) condition.
+    pub fn is_conjunction(&self) -> bool {
+        match self {
+            Self::Price(c) => c.is_conjunction,
+            Self::Time(c) => c.is_conjunction,
+            Self::Margin(c) => c.is_conjunction,
+            Self::Execution(c) => c.is_conjunction,
+            Self::Volume(c) => c.is_conjunction,
+            Self::PercentChange(c) => c.is_conjunction,
+        }
+    }
 }
 
 impl ToField for OrderCondition {
     fn to_field(&self) -> String {
-        (*self as u8).to_string()
+        self.condition_type().to_string()
     }
 }
 
@@ -840,14 +878,15 @@ impl ToField for Option<OrderCondition> {
 }
 
 impl From<i32> for OrderCondition {
+    /// Creates an OrderCondition variant with default values from a type discriminator.
     fn from(val: i32) -> Self {
         match val {
-            1 => OrderCondition::Price,
-            3 => OrderCondition::Time,
-            4 => OrderCondition::Volume,
-            5 => OrderCondition::Execution,
-            6 => OrderCondition::Volume,
-            7 => OrderCondition::PercentChange,
+            1 => OrderCondition::Price(PriceCondition::default()),
+            3 => OrderCondition::Time(TimeCondition::default()),
+            4 => OrderCondition::Margin(MarginCondition::default()),
+            5 => OrderCondition::Execution(ExecutionCondition::default()),
+            6 => OrderCondition::Volume(VolumeCondition::default()),
+            7 => OrderCondition::PercentChange(PercentChangeCondition::default()),
             _ => panic!("OrderCondition({val}) is unsupported"),
         }
     }
