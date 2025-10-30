@@ -38,7 +38,11 @@ pub(crate) fn head_timestamp(
     }
 }
 
-// https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration
+/// Requests historical data for a contract.
+///
+/// # See Also
+/// * [TWS API Documentation](https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration)
+/// * IB also recommends [IBKR Campus](https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/)
 pub(crate) fn historical_data(
     client: &Client,
     contract: &Contract,

@@ -115,6 +115,7 @@ pub fn order_update_stream(client: &Client) -> Result<Subscription<OrderUpdate>,
 ///
 /// # See Also
 /// * [TWS API Documentation](https://interactivebrokers.github.io/tws-api/order_submission.html)
+/// * IB also recommends [IBKR Campus](https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/)
 pub fn submit_order(client: &Client, order_id: i32, contract: &Contract, order: &super::Order) -> Result<(), Error> {
     verify::verify_order(client, order, order_id)?;
     verify::verify_order_contract(client, contract, order_id)?;
@@ -141,6 +142,7 @@ pub fn submit_order(client: &Client, order_id: i32, contract: &Contract, order: 
 ///
 /// # See Also
 /// * [TWS API Documentation](https://interactivebrokers.github.io/tws-api/order_submission.html)
+/// * IB also recommends [IBKR Campus](https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/)
 pub fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &super::Order) -> Result<Subscription<PlaceOrder>, Error> {
     verify::verify_order(client, order, order_id)?;
     verify::verify_order_contract(client, contract, order_id)?;
