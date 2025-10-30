@@ -241,14 +241,16 @@ fn test_message_encodes_rule_80_a() {
 #[test]
 #[cfg(feature = "sync")]
 fn test_message_encodes_order_condition() {
+    use crate::orders::conditions::*;
+
     let mut message = RequestMessage::new();
 
-    message.push_field(&OrderCondition::Price);
-    message.push_field(&OrderCondition::Time);
-    message.push_field(&OrderCondition::Margin);
-    message.push_field(&OrderCondition::Execution);
-    message.push_field(&OrderCondition::Volume);
-    message.push_field(&OrderCondition::PercentChange);
+    message.push_field(&OrderCondition::Price(PriceCondition::default()));
+    message.push_field(&OrderCondition::Time(TimeCondition::default()));
+    message.push_field(&OrderCondition::Margin(MarginCondition::default()));
+    message.push_field(&OrderCondition::Execution(ExecutionCondition::default()));
+    message.push_field(&OrderCondition::Volume(VolumeCondition::default()));
+    message.push_field(&OrderCondition::PercentChange(PercentChangeCondition::default()));
 
     assert_eq!(6, message.fields.len());
     assert_eq!("1\03\04\05\06\07\0", message.encode());
