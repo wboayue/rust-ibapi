@@ -289,6 +289,22 @@ impl<S: Stream> TcpMessageBus<S> {
 
     fn process_response(&self, message: ResponseMessage) {
         let request_id = message.request_id().unwrap_or(-1); // pass in request id?
+
+        // Handle error messages - check if they should go to order_update_stream
+        if message.message_type() == IncomingMessages::Error {
+            let sent_to_update_stream = self.send_order_update(&message);
+
+            // Try routing to specific request/order subscription
+            if self.requests.contains(&request_id) {
+                self.requests.send(&request_id, Ok(message)).unwrap();
+            } else if self.orders.contains(&request_id) {
+                self.orders.send(&request_id, Ok(message)).unwrap();
+            } else if !sent_to_update_stream {
+                info!("no recipient found for error message: {message:?}")
+            }
+            return;
+        }
+
         if self.requests.contains(&request_id) {
             self.requests.send(&request_id, Ok(message)).unwrap();
         } else if self.orders.contains(&request_id) {
