@@ -1224,13 +1224,13 @@ pub mod blocking {
 }
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
-pub use sync::{
+pub(crate) use sync::{
     all_open_orders, auto_open_orders, cancel_order, completed_orders, executions, exercise_options, global_cancel, next_valid_order_id, open_orders,
     order_update_stream, place_order, submit_order,
 };
 
 #[cfg(feature = "async")]
-pub use r#async::{
+pub(crate) use r#async::{
     all_open_orders, auto_open_orders, cancel_order, completed_orders, executions, exercise_options, global_cancel, next_valid_order_id, open_orders,
     order_update_stream, place_order, submit_order,
 };
