@@ -972,7 +972,7 @@ impl Client {
     /// * `duration`     - duration of interval to retrieve [historical::HistoricalData] for.
     /// * `bar_size`     - [historical::BarSize] to return.
     /// * `what_to_show` - requested bar type: [historical::WhatToShow].
-    /// * `use_rth`      - use regular trading hours.
+    /// * `trading_hours` - Use [TradingHours::Regular] for data generated only during regular trading hours, or [TradingHours::Extended] to include data from outside regular trading hours.
     ///
     /// # Examples
     ///
