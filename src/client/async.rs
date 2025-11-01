@@ -576,7 +576,7 @@ impl Client {
     /// * `contract` - The Contract for which the depth is being requested
     /// * `bar_size` - Currently being ignored
     /// * `what_to_show` - The nature of the data being retrieved (TRADES, MIDPOINT, BID, ASK)
-    /// * `use_rth` - Set to false to obtain the data which was also generated outside of the Regular Trading Hours, set to true to obtain only the RTH data
+    /// * `trading_hours` - Use TradingHours::Regular for data generated only during regular trading hours, or TradingHours::Extended to include data from outside regular trading hours
     ///
     /// # Examples
     ///
@@ -880,7 +880,7 @@ impl Client {
     /// * `duration` - The amount of time for which the data needs to be retrieved.
     /// * `bar_size` - The bar size.
     /// * `what_to_show` - The kind of information being retrieved.
-    /// * `use_rth` - Set to false to obtain the data which was also generated outside of the Regular Trading Hours, set to true to obtain only the RTH data.
+    /// * `trading_hours` - Use TradingHours::Regular for data generated only during regular trading hours, or TradingHours::Extended to include data from outside regular trading hours.
     ///
     /// # Examples
     ///
