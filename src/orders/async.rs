@@ -139,7 +139,7 @@ impl StreamDecoder<ExerciseOptions> for ExerciseOptions {
 /// Subscribes to order update events. Only one subscription can be active at a time.
 ///
 /// This function returns a subscription that will receive updates of activity for all orders placed by the client.
-pub async fn order_update_stream(client: &Client) -> Result<Subscription<OrderUpdate>, Error> {
+pub(crate) async fn order_update_stream(client: &Client) -> Result<Subscription<OrderUpdate>, Error> {
     let internal_subscription = client.create_order_update_subscription().await?;
     Ok(Subscription::new_from_internal_simple::<OrderUpdate>(
         internal_subscription,
@@ -165,7 +165,7 @@ pub async fn order_update_stream(client: &Client) -> Result<Subscription<OrderUp
 ///
 /// # See Also
 /// * [TWS API Documentation](https://interactivebrokers.github.io/tws-api/order_submission.html)
-pub async fn submit_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<(), Error> {
+pub(crate) async fn submit_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<(), Error> {
     verify::verify_order(client, order, order_id)?;
     verify::verify_order_contract(client, contract, order_id)?;
 
@@ -178,7 +178,7 @@ pub async fn submit_order(client: &Client, order_id: i32, contract: &Contract, o
 /// Submits an Order.
 /// After the order is submitted correctly, events will be returned concerning the order's activity.
 /// <https://interactivebrokers.github.io/tws-api/order_submission.html>
-pub async fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
+pub(crate) async fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
     verify::verify_order(client, order, order_id)?;
     verify::verify_order_contract(client, contract, order_id)?;
 
@@ -193,7 +193,7 @@ pub async fn place_order(client: &Client, order_id: i32, contract: &Contract, or
 }
 
 /// Cancels an open [Order].
-pub async fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
+pub(crate) async fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
     if !manual_order_cancel_time.is_empty() {
         check_version(client.server_version(), Features::MANUAL_ORDER_TIME)?;
     }
@@ -209,7 +209,7 @@ pub async fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_ti
 }
 
 /// Cancels all open [Order]s.
-pub async fn global_cancel(client: &Client) -> Result<(), Error> {
+pub(crate) async fn global_cancel(client: &Client) -> Result<(), Error> {
     check_version(client.server_version(), Features::REQ_GLOBAL_CANCEL)?;
 
     let message = encoders::encode_global_cancel()?;
@@ -219,7 +219,7 @@ pub async fn global_cancel(client: &Client) -> Result<(), Error> {
 }
 
 /// Gets next valid order id
-pub async fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
+pub(crate) async fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
     let message = encoders::encode_next_valid_order_id()?;
 
     let mut internal_subscription = client.send_shared_request(OutgoingMessages::RequestIds, message).await?;
@@ -239,7 +239,7 @@ pub async fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
 }
 
 /// Requests completed [Order]s.
-pub async fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<Orders>, Error> {
+pub(crate) async fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<Orders>, Error> {
     check_version(client.server_version(), Features::COMPLETED_ORDERS)?;
 
     let request = encoders::encode_completed_orders(api_only)?;
@@ -257,7 +257,7 @@ pub async fn completed_orders(client: &Client, api_only: bool) -> Result<Subscri
 ///
 /// # Arguments
 /// * `client` - [Client] used to communicate with server.
-pub async fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
+pub(crate) async fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
     let request = encoders::encode_open_orders()?;
 
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestOpenOrders, request).await?;
@@ -270,7 +270,7 @@ pub async fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error>
 
 /// Requests all *current* open orders in associated accounts at the current moment.
 /// Open orders are returned once; this function does not initiate a subscription.
-pub async fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
+pub(crate) async fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
     let request = encoders::encode_all_open_orders()?;
 
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestAllOpenOrders, request).await?;
@@ -282,7 +282,7 @@ pub async fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Er
 }
 
 /// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
-pub async fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription<Orders>, Error> {
+pub(crate) async fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription<Orders>, Error> {
     let request = encoders::encode_auto_open_orders(auto_bind)?;
 
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request).await?;
@@ -301,7 +301,7 @@ pub async fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscr
 ///
 /// # Arguments
 /// * `filter` - filter criteria used to determine which execution reports are returned
-pub async fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
+pub(crate) async fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
     let request_id = client.next_request_id();
     let request = encoders::encode_executions(client.server_version(), request_id, &filter)?;
     let internal_subscription = client.send_request(request_id, request).await?;
@@ -313,7 +313,7 @@ pub async fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subs
 }
 
 /// Exercise an option contract through the async client API.
-pub async fn exercise_options(
+pub(crate) async fn exercise_options(
     client: &Client,
     contract: &Contract,
     exercise_action: ExerciseAction,

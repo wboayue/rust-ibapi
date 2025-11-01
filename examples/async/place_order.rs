@@ -6,7 +6,7 @@
 //! 2. Monitor order status through the individual order subscription
 //! 3. Handle multiple concurrent orders with separate subscriptions
 
-use ibapi::orders::{order_builder, place_order};
+use ibapi::orders::order_builder;
 use ibapi::prelude::*;
 use std::error::Error;
 
@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
 
     // Place the order and get a subscription for this specific order
-    let mut order_subscription = place_order(&client, order_id, &contract, &order).await?;
+    let mut order_subscription = client.place_order(order_id, &contract, &order).await?;
     println!("Order placed successfully, monitoring updates...\n");
 
     // Monitor updates for this specific order
@@ -109,10 +109,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let order_id2 = client.next_order_id();
 
     // Place both orders
-    let subscription1 = place_order(&client, order_id1, &contract, &order1).await?;
+    let subscription1 = client.place_order(order_id1, &contract, &order1).await?;
     println!("Placed order {order_id1}");
 
-    let subscription2 = place_order(&client, order_id2, &contract, &order2).await?;
+    let subscription2 = client.place_order(order_id2, &contract, &order2).await?;
     println!("Placed order {order_id2}");
 
     // Monitor both orders concurrently

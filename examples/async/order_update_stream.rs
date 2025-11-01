@@ -7,7 +7,7 @@
 //! 3. Monitor order status through the update stream
 
 use ibapi::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
-use ibapi::orders::{order_builder, order_update_stream, submit_order, Action, OrderUpdate};
+use ibapi::orders::{order_builder, Action, OrderUpdate};
 use ibapi::Client;
 use std::error::Error;
 
@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Connected to server version {}", client.server_version());
 
     // Create order update stream - this receives ALL order updates
-    let mut order_stream = order_update_stream(&client).await?;
+    let mut order_stream = client.order_update_stream().await?;
     println!("Created order update stream");
 
     // Spawn a task to monitor all order updates
@@ -99,7 +99,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         order.limit_price.unwrap()
     );
 
-    submit_order(&client, order_id, &contract, &order).await?;
+    client.submit_order(order_id, &contract, &order).await?;
     println!("Order submitted successfully");
 
     // Wait a bit to see order updates
@@ -118,7 +118,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         order2.limit_price.unwrap()
     );
 
-    submit_order(&client, order_id2, &contract, &order2).await?;
+    client.submit_order(order_id2, &contract, &order2).await?;
     println!("Order submitted successfully");
 
     // Wait for more updates
