@@ -125,9 +125,22 @@ pub fn submit_order(client: &Client, order_id: i32, contract: &Contract, order: 
     Ok(())
 }
 
-// Submits an Order.
-// After the order is submitted correctly, events will be returned concerning the order's activity.
-// https://interactivebrokers.github.io/tws-api/order_submission.html
+/// Submits an Order and returns a subscription to receive order events.
+///
+/// After the order is submitted correctly, events will be returned concerning the order's activity.
+///
+/// # Arguments
+/// * `client` - The client instance
+/// * `order_id` - Unique order identifier
+/// * `contract` - Contract to submit order for
+/// * `order` - Order details
+///
+/// # Returns
+/// * `Ok(Subscription<PlaceOrder>)` - Subscription to receive order events
+/// * `Err(Error)` - If validation failed or sending failed
+///
+/// # See Also
+/// * [TWS API Documentation](https://interactivebrokers.github.io/tws-api/order_submission.html)
 pub fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &super::Order) -> Result<Subscription<PlaceOrder>, Error> {
     verify::verify_order(client, order, order_id)?;
     verify::verify_order_contract(client, contract, order_id)?;
@@ -143,7 +156,16 @@ pub fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &
     ))
 }
 
-// Cancels an open [Order].
+/// Cancels an open Order and returns a subscription to receive cancellation events.
+///
+/// # Arguments
+/// * `client` - The client instance
+/// * `order_id` - Order identifier to cancel
+/// * `manual_order_cancel_time` - Manual cancellation time (empty string for immediate)
+///
+/// # Returns
+/// * `Ok(Subscription<CancelOrder>)` - Subscription to receive cancellation status
+/// * `Err(Error)` - If the request failed
 pub fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
     if !manual_order_cancel_time.is_empty() {
         client.check_server_version(
@@ -163,7 +185,14 @@ pub fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_time: &s
     ))
 }
 
-// Cancels all open [Order]s.
+/// Cancels all open Orders.
+///
+/// # Arguments
+/// * `client` - The client instance
+///
+/// # Returns
+/// * `Ok(())` - If the cancel request was successfully sent
+/// * `Err(Error)` - If the server version doesn't support global cancel or sending failed
 pub fn global_cancel(client: &Client) -> Result<(), Error> {
     client.check_server_version(server_versions::REQ_GLOBAL_CANCEL, "It does not support global cancel requests.")?;
 
@@ -173,7 +202,14 @@ pub fn global_cancel(client: &Client) -> Result<(), Error> {
     Ok(())
 }
 
-// Gets next valid order id
+/// Gets the next valid order ID from the server.
+///
+/// # Arguments
+/// * `client` - The client instance
+///
+/// # Returns
+/// * `Ok(i32)` - The next valid order ID
+/// * `Err(Error)` - If the request failed or no response received
 pub fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
     let message = encoders::encode_next_valid_order_id()?;
 
@@ -191,7 +227,15 @@ pub fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
     }
 }
 
-// Requests completed [Order]s.
+/// Requests completed Orders.
+///
+/// # Arguments
+/// * `client` - The client instance
+/// * `api_only` - If true, only return orders placed by this API client
+///
+/// # Returns
+/// * `Ok(Subscription<Orders>)` - Subscription to receive completed orders
+/// * `Err(Error)` - If the server version doesn't support this feature or request failed
 pub fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<Orders>, Error> {
     client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
 
@@ -224,8 +268,16 @@ pub fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
     ))
 }
 
-// Requests all *current* open orders in associated accounts at the current moment.
-// Open orders are returned once; this function does not initiate a subscription.
+/// Requests all current open orders in associated accounts at the current moment.
+///
+/// Open orders are returned once; this function does not initiate a live subscription.
+///
+/// # Arguments
+/// * `client` - The client instance
+///
+/// # Returns
+/// * `Ok(Subscription<Orders>)` - Subscription to receive all open orders
+/// * `Err(Error)` - If the request failed
 pub fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
     let request = encoders::encode_all_open_orders()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAllOpenOrders, request)?;
@@ -238,7 +290,17 @@ pub fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
     ))
 }
 
-// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
+/// Requests status updates about future orders placed from TWS.
+///
+/// Can only be used with client ID 0.
+///
+/// # Arguments
+/// * `client` - The client instance (must have client ID 0)
+/// * `auto_bind` - If true, bind to orders placed from TWS
+///
+/// # Returns
+/// * `Ok(Subscription<Orders>)` - Subscription to receive order updates
+/// * `Err(Error)` - If the request failed
 pub fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription<Orders>, Error> {
     let request = encoders::encode_auto_open_orders(auto_bind)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request)?;
@@ -251,14 +313,19 @@ pub fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription
     ))
 }
 
-// Requests current day's (since midnight) executions matching the filter.
-//
-// Only the current day's executions can be retrieved.
-// Along with the [ExecutionData], the [CommissionReport] will also be returned.
-// When requesting executions, a filter can be specified to receive only a subset of them
-//
-// # Arguments
-// * `filter` - filter criteria used to determine which execution reports are returned
+/// Requests current day's (since midnight) executions matching the filter.
+///
+/// Only the current day's executions can be retrieved.
+/// Along with the ExecutionData, the CommissionReport will also be returned.
+/// When requesting executions, a filter can be specified to receive only a subset of them.
+///
+/// # Arguments
+/// * `client` - The client instance
+/// * `filter` - Filter criteria used to determine which execution reports are returned
+///
+/// # Returns
+/// * `Ok(Subscription<Executions>)` - Subscription to receive executions
+/// * `Err(Error)` - If the request failed
 pub fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
     let request_id = client.next_request_id();
 
@@ -273,6 +340,20 @@ pub fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subscripti
     ))
 }
 
+/// Exercises options contracts.
+///
+/// # Arguments
+/// * `client` - The client instance
+/// * `contract` - Options contract to exercise
+/// * `exercise_action` - Exercise action (exercise or lapse)
+/// * `exercise_quantity` - Number of contracts to exercise
+/// * `account` - Account identifier
+/// * `ovrd` - Override system defaults
+/// * `manual_order_time` - Manual order time for order placement
+///
+/// # Returns
+/// * `Ok(Subscription<ExerciseOptions>)` - Subscription to receive exercise events
+/// * `Err(Error)` - If the request failed
 pub fn exercise_options(
     client: &Client,
     contract: &Contract,
