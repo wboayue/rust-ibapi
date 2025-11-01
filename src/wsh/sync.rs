@@ -12,7 +12,17 @@ use crate::{
 
 use super::{common::decoders, encoders, AutoFill, WshEventData, WshMetadata};
 
-pub fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
+/// Requests Wall Street Horizon metadata.
+///
+/// Returns metadata about available Wall Street Horizon events and filters.
+///
+/// # Arguments
+/// * `client` - The client instance
+///
+/// # Returns
+/// * `Ok(WshMetadata)` - The WSH metadata including available event types
+/// * `Err(Error)` - If the server version doesn't support WSH or the request failed
+pub(crate) fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
     check_version(client.server_version, Features::WSHE_CALENDAR)?;
 
     request_helpers::blocking::one_shot_request_with_retry(
@@ -23,7 +33,23 @@ pub fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
     )
 }
 
-pub fn wsh_event_data_by_contract(
+/// Requests Wall Street Horizon event data for a specific contract.
+///
+/// Returns WSH event data (earnings, dividends, etc.) for the specified contract within
+/// the optional date range.
+///
+/// # Arguments
+/// * `client` - The client instance
+/// * `contract_id` - Contract identifier to get events for
+/// * `start_date` - Optional start date for event data
+/// * `end_date` - Optional end date for event data
+/// * `limit` - Optional maximum number of events to return
+/// * `auto_fill` - Optional auto-fill settings for related securities
+///
+/// # Returns
+/// * `Ok(WshEventData)` - The event data as JSON
+/// * `Err(Error)` - If the server version doesn't support this feature or the request failed
+pub(crate) fn wsh_event_data_by_contract(
     client: &Client,
     contract_id: i32,
     start_date: Option<Date>,
@@ -61,7 +87,20 @@ pub fn wsh_event_data_by_contract(
     )
 }
 
-pub fn wsh_event_data_by_filter(
+/// Requests Wall Street Horizon event data by filter criteria.
+///
+/// Returns a subscription that streams WSH events matching the filter criteria.
+///
+/// # Arguments
+/// * `client` - The client instance
+/// * `filter` - Filter string to select events (e.g., "symbol=AAPL")
+/// * `limit` - Optional maximum number of events to return
+/// * `auto_fill` - Optional auto-fill settings for related securities
+///
+/// # Returns
+/// * `Ok(Subscription<WshEventData>)` - Subscription to receive matching events
+/// * `Err(Error)` - If the server version doesn't support filters or the request failed
+pub(crate) fn wsh_event_data_by_filter(
     client: &Client,
     filter: &str,
     limit: Option<i32>,
