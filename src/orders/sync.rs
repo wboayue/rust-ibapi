@@ -88,7 +88,7 @@ impl StreamDecoder<ExerciseOptions> for ExerciseOptions {
 /// Subscribes to order update events. Only one subscription can be active at a time.
 ///
 /// This function returns a subscription that will receive updates of activity for all orders placed by the client.
-pub fn order_update_stream(client: &Client) -> Result<Subscription<OrderUpdate>, Error> {
+pub(crate) fn order_update_stream(client: &Client) -> Result<Subscription<OrderUpdate>, Error> {
     let subscription = client.create_order_update_subscription()?;
     Ok(Subscription::new(
         client.server_version,
@@ -115,7 +115,7 @@ pub fn order_update_stream(client: &Client) -> Result<Subscription<OrderUpdate>,
 ///
 /// # See Also
 /// * [TWS API Documentation](https://interactivebrokers.github.io/tws-api/order_submission.html)
-pub fn submit_order(client: &Client, order_id: i32, contract: &Contract, order: &super::Order) -> Result<(), Error> {
+pub(crate) fn submit_order(client: &Client, order_id: i32, contract: &Contract, order: &super::Order) -> Result<(), Error> {
     verify::verify_order(client, order, order_id)?;
     verify::verify_order_contract(client, contract, order_id)?;
 
@@ -141,7 +141,7 @@ pub fn submit_order(client: &Client, order_id: i32, contract: &Contract, order: 
 ///
 /// # See Also
 /// * [TWS API Documentation](https://interactivebrokers.github.io/tws-api/order_submission.html)
-pub fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &super::Order) -> Result<Subscription<PlaceOrder>, Error> {
+pub(crate) fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &super::Order) -> Result<Subscription<PlaceOrder>, Error> {
     verify::verify_order(client, order, order_id)?;
     verify::verify_order_contract(client, contract, order_id)?;
 
@@ -166,7 +166,7 @@ pub fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &
 /// # Returns
 /// * `Ok(Subscription<CancelOrder>)` - Subscription to receive cancellation status
 /// * `Err(Error)` - If the request failed
-pub fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
+pub(crate) fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
     if !manual_order_cancel_time.is_empty() {
         client.check_server_version(
             server_versions::MANUAL_ORDER_TIME,
@@ -193,7 +193,7 @@ pub fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_time: &s
 /// # Returns
 /// * `Ok(())` - If the cancel request was successfully sent
 /// * `Err(Error)` - If the server version doesn't support global cancel or sending failed
-pub fn global_cancel(client: &Client) -> Result<(), Error> {
+pub(crate) fn global_cancel(client: &Client) -> Result<(), Error> {
     client.check_server_version(server_versions::REQ_GLOBAL_CANCEL, "It does not support global cancel requests.")?;
 
     let message = encoders::encode_global_cancel()?;
@@ -210,7 +210,7 @@ pub fn global_cancel(client: &Client) -> Result<(), Error> {
 /// # Returns
 /// * `Ok(i32)` - The next valid order ID
 /// * `Err(Error)` - If the request failed or no response received
-pub fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
+pub(crate) fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
     let message = encoders::encode_next_valid_order_id()?;
 
     let subscription = client.send_shared_request(OutgoingMessages::RequestIds, message)?;
@@ -236,7 +236,7 @@ pub fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
 /// # Returns
 /// * `Ok(Subscription<Orders>)` - Subscription to receive completed orders
 /// * `Err(Error)` - If the server version doesn't support this feature or request failed
-pub fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<Orders>, Error> {
+pub(crate) fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<Orders>, Error> {
     client.check_server_version(server_versions::COMPLETED_ORDERS, "It does not support completed orders requests.")?;
 
     let request = encoders::encode_completed_orders(api_only)?;
@@ -256,7 +256,7 @@ pub fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<
 /// # Arguments
 /// * `client` - [Client] used to communicate with server.
 ///
-pub fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
+pub(crate) fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
     let request = encoders::encode_open_orders()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestOpenOrders, request)?;
 
@@ -278,7 +278,7 @@ pub fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
 /// # Returns
 /// * `Ok(Subscription<Orders>)` - Subscription to receive all open orders
 /// * `Err(Error)` - If the request failed
-pub fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
+pub(crate) fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
     let request = encoders::encode_all_open_orders()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAllOpenOrders, request)?;
 
@@ -301,7 +301,7 @@ pub fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
 /// # Returns
 /// * `Ok(Subscription<Orders>)` - Subscription to receive order updates
 /// * `Err(Error)` - If the request failed
-pub fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription<Orders>, Error> {
+pub(crate) fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription<Orders>, Error> {
     let request = encoders::encode_auto_open_orders(auto_bind)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request)?;
 
@@ -326,7 +326,7 @@ pub fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription
 /// # Returns
 /// * `Ok(Subscription<Executions>)` - Subscription to receive executions
 /// * `Err(Error)` - If the request failed
-pub fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
+pub(crate) fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
     let request_id = client.next_request_id();
 
     let request = encoders::encode_executions(client.server_version, request_id, &filter)?;
@@ -354,7 +354,7 @@ pub fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subscripti
 /// # Returns
 /// * `Ok(Subscription<ExerciseOptions>)` - Subscription to receive exercise events
 /// * `Err(Error)` - If the request failed
-pub fn exercise_options(
+pub(crate) fn exercise_options(
     client: &Client,
     contract: &Contract,
     exercise_action: ExerciseAction,
