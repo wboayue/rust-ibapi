@@ -460,6 +460,10 @@ impl AsyncTcpMessageBus {
             // Route to request-specific channel or order channel
             info!("Error message - Request ID: {request_id}, Code: {error_code}, Message: {error_msg}");
 
+            // Try sending all error messages to order_update_stream
+            // Error messages from order operations will be decoded properly by OrderUpdate::Message
+            let sent_to_update_stream = self.send_order_update(&message).await;
+
             // First try request channels
             let channels = self.request_channels.read().await;
             if let Some(sender) = channels.get(&request_id) {
@@ -468,7 +472,9 @@ impl AsyncTcpMessageBus {
                 // If not in request channels, try order channels (for cancel_order, etc.)
                 let order_channels = self.order_channels.read().await;
                 if let Some(sender) = order_channels.get(&request_id) {
-                    let _ = sender.send(message);
+                    let _ = sender.send(message.clone());
+                } else if !sent_to_update_stream {
+                    info!("error message has no recipient: {:?}", message);
                 }
             }
         }
