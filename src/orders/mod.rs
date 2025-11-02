@@ -36,6 +36,9 @@ pub(crate) mod common;
 /// Fluent builder APIs for constructing orders.
 pub mod builder;
 
+/// Condition details for order conditions.
+pub mod condition_details;
+
 /// Convenience re-export for low-level order builder helpers.
 pub use common::order_builder;
 
@@ -479,6 +482,10 @@ pub struct Order {
     pub adjustable_trailing_unit: i32,
     /// Conditions determining when the order will be activated or canceled.
     pub conditions: Vec<OrderCondition>,
+    /// Condition details for each condition type.
+    /// This vector should have the same length as `conditions`, with each element
+    /// containing the details for the corresponding condition type.
+    pub condition_details: Vec<condition_details::ConditionDetails>,
     /// Indicates whether or not conditions will also be valid outside Regular Trading Hours.
     pub conditions_ignore_rth: bool,
     /// Conditions can determine if an order should become active or canceled.
@@ -632,6 +639,7 @@ impl Default for Order {
             adjusted_trailing_amount: None,
             adjustable_trailing_unit: 0,
             conditions: vec![],
+            condition_details: vec![],
             conditions_ignore_rth: false,
             conditions_cancel_order: false,
             soft_dollar_tier: SoftDollarTier::default(),

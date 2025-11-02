@@ -2,7 +2,10 @@ use time::OffsetDateTime;
 
 use crate::contracts::Contract;
 use crate::messages::{OutgoingMessages, RequestMessage};
-use crate::orders::{ExecutionFilter, ExerciseAction, Order, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
+use crate::orders::{
+    condition_details::ConditionDetails,
+    ExecutionFilter, ExerciseAction, Order, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID,
+};
 use crate::{server_versions, Error};
 
 pub(crate) fn encode_place_order(server_version: i32, order_id: i32, contract: &Contract, order: &Order) -> Result<RequestMessage, Error> {
@@ -287,10 +290,19 @@ pub(crate) fn encode_place_order(server_version: i32, order_id: i32, contract: &
         message.push_field(&order.conditions.len());
 
         if !order.conditions.is_empty() {
-            for condition in &order.conditions {
+            for (idx, condition) in order.conditions.iter().enumerate() {
                 // verify
                 // https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EClient.cs#L1187
                 message.push_field(condition);
+                
+                // Encode condition details after condition type
+                if idx < order.condition_details.len() {
+                    encode_condition_details(&mut message, &order.condition_details[idx], condition);
+                } else {
+                    // If condition details are missing, encode default conjunction only
+                    // This maintains backward compatibility
+                    message.push_field(&"a"); // Default to AND
+                }
             }
 
             message.push_field(&order.conditions_ignore_rth);
@@ -550,11 +562,69 @@ pub(crate) fn encode_exercise_options(
     Ok(message)
 }
 
+/// Encode condition details into the message after the condition type.
+///
+/// According to the IB API, after each condition type is encoded, we need to encode
+/// condition-specific fields. This function handles that encoding.
+fn encode_condition_details(
+    message: &mut RequestMessage,
+    details: &ConditionDetails,
+    condition_type: &crate::orders::OrderCondition,
+) {
+    use crate::orders::OrderCondition;
+
+    // Encode conjunction connection ("a" for AND, "o" for OR)
+    let conjunction = if details.is_conjunction() { "a" } else { "o" };
+    message.push_field(&conjunction);
+
+    match (condition_type, details) {
+        (OrderCondition::Price, ConditionDetails::Price(d)) => {
+            message.push_field(&d.is_more);
+            message.push_field(&d.price.to_string()); // Price as string
+            message.push_field(&d.contract_id);
+            message.push_field(&d.exchange);
+            message.push_field(&d.trigger_method);
+        }
+        (OrderCondition::Time, ConditionDetails::Time(d)) => {
+            message.push_field(&d.is_more);
+            message.push_field(&d.time);
+        }
+        (OrderCondition::Margin, ConditionDetails::Margin(d)) => {
+            message.push_field(&d.is_more);
+            message.push_field(&d.percent.to_string()); // Percent as string
+        }
+        (OrderCondition::Execution, ConditionDetails::Execution(d)) => {
+            message.push_field(&d.security_type);
+            message.push_field(&d.exchange);
+            message.push_field(&d.symbol);
+        }
+        (OrderCondition::Volume, ConditionDetails::Volume(d)) => {
+            message.push_field(&d.is_more);
+            message.push_field(&d.volume.to_string()); // Volume as string
+            message.push_field(&d.contract_id);
+            message.push_field(&d.exchange);
+        }
+        (OrderCondition::PercentChange, ConditionDetails::PercentChange(d)) => {
+            message.push_field(&d.is_more);
+            message.push_field(&d.change_percent.to_string()); // ChangePercent as string
+            message.push_field(&d.contract_id);
+            message.push_field(&d.exchange);
+        }
+        _ => {
+            // Mismatch between condition type and details - log warning but don't fail
+            // This shouldn't happen if the API is used correctly
+            eprintln!("Warning: Condition type {:?} doesn't match details type", condition_type);
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
+    use crate::orders::condition_details::*;
+    use crate::orders::OrderCondition;
 
     #[test]
     fn message_version_for() {
@@ -567,5 +637,67 @@ pub(crate) mod tests {
         assert_eq!(super::f64_max_to_zero(Some(f64::MAX)), Some(0.0));
         assert_eq!(super::f64_max_to_zero(Some(0.0)), Some(0.0));
         assert_eq!(super::f64_max_to_zero(Some(50.0)), Some(50.0));
+    }
+
+    #[test]
+    fn test_encode_price_condition() {
+        let mut message = RequestMessage::default();
+        let details = ConditionDetails::Price(PriceConditionDetails {
+            is_conjunction: true,
+            is_more: true,
+            price: 250.0,
+            contract_id: 265598,
+            exchange: "SMART".to_string(),
+            trigger_method: 0,
+        });
+
+        encode_condition_details(&mut message, &details, &OrderCondition::Price);
+        
+        // Should encode: conjunction, isMore, price (string), contract_id, exchange, trigger_method
+        assert!(message.fields.len() >= 6);
+        assert_eq!(message.fields[0], "a"); // conjunction
+        assert_eq!(message.fields[1], "1"); // is_more (bool encoded as "1")
+        assert_eq!(message.fields[2], "250"); // price as string
+        assert_eq!(message.fields[3], "265598"); // contract_id
+        assert_eq!(message.fields[4], "SMART"); // exchange
+        assert_eq!(message.fields[5], "0"); // trigger_method
+    }
+
+    #[test]
+    fn test_encode_time_condition() {
+        let mut message = RequestMessage::default();
+        let details = ConditionDetails::Time(TimeConditionDetails {
+            is_conjunction: false,
+            is_more: true,
+            time: "20250315-09:30:00".to_string(),
+        });
+
+        encode_condition_details(&mut message, &details, &OrderCondition::Time);
+        
+        // Should encode: conjunction, isMore, time
+        assert!(message.fields.len() >= 3);
+        assert_eq!(message.fields[0], "o"); // OR conjunction
+        assert_eq!(message.fields[1], "1"); // is_more (bool encoded as "1")
+        assert_eq!(message.fields[2], "20250315-09:30:00"); // time
+    }
+
+    #[test]
+    fn test_encode_execution_condition() {
+        let mut message = RequestMessage::default();
+        let details = ConditionDetails::Execution(ExecutionConditionDetails {
+            is_conjunction: true,
+            security_type: "STK".to_string(),
+            exchange: "SMART".to_string(),
+            symbol: "SPY".to_string(),
+        });
+
+        encode_condition_details(&mut message, &details, &OrderCondition::Execution);
+        
+        // Should encode: conjunction, secType, exchange, symbol
+        assert!(message.fields.len() >= 4);
+        assert_eq!(message.fields[0], "a"); // conjunction
+        assert_eq!(message.fields[1], "STK"); // security_type
+        assert_eq!(message.fields[2], "SMART"); // exchange
+        assert_eq!(message.fields[3], "SPY"); // symbol
     }
 }

@@ -1,6 +1,10 @@
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, Currency, DeltaNeutralContract, Exchange, SecurityType, Symbol, TagValue};
 use crate::messages::ResponseMessage;
 use crate::orders::{
+    condition_details::{
+        ConditionDetails, ExecutionConditionDetails, MarginConditionDetails, PercentChangeConditionDetails,
+        PriceConditionDetails, TimeConditionDetails, VolumeConditionDetails,
+    },
     Action, CommissionReport, ExecutionData, Liquidity, Order, OrderComboLeg, OrderCondition, OrderData, OrderOpenClose, OrderState, OrderStatus,
     Rule80A, SoftDollarTier,
 };
@@ -487,7 +491,12 @@ impl OrderDecoder {
         let conditions_count = self.message.next_int()?;
         for _ in 0..conditions_count {
             let order_condition = self.message.next_int()?;
-            self.order.conditions.push(OrderCondition::from(order_condition));
+            let condition_type = OrderCondition::from(order_condition);
+            self.order.conditions.push(condition_type);
+            
+            // Decode condition details after condition type
+            let condition_details = decode_condition_details(&mut self.message, &condition_type)?;
+            self.order.condition_details.push(condition_details);
         }
         if conditions_count > 0 {
             self.order.conditions_ignore_rth = self.message.next_bool()?;
@@ -496,7 +505,118 @@ impl OrderDecoder {
 
         Ok(())
     }
+}
 
+/// Decode condition details from a message after the condition type has been read.
+///
+/// According to the IB API, after each condition type is decoded, we need to decode
+/// condition-specific fields. This function handles that decoding.
+fn decode_condition_details(
+    message: &mut ResponseMessage,
+    condition_type: &OrderCondition,
+) -> Result<ConditionDetails, Error> {
+    use OrderCondition::*;
+
+    // Decode conjunction connection ("a" for AND, "o" for OR)
+    let conjunction_str = message.next_string()?;
+    let is_conjunction = conjunction_str == "a";
+
+    match condition_type {
+        Price => {
+            let is_more = message.next_bool()?;
+            let price_str = message.next_string()?;
+            let price = price_str.parse::<f64>().map_err(|_| {
+                Error::Simple(format!("Failed to parse price condition price: {}", price_str))
+            })?;
+            let contract_id = message.next_int()?;
+            let exchange = message.next_string()?;
+            let trigger_method = message.next_int()?;
+
+            Ok(ConditionDetails::Price(PriceConditionDetails {
+                is_conjunction,
+                is_more,
+                price,
+                contract_id,
+                exchange,
+                trigger_method,
+            }))
+        }
+        Time => {
+            let is_more = message.next_bool()?;
+            let time = message.next_string()?;
+
+            Ok(ConditionDetails::Time(TimeConditionDetails {
+                is_conjunction,
+                is_more,
+                time,
+            }))
+        }
+        Margin => {
+            let is_more = message.next_bool()?;
+            let percent_str = message.next_string()?;
+            let percent = percent_str.parse::<i32>().map_err(|_| {
+                Error::Simple(format!("Failed to parse margin condition percent: {}", percent_str))
+            })?;
+
+            Ok(ConditionDetails::Margin(MarginConditionDetails {
+                is_conjunction,
+                is_more,
+                percent,
+            }))
+        }
+        Execution => {
+            let security_type = message.next_string()?;
+            let exchange = message.next_string()?;
+            let symbol = message.next_string()?;
+
+            Ok(ConditionDetails::Execution(ExecutionConditionDetails {
+                is_conjunction,
+                security_type,
+                exchange,
+                symbol,
+            }))
+        }
+        Volume => {
+            let is_more = message.next_bool()?;
+            let volume_str = message.next_string()?;
+            let volume = volume_str.parse::<i32>().map_err(|_| {
+                Error::Simple(format!("Failed to parse volume condition volume: {}", volume_str))
+            })?;
+            let contract_id = message.next_int()?;
+            let exchange = message.next_string()?;
+
+            Ok(ConditionDetails::Volume(VolumeConditionDetails {
+                is_conjunction,
+                is_more,
+                volume,
+                contract_id,
+                exchange,
+            }))
+        }
+        PercentChange => {
+            let is_more = message.next_bool()?;
+            let change_percent_str = message.next_string()?;
+            let change_percent = change_percent_str.parse::<f64>().map_err(|_| {
+                Error::Simple(format!(
+                    "Failed to parse percent change condition change_percent: {}",
+                    change_percent_str
+                ))
+            })?;
+            let contract_id = message.next_int()?;
+            let exchange = message.next_string()?;
+
+            Ok(ConditionDetails::PercentChange(PercentChangeConditionDetails {
+                is_conjunction,
+                is_more,
+                change_percent,
+                contract_id,
+                exchange,
+            }))
+        }
+    }
+}
+
+impl OrderDecoder {
     fn read_adjusted_order_params(&mut self) -> Result<(), Error> {
         if self.server_version < server_versions::PEGGED_TO_BENCHMARK {
             return Ok(());
