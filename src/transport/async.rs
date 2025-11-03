@@ -468,7 +468,7 @@ impl AsyncTcpMessageBus {
     /// Route message to order-specific channel
     async fn route_to_order_channel(&self, order_id: i32, message: ResponseMessage) -> Result<(), Error> {
         // Send to order update stream if it exists
-        let sent_to_update_stream = self.send_order_update(&message).await;
+        let routed = self.send_order_update(&message).await;
         let message_type = message.message_type();
 
         // Special handling for different order message types
@@ -505,7 +505,7 @@ impl AsyncTcpMessageBus {
                     }
                 }
 
-                if !sent_to_update_stream {
+                if !routed {
                     warn!("could not route ExecutionData message {:?}", message);
                 }
             }
@@ -541,7 +541,7 @@ impl AsyncTcpMessageBus {
                     }
                 }
 
-                if !sent_to_update_stream {
+                if !routed {
                     warn!("could not route message {:?}", message);
                 }
             }
@@ -581,7 +581,7 @@ impl AsyncTcpMessageBus {
                     return Ok(());
                 }
 
-                if !sent_to_update_stream {
+                if !routed {
                     warn!("could not route message {:?}", message);
                 }
             }
@@ -595,7 +595,7 @@ impl AsyncTcpMessageBus {
                     }
                 }
 
-                if !sent_to_update_stream {
+                if !routed {
                     warn!("could not route message {:?}", message);
                 }
             }
