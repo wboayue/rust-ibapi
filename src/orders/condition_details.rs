@@ -132,7 +132,7 @@ mod tests {
             exchange: "SMART".to_string(),
             trigger_method: 0,
         };
-        
+
         assert!(details.is_conjunction);
         assert_eq!(details.price, 250.0);
         assert_eq!(details.contract_id, 265598);
@@ -145,7 +145,7 @@ mod tests {
             is_more: true,
             time: "20250315-09:30:00".to_string(),
         };
-        
+
         assert!(details.is_conjunction);
         assert_eq!(details.time, "20250315-09:30:00");
     }
@@ -160,15 +160,14 @@ mod tests {
             exchange: "SMART".to_string(),
             trigger_method: 0,
         });
-        
+
         let time_details = ConditionDetails::Time(TimeConditionDetails {
             is_conjunction: false,
             is_more: true,
             time: "20250315-09:30:00".to_string(),
         });
-        
+
         assert!(price_details.is_conjunction());
         assert!(!time_details.is_conjunction());
     }
 }
-

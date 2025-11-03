@@ -2,10 +2,7 @@ use time::OffsetDateTime;
 
 use crate::contracts::Contract;
 use crate::messages::{OutgoingMessages, RequestMessage};
-use crate::orders::{
-    condition_details::ConditionDetails,
-    ExecutionFilter, ExerciseAction, Order, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID,
-};
+use crate::orders::{condition_details::ConditionDetails, ExecutionFilter, ExerciseAction, Order, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
 use crate::{server_versions, Error};
 
 pub(crate) fn encode_place_order(server_version: i32, order_id: i32, contract: &Contract, order: &Order) -> Result<RequestMessage, Error> {
@@ -294,7 +291,7 @@ pub(crate) fn encode_place_order(server_version: i32, order_id: i32, contract: &
                 // verify
                 // https://github.com/InteractiveBrokers/tws-api/blob/817a905d52299028ac5af08581c8ffde7644cea9/source/csharpclient/client/EClient.cs#L1187
                 message.push_field(condition);
-                
+
                 // Encode condition details after condition type
                 if idx < order.condition_details.len() {
                     encode_condition_details(&mut message, &order.condition_details[idx], condition);
@@ -566,11 +563,7 @@ pub(crate) fn encode_exercise_options(
 ///
 /// According to the IB API, after each condition type is encoded, we need to encode
 /// condition-specific fields. This function handles that encoding.
-fn encode_condition_details(
-    message: &mut RequestMessage,
-    details: &ConditionDetails,
-    condition_type: &crate::orders::OrderCondition,
-) {
+fn encode_condition_details(message: &mut RequestMessage, details: &ConditionDetails, condition_type: &crate::orders::OrderCondition) {
     use crate::orders::OrderCondition;
 
     // Encode conjunction connection ("a" for AND, "o" for OR)
@@ -652,7 +645,7 @@ pub(crate) mod tests {
         });
 
         encode_condition_details(&mut message, &details, &OrderCondition::Price);
-        
+
         // Should encode: conjunction, isMore, price (string), contract_id, exchange, trigger_method
         assert!(message.fields.len() >= 6);
         assert_eq!(message.fields[0], "a"); // conjunction
@@ -673,7 +666,7 @@ pub(crate) mod tests {
         });
 
         encode_condition_details(&mut message, &details, &OrderCondition::Time);
-        
+
         // Should encode: conjunction, isMore, time
         assert!(message.fields.len() >= 3);
         assert_eq!(message.fields[0], "o"); // OR conjunction
@@ -692,7 +685,7 @@ pub(crate) mod tests {
         });
 
         encode_condition_details(&mut message, &details, &OrderCondition::Execution);
-        
+
         // Should encode: conjunction, secType, exchange, symbol
         assert!(message.fields.len() >= 4);
         assert_eq!(message.fields[0], "a"); // conjunction
