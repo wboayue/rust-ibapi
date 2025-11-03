@@ -404,7 +404,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 }
             }
             _ => {
-                error!("unhandled order message type: {message:?}");
+                warn!("unhandled order message type: {message:?}");
             }
         }
     }

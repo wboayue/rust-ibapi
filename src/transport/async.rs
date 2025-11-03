@@ -336,7 +336,7 @@ impl AsyncTcpMessageBus {
             RoutingDecision::ByOrderId(order_id) => self.route_to_order_channel(order_id, message).await,
             RoutingDecision::ByMessageType(message_type) => self.route_to_shared_channel(message_type, message).await,
             RoutingDecision::SharedMessage(message_type) => self.route_to_shared_channel(message_type, message).await,
-            RoutingDecision::Error { request_id, error_code } => self.route_error_message_new(message, request_id, error_code).await,
+            RoutingDecision::Error { request_id, error_code } => self.route_error_message(message, request_id, error_code).await,
             RoutingDecision::Shutdown => {
                 debug!("Received shutdown message, calling request_shutdown");
                 self.request_shutdown().await;
@@ -417,30 +417,10 @@ impl AsyncTcpMessageBus {
         }
     }
 
-    /// Route error message to appropriate channel
-    #[allow(dead_code)]
-    async fn route_error_message(&self, mut message: ResponseMessage) -> Result<(), Error> {
-        message.skip(); // Skip message type
-        message.skip(); // Skip version
-        let request_id = message.next_int()?;
-        let error_code = message.next_int()?;
-        let error_msg = message.next_string()?;
-
-        info!("Error message - Request ID: {request_id}, Code: {error_code}, Message: {error_msg}");
-
-        // Route to request-specific channel if exists
-        if request_id >= 0 {
-            let channels = self.request_channels.read().await;
-            if let Some(sender) = channels.get(&request_id) {
-                let _ = sender.send(message);
-            }
-        }
-
-        Ok(())
-    }
-
     /// Route error message using routing decision
-    async fn route_error_message_new(&self, message: ResponseMessage, request_id: i32, error_code: i32) -> Result<(), Error> {
+    async fn route_error_message(&self, message: ResponseMessage, request_id: i32, error_code: i32) -> Result<(), Error> {
+        let _ = self.send_order_update(&message).await;
+
         // Log the error for visibility
         let error_msg = if message.len() > 4 {
             message.peek_string(4)
