@@ -269,11 +269,13 @@ impl<S: Stream> TcpMessageBus<S> {
         // Use common routing logic
         match determine_routing(&message) {
             RoutingDecision::Error { request_id, error_code } => {
+                let routed = self.send_order_update(&message);
+
                 // Check if this is a warning or unspecified error
                 if request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(error_code) {
                     error_event(server_version, message).unwrap();
                 } else {
-                    self.process_response(message);
+                    self.process_response(message, routed);
                 }
             }
             RoutingDecision::ByOrderId(_) => {
@@ -282,12 +284,12 @@ impl<S: Stream> TcpMessageBus<S> {
             }
             _ => {
                 // All other messages
-                self.process_response(message);
+                self.process_response(message, false);
             }
         }
     }
 
-    fn process_response(&self, message: ResponseMessage) {
+    fn process_response(&self, message: ResponseMessage, routed: bool) {
         let request_id = message.request_id().unwrap_or(-1); // pass in request id?
         if self.requests.contains(&request_id) {
             self.requests.send(&request_id, Ok(message)).unwrap();
@@ -295,7 +297,7 @@ impl<S: Stream> TcpMessageBus<S> {
             self.orders.send(&request_id, Ok(message)).unwrap();
         } else if self.shared_channels.contains_sender(message.message_type()) {
             self.shared_channels.send_message(message.message_type(), &message);
-        } else {
+        } else if !routed {
             info!("no recipient found for: {message:?}")
         }
     }
@@ -401,24 +403,9 @@ impl<S: Stream> TcpMessageBus<S> {
                     warn!("could not route commission report {message:?}");
                 }
             }
-            IncomingMessages::Error => {
-                // Forward error messages to order update stream
-                let sent_to_update_stream = self.send_order_update(&message);
-
-                // Also try to route to specific order if subscription exists
-                if let Some(order_id) = message.order_id() {
-                    if self.orders.contains(&order_id) {
-                        if let Err(e) = self.orders.send(&order_id, Ok(message)) {
-                            warn!("error routing error message for order_id({order_id}): {e}");
-                        }
-                    } else if !sent_to_update_stream {
-                        info!("order error message has no recipient: {message:?}");
-                    }
-                } else if !sent_to_update_stream {
-                    info!("order error message has no recipient: {message:?}");
-                }
+            _ => {
+                warn!("unhandled order message type: {message:?}");
             }
-            _ => (),
         }
     }
 

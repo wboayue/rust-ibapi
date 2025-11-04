@@ -22,7 +22,7 @@ use super::{common::decoders, encoders, AutoFill, WshEventData, WshMetadata};
 /// # Returns
 /// * `Ok(WshMetadata)` - The WSH metadata including available event types
 /// * `Err(Error)` - If the server version doesn't support WSH or the request failed
-pub fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
+pub(crate) fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
     check_version(client.server_version, Features::WSHE_CALENDAR)?;
 
     request_helpers::blocking::one_shot_request_with_retry(
@@ -49,7 +49,7 @@ pub fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
 /// # Returns
 /// * `Ok(WshEventData)` - The event data as JSON
 /// * `Err(Error)` - If the server version doesn't support this feature or the request failed
-pub fn wsh_event_data_by_contract(
+pub(crate) fn wsh_event_data_by_contract(
     client: &Client,
     contract_id: i32,
     start_date: Option<Date>,
@@ -100,7 +100,7 @@ pub fn wsh_event_data_by_contract(
 /// # Returns
 /// * `Ok(Subscription<WshEventData>)` - Subscription to receive matching events
 /// * `Err(Error)` - If the server version doesn't support filters or the request failed
-pub fn wsh_event_data_by_filter(
+pub(crate) fn wsh_event_data_by_filter(
     client: &Client,
     filter: &str,
     limit: Option<i32>,

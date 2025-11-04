@@ -24,7 +24,7 @@ mod sync_integration_tests {
         let contract = create_stock_contract("AAPL");
 
         // Create multiple orders
-        let orders = vec![
+        let orders = [
             OrderBuilder::new(&client, &contract).buy(100).market().build().unwrap(),
             OrderBuilder::new(&client, &contract).sell(50).limit(150.00).build().unwrap(),
             OrderBuilder::new(&client, &contract).buy(200).stop_limit(145.00, 148.00).build().unwrap(),
@@ -101,7 +101,7 @@ mod async_integration_tests {
         let contract = create_stock_contract("AAPL");
 
         // Create multiple orders
-        let orders = vec![
+        let orders = [
             OrderBuilder::new(&client, &contract).buy(100).market().build().unwrap(),
             OrderBuilder::new(&client, &contract).sell(50).limit(150.00).build().unwrap(),
             OrderBuilder::new(&client, &contract).buy(200).stop_limit(145.00, 148.00).build().unwrap(),

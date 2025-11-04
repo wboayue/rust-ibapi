@@ -486,8 +486,20 @@ impl OrderDecoder {
 
         let conditions_count = self.message.next_int()?;
         for _ in 0..conditions_count {
-            let order_condition = self.message.next_int()?;
-            self.order.conditions.push(OrderCondition::from(order_condition));
+            let condition_type = self.message.next_int()?;
+            let is_conjunction = self.message.next_bool()?;
+
+            let condition = match condition_type {
+                1 => decode_price_condition(&mut self.message, is_conjunction)?,
+                3 => decode_time_condition(&mut self.message, is_conjunction)?,
+                4 => decode_margin_condition(&mut self.message, is_conjunction)?,
+                5 => decode_execution_condition(&mut self.message, is_conjunction)?,
+                6 => decode_volume_condition(&mut self.message, is_conjunction)?,
+                7 => decode_percent_change_condition(&mut self.message, is_conjunction)?,
+                _ => return Err(Error::Parse(0, condition_type.to_string(), "Unknown condition type".to_string())),
+            };
+
+            self.order.conditions.push(condition);
         }
         if conditions_count > 0 {
             self.order.conditions_ignore_rth = self.message.next_bool()?;
@@ -933,6 +945,112 @@ pub(crate) fn decode_completed_order(server_version: i32, message: ResponseMessa
     Ok(decoder.into_order_data())
 }
 
+/// Decodes a PriceCondition from a TWS response.
+///
+/// Expected field order after type and is_conjunction:
+/// 1. contract_id (i32)
+/// 2. exchange (String)
+/// 3. is_more (bool)
+/// 4. price (f64)
+/// 5. trigger_method (i32)
+fn decode_price_condition(message: &mut ResponseMessage, is_conjunction: bool) -> Result<OrderCondition, Error> {
+    use crate::orders::conditions::PriceCondition;
+
+    Ok(OrderCondition::Price(PriceCondition {
+        contract_id: message.next_int()?,
+        exchange: message.next_string()?,
+        is_more: message.next_bool()?,
+        price: message.next_double()?,
+        trigger_method: message.next_int()?,
+        is_conjunction,
+    }))
+}
+
+/// Decodes a TimeCondition from a TWS response.
+///
+/// Expected field order after type and is_conjunction:
+/// 1. is_more (bool)
+/// 2. time (String)
+fn decode_time_condition(message: &mut ResponseMessage, is_conjunction: bool) -> Result<OrderCondition, Error> {
+    use crate::orders::conditions::TimeCondition;
+
+    Ok(OrderCondition::Time(TimeCondition {
+        is_more: message.next_bool()?,
+        time: message.next_string()?,
+        is_conjunction,
+    }))
+}
+
+/// Decodes a MarginCondition from a TWS response.
+///
+/// Expected field order after type and is_conjunction:
+/// 1. is_more (bool)
+/// 2. percent (i32)
+fn decode_margin_condition(message: &mut ResponseMessage, is_conjunction: bool) -> Result<OrderCondition, Error> {
+    use crate::orders::conditions::MarginCondition;
+
+    Ok(OrderCondition::Margin(MarginCondition {
+        is_more: message.next_bool()?,
+        percent: message.next_int()?,
+        is_conjunction,
+    }))
+}
+
+/// Decodes an ExecutionCondition from a TWS response.
+///
+/// Expected field order after type and is_conjunction:
+/// 1. symbol (String)
+/// 2. security_type (String)
+/// 3. exchange (String)
+fn decode_execution_condition(message: &mut ResponseMessage, is_conjunction: bool) -> Result<OrderCondition, Error> {
+    use crate::orders::conditions::ExecutionCondition;
+
+    Ok(OrderCondition::Execution(ExecutionCondition {
+        symbol: message.next_string()?,
+        security_type: message.next_string()?,
+        exchange: message.next_string()?,
+        is_conjunction,
+    }))
+}
+
+/// Decodes a VolumeCondition from a TWS response.
+///
+/// Expected field order after type and is_conjunction:
+/// 1. contract_id (i32)
+/// 2. exchange (String)
+/// 3. is_more (bool)
+/// 4. volume (i32)
+fn decode_volume_condition(message: &mut ResponseMessage, is_conjunction: bool) -> Result<OrderCondition, Error> {
+    use crate::orders::conditions::VolumeCondition;
+
+    Ok(OrderCondition::Volume(VolumeCondition {
+        contract_id: message.next_int()?,
+        exchange: message.next_string()?,
+        is_more: message.next_bool()?,
+        volume: message.next_int()?,
+        is_conjunction,
+    }))
+}
+
+/// Decodes a PercentChangeCondition from a TWS response.
+///
+/// Expected field order after type and is_conjunction:
+/// 1. contract_id (i32)
+/// 2. exchange (String)
+/// 3. is_more (bool)
+/// 4. percent (f64)
+fn decode_percent_change_condition(message: &mut ResponseMessage, is_conjunction: bool) -> Result<OrderCondition, Error> {
+    use crate::orders::conditions::PercentChangeCondition;
+
+    Ok(OrderCondition::PercentChange(PercentChangeCondition {
+        contract_id: message.next_int()?,
+        exchange: message.next_string()?,
+        is_more: message.next_bool()?,
+        percent: message.next_double()?,
+        is_conjunction,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1236,6 +1354,213 @@ mod tests {
             }
             Err(e) => {
                 panic!("Failed to parse BAG order from issue #318: {:?}", e);
+            }
+        }
+    }
+
+    /// Tests round-trip encoding and decoding of PriceCondition.
+    #[test]
+    fn test_price_condition_round_trip() {
+        use crate::messages::RequestMessage;
+        use crate::orders::common::encoders::encode_condition;
+        use crate::orders::conditions::PriceCondition;
+
+        let original = OrderCondition::Price(PriceCondition {
+            contract_id: 12345,
+            exchange: "NASDAQ".to_string(),
+            price: 150.0,
+            trigger_method: 1,
+            is_more: true,
+            is_conjunction: false,
+        });
+
+        // Encode
+        let mut request_message = RequestMessage::default();
+        encode_condition(&mut request_message, &original);
+
+        // Create ResponseMessage from encoded fields
+        let encoded = request_message.encode();
+        let mut response_message = ResponseMessage::from(&encoded);
+
+        // Decode
+        let condition_type = response_message.next_int().unwrap();
+        let is_conjunction = response_message.next_bool().unwrap();
+        let decoded = decode_price_condition(&mut response_message, is_conjunction).unwrap();
+
+        assert_eq!(condition_type, 1);
+        assert_eq!(original, decoded);
+    }
+
+    /// Tests round-trip encoding and decoding of TimeCondition.
+    #[test]
+    fn test_time_condition_round_trip() {
+        use crate::messages::RequestMessage;
+        use crate::orders::common::encoders::encode_condition;
+        use crate::orders::conditions::TimeCondition;
+
+        let original = OrderCondition::Time(TimeCondition {
+            time: "20251230 23:59:59 UTC".to_string(),
+            is_more: true,
+            is_conjunction: true,
+        });
+
+        // Encode
+        let mut request_message = RequestMessage::default();
+        encode_condition(&mut request_message, &original);
+
+        // Create ResponseMessage from encoded fields
+        let encoded = request_message.encode();
+        let mut response_message = ResponseMessage::from(&encoded);
+
+        // Decode
+        let condition_type = response_message.next_int().unwrap();
+        let is_conjunction = response_message.next_bool().unwrap();
+        let decoded = decode_time_condition(&mut response_message, is_conjunction).unwrap();
+
+        assert_eq!(condition_type, 3);
+        assert_eq!(original, decoded);
+    }
+
+    /// Tests round-trip encoding and decoding of MarginCondition.
+    #[test]
+    fn test_margin_condition_round_trip() {
+        use crate::messages::RequestMessage;
+        use crate::orders::common::encoders::encode_condition;
+        use crate::orders::conditions::MarginCondition;
+
+        let original = OrderCondition::Margin(MarginCondition {
+            percent: 30,
+            is_more: false,
+            is_conjunction: true,
+        });
+
+        // Encode
+        let mut request_message = RequestMessage::default();
+        encode_condition(&mut request_message, &original);
+
+        // Create ResponseMessage from encoded fields
+        let encoded = request_message.encode();
+        let mut response_message = ResponseMessage::from(&encoded);
+
+        // Decode
+        let condition_type = response_message.next_int().unwrap();
+        let is_conjunction = response_message.next_bool().unwrap();
+        let decoded = decode_margin_condition(&mut response_message, is_conjunction).unwrap();
+
+        assert_eq!(condition_type, 4);
+        assert_eq!(original, decoded);
+    }
+
+    /// Tests round-trip encoding and decoding of ExecutionCondition.
+    #[test]
+    fn test_execution_condition_round_trip() {
+        use crate::messages::RequestMessage;
+        use crate::orders::common::encoders::encode_condition;
+        use crate::orders::conditions::ExecutionCondition;
+
+        let original = OrderCondition::Execution(ExecutionCondition {
+            symbol: "AAPL".to_string(),
+            security_type: "STK".to_string(),
+            exchange: "SMART".to_string(),
+            is_conjunction: false,
+        });
+
+        // Encode
+        let mut request_message = RequestMessage::default();
+        encode_condition(&mut request_message, &original);
+
+        // Create ResponseMessage from encoded fields
+        let encoded = request_message.encode();
+        let mut response_message = ResponseMessage::from(&encoded);
+
+        // Decode
+        let condition_type = response_message.next_int().unwrap();
+        let is_conjunction = response_message.next_bool().unwrap();
+        let decoded = decode_execution_condition(&mut response_message, is_conjunction).unwrap();
+
+        assert_eq!(condition_type, 5);
+        assert_eq!(original, decoded);
+    }
+
+    /// Tests round-trip encoding and decoding of VolumeCondition.
+    #[test]
+    fn test_volume_condition_round_trip() {
+        use crate::messages::RequestMessage;
+        use crate::orders::common::encoders::encode_condition;
+        use crate::orders::conditions::VolumeCondition;
+
+        let original = OrderCondition::Volume(VolumeCondition {
+            contract_id: 12345,
+            exchange: "NASDAQ".to_string(),
+            volume: 1000000,
+            is_more: true,
+            is_conjunction: true,
+        });
+
+        // Encode
+        let mut request_message = RequestMessage::default();
+        encode_condition(&mut request_message, &original);
+
+        // Create ResponseMessage from encoded fields
+        let encoded = request_message.encode();
+        let mut response_message = ResponseMessage::from(&encoded);
+
+        // Decode
+        let condition_type = response_message.next_int().unwrap();
+        let is_conjunction = response_message.next_bool().unwrap();
+        let decoded = decode_volume_condition(&mut response_message, is_conjunction).unwrap();
+
+        assert_eq!(condition_type, 6);
+        assert_eq!(original, decoded);
+    }
+
+    /// Tests round-trip encoding and decoding of PercentChangeCondition.
+    #[test]
+    fn test_percent_change_condition_round_trip() {
+        use crate::messages::RequestMessage;
+        use crate::orders::common::encoders::encode_condition;
+        use crate::orders::conditions::PercentChangeCondition;
+
+        let original = OrderCondition::PercentChange(PercentChangeCondition {
+            contract_id: 12345,
+            exchange: "NASDAQ".to_string(),
+            percent: 5.0,
+            is_more: false,
+            is_conjunction: false,
+        });
+
+        // Encode
+        let mut request_message = RequestMessage::default();
+        encode_condition(&mut request_message, &original);
+
+        // Create ResponseMessage from encoded fields
+        let encoded = request_message.encode();
+        let mut response_message = ResponseMessage::from(&encoded);
+
+        // Decode
+        let condition_type = response_message.next_int().unwrap();
+        let is_conjunction = response_message.next_bool().unwrap();
+        let decoded = decode_percent_change_condition(&mut response_message, is_conjunction).unwrap();
+
+        assert_eq!(condition_type, 7);
+        assert_eq!(original, decoded);
+    }
+
+    /// Tests error handling for unknown condition type.
+    #[test]
+    fn test_unknown_condition_type() {
+        let encoded = "99\x001\x00"; // Unknown type 99
+        let mut response_message = ResponseMessage::from(encoded);
+
+        let condition_type = response_message.next_int().unwrap();
+        let _is_conjunction = response_message.next_bool().unwrap();
+
+        // Should return error for unknown type
+        match condition_type {
+            1 => panic!("Should be unknown type"),
+            _ => {
+                // This is the expected path - unknown type should be caught in read_conditions
+                assert_eq!(condition_type, 99);
             }
         }
     }

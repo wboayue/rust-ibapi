@@ -65,11 +65,8 @@ pub mod blocking {
     pub(crate) use super::sync::{wsh_event_data_by_contract, wsh_event_data_by_filter, wsh_metadata};
 }
 
-#[cfg(all(feature = "sync", not(feature = "async")))]
-pub use sync::{wsh_event_data_by_contract, wsh_event_data_by_filter, wsh_metadata};
-
 #[cfg(feature = "async")]
-pub use r#async::{wsh_event_data_by_contract, wsh_event_data_by_filter, wsh_metadata};
+pub(crate) use r#async::{wsh_event_data_by_contract, wsh_event_data_by_filter, wsh_metadata};
 
 // Tests that work with both sync and async features
 #[cfg(test)]

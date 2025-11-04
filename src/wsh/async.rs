@@ -12,7 +12,7 @@ use crate::{
 use super::{common::decoders, encoders, AutoFill, WshEventData, WshMetadata};
 
 /// Fetch Wall Street Horizon metadata table with retry semantics.
-pub async fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
+pub(crate) async fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
     check_version(client.server_version(), Features::WSHE_CALENDAR)?;
 
     request_helpers::one_shot_request_with_retry(
@@ -25,7 +25,7 @@ pub async fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
 }
 
 /// Fetch WSH event data filtered by contract identifier.
-pub async fn wsh_event_data_by_contract(
+pub(crate) async fn wsh_event_data_by_contract(
     client: &Client,
     contract_id: i32,
     start_date: Option<Date>,
@@ -65,7 +65,7 @@ pub async fn wsh_event_data_by_contract(
 }
 
 /// Subscribe to WSH event data using a filter expression.
-pub async fn wsh_event_data_by_filter(
+pub(crate) async fn wsh_event_data_by_filter(
     client: &Client,
     filter: &str,
     limit: Option<i32>,
