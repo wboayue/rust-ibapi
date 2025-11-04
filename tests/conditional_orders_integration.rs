@@ -1,9 +1,26 @@
-//! Test for Issue #325: Conditional Orders Support
+//! Integration test for Issue #325: Conditional Orders Support
 //!
 //! This test verifies that conditional orders can be created, submitted to TWS,
-//! and properly encoded/decoded. We test all 6 condition types.
+//! and properly encoded/decoded. Tests all 6 condition types:
+//! - Price Condition
+//! - Time Condition
+//! - Margin Condition
+//! - Execution Condition
+//! - Volume Condition
+//! - Percent Change Condition
 //!
-//! To run: cargo run --example test_conditional_orders
+//! # Requirements
+//! - TWS or IB Gateway must be running
+//! - Paper trading account recommended
+//!
+//! # Running the test
+//! ```bash
+//! # Start TWS Paper Trading on 127.0.0.1:7497, then run:
+//! cargo test --test conditional_orders_integration --features sync -- --ignored --nocapture
+//!
+//! # Or with logging enabled:
+//! RUST_LOG=debug cargo test --test conditional_orders_integration --features sync -- --ignored --nocapture
+//! ```
 
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
@@ -12,7 +29,9 @@ use ibapi::orders::{order_builder, Action, OrderCondition};
 use std::thread;
 use std::time::Duration;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[test]
+#[ignore] // Requires live TWS/Gateway connection
+fn test_conditional_orders() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
     println!("=== Testing Conditional Orders (Issue #325) ===\n");
