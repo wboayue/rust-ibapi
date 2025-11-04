@@ -6,8 +6,12 @@
 //!
 //! <br>
 //!
-//! A comprehensive Rust implementation of the Interactive Brokers [TWS API](https://interactivebrokers.github.io/tws-api/introduction.html), providing a robust and
+//! A comprehensive Rust implementation of the Interactive Brokers TWS API, providing a robust and
 //! user-friendly interface for TWS and IB Gateway. Designed with simplicity in mind, it integrates smoothly into trading systems.
+//!
+//! **API Documentation:**
+//! * [TWS API Reference](https://interactivebrokers.github.io/tws-api/introduction.html) - Detailed technical documentation
+//! * [IBKR Campus](https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/) - IB's official learning platform
 //!
 //! This fully featured API enables the retrieval of account information, access to real-time and historical market data, order management,
 //! market scanning, and access to news and Wall Street Horizons (WSH) event data. Future updates will focus on bug fixes,
