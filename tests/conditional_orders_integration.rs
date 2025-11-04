@@ -22,6 +22,8 @@
 //! RUST_LOG=debug cargo test --test conditional_orders_integration --features sync -- --ignored --nocapture
 //! ```
 
+#![cfg(feature = "sync")]
+
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::orders::conditions::*;
