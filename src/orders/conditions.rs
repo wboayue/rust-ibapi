@@ -751,6 +751,44 @@ impl PercentChangeConditionBuilder {
         }
     }
 }
+
+// From implementations to convert builders to OrderCondition
+impl From<PriceConditionBuilder> for crate::orders::OrderCondition {
+    fn from(builder: PriceConditionBuilder) -> Self {
+        crate::orders::OrderCondition::Price(builder.build())
+    }
+}
+
+impl From<TimeConditionBuilder> for crate::orders::OrderCondition {
+    fn from(builder: TimeConditionBuilder) -> Self {
+        crate::orders::OrderCondition::Time(builder.build())
+    }
+}
+
+impl From<MarginConditionBuilder> for crate::orders::OrderCondition {
+    fn from(builder: MarginConditionBuilder) -> Self {
+        crate::orders::OrderCondition::Margin(builder.build())
+    }
+}
+
+impl From<VolumeConditionBuilder> for crate::orders::OrderCondition {
+    fn from(builder: VolumeConditionBuilder) -> Self {
+        crate::orders::OrderCondition::Volume(builder.build())
+    }
+}
+
+impl From<PercentChangeConditionBuilder> for crate::orders::OrderCondition {
+    fn from(builder: PercentChangeConditionBuilder) -> Self {
+        crate::orders::OrderCondition::PercentChange(builder.build())
+    }
+}
+
+impl From<ExecutionConditionBuilder> for crate::orders::OrderCondition {
+    fn from(builder: ExecutionConditionBuilder) -> Self {
+        crate::orders::OrderCondition::Execution(builder.build())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -831,42 +869,5 @@ mod tests {
         assert_eq!(condition.trigger_method, 0);
         assert!(condition.is_more);
         assert!(condition.is_conjunction);
-    }
-}
-
-// From implementations to convert builders to OrderCondition
-impl From<PriceConditionBuilder> for crate::orders::OrderCondition {
-    fn from(builder: PriceConditionBuilder) -> Self {
-        crate::orders::OrderCondition::Price(builder.build())
-    }
-}
-
-impl From<TimeConditionBuilder> for crate::orders::OrderCondition {
-    fn from(builder: TimeConditionBuilder) -> Self {
-        crate::orders::OrderCondition::Time(builder.build())
-    }
-}
-
-impl From<MarginConditionBuilder> for crate::orders::OrderCondition {
-    fn from(builder: MarginConditionBuilder) -> Self {
-        crate::orders::OrderCondition::Margin(builder.build())
-    }
-}
-
-impl From<VolumeConditionBuilder> for crate::orders::OrderCondition {
-    fn from(builder: VolumeConditionBuilder) -> Self {
-        crate::orders::OrderCondition::Volume(builder.build())
-    }
-}
-
-impl From<PercentChangeConditionBuilder> for crate::orders::OrderCondition {
-    fn from(builder: PercentChangeConditionBuilder) -> Self {
-        crate::orders::OrderCondition::PercentChange(builder.build())
-    }
-}
-
-impl From<ExecutionConditionBuilder> for crate::orders::OrderCondition {
-    fn from(builder: ExecutionConditionBuilder) -> Self {
-        crate::orders::OrderCondition::Execution(builder.build())
     }
 }
