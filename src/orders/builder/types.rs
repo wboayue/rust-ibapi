@@ -156,6 +156,8 @@ pub enum TimeInForce {
     DayTillCanceled,
     /// Auction-only order.
     Auction,
+    /// Opening auction order.
+    OpeningAuction,
 }
 
 impl TimeInForce {
@@ -170,6 +172,7 @@ impl TimeInForce {
             Self::GoodTillCrossing => "GTX",
             Self::DayTillCanceled => "DTC",
             Self::Auction => "AUC",
+            Self::OpeningAuction => "OPG",
         }
     }
 }

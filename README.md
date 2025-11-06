@@ -19,13 +19,13 @@ rust-ibapi ships both asynchronous (Tokio) and blocking (threaded) clients. The 
 
 ```toml
 # Async only (default features)
-ibapi = "2.0"
+ibapi = "2.1"
 
 # Blocking only
-ibapi = { version = "2.0", default-features = false, features = ["sync"] }
+ibapi = { version = "2.1", default-features = false, features = ["sync"] }
 
 # Async + blocking together
-ibapi = { version = "2.0", default-features = false, features = ["sync", "async"] }
+ibapi = { version = "2.1", default-features = false, features = ["sync", "async"] }
 ```
 
 ```bash
@@ -173,7 +173,7 @@ fn main() {
             1.days(),
             HistoricalBarSize::Hour,
             HistoricalWhatToShow::Trades,
-            true,
+            TradingHours::Regular,
         )
         .expect("historical data request failed");
 
@@ -205,7 +205,7 @@ async fn main() {
             1.days(),
             HistoricalBarSize::Hour,
             HistoricalWhatToShow::Trades,
-            true,
+            TradingHours::Regular,
         )
         .await
         .expect("historical data request failed");
@@ -232,7 +232,7 @@ fn main() {
     // Request real-time bars data for AAPL with 5-second intervals
     let contract = Contract::stock("AAPL").build();
     let subscription = client
-        .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
+        .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
         .expect("realtime bars request failed!");
 
     for bar in subscription {
@@ -256,7 +256,7 @@ async fn main() {
     // Request real-time bars data for AAPL with 5-second intervals
     let contract = Contract::stock("AAPL").build();
     let mut subscription = client
-        .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
+        .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
         .await
         .expect("realtime bars request failed!");
 
@@ -302,10 +302,10 @@ fn main() {
     let contract_nvda = Contract::stock("NVDA").build();
 
     let subscription_aapl = client
-        .realtime_bars(&contract_aapl, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
+        .realtime_bars(&contract_aapl, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
         .expect("realtime bars request failed!");
     let subscription_nvda = client
-        .realtime_bars(&contract_nvda, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
+        .realtime_bars(&contract_nvda, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
         .expect("realtime bars request failed!");
 
     for (bar_aapl, bar_nvda) in subscription_aapl.iter().zip(subscription_nvda.iter()) {
@@ -386,10 +386,145 @@ async fn main() {
         .await
         .expect("bracket order submission failed!");
 
-    println!("Bracket order IDs - Parent: {}, TP: {}, SL: {}", 
+    println!("Bracket order IDs - Parent: {}, TP: {}, SL: {}",
              bracket_ids.parent, bracket_ids.take_profit, bracket_ids.stop_loss);
 }
 ```
+
+#### Monitoring Order Updates
+
+For real-time monitoring of order status, executions, and commissions, set up an order update stream before submitting orders:
+
+##### Sync Example
+
+```rust
+use ibapi::prelude::*;
+use std::thread;
+use std::sync::Arc;
+
+fn main() {
+    let connection_url = "127.0.0.1:4002";
+    let client = Arc::new(Client::connect(connection_url, 100).expect("connection to TWS failed!"));
+
+    // Start background thread to monitor order updates
+    let monitor_client = client.clone();
+    let _monitor_handle = thread::spawn(move || {
+        let stream = monitor_client.order_update_stream().expect("failed to create stream");
+
+        for update in stream {
+            match update {
+                OrderUpdate::OrderStatus(status) => {
+                    println!("Order {} Status: {}", status.order_id, status.status);
+                    println!("  Filled: {}, Remaining: {}", status.filled, status.remaining);
+                }
+                OrderUpdate::OpenOrder(data) => {
+                    println!("Open Order {}: {} {}",
+                             data.order_id, data.order.action, data.contract.symbol);
+                }
+                OrderUpdate::ExecutionData(exec) => {
+                    println!("Execution: {} shares @ {}",
+                             exec.execution.shares, exec.execution.price);
+                }
+                OrderUpdate::CommissionReport(report) => {
+                    println!("Commission: ${}", report.commission);
+                }
+                OrderUpdate::Message(msg) => {
+                    println!("Message: {}", msg.message);
+                }
+            }
+        }
+    });
+
+    // Give monitor time to start
+    thread::sleep(std::time::Duration::from_millis(100));
+
+    // Now submit orders - updates will be received by the monitoring thread
+    let contract = Contract::stock("AAPL").build();
+    let order_id = client.order(&contract)
+        .buy(100)
+        .market()
+        .submit()
+        .expect("order submission failed!");
+
+    println!("Order {} submitted", order_id);
+
+    // Keep main thread alive to receive updates
+    thread::sleep(std::time::Duration::from_secs(10));
+}
+```
+
+##### Async Example
+
+```rust
+use ibapi::prelude::*;
+use futures::StreamExt;
+
+#[tokio::main]
+async fn main() {
+    let connection_url = "127.0.0.1:4002";
+    let client = Client::connect(connection_url, 100).await.expect("connection to TWS failed!");
+
+    // Create order update stream before submitting orders
+    let mut order_stream = client.order_update_stream().await.expect("failed to create stream");
+
+    // Spawn task to monitor updates
+    let monitor_handle = tokio::spawn(async move {
+        while let Some(update) = order_stream.next().await {
+            match update {
+                Ok(OrderUpdate::OrderStatus(status)) => {
+                    println!("Order {} Status: {}", status.order_id, status.status);
+                    println!("  Filled: {}, Remaining: {}", status.filled, status.remaining);
+                }
+                Ok(OrderUpdate::OpenOrder(data)) => {
+                    println!("Open Order {}: {} {}",
+                             data.order_id, data.order.action, data.contract.symbol);
+                }
+                Ok(OrderUpdate::ExecutionData(exec)) => {
+                    println!("Execution: {} shares @ {}",
+                             exec.execution.shares, exec.execution.price);
+                }
+                Ok(OrderUpdate::CommissionReport(report)) => {
+                    println!("Commission: ${}", report.commission);
+                }
+                Ok(OrderUpdate::Message(msg)) => {
+                    println!("Message: {}", msg.message);
+                }
+                Err(e) => {
+                    eprintln!("Error: {:?}", e);
+                    break;
+                }
+            }
+        }
+    });
+
+    // Give monitor time to start
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    // Now submit orders - updates will be received by the monitoring task
+    let contract = Contract::stock("AAPL").build();
+    let order_id = client.order(&contract)
+        .buy(100)
+        .market()
+        .submit()
+        .await
+        .expect("order submission failed!");
+
+    println!("Order {} submitted", order_id);
+
+    // Wait for updates
+    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+
+    // Clean up
+    monitor_handle.abort();
+}
+```
+
+The order update stream provides real-time notifications for:
+- **OrderStatus**: Status changes (Submitted, Filled, Cancelled, etc.)
+- **OpenOrder**: Order details when opened or modified
+- **ExecutionData**: Fill notifications with price and quantity
+- **CommissionReport**: Commission charges for executions
+- **Message**: System messages and notifications
 
 ## Multi-Threading
 
@@ -412,7 +547,7 @@ fn main() {
         let handle = thread::spawn(move || {
             let contract = Contract::stock(symbol).build();
             let subscription = client
-                .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
+                .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
                 .expect("realtime bars request failed!");
 
             for bar in subscription {
@@ -446,7 +581,7 @@ fn main() {
 
             let contract = Contract::stock(symbol).build();
             let subscription = client
-                .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
+                .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
                 .expect("realtime bars request failed!");
 
             for bar in subscription {
@@ -479,7 +614,7 @@ fn main() {
     loop {
         // Request real-time bars data with 5-second intervals
         let subscription = client
-            .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, false)
+            .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
             .expect("realtime bars request failed!");
 
         for bar in &subscription {
