@@ -47,7 +47,7 @@ fn main() {
         272093,  // MSFT contract ID (example - use contract_details() to get real ID)
         "SMART", // Smart routing
     )
-    .greater_than(350.0)   // Trigger price
+    .greater_than(350.0) // Trigger price
     .trigger_method(2) // Use last price
     .build();
 
@@ -113,8 +113,8 @@ fn main() {
     println!("   Scenario: Trade after volume indicates sufficient liquidity");
 
     let volume_condition = VolumeCondition::builder(
-        76792991,   // TSLA contract ID (example)
-        "SMART",    // Exchange
+        76792991, // TSLA contract ID (example)
+        "SMART",  // Exchange
     )
     .greater_than(50_000_000) // 50 million shares
     .build();
@@ -135,7 +135,7 @@ fn main() {
         756733,  // SPY contract ID (example)
         "SMART", // Exchange
     )
-    .greater_than(2.0)     // 2% change
+    .greater_than(2.0) // 2% change
     .build();
 
     let mut order = order_builder::limit_order(Action::Buy, 50.0, 452.0);
@@ -242,10 +242,7 @@ fn main() {
         .conjunction(true)
         .build();
 
-    let laggard_condition = PercentChangeCondition::builder(265598, "SMART")
-        .less_than(0.5)
-        .conjunction(true)
-        .build();
+    let laggard_condition = PercentChangeCondition::builder(265598, "SMART").less_than(0.5).conjunction(true).build();
 
     let mut order = order_builder::limit_order(Action::Buy, 100.0, 150.0);
     order.conditions = vec![

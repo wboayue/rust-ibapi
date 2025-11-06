@@ -910,7 +910,7 @@ fn test_single_price_condition() {
 
 #[test]
 fn test_multiple_and_conditions() {
-    use crate::orders::builder::{price, margin, time};
+    use crate::orders::builder::{margin, price, time};
 
     let client = MockClient;
     let contract = create_test_contract();
@@ -961,7 +961,7 @@ fn test_multiple_or_conditions() {
 
 #[test]
 fn test_mixed_and_or_conditions() {
-    use crate::orders::builder::{price, margin, time, volume};
+    use crate::orders::builder::{margin, price, time, volume};
 
     let client = MockClient;
     let contract = create_test_contract();

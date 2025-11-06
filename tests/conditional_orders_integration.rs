@@ -189,9 +189,7 @@ fn test_volume_condition(client: &Client, order_id: i32) -> Result<(), Box<dyn s
     println!("  Trigger when TSLA volume > 50M shares");
 
     // Create volume condition: trigger when volume exceeds 50 million
-    let condition = VolumeCondition::builder(76792991, "SMART")
-        .greater_than(50_000_000)
-        .build();
+    let condition = VolumeCondition::builder(76792991, "SMART").greater_than(50_000_000).build();
 
     let contract = Contract::stock("TSLA").build();
     let mut order = order_builder::market_order(Action::Buy, 10.0);
@@ -211,9 +209,7 @@ fn test_percent_change_condition(client: &Client, order_id: i32) -> Result<(), B
     println!("  Trigger when SPY changes > 2%");
 
     // Create percent change condition: trigger when SPY moves more than 2%
-    let condition = PercentChangeCondition::builder(756733, "SMART")
-        .greater_than(2.0)
-        .build();
+    let condition = PercentChangeCondition::builder(756733, "SMART").greater_than(2.0).build();
 
     let contract = Contract::stock("SPY").build();
     let mut order = order_builder::market_order(Action::Sell, 10.0);
