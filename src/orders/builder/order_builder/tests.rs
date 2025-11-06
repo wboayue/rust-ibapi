@@ -1017,7 +1017,6 @@ fn test_all_condition_types() {
 #[test]
 fn test_condition_builder_conversion() {
     use crate::orders::builder::price;
-    use crate::orders::OrderCondition;
 
     let client = MockClient;
     let contract = create_test_contract();

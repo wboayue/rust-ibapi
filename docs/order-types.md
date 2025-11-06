@@ -243,6 +243,292 @@ let order_id = client.order(&contract)
 
 **When to use:** Similar to MIT but with price control on execution.
 
+## Conditional Orders with Conditions
+
+Conditional orders allow you to specify market conditions that must be met before an order is activated. You can combine multiple conditions using AND/OR logic to create sophisticated trading strategies.
+
+### Available Condition Types
+
+1. **Price Condition** - Trigger when a contract reaches a specific price
+2. **Time Condition** - Trigger at or after a specific time
+3. **Margin Condition** - Trigger based on account margin cushion percentage
+4. **Execution Condition** - Trigger when a specific contract executes
+5. **Volume Condition** - Trigger when trading volume reaches a threshold
+6. **Percent Change Condition** - Trigger when price changes by a percentage
+
+### Single Condition Example
+
+```rust
+use ibapi::orders::builder::price;
+
+// Buy when AAPL price exceeds $150
+let order_id = client.order(&contract)
+    .buy(100)
+    .market()
+    .condition(price(265598, "SMART").greater_than(150.0))
+    .submit()?;
+```
+
+### Multiple AND Conditions
+
+Use `.and_condition()` to require all conditions to be met:
+
+```rust
+use ibapi::orders::builder::{price, margin, time};
+
+// Buy only when ALL conditions are true:
+// - Price > $150 AND
+// - Margin cushion > 30% AND
+// - Time after 2:30 PM ET
+let order_id = client.order(&contract)
+    .sell(50)
+    .limit(155.0)
+    .condition(price(265598, "SMART").greater_than(150.0))
+    .and_condition(margin().greater_than(30))
+    .and_condition(time().greater_than("20251230 14:30:00 US/Eastern"))
+    .submit()?;
+```
+
+### Multiple OR Conditions
+
+Use `.or_condition()` to trigger when any condition is met:
+
+```rust
+use ibapi::orders::builder::{price, volume};
+
+// Buy when EITHER condition is true:
+// - Price < $100 OR
+// - Volume > 50 million
+let order_id = client.order(&contract)
+    .buy(100)
+    .market()
+    .condition(price(265598, "SMART").less_than(100.0))
+    .or_condition(volume(265598, "SMART").greater_than(50_000_000))
+    .submit()?;
+```
+
+### Mixed AND/OR Logic
+
+Combine AND and OR logic for complex strategies:
+
+```rust
+use ibapi::orders::builder::{price, margin, time, volume};
+
+// Logic: (price > 10 AND margin < 20) OR time > X OR volume > Y
+let order_id = client.order(&contract)
+    .buy(100)
+    .market()
+    .condition(price(123445, "SMART").greater_than(10.0))
+    .and_condition(margin().less_than(20))
+    .or_condition(time().greater_than("20251010 09:30:00 US/Eastern"))
+    .or_condition(volume(123445, "SMART").greater_than(10_000_000))
+    .submit()?;
+```
+
+### Condition Types Reference
+
+#### Price Condition
+
+Monitor price movements and trigger when threshold is crossed:
+
+```rust
+use ibapi::orders::builder::price;
+
+// Trigger when price goes above $150
+let condition = price(265598, "SMART")
+    .greater_than(150.0)
+    .trigger_method(2);  // 0=Default, 2=Last price, 4=Bid/Ask, 8=Midpoint
+```
+
+**Parameters:**
+- `contract_id` - Contract ID (get via `contract_details()`)
+- `exchange` - Exchange to monitor (e.g., "SMART", "NASDAQ")
+- `.greater_than(price)` - Trigger when price rises above threshold
+- `.less_than(price)` - Trigger when price falls below threshold
+- `.trigger_method(n)` - Which price to use (0-8)
+
+#### Time Condition
+
+Trigger at or after a specific date/time:
+
+```rust
+use ibapi::orders::builder::time;
+
+// Trigger after 2:30 PM Eastern on Dec 30, 2025
+let condition = time()
+    .greater_than("20251230 14:30:00 US/Eastern");
+
+// Trigger before market close
+let condition = time()
+    .less_than("20251230 16:00:00 US/Eastern");
+```
+
+**Time Format:** `"YYYYMMDD HH:MM:SS TZ"`
+- Example: `"20251230 14:30:00 US/Eastern"`
+- Common timezones: `US/Eastern`, `US/Central`, `UTC`
+
+#### Margin Condition
+
+Trigger based on account margin cushion percentage:
+
+```rust
+use ibapi::orders::builder::margin;
+
+// Trigger when margin cushion falls below 30%
+let condition = margin().less_than(30);
+
+// Trigger when margin cushion exceeds 50%
+let condition = margin().greater_than(50);
+```
+
+**Use case:** Risk management - close positions when margin is low, or enter new positions when margin is high.
+
+**Calculation:** Margin cushion = (Equity with Loan Value - Maintenance Margin) / Net Liquidation Value
+
+#### Execution Condition
+
+Trigger when a specific contract trades in your account:
+
+```rust
+use ibapi::orders::builder::execution;
+
+// Trigger when MSFT executes (any fill, any side)
+let condition = execution("MSFT", "STK", "SMART");
+```
+
+**Parameters:**
+- `symbol` - Contract symbol
+- `security_type` - "STK", "OPT", "FUT", etc.
+- `exchange` - Exchange to monitor
+
+**Use case:** Pairs trading - automatically hedge after initial position fills.
+
+#### Volume Condition
+
+Trigger when cumulative daily volume reaches threshold:
+
+```rust
+use ibapi::orders::builder::volume;
+
+// Trigger when TSLA volume exceeds 50 million shares
+let condition = volume(76792991, "SMART")
+    .greater_than(50_000_000);
+
+// Trigger when volume is below average
+let condition = volume(76792991, "SMART")
+    .less_than(10_000_000);
+```
+
+**Note:** Volume resets daily at market open.
+
+**Use case:** Enter positions only after sufficient liquidity is established.
+
+#### Percent Change Condition
+
+Trigger based on percentage price change from session open:
+
+```rust
+use ibapi::orders::builder::percent_change;
+
+// Trigger when SPY moves up more than 2% from open
+let condition = percent_change(756733, "SMART")
+    .greater_than(2.0);
+
+// Trigger on 3% decline
+let condition = percent_change(756733, "SMART")
+    .less_than(-3.0);
+```
+
+**Note:** Percentage is a decimal (2.0 = 2%, not 0.02). Resets at session open.
+
+**Use case:** Momentum trading - enter on significant moves.
+
+### Advanced Features
+
+#### Ignoring Regular Trading Hours
+
+By default, conditions are only evaluated during regular trading hours. To monitor conditions outside RTH:
+
+```rust
+let order_id = client.order(&contract)
+    .buy(100)
+    .market()
+    .condition(price(265598, "SMART").greater_than(150.0))
+    .conditions_ignore_rth()  // Monitor during extended hours
+    .submit()?;
+```
+
+#### Cancel vs Activate on Condition
+
+By default, orders activate when conditions are met. You can reverse this to cancel orders:
+
+```rust
+// Cancel order if not filled by 3:30 PM
+let order_id = client.order(&contract)
+    .buy(100)
+    .limit(149.0)
+    .condition(time().greater_than("20251230 15:30:00 US/Eastern"))
+    .conditions_cancel_order()  // Cancel instead of activate
+    .submit()?;
+```
+
+### Getting Contract IDs
+
+Most conditions require contract IDs. Get them via `contract_details()`:
+
+```rust
+// Get contract details to find contract ID
+let details = client.contract_details(&Contract::stock("AAPL")).next()?;
+let contract_id = details.contract.contract_id;
+
+// Now use in conditions
+let condition = price(contract_id, "SMART").greater_than(150.0);
+```
+
+### How Conditions Work
+
+**Conjunction Logic:**
+- Each condition has an `is_conjunction` flag that determines how it combines with the NEXT condition
+- `.condition()` - First condition, always uses AND logic
+- `.and_condition()` - Sets previous condition to AND with this one
+- `.or_condition()` - Sets previous condition to OR with this one
+
+**Evaluation:**
+- Conditions are evaluated continuously during market hours (or extended hours if configured)
+- Once conditions are met, the order activates immediately
+- After activation, the original conditional order is replaced with a regular order
+
+### Best Practices
+
+1. **Test with paper trading first** - Conditional orders can be complex
+2. **Get contract IDs before trading** - Cache contract IDs to avoid repeated lookups
+3. **Use time conditions for time-limited opportunities** - Automatically cancel stale orders
+4. **Combine price and margin conditions for risk management** - Don't trade when margin is low
+5. **Monitor extended hours carefully** - Use `conditions_ignore_rth()` only when needed
+6. **Keep conditions simple** - Complex logic can be hard to debug
+7. **Use execution conditions for hedging** - Automatically place offsetting trades
+
+### Complete Example: Risk-Managed Entry
+
+```rust
+use ibapi::orders::builder::{price, margin, time, volume};
+
+// Enter position only when:
+// 1. Price is favorable (> $150)
+// 2. Sufficient liquidity (volume > 80M)
+// 3. After market stabilizes (> 10:00 AM)
+// 4. Account has adequate margin (> 40%)
+let order_id = client.order(&contract)
+    .buy(100)
+    .limit(151.0)
+    .condition(price(265598, "SMART").greater_than(150.0))
+    .and_condition(volume(265598, "SMART").greater_than(80_000_000))
+    .and_condition(time().greater_than("20251230 10:00:00 US/Eastern"))
+    .and_condition(margin().greater_than(40))
+    .good_till_cancel()
+    .submit()?;
+```
+
 ## Protected Orders
 
 ### Market with Protection
