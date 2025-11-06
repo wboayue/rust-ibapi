@@ -76,7 +76,7 @@ impl crate::ToField for TriggerMethod {
 /// # Example
 ///
 /// ```no_run
-/// use ibapi::orders::conditions::PriceCondition;
+/// use ibapi::orders::conditions::{PriceCondition, TriggerMethod};
 /// use ibapi::orders::OrderCondition;
 ///
 /// // Trigger when AAPL (contract ID 265598) goes above $150 on SMART

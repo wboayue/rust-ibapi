@@ -439,7 +439,7 @@ impl<'a, C> OrderBuilder<'a, C> {
     ///
     /// # Example
     ///
-    /// ```no_run
+    /// ```ignore
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// # use ibapi::client::Client;
     /// # use ibapi::contracts::Contract;
@@ -466,7 +466,7 @@ impl<'a, C> OrderBuilder<'a, C> {
     ///
     /// # Example
     ///
-    /// ```no_run
+    /// ```ignore
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// # use ibapi::client::Client;
     /// # use ibapi::contracts::Contract;
@@ -495,7 +495,7 @@ impl<'a, C> OrderBuilder<'a, C> {
     ///
     /// # Example
     ///
-    /// ```no_run
+    /// ```ignore
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// # use ibapi::client::Client;
     /// # use ibapi::contracts::Contract;

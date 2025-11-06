@@ -101,7 +101,7 @@ fn test_price_condition(client: &Client, order_id: i32) -> Result<(), Box<dyn st
     // Create price condition: trigger when AAPL goes above $200
     let condition = PriceCondition::builder(265598, "SMART")
         .greater_than(200.0)
-        .trigger_method(0) // Default: last price
+        .trigger_method(TriggerMethod::Default) // Default: last price
         .build();
 
     let contract = Contract::stock("MSFT").build();
