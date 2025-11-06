@@ -289,7 +289,7 @@ pub struct PercentChangeCondition {
 pub struct PriceConditionBuilder {
     contract_id: i32,
     exchange: String,
-    price: f64,
+    price: Option<f64>,
     trigger_method: i32,
     is_more: bool,
     is_conjunction: bool,
@@ -318,7 +318,7 @@ impl PriceConditionBuilder {
         Self {
             contract_id,
             exchange: exchange.into(),
-            price: 0.0,           // Will be set by greater_than/less_than
+            price: None,          // Must be set by greater_than/less_than
             trigger_method: 0,    // Default: last price
             is_more: true,        // Default: trigger when price goes above
             is_conjunction: true, // Default: AND condition
@@ -327,14 +327,14 @@ impl PriceConditionBuilder {
 
     /// Set trigger when price is greater than the specified value.
     pub fn greater_than(mut self, price: f64) -> Self {
-        self.price = price;
+        self.price = Some(price);
         self.is_more = true;
         self
     }
 
     /// Set trigger when price is less than the specified value.
     pub fn less_than(mut self, price: f64) -> Self {
-        self.price = price;
+        self.price = Some(price);
         self.is_more = false;
         self
     }
@@ -368,7 +368,9 @@ impl PriceConditionBuilder {
         PriceCondition {
             contract_id: self.contract_id,
             exchange: self.exchange,
-            price: self.price,
+            price: self
+                .price
+                .expect("PriceConditionBuilder requires a price threshold; call greater_than() or less_than() before build()"),
             trigger_method: self.trigger_method,
             is_more: self.is_more,
             is_conjunction: self.is_conjunction,
@@ -387,9 +389,9 @@ impl PriceConditionBuilder {
 ///     .greater_than("20251230 23:59:59 UTC")
 ///     .build();
 /// ```
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct TimeConditionBuilder {
-    time: String,
+    time: Option<String>,
     is_more: bool,
     is_conjunction: bool,
 }
@@ -405,7 +407,7 @@ impl TimeConditionBuilder {
     /// Create a new time condition builder.
     pub fn new() -> Self {
         Self {
-            time: String::new(),  // Will be set by greater_than/less_than
+            time: None,           // Must be set by greater_than/less_than
             is_more: true,        // Default: trigger after time
             is_conjunction: true, // Default: AND condition
         }
@@ -417,7 +419,7 @@ impl TimeConditionBuilder {
     ///
     /// - `time`: Time in format "YYYYMMDD HH:MM:SS TZ"
     pub fn greater_than(mut self, time: impl Into<String>) -> Self {
-        self.time = time.into();
+        self.time = Some(time.into());
         self.is_more = true;
         self
     }
@@ -428,7 +430,7 @@ impl TimeConditionBuilder {
     ///
     /// - `time`: Time in format "YYYYMMDD HH:MM:SS TZ"
     pub fn less_than(mut self, time: impl Into<String>) -> Self {
-        self.time = time.into();
+        self.time = Some(time.into());
         self.is_more = false;
         self
     }
@@ -444,10 +446,18 @@ impl TimeConditionBuilder {
     /// Build the time condition.
     pub fn build(self) -> TimeCondition {
         TimeCondition {
-            time: self.time,
+            time: self
+                .time
+                .expect("TimeConditionBuilder requires a time value; call greater_than() or less_than() before build()"),
             is_more: self.is_more,
             is_conjunction: self.is_conjunction,
         }
+    }
+}
+
+impl Default for TimeConditionBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -462,9 +472,9 @@ impl TimeConditionBuilder {
 ///     .less_than(30)
 ///     .build();
 /// ```
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct MarginConditionBuilder {
-    percent: i32,
+    percent: Option<i32>,
     is_more: bool,
     is_conjunction: bool,
 }
@@ -480,7 +490,7 @@ impl MarginConditionBuilder {
     /// Create a new margin condition builder.
     pub fn new() -> Self {
         Self {
-            percent: 0,           // Will be set by greater_than/less_than
+            percent: None,        // Must be set by greater_than/less_than
             is_more: true,        // Default: trigger when above threshold
             is_conjunction: true, // Default: AND condition
         }
@@ -488,14 +498,14 @@ impl MarginConditionBuilder {
 
     /// Set trigger when margin cushion is greater than the specified percentage.
     pub fn greater_than(mut self, percent: i32) -> Self {
-        self.percent = percent;
+        self.percent = Some(percent);
         self.is_more = true;
         self
     }
 
     /// Set trigger when margin cushion is less than the specified percentage.
     pub fn less_than(mut self, percent: i32) -> Self {
-        self.percent = percent;
+        self.percent = Some(percent);
         self.is_more = false;
         self
     }
@@ -511,10 +521,18 @@ impl MarginConditionBuilder {
     /// Build the margin condition.
     pub fn build(self) -> MarginCondition {
         MarginCondition {
-            percent: self.percent,
+            percent: self
+                .percent
+                .expect("MarginConditionBuilder requires a percentage threshold; call greater_than() or less_than() before build()"),
             is_more: self.is_more,
             is_conjunction: self.is_conjunction,
         }
+    }
+}
+
+impl Default for MarginConditionBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -601,7 +619,7 @@ impl ExecutionConditionBuilder {
 pub struct VolumeConditionBuilder {
     contract_id: i32,
     exchange: String,
-    volume: i32,
+    volume: Option<i32>,
     is_more: bool,
     is_conjunction: bool,
 }
@@ -629,7 +647,7 @@ impl VolumeConditionBuilder {
         Self {
             contract_id,
             exchange: exchange.into(),
-            volume: 0,            // Will be set by greater_than/less_than
+            volume: None,         // Must be set by greater_than/less_than
             is_more: true,        // Default: trigger when above threshold
             is_conjunction: true, // Default: AND condition
         }
@@ -637,14 +655,14 @@ impl VolumeConditionBuilder {
 
     /// Set trigger when volume is greater than the specified value.
     pub fn greater_than(mut self, volume: i32) -> Self {
-        self.volume = volume;
+        self.volume = Some(volume);
         self.is_more = true;
         self
     }
 
     /// Set trigger when volume is less than the specified value.
     pub fn less_than(mut self, volume: i32) -> Self {
-        self.volume = volume;
+        self.volume = Some(volume);
         self.is_more = false;
         self
     }
@@ -662,7 +680,9 @@ impl VolumeConditionBuilder {
         VolumeCondition {
             contract_id: self.contract_id,
             exchange: self.exchange,
-            volume: self.volume,
+            volume: self
+                .volume
+                .expect("VolumeConditionBuilder requires a volume threshold; call greater_than() or less_than() before build()"),
             is_more: self.is_more,
             is_conjunction: self.is_conjunction,
         }
@@ -684,7 +704,7 @@ impl VolumeConditionBuilder {
 pub struct PercentChangeConditionBuilder {
     contract_id: i32,
     exchange: String,
-    percent: f64,
+    percent: Option<f64>,
     is_more: bool,
     is_conjunction: bool,
 }
@@ -712,7 +732,7 @@ impl PercentChangeConditionBuilder {
         Self {
             contract_id,
             exchange: exchange.into(),
-            percent: 0.0,         // Will be set by greater_than/less_than
+            percent: None,        // Must be set by greater_than/less_than
             is_more: true,        // Default: trigger when above threshold
             is_conjunction: true, // Default: AND condition
         }
@@ -720,14 +740,14 @@ impl PercentChangeConditionBuilder {
 
     /// Set trigger when percent change is greater than the specified value.
     pub fn greater_than(mut self, percent: f64) -> Self {
-        self.percent = percent;
+        self.percent = Some(percent);
         self.is_more = true;
         self
     }
 
     /// Set trigger when percent change is less than the specified value.
     pub fn less_than(mut self, percent: f64) -> Self {
-        self.percent = percent;
+        self.percent = Some(percent);
         self.is_more = false;
         self
     }
@@ -745,7 +765,9 @@ impl PercentChangeConditionBuilder {
         PercentChangeCondition {
             contract_id: self.contract_id,
             exchange: self.exchange,
-            percent: self.percent,
+            percent: self
+                .percent
+                .expect("PercentChangeConditionBuilder requires a threshold; call greater_than() or less_than() before build()"),
             is_more: self.is_more,
             is_conjunction: self.is_conjunction,
         }
@@ -869,5 +891,35 @@ mod tests {
         assert_eq!(condition.trigger_method, 0);
         assert!(condition.is_more);
         assert!(condition.is_conjunction);
+    }
+
+    #[test]
+    #[should_panic(expected = "PriceConditionBuilder requires a price threshold")]
+    fn test_price_condition_builder_missing_threshold_panics() {
+        let _ = PriceCondition::builder(12345, "NASDAQ").build();
+    }
+
+    #[test]
+    #[should_panic(expected = "TimeConditionBuilder requires a time value")]
+    fn test_time_condition_builder_missing_time_panics() {
+        let _ = TimeCondition::builder().build();
+    }
+
+    #[test]
+    #[should_panic(expected = "MarginConditionBuilder requires a percentage threshold")]
+    fn test_margin_condition_builder_missing_threshold_panics() {
+        let _ = MarginCondition::builder().build();
+    }
+
+    #[test]
+    #[should_panic(expected = "VolumeConditionBuilder requires a volume threshold")]
+    fn test_volume_condition_builder_missing_threshold_panics() {
+        let _ = VolumeCondition::builder(12345, "NASDAQ").build();
+    }
+
+    #[test]
+    #[should_panic(expected = "PercentChangeConditionBuilder requires a threshold")]
+    fn test_percent_change_condition_builder_missing_threshold_panics() {
+        let _ = PercentChangeCondition::builder(12345, "NASDAQ").build();
     }
 }
