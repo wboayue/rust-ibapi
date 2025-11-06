@@ -547,6 +547,42 @@ match result {
 }
 ```
 
+## Custom Order Construction
+
+While the fluent API provides a convenient interface for creating common order types, you can also manually construct `Order` objects for more advanced or specialized scenarios. Orders can be submitted using either `place_order` or `submit_order` methods.
+
+```rust
+use rust_ibapi::orders::Order;
+
+// Manually construct an order
+let order = Order {
+    action: Action::Buy,
+    order_type: "LMT".to_string(),
+    total_quantity: 100.0,
+    lmt_price: Some(150.50),
+    tif: "GTC".to_string(),
+    outside_rth: true,
+    ..Default::default()
+};
+
+// Get the next valid order ID
+let order_id = client.next_order_id();
+
+// Submit using place_order (returns subscription for updates)
+let subscription = client.place_order(order_id, &contract, &order)?;
+
+// Or using submit_order (fire-and-forget, no subscription)
+client.submit_order(order_id, &contract, &order)?;
+```
+
+This approach is useful when:
+- You need to set order fields not exposed by the fluent API
+- You're migrating code from other TWS API implementations
+- You need maximum control over order construction
+- You're implementing custom order strategies
+
+**Note:** When manually constructing orders, you're responsible for ensuring all required fields are set correctly and the combination is valid for the target exchange and product type.
+
 ## Best Practices
 
 1. **Use specific order types:** Choose the most appropriate order type for your strategy
