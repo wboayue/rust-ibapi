@@ -268,7 +268,7 @@ impl OrderDecoder {
     }
 
     fn read_trigger_method(&mut self) -> Result<(), Error> {
-        self.order.trigger_method = self.message.next_int()?;
+        self.order.trigger_method = self.message.next_int()?.into();
         Ok(())
     }
 
