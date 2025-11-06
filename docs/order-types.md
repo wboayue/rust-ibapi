@@ -428,8 +428,11 @@ let order2 = client.order(&contract2)
     .oca_group("MyOCA", 1)
     .build()?;
 
-// Submit as OCA group
-let order_ids = client.submit_oca_orders(vec![order1, order2])?;
+// Submit as OCA group (requires contract-order pairs)
+let order_ids = client.submit_oca_orders(vec![
+    (contract1.clone(), order1),
+    (contract2.clone(), order2)
+])?;
 ```
 
 **When to use:** When you want multiple entry strategies but only one execution.

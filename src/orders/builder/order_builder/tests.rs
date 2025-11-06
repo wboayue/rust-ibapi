@@ -749,3 +749,131 @@ fn test_bracket_order_with_missing_action() {
 
     assert!(result.is_err());
 }
+
+#[test]
+fn test_market_on_close() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let builder = OrderBuilder::new(&client, &contract).buy(100).market_on_close();
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.order_type, "MOC");
+    assert_eq!(order.action, Action::Buy);
+    assert_eq!(order.total_quantity, 100.0);
+    assert_eq!(order.limit_price, None);
+}
+
+#[test]
+fn test_limit_on_close() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let builder = OrderBuilder::new(&client, &contract).buy(100).limit_on_close(50.50);
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.order_type, "LOC");
+    assert_eq!(order.action, Action::Buy);
+    assert_eq!(order.total_quantity, 100.0);
+    assert_eq!(order.limit_price, Some(50.50));
+}
+
+#[test]
+fn test_market_on_open() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let builder = OrderBuilder::new(&client, &contract).buy(100).market_on_open();
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.order_type, "MKT");
+    assert_eq!(order.action, Action::Buy);
+    assert_eq!(order.total_quantity, 100.0);
+    assert_eq!(order.tif, "OPG");
+    assert_eq!(order.limit_price, None);
+}
+
+#[test]
+fn test_limit_on_open() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let builder = OrderBuilder::new(&client, &contract).buy(100).limit_on_open(50.50);
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.order_type, "LMT");
+    assert_eq!(order.action, Action::Buy);
+    assert_eq!(order.total_quantity, 100.0);
+    assert_eq!(order.limit_price, Some(50.50));
+    assert_eq!(order.tif, "OPG");
+}
+
+#[test]
+fn test_market_with_protection() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let builder = OrderBuilder::new(&client, &contract).buy(100).market_with_protection();
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.order_type, "MKT PRT");
+    assert_eq!(order.action, Action::Buy);
+    assert_eq!(order.total_quantity, 100.0);
+    assert_eq!(order.limit_price, None);
+    assert_eq!(order.aux_price, None);
+}
+
+#[test]
+fn test_stop_with_protection() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let builder = OrderBuilder::new(&client, &contract).sell(100).stop_with_protection(95.00);
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.order_type, "STP PRT");
+    assert_eq!(order.action, Action::Sell);
+    assert_eq!(order.total_quantity, 100.0);
+    assert_eq!(order.aux_price, Some(95.00));
+}
+
+#[test]
+fn test_market_on_close_sell() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let builder = OrderBuilder::new(&client, &contract).sell(200).market_on_close();
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.order_type, "MOC");
+    assert_eq!(order.action, Action::Sell);
+    assert_eq!(order.total_quantity, 200.0);
+}
+
+#[test]
+fn test_limit_on_close_sell() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let builder = OrderBuilder::new(&client, &contract).sell(200).limit_on_close(100.00);
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.order_type, "LOC");
+    assert_eq!(order.action, Action::Sell);
+    assert_eq!(order.total_quantity, 200.0);
+    assert_eq!(order.limit_price, Some(100.00));
+}
+
+#[test]
+fn test_stop_with_protection_buy() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let builder = OrderBuilder::new(&client, &contract).buy(50).stop_with_protection(105.00);
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.order_type, "STP PRT");
+    assert_eq!(order.action, Action::Buy);
+    assert_eq!(order.total_quantity, 50.0);
+    assert_eq!(order.aux_price, Some(105.00));
+}

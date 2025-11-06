@@ -291,6 +291,47 @@ impl<'a, C> OrderBuilder<'a, C> {
         self
     }
 
+    /// Market on Close - executes as market order at or near closing price
+    pub fn market_on_close(mut self) -> Self {
+        self.order_type = Some(OrderType::MarketOnClose);
+        self
+    }
+
+    /// Limit on Close - executes as limit order at close if price is met
+    pub fn limit_on_close(mut self, limit_price: impl Into<f64>) -> Self {
+        self.order_type = Some(OrderType::LimitOnClose);
+        self.limit_price = Some(limit_price.into());
+        self
+    }
+
+    /// Market on Open - executes as market order at market open
+    pub fn market_on_open(mut self) -> Self {
+        self.order_type = Some(OrderType::Market);
+        self.time_in_force = TimeInForce::OpeningAuction;
+        self
+    }
+
+    /// Limit on Open - executes as limit order at market open
+    pub fn limit_on_open(mut self, limit_price: impl Into<f64>) -> Self {
+        self.order_type = Some(OrderType::Limit);
+        self.limit_price = Some(limit_price.into());
+        self.time_in_force = TimeInForce::OpeningAuction;
+        self
+    }
+
+    /// Market with Protection - market order with protection against extreme price movements (futures only)
+    pub fn market_with_protection(mut self) -> Self {
+        self.order_type = Some(OrderType::MarketWithProtection);
+        self
+    }
+
+    /// Stop with Protection - stop order with protection against extreme price movements (futures only)
+    pub fn stop_with_protection(mut self, stop_price: impl Into<f64>) -> Self {
+        self.order_type = Some(OrderType::StopWithProtection);
+        self.stop_price = Some(stop_price.into());
+        self
+    }
+
     // Time in force methods
 
     /// Set time in force for the order
