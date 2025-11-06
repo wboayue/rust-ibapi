@@ -46,9 +46,8 @@ fn main() {
     let price_condition = PriceCondition::builder(
         272093,  // MSFT contract ID (example - use contract_details() to get real ID)
         "SMART", // Smart routing
-        350.0,   // Trigger price
     )
-    .trigger_above()
+    .greater_than(350.0)   // Trigger price
     .trigger_method(2) // Use last price
     .build();
 
@@ -63,7 +62,7 @@ fn main() {
     println!("2. TIME CONDITION");
     println!("   Scenario: Submit order after 2:30 PM ET");
 
-    let time_condition = TimeCondition::builder("20251230 14:30:00 US/Eastern").trigger_after().build();
+    let time_condition = TimeCondition::builder().greater_than("20251230 14:30:00 US/Eastern").build();
 
     let mut order = order_builder::limit_order(Action::Sell, 50.0, 155.0);
     order.conditions = vec![OrderCondition::Time(time_condition)];
@@ -76,8 +75,8 @@ fn main() {
     println!("3. MARGIN CONDITION");
     println!("   Scenario: Close position if margin cushion drops below 30%");
 
-    let margin_condition = MarginCondition::builder(30) // 30% threshold
-        .trigger_below()
+    let margin_condition = MarginCondition::builder()
+        .less_than(30) // 30% threshold
         .build();
 
     let mut order = order_builder::market_order(Action::Sell, 200.0);
@@ -116,9 +115,8 @@ fn main() {
     let volume_condition = VolumeCondition::builder(
         76792991,   // TSLA contract ID (example)
         "SMART",    // Exchange
-        50_000_000, // 50 million shares
     )
-    .trigger_above()
+    .greater_than(50_000_000) // 50 million shares
     .build();
 
     let mut order = order_builder::limit_order(Action::Buy, 100.0, 245.0);
@@ -136,9 +134,8 @@ fn main() {
     let percent_change_condition = PercentChangeCondition::builder(
         756733,  // SPY contract ID (example)
         "SMART", // Exchange
-        2.0,     // 2% change
     )
-    .trigger_above()
+    .greater_than(2.0)     // 2% change
     .build();
 
     let mut order = order_builder::limit_order(Action::Buy, 50.0, 452.0);
@@ -153,18 +150,18 @@ fn main() {
     println!("7. COMPLEX SCENARIO - AND CONDITIONS");
     println!("   Scenario: Trade only when multiple conditions align");
 
-    let price_cond = PriceCondition::builder(265598, "SMART", 150.0)
-        .trigger_above()
+    let price_cond = PriceCondition::builder(265598, "SMART")
+        .greater_than(150.0)
         .conjunction(true) // AND with next condition
         .build();
 
-    let volume_cond = VolumeCondition::builder(265598, "SMART", 80_000_000)
-        .trigger_above()
+    let volume_cond = VolumeCondition::builder(265598, "SMART")
+        .greater_than(80_000_000)
         .conjunction(true) // AND with next condition
         .build();
 
-    let time_cond = TimeCondition::builder("20251230 10:00:00 US/Eastern")
-        .trigger_after()
+    let time_cond = TimeCondition::builder()
+        .greater_than("20251230 10:00:00 US/Eastern")
         .conjunction(true) // Last condition in AND chain
         .build();
 
@@ -188,18 +185,18 @@ fn main() {
     println!("8. COMPLEX SCENARIO - OR CONDITIONS");
     println!("   Scenario: Close position if any risk threshold is breached");
 
-    let margin_cond = MarginCondition::builder(25)
-        .trigger_below()
+    let margin_cond = MarginCondition::builder()
+        .less_than(25)
         .conjunction(false) // OR with next condition
         .build();
 
-    let price_cond = PriceCondition::builder(265598, "SMART", 140.0)
-        .trigger_below()
+    let price_cond = PriceCondition::builder(265598, "SMART")
+        .less_than(140.0)
         .conjunction(false) // OR with next condition
         .build();
 
-    let time_cond = TimeCondition::builder("20251230 15:55:00 US/Eastern")
-        .trigger_after()
+    let time_cond = TimeCondition::builder()
+        .greater_than("20251230 15:55:00 US/Eastern")
         .conjunction(false) // Last condition in OR chain
         .build();
 
@@ -224,7 +221,7 @@ fn main() {
     println!("9. CANCEL ORDER ON CONDITION");
     println!("   Scenario: Cancel order if not filled by specific time");
 
-    let time_cond = TimeCondition::builder("20251230 15:30:00 US/Eastern").trigger_after().build();
+    let time_cond = TimeCondition::builder().greater_than("20251230 15:30:00 US/Eastern").build();
 
     let mut order = order_builder::limit_order(Action::Buy, 100.0, 149.0);
     order.conditions = vec![OrderCondition::Time(time_cond)];
@@ -240,13 +237,13 @@ fn main() {
     println!("    Scenario: Trade spread when correlation breaks");
 
     // Buy the laggard when the leader has moved significantly
-    let leader_condition = PercentChangeCondition::builder(756733, "SMART", 1.5)
-        .trigger_above()
+    let leader_condition = PercentChangeCondition::builder(756733, "SMART")
+        .greater_than(1.5)
         .conjunction(true)
         .build();
 
-    let laggard_condition = PercentChangeCondition::builder(265598, "SMART", 0.5)
-        .trigger_below()
+    let laggard_condition = PercentChangeCondition::builder(265598, "SMART")
+        .less_than(0.5)
         .conjunction(true)
         .build();
 

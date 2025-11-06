@@ -99,8 +99,8 @@ fn test_price_condition(client: &Client, order_id: i32) -> Result<(), Box<dyn st
     println!("  Trigger when AAPL price > $200");
 
     // Create price condition: trigger when AAPL goes above $200
-    let condition = PriceCondition::builder(265598, "SMART", 200.0)
-        .trigger_above()
+    let condition = PriceCondition::builder(265598, "SMART")
+        .greater_than(200.0)
         .trigger_method(0) // Default: last price
         .build();
 
@@ -127,7 +127,7 @@ fn test_time_condition(client: &Client, order_id: i32) -> Result<(), Box<dyn std
     let now = OffsetDateTime::now_utc();
     let time_str = format!("{:04}{:02}{:02} 14:30:00", now.year(), now.month() as u8, now.day());
 
-    let condition = TimeCondition::builder(&time_str).trigger_after().build();
+    let condition = TimeCondition::builder().greater_than(time_str).build();
 
     let contract = Contract::stock("AAPL").build();
     let mut order = order_builder::market_order(Action::Buy, 10.0);
@@ -148,7 +148,7 @@ fn test_margin_condition(client: &Client, order_id: i32) -> Result<(), Box<dyn s
     println!("  Trigger when margin cushion < 30%");
 
     // Create margin condition: trigger when margin falls below 30%
-    let condition = MarginCondition::builder(30).trigger_below().build();
+    let condition = MarginCondition::builder().less_than(30).build();
 
     let contract = Contract::stock("TSLA").build();
     let mut order = order_builder::market_order(Action::Sell, 5.0);
@@ -189,7 +189,9 @@ fn test_volume_condition(client: &Client, order_id: i32) -> Result<(), Box<dyn s
     println!("  Trigger when TSLA volume > 50M shares");
 
     // Create volume condition: trigger when volume exceeds 50 million
-    let condition = VolumeCondition::builder(76792991, "SMART", 50_000_000).trigger_above().build();
+    let condition = VolumeCondition::builder(76792991, "SMART")
+        .greater_than(50_000_000)
+        .build();
 
     let contract = Contract::stock("TSLA").build();
     let mut order = order_builder::market_order(Action::Buy, 10.0);
@@ -209,7 +211,9 @@ fn test_percent_change_condition(client: &Client, order_id: i32) -> Result<(), B
     println!("  Trigger when SPY changes > 2%");
 
     // Create percent change condition: trigger when SPY moves more than 2%
-    let condition = PercentChangeCondition::builder(756733, "SMART", 2.0).trigger_above().build();
+    let condition = PercentChangeCondition::builder(756733, "SMART")
+        .greater_than(2.0)
+        .build();
 
     let contract = Contract::stock("SPY").build();
     let mut order = order_builder::market_order(Action::Sell, 10.0);
@@ -230,8 +234,8 @@ fn test_multiple_conditions(client: &Client, order_id: i32) -> Result<(), Box<dy
     println!("  2. AND after 15:00:00 today");
 
     // Price condition
-    let price_condition = PriceCondition::builder(265598, "SMART", 180.0)
-        .trigger_above()
+    let price_condition = PriceCondition::builder(265598, "SMART")
+        .greater_than(180.0)
         .conjunction(true) // AND with next condition
         .build();
 
@@ -239,8 +243,8 @@ fn test_multiple_conditions(client: &Client, order_id: i32) -> Result<(), Box<dy
     use time::OffsetDateTime;
     let now = OffsetDateTime::now_utc();
     let time_str = format!("{:04}{:02}{:02} 15:00:00", now.year(), now.month() as u8, now.day());
-    let time_condition = TimeCondition::builder(&time_str)
-        .trigger_after()
+    let time_condition = TimeCondition::builder()
+        .greater_than(time_str)
         .conjunction(true) // AND logic
         .build();
 

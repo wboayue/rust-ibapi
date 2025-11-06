@@ -430,6 +430,96 @@ impl<'a, C> OrderBuilder<'a, C> {
         BracketOrderBuilder::new(self)
     }
 
+    // Conditional orders
+
+    /// Add a condition to the order.
+    ///
+    /// The first condition is always treated as AND. Use `and_condition()` or `or_condition()`
+    /// for subsequent conditions to specify the logical relationship.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::client::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// use ibapi::orders::builder::price;
+    ///
+    /// let order_id = client.order(&contract)
+    ///     .buy(100)
+    ///     .market()
+    ///     .condition(price(265598, "SMART").greater_than(150.0))
+    ///     .submit().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn condition(mut self, condition: impl Into<OrderCondition>) -> Self {
+        let mut cond = condition.into();
+        set_conjunction(&mut cond, true);
+        self.conditions.push(cond);
+        self
+    }
+
+    /// Add a condition that must be met along with previous conditions (AND logic).
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::client::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// use ibapi::orders::builder::{price, margin};
+    ///
+    /// let order_id = client.order(&contract)
+    ///     .buy(100)
+    ///     .market()
+    ///     .condition(price(265598, "SMART").greater_than(150.0))
+    ///     .and_condition(margin().greater_than(30))
+    ///     .submit().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn and_condition(mut self, condition: impl Into<OrderCondition>) -> Self {
+        if let Some(prev) = self.conditions.last_mut() {
+            set_conjunction(prev, true);
+        }
+        self.conditions.push(condition.into());
+        self
+    }
+
+    /// Add a condition where either this OR previous conditions trigger the order (OR logic).
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::client::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// use ibapi::orders::builder::{price, volume};
+    ///
+    /// let order_id = client.order(&contract)
+    ///     .buy(100)
+    ///     .market()
+    ///     .condition(price(265598, "SMART").less_than(100.0))
+    ///     .or_condition(volume(265598, "SMART").greater_than(50_000_000))
+    ///     .submit().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn or_condition(mut self, condition: impl Into<OrderCondition>) -> Self {
+        if let Some(prev) = self.conditions.last_mut() {
+            set_conjunction(prev, false);
+        }
+        self.conditions.push(condition.into());
+        self
+    }
+
     // Algorithmic trading
 
     /// Set algorithm strategy
@@ -774,6 +864,18 @@ impl<'a, C> OrderBuilder<'a, C> {
         }
 
         Ok(order)
+    }
+}
+
+/// Helper function to set conjunction flag on OrderCondition enum
+fn set_conjunction(condition: &mut OrderCondition, is_conjunction: bool) {
+    match condition {
+        OrderCondition::Price(c) => c.is_conjunction = is_conjunction,
+        OrderCondition::Time(c) => c.is_conjunction = is_conjunction,
+        OrderCondition::Margin(c) => c.is_conjunction = is_conjunction,
+        OrderCondition::Execution(c) => c.is_conjunction = is_conjunction,
+        OrderCondition::Volume(c) => c.is_conjunction = is_conjunction,
+        OrderCondition::PercentChange(c) => c.is_conjunction = is_conjunction,
     }
 }
 
