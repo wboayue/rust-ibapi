@@ -333,11 +333,12 @@ Monitor price movements and trigger when threshold is crossed:
 
 ```rust
 use ibapi::orders::builder::price;
+use ibapi::orders::conditions::TriggerMethod;
 
 // Trigger when price goes above $150
 let condition = price(265598, "SMART")
     .greater_than(150.0)
-    .trigger_method(2);  // 0=Default, 2=Last price, 4=Bid/Ask, 8=Midpoint
+    .trigger_method(TriggerMethod::Last);
 ```
 
 **Parameters:**
@@ -345,7 +346,16 @@ let condition = price(265598, "SMART")
 - `exchange` - Exchange to monitor (e.g., "SMART", "NASDAQ")
 - `.greater_than(price)` - Trigger when price rises above threshold
 - `.less_than(price)` - Trigger when price falls below threshold
-- `.trigger_method(n)` - Which price to use (0-8)
+- `.trigger_method(method)` - Which price to use (see [`TriggerMethod`])
+
+**Available Trigger Methods:**
+- `TriggerMethod::Default` - Last for most securities, double bid/ask for OTC and options
+- `TriggerMethod::DoubleBidAsk` - Two consecutive bid or ask prices
+- `TriggerMethod::Last` - Last traded price
+- `TriggerMethod::DoubleLast` - Two consecutive last prices
+- `TriggerMethod::BidAsk` - Current bid or ask price
+- `TriggerMethod::LastOrBidAsk` - Last price or bid/ask if no last price
+- `TriggerMethod::Midpoint` - Mid-point between bid and ask
 
 #### Time Condition
 

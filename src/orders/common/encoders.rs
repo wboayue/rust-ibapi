@@ -665,14 +665,14 @@ pub(crate) mod tests {
 
     #[test]
     fn test_encode_price_condition() {
-        use crate::orders::conditions::PriceCondition;
+        use crate::orders::conditions::{PriceCondition, TriggerMethod};
         use crate::orders::OrderCondition;
 
         let condition = OrderCondition::Price(PriceCondition {
             contract_id: 12345,
             exchange: "NASDAQ".to_string(),
             price: 150.0,
-            trigger_method: 1,
+            trigger_method: TriggerMethod::DoubleBidAsk,
             is_more: true,
             is_conjunction: false,
         });

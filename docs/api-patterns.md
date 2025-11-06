@@ -190,7 +190,7 @@ let order = order_builder::limit_order(Action::Buy, 50.0, 452.0)
 Each condition builder uses the type-state pattern to ensure valid configuration:
 
 ```rust
-use ibapi::orders::conditions::PriceCondition;
+use ibapi::orders::conditions::{PriceCondition, TriggerMethod};
 
 // Builder starts with required fields only
 let builder = PriceCondition::builder(265598, "SMART");
@@ -202,8 +202,8 @@ let condition = builder.less_than(140.0);     // Sets price + direction
 
 // Optional configuration
 let condition = condition
-    .trigger_method(2)      // Use last price
-    .conjunction(true);     // AND with next condition
+    .trigger_method(TriggerMethod::Last)  // Use last price
+    .conjunction(true);                   // AND with next condition
 
 // Convert to OrderCondition
 let condition = condition.build();

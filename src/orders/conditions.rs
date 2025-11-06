@@ -5,6 +5,55 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Price evaluation method for price conditions.
+///
+/// Determines which price feed to use when evaluating price conditions.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TriggerMethod {
+    /// Default method (last for most securities, double bid/ask for OTC and options)
+    #[default]
+    Default = 0,
+    /// Two consecutive bid or ask prices
+    DoubleBidAsk = 1,
+    /// Last traded price
+    Last = 2,
+    /// Two consecutive last prices
+    DoubleLast = 3,
+    /// Current bid or ask price
+    BidAsk = 4,
+    /// Last price or bid/ask if no last price available
+    LastOrBidAsk = 7,
+    /// Mid-point between bid and ask
+    Midpoint = 8,
+}
+
+impl From<TriggerMethod> for i32 {
+    fn from(method: TriggerMethod) -> i32 {
+        method as i32
+    }
+}
+
+impl From<i32> for TriggerMethod {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => TriggerMethod::Default,
+            1 => TriggerMethod::DoubleBidAsk,
+            2 => TriggerMethod::Last,
+            3 => TriggerMethod::DoubleLast,
+            4 => TriggerMethod::BidAsk,
+            7 => TriggerMethod::LastOrBidAsk,
+            8 => TriggerMethod::Midpoint,
+            _ => TriggerMethod::Default,
+        }
+    }
+}
+
+impl crate::ToField for TriggerMethod {
+    fn to_field(&self) -> String {
+        i32::from(*self).to_string()
+    }
+}
+
 // ============================================================================
 // Condition Structs (to be created by Unit 1.1)
 // ============================================================================
@@ -33,12 +82,12 @@ use serde::{Deserialize, Serialize};
 /// // Trigger when AAPL (contract ID 265598) goes above $150 on SMART
 /// let condition = PriceCondition::builder(265598, "SMART")
 ///     .greater_than(150.0)
-///     .trigger_method(2)  // Use last price
+///     .trigger_method(TriggerMethod::Last)
 ///     .build();
 ///
 /// let order_condition = OrderCondition::Price(condition);
 /// ```
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PriceCondition {
     /// Contract identifier for the instrument to monitor.
     /// Use contract_details() to obtain the contract_id for a symbol.
@@ -47,19 +96,42 @@ pub struct PriceCondition {
     pub exchange: String,
     /// Trigger price threshold.
     pub price: f64,
-    /// Method for price evaluation:
-    /// - 0: Default (last for most securities, double bid/ask for OTC and options)
-    /// - 1: Double bid/ask (two consecutive bid or ask prices)
-    /// - 2: Last price
-    /// - 3: Double last (two consecutive last prices)
-    /// - 4: Bid/Ask
-    /// - 7: Last or bid/ask
-    /// - 8: Mid-point
-    pub trigger_method: i32,
+    /// Method for price evaluation.
+    #[serde(serialize_with = "serialize_trigger_method", deserialize_with = "deserialize_trigger_method")]
+    pub trigger_method: TriggerMethod,
     /// True to trigger when price goes above threshold, false for below.
     pub is_more: bool,
     /// True for AND condition (all conditions must be met), false for OR condition (any condition triggers).
     pub is_conjunction: bool,
+}
+
+impl Default for PriceCondition {
+    fn default() -> Self {
+        Self {
+            contract_id: 0,
+            exchange: String::new(),
+            price: 0.0,
+            trigger_method: TriggerMethod::Default,
+            is_more: true,
+            is_conjunction: true,
+        }
+    }
+}
+
+// Serde helpers for TriggerMethod
+fn serialize_trigger_method<S>(method: &TriggerMethod, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_i32((*method).into())
+}
+
+fn deserialize_trigger_method<'de, D>(deserializer: D) -> Result<TriggerMethod, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = i32::deserialize(deserializer)?;
+    Ok(value.into())
 }
 
 /// Time-based condition that activates an order at a specific date and time.
@@ -277,11 +349,11 @@ pub struct PercentChangeCondition {
 /// # Example
 ///
 /// ```no_run
-/// use ibapi::orders::conditions::PriceCondition;
+/// use ibapi::orders::conditions::{PriceCondition, TriggerMethod};
 ///
 /// let condition = PriceCondition::builder(12345, "NASDAQ")
 ///     .greater_than(150.0)
-///     .trigger_method(1)
+///     .trigger_method(TriggerMethod::Last)
 ///     .conjunction(false)
 ///     .build();
 /// ```
@@ -290,7 +362,7 @@ pub struct PriceConditionBuilder {
     contract_id: i32,
     exchange: String,
     price: Option<f64>,
-    trigger_method: i32,
+    trigger_method: TriggerMethod,
     is_more: bool,
     is_conjunction: bool,
 }
@@ -318,10 +390,10 @@ impl PriceConditionBuilder {
         Self {
             contract_id,
             exchange: exchange.into(),
-            price: None,          // Must be set by greater_than/less_than
-            trigger_method: 0,    // Default: last price
-            is_more: true,        // Default: trigger when price goes above
-            is_conjunction: true, // Default: AND condition
+            price: None,                            // Must be set by greater_than/less_than
+            trigger_method: TriggerMethod::Default, // Default trigger method
+            is_more: true,                          // Default: trigger when price goes above
+            is_conjunction: true,                   // Default: AND condition
         }
     }
 
@@ -341,16 +413,17 @@ impl PriceConditionBuilder {
 
     /// Set the trigger method for price evaluation.
     ///
-    /// # Parameters
+    /// # Example
     ///
-    /// - `0`: Default (last price)
-    /// - `1`: Double bid/ask
-    /// - `2`: Last price
-    /// - `3`: Double last price
-    /// - `4`: Bid/Ask
-    /// - `7`: Last or bid/ask
-    /// - `8`: Mid-point
-    pub fn trigger_method(mut self, method: i32) -> Self {
+    /// ```no_run
+    /// use ibapi::orders::conditions::{PriceCondition, TriggerMethod};
+    ///
+    /// let condition = PriceCondition::builder(12345, "NASDAQ")
+    ///     .greater_than(150.0)
+    ///     .trigger_method(TriggerMethod::Last)
+    ///     .build();
+    /// ```
+    pub fn trigger_method(mut self, method: TriggerMethod) -> Self {
         self.trigger_method = method;
         self
     }
@@ -819,14 +892,14 @@ mod tests {
     fn test_price_condition_builder() {
         let condition = PriceCondition::builder(12345, "NASDAQ")
             .greater_than(150.0)
-            .trigger_method(1)
+            .trigger_method(TriggerMethod::DoubleBidAsk)
             .conjunction(false)
             .build();
 
         assert_eq!(condition.contract_id, 12345);
         assert_eq!(condition.exchange, "NASDAQ");
         assert_eq!(condition.price, 150.0);
-        assert_eq!(condition.trigger_method, 1);
+        assert_eq!(condition.trigger_method, TriggerMethod::DoubleBidAsk);
         assert!(condition.is_more);
         assert!(!condition.is_conjunction);
     }
@@ -888,7 +961,7 @@ mod tests {
     fn test_default_values() {
         let condition = PriceCondition::builder(12345, "NASDAQ").greater_than(150.0).build();
 
-        assert_eq!(condition.trigger_method, 0);
+        assert_eq!(condition.trigger_method, TriggerMethod::Default);
         assert!(condition.is_more);
         assert!(condition.is_conjunction);
     }

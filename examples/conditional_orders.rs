@@ -30,6 +30,7 @@
 //! cargo build --features sync --example conditional_orders
 //! ```
 
+use ibapi::orders::conditions::TriggerMethod;
 use ibapi::orders::{
     order_builder, Action, ExecutionCondition, MarginCondition, OrderCondition, PercentChangeCondition, PriceCondition, TimeCondition,
     VolumeCondition,
@@ -48,7 +49,7 @@ fn main() {
         "SMART", // Smart routing
     )
     .greater_than(350.0) // Trigger price
-    .trigger_method(2) // Use last price
+    .trigger_method(TriggerMethod::Last) // Use last price
     .build();
 
     let mut order = order_builder::market_order(Action::Buy, 100.0);
