@@ -146,16 +146,8 @@ pub struct Order {
     pub display_size: Option<i32>,
     /// Specifies how Simulated Stop, Stop-Limit and Trailing Stop orders are triggered.
     ///
-    /// Valid values are:
-    /// - `0` - The default value. The "double bid/ask" function will be used for orders for OTC stocks and US options.
-    ///   All other orders will used the "last" function.
-    /// - `1` - Use "double bid/ask" function, where stop orders are triggered based on two consecutive bid or ask prices.
-    /// - `2` - "last" function, where stop orders are triggered based on the last price.
-    /// - `3` - Double last function.
-    /// - `4` - Bid/ask function.
-    /// - `7` - Last or bid/ask function.
-    /// - `8` - Mid-point function.    
-    pub trigger_method: i32,
+    /// See [`conditions::TriggerMethod`] for available options.
+    pub trigger_method: conditions::TriggerMethod,
     /// If set to true, allows orders to also trigger or fill outside of regular trading hours.
     pub outside_rth: bool,
     /// If set to true, the order will not be visible when viewing the market depth. This option only applies to orders routed to the NASDAQ exchange.
@@ -531,7 +523,7 @@ impl Default for Order {
             block_order: false,
             sweep_to_fill: false,
             display_size: Some(0), // TODO - default to None?
-            trigger_method: 0,
+            trigger_method: conditions::TriggerMethod::Default,
             outside_rth: false,
             hidden: false,
             good_after_time: "".to_owned(),

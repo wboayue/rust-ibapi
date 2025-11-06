@@ -390,6 +390,7 @@ mod tests {
     use std::sync::{Arc, RwLock};
 
     use crate::contracts::{ComboLeg, Contract, Currency, Exchange, SecurityType, Symbol};
+    use crate::orders::conditions::TriggerMethod;
     use crate::orders::{Action, Liquidity};
     use crate::stubs::MessageBusStub;
 
@@ -502,7 +503,7 @@ mod tests {
             assert_eq!(order.min_qty, None, "order.min_qty");
             assert_eq!(order.oca_type, 3, "order.oca_type");
             assert_eq!(order.parent_id, 0, "order.parent_id");
-            assert_eq!(order.trigger_method, 0, "order.trigger_method");
+            assert_eq!(order.trigger_method, TriggerMethod::Default, "order.trigger_method");
             assert_eq!(order.volatility, None, "order.volatility");
             assert_eq!(order.volatility_type, Some(0), "order.volatility_type");
             assert_eq!(order.delta_neutral_order_type, "None", "order.delta_neutral_order_type");
@@ -847,7 +848,7 @@ mod tests {
             assert_eq!(order.all_or_none, false, "order.all_or_none");
             assert_eq!(order.min_qty, None, "order.min_qty");
             assert_eq!(order.oca_type, 3, "order.oca_type");
-            assert_eq!(order.trigger_method, 0, "order.trigger_method");
+            assert_eq!(order.trigger_method, TriggerMethod::Default, "order.trigger_method");
             assert_eq!(order.volatility, None, "order.volatility");
             assert_eq!(order.volatility_type, Some(0), "order.volatility_type");
             assert_eq!(order.delta_neutral_order_type, "None", "order.delta_neutral_order_type");

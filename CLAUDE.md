@@ -52,6 +52,7 @@ cargo test --all-features
 3. **Follow module structure**: Use the common pattern for shared logic between sync/async
 4. **Minimal comments**: Keep comments concise, avoid stating the obvious
 5. **Run quality checks**: Before committing, run `cargo fmt`, `cargo clippy --features sync`, and `cargo clippy --features async`
+6. **Fluent conditional orders**: Use helper functions (`price()`, `time()`, `margin()`, etc.) and method chaining (`.condition()`, `.and_condition()`, `.or_condition()`) for building conditional orders. See [docs/order-types.md](docs/order-types.md#conditional-orders-with-conditions) and [docs/api-patterns.md](docs/api-patterns.md#conditional-order-builder-pattern) for details
 
 ## Connection Settings
 

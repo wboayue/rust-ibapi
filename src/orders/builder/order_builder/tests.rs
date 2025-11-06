@@ -877,3 +877,239 @@ fn test_stop_with_protection_buy() {
     assert_eq!(order.total_quantity, 50.0);
     assert_eq!(order.aux_price, Some(105.00));
 }
+
+// ===== Conditional Order Tests =====
+
+#[test]
+fn test_single_price_condition() {
+    use crate::orders::builder::price;
+    use crate::orders::OrderCondition;
+
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let builder = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .market()
+        .condition(price(265598, "SMART").greater_than(150.0));
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.conditions.len(), 1);
+
+    match &order.conditions[0] {
+        OrderCondition::Price(c) => {
+            assert_eq!(c.contract_id, 265598);
+            assert_eq!(c.exchange, "SMART");
+            assert_eq!(c.price, 150.0);
+            assert!(c.is_more);
+            assert!(c.is_conjunction);
+        }
+        _ => panic!("Expected Price condition"),
+    }
+}
+
+#[test]
+fn test_multiple_and_conditions() {
+    use crate::orders::builder::{margin, price, time};
+
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let builder = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .market()
+        .condition(price(265598, "SMART").greater_than(150.0))
+        .and_condition(margin().greater_than(30))
+        .and_condition(time().greater_than("20251230 14:30:00 US/Eastern"));
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.conditions.len(), 3);
+
+    // All conditions should have is_conjunction = true for AND logic
+    for cond in &order.conditions {
+        match cond {
+            crate::orders::OrderCondition::Price(c) => assert!(c.is_conjunction),
+            crate::orders::OrderCondition::Margin(c) => assert!(c.is_conjunction),
+            crate::orders::OrderCondition::Time(c) => assert!(c.is_conjunction),
+            _ => {}
+        }
+    }
+}
+
+#[test]
+fn test_multiple_or_conditions() {
+    use crate::orders::builder::{price, volume};
+
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let builder = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .market()
+        .condition(price(265598, "SMART").less_than(100.0))
+        .or_condition(volume(265598, "SMART").greater_than(50_000_000));
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.conditions.len(), 2);
+
+    // First condition should have is_conjunction = false for OR with next
+    match &order.conditions[0] {
+        crate::orders::OrderCondition::Price(c) => assert!(!c.is_conjunction),
+        _ => panic!("Expected Price condition"),
+    }
+}
+
+#[test]
+fn test_mixed_and_or_conditions() {
+    use crate::orders::builder::{margin, price, time, volume};
+
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    // (price > 10 AND margin < 20) OR time > X OR volume > Y
+    let builder = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .market()
+        .condition(price(123445, "SMART").greater_than(10.0))
+        .and_condition(margin().less_than(20))
+        .or_condition(time().greater_than("20251010 09:30:00 US/Eastern"))
+        .or_condition(volume(123445, "SMART").greater_than(10_000_000));
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.conditions.len(), 4);
+
+    // Check conjunction flags: AND, OR, OR pattern
+    match &order.conditions[0] {
+        crate::orders::OrderCondition::Price(c) => assert!(c.is_conjunction), // AND with next
+        _ => panic!("Expected Price condition"),
+    }
+    match &order.conditions[1] {
+        crate::orders::OrderCondition::Margin(c) => assert!(!c.is_conjunction), // OR with next
+        _ => panic!("Expected Margin condition"),
+    }
+    match &order.conditions[2] {
+        crate::orders::OrderCondition::Time(c) => assert!(!c.is_conjunction), // OR with next
+        _ => panic!("Expected Time condition"),
+    }
+}
+
+#[test]
+fn test_all_condition_types() {
+    use crate::orders::builder::{execution, margin, percent_change, price, time, volume};
+
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let builder = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .market()
+        .condition(price(265598, "SMART").greater_than(150.0))
+        .and_condition(time().greater_than("20251230 14:30:00 US/Eastern"))
+        .and_condition(margin().less_than(30))
+        .and_condition(execution("MSFT", "STK", "SMART"))
+        .and_condition(volume(76792991, "SMART").greater_than(50_000_000))
+        .and_condition(percent_change(756733, "SMART").greater_than(2.0));
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.conditions.len(), 6);
+}
+
+#[test]
+fn test_condition_builder_conversion() {
+    use crate::orders::builder::price;
+
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    // Test that condition builder auto-converts to OrderCondition via Into
+    let builder = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .market()
+        .condition(price(265598, "SMART").greater_than(150.0)); // Builder should auto-convert
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.conditions.len(), 1);
+}
+
+#[test]
+fn test_condition_with_existing_order_conditions() {
+    use crate::orders::builder::price;
+    use crate::orders::conditions::MarginCondition;
+    use crate::orders::OrderCondition;
+
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    // Test mixing fluent API with manual conditions
+    let mut builder = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .market()
+        .condition(price(265598, "SMART").greater_than(150.0));
+
+    // Manually add another condition
+    builder.conditions.push(OrderCondition::Margin(MarginCondition {
+        percent: 25,
+        is_more: false,
+        is_conjunction: true,
+    }));
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.conditions.len(), 2);
+}
+
+#[test]
+fn test_less_than_conditions() {
+    use crate::orders::builder::{margin, percent_change, price, time, volume};
+
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let builder = OrderBuilder::new(&client, &contract)
+        .sell(100)
+        .market()
+        .condition(price(265598, "SMART").less_than(140.0))
+        .and_condition(margin().less_than(25))
+        .and_condition(volume(265598, "SMART").less_than(1_000_000))
+        .and_condition(percent_change(265598, "SMART").less_than(-2.0))
+        .and_condition(time().less_than("20251230 09:30:00 US/Eastern"));
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.conditions.len(), 5);
+
+    // Verify all are less_than (is_more = false)
+    for cond in &order.conditions {
+        match cond {
+            crate::orders::OrderCondition::Price(c) => assert!(!c.is_more),
+            crate::orders::OrderCondition::Margin(c) => assert!(!c.is_more),
+            crate::orders::OrderCondition::Volume(c) => assert!(!c.is_more),
+            crate::orders::OrderCondition::PercentChange(c) => assert!(!c.is_more),
+            crate::orders::OrderCondition::Time(c) => assert!(!c.is_more),
+            _ => {}
+        }
+    }
+}
+
+#[test]
+fn test_execution_condition_no_threshold() {
+    use crate::orders::builder::execution;
+
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let builder = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .market()
+        .condition(execution("TSLA", "STK", "SMART"));
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.conditions.len(), 1);
+
+    match &order.conditions[0] {
+        crate::orders::OrderCondition::Execution(c) => {
+            assert_eq!(c.symbol, "TSLA");
+            assert_eq!(c.security_type, "STK");
+            assert_eq!(c.exchange, "SMART");
+        }
+        _ => panic!("Expected Execution condition"),
+    }
+}

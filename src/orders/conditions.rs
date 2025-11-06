@@ -5,6 +5,55 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Price evaluation method for price conditions.
+///
+/// Determines which price feed to use when evaluating price conditions.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TriggerMethod {
+    /// Default method (last for most securities, double bid/ask for OTC and options)
+    #[default]
+    Default = 0,
+    /// Two consecutive bid or ask prices
+    DoubleBidAsk = 1,
+    /// Last traded price
+    Last = 2,
+    /// Two consecutive last prices
+    DoubleLast = 3,
+    /// Current bid or ask price
+    BidAsk = 4,
+    /// Last price or bid/ask if no last price available
+    LastOrBidAsk = 7,
+    /// Mid-point between bid and ask
+    Midpoint = 8,
+}
+
+impl From<TriggerMethod> for i32 {
+    fn from(method: TriggerMethod) -> i32 {
+        method as i32
+    }
+}
+
+impl From<i32> for TriggerMethod {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => TriggerMethod::Default,
+            1 => TriggerMethod::DoubleBidAsk,
+            2 => TriggerMethod::Last,
+            3 => TriggerMethod::DoubleLast,
+            4 => TriggerMethod::BidAsk,
+            7 => TriggerMethod::LastOrBidAsk,
+            8 => TriggerMethod::Midpoint,
+            _ => TriggerMethod::Default,
+        }
+    }
+}
+
+impl crate::ToField for TriggerMethod {
+    fn to_field(&self) -> String {
+        i32::from(*self).to_string()
+    }
+}
+
 // ============================================================================
 // Condition Structs (to be created by Unit 1.1)
 // ============================================================================
@@ -27,18 +76,18 @@ use serde::{Deserialize, Serialize};
 /// # Example
 ///
 /// ```no_run
-/// use ibapi::orders::conditions::PriceCondition;
+/// use ibapi::orders::conditions::{PriceCondition, TriggerMethod};
 /// use ibapi::orders::OrderCondition;
 ///
 /// // Trigger when AAPL (contract ID 265598) goes above $150 on SMART
-/// let condition = PriceCondition::builder(265598, "SMART", 150.0)
-///     .trigger_above()
-///     .trigger_method(2)  // Use last price
+/// let condition = PriceCondition::builder(265598, "SMART")
+///     .greater_than(150.0)
+///     .trigger_method(TriggerMethod::Last)
 ///     .build();
 ///
 /// let order_condition = OrderCondition::Price(condition);
 /// ```
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PriceCondition {
     /// Contract identifier for the instrument to monitor.
     /// Use contract_details() to obtain the contract_id for a symbol.
@@ -47,19 +96,42 @@ pub struct PriceCondition {
     pub exchange: String,
     /// Trigger price threshold.
     pub price: f64,
-    /// Method for price evaluation:
-    /// - 0: Default (last for most securities, double bid/ask for OTC and options)
-    /// - 1: Double bid/ask (two consecutive bid or ask prices)
-    /// - 2: Last price
-    /// - 3: Double last (two consecutive last prices)
-    /// - 4: Bid/Ask
-    /// - 7: Last or bid/ask
-    /// - 8: Mid-point
-    pub trigger_method: i32,
+    /// Method for price evaluation.
+    #[serde(serialize_with = "serialize_trigger_method", deserialize_with = "deserialize_trigger_method")]
+    pub trigger_method: TriggerMethod,
     /// True to trigger when price goes above threshold, false for below.
     pub is_more: bool,
     /// True for AND condition (all conditions must be met), false for OR condition (any condition triggers).
     pub is_conjunction: bool,
+}
+
+impl Default for PriceCondition {
+    fn default() -> Self {
+        Self {
+            contract_id: 0,
+            exchange: String::new(),
+            price: 0.0,
+            trigger_method: TriggerMethod::Default,
+            is_more: true,
+            is_conjunction: true,
+        }
+    }
+}
+
+// Serde helpers for TriggerMethod
+fn serialize_trigger_method<S>(method: &TriggerMethod, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_i32((*method).into())
+}
+
+fn deserialize_trigger_method<'de, D>(deserializer: D) -> Result<TriggerMethod, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = i32::deserialize(deserializer)?;
+    Ok(value.into())
 }
 
 /// Time-based condition that activates an order at a specific date and time.
@@ -89,8 +161,8 @@ pub struct PriceCondition {
 /// use ibapi::orders::OrderCondition;
 ///
 /// // Trigger after 2:30 PM Eastern Time on December 30, 2025
-/// let condition = TimeCondition::builder("20251230 14:30:00 US/Eastern")
-///     .trigger_after()
+/// let condition = TimeCondition::builder()
+///     .greater_than("20251230 14:30:00 US/Eastern")
 ///     .build();
 ///
 /// let order_condition = OrderCondition::Time(condition);
@@ -129,8 +201,8 @@ pub struct TimeCondition {
 /// use ibapi::orders::OrderCondition;
 ///
 /// // Trigger when margin cushion falls below 30%
-/// let condition = MarginCondition::builder(30)
-///     .trigger_below()
+/// let condition = MarginCondition::builder()
+///     .less_than(30)
 ///     .build();
 ///
 /// let order_condition = OrderCondition::Margin(condition);
@@ -204,8 +276,8 @@ pub struct ExecutionCondition {
 /// use ibapi::orders::OrderCondition;
 ///
 /// // Trigger when TSLA volume exceeds 50 million shares
-/// let condition = VolumeCondition::builder(76792991, "SMART", 50_000_000)
-///     .trigger_above()
+/// let condition = VolumeCondition::builder(76792991, "SMART")
+///     .greater_than(50_000_000)
 ///     .build();
 ///
 /// let order_condition = OrderCondition::Volume(condition);
@@ -246,9 +318,9 @@ pub struct VolumeCondition {
 /// use ibapi::orders::conditions::PercentChangeCondition;
 /// use ibapi::orders::OrderCondition;
 ///
-/// // Trigger when SPY moves more than 2% in either direction from open
-/// let condition = PercentChangeCondition::builder(756733, "SMART", 2.0)
-///     .trigger_above()
+/// // Trigger when SPY moves more than 2% upward from open
+/// let condition = PercentChangeCondition::builder(756733, "SMART")
+///     .greater_than(2.0)
 ///     .build();
 ///
 /// let order_condition = OrderCondition::PercentChange(condition);
@@ -277,11 +349,11 @@ pub struct PercentChangeCondition {
 /// # Example
 ///
 /// ```no_run
-/// use ibapi::orders::conditions::PriceCondition;
+/// use ibapi::orders::conditions::{PriceCondition, TriggerMethod};
 ///
-/// let condition = PriceCondition::builder(12345, "NASDAQ", 150.0)
-///     .trigger_above()
-///     .trigger_method(1)
+/// let condition = PriceCondition::builder(12345, "NASDAQ")
+///     .greater_than(150.0)
+///     .trigger_method(TriggerMethod::Last)
 ///     .conjunction(false)
 ///     .build();
 /// ```
@@ -289,8 +361,8 @@ pub struct PercentChangeCondition {
 pub struct PriceConditionBuilder {
     contract_id: i32,
     exchange: String,
-    price: f64,
-    trigger_method: i32,
+    price: Option<f64>,
+    trigger_method: TriggerMethod,
     is_more: bool,
     is_conjunction: bool,
 }
@@ -302,9 +374,8 @@ impl PriceCondition {
     ///
     /// - `contract_id`: Contract identifier for the instrument to monitor
     /// - `exchange`: Exchange where the price is monitored
-    /// - `price`: Trigger price threshold
-    pub fn builder(contract_id: i32, exchange: impl Into<String>, price: f64) -> PriceConditionBuilder {
-        PriceConditionBuilder::new(contract_id, exchange, price)
+    pub fn builder(contract_id: i32, exchange: impl Into<String>) -> PriceConditionBuilder {
+        PriceConditionBuilder::new(contract_id, exchange)
     }
 }
 
@@ -315,43 +386,45 @@ impl PriceConditionBuilder {
     ///
     /// - `contract_id`: Contract identifier for the instrument to monitor
     /// - `exchange`: Exchange where the price is monitored
-    /// - `price`: Trigger price threshold
-    pub fn new(contract_id: i32, exchange: impl Into<String>, price: f64) -> Self {
+    pub fn new(contract_id: i32, exchange: impl Into<String>) -> Self {
         Self {
             contract_id,
             exchange: exchange.into(),
-            price,
-            trigger_method: 0,    // Default: last price
-            is_more: true,        // Default: trigger when price goes above
-            is_conjunction: true, // Default: AND condition
+            price: None,                            // Must be set by greater_than/less_than
+            trigger_method: TriggerMethod::Default, // Default trigger method
+            is_more: true,                          // Default: trigger when price goes above
+            is_conjunction: true,                   // Default: AND condition
         }
     }
 
-    /// Set the trigger method for price evaluation.
-    ///
-    /// # Parameters
-    ///
-    /// - `0`: Default (last price)
-    /// - `1`: Double bid/ask
-    /// - `2`: Last price
-    /// - `3`: Double last price
-    /// - `4`: Bid/Ask
-    /// - `7`: Last or bid/ask
-    /// - `8`: Mid-point
-    pub fn trigger_method(mut self, method: i32) -> Self {
-        self.trigger_method = method;
-        self
-    }
-
-    /// Trigger when price goes above the threshold (default).
-    pub fn trigger_above(mut self) -> Self {
+    /// Set trigger when price is greater than the specified value.
+    pub fn greater_than(mut self, price: f64) -> Self {
+        self.price = Some(price);
         self.is_more = true;
         self
     }
 
-    /// Trigger when price goes below the threshold.
-    pub fn trigger_below(mut self) -> Self {
+    /// Set trigger when price is less than the specified value.
+    pub fn less_than(mut self, price: f64) -> Self {
+        self.price = Some(price);
         self.is_more = false;
+        self
+    }
+
+    /// Set the trigger method for price evaluation.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use ibapi::orders::conditions::{PriceCondition, TriggerMethod};
+    ///
+    /// let condition = PriceCondition::builder(12345, "NASDAQ")
+    ///     .greater_than(150.0)
+    ///     .trigger_method(TriggerMethod::Last)
+    ///     .build();
+    /// ```
+    pub fn trigger_method(mut self, method: TriggerMethod) -> Self {
+        self.trigger_method = method;
         self
     }
 
@@ -368,7 +441,9 @@ impl PriceConditionBuilder {
         PriceCondition {
             contract_id: self.contract_id,
             exchange: self.exchange,
-            price: self.price,
+            price: self
+                .price
+                .expect("PriceConditionBuilder requires a price threshold; call greater_than() or less_than() before build()"),
             trigger_method: self.trigger_method,
             is_more: self.is_more,
             is_conjunction: self.is_conjunction,
@@ -383,50 +458,52 @@ impl PriceConditionBuilder {
 /// ```no_run
 /// use ibapi::orders::conditions::TimeCondition;
 ///
-/// let condition = TimeCondition::builder("20251230 23:59:59 UTC")
-///     .trigger_after()
+/// let condition = TimeCondition::builder()
+///     .greater_than("20251230 23:59:59 UTC")
 ///     .build();
 /// ```
 #[derive(Debug, Clone)]
 pub struct TimeConditionBuilder {
-    time: String,
+    time: Option<String>,
     is_more: bool,
     is_conjunction: bool,
 }
 
 impl TimeCondition {
     /// Create a builder for a time condition.
-    ///
-    /// # Parameters
-    ///
-    /// - `time`: Time in format "YYYYMMDD HH:MM:SS TZ"
-    pub fn builder(time: impl Into<String>) -> TimeConditionBuilder {
-        TimeConditionBuilder::new(time)
+    pub fn builder() -> TimeConditionBuilder {
+        TimeConditionBuilder::new()
     }
 }
 
 impl TimeConditionBuilder {
     /// Create a new time condition builder.
-    ///
-    /// # Parameters
-    ///
-    /// - `time`: Time in format "YYYYMMDD HH:MM:SS TZ"
-    pub fn new(time: impl Into<String>) -> Self {
+    pub fn new() -> Self {
         Self {
-            time: time.into(),
+            time: None,           // Must be set by greater_than/less_than
             is_more: true,        // Default: trigger after time
             is_conjunction: true, // Default: AND condition
         }
     }
 
-    /// Trigger after the specified time (default).
-    pub fn trigger_after(mut self) -> Self {
+    /// Set trigger when time is greater than (after) the specified time.
+    ///
+    /// # Parameters
+    ///
+    /// - `time`: Time in format "YYYYMMDD HH:MM:SS TZ"
+    pub fn greater_than(mut self, time: impl Into<String>) -> Self {
+        self.time = Some(time.into());
         self.is_more = true;
         self
     }
 
-    /// Trigger before the specified time.
-    pub fn trigger_before(mut self) -> Self {
+    /// Set trigger when time is less than (before) the specified time.
+    ///
+    /// # Parameters
+    ///
+    /// - `time`: Time in format "YYYYMMDD HH:MM:SS TZ"
+    pub fn less_than(mut self, time: impl Into<String>) -> Self {
+        self.time = Some(time.into());
         self.is_more = false;
         self
     }
@@ -442,10 +519,18 @@ impl TimeConditionBuilder {
     /// Build the time condition.
     pub fn build(self) -> TimeCondition {
         TimeCondition {
-            time: self.time,
+            time: self
+                .time
+                .expect("TimeConditionBuilder requires a time value; call greater_than() or less_than() before build()"),
             is_more: self.is_more,
             is_conjunction: self.is_conjunction,
         }
+    }
+}
+
+impl Default for TimeConditionBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -456,50 +541,44 @@ impl TimeConditionBuilder {
 /// ```no_run
 /// use ibapi::orders::conditions::MarginCondition;
 ///
-/// let condition = MarginCondition::builder(30)
-///     .trigger_below()
+/// let condition = MarginCondition::builder()
+///     .less_than(30)
 ///     .build();
 /// ```
 #[derive(Debug, Clone)]
 pub struct MarginConditionBuilder {
-    percent: i32,
+    percent: Option<i32>,
     is_more: bool,
     is_conjunction: bool,
 }
 
 impl MarginCondition {
     /// Create a builder for a margin cushion condition.
-    ///
-    /// # Parameters
-    ///
-    /// - `percent`: Margin cushion percentage threshold
-    pub fn builder(percent: i32) -> MarginConditionBuilder {
-        MarginConditionBuilder::new(percent)
+    pub fn builder() -> MarginConditionBuilder {
+        MarginConditionBuilder::new()
     }
 }
 
 impl MarginConditionBuilder {
     /// Create a new margin condition builder.
-    ///
-    /// # Parameters
-    ///
-    /// - `percent`: Margin cushion percentage threshold
-    pub fn new(percent: i32) -> Self {
+    pub fn new() -> Self {
         Self {
-            percent,
+            percent: None,        // Must be set by greater_than/less_than
             is_more: true,        // Default: trigger when above threshold
             is_conjunction: true, // Default: AND condition
         }
     }
 
-    /// Trigger when margin cushion goes above the threshold (default).
-    pub fn trigger_above(mut self) -> Self {
+    /// Set trigger when margin cushion is greater than the specified percentage.
+    pub fn greater_than(mut self, percent: i32) -> Self {
+        self.percent = Some(percent);
         self.is_more = true;
         self
     }
 
-    /// Trigger when margin cushion goes below the threshold.
-    pub fn trigger_below(mut self) -> Self {
+    /// Set trigger when margin cushion is less than the specified percentage.
+    pub fn less_than(mut self, percent: i32) -> Self {
+        self.percent = Some(percent);
         self.is_more = false;
         self
     }
@@ -515,10 +594,18 @@ impl MarginConditionBuilder {
     /// Build the margin condition.
     pub fn build(self) -> MarginCondition {
         MarginCondition {
-            percent: self.percent,
+            percent: self
+                .percent
+                .expect("MarginConditionBuilder requires a percentage threshold; call greater_than() or less_than() before build()"),
             is_more: self.is_more,
             is_conjunction: self.is_conjunction,
         }
+    }
+}
+
+impl Default for MarginConditionBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -597,15 +684,15 @@ impl ExecutionConditionBuilder {
 /// ```no_run
 /// use ibapi::orders::conditions::VolumeCondition;
 ///
-/// let condition = VolumeCondition::builder(12345, "NASDAQ", 1000000)
-///     .trigger_above()
+/// let condition = VolumeCondition::builder(12345, "NASDAQ")
+///     .greater_than(1000000)
 ///     .build();
 /// ```
 #[derive(Debug, Clone)]
 pub struct VolumeConditionBuilder {
     contract_id: i32,
     exchange: String,
-    volume: i32,
+    volume: Option<i32>,
     is_more: bool,
     is_conjunction: bool,
 }
@@ -617,9 +704,8 @@ impl VolumeCondition {
     ///
     /// - `contract_id`: Contract identifier for the instrument to monitor
     /// - `exchange`: Exchange where volume is monitored
-    /// - `volume`: Volume threshold
-    pub fn builder(contract_id: i32, exchange: impl Into<String>, volume: i32) -> VolumeConditionBuilder {
-        VolumeConditionBuilder::new(contract_id, exchange, volume)
+    pub fn builder(contract_id: i32, exchange: impl Into<String>) -> VolumeConditionBuilder {
+        VolumeConditionBuilder::new(contract_id, exchange)
     }
 }
 
@@ -630,25 +716,26 @@ impl VolumeConditionBuilder {
     ///
     /// - `contract_id`: Contract identifier for the instrument to monitor
     /// - `exchange`: Exchange where volume is monitored
-    /// - `volume`: Volume threshold
-    pub fn new(contract_id: i32, exchange: impl Into<String>, volume: i32) -> Self {
+    pub fn new(contract_id: i32, exchange: impl Into<String>) -> Self {
         Self {
             contract_id,
             exchange: exchange.into(),
-            volume,
+            volume: None,         // Must be set by greater_than/less_than
             is_more: true,        // Default: trigger when above threshold
             is_conjunction: true, // Default: AND condition
         }
     }
 
-    /// Trigger when volume goes above the threshold (default).
-    pub fn trigger_above(mut self) -> Self {
+    /// Set trigger when volume is greater than the specified value.
+    pub fn greater_than(mut self, volume: i32) -> Self {
+        self.volume = Some(volume);
         self.is_more = true;
         self
     }
 
-    /// Trigger when volume goes below the threshold.
-    pub fn trigger_below(mut self) -> Self {
+    /// Set trigger when volume is less than the specified value.
+    pub fn less_than(mut self, volume: i32) -> Self {
+        self.volume = Some(volume);
         self.is_more = false;
         self
     }
@@ -666,7 +753,9 @@ impl VolumeConditionBuilder {
         VolumeCondition {
             contract_id: self.contract_id,
             exchange: self.exchange,
-            volume: self.volume,
+            volume: self
+                .volume
+                .expect("VolumeConditionBuilder requires a volume threshold; call greater_than() or less_than() before build()"),
             is_more: self.is_more,
             is_conjunction: self.is_conjunction,
         }
@@ -680,15 +769,15 @@ impl VolumeConditionBuilder {
 /// ```no_run
 /// use ibapi::orders::conditions::PercentChangeCondition;
 ///
-/// let condition = PercentChangeCondition::builder(12345, "NASDAQ", 5.0)
-///     .trigger_above()
+/// let condition = PercentChangeCondition::builder(12345, "NASDAQ")
+///     .greater_than(5.0)
 ///     .build();
 /// ```
 #[derive(Debug, Clone)]
 pub struct PercentChangeConditionBuilder {
     contract_id: i32,
     exchange: String,
-    percent: f64,
+    percent: Option<f64>,
     is_more: bool,
     is_conjunction: bool,
 }
@@ -700,9 +789,8 @@ impl PercentChangeCondition {
     ///
     /// - `contract_id`: Contract identifier for the instrument to monitor
     /// - `exchange`: Exchange where price change is monitored
-    /// - `percent`: Percentage change threshold
-    pub fn builder(contract_id: i32, exchange: impl Into<String>, percent: f64) -> PercentChangeConditionBuilder {
-        PercentChangeConditionBuilder::new(contract_id, exchange, percent)
+    pub fn builder(contract_id: i32, exchange: impl Into<String>) -> PercentChangeConditionBuilder {
+        PercentChangeConditionBuilder::new(contract_id, exchange)
     }
 }
 
@@ -713,25 +801,26 @@ impl PercentChangeConditionBuilder {
     ///
     /// - `contract_id`: Contract identifier for the instrument to monitor
     /// - `exchange`: Exchange where price change is monitored
-    /// - `percent`: Percentage change threshold
-    pub fn new(contract_id: i32, exchange: impl Into<String>, percent: f64) -> Self {
+    pub fn new(contract_id: i32, exchange: impl Into<String>) -> Self {
         Self {
             contract_id,
             exchange: exchange.into(),
-            percent,
+            percent: None,        // Must be set by greater_than/less_than
             is_more: true,        // Default: trigger when above threshold
             is_conjunction: true, // Default: AND condition
         }
     }
 
-    /// Trigger when percent change goes above the threshold (default).
-    pub fn trigger_above(mut self) -> Self {
+    /// Set trigger when percent change is greater than the specified value.
+    pub fn greater_than(mut self, percent: f64) -> Self {
+        self.percent = Some(percent);
         self.is_more = true;
         self
     }
 
-    /// Trigger when percent change goes below the threshold.
-    pub fn trigger_below(mut self) -> Self {
+    /// Set trigger when percent change is less than the specified value.
+    pub fn less_than(mut self, percent: f64) -> Self {
+        self.percent = Some(percent);
         self.is_more = false;
         self
     }
@@ -749,35 +838,75 @@ impl PercentChangeConditionBuilder {
         PercentChangeCondition {
             contract_id: self.contract_id,
             exchange: self.exchange,
-            percent: self.percent,
+            percent: self
+                .percent
+                .expect("PercentChangeConditionBuilder requires a threshold; call greater_than() or less_than() before build()"),
             is_more: self.is_more,
             is_conjunction: self.is_conjunction,
         }
     }
 }
+
+// From implementations to convert builders to OrderCondition
+impl From<PriceConditionBuilder> for crate::orders::OrderCondition {
+    fn from(builder: PriceConditionBuilder) -> Self {
+        crate::orders::OrderCondition::Price(builder.build())
+    }
+}
+
+impl From<TimeConditionBuilder> for crate::orders::OrderCondition {
+    fn from(builder: TimeConditionBuilder) -> Self {
+        crate::orders::OrderCondition::Time(builder.build())
+    }
+}
+
+impl From<MarginConditionBuilder> for crate::orders::OrderCondition {
+    fn from(builder: MarginConditionBuilder) -> Self {
+        crate::orders::OrderCondition::Margin(builder.build())
+    }
+}
+
+impl From<VolumeConditionBuilder> for crate::orders::OrderCondition {
+    fn from(builder: VolumeConditionBuilder) -> Self {
+        crate::orders::OrderCondition::Volume(builder.build())
+    }
+}
+
+impl From<PercentChangeConditionBuilder> for crate::orders::OrderCondition {
+    fn from(builder: PercentChangeConditionBuilder) -> Self {
+        crate::orders::OrderCondition::PercentChange(builder.build())
+    }
+}
+
+impl From<ExecutionConditionBuilder> for crate::orders::OrderCondition {
+    fn from(builder: ExecutionConditionBuilder) -> Self {
+        crate::orders::OrderCondition::Execution(builder.build())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_price_condition_builder() {
-        let condition = PriceCondition::builder(12345, "NASDAQ", 150.0)
-            .trigger_above()
-            .trigger_method(1)
+        let condition = PriceCondition::builder(12345, "NASDAQ")
+            .greater_than(150.0)
+            .trigger_method(TriggerMethod::DoubleBidAsk)
             .conjunction(false)
             .build();
 
         assert_eq!(condition.contract_id, 12345);
         assert_eq!(condition.exchange, "NASDAQ");
         assert_eq!(condition.price, 150.0);
-        assert_eq!(condition.trigger_method, 1);
+        assert_eq!(condition.trigger_method, TriggerMethod::DoubleBidAsk);
         assert!(condition.is_more);
         assert!(!condition.is_conjunction);
     }
 
     #[test]
     fn test_time_condition_builder() {
-        let condition = TimeCondition::builder("20251230 23:59:59 UTC").trigger_before().build();
+        let condition = TimeCondition::builder().less_than("20251230 23:59:59 UTC").build();
 
         assert_eq!(condition.time, "20251230 23:59:59 UTC");
         assert!(!condition.is_more);
@@ -786,7 +915,7 @@ mod tests {
 
     #[test]
     fn test_margin_condition_builder() {
-        let condition = MarginCondition::builder(30).trigger_below().conjunction(false).build();
+        let condition = MarginCondition::builder().less_than(30).conjunction(false).build();
 
         assert_eq!(condition.percent, 30);
         assert!(!condition.is_more);
@@ -805,7 +934,7 @@ mod tests {
 
     #[test]
     fn test_volume_condition_builder() {
-        let condition = VolumeCondition::builder(12345, "NASDAQ", 1000000).trigger_below().build();
+        let condition = VolumeCondition::builder(12345, "NASDAQ").less_than(1000000).build();
 
         assert_eq!(condition.contract_id, 12345);
         assert_eq!(condition.exchange, "NASDAQ");
@@ -816,8 +945,8 @@ mod tests {
 
     #[test]
     fn test_percent_change_condition_builder() {
-        let condition = PercentChangeCondition::builder(12345, "NASDAQ", 5.0)
-            .trigger_above()
+        let condition = PercentChangeCondition::builder(12345, "NASDAQ")
+            .greater_than(5.0)
             .conjunction(false)
             .build();
 
@@ -830,10 +959,40 @@ mod tests {
 
     #[test]
     fn test_default_values() {
-        let condition = PriceCondition::builder(12345, "NASDAQ", 150.0).build();
+        let condition = PriceCondition::builder(12345, "NASDAQ").greater_than(150.0).build();
 
-        assert_eq!(condition.trigger_method, 0);
+        assert_eq!(condition.trigger_method, TriggerMethod::Default);
         assert!(condition.is_more);
         assert!(condition.is_conjunction);
+    }
+
+    #[test]
+    #[should_panic(expected = "PriceConditionBuilder requires a price threshold")]
+    fn test_price_condition_builder_missing_threshold_panics() {
+        let _ = PriceCondition::builder(12345, "NASDAQ").build();
+    }
+
+    #[test]
+    #[should_panic(expected = "TimeConditionBuilder requires a time value")]
+    fn test_time_condition_builder_missing_time_panics() {
+        let _ = TimeCondition::builder().build();
+    }
+
+    #[test]
+    #[should_panic(expected = "MarginConditionBuilder requires a percentage threshold")]
+    fn test_margin_condition_builder_missing_threshold_panics() {
+        let _ = MarginCondition::builder().build();
+    }
+
+    #[test]
+    #[should_panic(expected = "VolumeConditionBuilder requires a volume threshold")]
+    fn test_volume_condition_builder_missing_threshold_panics() {
+        let _ = VolumeCondition::builder(12345, "NASDAQ").build();
+    }
+
+    #[test]
+    #[should_panic(expected = "PercentChangeConditionBuilder requires a threshold")]
+    fn test_percent_change_condition_builder_missing_threshold_panics() {
+        let _ = PercentChangeCondition::builder(12345, "NASDAQ").build();
     }
 }

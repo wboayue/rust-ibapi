@@ -268,7 +268,7 @@ impl OrderDecoder {
     }
 
     fn read_trigger_method(&mut self) -> Result<(), Error> {
-        self.order.trigger_method = self.message.next_int()?;
+        self.order.trigger_method = self.message.next_int()?.into();
         Ok(())
     }
 
@@ -961,7 +961,7 @@ fn decode_price_condition(message: &mut ResponseMessage, is_conjunction: bool) -
         exchange: message.next_string()?,
         is_more: message.next_bool()?,
         price: message.next_double()?,
-        trigger_method: message.next_int()?,
+        trigger_method: message.next_int()?.into(),
         is_conjunction,
     }))
 }
@@ -1363,13 +1363,13 @@ mod tests {
     fn test_price_condition_round_trip() {
         use crate::messages::RequestMessage;
         use crate::orders::common::encoders::encode_condition;
-        use crate::orders::conditions::PriceCondition;
+        use crate::orders::conditions::{PriceCondition, TriggerMethod};
 
         let original = OrderCondition::Price(PriceCondition {
             contract_id: 12345,
             exchange: "NASDAQ".to_string(),
             price: 150.0,
-            trigger_method: 1,
+            trigger_method: TriggerMethod::DoubleBidAsk,
             is_more: true,
             is_conjunction: false,
         });

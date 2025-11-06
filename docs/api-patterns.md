@@ -127,6 +127,215 @@ pub fn market_depth(client: &Client, contract: &Contract, num_rows: i32)
 }
 ```
 
+### Conditional Order Builder Pattern
+
+The library provides a fluent API for building conditional orders with type-safe condition builders and ergonomic helper functions.
+
+#### Helper Functions
+
+Helper functions provide a concise way to create condition builders:
+
+```rust
+use ibapi::orders::builder::{price, time, margin, volume, execution, percent_change};
+use ibapi::orders::order_builder;
+
+// Helper functions return partially-built condition builders
+let price_cond = price(265598, "SMART").greater_than(150.0);
+let time_cond = time().greater_than("20251230 14:30:00 US/Eastern");
+let margin_cond = margin().less_than(30);
+let volume_cond = volume(76792991, "SMART").greater_than(50_000_000);
+let pct_change_cond = percent_change(756733, "SMART").greater_than(2.0);
+
+// Execution condition returns OrderCondition directly (no threshold)
+let exec_cond = execution("TSLA", "STK", "SMART");
+
+// Create order with single condition
+let order = order_builder::market_order(Action::Buy, 100.0)
+    .condition(price_cond)
+    .build();
+```
+
+#### Fluent Condition Chaining
+
+The `OrderBuilder` provides methods for chaining conditions with AND/OR logic:
+
+```rust
+use ibapi::orders::builder::{price, time, volume};
+use ibapi::orders::order_builder;
+
+// Multiple conditions with AND logic (all must be true)
+let order = order_builder::limit_order(Action::Buy, 100.0, 151.0)
+    .condition(price(265598, "SMART").greater_than(150.0))
+    .and_condition(volume(265598, "SMART").greater_than(80_000_000))
+    .and_condition(time().greater_than("20251230 10:00:00 US/Eastern"))
+    .build();
+
+// Multiple conditions with OR logic (any can trigger)
+let order = order_builder::market_order(Action::Sell, 100.0)
+    .condition(margin().less_than(25))
+    .or_condition(price(265598, "SMART").less_than(140.0))
+    .or_condition(time().greater_than("20251230 15:55:00 US/Eastern"))
+    .build();
+
+// Mixed AND/OR logic
+let order = order_builder::limit_order(Action::Buy, 50.0, 452.0)
+    .condition(price(265598, "SMART").greater_than(150.0))
+    .and_condition(volume(265598, "SMART").greater_than(50_000_000))  // Price AND Volume
+    .or_condition(time().greater_than("20251230 14:00:00 US/Eastern")) // OR Time
+    .build();
+```
+
+#### Type-State Pattern for Conditions
+
+Each condition builder uses the type-state pattern to ensure valid configuration:
+
+```rust
+use ibapi::orders::conditions::{PriceCondition, TriggerMethod};
+
+// Builder starts with required fields only
+let builder = PriceCondition::builder(265598, "SMART");
+
+// Threshold and direction set together (type-safe)
+let condition = builder.greater_than(150.0);  // Sets price + direction
+// or
+let condition = builder.less_than(140.0);     // Sets price + direction
+
+// Optional configuration
+let condition = condition
+    .trigger_method(TriggerMethod::Last)  // Use last price
+    .conjunction(true);                   // AND with next condition
+
+// Convert to OrderCondition
+let condition = condition.build();
+```
+
+All condition builders follow this pattern:
+- **Required parameters** in the constructor (contract ID, exchange, etc.)
+- **Threshold and direction** set together via `greater_than()` or `less_than()`
+- **Optional parameters** via chainable methods
+- **Type conversion** via `.build()` or automatic `Into<OrderCondition>`
+
+#### Old vs New API Comparison
+
+**Before (v0.x):**
+```rust
+// Threshold in constructor, separate trigger direction method
+let price_cond = PriceCondition::builder(265598, "SMART", 150.0)
+    .trigger_above()
+    .build();
+
+let time_cond = TimeCondition::builder("20251230 14:30:00 US/Eastern")
+    .trigger_after()
+    .build();
+
+// Manual condition assignment
+let mut order = order_builder::market_order(Action::Buy, 100.0);
+order.conditions = vec![
+    OrderCondition::Price(price_cond),
+    OrderCondition::Time(time_cond),
+];
+```
+
+**After (v1.0+):**
+```rust
+// Threshold and direction combined, fluent chaining
+let order = order_builder::market_order(Action::Buy, 100.0)
+    .condition(price(265598, "SMART").greater_than(150.0))
+    .and_condition(time().greater_than("20251230 14:30:00 US/Eastern"))
+    .build();
+
+// Or using builders directly
+let price_cond = PriceCondition::builder(265598, "SMART")
+    .greater_than(150.0)
+    .build();
+
+let time_cond = TimeCondition::builder()
+    .greater_than("20251230 14:30:00 US/Eastern")
+    .build();
+```
+
+Key improvements:
+- **More ergonomic**: Helper functions reduce boilerplate
+- **Type-safe**: Threshold and direction set atomically
+- **Fluent**: Method chaining for AND/OR logic
+- **Explicit**: `greater_than()` vs `less_than()` is clearer than `trigger_above()` vs `trigger_below()`
+- **Consistent**: All condition types follow the same pattern
+
+#### Sync and Async Usage
+
+Conditional orders work identically in both sync and async modes:
+
+**Sync Mode:**
+```rust
+use ibapi::client::blocking::Client;
+use ibapi::contracts::Contract;
+use ibapi::orders::builder::{price, order_builder};
+use ibapi::orders::Action;
+
+let client = Client::connect("127.0.0.1:7497", 100)?;
+let contract = Contract::stock("AAPL").build();
+
+let order = order_builder::market_order(Action::Buy, 100.0)
+    .condition(price(265598, "SMART").greater_than(150.0))
+    .build();
+
+let order_id = client.next_valid_order_id()?;
+client.submit_order(order_id, &contract, &order)?;
+```
+
+**Async Mode:**
+```rust
+use ibapi::client::Client;
+use ibapi::contracts::Contract;
+use ibapi::orders::builder::{price, order_builder};
+use ibapi::orders::Action;
+
+let client = Client::connect("127.0.0.1:4002", 100).await?;
+let contract = Contract::stock("AAPL").build();
+
+let order = order_builder::market_order(Action::Buy, 100.0)
+    .condition(price(265598, "SMART").greater_than(150.0))
+    .build();
+
+let order_id = client.next_valid_order_id().await?;
+client.submit_order(order_id, &contract, &order).await?;
+```
+
+The only difference is the `.await` calls on client methods. The order building logic is identical.
+
+#### Advanced Pattern: Reusable Condition Components
+
+Create reusable condition components for common trading scenarios:
+
+```rust
+use ibapi::orders::builder::{price, time, volume, margin};
+use ibapi::orders::conditions::OrderCondition;
+
+// Reusable condition builders
+fn liquidity_check(contract_id: i32, min_volume: i32) -> impl Into<OrderCondition> {
+    volume(contract_id, "SMART").greater_than(min_volume)
+}
+
+fn trading_hours_only() -> impl Into<OrderCondition> {
+    time()
+        .greater_than("20251230 09:30:00 US/Eastern")
+        .conjunction(true)
+}
+
+fn risk_guard() -> impl Into<OrderCondition> {
+    margin().less_than(30)
+}
+
+// Compose conditions
+let order = order_builder::market_order(Action::Buy, 100.0)
+    .condition(liquidity_check(265598, 50_000_000))
+    .and_condition(trading_hours_only())
+    .and_condition(risk_guard())
+    .build();
+```
+
+For comprehensive conditional order documentation, see [Order Types - Conditional Orders](order-types.md#conditional-orders-with-conditions).
+
 ## Protocol Version Checking
 
 Use the protocol module for version-specific features:
