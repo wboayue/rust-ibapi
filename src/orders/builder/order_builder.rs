@@ -701,7 +701,7 @@ impl<'a, C> OrderBuilder<'a, C> {
         }
 
         // Set time in force
-        order.tif = self.time_in_force.as_str().to_string();
+        order.tif = crate::orders::TimeInForce::from(self.time_in_force.as_str());
         if let TimeInForce::GoodTillDate { date } = &self.time_in_force {
             order.good_till_date = date.clone();
         }
@@ -717,7 +717,7 @@ impl<'a, C> OrderBuilder<'a, C> {
 
         if let Some(group) = self.oca_group {
             order.oca_group = group;
-            order.oca_type = self.oca_type.unwrap_or(0);
+            order.oca_type = self.oca_type.unwrap_or(0).into();
         }
 
         if let Some(account) = self.account {
@@ -750,7 +750,7 @@ impl<'a, C> OrderBuilder<'a, C> {
 
         if let Some(vol) = self.volatility {
             order.volatility = Some(vol);
-            order.volatility_type = self.volatility_type;
+            order.volatility_type = self.volatility_type.map(|v| v.into());
         }
 
         if let Some(delta) = self.delta {
@@ -850,7 +850,7 @@ impl<'a, C> OrderBuilder<'a, C> {
 
         // Set auction strategy
         if let Some(strategy) = self.auction_strategy {
-            order.auction_strategy = Some(strategy);
+            order.auction_strategy = Some(strategy.into());
         }
 
         // Set starting price

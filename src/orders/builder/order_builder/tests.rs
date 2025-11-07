@@ -174,25 +174,25 @@ fn test_time_conditions() {
     let builder = OrderBuilder::new(&client, &contract).buy(100).market().day_order();
 
     let order = builder.build().unwrap();
-    assert_eq!(order.tif, "DAY");
+    assert_eq!(order.tif, crate::orders::TimeInForce::Day);
 
     // Test Good Till Cancel
     let builder = OrderBuilder::new(&client, &contract).buy(100).market().good_till_cancel();
 
     let order = builder.build().unwrap();
-    assert_eq!(order.tif, "GTC");
+    assert_eq!(order.tif, crate::orders::TimeInForce::GoodTilCanceled);
 
     // Test Immediate or Cancel
     let builder = OrderBuilder::new(&client, &contract).buy(100).market().immediate_or_cancel();
 
     let order = builder.build().unwrap();
-    assert_eq!(order.tif, "IOC");
+    assert_eq!(order.tif, crate::orders::TimeInForce::ImmediateOrCancel);
 
     // Test Fill or Kill
     let builder = OrderBuilder::new(&client, &contract).buy(100).market().fill_or_kill();
 
     let order = builder.build().unwrap();
-    assert_eq!(order.tif, "FOK");
+    assert_eq!(order.tif, crate::orders::TimeInForce::FillOrKill);
 }
 
 #[test]
@@ -206,7 +206,7 @@ fn test_time_in_force_method() {
         .time_in_force(TimeInForce::ImmediateOrCancel);
 
     let order = builder.build().unwrap();
-    assert_eq!(order.tif, "IOC");
+    assert_eq!(order.tif, crate::orders::TimeInForce::ImmediateOrCancel);
 }
 
 #[test]
@@ -220,7 +220,7 @@ fn test_good_till_date() {
         .good_till_date("20240630 23:59:59");
 
     let order = builder.build().unwrap();
-    assert_eq!(order.tif, "GTD");
+    assert_eq!(order.tif, crate::orders::TimeInForce::GoodTilDate);
     assert_eq!(order.good_till_date, "20240630 23:59:59");
 }
 
@@ -313,7 +313,7 @@ fn test_oca_group_settings() {
 
     let order = builder.build().unwrap();
     assert_eq!(order.oca_group, "TEST_OCA");
-    assert_eq!(order.oca_type, 2);
+    assert_eq!(order.oca_type, crate::orders::OcaType::ReduceWithBlock);
 }
 
 #[test]
@@ -789,7 +789,7 @@ fn test_market_on_open() {
     assert_eq!(order.order_type, "MKT");
     assert_eq!(order.action, Action::Buy);
     assert_eq!(order.total_quantity, 100.0);
-    assert_eq!(order.tif, "OPG");
+    assert_eq!(order.tif, crate::orders::TimeInForce::OnOpen);
     assert_eq!(order.limit_price, None);
 }
 
@@ -805,7 +805,7 @@ fn test_limit_on_open() {
     assert_eq!(order.action, Action::Buy);
     assert_eq!(order.total_quantity, 100.0);
     assert_eq!(order.limit_price, Some(50.50));
-    assert_eq!(order.tif, "OPG");
+    assert_eq!(order.tif, crate::orders::TimeInForce::OnOpen);
 }
 
 #[test]

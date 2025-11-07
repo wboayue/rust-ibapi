@@ -3,6 +3,9 @@ mod order_builder_tests {
     use ibapi::contracts::{Contract, Currency, Exchange, Symbol};
     use ibapi::orders::{Action, OrderBuilder};
 
+    #[cfg(feature = "sync")]
+    use ibapi::orders::OcaType;
+
     fn create_stock_contract(symbol: &str) -> Contract {
         Contract {
             symbol: Symbol::from(symbol),
@@ -45,7 +48,7 @@ mod order_builder_tests {
         assert_eq!(order.total_quantity, 200.0);
         assert_eq!(order.order_type, "LMT");
         assert_eq!(order.limit_price, Some(150.50));
-        assert_eq!(order.tif, "GTC");
+        assert_eq!(order.tif, ibapi::orders::TimeInForce::GoodTilCanceled);
         assert!(order.hidden);
         assert!(order.outside_rth);
 
@@ -210,7 +213,7 @@ mod order_builder_tests {
 
         let order = builder.build().unwrap();
         assert_eq!(order.oca_group, "TestOCA");
-        assert_eq!(order.oca_type, 1);
+        assert_eq!(order.oca_type, OcaType::CancelWithBlock);
     }
 
     #[test]
@@ -262,6 +265,6 @@ mod order_builder_tests {
         assert_eq!(order.total_quantity, 200.0);
         assert_eq!(order.order_type, "LMT");
         assert_eq!(order.limit_price, Some(150.50));
-        assert_eq!(order.tif, "GTC");
+        assert_eq!(order.tif, ibapi::orders::TimeInForce::GoodTilCanceled);
     }
 }

@@ -95,42 +95,17 @@ pub struct Order {
     pub limit_price: Option<f64>,
     /// Generic field to contain the stop price for STP LMT orders, trailing amount, etc.
     pub aux_price: Option<f64>,
-    /// The time in force.
-    /// Valid values are:
-    /// - `DAY` - Valid for the day only.
-    /// - `GTC` - Good until canceled. The order will continue to work within the system and in the marketplace
-    ///   until it executes or is canceled. GTC orders will be automatically cancelled under the following conditions:
-    ///   - If a corporate action on a security results in a stock split (forward or reverse), exchange for shares,
-    ///     or distribution of shares.
-    ///   - If you do not log into your IB account for 90 days.
-    ///   - At the end of the calendar quarter following the current quarter. For example, an order placed during
-    ///     the third quarter of 2011 will be canceled at the end of the first quarter of 2012. If the last day
-    ///     is a non-trading day, the cancellation will occur at the close of the final trading day of that quarter.
-    ///   - Orders that are modified will be assigned a new "Auto Expire" date consistent with the end of the calendar quarter following the current quarter.
-    ///   - Orders submitted to IB that remain in force for more than one day will not be reduced for dividends.
-    ///     To allow adjustment to your order price on ex-dividend date, consider using a Good-Til-Date/Time (GTD)
-    ///     or Good-after-Time/Date (GAT) order type, or a combination of the two.
-    /// - `IOC` - Immediate or Cancel. Any portion that is not filled as soon as it becomes available in the
-    ///   market is canceled.
-    /// - `GTD` - Good until Date. It will remain working within the system and in the marketplace until it
-    ///   executes or until the close of the market on the date specified.
-    /// - `OPG` - Use OPG to send a market-on-open (MOO) or limit-on-open (LOO) order.
-    /// - `FOK` - If the entire Fill-or-Kill order does not execute as soon as it becomes available, the entire
-    ///   order is canceled.
-    /// - `DTC` - Day until Canceled.
-    pub tif: String, // FIXME create enum
+    /// The time in force - specifies how long the order remains active.
+    ///
+    /// See [`TimeInForce`] for available options and their behavior.
+    pub tif: TimeInForce,
     /// One-Cancels-All group identifier.
     pub oca_group: String,
     /// Tells how to handle remaining orders in an OCA group when one order or part of an order executes.
     ///
-    /// Valid values are:
-    /// - `1` - Cancel all remaining orders with block.
-    /// - `2` - Remaining orders are proportionately reduced in size with block.
-    /// - `3` - Remaining orders are proportionately reduced in size with no block.
-    ///
-    /// If you use a value "with block" it gives the order overfill protection. This means that only one order
-    /// in the group will be routed at a time to remove the possibility of an overfill.
-    pub oca_type: i32,
+    /// See [`OcaType`] for available options. "With block" provides overfill protection by ensuring
+    /// only one order in the group is routed at a time.
+    pub oca_type: OcaType,
     /// The order reference.
     /// Intended for institutional customers only, although all customers may use it to identify the API client that sent the order when multiple API clients are running.
     pub order_ref: String,
@@ -202,21 +177,18 @@ pub struct Order {
     ///
     /// Available for institutional clients to determine if this order is to open or close a position.
     /// - When Action = "BUY" and OpenClose = "O" this will open a new position.
-    /// - When Action = "BUY" and OpenClose = "C" this will close an existing short position.    
+    /// - When Action = "BUY" and OpenClose = "C" this will close an existing short position.
     pub open_close: Option<OrderOpenClose>,
     /// The order's origin. Same as TWS "Origin" column. Identifies the type of customer from which the order originated.
     ///
-    /// Valid values are:
-    /// - `0` - Customer
-    /// - `1` - Firm
-    pub origin: i32,
-    /// For institutions only.
+    /// See [`OrderOrigin`] for available options.
+    pub origin: OrderOrigin,
+    /// For institutions only. Specifies the short sale slot.
     ///
-    /// Valid values are:
-    /// - `1` - Broker holds shares
-    /// - `2` - Shares come from elsewhere    
-    pub short_sale_slot: i32,
-    /// For institutions only. Indicates the location where the shares to short come from. Used only when short sale slot is set to 2 (which means that the shares to short are held elsewhere and not with IB).
+    /// See [`ShortSaleSlot`] for available options.
+    pub short_sale_slot: ShortSaleSlot,
+    /// For institutions only. Indicates the location where the shares to short come from.
+    /// Used only when short sale slot is set to `ThirdParty`.
     pub designated_location: String,
     /// Only available with IB Execution-Only accounts with applicable securities.
     /// Mark order as exempt from short sale uptick rule.
@@ -230,11 +202,8 @@ pub struct Order {
     pub opt_out_smart_routing: bool,
     /// For BOX orders only.
     ///
-    /// Valid values are:
-    /// - `1` - Match
-    /// - `2` - Improvement
-    /// - `3` - Transparent
-    pub auction_strategy: Option<i32>, // FIXME enum
+    /// See [`AuctionStrategy`] for available options.
+    pub auction_strategy: Option<AuctionStrategy>,
     /// The auction's starting price. For BOX orders only.
     pub starting_price: Option<f64>,
     /// The stock's reference price.
@@ -251,19 +220,15 @@ pub struct Order {
     /// The option price in volatility, as calculated by TWS' Option Analytics.
     /// This value is expressed as a percent and is used to calculate the limit price sent to the exchange.
     pub volatility: Option<f64>,
-    /// Valid values are:
-    /// - `1` - Daily Volatility
-    /// - `2` - Annual Volatility
-    pub volatility_type: Option<i32>, // FIXM enum
+    /// VOL orders only. See [`VolatilityType`] for available options.
+    pub volatility_type: Option<VolatilityType>,
     /// Specifies whether TWS will automatically update the limit price of the order as the underlying price moves. VOL orders only.
     pub continuous_update: bool,
     /// Specifies how you want TWS to calculate the limit price for options, and for stock range price monitoring.
     /// VOL orders only.
     ///
-    /// Valid values are:
-    /// - `1` - Average of NBBO
-    /// - `2` - NBB or the NBO depending on the action and right
-    pub reference_price_type: Option<i32>,
+    /// See [`ReferencePriceType`] for available options.
+    pub reference_price_type: Option<ReferencePriceType>,
     /// Enter an order type to instruct TWS to submit a delta neutral trade on full or partial execution of the VOL order. VOL orders only. For no hedge delta order to be sent, specify NONE.
     pub delta_neutral_order_type: String,
     /// Use this field to enter a value if the value in the deltaNeutralOrderType field is an order type that requires an Aux price, such as a REL order. VOL orders only.
@@ -514,9 +479,9 @@ impl Default for Order {
             order_type: "".to_owned(),
             limit_price: None,
             aux_price: None,
-            tif: "".to_owned(),
+            tif: TimeInForce::Day,
             oca_group: "".to_owned(),
-            oca_type: 0,
+            oca_type: OcaType::None,
             order_ref: "".to_owned(),
             transmit: true,
             parent_id: 0,
@@ -540,13 +505,13 @@ impl Default for Order {
             fa_method: "".to_owned(),
             fa_percentage: "".to_owned(),
             open_close: None,
-            origin: 0,
-            short_sale_slot: 0,
+            origin: OrderOrigin::Customer,
+            short_sale_slot: ShortSaleSlot::None,
             designated_location: "".to_owned(),
             exempt_code: -1,
             discretionary_amt: 0.0,
             opt_out_smart_routing: false,
-            auction_strategy: Some(0), // TODO - use enum
+            auction_strategy: None,
             starting_price: None,
             stock_ref_price: None,
             delta: None,
@@ -723,6 +688,255 @@ impl Action {
     }
 }
 
+/// Time in force specifies how long an order remains active.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TimeInForce {
+    /// Valid for the day only.
+    #[default]
+    Day,
+    /// Good until canceled. The order will continue to work within the system and in the marketplace
+    /// until it executes or is canceled. GTC orders will be automatically cancelled under certain conditions.
+    GoodTilCanceled,
+    /// Immediate or Cancel. Any portion that is not filled as soon as it becomes available in the
+    /// market is canceled.
+    ImmediateOrCancel,
+    /// Good until Date. It will remain working within the system and in the marketplace until it
+    /// executes or until the close of the market on the date specified.
+    GoodTilDate,
+    /// Market-on-open (MOO) or limit-on-open (LOO) order.
+    OnOpen,
+    /// Fill-or-Kill. If the entire order does not execute as soon as it becomes available, the entire
+    /// order is canceled.
+    FillOrKill,
+    /// Day until Canceled.
+    DayTilCanceled,
+    /// Auction - for auction orders.
+    Auction,
+}
+
+impl ToField for TimeInForce {
+    fn to_field(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl std::fmt::Display for TimeInForce {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let text = match self {
+            TimeInForce::Day => "DAY",
+            TimeInForce::GoodTilCanceled => "GTC",
+            TimeInForce::ImmediateOrCancel => "IOC",
+            TimeInForce::GoodTilDate => "GTD",
+            TimeInForce::OnOpen => "OPG",
+            TimeInForce::FillOrKill => "FOK",
+            TimeInForce::DayTilCanceled => "DTC",
+            TimeInForce::Auction => "AUC",
+        };
+        write!(f, "{text}")
+    }
+}
+
+impl From<String> for TimeInForce {
+    fn from(value: String) -> Self {
+        Self::from(value.as_str())
+    }
+}
+
+impl From<&str> for TimeInForce {
+    fn from(value: &str) -> Self {
+        match value {
+            "DAY" => TimeInForce::Day,
+            "GTC" => TimeInForce::GoodTilCanceled,
+            "IOC" => TimeInForce::ImmediateOrCancel,
+            "GTD" => TimeInForce::GoodTilDate,
+            "OPG" => TimeInForce::OnOpen,
+            "FOK" => TimeInForce::FillOrKill,
+            "DTC" => TimeInForce::DayTilCanceled,
+            "AUC" => TimeInForce::Auction,
+            _ => TimeInForce::Day, // Default fallback
+        }
+    }
+}
+
+/// Tells how to handle remaining orders in an OCA group when one order or part of an order executes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OcaType {
+    /// Not part of OCA group.
+    #[default]
+    None = 0,
+    /// Cancel all remaining orders with block (overfill protection - only one order routed at a time).
+    CancelWithBlock = 1,
+    /// Proportionally reduce remaining orders with block.
+    ReduceWithBlock = 2,
+    /// Proportionally reduce remaining orders without block.
+    ReduceWithoutBlock = 3,
+}
+
+impl ToField for OcaType {
+    fn to_field(&self) -> String {
+        i32::from(*self).to_string()
+    }
+}
+
+impl From<OcaType> for i32 {
+    fn from(value: OcaType) -> i32 {
+        value as i32
+    }
+}
+
+impl From<i32> for OcaType {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => OcaType::None,
+            1 => OcaType::CancelWithBlock,
+            2 => OcaType::ReduceWithBlock,
+            3 => OcaType::ReduceWithoutBlock,
+            _ => OcaType::None,
+        }
+    }
+}
+
+/// The order's origin. Identifies the type of customer from which the order originated.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OrderOrigin {
+    /// Customer order.
+    #[default]
+    Customer = 0,
+    /// Firm order (institutional customers only).
+    Firm = 1,
+}
+
+impl ToField for OrderOrigin {
+    fn to_field(&self) -> String {
+        i32::from(*self).to_string()
+    }
+}
+
+impl From<OrderOrigin> for i32 {
+    fn from(value: OrderOrigin) -> i32 {
+        value as i32
+    }
+}
+
+impl From<i32> for OrderOrigin {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => OrderOrigin::Customer,
+            1 => OrderOrigin::Firm,
+            _ => OrderOrigin::Customer,
+        }
+    }
+}
+
+/// Specifies the short sale slot (for institutional short sales).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ShortSaleSlot {
+    /// Not a short sale.
+    #[default]
+    None = 0,
+    /// Broker holds shares.
+    Broker = 1,
+    /// Shares come from elsewhere (third party). Use with `designated_location` field.
+    ThirdParty = 2,
+}
+
+impl ToField for ShortSaleSlot {
+    fn to_field(&self) -> String {
+        i32::from(*self).to_string()
+    }
+}
+
+impl From<ShortSaleSlot> for i32 {
+    fn from(value: ShortSaleSlot) -> i32 {
+        value as i32
+    }
+}
+
+impl From<i32> for ShortSaleSlot {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => ShortSaleSlot::None,
+            1 => ShortSaleSlot::Broker,
+            2 => ShortSaleSlot::ThirdParty,
+            _ => ShortSaleSlot::None,
+        }
+    }
+}
+
+/// Volatility type for VOL orders.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VolatilityType {
+    /// Daily volatility.
+    Daily = 1,
+    /// Annual volatility.
+    Annual = 2,
+}
+
+impl ToField for VolatilityType {
+    fn to_field(&self) -> String {
+        i32::from(*self).to_string()
+    }
+}
+
+impl ToField for Option<VolatilityType> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
+impl From<VolatilityType> for i32 {
+    fn from(value: VolatilityType) -> i32 {
+        value as i32
+    }
+}
+
+impl From<i32> for VolatilityType {
+    fn from(value: i32) -> Self {
+        match value {
+            1 => VolatilityType::Daily,
+            2 => VolatilityType::Annual,
+            _ => VolatilityType::Daily,
+        }
+    }
+}
+
+/// Reference price type for VOL orders.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReferencePriceType {
+    /// Average of National Best Bid/Offer.
+    AverageOfNBBO = 1,
+    /// NBB or NBO depending on action and right.
+    NBBO = 2,
+}
+
+impl ToField for ReferencePriceType {
+    fn to_field(&self) -> String {
+        i32::from(*self).to_string()
+    }
+}
+
+impl ToField for Option<ReferencePriceType> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
+impl From<ReferencePriceType> for i32 {
+    fn from(value: ReferencePriceType) -> i32 {
+        value as i32
+    }
+}
+
+impl From<i32> for ReferencePriceType {
+    fn from(value: i32) -> Self {
+        match value {
+            1 => ReferencePriceType::AverageOfNBBO,
+            2 => ReferencePriceType::NBBO,
+            _ => ReferencePriceType::AverageOfNBBO,
+        }
+    }
+}
+
 /// NYSE Rule 80A designations for institutional trading.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Rule80A {
@@ -795,13 +1009,43 @@ impl Rule80A {
 }
 
 /// Auction strategy for BOX orders.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AuctionStrategy {
     /// Match strategy.
-    Match,
+    Match = 1,
     /// Improvement strategy.
-    Improvement,
+    Improvement = 2,
     /// Transparent strategy.
-    Transparent,
+    Transparent = 3,
+}
+
+impl ToField for AuctionStrategy {
+    fn to_field(&self) -> String {
+        i32::from(*self).to_string()
+    }
+}
+
+impl ToField for Option<AuctionStrategy> {
+    fn to_field(&self) -> String {
+        encode_option_field(self)
+    }
+}
+
+impl From<AuctionStrategy> for i32 {
+    fn from(value: AuctionStrategy) -> i32 {
+        value as i32
+    }
+}
+
+impl From<i32> for AuctionStrategy {
+    fn from(value: i32) -> Self {
+        match value {
+            1 => AuctionStrategy::Match,
+            2 => AuctionStrategy::Improvement,
+            3 => AuctionStrategy::Transparent,
+            _ => AuctionStrategy::Match,
+        }
+    }
 }
 
 /// Represents the price component of a combo leg order.

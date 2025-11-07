@@ -1,4 +1,6 @@
-use crate::orders::{Action, Order, OrderComboLeg, TagValue, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
+use crate::orders::{
+    Action, AuctionStrategy, OcaType, Order, OrderComboLeg, TagValue, TimeInForce, VolatilityType, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID,
+};
 
 // TODO: Consider implementing a fluent builder pattern for Order construction
 // instead of having many standalone functions. This would provide a more
@@ -21,7 +23,7 @@ use crate::orders::{Action, Order, OrderComboLeg, TagValue, COMPETE_AGAINST_BEST
 pub fn at_auction(action: Action, quantity: f64, price: f64) -> Order {
     Order {
         action,
-        tif: "AUC".to_owned(),
+        tif: TimeInForce::Auction,
         order_type: "MTL".to_owned(),
         total_quantity: quantity,
         limit_price: Some(price),
@@ -92,7 +94,7 @@ pub fn market_on_open(action: Action, quantity: f64) -> Order {
         action,
         order_type: "MKT".to_owned(),
         total_quantity: quantity,
-        tif: "OPG".to_owned(),
+        tif: TimeInForce::OnOpen,
         ..Order::default()
     }
 }
@@ -207,7 +209,7 @@ pub fn sweep_to_fill(action: Action, quantity: f64, price: f64) -> Order {
 /// limit order price and the nearest listed increment.
 /// Products: OPT
 /// Supported Exchanges: BOX
-pub fn auction_limit(action: Action, quantity: f64, price: f64, auction_strategy: i32) -> Order {
+pub fn auction_limit(action: Action, quantity: f64, price: f64, auction_strategy: AuctionStrategy) -> Order {
     Order {
         action,
         order_type: "LMT".to_owned(),
@@ -353,7 +355,7 @@ pub fn limit_on_open(action: Action, quantity: f64, limit_price: f64) -> Order {
         order_type: "LMT".to_owned(),
         total_quantity: quantity,
         limit_price: Some(limit_price),
-        tif: "OPG".to_owned(),
+        tif: TimeInForce::OnOpen,
         ..Order::default()
     }
 }
@@ -681,7 +683,7 @@ pub fn relative_market_combo(action: Action, quantity: f64, non_guaranteed: bool
 /// Grouping the two orders using an OCA order type offers the investor two chance to enter a similar position, while only running the risk
 /// of taking on a single position.
 /// Products: BOND, CASH, FUT, FOP, STK, OPT, WAR
-pub fn one_cancels_all(oca_group: &str, mut oca_orders: Vec<Order>, oca_type: i32) -> Vec<Order> {
+pub fn one_cancels_all(oca_group: &str, mut oca_orders: Vec<Order>, oca_type: OcaType) -> Vec<Order> {
     for order in &mut oca_orders {
         order.oca_group = oca_group.to_owned();
         order.oca_type = oca_type;
@@ -699,13 +701,13 @@ pub fn one_cancels_all(oca_group: &str, mut oca_orders: Vec<Order>, oca_type: i3
 /// is the same as for regular orders priced in premium terms except that the client can limit the volatility level they are willing to pay or
 /// receive.
 /// Products: FOP, OPT
-pub fn volatility(action: Action, quantity: f64, volatility_percent: f64, volatility_type: i32) -> Order {
+pub fn volatility(action: Action, quantity: f64, volatility_percent: f64, volatility_type: VolatilityType) -> Order {
     Order {
         action,
         order_type: "VOL".to_owned(),
         total_quantity: quantity,
-        volatility: Some(volatility_percent),   //Expressed in percentage (40%)
-        volatility_type: Some(volatility_type), // 1=daily, 2=annual
+        volatility: Some(volatility_percent), //Expressed in percentage (40%)
+        volatility_type: Some(volatility_type),
         ..Order::default()
     }
 }
@@ -1114,7 +1116,7 @@ mod tests {
             assert_eq!(order.action, Action::Buy);
             assert_eq!(order.order_type, "MKT");
             assert_eq!(order.total_quantity, 100.0);
-            assert_eq!(order.tif, "OPG");
+            assert_eq!(order.tif, TimeInForce::OnOpen);
         }
 
         #[test]
@@ -1135,7 +1137,7 @@ mod tests {
             assert_eq!(order.order_type, "LMT");
             assert_eq!(order.total_quantity, 100.0);
             assert_eq!(order.limit_price, Some(50.0));
-            assert_eq!(order.tif, "OPG");
+            assert_eq!(order.tif, TimeInForce::OnOpen);
         }
     }
 
@@ -1183,11 +1185,11 @@ mod tests {
         fn test_one_cancels_all() {
             let order1 = limit_order(Action::Buy, 100.0, 50.0);
             let order2 = limit_order(Action::Sell, 100.0, 52.0);
-            let orders = one_cancels_all("TestOCA", vec![order1, order2], 2);
+            let orders = one_cancels_all("TestOCA", vec![order1, order2], OcaType::ReduceWithBlock);
 
             for order in &orders {
                 assert_eq!(order.oca_group, "TestOCA");
-                assert_eq!(order.oca_type, 2);
+                assert_eq!(order.oca_type, OcaType::ReduceWithBlock);
             }
 
             assert_eq!(orders[0].action, Action::Buy);
@@ -1306,24 +1308,24 @@ mod tests {
 
         #[test]
         fn test_volatility_order() {
-            let order = volatility(Action::Buy, 100.0, 0.04, 1);
+            let order = volatility(Action::Buy, 100.0, 0.04, VolatilityType::Daily);
 
             assert_eq!(order.action, Action::Buy);
             assert_eq!(order.order_type, "VOL");
             assert_eq!(order.total_quantity, 100.0);
             assert_eq!(order.volatility, Some(0.04));
-            assert_eq!(order.volatility_type, Some(1));
+            assert_eq!(order.volatility_type, Some(VolatilityType::Daily));
         }
 
         #[test]
         fn test_auction_limit() {
-            let order = auction_limit(Action::Buy, 100.0, 50.0, 2);
+            let order = auction_limit(Action::Buy, 100.0, 50.0, AuctionStrategy::Improvement);
 
             assert_eq!(order.action, Action::Buy);
             assert_eq!(order.order_type, "LMT");
             assert_eq!(order.total_quantity, 100.0);
             assert_eq!(order.limit_price, Some(50.0));
-            assert_eq!(order.auction_strategy, Some(2));
+            assert_eq!(order.auction_strategy, Some(AuctionStrategy::Improvement));
         }
 
         #[test]
@@ -1728,7 +1730,7 @@ mod tests {
             assert_eq!(order.order_type, "MTL");
             assert_eq!(order.total_quantity, 100.0);
             assert_eq!(order.limit_price, Some(50.0));
-            assert_eq!(order.tif, "AUC");
+            assert_eq!(order.tif, TimeInForce::Auction);
         }
 
         #[test]
