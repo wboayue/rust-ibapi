@@ -383,7 +383,7 @@ impl OrderType {
 pub enum ValidationError {
     /// Quantity must be positive and finite.
     InvalidQuantity(f64),
-    /// Price must be non-negative and finite.
+    /// Price must be finite (not NaN or infinity).
     InvalidPrice(f64),
     /// Required builder field was not supplied.
     MissingRequiredField(&'static str),
