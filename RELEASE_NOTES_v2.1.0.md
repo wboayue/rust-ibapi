@@ -69,6 +69,39 @@ let loo = order_builder()
     .build();
 ```
 
+### Type-Safe Order Field Enums (#339)
+
+Replace string-based and integer-based order fields with type-safe enums to improve compile-time safety and prevent runtime errors from invalid values:
+
+- **TimeInForce** - Now an enum instead of String (Day, GTC, IOC, GTD, OnOpen, FillOrKill, DayTilCanceled, Auction)
+- **OcaType** - Now an enum instead of i32 (None, CancelWithBlock, ReduceWithBlock, ReduceWithoutBlock)
+- **OrderOrigin** - Now an enum instead of i32 (Customer, Firm)
+- **ShortSaleSlot** - Now an enum instead of i32 (None, Broker, ThirdParty)
+- **VolatilityType** - Now an enum instead of Option<i32> (Daily, Annual)
+- **ReferencePriceType** - Now an enum instead of Option<i32> (Average, BidOrAsk)
+- **AuctionStrategy** - Now an enum instead of Option<i32> (Match, Improvement, Transparent)
+
+Benefits:
+- Compile-time safety: Invalid values caught at compile time
+- Better IDE support: Auto-completion and type hints
+- Self-documenting code: Enum variants clearly show available options
+- Reduced errors: No more typos or invalid values
+
+Example:
+```rust
+use ibapi::orders::{TimeInForce, OcaType};
+
+// Before: stringly-typed
+let mut order = market_order(Action::Buy, 100.0);
+order.tif = "GTC".to_string();  // Easy to typo
+order.oca_type = 2;             // What does 2 mean?
+
+// After: type-safe
+let mut order = market_order(Action::Buy, 100.0);
+order.tif = TimeInForce::GoodTilCanceled;  // Clear and type-safe
+order.oca_type = OcaType::ReduceWithBlock;  // Self-documenting
+```
+
 ## 📚 Documentation Improvements
 
 ### New Documentation Files (#328, #336)
@@ -112,10 +145,55 @@ let loo = order_builder()
 
 ## 📦 Breaking Changes
 
-None - this release is backward compatible with v2.0.0
+### Type-Safe Order Fields (#339)
+
+Several `Order` struct fields have been changed from strings/integers to enums for type safety. This affects code that directly constructs or modifies orders.
+
+**Migration Guide:**
+
+1. **TimeInForce** (was `String`, now `TimeInForce` enum):
+```rust
+// Before
+order.tif = "GTC".to_string();
+
+// After
+order.tif = TimeInForce::GoodTilCanceled;
+```
+
+2. **OcaType** (was `i32`, now `OcaType` enum):
+```rust
+// Before
+order.oca_type = 2;
+
+// After
+order.oca_type = OcaType::ReduceWithBlock;
+```
+
+3. **Order builder helper functions** now accept enum types:
+```rust
+// Before
+let order = auction_limit(Action::Buy, 100.0, 50.0, 2);
+let order = volatility(Action::Buy, 100.0, 0.04, 1);
+let orders = one_cancels_all("OCA1", vec![order1, order2], 2);
+
+// After
+let order = auction_limit(Action::Buy, 100.0, 50.0, AuctionStrategy::Improvement);
+let order = volatility(Action::Buy, 100.0, 0.04, VolatilityType::Daily);
+let orders = one_cancels_all("OCA1", vec![order1, order2], OcaType::ReduceWithBlock);
+```
+
+4. **Default values** have changed:
+   - `Order::tif` defaults to `TimeInForce::Day` (was empty string)
+   - `Order::oca_type` defaults to `OcaType::None` (was 0)
+   - `Order::origin` defaults to `OrderOrigin::Customer` (was 0)
+   - `Order::short_sale_slot` defaults to `ShortSaleSlot::None` (was 0)
+   - `Order::auction_strategy` defaults to `None` (was `Some(0)`)
+
+All enums implement `From<i32>`, `From<&str>`, `ToString`, and `ToField` for seamless wire protocol compatibility.
 
 ## 🔗 Related Pull Requests
 
+- #339 - Replace stringly-typed order fields with type-safe enums
 - #337 - Add fluent conditional order API
 - #336 - Add auction and protection order types
 - #335 - Fix order rejection routing and cleanup feature guards
