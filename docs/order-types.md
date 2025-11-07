@@ -829,10 +829,10 @@ println!("Commission: {}", analysis.commission);
 The fluent API validates orders at build time:
 
 ```rust
-// This will return an error - missing required limit price
+// This will return an error - invalid price (NaN)
 let result = client.order(&contract)
     .buy(100)
-    .limit(0.0)  // Invalid price
+    .limit(f64::NAN)  // Invalid price
     .build();
 
 match result {
