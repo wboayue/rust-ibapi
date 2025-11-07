@@ -1,7 +1,10 @@
 #[cfg(test)]
 mod order_builder_tests {
     use ibapi::contracts::{Contract, Currency, Exchange, Symbol};
-    use ibapi::orders::{Action, OcaType, OrderBuilder};
+    use ibapi::orders::{Action, OrderBuilder};
+
+    #[cfg(feature = "sync")]
+    use ibapi::orders::OcaType;
 
     fn create_stock_contract(symbol: &str) -> Contract {
         Contract {
