@@ -82,7 +82,7 @@ fn main() {
 
     let mut order = order_builder::market_order(Action::Sell, 200.0);
     order.conditions = vec![OrderCondition::Margin(margin_condition)];
-    order.tif = "GTC".to_string(); // Good-til-canceled
+    order.tif = ibapi::orders::TimeInForce::GoodTilCanceled; // Good-til-canceled
 
     println!("   Order: Sell 200 shares at market");
     println!("   Condition: Margin cushion < 30%");
@@ -208,7 +208,7 @@ fn main() {
         OrderCondition::Time(time_cond),
     ];
     order.conditions_cancel_order = false; // Activate (not cancel) when triggered
-    order.tif = "GTC".to_string();
+    order.tif = ibapi::orders::TimeInForce::GoodTilCanceled;
 
     println!("   Order: Sell 100 shares at market");
     println!("   Conditions (ANY can trigger):");
@@ -227,7 +227,7 @@ fn main() {
     let mut order = order_builder::limit_order(Action::Buy, 100.0, 149.0);
     order.conditions = vec![OrderCondition::Time(time_cond)];
     order.conditions_cancel_order = true; // Cancel (not activate) when triggered
-    order.tif = "DAY".to_string();
+    order.tif = ibapi::orders::TimeInForce::Day;
 
     println!("   Order: Buy 100 shares at limit $149.00");
     println!("   Condition: Cancel after 3:30 PM ET if not filled");

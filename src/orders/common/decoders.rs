@@ -2,7 +2,7 @@ use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, Currency, DeltaNeu
 use crate::messages::ResponseMessage;
 use crate::orders::{
     Action, CommissionReport, ExecutionData, Liquidity, Order, OrderComboLeg, OrderCondition, OrderData, OrderOpenClose, OrderState, OrderStatus,
-    Rule80A, SoftDollarTier,
+    Rule80A, SoftDollarTier, TimeInForce,
 };
 use crate::{server_versions, Error};
 
@@ -91,7 +91,7 @@ impl OrderDecoder {
     }
 
     fn read_tif(&mut self) -> Result<(), Error> {
-        self.order.tif = self.message.next_string()?;
+        self.order.tif = TimeInForce::from(self.message.next_string()?);
         Ok(())
     }
 
@@ -112,7 +112,7 @@ impl OrderDecoder {
     }
 
     fn read_origin(&mut self) -> Result<(), Error> {
-        self.order.origin = self.message.next_int()?;
+        self.order.origin = self.message.next_int()?.into();
         Ok(())
     }
 
@@ -196,14 +196,14 @@ impl OrderDecoder {
     }
 
     fn read_short_sale_params(&mut self) -> Result<(), Error> {
-        self.order.short_sale_slot = self.message.next_int()?;
+        self.order.short_sale_slot = self.message.next_int()?.into();
         self.order.designated_location = self.message.next_string()?;
         self.order.exempt_code = self.message.next_int()?;
         Ok(())
     }
 
     fn read_auction_strategy(&mut self) -> Result<(), Error> {
-        self.order.auction_strategy = self.message.next_optional_int()?;
+        self.order.auction_strategy = self.message.next_optional_int()?.map(|v| v.into());
         Ok(())
     }
 
@@ -246,7 +246,7 @@ impl OrderDecoder {
     }
 
     fn read_oca_type(&mut self) -> Result<(), Error> {
-        self.order.oca_type = self.message.next_int()?;
+        self.order.oca_type = self.message.next_int()?.into();
         Ok(())
     }
 
@@ -274,7 +274,7 @@ impl OrderDecoder {
 
     fn read_volatility_order_params(&mut self, read_open_order_attributes: bool) -> Result<(), Error> {
         self.order.volatility = self.message.next_optional_double()?;
-        self.order.volatility_type = self.message.next_optional_int()?;
+        self.order.volatility_type = self.message.next_optional_int()?.map(|v| v.into());
         self.order.delta_neutral_order_type = self.message.next_string()?;
         self.order.delta_neutral_aux_price = self.message.next_optional_double()?;
 
@@ -292,7 +292,7 @@ impl OrderDecoder {
         }
 
         self.order.continuous_update = self.message.next_bool()?;
-        self.order.reference_price_type = self.message.next_optional_int()?;
+        self.order.reference_price_type = self.message.next_optional_int()?.map(|v| v.into());
 
         Ok(())
     }
