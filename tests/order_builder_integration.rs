@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod order_builder_tests {
     use ibapi::contracts::{Contract, Currency, Exchange, Symbol};
-    use ibapi::orders::{Action, OrderBuilder};
+    use ibapi::orders::{Action, OcaType, OrderBuilder};
 
     fn create_stock_contract(symbol: &str) -> Contract {
         Contract {
@@ -210,7 +210,7 @@ mod order_builder_tests {
 
         let order = builder.build().unwrap();
         assert_eq!(order.oca_group, "TestOCA");
-        assert_eq!(order.oca_type, 1);
+        assert_eq!(order.oca_type, OcaType::CancelWithBlock);
     }
 
     #[test]

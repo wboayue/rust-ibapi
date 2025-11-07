@@ -391,7 +391,7 @@ mod tests {
 
     use crate::contracts::{ComboLeg, Contract, Currency, Exchange, SecurityType, Symbol};
     use crate::orders::conditions::TriggerMethod;
-    use crate::orders::{Action, Liquidity};
+    use crate::orders::{Action, Liquidity, OcaType, OrderOrigin, ShortSaleSlot, TimeInForce};
     use crate::stubs::MessageBusStub;
 
     use super::*;
@@ -431,7 +431,7 @@ mod tests {
 
         assert_eq!(
             request_messages[0].encode().replace('\0', "|"),
-            "3|13|0|TSLA|STK||0|||SMART||USD|||||BUY|100|MKT|||||||0||1|0|0|0|0|0|0|0||0||||||||0||-1|0|||0|||0|0||0||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
+            "3|13|0|TSLA|STK||0|||SMART||USD|||||BUY|100|MKT|||DAY||||0||1|0|0|0|0|0|0|0||0||||||||0||-1|0|||0|||0|0||||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
         );
 
         assert!(result.is_ok(), "failed to place order: {}", result.err().unwrap());
@@ -466,11 +466,11 @@ mod tests {
             assert_eq!(order.order_type, "MKT", "order.order_type");
             assert_eq!(order.limit_price, Some(0.0), "order.limit_price");
             assert_eq!(order.aux_price, Some(0.0), "order.aux_price");
-            assert_eq!(order.tif, "DAY", "order.tif");
+            assert_eq!(order.tif, TimeInForce::Day, "order.tif");
             assert_eq!(order.oca_group, "", "order.oca_group");
             assert_eq!(order.account, "DU1234567", "order.account");
             assert_eq!(order.open_close, None, "order.open_close");
-            assert_eq!(order.origin, 0, "order.origin");
+            assert_eq!(order.origin, OrderOrigin::Customer, "order.origin");
             assert_eq!(order.order_ref, "", "order.order_ref");
             assert_eq!(order.client_id, 100, "order.client_id");
             assert_eq!(order.perm_id, 1376327563, "order.perm_id");
@@ -487,10 +487,10 @@ mod tests {
             assert_eq!(order.rule_80_a, None, "order.rule_80_a");
             assert_eq!(order.percent_offset, None, "order.percent_offset");
             assert_eq!(order.settling_firm, "", "order.settling_firm");
-            assert_eq!(order.short_sale_slot, 0, "order.short_sale_slot");
+            assert_eq!(order.short_sale_slot, ShortSaleSlot::None, "order.short_sale_slot");
             assert_eq!(order.designated_location, "", "order.designated_location");
             assert_eq!(order.exempt_code, -1, "order.exempt_code");
-            assert_eq!(order.auction_strategy, Some(0), "order.auction_strategy");
+            assert_eq!(order.auction_strategy, None, "order.auction_strategy");
             assert_eq!(order.starting_price, None, "order.starting_price");
             assert_eq!(order.stock_ref_price, None, "order.stock_ref_price");
             assert_eq!(order.delta, None, "order.delta");
@@ -501,11 +501,11 @@ mod tests {
             assert_eq!(order.sweep_to_fill, false, "order.sweep_to_fill");
             assert_eq!(order.all_or_none, false, "order.all_or_none");
             assert_eq!(order.min_qty, None, "order.min_qty");
-            assert_eq!(order.oca_type, 3, "order.oca_type");
+            assert_eq!(order.oca_type, OcaType::ReduceWithoutBlock, "order.oca_type");
             assert_eq!(order.parent_id, 0, "order.parent_id");
             assert_eq!(order.trigger_method, TriggerMethod::Default, "order.trigger_method");
             assert_eq!(order.volatility, None, "order.volatility");
-            assert_eq!(order.volatility_type, Some(0), "order.volatility_type");
+            assert_eq!(order.volatility_type, None, "order.volatility_type");
             assert_eq!(order.delta_neutral_order_type, "None", "order.delta_neutral_order_type");
             assert_eq!(order.delta_neutral_aux_price, None, "order.delta_neutral_aux_price");
             assert_eq!(order.delta_neutral_con_id, 0, "order.delta_neutral_con_id");
@@ -517,7 +517,7 @@ mod tests {
             assert_eq!(order.delta_neutral_short_sale_slot, 0, "order.delta_neutral_short_sale_slot");
             assert_eq!(order.delta_neutral_designated_location, "", "order.delta_neutral_designated_location");
             assert_eq!(order.continuous_update, false, "order.continuous_update");
-            assert_eq!(order.reference_price_type, Some(0), "order.reference_price_type");
+            assert_eq!(order.reference_price_type, None, "order.reference_price_type");
             assert_eq!(order.trail_stop_price, None, "order.trail_stop_price");
             assert_eq!(order.trailing_percent, None, "order.trailing_percent");
             assert_eq!(order.basis_points, None, "order.basis_points");
@@ -815,11 +815,11 @@ mod tests {
             assert_eq!(order.order_type, "MKT", "order.order_type");
             assert_eq!(order.limit_price, Some(0.0), "order.limit_price");
             assert_eq!(order.aux_price, Some(0.0), "order.aux_price");
-            assert_eq!(order.tif, "DAY", "order.tif");
+            assert_eq!(order.tif, TimeInForce::Day, "order.tif");
             assert_eq!(order.oca_group, "", "order.oca_group");
             assert_eq!(order.account, "DU1234567", "order.account");
             assert_eq!(order.open_close, None, "order.open_close");
-            assert_eq!(order.origin, 0, "order.origin");
+            assert_eq!(order.origin, OrderOrigin::Customer, "order.origin");
             assert_eq!(order.order_ref, "", "order.order_ref");
             assert_eq!(order.perm_id, 1377295418, "order.perm_id");
             assert_eq!(order.outside_rth, false, "order.outside_rth");
@@ -835,7 +835,7 @@ mod tests {
             assert_eq!(order.rule_80_a, None, "order.rule_80_a");
             assert_eq!(order.percent_offset, None, "order.percent_offset");
             assert_eq!(order.settling_firm, "", "order.settling_firm");
-            assert_eq!(order.short_sale_slot, 0, "order.short_sale_slot");
+            assert_eq!(order.short_sale_slot, ShortSaleSlot::None, "order.short_sale_slot");
             assert_eq!(order.designated_location, "", "order.designated_location");
             assert_eq!(order.exempt_code, -1, "order.exempt_code");
             assert_eq!(order.starting_price, None, "order.starting_price");
@@ -847,10 +847,10 @@ mod tests {
             assert_eq!(order.sweep_to_fill, false, "order.sweep_to_fill");
             assert_eq!(order.all_or_none, false, "order.all_or_none");
             assert_eq!(order.min_qty, None, "order.min_qty");
-            assert_eq!(order.oca_type, 3, "order.oca_type");
+            assert_eq!(order.oca_type, OcaType::ReduceWithoutBlock, "order.oca_type");
             assert_eq!(order.trigger_method, TriggerMethod::Default, "order.trigger_method");
             assert_eq!(order.volatility, None, "order.volatility");
-            assert_eq!(order.volatility_type, Some(0), "order.volatility_type");
+            assert_eq!(order.volatility_type, None, "order.volatility_type");
             assert_eq!(order.delta_neutral_order_type, "None", "order.delta_neutral_order_type");
             assert_eq!(order.delta_neutral_aux_price, None, "order.delta_neutral_aux_price");
             assert_eq!(order.delta_neutral_con_id, 0, "order.delta_neutral_con_id");
@@ -858,7 +858,7 @@ mod tests {
             assert_eq!(order.delta_neutral_short_sale_slot, 0, "order.delta_neutral_short_sale_slot");
             assert_eq!(order.delta_neutral_designated_location, "", "order.delta_neutral_designated_location");
             assert_eq!(order.continuous_update, false, "order.continuous_update");
-            assert_eq!(order.reference_price_type, Some(0), "order.reference_price_type");
+            assert_eq!(order.reference_price_type, None, "order.reference_price_type");
             assert_eq!(order.trail_stop_price, Some(150.25), "order.trail_stop_price");
             assert_eq!(order.trailing_percent, None, "order.trailing_percent");
             assert_eq!(contract.combo_legs_description, "", "contract.combo_legs_description");
@@ -1015,7 +1015,7 @@ mod tests {
 
         assert_eq!(
             request_messages[0].encode_simple(),
-            "3|12|0||FUT|202303|0|||EUREX||EUR|FGBL MAR 23||||BUY|10|LMT|500||||||0||1|0|0|0|0|0|0|0||0||||||||0||-1|0|||0|||0|0||0||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
+            "3|12|0||FUT|202303|0|||EUREX||EUR|FGBL MAR 23||||BUY|10|LMT|500||DAY||||0||1|0|0|0|0|0|0|0||0||||||||0||-1|0|||0|||0|0||||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
         );
 
         assert!(results.is_ok(), "failed to place order: {}", results.err().unwrap());
@@ -1065,7 +1065,7 @@ mod tests {
 
         assert_eq!(
             request_messages[0].encode_simple(),
-            "3|12|0|WTI|BAG||0|||SMART||USD|||||SELL|150|MKT|||||||0||1|0|0|0|0|0|0|0|2|55928698|1|BUY|IPE|0|0||0|55850663|1|SELL|IPE|0|0||0|0|1|NonGuaranteed|1||0||||||||0||-1|0|||0|||0|0||0||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
+            "3|12|0|WTI|BAG||0|||SMART||USD|||||SELL|150|MKT|||DAY||||0||1|0|0|0|0|0|0|0|2|55928698|1|BUY|IPE|0|0||0|55850663|1|SELL|IPE|0|0||0|0|1|NonGuaranteed|1||0||||||||0||-1|0|||0|||0|0||||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
         );
 
         assert!(results.is_ok(), "failed to place order: {}", results.err().unwrap());
@@ -1097,7 +1097,7 @@ mod tests {
 
         assert_eq!(
             request_messages[0].encode().replace('\0', "|"),
-            "3|42|0|AAPL|STK||0|||SMART||USD|||||BUY|200|MKT|||||||0||1|0|0|0|0|0|0|0||0||||||||0||-1|0|||0|||0|0||0||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
+            "3|42|0|AAPL|STK||0|||SMART||USD|||||BUY|200|MKT|||DAY||||0||1|0|0|0|0|0|0|0||0||||||||0||-1|0|||0|||0|0||||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
         );
 
         assert!(result.is_ok(), "failed to submit order: {}", result.err().unwrap());

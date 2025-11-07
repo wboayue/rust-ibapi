@@ -6,7 +6,7 @@ mod sync_integration_tests {
     use super::mock_client::mock::MockOrderClient;
     use crate::contracts::{Contract, Currency, Exchange, Symbol};
     use crate::orders::builder::OrderBuilder;
-    use crate::orders::Action;
+    use crate::orders::{Action, OcaType, TimeInForce};
 
     fn create_stock_contract(symbol: &str) -> Contract {
         Contract {
@@ -68,13 +68,13 @@ mod sync_integration_tests {
         assert_eq!(order.limit_price, Some(50.00));
         assert!(order.hidden);
         assert!(order.outside_rth);
-        assert_eq!(order.tif, "GTD");
+        assert_eq!(order.tif, TimeInForce::GoodTilDate);
         assert_eq!(order.good_till_date, "20240630 23:59:59");
         assert_eq!(order.account, "TEST123");
         assert_eq!(order.algo_strategy, "VWAP");
         assert_eq!(order.algo_params.len(), 2);
         assert_eq!(order.oca_group, "TestGroup");
-        assert_eq!(order.oca_type, 1);
+        assert_eq!(order.oca_type, OcaType::CancelWithBlock);
     }
 }
 

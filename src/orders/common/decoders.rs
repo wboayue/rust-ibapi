@@ -203,7 +203,7 @@ impl OrderDecoder {
     }
 
     fn read_auction_strategy(&mut self) -> Result<(), Error> {
-        self.order.auction_strategy = self.message.next_optional_int()?.map(|v| v.into());
+        self.order.auction_strategy = self.message.next_optional_int()?.filter(|&v| v != 0).map(|v| v.into());
         Ok(())
     }
 
@@ -274,7 +274,7 @@ impl OrderDecoder {
 
     fn read_volatility_order_params(&mut self, read_open_order_attributes: bool) -> Result<(), Error> {
         self.order.volatility = self.message.next_optional_double()?;
-        self.order.volatility_type = self.message.next_optional_int()?.map(|v| v.into());
+        self.order.volatility_type = self.message.next_optional_int()?.filter(|&v| v != 0).map(|v| v.into());
         self.order.delta_neutral_order_type = self.message.next_string()?;
         self.order.delta_neutral_aux_price = self.message.next_optional_double()?;
 
@@ -292,7 +292,7 @@ impl OrderDecoder {
         }
 
         self.order.continuous_update = self.message.next_bool()?;
-        self.order.reference_price_type = self.message.next_optional_int()?.map(|v| v.into());
+        self.order.reference_price_type = self.message.next_optional_int()?.filter(|&v| v != 0).map(|v| v.into());
 
         Ok(())
     }
