@@ -411,8 +411,8 @@ async fn test_async_order_validation() {
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("Invalid quantity"));
 
-    // Test invalid price
-    let builder = OrderBuilder::new(&client, &contract).buy(100).limit(-50.00);
+    // Test invalid price (NaN)
+    let builder = OrderBuilder::new(&client, &contract).buy(100).limit(f64::NAN);
 
     let result = builder.submit().await;
     assert!(result.is_err());

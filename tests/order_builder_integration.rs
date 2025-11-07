@@ -175,13 +175,13 @@ mod order_builder_tests {
             panic!("Expected InvalidQuantity error");
         }
 
-        // Test invalid price
-        let builder = OrderBuilder::new(&client, &contract).buy(100).limit(-50.0);
+        // Test invalid price (NaN)
+        let builder = OrderBuilder::new(&client, &contract).buy(100).limit(f64::NAN);
 
         let result = builder.build();
         assert!(result.is_err());
         if let Err(ValidationError::InvalidPrice(p)) = result {
-            assert_eq!(p, -50.0);
+            assert!(p.is_nan());
         } else {
             panic!("Expected InvalidPrice error");
         }

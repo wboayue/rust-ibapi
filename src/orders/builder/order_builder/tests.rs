@@ -419,11 +419,11 @@ fn test_validation_errors() {
     let result = builder.build();
     assert!(matches!(result, Err(ValidationError::MissingRequiredField("order_type"))));
 
-    // Test invalid stop price
-    let builder = OrderBuilder::new(&client, &contract).buy(100).stop(-10.0);
+    // Test invalid stop price (NaN)
+    let builder = OrderBuilder::new(&client, &contract).buy(100).stop(f64::NAN);
 
     let result = builder.build();
-    assert!(matches!(result, Err(ValidationError::InvalidPrice(-10.0))));
+    assert!(matches!(result, Err(ValidationError::InvalidPrice(_))));
 }
 
 #[test]

@@ -117,11 +117,8 @@ impl Quantity {
 pub struct Price(f64);
 
 impl Price {
-    /// Create a validated price ensuring it is non-negative and finite.
+    /// Create a validated price ensuring it is finite.
     pub fn new(value: f64) -> Result<Self, ValidationError> {
-        if value < 0.0 {
-            return Err(ValidationError::InvalidPrice(value));
-        }
         if value.is_nan() || value.is_infinite() {
             return Err(ValidationError::InvalidPrice(value));
         }
@@ -386,7 +383,7 @@ impl OrderType {
 pub enum ValidationError {
     /// Quantity must be positive and finite.
     InvalidQuantity(f64),
-    /// Price must be non-negative and finite.
+    /// Price must be finite (not NaN or infinity).
     InvalidPrice(f64),
     /// Required builder field was not supplied.
     MissingRequiredField(&'static str),
