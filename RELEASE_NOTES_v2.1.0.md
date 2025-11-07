@@ -47,9 +47,8 @@ let order = order_builder()
 New order types for market open/close and futures protection:
 
 - **Market on Close (MOC)** and **Limit on Close (LOC)** orders
-- **Market on Open** and **Limit on Open** using `OpeningAuction` TIF
+- **Market on Open** and **Limit on Open** using `OnOpen` TIF
 - **Market with Protection** and **Stop with Protection** for futures
-- New `OpeningAuction` variant added to `TimeInForce` enum
 
 Example:
 ```rust
@@ -65,7 +64,7 @@ let loo = order_builder()
     .action(Action::Buy)
     .total_quantity(100.0)
     .limit_price(150.0)
-    .time_in_force(TimeInForce::OpeningAuction)
+    .time_in_force(TimeInForce::OnOpen)
     .build();
 ```
 
@@ -135,13 +134,15 @@ order.oca_type = OcaType::ReduceWithBlock;  // Self-documenting
 
 ## 🔧 Internal Improvements
 
-- **Code additions**: 4,671 insertions, 172 deletions across 34 files
+- **Code changes**: 4,371 insertions, 853 deletions across 40 files
 - **New modules**:
   - `src/orders/conditions.rs` (998 lines) - Core condition types and builders
   - `src/orders/builder/condition_helpers.rs` (195 lines) - Fluent API helpers
   - `tests/conditional_orders_integration.rs` (259 lines) - Integration tests
-- Enhanced message encoding/decoding for conditional orders (588 new lines)
-- Improved transport layer error handling (49 async, 14 sync)
+  - `examples/conditional_orders.rs` (274 lines) - Comprehensive usage examples
+  - `docs/api-patterns.md` (209 lines) - API pattern documentation
+- Enhanced message encoding/decoding for conditional orders and type-safe enums
+- Improved transport layer error handling and visibility controls
 
 ## 📦 Breaking Changes
 
