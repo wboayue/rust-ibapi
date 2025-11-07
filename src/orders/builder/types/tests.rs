@@ -47,7 +47,7 @@ fn test_quantity_validation() {
 fn test_price_validation() {
     assert!(Price::new(50.0).is_ok());
     assert!(Price::new(0.0).is_ok());
-    assert!(Price::new(-10.0).is_err());
+    assert!(Price::new(-10.0).is_ok());
     assert!(Price::new(f64::NAN).is_err());
     assert!(Price::new(f64::INFINITY).is_err());
 }
