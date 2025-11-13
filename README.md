@@ -204,7 +204,7 @@ async fn main() {
             Some(datetime!(2023-04-11 20:00 UTC)),
             1.days(),
             HistoricalBarSize::Hour,
-            HistoricalWhatToShow::Trades,
+            Some(HistoricalWhatToShow::Trades),
             TradingHours::Regular,
         )
         .await
