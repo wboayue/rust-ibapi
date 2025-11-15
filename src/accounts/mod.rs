@@ -96,6 +96,16 @@ impl AccountSummaryTags {
     pub const DAY_TRADES_REMAINING: &'static str = "DayTradesRemaining";
     /// Effective account leverage based on net liquidation.
     pub const LEVERAGE: &'static str = "Leverage";
+    /// Returns cash balance data in the account's base currency only.
+    /// Available since TWS Build 956 / IB Gateway 956.
+    ///
+    /// For currency-specific queries, use the literal string format `"$LEDGER:CURRENCY"`
+    /// where CURRENCY is replaced with the actual currency code (e.g., `"$LEDGER:USD"`,
+    /// `"$LEDGER:EUR"`, `"$LEDGER:HKD"`).
+    pub const LEDGER: &'static str = "$LEDGER";
+    /// Returns aggregated cash balance data across all accounts and currencies.
+    /// Available since TWS Build 956 / IB Gateway 956.
+    pub const LEDGER_ALL: &'static str = "$LEDGER:ALL";
 
     /// Convenience slice containing every supported account summary tag.
     pub const ALL: &'static [&'static str] = &[
