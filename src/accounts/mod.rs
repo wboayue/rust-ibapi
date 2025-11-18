@@ -138,6 +138,7 @@ impl AccountSummaryTags {
         Self::HIGHEST_SEVERITY,
         Self::DAY_TRADES_REMAINING,
         Self::LEVERAGE,
+        Self::LEDGER_ALL,
     ];
 }
 
