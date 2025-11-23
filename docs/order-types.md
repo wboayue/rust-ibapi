@@ -592,7 +592,13 @@ Seeks to fill at the midpoint between bid and ask.
 // Midprice order with price cap at $151.00
 let order_id = client.order(&contract)
     .buy(100)
-    .midprice(151.00)
+    .midprice(Some(151.00))
+    .submit()?;
+
+// Midprice order without price cap
+let order_id = client.order(&contract)
+    .buy(100)
+    .midprice(None)
     .submit()?;
 ```
 

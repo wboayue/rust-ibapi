@@ -139,7 +139,7 @@ mod order_builder_tests {
         assert!(order.sweep_to_fill);
 
         // Test midprice order
-        let builder = OrderBuilder::new(&client, &contract).buy(100).midprice(50.0);
+        let builder = OrderBuilder::new(&client, &contract).buy(100).midprice(Some(50.0));
 
         let order = builder.build().unwrap();
         assert_eq!(order.order_type, "MIDPRICE");

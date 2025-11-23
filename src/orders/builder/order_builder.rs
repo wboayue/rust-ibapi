@@ -262,9 +262,9 @@ impl<'a, C> OrderBuilder<'a, C> {
     }
 
     /// Midprice order - fills at midpoint between bid/ask or better
-    pub fn midprice(mut self, price_cap: impl Into<f64>) -> Self {
+    pub fn midprice(mut self, price_cap: Option<f64>) -> Self {
         self.order_type = Some(OrderType::Midprice);
-        self.limit_price = Some(price_cap.into());
+        self.limit_price = price_cap;
         self
     }
 
