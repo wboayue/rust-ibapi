@@ -122,7 +122,7 @@ fn test_midprice_order() {
     let client = MockClient;
     let contract = create_test_contract();
 
-    let builder = OrderBuilder::new(&client, &contract).buy(100).midprice(50.00);
+    let builder = OrderBuilder::new(&client, &contract).buy(100).midprice(Some(50.00));
 
     let order = builder.build().unwrap();
     assert_eq!(order.order_type, "MIDPRICE");

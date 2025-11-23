@@ -115,13 +115,13 @@ pub fn midpoint_match(action: Action, quantity: f64) -> Order {
 // A Midprice order is designed to split the difference between the bid and ask prices, and fill at the current midpoint of
 // the NBBO or better. Set an optional price cap to define the highest price (for a buy order) or the lowest price (for a sell
 // order) you are willing to accept. Requires TWS 975+. Smart-routing to US stocks only.
-/// Construct a midprice order with the supplied cap.
-pub fn midprice(action: Action, quantity: f64, price_cap: f64) -> Order {
+/// Construct a midprice order with an optional price cap.
+pub fn midprice(action: Action, quantity: f64, price_cap: Option<f64>) -> Order {
     Order {
         action,
         order_type: "MIDPRICE".to_owned(),
         total_quantity: quantity,
-        limit_price: Some(price_cap),
+        limit_price: price_cap,
         ..Order::default()
     }
 }
@@ -1390,13 +1390,23 @@ mod tests {
         }
 
         #[test]
-        fn test_midprice() {
-            let order = midprice(Action::Buy, 100.0, 50.0);
+        fn test_midprice_with_cap() {
+            let order = midprice(Action::Buy, 100.0, Some(50.0));
 
             assert_eq!(order.action, Action::Buy);
             assert_eq!(order.order_type, "MIDPRICE");
             assert_eq!(order.total_quantity, 100.0);
             assert_eq!(order.limit_price, Some(50.0));
+        }
+
+        #[test]
+        fn test_midprice_without_cap() {
+            let order = midprice(Action::Buy, 100.0, None);
+
+            assert_eq!(order.action, Action::Buy);
+            assert_eq!(order.order_type, "MIDPRICE");
+            assert_eq!(order.total_quantity, 100.0);
+            assert_eq!(order.limit_price, None);
         }
 
         #[test]
