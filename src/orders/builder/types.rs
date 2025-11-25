@@ -354,8 +354,7 @@ impl OrderType {
                 | Self::AuctionLimit
                 | Self::ComboLimit
                 | Self::RelativeLimitCombo
-                | Self::AtAuction
-                | Self::Midprice // TrailingStopLimit uses limit_price_offset, not limit_price
+                | Self::AtAuction // TrailingStopLimit uses limit_price_offset, not limit_price
         )
     }
 
