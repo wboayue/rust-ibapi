@@ -130,6 +130,18 @@ fn test_midprice_order() {
 }
 
 #[test]
+fn test_midprice_order_without_price_cap() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let builder = OrderBuilder::new(&client, &contract).buy(100).midprice(None);
+
+    let order = builder.build().unwrap();
+    assert_eq!(order.order_type, "MIDPRICE");
+    assert_eq!(order.limit_price, None);
+}
+
+#[test]
 fn test_at_auction() {
     let client = MockClient;
     let contract = create_test_contract();
