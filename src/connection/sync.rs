@@ -111,7 +111,7 @@ impl<S: Stream> Connection<S> {
     /// Read a message from the connection
     pub(crate) fn read_message(&self) -> Response {
         let data = self.socket.read_message()?;
-        let raw_string = String::from_utf8(data)?;
+        let raw_string = String::from_utf8_lossy(&data).into_owned();
         debug!("<- {raw_string:?}");
 
         // Record the response if debug logging is enabled
