@@ -152,7 +152,7 @@ impl AsyncConnection {
             socket.read_exact(&mut data).await?;
         }
 
-        let raw_string = String::from_utf8(data)?;
+        let raw_string = String::from_utf8_lossy(&data).into_owned();
         debug!("<- {raw_string:?}");
 
         // Record the response if debug logging is enabled
