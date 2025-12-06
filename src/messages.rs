@@ -441,6 +441,8 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         IncomingMessages::TickString => Some(2),
         IncomingMessages::WshEventData => Some(1),
         IncomingMessages::WshMetaData => Some(1),
+        IncomingMessages::DisplayGroupList => Some(2),
+        IncomingMessages::DisplayGroupUpdated => Some(2),
 
         _ => {
             debug!("could not determine request id index for {kind:?} (this message type may not have a request id).");
