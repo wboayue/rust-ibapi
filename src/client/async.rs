@@ -525,6 +525,58 @@ impl Client {
         accounts::family_codes(self).await
     }
 
+    /// Subscribes to TWS's Display Groups.
+    ///
+    /// # Arguments
+    /// * `group_id` - The ID of the group to subscribe to.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:7497", 100).await.expect("connection failed");
+    ///
+    ///     let mut subscription = client.subscribe_to_group_events(1).await.expect("error subscribing to group events");
+    ///
+    ///     while let Some(msg) = subscription.next().await {
+    ///         println!("Received group event: {:?}", msg);
+    ///     }
+    /// }
+    /// ```
+    pub async fn subscribe_to_group_events(&self, group_id: i32) -> Result<Subscription<String>, Error> {
+        // 1. Get a new Request ID
+        let request_id = self.next_request_id();
+
+        // 2. Create the message
+        let mut message = RequestMessage::default();
+        message.push_field(&OutgoingMessages::SubscribeToGroupEvents);
+        message.push_field(&1); // Version
+        message.push_field(&request_id);
+        message.push_field(&group_id);
+
+        // 3. Register the subscription
+        let subscription = self.send_request(request_id, message).await?;
+
+        // 4. Create the typed subscription
+        Ok(Subscription::with_decoder(
+            subscription,
+            self.server_version,
+            self.message_bus.clone(),
+            |_server_version, message| {
+                // DisplayGroupUpdated: 2, reqId, contractInfo
+                let contract_info = message.peek_string(3);
+                Ok(contract_info)
+            },
+            Some(request_id),
+            None,
+            Some(OutgoingMessages::SubscribeToGroupEvents),
+            crate::subscriptions::ResponseContext::default(),
+        ))
+    }
+
     // === Market Data ===
 
     /// Creates a market data subscription builder with a fluent interface.
@@ -4521,5 +4573,50 @@ mod tests {
         let requests = gateway.requests();
         assert!(requests[0].starts_with("102\0"), "Request should be RequestWshEventData");
         assert!(requests[0].contains(filter), "Request should contain the filter");
+    }
+
+    #[tokio::test]
+    async fn test_subscribe_to_group_events() {
+        use crate::connection::ConnectionMetadata;
+        use crate::stubs::MessageBusStub;
+        use std::sync::{Arc, RwLock};
+        use time::OffsetDateTime;
+
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            // DisplayGroupUpdated (68), version 1, reqId 9000, contractInfo "group info"
+            response_messages: vec!["68\01\09000\0group info\0".to_string()],
+        });
+
+        let connection_metadata = ConnectionMetadata {
+            client_id: 100,
+            server_version: 176,
+            connection_time: Some(OffsetDateTime::now_utc()),
+            time_zone: None,
+            next_order_id: 1,
+            managed_accounts: String::new(),
+        };
+
+        let client = Client::new(connection_metadata, message_bus.clone()).expect("failed to create client");
+
+        let mut subscription = client.subscribe_to_group_events(1).await.expect("failed to subscribe");
+
+        // Verify request was sent
+        {
+            let requests = message_bus.request_messages.read().unwrap();
+            assert_eq!(requests.len(), 1);
+
+            let req = &requests[0];
+            // RequestMessage has fields: [SubscribeToGroupEvents, Version, RequestId, GroupId]
+            assert_eq!(req[0], "68"); // SubscribeToGroupEvents
+            assert_eq!(req[1], "1"); // Version
+            let _req_id = &req[2];
+            assert_eq!(req[3], "1"); // Group ID
+        }
+
+        // Verify response
+        let result = subscription.next().await;
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().unwrap(), "group info");
     }
 }
