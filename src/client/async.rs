@@ -567,8 +567,12 @@ impl Client {
             self.message_bus.clone(),
             |_server_version, message| {
                 // DisplayGroupUpdated: 2, reqId, contractInfo
-                let contract_info = message.peek_string(3);
-                Ok(contract_info)
+                if message.len() > 3 {
+                    let contract_info = message.peek_string(3);
+                    Ok(contract_info)
+                } else {
+                    Ok(String::new())
+                }
             },
             Some(request_id),
             None,
