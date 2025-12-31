@@ -5,21 +5,24 @@ use log::warn;
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::Error;
 
-/// Decodes a DisplayGroupUpdated message and returns the contract info string.
-pub(crate) fn decode_display_group_updated(message: &mut ResponseMessage) -> Result<String, Error> {
+use super::stream_decoders::DisplayGroupUpdate;
+
+/// Decodes a DisplayGroupUpdated message.
+pub(crate) fn decode_display_group_updated(message: &mut ResponseMessage) -> Result<DisplayGroupUpdate, Error> {
     // Validate message type
     if message.message_type() != IncomingMessages::DisplayGroupUpdated {
         return Err(Error::Simple(format!("unexpected message type: {:?}", message.message_type())));
     }
 
     // DisplayGroupUpdated: message_type, version, request_id, contract_info
-    if message.len() > 3 {
-        let contract_info = message.peek_string(3);
-        Ok(contract_info)
+    let contract_info = if message.len() > 3 {
+        message.peek_string(3)
     } else {
         warn!("DisplayGroupUpdated message has fewer fields than expected (len={})", message.len());
-        Ok(String::new())
-    }
+        String::new()
+    };
+
+    Ok(DisplayGroupUpdate::new(contract_info))
 }
 
 #[cfg(test)]
@@ -38,7 +41,7 @@ mod tests {
 
         let result = decode_display_group_updated(&mut message).expect("decoding failed");
 
-        assert_eq!(result, "265598@SMART");
+        assert_eq!(result.contract_info, "265598@SMART");
     }
 
     #[test]
@@ -48,7 +51,7 @@ mod tests {
 
         let result = decode_display_group_updated(&mut message).expect("decoding failed");
 
-        assert_eq!(result, "");
+        assert_eq!(result.contract_info, "");
     }
 
     #[test]

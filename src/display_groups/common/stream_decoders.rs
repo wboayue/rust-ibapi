@@ -29,10 +29,7 @@ impl StreamDecoder<DisplayGroupUpdate> for DisplayGroupUpdate {
 
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::DisplayGroupUpdated => {
-                let contract_info = decoders::decode_display_group_updated(message)?;
-                Ok(DisplayGroupUpdate::new(contract_info))
-            }
+            IncomingMessages::DisplayGroupUpdated => decoders::decode_display_group_updated(message),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
