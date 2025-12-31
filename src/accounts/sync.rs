@@ -115,7 +115,7 @@ pub fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
             message.skip(); // message type
             message.skip(); // message version
             let accounts = message.next_string()?;
-            Ok(accounts.split(",").map(String::from).collect())
+            Ok(accounts.split(',').filter(|s| !s.is_empty()).map(String::from).collect())
         },
         || Ok(Vec::default()),
     )
@@ -304,11 +304,7 @@ mod tests {
         let accounts_empty = client_empty
             .managed_accounts()
             .expect("request managed accounts failed for empty response");
-        assert_eq!(
-            accounts_empty,
-            vec![""],
-            "Empty accounts list should result in a vec with one empty string"
-        );
+        assert!(accounts_empty.is_empty(), "Empty accounts list should result in empty vec");
 
         // Scenario: No message (subscription.next() returns None)
         let (client_no_msg, _) = create_blocking_test_client();
