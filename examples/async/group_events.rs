@@ -31,8 +31,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     while let Some(result) = subscription.next().await {
         match result {
-            Ok(contract_info) => {
-                println!("Received group event: {}", contract_info);
+            Ok(event) => {
+                println!("Received group event: {:?}", event);
+                println!("  Contract info: {}", event.contract_info);
             }
             Err(e) => {
                 eprintln!("Error receiving group event: {e:?}");
