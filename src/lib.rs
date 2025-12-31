@@ -56,8 +56,7 @@ pub(crate) mod connection;
 pub(crate) mod common;
 
 /// Display groups subscription support
-#[cfg(feature = "async")]
-pub(crate) mod display_groups;
+pub mod display_groups;
 
 /// Subscription types for streaming data
 pub mod subscriptions;

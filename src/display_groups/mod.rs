@@ -9,5 +9,12 @@
 
 pub(crate) mod common;
 
-pub(crate) use common::decoders;
+#[cfg(feature = "sync")]
+pub(crate) mod sync;
+
 pub(crate) use common::encoders;
+
+#[cfg(feature = "async")]
+pub(crate) use common::decoders;
+
+pub use common::DisplayGroupUpdate;
