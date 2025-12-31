@@ -3,12 +3,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use log::{debug, warn};
+use log::debug;
 use time::OffsetDateTime;
 use time_tz::Tz;
 
 use crate::connection::{r#async::AsyncConnection, ConnectionMetadata};
-use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage};
+use crate::messages::{OutgoingMessages, RequestMessage};
 use crate::transport::{
     r#async::{AsyncInternalSubscription, AsyncTcpMessageBus},
     AsyncMessageBus,
@@ -20,6 +20,7 @@ use crate::accounts;
 use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::contracts::Contract;
+use crate::display_groups;
 use crate::market_data::builder::MarketDataBuilder;
 use crate::market_data::TradingHours;
 use crate::orders::OrderBuilder;
@@ -547,52 +548,25 @@ impl Client {
     /// }
     /// ```
     pub async fn subscribe_to_group_events(&self, group_id: i32) -> Result<Subscription<String>, Error> {
-        // 1. Get a new Request ID
         let request_id = self.next_request_id();
+        let message = display_groups::encoders::encode_subscribe_to_group_events(request_id, group_id)?;
 
-        // 2. Create the message
-        let mut message = RequestMessage::default();
-        message.push_field(&OutgoingMessages::SubscribeToGroupEvents);
-        message.push_field(&1); // Version
-        message.push_field(&request_id);
-        message.push_field(&group_id);
-
-        // 3. Register the subscription
         let internal_subscription = self.send_request(request_id, message).await?;
 
-        // 4. Create the typed subscription
         let mut subscription = Subscription::with_decoder(
             internal_subscription,
             self.server_version,
             self.message_bus.clone(),
-            |_server_version, message| {
-                // Validate message type
-                if message.message_type() != IncomingMessages::DisplayGroupUpdated {
-                    return Err(Error::Simple(format!("unexpected message type: {:?}", message.message_type())));
-                }
-                // DisplayGroupUpdated: version, reqId, contractInfo
-                if message.len() > 3 {
-                    let contract_info = message.peek_string(3);
-                    Ok(contract_info)
-                } else {
-                    warn!("DisplayGroupUpdated message has fewer fields than expected (len={})", message.len());
-                    Ok(String::new())
-                }
-            },
+            |_server_version, message| display_groups::decoders::decode_display_group_updated(message),
             Some(request_id),
             None,
             Some(OutgoingMessages::SubscribeToGroupEvents),
             crate::subscriptions::ResponseContext::default(),
         );
 
-        // 5. Set cancel function for unsubscribe
         subscription.set_cancel_fn(|_server_version, request_id, _context| {
             let request_id = request_id.ok_or_else(|| Error::Simple("Request ID required to unsubscribe from group events".to_string()))?;
-            let mut msg = RequestMessage::default();
-            msg.push_field(&OutgoingMessages::UnsubscribeFromGroupEvents);
-            msg.push_field(&1); // Version
-            msg.push_field(&request_id);
-            Ok(msg)
+            display_groups::encoders::encode_unsubscribe_from_group_events(request_id)
         });
 
         Ok(subscription)
