@@ -397,6 +397,52 @@ while let Some(position) = positions.next().await {
 }
 ```
 
+## Trading Hours Support
+
+The `TradingHours` enum controls whether data includes extended hours (pre-market and after-hours). However, not all market data APIs support this parameter at the TWS protocol level.
+
+| API | TradingHours Support | Notes |
+|-----|---------------------|-------|
+| `realtime_bars()` | ✓ Yes | Server-side filtering via `use_rth` |
+| `historical_data()` | ✓ Yes | Server-side filtering via `use_rth` |
+| `market_data()` | ✗ No | TWS protocol doesn't support filtering |
+
+### Realtime Bars (Extended Hours Supported)
+
+```rust
+use ibapi::market_data::TradingHours;
+
+// Regular trading hours only
+let bars = client.realtime_bars(
+    &contract,
+    BarSize::Sec5,
+    WhatToShow::Trades,
+    TradingHours::Regular,  // Excludes pre/post-market
+).await?;
+
+// Include extended hours
+let bars = client.realtime_bars(
+    &contract,
+    BarSize::Sec5,
+    WhatToShow::Trades,
+    TradingHours::Extended,  // Includes pre/post-market
+).await?;
+```
+
+### Market Data Subscriptions (No Extended Hours Filtering)
+
+The TWS API's `reqMktData` does not support a `useRth` parameter. Streaming tick data automatically includes all available data, including pre-market and after-hours quotes when the exchange reports them.
+
+```rust
+// Market data subscriptions receive ALL available data
+// including extended hours - no filtering option exists
+let ticks = client.market_data(&contract)
+    .subscribe()
+    .await?;
+```
+
+To filter for regular trading hours only, you must filter client-side based on timestamp and the trading session times for your specific exchange.
+
 ## Error Handling Patterns
 
 ### Connection Errors
