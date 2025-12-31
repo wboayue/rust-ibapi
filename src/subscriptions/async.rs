@@ -221,19 +221,6 @@ impl<T> Subscription<T> {
         }
     }
 
-    /// Set the cancel function for this subscription
-    pub(crate) fn set_cancel_fn<F>(&mut self, f: F)
-    where
-        F: Fn(i32, Option<i32>, Option<&ResponseContext>) -> Result<RequestMessage, Error> + Send + Sync + 'static,
-    {
-        self.cancel_fn = Some(Arc::new(Box::new(f)));
-    }
-
-    /// Check if this subscription has a cancel function set
-    pub fn has_cancel_fn(&self) -> bool {
-        self.cancel_fn.is_some()
-    }
-
     /// Get the next value from the subscription
     pub async fn next(&mut self) -> Option<Result<T, Error>>
     where

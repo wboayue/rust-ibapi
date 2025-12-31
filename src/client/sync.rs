@@ -17,6 +17,7 @@ use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::connection::{sync::Connection, ConnectionMetadata};
 use crate::contracts::{Contract, OptionComputation, SecurityType};
+use crate::display_groups::DisplayGroupUpdate;
 use crate::errors::Error;
 use crate::market_data::builder::MarketDataBuilder;
 use crate::market_data::historical::{self, HistogramEntry};
@@ -29,7 +30,7 @@ use crate::scanner::ScannerData;
 use crate::subscriptions::sync::Subscription;
 use crate::transport::{InternalSubscription, MessageBus, TcpMessageBus, TcpSocket};
 use crate::wsh::AutoFill;
-use crate::{accounts, contracts, market_data, news, orders, scanner, wsh};
+use crate::{accounts, contracts, display_groups, market_data, news, orders, scanner, wsh};
 
 use super::id_generator::ClientIdManager;
 
@@ -435,6 +436,34 @@ impl Client {
     /// ```
     pub fn managed_accounts(&self) -> Result<Vec<String>, Error> {
         accounts::blocking::managed_accounts(self)
+    }
+
+    // === Display Groups ===
+
+    /// Subscribes to display group events for the specified group.
+    ///
+    /// Display Groups are a TWS-only feature (not available in IB Gateway).
+    /// They allow organizing contracts into color-coded groups in the TWS UI.
+    /// When subscribed, you receive updates whenever the user changes the contract
+    /// displayed in that group within TWS.
+    ///
+    /// # Arguments
+    /// * `group_id` - The ID of the group to subscribe to (1-9)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:7497", 100).expect("connection failed");
+    ///
+    /// let subscription = client.subscribe_to_group_events(1).expect("subscription failed");
+    /// for event in &subscription {
+    ///     println!("group event: {:?}", event);
+    /// }
+    /// ```
+    pub fn subscribe_to_group_events(&self, group_id: i32) -> Result<Subscription<DisplayGroupUpdate>, Error> {
+        display_groups::sync::subscribe_to_group_events(self, group_id)
     }
 
     // === Contracts ===
