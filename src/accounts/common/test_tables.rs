@@ -155,8 +155,8 @@ pub fn managed_accounts_test_cases() -> Vec<ManagedAccountsTestCase> {
         ManagedAccountsTestCase {
             scenario: "empty response",
             responses: vec!["17|1||".into()],
-            expected: vec![String::new()],
-            description: "Empty account string results in single empty account",
+            expected: vec![],
+            description: "Empty account string results in empty vector",
         },
         ManagedAccountsTestCase {
             scenario: "no response",
@@ -167,8 +167,8 @@ pub fn managed_accounts_test_cases() -> Vec<ManagedAccountsTestCase> {
         ManagedAccountsTestCase {
             scenario: "accounts with trailing comma",
             responses: vec!["17|1|ACC1,ACC2,|".into()],
-            expected: vec!["ACC1".to_string(), "ACC2".to_string(), String::new()],
-            description: "Trailing comma creates empty account entry",
+            expected: vec!["ACC1".to_string(), "ACC2".to_string()],
+            description: "Trailing comma is ignored",
         },
     ]
 }

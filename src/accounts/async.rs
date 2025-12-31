@@ -120,7 +120,7 @@ pub async fn managed_accounts(client: &Client) -> Result<Vec<String>, Error> {
             message.skip(); // message type
             message.skip(); // message version
             let accounts = message.next_string()?;
-            Ok(accounts.split(",").map(String::from).collect())
+            Ok(accounts.split(',').filter(|s| !s.is_empty()).map(String::from).collect())
         },
         || Ok(Vec::default()),
     )
