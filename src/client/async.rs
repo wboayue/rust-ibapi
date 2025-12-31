@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use log::debug;
+use log::{debug, warn};
 use time::OffsetDateTime;
 use time_tz::Tz;
 
@@ -575,6 +575,7 @@ impl Client {
                     let contract_info = message.peek_string(3);
                     Ok(contract_info)
                 } else {
+                    warn!("DisplayGroupUpdated message has fewer fields than expected (len={})", message.len());
                     Ok(String::new())
                 }
             },

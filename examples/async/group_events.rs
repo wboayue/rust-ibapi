@@ -6,7 +6,7 @@
 //! cargo run --features async --example async_group_events
 //! ```
 //!
-//! Make sure TWS is running with API connections enabled
+//! Make sure TWS or IB Gateway is running with API connections enabled
 
 use ibapi::prelude::*;
 
@@ -14,9 +14,9 @@ use ibapi::prelude::*;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
-    println!("Connecting to TWS...");
+    println!("Connecting to IB Gateway...");
 
-    let client = Client::connect("127.0.0.1:7497", 100).await?;
+    let client = Client::connect("127.0.0.1:4002", 100).await?;
     println!("Connected successfully!");
 
     println!("\nSubscribing to group events for group 1...");
