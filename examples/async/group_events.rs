@@ -1,12 +1,15 @@
 #![allow(clippy::uninlined_format_args)]
 //! Example of subscribing to TWS display group events asynchronously
 //!
+//! Display Groups are a TWS-only feature (not available in IB Gateway).
+//! They allow organizing contracts into color-coded groups in the TWS UI.
+//!
 //! To run this example:
 //! ```bash
 //! cargo run --features async --example async_group_events
 //! ```
 //!
-//! Make sure TWS or IB Gateway is running with API connections enabled
+//! Make sure TWS is running with API connections enabled
 
 use ibapi::prelude::*;
 
@@ -14,9 +17,10 @@ use ibapi::prelude::*;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
-    println!("Connecting to IB Gateway...");
+    println!("Connecting to TWS...");
 
-    let client = Client::connect("127.0.0.1:4002", 100).await?;
+    // Display Groups require TWS (not IB Gateway)
+    let client = Client::connect("127.0.0.1:7497", 100).await?;
     println!("Connected successfully!");
 
     println!("\nSubscribing to group events for group 1...");
