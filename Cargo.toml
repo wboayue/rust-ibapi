@@ -622,3 +622,8 @@ name = "record_interactions"
 path = "examples/record_interactions.rs"
 required-features = ["sync"]
 
+
+[[example]]
+name = "async_group_events"
+path = "examples/async/group_events.rs"
+required-features = ["async"]

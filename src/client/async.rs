@@ -20,6 +20,7 @@ use crate::accounts;
 use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::contracts::Contract;
+use crate::display_groups;
 use crate::market_data::builder::MarketDataBuilder;
 use crate::market_data::TradingHours;
 use crate::orders::OrderBuilder;
@@ -523,6 +524,52 @@ impl Client {
     /// ```
     pub async fn family_codes(&self) -> Result<Vec<FamilyCode>, Error> {
         accounts::family_codes(self).await
+    }
+
+    /// Subscribes to TWS's Display Groups.
+    ///
+    /// # Arguments
+    /// * `group_id` - The ID of the group to subscribe to.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:7497", 100).await.expect("connection failed");
+    ///
+    ///     let mut subscription = client.subscribe_to_group_events(1).await.expect("error subscribing to group events");
+    ///
+    ///     while let Some(msg) = subscription.next().await {
+    ///         println!("Received group event: {:?}", msg);
+    ///     }
+    /// }
+    /// ```
+    pub async fn subscribe_to_group_events(&self, group_id: i32) -> Result<Subscription<String>, Error> {
+        let request_id = self.next_request_id();
+        let message = display_groups::encoders::encode_subscribe_to_group_events(request_id, group_id)?;
+
+        let internal_subscription = self.send_request(request_id, message).await?;
+
+        let mut subscription = Subscription::with_decoder(
+            internal_subscription,
+            self.server_version,
+            self.message_bus.clone(),
+            |_server_version, message| display_groups::decoders::decode_display_group_updated(message),
+            Some(request_id),
+            None,
+            Some(OutgoingMessages::SubscribeToGroupEvents),
+            crate::subscriptions::ResponseContext::default(),
+        );
+
+        subscription.set_cancel_fn(|_server_version, request_id, _context| {
+            let request_id = request_id.ok_or_else(|| Error::Simple("Request ID required to unsubscribe from group events".to_string()))?;
+            display_groups::encoders::encode_unsubscribe_from_group_events(request_id)
+        });
+
+        Ok(subscription)
     }
 
     // === Market Data ===
@@ -4521,5 +4568,91 @@ mod tests {
         let requests = gateway.requests();
         assert!(requests[0].starts_with("102\0"), "Request should be RequestWshEventData");
         assert!(requests[0].contains(filter), "Request should contain the filter");
+    }
+
+    #[tokio::test]
+    async fn test_subscribe_to_group_events() {
+        use crate::connection::ConnectionMetadata;
+        use crate::stubs::MessageBusStub;
+        use std::sync::{Arc, RwLock};
+        use time::OffsetDateTime;
+
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            // DisplayGroupUpdated (68), version 1, reqId 9000, contractInfo "group info"
+            response_messages: vec!["68\01\09000\0group info\0".to_string()],
+        });
+
+        let connection_metadata = ConnectionMetadata {
+            client_id: 100,
+            server_version: 176,
+            connection_time: Some(OffsetDateTime::now_utc()),
+            time_zone: None,
+            next_order_id: 1,
+            managed_accounts: String::new(),
+        };
+
+        let client = Client::new(connection_metadata, message_bus.clone()).expect("failed to create client");
+
+        let mut subscription = client.subscribe_to_group_events(1).await.expect("failed to subscribe");
+
+        // Verify request was sent
+        {
+            let requests = message_bus.request_messages.read().unwrap();
+            assert_eq!(requests.len(), 1);
+
+            let req = &requests[0];
+            // RequestMessage has fields: [SubscribeToGroupEvents, Version, RequestId, GroupId]
+            assert_eq!(req[0], "68"); // SubscribeToGroupEvents
+            assert_eq!(req[1], "1"); // Version
+            let _req_id = &req[2];
+            assert_eq!(req[3], "1"); // Group ID
+        }
+
+        // Verify response
+        let result = subscription.next().await;
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().unwrap(), "group info");
+
+        // Verify cancel function is set
+        assert!(subscription.has_cancel_fn(), "cancel_fn should be set for unsubscribe support");
+    }
+
+    #[tokio::test]
+    async fn test_subscribe_to_group_events_wrong_message_type() {
+        use crate::connection::ConnectionMetadata;
+        use crate::stubs::MessageBusStub;
+        use std::sync::{Arc, RwLock};
+        use time::OffsetDateTime;
+
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            // Send wrong message type (67 = DisplayGroupList instead of 68 = DisplayGroupUpdated)
+            response_messages: vec!["67\01\09000\0wrong message\0".to_string()],
+        });
+
+        let connection_metadata = ConnectionMetadata {
+            client_id: 100,
+            server_version: 176,
+            connection_time: Some(OffsetDateTime::now_utc()),
+            time_zone: None,
+            next_order_id: 1,
+            managed_accounts: String::new(),
+        };
+
+        let client = Client::new(connection_metadata, message_bus.clone()).expect("failed to create client");
+
+        let mut subscription = client.subscribe_to_group_events(1).await.expect("failed to subscribe");
+
+        // Verify error is returned for wrong message type
+        let result = subscription.next().await;
+        assert!(result.is_some());
+        let err = result.unwrap();
+        assert!(err.is_err(), "should return error for wrong message type");
+        let error_msg = format!("{:?}", err.unwrap_err());
+        assert!(
+            error_msg.contains("unexpected message type"),
+            "error should mention unexpected message type"
+        );
     }
 }

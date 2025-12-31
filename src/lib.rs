@@ -55,6 +55,10 @@ pub(crate) mod connection;
 /// Common utilities shared across modules
 pub(crate) mod common;
 
+/// Display groups subscription support
+#[cfg(feature = "async")]
+pub(crate) mod display_groups;
+
 /// Subscription types for streaming data
 pub mod subscriptions;
 
