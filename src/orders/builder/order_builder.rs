@@ -1,3 +1,4 @@
+use super::algo_builders::AlgoParams;
 use super::types::*;
 use super::validation;
 use crate::contracts::Contract;
@@ -522,13 +523,60 @@ impl<'a, C> OrderBuilder<'a, C> {
 
     // Algorithmic trading
 
-    /// Set algorithm strategy
-    pub fn algo(mut self, strategy: impl Into<String>) -> Self {
-        self.algo_strategy = Some(strategy.into());
+    /// Set algorithm strategy and parameters.
+    ///
+    /// Accepts either a strategy name (string) or an algo builder.
+    ///
+    /// # Example with builder
+    ///
+    /// ```no_run
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::client::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// use ibapi::orders::builder::vwap;
+    ///
+    /// let order_id = client.order(&contract)
+    ///     .buy(1000)
+    ///     .limit(150.0)
+    ///     .algo(vwap()
+    ///         .max_pct_vol(0.2)
+    ///         .start_time("09:00:00 US/Eastern")
+    ///         .end_time("16:00:00 US/Eastern"))
+    ///     .submit().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Example with string (for custom strategies)
+    ///
+    /// ```no_run
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use ibapi::client::Client;
+    /// # use ibapi::contracts::Contract;
+    /// # let client = Client::connect("127.0.0.1:4002", 100).await?;
+    /// # let contract = Contract::stock("AAPL").build();
+    /// let order_id = client.order(&contract)
+    ///     .buy(1000)
+    ///     .limit(150.0)
+    ///     .algo("Vwap")
+    ///     .algo_param("maxPctVol", "0.2")
+    ///     .submit().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn algo(mut self, algo: impl Into<AlgoParams>) -> Self {
+        let params = algo.into();
+        self.algo_strategy = Some(params.strategy);
+        self.algo_params.extend(params.params);
         self
     }
 
-    /// Add algorithm parameter
+    /// Add algorithm parameter.
+    ///
+    /// Use this to add individual parameters when using a strategy name string.
+    /// When using algo builders, parameters are set via the builder methods.
     pub fn algo_param(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.algo_params.push(TagValue {
             tag: key.into(),

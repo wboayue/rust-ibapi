@@ -37,6 +37,11 @@ This guide describes all order types supported by rust-ibapi and demonstrates ho
 - [Complex Orders](#complex-orders)
   - [Bracket Orders](#bracket-orders)
   - [One-Cancels-All (OCA)](#one-cancels-all-oca)
+- [Algorithmic Orders](#algorithmic-orders)
+  - [VWAP](#vwap)
+  - [TWAP](#twap)
+  - [Percentage of Volume](#percentage-of-volume)
+  - [Arrival Price](#arrival-price)
 
 ## Basic Order Types
 
@@ -738,6 +743,160 @@ let order_ids = client.submit_oca_orders(vec![
 ```
 
 **When to use:** When you want multiple entry strategies but only one execution.
+
+## Algorithmic Orders
+
+IB provides several algorithmic order strategies that automatically slice orders over time to minimize market impact. These algos are available for most US stocks and can significantly improve execution quality for large orders.
+
+### VWAP
+
+Volume Weighted Average Price seeks to achieve the VWAP from order submission to market close.
+
+```rust
+use ibapi::orders::builder::vwap;
+
+let order_id = client.order(&contract)
+    .buy(1000)
+    .limit(150.0)
+    .algo(vwap()
+        .max_pct_vol(0.2)
+        .start_time("09:00:00 US/Eastern")
+        .end_time("16:00:00 US/Eastern")
+        .allow_past_end_time(true)
+        .no_take_liq(true))
+    .submit()?;
+```
+
+**Parameters:**
+- `max_pct_vol(0.1-0.5)` - Maximum participation rate as % of volume
+- `start_time` - Start time (format: "HH:MM:SS TZ")
+- `end_time` - End time (format: "HH:MM:SS TZ")
+- `allow_past_end_time` - Continue trading after end time
+- `no_take_liq` - Passive only, don't take liquidity
+- `speed_up` - Speed up execution in momentum
+
+**When to use:** For large orders where you want to match the market's volume-weighted average price.
+
+### TWAP
+
+Time Weighted Average Price slices orders evenly over time.
+
+```rust
+use ibapi::orders::builder::{twap, TwapStrategyType};
+
+let order_id = client.order(&contract)
+    .buy(1000)
+    .limit(150.0)
+    .algo(twap()
+        .strategy_type(TwapStrategyType::Marketable)
+        .start_time("09:30:00 US/Eastern")
+        .end_time("16:00:00 US/Eastern"))
+    .submit()?;
+```
+
+**Parameters:**
+- `strategy_type` - Execution style:
+  - `Marketable` - Cross the spread when needed
+  - `MatchingMidpoint` - Execute at midpoint
+  - `MatchingSameSide` - Stay on one side of spread
+  - `MatchingLast` - Match last traded price
+- `start_time` - Start time
+- `end_time` - End time
+- `allow_past_end_time` - Continue after end time
+
+**When to use:** For even distribution of execution across time.
+
+### Percentage of Volume
+
+Controls participation rate relative to market volume.
+
+```rust
+use ibapi::orders::builder::pct_vol;
+
+let order_id = client.order(&contract)
+    .buy(1000)
+    .limit(150.0)
+    .algo(pct_vol()
+        .pct_vol(0.1)
+        .start_time("09:30:00 US/Eastern")
+        .end_time("16:00:00 US/Eastern")
+        .no_take_liq(true))
+    .submit()?;
+```
+
+**Parameters:**
+- `pct_vol(0.1-0.5)` - Target participation rate
+- `start_time` - Start time
+- `end_time` - End time
+- `no_take_liq` - Passive only
+
+**When to use:** To limit market impact while participating at a consistent rate.
+
+### Arrival Price
+
+Targets the bid/ask midpoint at the time of order arrival.
+
+```rust
+use ibapi::orders::builder::{arrival_price, RiskAversion};
+
+let order_id = client.order(&contract)
+    .buy(1000)
+    .limit(150.0)
+    .algo(arrival_price()
+        .max_pct_vol(0.1)
+        .risk_aversion(RiskAversion::Neutral)
+        .start_time("09:30:00 US/Eastern")
+        .end_time("16:00:00 US/Eastern")
+        .force_completion(true))
+    .submit()?;
+```
+
+**Parameters:**
+- `max_pct_vol(0.1-0.5)` - Maximum participation rate
+- `risk_aversion` - Urgency level:
+  - `GetDone` - Complete quickly
+  - `Aggressive` - Favor speed over price
+  - `Neutral` - Balance speed and price
+  - `Passive` - Favor price over speed
+- `start_time` - Start time
+- `end_time` - End time
+- `force_completion` - Complete by end time
+- `allow_past_end_time` - Continue after end time
+
+**When to use:** When you want to benchmark against arrival price.
+
+### Manual Algo Order Construction
+
+For custom algo strategies or parameters not exposed by the builders, you can construct orders manually:
+
+```rust
+use ibapi::orders::{Order, Action, TagValue};
+
+let order = Order {
+    order_type: "LMT".to_string(),
+    action: Action::Buy,
+    total_quantity: 1000.0,
+    lmt_price: Some(150.0),
+    algo_strategy: "Vwap".to_string(),
+    algo_params: vec![
+        TagValue { tag: "maxPctVol".to_string(), value: "0.2".to_string() },
+        TagValue { tag: "startTime".to_string(), value: "09:00:00 US/Eastern".to_string() },
+        TagValue { tag: "endTime".to_string(), value: "16:00:00 US/Eastern".to_string() },
+    ],
+    ..Default::default()
+};
+
+let order_id = client.next_order_id();
+client.place_order(order_id, &contract, &order)?;
+```
+
+### Algo Order Best Practices
+
+1. **Use limit prices** - Always set a limit price as a safety cap
+2. **Consider market hours** - Most algos work best during regular trading hours
+3. **Start conservative** - Use lower participation rates initially (0.1-0.2)
+4. **Monitor execution** - Review fills to calibrate future algo parameters
+5. **Test with small orders** - Validate algo behavior before large trades
 
 ## Order Modifiers
 
