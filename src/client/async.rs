@@ -7,6 +7,7 @@ use log::debug;
 use time::OffsetDateTime;
 use time_tz::Tz;
 
+use crate::connection::common::StartupMessageCallback;
 use crate::connection::{r#async::AsyncConnection, ConnectionMetadata};
 use crate::messages::{OutgoingMessages, RequestMessage};
 use crate::transport::{
@@ -71,7 +72,50 @@ impl Client {
     /// }
     /// ```
     pub async fn connect(address: &str, client_id: i32) -> Result<Client, Error> {
-        let connection = AsyncConnection::connect(address, client_id).await?;
+        Self::connect_with_callback(address, client_id, None).await
+    }
+
+    /// Establishes async connection to TWS or Gateway with a callback for startup messages
+    ///
+    /// This is similar to [`connect`](Self::connect), but allows you to provide a callback
+    /// that will be invoked for any unsolicited messages received during the connection
+    /// handshake (e.g., OpenOrder, OrderStatus).
+    ///
+    /// # Arguments
+    /// * `address`          - address of server. e.g. 127.0.0.1:4002
+    /// * `client_id`        - id of client. e.g. 100
+    /// * `startup_callback` - optional callback for unsolicited messages during connection
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::{Client, StartupMessageCallback};
+    /// use ibapi::messages::IncomingMessages;
+    /// use std::sync::{Arc, Mutex};
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let orders = Arc::new(Mutex::new(Vec::new()));
+    ///     let orders_clone = orders.clone();
+    ///
+    ///     let callback: StartupMessageCallback = Box::new(move |msg| {
+    ///         match msg.message_type() {
+    ///             IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => {
+    ///                 orders_clone.lock().unwrap().push(msg);
+    ///             }
+    ///             _ => {}
+    ///         }
+    ///     });
+    ///
+    ///     let client = Client::connect_with_callback("127.0.0.1:4002", 100, Some(callback))
+    ///         .await
+    ///         .expect("connection failed");
+    ///
+    ///     println!("Received {} startup orders", orders.lock().unwrap().len());
+    /// }
+    /// ```
+    pub async fn connect_with_callback(address: &str, client_id: i32, startup_callback: Option<StartupMessageCallback>) -> Result<Client, Error> {
+        let connection = AsyncConnection::connect_with_callback(address, client_id, startup_callback).await?;
         let connection_metadata = connection.connection_metadata();
 
         let message_bus = Arc::new(AsyncTcpMessageBus::new(connection)?);

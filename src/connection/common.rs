@@ -9,6 +9,13 @@ use crate::errors::Error;
 use crate::messages::{encode_length, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::server_versions;
 
+/// Callback for handling unsolicited messages during connection setup.
+///
+/// When TWS sends messages like `OpenOrder` or `OrderStatus` during the connection
+/// handshake, this callback is invoked to allow the application to process them
+/// instead of discarding them.
+pub type StartupMessageCallback = Box<dyn Fn(ResponseMessage) + Send + Sync>;
+
 /// Data exchanged during the connection handshake
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -33,7 +40,10 @@ pub trait ConnectionProtocol {
     fn format_start_api(&self, client_id: i32, server_version: i32) -> RequestMessage;
 
     /// Parse account information from incoming messages
-    fn parse_account_info(&self, message: &mut ResponseMessage) -> Result<AccountInfo, Self::Error>;
+    ///
+    /// If a callback is provided, unsolicited messages (like OpenOrder, OrderStatus)
+    /// will be passed to it instead of being discarded.
+    fn parse_account_info(&self, message: &mut ResponseMessage, callback: Option<&StartupMessageCallback>) -> Result<AccountInfo, Self::Error>;
 }
 
 /// Account information received during connection establishment
@@ -98,7 +108,7 @@ impl ConnectionProtocol for ConnectionHandler {
         message
     }
 
-    fn parse_account_info(&self, message: &mut ResponseMessage) -> Result<AccountInfo, Self::Error> {
+    fn parse_account_info(&self, message: &mut ResponseMessage, callback: Option<&StartupMessageCallback>) -> Result<AccountInfo, Self::Error> {
         let mut info = AccountInfo::default();
 
         match message.message_type() {
@@ -116,11 +126,15 @@ impl ConnectionProtocol for ConnectionHandler {
                 error!("Error during account info: {message:?}");
             }
             _ => {
-                // Other messages during connection are logged but not processed
-                warn!(
-                    "CONSUMING MESSAGE during connection setup: {:?} - THIS MESSAGE IS LOST!",
-                    message.message_type()
-                );
+                // Pass unsolicited messages to callback if provided
+                if let Some(cb) = callback {
+                    cb(message.clone());
+                } else {
+                    warn!(
+                        "CONSUMING MESSAGE during connection setup: {:?} - THIS MESSAGE IS LOST!",
+                        message.message_type()
+                    );
+                }
             }
         }
 
@@ -169,8 +183,159 @@ pub fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex};
     use time::macros::datetime;
     use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt};
+
+    #[test]
+    fn test_parse_account_info_next_valid_id() {
+        let handler = ConnectionHandler::default();
+        // NextValidId message: message_type=9, version=1, next_order_id=1000
+        let mut message = ResponseMessage::from("9\01\01000\0");
+
+        let result = handler.parse_account_info(&mut message, None);
+        assert!(result.is_ok());
+
+        let info = result.unwrap();
+        assert_eq!(info.next_order_id, Some(1000));
+        assert_eq!(info.managed_accounts, None);
+    }
+
+    #[test]
+    fn test_parse_account_info_managed_accounts() {
+        let handler = ConnectionHandler::default();
+        // ManagedAccounts message: message_type=15, version=1, accounts="DU123,DU456"
+        let mut message = ResponseMessage::from("15\01\0DU123,DU456\0");
+
+        let result = handler.parse_account_info(&mut message, None);
+        assert!(result.is_ok());
+
+        let info = result.unwrap();
+        assert_eq!(info.next_order_id, None);
+        assert_eq!(info.managed_accounts, Some("DU123,DU456".to_string()));
+    }
+
+    #[test]
+    fn test_parse_account_info_callback_invoked_for_open_order() {
+        let handler = ConnectionHandler::default();
+        // OpenOrder message: message_type=5
+        let mut message = ResponseMessage::from("5\0123\0AAPL\0STK\0");
+
+        let callback_invoked = Arc::new(Mutex::new(false));
+        let callback_invoked_clone = callback_invoked.clone();
+
+        let callback: StartupMessageCallback = Box::new(move |_msg| {
+            *callback_invoked_clone.lock().unwrap() = true;
+        });
+
+        let result = handler.parse_account_info(&mut message, Some(&callback));
+        assert!(result.is_ok());
+
+        assert!(*callback_invoked.lock().unwrap(), "callback should be invoked for OpenOrder");
+    }
+
+    #[test]
+    fn test_parse_account_info_callback_invoked_for_order_status() {
+        let handler = ConnectionHandler::default();
+        // OrderStatus message: message_type=3
+        let mut message = ResponseMessage::from("3\0456\0Filled\0100\0");
+
+        let callback_invoked = Arc::new(Mutex::new(false));
+        let callback_invoked_clone = callback_invoked.clone();
+
+        let callback: StartupMessageCallback = Box::new(move |_msg| {
+            *callback_invoked_clone.lock().unwrap() = true;
+        });
+
+        let result = handler.parse_account_info(&mut message, Some(&callback));
+        assert!(result.is_ok());
+
+        assert!(*callback_invoked.lock().unwrap(), "callback should be invoked for OrderStatus");
+    }
+
+    #[test]
+    fn test_parse_account_info_callback_receives_message() {
+        let handler = ConnectionHandler::default();
+        // OpenOrder message with identifiable content
+        let mut message = ResponseMessage::from("5\0999\0TEST_SYMBOL\0");
+
+        let received_messages = Arc::new(Mutex::new(Vec::new()));
+        let received_messages_clone = received_messages.clone();
+
+        let callback: StartupMessageCallback = Box::new(move |msg| {
+            received_messages_clone.lock().unwrap().push(msg);
+        });
+
+        let result = handler.parse_account_info(&mut message, Some(&callback));
+        assert!(result.is_ok());
+
+        let messages = received_messages.lock().unwrap();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].message_type(), IncomingMessages::OpenOrder);
+    }
+
+    #[test]
+    fn test_parse_account_info_callback_not_invoked_for_next_valid_id() {
+        let handler = ConnectionHandler::default();
+        // NextValidId message should NOT trigger callback
+        let mut message = ResponseMessage::from("9\01\01000\0");
+
+        let callback_invoked = Arc::new(Mutex::new(false));
+        let callback_invoked_clone = callback_invoked.clone();
+
+        let callback: StartupMessageCallback = Box::new(move |_msg| {
+            *callback_invoked_clone.lock().unwrap() = true;
+        });
+
+        let result = handler.parse_account_info(&mut message, Some(&callback));
+        assert!(result.is_ok());
+
+        assert!(!*callback_invoked.lock().unwrap(), "callback should NOT be invoked for NextValidId");
+    }
+
+    #[test]
+    fn test_parse_account_info_callback_not_invoked_for_managed_accounts() {
+        let handler = ConnectionHandler::default();
+        // ManagedAccounts message should NOT trigger callback
+        let mut message = ResponseMessage::from("15\01\0DU123\0");
+
+        let callback_invoked = Arc::new(Mutex::new(false));
+        let callback_invoked_clone = callback_invoked.clone();
+
+        let callback: StartupMessageCallback = Box::new(move |_msg| {
+            *callback_invoked_clone.lock().unwrap() = true;
+        });
+
+        let result = handler.parse_account_info(&mut message, Some(&callback));
+        assert!(result.is_ok());
+
+        assert!(!*callback_invoked.lock().unwrap(), "callback should NOT be invoked for ManagedAccounts");
+    }
+
+    #[test]
+    fn test_parse_account_info_multiple_messages_callback() {
+        let handler = ConnectionHandler::default();
+        let received_count = Arc::new(Mutex::new(0));
+        let received_count_clone = received_count.clone();
+
+        let callback: StartupMessageCallback = Box::new(move |_msg| {
+            *received_count_clone.lock().unwrap() += 1;
+        });
+
+        // First message: OpenOrder
+        let mut msg1 = ResponseMessage::from("5\0123\0AAPL\0");
+        handler.parse_account_info(&mut msg1, Some(&callback)).unwrap();
+
+        // Second message: OrderStatus
+        let mut msg2 = ResponseMessage::from("3\0456\0Filled\0");
+        handler.parse_account_info(&mut msg2, Some(&callback)).unwrap();
+
+        // Third message: NextValidId (should NOT trigger callback)
+        let mut msg3 = ResponseMessage::from("9\01\01000\0");
+        handler.parse_account_info(&mut msg3, Some(&callback)).unwrap();
+
+        assert_eq!(*received_count.lock().unwrap(), 2, "callback should be invoked exactly twice");
+    }
 
     #[test]
     fn test_parse_connection_time() {
