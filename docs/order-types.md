@@ -763,7 +763,8 @@ let order_id = client.order(&contract)
         .start_time("09:00:00 US/Eastern")
         .end_time("16:00:00 US/Eastern")
         .allow_past_end_time(true)
-        .no_take_liq(true))
+        .no_take_liq(true)
+        .build()?)
     .submit()?;
 ```
 
@@ -790,7 +791,8 @@ let order_id = client.order(&contract)
     .algo(twap()
         .strategy_type(TwapStrategyType::Marketable)
         .start_time("09:30:00 US/Eastern")
-        .end_time("16:00:00 US/Eastern"))
+        .end_time("16:00:00 US/Eastern")
+        .build()?)
     .submit()?;
 ```
 
@@ -820,7 +822,8 @@ let order_id = client.order(&contract)
         .pct_vol(0.1)
         .start_time("09:30:00 US/Eastern")
         .end_time("16:00:00 US/Eastern")
-        .no_take_liq(true))
+        .no_take_liq(true)
+        .build()?)
     .submit()?;
 ```
 
@@ -847,7 +850,8 @@ let order_id = client.order(&contract)
         .risk_aversion(RiskAversion::Neutral)
         .start_time("09:30:00 US/Eastern")
         .end_time("16:00:00 US/Eastern")
-        .force_completion(true))
+        .force_completion(true)
+        .build()?)
     .submit()?;
 ```
 

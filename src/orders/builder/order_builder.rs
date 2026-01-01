@@ -543,7 +543,8 @@ impl<'a, C> OrderBuilder<'a, C> {
     ///     .algo(vwap()
     ///         .max_pct_vol(0.2)
     ///         .start_time("09:00:00 US/Eastern")
-    ///         .end_time("16:00:00 US/Eastern"))
+    ///         .end_time("16:00:00 US/Eastern")
+    ///         .build()?)
     ///     .submit().await?;
     /// # Ok(())
     /// # }

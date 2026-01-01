@@ -3,6 +3,7 @@
 //! This module provides type-safe builders for common IB algo strategies:
 //! VWAP, TWAP, Percentage of Volume, and Arrival Price.
 
+use super::types::ValidationError;
 use crate::contracts::TagValue;
 
 /// Convert a boolean to IB's string representation ("1" or "0").
@@ -11,9 +12,23 @@ fn bool_param(v: bool) -> String {
 }
 
 /// Minimum allowed participation rate (10%).
-const MIN_PCT_VOL: f64 = 0.1;
+pub const MIN_PCT_VOL: f64 = 0.1;
 /// Maximum allowed participation rate (50%).
-const MAX_PCT_VOL: f64 = 0.5;
+pub const MAX_PCT_VOL: f64 = 0.5;
+
+/// Validate percentage is within IB's allowed range.
+fn validate_pct_vol(field: &'static str, value: f64) -> Result<(), ValidationError> {
+    if !(MIN_PCT_VOL..=MAX_PCT_VOL).contains(&value) {
+        Err(ValidationError::InvalidPercentage {
+            field,
+            value,
+            min: MIN_PCT_VOL,
+            max: MAX_PCT_VOL,
+        })
+    } else {
+        Ok(())
+    }
+}
 
 /// Parameters for an algorithmic order strategy.
 #[derive(Debug, Clone, Default)]
@@ -58,7 +73,8 @@ impl From<&str> for AlgoParams {
 ///     .max_pct_vol(0.2)
 ///     .start_time("09:00:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
-///     .build();
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 pub struct VwapBuilder {
@@ -76,9 +92,9 @@ impl VwapBuilder {
         Self::default()
     }
 
-    /// Set maximum participation rate, clamped to 10-50% per IB requirements.
+    /// Set maximum participation rate (must be 10-50% per IB requirements).
     pub fn max_pct_vol(mut self, pct: f64) -> Self {
-        self.max_pct_vol = Some(pct.clamp(MIN_PCT_VOL, MAX_PCT_VOL));
+        self.max_pct_vol = Some(pct);
         self
     }
 
@@ -113,56 +129,61 @@ impl VwapBuilder {
     }
 
     /// Build the algo parameters.
-    pub fn build(self) -> AlgoParams {
-        self.into()
-    }
-}
-
-impl From<VwapBuilder> for AlgoParams {
-    fn from(builder: VwapBuilder) -> Self {
+    ///
+    /// Returns an error if `max_pct_vol` is set but outside the 10-50% range.
+    pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = builder.max_pct_vol {
+        if let Some(v) = self.max_pct_vol {
+            validate_pct_vol("max_pct_vol", v)?;
             params.push(TagValue {
                 tag: "maxPctVol".to_string(),
                 value: v.to_string(),
             });
         }
-        if let Some(v) = builder.start_time {
+        if let Some(v) = self.start_time {
             params.push(TagValue {
                 tag: "startTime".to_string(),
                 value: v,
             });
         }
-        if let Some(v) = builder.end_time {
+        if let Some(v) = self.end_time {
             params.push(TagValue {
                 tag: "endTime".to_string(),
                 value: v,
             });
         }
-        if let Some(v) = builder.allow_past_end_time {
+        if let Some(v) = self.allow_past_end_time {
             params.push(TagValue {
                 tag: "allowPastEndTime".to_string(),
                 value: bool_param(v),
             });
         }
-        if let Some(v) = builder.no_take_liq {
+        if let Some(v) = self.no_take_liq {
             params.push(TagValue {
                 tag: "noTakeLiq".to_string(),
                 value: bool_param(v),
             });
         }
-        if let Some(v) = builder.speed_up {
+        if let Some(v) = self.speed_up {
             params.push(TagValue {
                 tag: "speedUp".to_string(),
                 value: bool_param(v),
             });
         }
 
-        AlgoParams {
+        Ok(AlgoParams {
             strategy: "Vwap".to_string(),
             params,
-        }
+        })
+    }
+}
+
+impl TryFrom<VwapBuilder> for AlgoParams {
+    type Error = ValidationError;
+
+    fn try_from(builder: VwapBuilder) -> Result<Self, Self::Error> {
+        builder.build()
     }
 }
 
@@ -205,7 +226,8 @@ impl TwapStrategyType {
 /// let algo = twap()
 ///     .start_time("09:00:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
-///     .build();
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 pub struct TwapBuilder {
@@ -246,44 +268,46 @@ impl TwapBuilder {
     }
 
     /// Build the algo parameters.
-    pub fn build(self) -> AlgoParams {
-        self.into()
-    }
-}
-
-impl From<TwapBuilder> for AlgoParams {
-    fn from(builder: TwapBuilder) -> Self {
+    pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = builder.strategy_type {
+        if let Some(v) = self.strategy_type {
             params.push(TagValue {
                 tag: "strategyType".to_string(),
                 value: v.as_str().to_string(),
             });
         }
-        if let Some(v) = builder.start_time {
+        if let Some(v) = self.start_time {
             params.push(TagValue {
                 tag: "startTime".to_string(),
                 value: v,
             });
         }
-        if let Some(v) = builder.end_time {
+        if let Some(v) = self.end_time {
             params.push(TagValue {
                 tag: "endTime".to_string(),
                 value: v,
             });
         }
-        if let Some(v) = builder.allow_past_end_time {
+        if let Some(v) = self.allow_past_end_time {
             params.push(TagValue {
                 tag: "allowPastEndTime".to_string(),
                 value: bool_param(v),
             });
         }
 
-        AlgoParams {
+        Ok(AlgoParams {
             strategy: "Twap".to_string(),
             params,
-        }
+        })
+    }
+}
+
+impl TryFrom<TwapBuilder> for AlgoParams {
+    type Error = ValidationError;
+
+    fn try_from(builder: TwapBuilder) -> Result<Self, Self::Error> {
+        builder.build()
     }
 }
 
@@ -302,7 +326,8 @@ impl From<TwapBuilder> for AlgoParams {
 ///     .pct_vol(0.1)
 ///     .start_time("09:00:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
-///     .build();
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 pub struct PctVolBuilder {
@@ -318,9 +343,9 @@ impl PctVolBuilder {
         Self::default()
     }
 
-    /// Set target participation rate, clamped to 10-50% per IB requirements.
+    /// Set target participation rate (must be 10-50% per IB requirements).
     pub fn pct_vol(mut self, pct: f64) -> Self {
-        self.pct_vol = Some(pct.clamp(MIN_PCT_VOL, MAX_PCT_VOL));
+        self.pct_vol = Some(pct);
         self
     }
 
@@ -343,44 +368,49 @@ impl PctVolBuilder {
     }
 
     /// Build the algo parameters.
-    pub fn build(self) -> AlgoParams {
-        self.into()
-    }
-}
-
-impl From<PctVolBuilder> for AlgoParams {
-    fn from(builder: PctVolBuilder) -> Self {
+    ///
+    /// Returns an error if `pct_vol` is set but outside the 10-50% range.
+    pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = builder.pct_vol {
+        if let Some(v) = self.pct_vol {
+            validate_pct_vol("pct_vol", v)?;
             params.push(TagValue {
                 tag: "pctVol".to_string(),
                 value: v.to_string(),
             });
         }
-        if let Some(v) = builder.start_time {
+        if let Some(v) = self.start_time {
             params.push(TagValue {
                 tag: "startTime".to_string(),
                 value: v,
             });
         }
-        if let Some(v) = builder.end_time {
+        if let Some(v) = self.end_time {
             params.push(TagValue {
                 tag: "endTime".to_string(),
                 value: v,
             });
         }
-        if let Some(v) = builder.no_take_liq {
+        if let Some(v) = self.no_take_liq {
             params.push(TagValue {
                 tag: "noTakeLiq".to_string(),
                 value: bool_param(v),
             });
         }
 
-        AlgoParams {
+        Ok(AlgoParams {
             strategy: "PctVol".to_string(),
             params,
-        }
+        })
+    }
+}
+
+impl TryFrom<PctVolBuilder> for AlgoParams {
+    type Error = ValidationError;
+
+    fn try_from(builder: PctVolBuilder) -> Result<Self, Self::Error> {
+        builder.build()
     }
 }
 
@@ -425,7 +455,8 @@ impl RiskAversion {
 ///     .risk_aversion(RiskAversion::Neutral)
 ///     .start_time("09:00:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
-///     .build();
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 #[derive(Debug, Clone, Default)]
 pub struct ArrivalPriceBuilder {
@@ -443,9 +474,9 @@ impl ArrivalPriceBuilder {
         Self::default()
     }
 
-    /// Set maximum participation rate, clamped to 10-50% per IB requirements.
+    /// Set maximum participation rate (must be 10-50% per IB requirements).
     pub fn max_pct_vol(mut self, pct: f64) -> Self {
-        self.max_pct_vol = Some(pct.clamp(MIN_PCT_VOL, MAX_PCT_VOL));
+        self.max_pct_vol = Some(pct);
         self
     }
 
@@ -480,56 +511,61 @@ impl ArrivalPriceBuilder {
     }
 
     /// Build the algo parameters.
-    pub fn build(self) -> AlgoParams {
-        self.into()
-    }
-}
-
-impl From<ArrivalPriceBuilder> for AlgoParams {
-    fn from(builder: ArrivalPriceBuilder) -> Self {
+    ///
+    /// Returns an error if `max_pct_vol` is set but outside the 10-50% range.
+    pub fn build(self) -> Result<AlgoParams, ValidationError> {
         let mut params = Vec::new();
 
-        if let Some(v) = builder.max_pct_vol {
+        if let Some(v) = self.max_pct_vol {
+            validate_pct_vol("max_pct_vol", v)?;
             params.push(TagValue {
                 tag: "maxPctVol".to_string(),
                 value: v.to_string(),
             });
         }
-        if let Some(v) = builder.risk_aversion {
+        if let Some(v) = self.risk_aversion {
             params.push(TagValue {
                 tag: "riskAversion".to_string(),
                 value: v.as_str().to_string(),
             });
         }
-        if let Some(v) = builder.start_time {
+        if let Some(v) = self.start_time {
             params.push(TagValue {
                 tag: "startTime".to_string(),
                 value: v,
             });
         }
-        if let Some(v) = builder.end_time {
+        if let Some(v) = self.end_time {
             params.push(TagValue {
                 tag: "endTime".to_string(),
                 value: v,
             });
         }
-        if let Some(v) = builder.force_completion {
+        if let Some(v) = self.force_completion {
             params.push(TagValue {
                 tag: "forceCompletion".to_string(),
                 value: bool_param(v),
             });
         }
-        if let Some(v) = builder.allow_past_end_time {
+        if let Some(v) = self.allow_past_end_time {
             params.push(TagValue {
                 tag: "allowPastEndTime".to_string(),
                 value: bool_param(v),
             });
         }
 
-        AlgoParams {
+        Ok(AlgoParams {
             strategy: "ArrivalPx".to_string(),
             params,
-        }
+        })
+    }
+}
+
+impl TryFrom<ArrivalPriceBuilder> for AlgoParams {
+    type Error = ValidationError;
+
+    fn try_from(builder: ArrivalPriceBuilder) -> Result<Self, Self::Error> {
+        builder.build()
     }
 }
 
@@ -546,14 +582,15 @@ mod tests {
 
     #[test]
     fn test_vwap_builder() {
-        let params: AlgoParams = VwapBuilder::new()
+        let params = VwapBuilder::new()
             .max_pct_vol(0.2)
             .start_time("09:00:00 US/Eastern")
             .end_time("16:00:00 US/Eastern")
             .allow_past_end_time(true)
             .no_take_liq(true)
             .speed_up(true)
-            .build();
+            .build()
+            .unwrap();
 
         assert_eq!(params.strategy, "Vwap");
         assert_eq!(params.params.len(), 6);
@@ -569,12 +606,13 @@ mod tests {
 
     #[test]
     fn test_twap_builder() {
-        let params: AlgoParams = TwapBuilder::new()
+        let params = TwapBuilder::new()
             .strategy_type(TwapStrategyType::MatchingMidpoint)
             .start_time("09:00:00 US/Eastern")
             .end_time("16:00:00 US/Eastern")
             .allow_past_end_time(false)
-            .build();
+            .build()
+            .unwrap();
 
         assert_eq!(params.strategy, "Twap");
         assert_eq!(params.params.len(), 4);
@@ -586,12 +624,13 @@ mod tests {
 
     #[test]
     fn test_pct_vol_builder() {
-        let params: AlgoParams = PctVolBuilder::new()
+        let params = PctVolBuilder::new()
             .pct_vol(0.15)
             .start_time("09:30:00 US/Eastern")
             .end_time("15:30:00 US/Eastern")
             .no_take_liq(false)
-            .build();
+            .build()
+            .unwrap();
 
         assert_eq!(params.strategy, "PctVol");
         assert_eq!(params.params.len(), 4);
@@ -603,14 +642,15 @@ mod tests {
 
     #[test]
     fn test_arrival_price_builder() {
-        let params: AlgoParams = ArrivalPriceBuilder::new()
+        let params = ArrivalPriceBuilder::new()
             .max_pct_vol(0.1)
             .risk_aversion(RiskAversion::Aggressive)
             .start_time("09:00:00 US/Eastern")
             .end_time("16:00:00 US/Eastern")
             .force_completion(true)
             .allow_past_end_time(true)
-            .build();
+            .build()
+            .unwrap();
 
         assert_eq!(params.strategy, "ArrivalPx");
         assert_eq!(params.params.len(), 6);
@@ -623,49 +663,62 @@ mod tests {
     #[test]
     fn test_builder_minimal() {
         // Test that builders work with no params set
-        let vwap: AlgoParams = VwapBuilder::new().build();
+        let vwap = VwapBuilder::new().build().unwrap();
         assert_eq!(vwap.strategy, "Vwap");
         assert!(vwap.params.is_empty());
 
-        let twap: AlgoParams = TwapBuilder::new().build();
+        let twap = TwapBuilder::new().build().unwrap();
         assert_eq!(twap.strategy, "Twap");
         assert!(twap.params.is_empty());
     }
 
     #[test]
-    fn test_pct_vol_clamped_to_range() {
-        // Values above 0.5 should be capped at max
-        let params: AlgoParams = PctVolBuilder::new().pct_vol(0.8).build();
-        let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
-        assert_eq!(find_param("pctVol"), Some(&"0.5".to_string()));
+    fn test_pct_vol_out_of_range_errors() {
+        // Values above 0.5 should return error
+        let result = PctVolBuilder::new().pct_vol(0.8).build();
+        assert!(matches!(result, Err(ValidationError::InvalidPercentage { field: "pct_vol", .. })));
 
-        let params: AlgoParams = VwapBuilder::new().max_pct_vol(1.0).build();
-        let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
-        assert_eq!(find_param("maxPctVol"), Some(&"0.5".to_string()));
+        let result = VwapBuilder::new().max_pct_vol(1.0).build();
+        assert!(matches!(result, Err(ValidationError::InvalidPercentage { field: "max_pct_vol", .. })));
 
-        // Values below 0.1 should be raised to min
-        let params: AlgoParams = PctVolBuilder::new().pct_vol(0.05).build();
-        let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
-        assert_eq!(find_param("pctVol"), Some(&"0.1".to_string()));
+        // Values below 0.1 should return error
+        let result = PctVolBuilder::new().pct_vol(0.05).build();
+        assert!(matches!(result, Err(ValidationError::InvalidPercentage { field: "pct_vol", .. })));
 
-        let params: AlgoParams = ArrivalPriceBuilder::new().max_pct_vol(0.01).build();
-        let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
-        assert_eq!(find_param("maxPctVol"), Some(&"0.1".to_string()));
+        let result = ArrivalPriceBuilder::new().max_pct_vol(0.01).build();
+        assert!(matches!(result, Err(ValidationError::InvalidPercentage { field: "max_pct_vol", .. })));
     }
 
     #[test]
-    fn test_pct_vol_valid_values_unchanged() {
+    fn test_pct_vol_valid_values_succeed() {
         // Values within 0.1-0.5 should pass through unchanged
-        let params: AlgoParams = PctVolBuilder::new().pct_vol(0.25).build();
+        let params = PctVolBuilder::new().pct_vol(0.25).build().unwrap();
         let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
         assert_eq!(find_param("pctVol"), Some(&"0.25".to_string()));
 
-        let params: AlgoParams = VwapBuilder::new().max_pct_vol(0.1).build();
+        let params = VwapBuilder::new().max_pct_vol(0.1).build().unwrap();
         let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
         assert_eq!(find_param("maxPctVol"), Some(&"0.1".to_string()));
 
-        let params: AlgoParams = VwapBuilder::new().max_pct_vol(0.5).build();
+        let params = VwapBuilder::new().max_pct_vol(0.5).build().unwrap();
         let find_param = |tag: &str| params.params.iter().find(|p| p.tag == tag).map(|p| &p.value);
         assert_eq!(find_param("maxPctVol"), Some(&"0.5".to_string()));
+    }
+
+    #[test]
+    fn test_pct_vol_boundary_values() {
+        // Exactly 0.1 should succeed
+        assert!(VwapBuilder::new().max_pct_vol(0.1).build().is_ok());
+        assert!(PctVolBuilder::new().pct_vol(0.1).build().is_ok());
+        assert!(ArrivalPriceBuilder::new().max_pct_vol(0.1).build().is_ok());
+
+        // Exactly 0.5 should succeed
+        assert!(VwapBuilder::new().max_pct_vol(0.5).build().is_ok());
+        assert!(PctVolBuilder::new().pct_vol(0.5).build().is_ok());
+        assert!(ArrivalPriceBuilder::new().max_pct_vol(0.5).build().is_ok());
+
+        // Just outside boundaries should fail
+        assert!(VwapBuilder::new().max_pct_vol(0.09).build().is_err());
+        assert!(VwapBuilder::new().max_pct_vol(0.51).build().is_err());
     }
 }

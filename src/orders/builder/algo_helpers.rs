@@ -35,7 +35,8 @@ use crate::orders::builder::algo_builders::{ArrivalPriceBuilder, PctVolBuilder, 
 ///     .max_pct_vol(0.2)
 ///     .start_time("09:00:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
-///     .build();
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 pub fn vwap() -> VwapBuilder {
     VwapBuilder::new()
@@ -53,7 +54,8 @@ pub fn vwap() -> VwapBuilder {
 /// let algo = twap()
 ///     .start_time("09:00:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
-///     .build();
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 pub fn twap() -> TwapBuilder {
     TwapBuilder::new()
@@ -72,7 +74,8 @@ pub fn twap() -> TwapBuilder {
 ///     .pct_vol(0.1)
 ///     .start_time("09:00:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
-///     .build();
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 pub fn pct_vol() -> PctVolBuilder {
     PctVolBuilder::new()
@@ -92,7 +95,8 @@ pub fn pct_vol() -> PctVolBuilder {
 ///     .risk_aversion(RiskAversion::Neutral)
 ///     .start_time("09:00:00 US/Eastern")
 ///     .end_time("16:00:00 US/Eastern")
-///     .build();
+///     .build()?;
+/// # Ok::<(), ibapi::orders::builder::ValidationError>(())
 /// ```
 pub fn arrival_price() -> ArrivalPriceBuilder {
     ArrivalPriceBuilder::new()
@@ -105,28 +109,28 @@ mod tests {
 
     #[test]
     fn test_vwap_helper() {
-        let algo: AlgoParams = vwap().max_pct_vol(0.2).build();
+        let algo: AlgoParams = vwap().max_pct_vol(0.2).build().unwrap();
         assert_eq!(algo.strategy, "Vwap");
         assert_eq!(algo.params.len(), 1);
     }
 
     #[test]
     fn test_twap_helper() {
-        let algo: AlgoParams = twap().start_time("09:00:00 US/Eastern").build();
+        let algo: AlgoParams = twap().start_time("09:00:00 US/Eastern").build().unwrap();
         assert_eq!(algo.strategy, "Twap");
         assert_eq!(algo.params.len(), 1);
     }
 
     #[test]
     fn test_pct_vol_helper() {
-        let algo: AlgoParams = pct_vol().pct_vol(0.15).build();
+        let algo: AlgoParams = pct_vol().pct_vol(0.15).build().unwrap();
         assert_eq!(algo.strategy, "PctVol");
         assert_eq!(algo.params.len(), 1);
     }
 
     #[test]
     fn test_arrival_price_helper() {
-        let algo: AlgoParams = arrival_price().max_pct_vol(0.1).build();
+        let algo: AlgoParams = arrival_price().max_pct_vol(0.1).build().unwrap();
         assert_eq!(algo.strategy, "ArrivalPx");
         assert_eq!(algo.params.len(), 1);
     }
