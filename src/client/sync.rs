@@ -81,6 +81,9 @@ impl Client {
     /// that will be invoked for any unsolicited messages received during the connection
     /// handshake (e.g., OpenOrder, OrderStatus).
     ///
+    /// Note: The callback is only invoked during the initial connection, not during
+    /// automatic reconnections.
+    ///
     /// # Arguments
     /// * `address`          - address of server. e.g. 127.0.0.1:4002
     /// * `client_id`        - id of client. e.g. 100
