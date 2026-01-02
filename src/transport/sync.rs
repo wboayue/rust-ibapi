@@ -1094,7 +1094,7 @@ mod tests {
         ];
         let stream = MockSocket::new(events, 0);
         let connection = Connection::stubbed(stream, 28);
-        connection.establish_connection()?;
+        connection.establish_connection(None)?;
 
         Ok(())
     }
@@ -1108,7 +1108,7 @@ mod tests {
         let socket = MockSocket::new(events, MAX_RECONNECT_ATTEMPTS as usize + 1);
 
         let connection = Connection::stubbed(socket, 28);
-        connection.establish_connection()?;
+        connection.establish_connection(None)?;
 
         // simulated dispatcher thread read to trigger disconnection
         let _ = connection.read_message();
@@ -1130,7 +1130,7 @@ mod tests {
         let socket = MockSocket::new(events, MAX_RECONNECT_ATTEMPTS as usize - 1);
 
         let connection = Connection::stubbed(socket, 28);
-        connection.establish_connection()?;
+        connection.establish_connection(None)?;
 
         // simulated dispatcher thread read to trigger disconnection
         let _ = connection.read_message();
@@ -1150,7 +1150,7 @@ mod tests {
         ];
         let stream = MockSocket::new(events, 0);
         let connection = Connection::stubbed(stream, 28);
-        connection.establish_connection()?;
+        connection.establish_connection(None)?;
         let server_version = connection.server_version();
         let bus = Arc::new(TcpMessageBus::new(connection)?);
         bus.process_messages(server_version, std::time::Duration::from_secs(0))?;
@@ -1179,7 +1179,7 @@ mod tests {
 
         let stream = MockSocket::new(events, 0);
         let connection = Connection::stubbed(stream, 28);
-        connection.establish_connection()?;
+        connection.establish_connection(None)?;
         let server_version = connection.server_version();
         let bus = TcpMessageBus::new(connection)?;
 
@@ -1213,7 +1213,7 @@ mod tests {
 
         let stream = MockSocket::new(events, 0);
         let connection = Connection::stubbed(stream, 28);
-        connection.establish_connection()?;
+        connection.establish_connection(None)?;
         let server_version = connection.server_version();
         let bus = TcpMessageBus::new(connection)?;
 
@@ -1245,7 +1245,7 @@ mod tests {
 
         let stream = MockSocket::new(events, 0);
         let connection = Connection::stubbed(stream, 28);
-        connection.establish_connection()?;
+        connection.establish_connection(None)?;
 
         match connection.read_message() {
             Ok(_) => panic!(""),
@@ -1254,7 +1254,7 @@ mod tests {
                 connection.handshake()?;
                 connection.write_message(&packet)?;
                 connection.start_api()?;
-                connection.receive_account_info()?;
+                connection.receive_account_info(None)?;
             }
         };
 
@@ -1277,7 +1277,7 @@ mod tests {
 
         let stream = MockSocket::new(events, 0);
         let connection = Connection::stubbed(stream, 28);
-        connection.establish_connection()?;
+        connection.establish_connection(None)?;
         let server_version = connection.server_version();
         let bus = Arc::new(TcpMessageBus::new(connection)?);
         bus.process_messages(server_version, std::time::Duration::from_secs(0))?;

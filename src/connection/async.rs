@@ -6,7 +6,7 @@ use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
-use super::common::{parse_connection_time, AccountInfo, ConnectionHandler, ConnectionProtocol};
+use super::common::{parse_connection_time, AccountInfo, ConnectionHandler, ConnectionProtocol, StartupMessageCallback};
 use super::ConnectionMetadata;
 use crate::errors::Error;
 use crate::messages::{RequestMessage, ResponseMessage};
@@ -29,7 +29,16 @@ pub struct AsyncConnection {
 
 impl AsyncConnection {
     /// Create a new async connection
+    #[allow(dead_code)]
     pub async fn connect(address: &str, client_id: i32) -> Result<Self, Error> {
+        Self::connect_with_callback(address, client_id, None).await
+    }
+
+    /// Create a new async connection with a callback for unsolicited messages
+    ///
+    /// The callback will be invoked for any messages received during connection
+    /// setup that are not part of the normal handshake (e.g., OpenOrder, OrderStatus).
+    pub async fn connect_with_callback(address: &str, client_id: i32, startup_callback: Option<StartupMessageCallback>) -> Result<Self, Error> {
         let socket = TcpStream::connect(address).await?;
 
         let connection = Self {
@@ -44,7 +53,7 @@ impl AsyncConnection {
             connection_url: address.to_string(),
         };
 
-        connection.establish_connection().await?;
+        connection.establish_connection(startup_callback.as_ref()).await?;
 
         Ok(connection)
     }
@@ -88,7 +97,8 @@ impl AsyncConnection {
                         *socket = new_socket;
                     }
 
-                    self.establish_connection().await?;
+                    // Reconnection doesn't use startup callback
+                    self.establish_connection(None).await?;
 
                     return Ok(());
                 }
@@ -102,10 +112,10 @@ impl AsyncConnection {
     }
 
     /// Establish connection to TWS
-    pub(crate) async fn establish_connection(&self) -> Result<(), Error> {
+    pub(crate) async fn establish_connection(&self, startup_callback: Option<&StartupMessageCallback>) -> Result<(), Error> {
         self.handshake().await?;
         self.start_api().await?;
-        self.receive_account_info().await?;
+        self.receive_account_info(startup_callback).await?;
         Ok(())
     }
 
@@ -209,14 +219,14 @@ impl AsyncConnection {
     }
 
     // Fetches next order id and managed accounts.
-    pub(crate) async fn receive_account_info(&self) -> Result<(), Error> {
+    pub(crate) async fn receive_account_info(&self, startup_callback: Option<&StartupMessageCallback>) -> Result<(), Error> {
         let mut account_info = AccountInfo::default();
 
         let mut attempts = 0;
         const MAX_ATTEMPTS: i32 = 100;
         loop {
             let mut message = self.read_message().await?;
-            let info = self.connection_handler.parse_account_info(&mut message)?;
+            let info = self.connection_handler.parse_account_info(&mut message, startup_callback)?;
 
             // Merge received info
             if info.next_order_id.is_some() {

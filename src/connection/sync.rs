@@ -4,7 +4,7 @@ use std::sync::Mutex;
 
 use log::{debug, info};
 
-use super::common::{parse_connection_time, AccountInfo, ConnectionHandler, ConnectionProtocol};
+use super::common::{parse_connection_time, AccountInfo, ConnectionHandler, ConnectionProtocol, StartupMessageCallback};
 use super::ConnectionMetadata;
 use crate::errors::Error;
 use crate::messages::{RequestMessage, ResponseMessage};
@@ -28,7 +28,16 @@ pub struct Connection<S: Stream> {
 
 impl<S: Stream> Connection<S> {
     /// Create a new connection
+    #[allow(dead_code)]
     pub fn connect(socket: S, client_id: i32) -> Result<Self, Error> {
+        Self::connect_with_callback(socket, client_id, None)
+    }
+
+    /// Create a new connection with a callback for unsolicited messages
+    ///
+    /// The callback will be invoked for any messages received during connection
+    /// setup that are not part of the normal handshake (e.g., OpenOrder, OrderStatus).
+    pub fn connect_with_callback(socket: S, client_id: i32, startup_callback: Option<StartupMessageCallback>) -> Result<Self, Error> {
         let connection = Self {
             client_id,
             socket,
@@ -41,7 +50,7 @@ impl<S: Stream> Connection<S> {
             connection_handler: ConnectionHandler::default(),
         };
 
-        connection.establish_connection()?;
+        connection.establish_connection(startup_callback.as_ref())?;
 
         Ok(connection)
     }
@@ -71,7 +80,8 @@ impl<S: Stream> Connection<S> {
             match self.socket.reconnect() {
                 Ok(_) => {
                     info!("reconnected !!!");
-                    self.establish_connection()?;
+                    // Reconnection doesn't use startup callback
+                    self.establish_connection(None)?;
 
                     return Ok(());
                 }
@@ -85,10 +95,10 @@ impl<S: Stream> Connection<S> {
     }
 
     /// Establish connection to TWS
-    pub(crate) fn establish_connection(&self) -> Result<(), Error> {
+    pub(crate) fn establish_connection(&self, startup_callback: Option<&StartupMessageCallback>) -> Result<(), Error> {
         self.handshake()?;
         self.start_api()?;
-        self.receive_account_info()?;
+        self.receive_account_info(startup_callback)?;
         Ok(())
     }
 
@@ -165,14 +175,14 @@ impl<S: Stream> Connection<S> {
     }
 
     // Fetches next order id and managed accounts.
-    pub(crate) fn receive_account_info(&self) -> Result<(), Error> {
+    pub(crate) fn receive_account_info(&self, startup_callback: Option<&StartupMessageCallback>) -> Result<(), Error> {
         let mut account_info = AccountInfo::default();
 
         let mut attempts = 0;
         const MAX_ATTEMPTS: i32 = 100;
         loop {
             let mut message = self.read_message()?;
-            let info = self.connection_handler.parse_account_info(&mut message)?;
+            let info = self.connection_handler.parse_account_info(&mut message, startup_callback)?;
 
             // Merge received info
             if info.next_order_id.is_some() {

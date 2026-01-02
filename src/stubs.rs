@@ -46,7 +46,24 @@ impl Default for MessageBusStub {
     }
 }
 
+#[cfg(feature = "sync")]
+impl Drop for MessageBusStub {
+    fn drop(&mut self) {
+        // Clean up the subscription tracker to prevent test isolation issues
+        let stub_id = self as *const _ as usize;
+        ORDER_UPDATE_SUBSCRIPTION_TRACKER.lock().unwrap().remove(&stub_id);
+    }
+}
+
 impl MessageBusStub {
+    #[cfg(feature = "sync")]
+    pub fn with_responses(response_messages: Vec<String>) -> Self {
+        Self {
+            request_messages: RwLock::new(vec![]),
+            response_messages,
+        }
+    }
+
     pub fn request_messages(&self) -> Vec<RequestMessage> {
         self.request_messages.read().unwrap().clone()
     }
