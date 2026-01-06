@@ -138,7 +138,14 @@ pub fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, 
         return (None, None);
     }
 
-    let zones = timezones::find_by_name(parts[2]);
+    // Combine timezone parts if more than 3 parts
+    let tz_name = if parts.len() > 3 {
+        parts[2..].join(" ")
+    } else {
+        parts[2].to_string()
+    };
+    let tz_name = map_timezone_name(&tz_name);
+    let zones = timezones::find_by_name(tz_name);
 
     if zones.is_empty() {
         error!("Time zone not found for {}", parts[2]);
@@ -163,6 +170,16 @@ pub fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, 
             log::warn!("Could not parse connection time from {date_str}: {err}");
             (None, Some(timezone))
         }
+    }
+}
+
+/// Map timezone names to standard English names
+fn map_timezone_name(name: &str) -> &str {
+    match name {
+        // Chinese timezone names
+        "中国标准时间" | "北京时间" | "�й���׼ʱ��" | "China Standard Time" => "CST", // China Standard Time
+        // Add other mappings as needed
+        _ => name,
     }
 }
 
