@@ -249,6 +249,11 @@ impl<T> Subscription<T> {
             SubscriptionInner::PreDecoded { receiver } => receiver.recv().await,
         }
     }
+
+    /// Get the request ID associated with this subscription
+    pub fn request_id(&self) -> Option<i32> {
+        self.request_id
+    }
 }
 
 impl<T> Subscription<T> {

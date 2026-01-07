@@ -22,6 +22,25 @@ pub async fn subscribe_to_group_events(client: &Client, group_id: i32) -> Result
     builder.send::<DisplayGroupUpdate>(request).await
 }
 
+/// Updates the contract displayed in a TWS display group.
+///
+/// This function changes the contract shown in the specified display group within TWS.
+/// You must first subscribe to the group using [`subscribe_to_group_events`] before
+/// calling this function. The update will trigger a `DisplayGroupUpdated` callback
+/// on the existing subscription.
+///
+/// # Arguments
+/// * `client` - The connected client
+/// * `request_id` - The request ID from the subscription (use `subscription.request_id()`)
+/// * `contract_info` - Contract to display:
+///   - `"contractID@exchange"` for individual contracts (e.g., "265598@SMART")
+///   - `"none"` for empty selection
+///   - `"combo"` for combination contracts
+pub async fn update_display_group(client: &Client, request_id: i32, contract_info: &str) -> Result<(), Error> {
+    let request = encoders::encode_update_display_group(request_id, contract_info)?;
+    client.send_message(request).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -100,6 +100,11 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         }
     }
 
+    /// Returns the request ID associated with this subscription.
+    pub fn request_id(&self) -> Option<i32> {
+        self.request_id
+    }
+
     /// Returns the next available value, blocking if necessary until a value becomes available.
     ///
     /// # Examples

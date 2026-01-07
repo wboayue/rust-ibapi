@@ -510,6 +510,37 @@ impl Client {
         display_groups::sync::subscribe_to_group_events(self, group_id)
     }
 
+    /// Updates the contract displayed in a TWS display group.
+    ///
+    /// This function changes the contract shown in the specified display group within TWS.
+    /// You must first subscribe to the group using [`subscribe_to_group_events`](Self::subscribe_to_group_events)
+    /// before calling this function.
+    ///
+    /// # Arguments
+    /// * `request_id` - The request ID from the subscription (use `subscription.request_id()`)
+    /// * `contract_info` - Contract to display:
+    ///   - `"contractID@exchange"` for individual contracts (e.g., "265598@SMART")
+    ///   - `"none"` for empty selection
+    ///   - `"combo"` for combination contracts
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:7497", 100).expect("connection failed");
+    ///
+    /// // First subscribe to the display group
+    /// let subscription = client.subscribe_to_group_events(1).expect("subscription failed");
+    /// let request_id = subscription.request_id().expect("no request ID");
+    ///
+    /// // Update the display group to show AAPL
+    /// client.update_display_group(request_id, "265598@SMART").expect("update failed");
+    /// ```
+    pub fn update_display_group(&self, request_id: i32, contract_info: &str) -> Result<(), Error> {
+        display_groups::sync::update_display_group(self, request_id, contract_info)
+    }
+
     // === Contracts ===
 
     /// Requests contract information.
