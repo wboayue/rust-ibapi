@@ -1,7 +1,8 @@
 use time::macros::{format_description, time};
 use time::{Date, OffsetDateTime, PrimitiveDateTime};
-use time_tz::{timezones, OffsetDateTimeExt, PrimitiveDateTimeExt, Tz};
+use time_tz::{OffsetDateTimeExt, PrimitiveDateTimeExt, Tz};
 
+use crate::common::timezone::find_timezone;
 use crate::messages::ResponseMessage;
 use crate::{server_versions, Error};
 
@@ -221,7 +222,7 @@ pub(crate) fn decode_histogram_data(message: &mut ResponseMessage) -> Result<Vec
 }
 
 fn parse_time_zone(name: &str) -> &Tz {
-    let zones = timezones::find_by_name(name);
+    let zones = find_timezone(name);
     if zones.is_empty() {
         panic!("timezone not found for: {name}")
     }
