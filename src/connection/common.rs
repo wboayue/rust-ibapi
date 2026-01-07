@@ -3,8 +3,9 @@
 use log::{debug, error, warn};
 use time::macros::format_description;
 use time::OffsetDateTime;
-use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, Tz};
+use time_tz::{OffsetResult, PrimitiveDateTimeExt, Tz};
 
+use crate::common::timezone::find_timezone;
 use crate::errors::Error;
 use crate::messages::{encode_length, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::server_versions;
@@ -152,10 +153,12 @@ pub fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, 
         return (None, None);
     }
 
-    let zones = timezones::find_by_name(parts[2]);
+    // Combine timezone parts if more than 3 parts (e.g., "China Standard Time")
+    let tz_name = if parts.len() > 3 { parts[2..].join(" ") } else { parts[2].to_string() };
+    let zones = find_timezone(&tz_name);
 
     if zones.is_empty() {
-        error!("Time zone not found for {}", parts[2]);
+        error!("Time zone not found for {}", tz_name);
         return (None, None);
     }
 
@@ -185,7 +188,7 @@ mod tests {
     use super::*;
     use std::sync::{Arc, Mutex};
     use time::macros::datetime;
-    use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt};
+    use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, TimeZone};
 
     #[test]
     fn test_parse_account_info_next_valid_id() {
@@ -346,6 +349,37 @@ mod tests {
         if let OffsetResult::Some(other) = datetime!(2023-04-05 22:20:39).assume_timezone(la) {
             assert_eq!(connection_time, Some(other));
         }
+    }
+
+    #[test]
+    fn test_parse_connection_time_china_standard_time() {
+        let example = "20230405 22:20:39 China Standard Time";
+        let (connection_time, timezone) = parse_connection_time(example);
+
+        assert!(connection_time.is_some());
+        assert!(timezone.is_some());
+        assert_eq!(timezone.unwrap().name(), "Asia/Shanghai");
+    }
+
+    #[test]
+    fn test_parse_connection_time_chinese_utf8() {
+        let example = "20230405 22:20:39 中国标准时间";
+        let (connection_time, timezone) = parse_connection_time(example);
+
+        assert!(connection_time.is_some());
+        assert!(timezone.is_some());
+        assert_eq!(timezone.unwrap().name(), "Asia/Shanghai");
+    }
+
+    #[test]
+    fn test_parse_connection_time_mojibake() {
+        // Simulate GB2312 timezone decoded as UTF-8 lossy
+        let example = "20230405 22:20:39 \u{FFFD}\u{FFFD}\u{FFFD}";
+        let (connection_time, timezone) = parse_connection_time(example);
+
+        assert!(connection_time.is_some());
+        assert!(timezone.is_some());
+        assert_eq!(timezone.unwrap().name(), "Asia/Shanghai");
     }
 
     #[test]
