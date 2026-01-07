@@ -52,6 +52,42 @@ pub(crate) mod transport;
 /// Connection management
 pub(crate) mod connection;
 
+/// Callback for handling unsolicited messages during connection setup.
+///
+/// When TWS sends messages like `OpenOrder` or `OrderStatus` during the connection
+/// handshake, this callback is invoked to allow the application to process them
+/// instead of discarding them.
+///
+/// # Example
+///
+/// ```no_run
+/// use ibapi::{Client, StartupMessageCallback};
+/// use ibapi::messages::IncomingMessages;
+/// use std::sync::{Arc, Mutex};
+///
+/// #[tokio::main]
+/// async fn main() {
+///     let orders = Arc::new(Mutex::new(Vec::new()));
+///     let orders_clone = orders.clone();
+///
+///     let callback: StartupMessageCallback = Box::new(move |msg| {
+///         match msg.message_type() {
+///             IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => {
+///                 orders_clone.lock().unwrap().push(msg);
+///             }
+///             _ => {}
+///         }
+///     });
+///
+///     let client = Client::connect_with_callback("127.0.0.1:4002", 100, Some(callback))
+///         .await
+///         .expect("connection failed");
+///
+///     println!("Received {} startup orders", orders.lock().unwrap().len());
+/// }
+/// ```
+pub use connection::StartupMessageCallback;
+
 /// Common utilities shared across modules
 pub(crate) mod common;
 

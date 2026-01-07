@@ -131,6 +131,9 @@ impl From<ValidationError> for Error {
                 Error::InvalidArgument(format!("Invalid limit price {} for current price {}", limit, current))
             }
             ValidationError::InvalidBracketOrder(msg) => Error::InvalidArgument(format!("Invalid bracket order: {}", msg)),
+            ValidationError::InvalidPercentage { field, value, min, max } => {
+                Error::InvalidArgument(format!("Invalid {}: {} (must be between {} and {})", field, value, min, max))
+            }
         }
     }
 }

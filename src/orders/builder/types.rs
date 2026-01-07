@@ -404,6 +404,17 @@ pub enum ValidationError {
     },
     /// Bracket order configuration is invalid.
     InvalidBracketOrder(String),
+    /// Percentage value outside allowed range (10-50%).
+    InvalidPercentage {
+        /// The field name (e.g., "max_pct_vol", "pct_vol").
+        field: &'static str,
+        /// The invalid value provided.
+        value: f64,
+        /// Minimum allowed value.
+        min: f64,
+        /// Maximum allowed value.
+        max: f64,
+    },
 }
 
 impl fmt::Display for ValidationError {
@@ -420,6 +431,9 @@ impl fmt::Display for ValidationError {
                 write!(f, "Invalid limit price {} for current price {}", limit, current)
             }
             Self::InvalidBracketOrder(msg) => write!(f, "Invalid bracket order: {}", msg),
+            Self::InvalidPercentage { field, value, min, max } => {
+                write!(f, "Invalid {}: {} (must be between {} and {})", field, value, min, max)
+            }
         }
     }
 }
