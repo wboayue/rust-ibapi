@@ -1074,6 +1074,19 @@ pub struct Notice {
     pub message: String,
 }
 
+/// Error code indicating an order was cancelled (confirmation, not an error).
+pub const ORDER_CANCELLED_CODE: i32 = 202;
+
+/// Range of error codes that are considered warnings (2100-2169).
+pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2169;
+
+/// System message codes indicating connectivity status.
+/// - 1100: Connectivity lost
+/// - 1101: Connectivity restored, market data lost (resubscribe needed)
+/// - 1102: Connectivity restored, market data maintained
+/// - 1300: Socket port reset during active connection
+pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [1100, 1101, 1102, 1300];
+
 impl Notice {
     #[allow(private_interfaces)]
     /// Construct a notice from a response message.
@@ -1081,6 +1094,46 @@ impl Notice {
         let code = message.peek_int(CODE_INDEX).unwrap_or(-1);
         let message = message.peek_string(MESSAGE_INDEX);
         Notice { code, message }
+    }
+
+    /// Returns `true` if this notice indicates an order was cancelled (code 202).
+    ///
+    /// Code 202 is sent by TWS to confirm an order cancellation. This is an
+    /// informational message, not an error.
+    pub fn is_cancellation(&self) -> bool {
+        self.code == ORDER_CANCELLED_CODE
+    }
+
+    /// Returns `true` if this is a warning message (codes 2100-2169).
+    pub fn is_warning(&self) -> bool {
+        WARNING_CODE_RANGE.contains(&self.code)
+    }
+
+    /// Returns `true` if this is a system/connectivity message (codes 1100-1102, 1300).
+    ///
+    /// System messages indicate connectivity status changes:
+    /// - 1100: Connectivity between IB and TWS lost
+    /// - 1101: Connectivity restored, market data lost (resubscribe needed)
+    /// - 1102: Connectivity restored, market data maintained
+    /// - 1300: Socket port reset during active connection
+    pub fn is_system_message(&self) -> bool {
+        SYSTEM_MESSAGE_CODES.contains(&self.code)
+    }
+
+    /// Returns `true` if this is an informational notice (not an error).
+    ///
+    /// Informational notices include cancellation confirmations, warnings,
+    /// and system/connectivity messages.
+    pub fn is_informational(&self) -> bool {
+        self.is_cancellation() || self.is_warning() || self.is_system_message()
+    }
+
+    /// Returns `true` if this is an error requiring attention.
+    ///
+    /// Returns `false` for informational messages like cancellation confirmations,
+    /// warnings, and system messages.
+    pub fn is_error(&self) -> bool {
+        !self.is_informational()
     }
 }
 
