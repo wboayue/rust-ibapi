@@ -1211,6 +1211,146 @@ fn test_notice_edge_cases() {
 }
 
 #[test]
+fn test_notice_is_cancellation() {
+    // Code 202 = order cancelled
+    let cancellation = Notice {
+        code: 202,
+        message: "Order Cancelled - reason:".to_string(),
+    };
+    assert!(cancellation.is_cancellation());
+    assert!(!cancellation.is_warning());
+    assert!(!cancellation.is_system_message());
+    assert!(cancellation.is_informational());
+    assert!(!cancellation.is_error());
+
+    // Other codes are not cancellations
+    let error = Notice {
+        code: 200,
+        message: "No security definition found".to_string(),
+    };
+    assert!(!error.is_cancellation());
+}
+
+#[test]
+fn test_notice_is_warning() {
+    // Codes 2100-2169 are warnings
+    let warning_codes = [2100, 2107, 2119, 2150, 2169];
+    for code in warning_codes {
+        let notice = Notice {
+            code,
+            message: format!("Warning with code {}", code),
+        };
+        assert!(notice.is_warning(), "Code {} should be a warning", code);
+        assert!(!notice.is_cancellation());
+        assert!(!notice.is_system_message());
+        assert!(notice.is_informational());
+        assert!(!notice.is_error());
+    }
+
+    // Codes outside 2100-2169 are not warnings
+    let non_warning_codes = [2099, 2170, 200, 202, 1000];
+    for code in non_warning_codes {
+        let notice = Notice {
+            code,
+            message: format!("Non-warning with code {}", code),
+        };
+        assert!(!notice.is_warning(), "Code {} should not be a warning", code);
+    }
+}
+
+#[test]
+fn test_notice_is_system_message() {
+    // System message codes: 1100, 1101, 1102, 1300
+    let system_codes = [
+        (1100, "Connectivity between IB and TWS has been lost."),
+        (1101, "Connectivity restored, data lost."),
+        (1102, "Connectivity restored, data maintained."),
+        (1300, "Socket port has been reset."),
+    ];
+    for (code, msg) in system_codes {
+        let notice = Notice {
+            code,
+            message: msg.to_string(),
+        };
+        assert!(notice.is_system_message(), "Code {} should be a system message", code);
+        assert!(!notice.is_cancellation());
+        assert!(!notice.is_warning());
+        assert!(notice.is_informational());
+        assert!(!notice.is_error());
+    }
+
+    // Non-system codes
+    let non_system_codes = [200, 202, 1099, 1103, 1299, 1301, 2100];
+    for code in non_system_codes {
+        let notice = Notice {
+            code,
+            message: format!("Non-system message with code {}", code),
+        };
+        assert!(!notice.is_system_message(), "Code {} should not be a system message", code);
+    }
+}
+
+#[test]
+fn test_notice_is_informational() {
+    // Informational includes cancellations, warnings, and system messages
+    let informational_codes = [202, 1100, 1101, 1102, 1300, 2100, 2107, 2169];
+    for code in informational_codes {
+        let notice = Notice {
+            code,
+            message: format!("Informational code {}", code),
+        };
+        assert!(notice.is_informational(), "Code {} should be informational", code);
+        assert!(!notice.is_error(), "Code {} should not be an error", code);
+    }
+
+    // Non-informational (actual errors)
+    let error_codes = [100, 200, 201, 321, 502, 10000];
+    for code in error_codes {
+        let notice = Notice {
+            code,
+            message: format!("Error code {}", code),
+        };
+        assert!(!notice.is_informational(), "Code {} should not be informational", code);
+        assert!(notice.is_error(), "Code {} should be an error", code);
+    }
+}
+
+#[test]
+fn test_notice_is_error() {
+    // Code 200 = actual error
+    let error = Notice {
+        code: 200,
+        message: "No security definition found".to_string(),
+    };
+    assert!(error.is_error());
+    assert!(!error.is_informational());
+
+    // Code 202 = cancellation, not error
+    let cancellation = Notice {
+        code: 202,
+        message: "Order Cancelled".to_string(),
+    };
+    assert!(!cancellation.is_error());
+    assert!(cancellation.is_informational());
+
+    // Code 1100 = system message, not error
+    let system_msg = Notice {
+        code: 1100,
+        message: "Connectivity lost".to_string(),
+    };
+    assert!(!system_msg.is_error());
+    assert!(system_msg.is_informational());
+
+    // Code 2107 = warning, not error
+    let warning = Notice {
+        code: 2107,
+        message: "HMDS data farm connection is inactive.".to_string(),
+    };
+    assert!(!warning.is_error());
+    assert!(warning.is_informational());
+}
+
+#[test]
 fn test_all_incoming_message_conversions() {
     // Test boundary values and ensure all message types are covered
     let test_cases = vec![

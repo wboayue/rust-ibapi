@@ -1,6 +1,6 @@
 //! Common message routing logic for sync and async implementations
 
-use crate::messages::{IncomingMessages, ResponseMessage};
+use crate::messages::{IncomingMessages, ResponseMessage, WARNING_CODE_RANGE};
 
 /// Represents how a message should be routed
 #[derive(Debug, Clone, PartialEq)]
@@ -71,9 +71,6 @@ pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
         _ => RoutingDecision::ByMessageType(message_type),
     }
 }
-
-/// Range of error codes that are considered warnings
-pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2169;
 
 /// Check if an error code is a warning
 pub fn is_warning_error(error_code: i32) -> bool {
