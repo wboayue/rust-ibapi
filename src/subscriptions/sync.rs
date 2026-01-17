@@ -1,13 +1,13 @@
 //! Synchronous subscription implementation
 
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use log::{debug, error, warn};
 
-use super::common::{process_decode_result, should_retry_error, should_store_error, ProcessingResult};
+use super::common::{check_retry, process_decode_result, should_retry_error, should_store_error, ProcessingResult, RetryDecision};
 use super::{ResponseContext, StreamDecoder};
 use crate::errors::Error;
 use crate::messages::{OutgoingMessages, ResponseMessage};
@@ -31,6 +31,7 @@ pub struct Subscription<T: StreamDecoder<T>> {
     subscription: InternalSubscription,
     response_context: Option<ResponseContext>,
     error: Mutex<Option<Error>>,
+    retry_count: AtomicUsize,
 }
 
 #[allow(private_bounds)]
@@ -57,6 +58,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             cancelled: AtomicBool::new(false),
             snapshot_ended: AtomicBool::new(false),
             error: Mutex::new(None),
+            retry_count: AtomicUsize::new(0),
         }
     }
 
@@ -136,13 +138,24 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// * `None` - If the subscription has ended or encountered an error
     pub fn next(&self) -> Option<T> {
         match self.process_response(self.subscription.next()) {
-            Some(val) => Some(val),
+            Some(val) => {
+                self.retry_count.store(0, Ordering::Relaxed);
+                Some(val)
+            }
             None => match self.error() {
                 Some(ref err) if should_retry_error(err) => {
-                    debug!("retrying after error: {err:?}");
-                    self.next()
+                    let retries = self.retry_count.fetch_add(1, Ordering::Relaxed);
+                    if check_retry(retries) == RetryDecision::Continue {
+                        self.next()
+                    } else {
+                        self.retry_count.store(0, Ordering::Relaxed);
+                        None
+                    }
                 }
-                _ => None,
+                _ => {
+                    self.retry_count.store(0, Ordering::Relaxed);
+                    None
+                }
             },
         }
     }

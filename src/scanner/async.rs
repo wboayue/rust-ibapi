@@ -16,10 +16,7 @@ impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::ScannerData];
 
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ScannerData>, Error> {
-        match message.message_type() {
-            IncomingMessages::ScannerData => Ok(decoders::decode_scanner_data(message.clone())?),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
+        decoders::decode_scanner_message(message)
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {

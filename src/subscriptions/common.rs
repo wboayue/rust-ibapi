@@ -3,6 +3,31 @@
 use crate::errors::Error;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 
+/// Maximum number of retry attempts when encountering unexpected responses.
+/// This prevents infinite loops when TWS sends unexpected message types.
+pub(crate) const MAX_DECODE_RETRIES: usize = 10;
+
+/// Result of checking whether a retry should be attempted
+#[derive(Debug, PartialEq)]
+pub(crate) enum RetryDecision {
+    /// Continue retrying
+    Continue,
+    /// Stop retrying, max attempts exceeded
+    Stop,
+}
+
+/// Checks if a retry should be attempted and logs appropriately.
+/// Returns `RetryDecision::Continue` if retry count is below max, `RetryDecision::Stop` otherwise.
+pub(crate) fn check_retry(retry_count: usize) -> RetryDecision {
+    if retry_count < MAX_DECODE_RETRIES {
+        log::warn!("retrying after unexpected response (attempt {}/{})", retry_count + 1, MAX_DECODE_RETRIES);
+        RetryDecision::Continue
+    } else {
+        log::error!("max retries ({}) exceeded, stopping subscription", MAX_DECODE_RETRIES);
+        RetryDecision::Stop
+    }
+}
+
 /// Checks if an error indicates the subscription should retry processing
 #[allow(dead_code)]
 pub(crate) fn should_retry_error(error: &Error) -> bool {
@@ -71,6 +96,18 @@ mod tests {
         assert!(!should_store_error(&Error::EndOfStream));
         assert!(should_store_error(&Error::UnexpectedResponse(test_msg)));
         assert!(should_store_error(&Error::ConnectionFailed));
+    }
+
+    #[test]
+    fn test_check_retry() {
+        // Should continue when under max retries
+        assert_eq!(check_retry(0), RetryDecision::Continue);
+        assert_eq!(check_retry(5), RetryDecision::Continue);
+        assert_eq!(check_retry(MAX_DECODE_RETRIES - 1), RetryDecision::Continue);
+
+        // Should stop when at or over max retries
+        assert_eq!(check_retry(MAX_DECODE_RETRIES), RetryDecision::Stop);
+        assert_eq!(check_retry(MAX_DECODE_RETRIES + 1), RetryDecision::Stop);
     }
 
     #[test]
