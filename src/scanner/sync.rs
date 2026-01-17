@@ -14,6 +14,7 @@ impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ScannerData>, Error> {
         match message.message_type() {
             IncomingMessages::ScannerData => Ok(decoders::decode_scanner_data(message.clone())?),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }

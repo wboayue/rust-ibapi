@@ -3,10 +3,10 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use log::{debug, warn};
+use log::{debug, error, warn};
 use tokio::sync::mpsc;
 
-use super::common::{process_decode_result, ProcessingResult};
+use super::common::{process_decode_result, ProcessingResult, MAX_DECODE_RETRIES};
 use super::{ResponseContext, StreamDecoder};
 use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
@@ -231,21 +231,32 @@ impl<T> Subscription<T> {
                 subscription,
                 decoder,
                 server_version,
-            } => loop {
-                match subscription.next().await {
-                    Some(Ok(mut message)) => {
-                        let result = decoder(*server_version, &mut message);
-                        match process_decode_result(result) {
-                            ProcessingResult::Success(val) => return Some(Ok(val)),
-                            ProcessingResult::EndOfStream => return None,
-                            ProcessingResult::Retry => continue,
-                            ProcessingResult::Error(err) => return Some(Err(err)),
+            } => {
+                let mut retry_count = 0;
+                loop {
+                    match subscription.next().await {
+                        Some(Ok(mut message)) => {
+                            let result = decoder(*server_version, &mut message);
+                            match process_decode_result(result) {
+                                ProcessingResult::Success(val) => return Some(Ok(val)),
+                                ProcessingResult::EndOfStream => return None,
+                                ProcessingResult::Retry => {
+                                    retry_count += 1;
+                                    if retry_count > MAX_DECODE_RETRIES {
+                                        error!("max retries ({}) exceeded, stopping subscription", MAX_DECODE_RETRIES);
+                                        return None;
+                                    }
+                                    warn!("retrying after unexpected response (attempt {}/{})", retry_count, MAX_DECODE_RETRIES);
+                                    continue;
+                                }
+                                ProcessingResult::Error(err) => return Some(Err(err)),
+                            }
                         }
+                        Some(Err(e)) => return Some(Err(e)),
+                        None => return None,
                     }
-                    Some(Err(e)) => return Some(Err(e)),
-                    None => return None,
                 }
-            },
+            }
             SubscriptionInner::PreDecoded { receiver } => receiver.recv().await,
         }
     }

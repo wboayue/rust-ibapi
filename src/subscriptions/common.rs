@@ -3,6 +3,10 @@
 use crate::errors::Error;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 
+/// Maximum number of retry attempts when encountering unexpected responses.
+/// This prevents infinite loops when TWS sends unexpected message types.
+pub(crate) const MAX_DECODE_RETRIES: usize = 10;
+
 /// Checks if an error indicates the subscription should retry processing
 #[allow(dead_code)]
 pub(crate) fn should_retry_error(error: &Error) -> bool {
