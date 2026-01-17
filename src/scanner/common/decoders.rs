@@ -1,8 +1,18 @@
 use crate::contracts::{Currency, Exchange, SecurityType, Symbol};
-use crate::messages::ResponseMessage;
+use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::Error;
 
 use super::super::ScannerData;
+
+/// Shared decode function for scanner data messages.
+/// Handles message type matching and error conversion.
+pub(in crate::scanner) fn decode_scanner_message(message: &mut ResponseMessage) -> Result<Vec<ScannerData>, Error> {
+    match message.message_type() {
+        IncomingMessages::ScannerData => decode_scanner_data(message.clone()),
+        IncomingMessages::Error => Err(Error::from(message.clone())),
+        _ => Err(Error::UnexpectedResponse(message.clone())),
+    }
+}
 
 pub(in crate::scanner) fn decode_scanner_parameters(mut message: ResponseMessage) -> Result<String, Error> {
     message.skip(); // skip message type

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use log::{debug, warn};
 use tokio::sync::mpsc;
 
-use super::common::{process_decode_result, ProcessingResult};
+use super::common::{check_retry, process_decode_result, ProcessingResult, RetryDecision};
 use super::{ResponseContext, StreamDecoder};
 use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
@@ -231,21 +231,30 @@ impl<T> Subscription<T> {
                 subscription,
                 decoder,
                 server_version,
-            } => loop {
-                match subscription.next().await {
-                    Some(Ok(mut message)) => {
-                        let result = decoder(*server_version, &mut message);
-                        match process_decode_result(result) {
-                            ProcessingResult::Success(val) => return Some(Ok(val)),
-                            ProcessingResult::EndOfStream => return None,
-                            ProcessingResult::Retry => continue,
-                            ProcessingResult::Error(err) => return Some(Err(err)),
+            } => {
+                let mut retry_count = 0;
+                loop {
+                    match subscription.next().await {
+                        Some(Ok(mut message)) => {
+                            let result = decoder(*server_version, &mut message);
+                            match process_decode_result(result) {
+                                ProcessingResult::Success(val) => return Some(Ok(val)),
+                                ProcessingResult::EndOfStream => return None,
+                                ProcessingResult::Retry => {
+                                    if check_retry(retry_count) == RetryDecision::Stop {
+                                        return None;
+                                    }
+                                    retry_count += 1;
+                                    continue;
+                                }
+                                ProcessingResult::Error(err) => return Some(Err(err)),
+                            }
                         }
+                        Some(Err(e)) => return Some(Err(e)),
+                        None => return None,
                     }
-                    Some(Err(e)) => return Some(Err(e)),
-                    None => return None,
                 }
-            },
+            }
             SubscriptionInner::PreDecoded { receiver } => receiver.recv().await,
         }
     }

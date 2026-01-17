@@ -6,16 +6,13 @@ use super::common::{decoders, encoders};
 use super::*;
 use crate::client::blocking::Subscription;
 use crate::client::{ResponseContext, StreamDecoder};
-use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::orders::TagValue;
 use crate::{client::sync::Client, server_versions, Error};
 
 impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
     fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ScannerData>, Error> {
-        match message.message_type() {
-            IncomingMessages::ScannerData => Ok(decoders::decode_scanner_data(message.clone())?),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
+        decoders::decode_scanner_message(message)
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
