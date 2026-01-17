@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use log::{debug, error, warn};
 
-use super::common::{process_decode_result, should_retry_error, should_store_error, ProcessingResult, MAX_DECODE_RETRIES};
+use super::common::{check_retry, process_decode_result, should_retry_error, should_store_error, ProcessingResult, RetryDecision};
 use super::{ResponseContext, StreamDecoder};
 use crate::errors::Error;
 use crate::messages::{OutgoingMessages, ResponseMessage};
@@ -138,13 +138,11 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 Some(val)
             }
             None => match self.error() {
-                Some(ref err) if should_retry_error(err) => {
+                Some(ref _err) if should_retry_error(_err) => {
                     let retries = self.retry_count.fetch_add(1, Ordering::Relaxed);
-                    if retries < MAX_DECODE_RETRIES {
-                        warn!("retrying after error (attempt {}/{}): {err:?}", retries + 1, MAX_DECODE_RETRIES);
+                    if check_retry(retries) == RetryDecision::Continue {
                         self.next()
                     } else {
-                        error!("max retries ({}) exceeded, stopping subscription", MAX_DECODE_RETRIES);
                         self.retry_count.store(0, Ordering::Relaxed);
                         None
                     }

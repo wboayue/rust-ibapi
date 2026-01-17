@@ -3,10 +3,10 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use log::{debug, error, warn};
+use log::{debug, warn};
 use tokio::sync::mpsc;
 
-use super::common::{process_decode_result, ProcessingResult, MAX_DECODE_RETRIES};
+use super::common::{check_retry, process_decode_result, ProcessingResult, RetryDecision};
 use super::{ResponseContext, StreamDecoder};
 use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
@@ -241,12 +241,10 @@ impl<T> Subscription<T> {
                                 ProcessingResult::Success(val) => return Some(Ok(val)),
                                 ProcessingResult::EndOfStream => return None,
                                 ProcessingResult::Retry => {
-                                    retry_count += 1;
-                                    if retry_count > MAX_DECODE_RETRIES {
-                                        error!("max retries ({}) exceeded, stopping subscription", MAX_DECODE_RETRIES);
+                                    if check_retry(retry_count) == RetryDecision::Stop {
                                         return None;
                                     }
-                                    warn!("retrying after unexpected response (attempt {}/{})", retry_count, MAX_DECODE_RETRIES);
+                                    retry_count += 1;
                                     continue;
                                 }
                                 ProcessingResult::Error(err) => return Some(Err(err)),
