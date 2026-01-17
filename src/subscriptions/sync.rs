@@ -138,7 +138,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 Some(val)
             }
             None => match self.error() {
-                Some(ref _err) if should_retry_error(_err) => {
+                Some(ref err) if should_retry_error(err) => {
                     let retries = self.retry_count.fetch_add(1, Ordering::Relaxed);
                     if check_retry(retries) == RetryDecision::Continue {
                         self.next()
