@@ -221,6 +221,49 @@ pub(crate) fn decode_histogram_data(message: &mut ResponseMessage) -> Result<Vec
     Ok(items)
 }
 
+/// Decode a HistoricalDataUpdate message (message type 90).
+///
+/// This message is sent when historical data is requested with keepUpToDate=true.
+/// IBKR sends updates approximately every 4-6 seconds for the current (incomplete) bar.
+///
+/// Message format:
+/// - message_type (90)
+/// - request_id
+/// - bar_count (always 1 for streaming updates)
+/// - date (unix timestamp as string)
+/// - open
+/// - high
+/// - low
+/// - close
+/// - volume
+/// - wap
+/// - count
+pub(crate) fn decode_historical_data_update(time_zone: &Tz, message: &mut ResponseMessage) -> Result<Bar, Error> {
+    message.skip(); // message type
+    message.skip(); // request_id
+    message.skip(); // bar_count (always 1)
+
+    let date = message.next_string()?;
+    let open = message.next_double()?;
+    let high = message.next_double()?;
+    let low = message.next_double()?;
+    let close = message.next_double()?;
+    let volume = message.next_double()?;
+    let wap = message.next_double()?;
+    let count = message.next_int()?;
+
+    Ok(Bar {
+        date: parse_bar_date(&date, time_zone)?,
+        open,
+        high,
+        low,
+        close,
+        volume,
+        wap,
+        count,
+    })
+}
+
 fn parse_time_zone(name: &str) -> &Tz {
     let zones = find_timezone(name);
     if zones.is_empty() {

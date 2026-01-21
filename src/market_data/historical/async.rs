@@ -1,6 +1,7 @@
 use log::{debug, warn};
 use std::collections::VecDeque;
 use time::OffsetDateTime;
+use time_tz::Tz;
 
 use crate::client::ClientRequestBuilders;
 use crate::contracts::Contract;
@@ -10,7 +11,7 @@ use crate::transport::AsyncInternalSubscription;
 use crate::{Client, Error, MAX_RETRIES};
 
 use super::common::{decoders, encoders};
-use super::{BarSize, Duration, HistogramEntry, HistoricalData, Schedule, TickBidAsk, TickDecoder, TickLast, TickMidpoint, WhatToShow};
+use super::{BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, Schedule, TickBidAsk, TickDecoder, TickLast, TickMidpoint, WhatToShow};
 use crate::market_data::TradingHours;
 
 // === Public API Functions ===
@@ -320,6 +321,191 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
 
     fn clear_error(&mut self) {
         self.error = None;
+    }
+}
+
+// === Historical Data Streaming with keepUpToDate ===
+
+/// Requests streaming historical data for a contract with `keepUpToDate=true`.
+///
+/// This function requests historical bars and then continues to receive streaming
+/// updates for the current (incomplete) bar. IBKR sends updates approximately every
+/// 4-6 seconds until the bar completes, at which point a new bar begins.
+///
+/// **Important IBKR behavior:**
+/// - The same timestamp bar is sent multiple times as it builds (with updated OHLCV)
+/// - When a NEW timestamp appears, the previous bar is considered complete
+/// - Supported `what_to_show` values: Trades, Midpoint, Bid, Ask only
+///
+/// # Arguments
+/// * `client` - The IBKR client connection
+/// * `contract` - The contract to request data for
+/// * `duration` - How far back to request initial historical data
+/// * `bar_size` - The bar size (e.g., Min15 for 15-minute bars)
+/// * `what_to_show` - The data type (Trades, Midpoint, Bid, or Ask)
+/// * `trading_hours` - Whether to use regular trading hours only
+///
+/// # Returns
+/// A `HistoricalDataStreamingSubscription` that yields `HistoricalBarUpdate` values
+///
+/// # Example
+/// ```ignore
+/// let mut subscription = historical_data_streaming(
+///     &client,
+///     &contract,
+///     Duration::days(1),
+///     BarSize::Min15,
+///     Some(WhatToShow::Trades),
+///     TradingHours::Regular,
+/// ).await?;
+///
+/// while let Some(update) = subscription.next().await {
+///     match update {
+///         HistoricalBarUpdate::Historical(data) => {
+///             println!("Received {} historical bars", data.bars.len());
+///         }
+///         HistoricalBarUpdate::Update(bar) => {
+///             println!("Bar update: {} close={}", bar.date, bar.close);
+///         }
+///         HistoricalBarUpdate::HistoricalEnd => {
+///             println!("Initial historical data complete, now streaming");
+///         }
+///     }
+/// }
+/// ```
+///
+/// # See Also
+/// * [IBKR Campus - keepUpToDate](https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/#hist-keepUp-date)
+pub async fn historical_data_streaming(
+    client: &Client,
+    contract: &Contract,
+    duration: Duration,
+    bar_size: BarSize,
+    what_to_show: Option<WhatToShow>,
+    trading_hours: TradingHours,
+) -> Result<HistoricalDataStreamingSubscription, Error> {
+    if !contract.trading_class.is_empty() || contract.contract_id > 0 {
+        check_version(client.server_version(), Features::TRADING_CLASS)?;
+    }
+
+    // Note: end_date must be None when keepUpToDate=true (IBKR requirement)
+    let builder = client.request();
+    let request = encoders::encode_request_historical_data(
+        client.server_version(),
+        builder.request_id(),
+        contract,
+        None, // end_date must be None for keepUpToDate
+        duration,
+        bar_size,
+        what_to_show,
+        trading_hours.use_rth(),
+        true, // keepUpToDate = true
+        Vec::<crate::contracts::TagValue>::default(),
+    )?;
+
+    let subscription = builder.send_raw(request).await?;
+
+    // Get the timezone directly to avoid lifetime issues
+    // time_zone(client) returns a reference tied to client's lifetime,
+    // but we need a 'static reference for the subscription struct
+    let tz: &'static Tz = client.time_zone.unwrap_or_else(|| {
+        warn!("server timezone unknown. assuming UTC, but that may be incorrect!");
+        time_tz::timezones::db::UTC
+    });
+
+    Ok(HistoricalDataStreamingSubscription::new(
+        subscription,
+        client.server_version(),
+        tz,
+    ))
+}
+
+/// Async subscription for streaming historical data with keepUpToDate=true.
+///
+/// This subscription first yields the initial historical bars, then continues
+/// to yield streaming updates for the current bar as it builds.
+pub struct HistoricalDataStreamingSubscription {
+    messages: AsyncInternalSubscription,
+    server_version: i32,
+    time_zone: &'static Tz,
+    received_initial: bool,
+    error: Option<Error>,
+}
+
+impl HistoricalDataStreamingSubscription {
+    fn new(messages: AsyncInternalSubscription, server_version: i32, time_zone: &'static Tz) -> Self {
+        Self {
+            messages,
+            server_version,
+            time_zone,
+            received_initial: false,
+            error: None,
+        }
+    }
+
+    /// Get the next update from the streaming subscription.
+    ///
+    /// Returns:
+    /// - `Some(HistoricalBarUpdate::Historical(data))` - Initial batch of historical bars
+    /// - `Some(HistoricalBarUpdate::HistoricalEnd)` - End of initial historical data
+    /// - `Some(HistoricalBarUpdate::Update(bar))` - Streaming bar update
+    /// - `None` - Subscription ended (connection closed or error)
+    pub async fn next(&mut self) -> Option<HistoricalBarUpdate> {
+        loop {
+            match self.messages.next().await {
+                Some(Ok(mut message)) => {
+                    match message.message_type() {
+                        IncomingMessages::HistoricalData => {
+                            // Initial historical data batch
+                            match decoders::decode_historical_data(self.server_version, self.time_zone, &mut message) {
+                                Ok(data) => {
+                                    self.received_initial = true;
+                                    return Some(HistoricalBarUpdate::Historical(data));
+                                }
+                                Err(e) => {
+                                    self.error = Some(e);
+                                    return None;
+                                }
+                            }
+                        }
+                        IncomingMessages::HistoricalDataUpdate => {
+                            // Streaming bar update
+                            match decoders::decode_historical_data_update(self.time_zone, &mut message) {
+                                Ok(bar) => {
+                                    return Some(HistoricalBarUpdate::Update(bar));
+                                }
+                                Err(e) => {
+                                    self.error = Some(e);
+                                    return None;
+                                }
+                            }
+                        }
+                        IncomingMessages::Error => {
+                            self.error = Some(Error::from(message));
+                            return None;
+                        }
+                        _ => {
+                            // Skip unexpected messages
+                            debug!("unexpected message in streaming subscription: {:?}", message.message_type());
+                            continue;
+                        }
+                    }
+                }
+                Some(Err(e)) => {
+                    self.error = Some(e);
+                    return None;
+                }
+                None => {
+                    // Connection closed
+                    return None;
+                }
+            }
+        }
+    }
+
+    /// Returns the last error that occurred, if any.
+    pub fn error(&self) -> Option<&Error> {
+        self.error.as_ref()
     }
 }
 
