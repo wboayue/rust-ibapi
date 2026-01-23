@@ -54,19 +54,21 @@ impl<'a> BracketOrderBuilder<'a, Client> {
     pub async fn submit_all(self) -> Result<BracketOrderIds, Error> {
         let client = self.parent_builder.client;
         let contract = self.parent_builder.contract;
-        let base_id = client.next_order_id();
         let orders = self.build()?;
 
-        let mut order_ids = Vec::new();
+        // Reserve all order IDs upfront to prevent collisions
+        let parent_id = client.next_order_id();
+        let tp_id = client.next_order_id();
+        let sl_id = client.next_order_id();
+        let reserved_ids = [parent_id, tp_id, sl_id];
 
         for (i, mut order) in orders.into_iter().enumerate() {
-            let order_id = base_id + i as i32;
+            let order_id = reserved_ids[i];
             order.order_id = order_id;
-            order_ids.push(order_id);
 
             // Update parent_id for child orders
             if i > 0 {
-                order.parent_id = base_id;
+                order.parent_id = parent_id;
             }
 
             // Only transmit the last order
@@ -77,7 +79,7 @@ impl<'a> BracketOrderBuilder<'a, Client> {
             orders::submit_order(client, order_id, contract, &order).await?;
         }
 
-        Ok(BracketOrderIds::new(order_ids[0], order_ids[1], order_ids[2]))
+        Ok(BracketOrderIds::new(parent_id, tp_id, sl_id))
     }
 }
 
@@ -118,10 +120,9 @@ impl Client {
     /// ```
     pub async fn submit_oca_orders(&self, orders: Vec<(crate::contracts::Contract, crate::orders::Order)>) -> Result<Vec<OrderId>, Error> {
         let mut order_ids = Vec::new();
-        let base_id = self.next_order_id();
 
-        for (i, (contract, mut order)) in orders.into_iter().enumerate() {
-            let order_id = base_id + i as i32;
+        for (contract, mut order) in orders.into_iter() {
+            let order_id = self.next_order_id();
             order.order_id = order_id;
             order_ids.push(OrderId::new(order_id));
             orders::submit_order(self, order_id, &contract, &order).await?;
