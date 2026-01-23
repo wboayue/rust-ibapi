@@ -542,7 +542,7 @@ fn test_bracket_order_validation_buy() {
 }
 
 #[test]
-fn test_bracket_order_missing_entry_price() {
+fn test_bracket_order_missing_entry() {
     let client = MockClient;
     let contract = create_test_contract();
 
@@ -550,7 +550,7 @@ fn test_bracket_order_missing_entry_price() {
 
     let result = bracket.build();
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("entry_price"));
+    assert!(result.unwrap_err().to_string().contains("entry"));
 }
 
 #[test]
@@ -797,6 +797,135 @@ fn test_bracket_order_with_missing_action() {
     let result = bracket.entry_limit(50.0).take_profit(55.0).stop_loss(45.0).build();
 
     assert!(result.is_err());
+}
+
+// ===== Market Entry Bracket Order Tests =====
+
+#[test]
+fn test_bracket_order_market_entry_buy() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let bracket = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .bracket()
+        .entry_market()
+        .take_profit(55.0)
+        .stop_loss(45.0);
+
+    let orders = bracket.build().unwrap();
+    assert_eq!(orders.len(), 3);
+
+    // Verify parent order is market order
+    let parent = &orders[0];
+    assert_eq!(parent.action, Action::Buy);
+    assert_eq!(parent.order_type, "MKT");
+    assert_eq!(parent.limit_price, None);
+    assert!(!parent.transmit);
+
+    // Verify take profit details
+    let tp = &orders[1];
+    assert_eq!(tp.action, Action::Sell);
+    assert_eq!(tp.order_type, "LMT");
+    assert_eq!(tp.limit_price, Some(55.0));
+    assert_eq!(tp.parent_id, parent.order_id);
+    assert!(!tp.transmit);
+
+    // Verify stop loss details
+    let sl = &orders[2];
+    assert_eq!(sl.action, Action::Sell);
+    assert_eq!(sl.order_type, "STP");
+    assert_eq!(sl.aux_price, Some(45.0));
+    assert_eq!(sl.parent_id, parent.order_id);
+    assert!(sl.transmit);
+}
+
+#[test]
+fn test_bracket_order_market_entry_sell() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let bracket = OrderBuilder::new(&client, &contract)
+        .sell(100)
+        .bracket()
+        .entry_market()
+        .take_profit(45.0)
+        .stop_loss(55.0);
+
+    let orders = bracket.build().unwrap();
+    assert_eq!(orders.len(), 3);
+
+    // Verify parent order is market order with Sell action
+    let parent = &orders[0];
+    assert_eq!(parent.action, Action::Sell);
+    assert_eq!(parent.order_type, "MKT");
+
+    // Verify child orders have reversed action
+    let tp = &orders[1];
+    assert_eq!(tp.action, Action::Buy);
+
+    let sl = &orders[2];
+    assert_eq!(sl.action, Action::Buy);
+}
+
+#[test]
+fn test_bracket_order_market_entry_inherits_outside_rth() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let bracket = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .outside_rth()
+        .bracket()
+        .entry_market()
+        .take_profit(55.0)
+        .stop_loss(45.0);
+
+    let orders = bracket.build().unwrap();
+
+    // All orders should inherit outside_rth from parent
+    assert!(orders[0].outside_rth, "Parent should have outside_rth");
+    assert!(orders[1].outside_rth, "Take profit should inherit outside_rth");
+    assert!(orders[2].outside_rth, "Stop loss should inherit outside_rth");
+}
+
+#[test]
+fn test_bracket_order_market_entry_quantity_propagation() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let bracket = OrderBuilder::new(&client, &contract)
+        .buy(500)
+        .bracket()
+        .entry_market()
+        .take_profit(55.0)
+        .stop_loss(45.0);
+
+    let orders = bracket.build().unwrap();
+
+    // All orders should have the same quantity
+    assert_eq!(orders[0].total_quantity, 500.0);
+    assert_eq!(orders[1].total_quantity, 500.0);
+    assert_eq!(orders[2].total_quantity, 500.0);
+}
+
+#[test]
+fn test_bracket_order_market_entry_parent_id_propagation() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let bracket = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .bracket()
+        .entry_market()
+        .take_profit(55.0)
+        .stop_loss(45.0);
+
+    let orders = bracket.build().unwrap();
+    let parent_id = orders[0].order_id;
+
+    assert_eq!(orders[1].parent_id, parent_id);
+    assert_eq!(orders[2].parent_id, parent_id);
 }
 
 #[test]
