@@ -928,10 +928,19 @@ fn set_conjunction(condition: &mut OrderCondition, is_conjunction: bool) {
     }
 }
 
+/// Entry order type for bracket orders
+#[derive(Default)]
+enum BracketEntryType {
+    #[default]
+    None,
+    Limit(f64),
+    Market,
+}
+
 /// Builder for bracket orders
 pub struct BracketOrderBuilder<'a, C> {
     pub(crate) parent_builder: OrderBuilder<'a, C>,
-    entry_price: Option<f64>,
+    entry_type: BracketEntryType,
     take_profit_price: Option<f64>,
     stop_loss_price: Option<f64>,
 }
@@ -940,15 +949,21 @@ impl<'a, C> BracketOrderBuilder<'a, C> {
     fn new(parent_builder: OrderBuilder<'a, C>) -> Self {
         Self {
             parent_builder,
-            entry_price: None,
+            entry_type: BracketEntryType::None,
             take_profit_price: None,
             stop_loss_price: None,
         }
     }
 
+    /// Set entry as market order (immediate execution)
+    pub fn entry_market(mut self) -> Self {
+        self.entry_type = BracketEntryType::Market;
+        self
+    }
+
     /// Set entry limit price
     pub fn entry_limit(mut self, price: impl Into<f64>) -> Self {
-        self.entry_price = Some(price.into());
+        self.entry_type = BracketEntryType::Limit(price.into());
         self
     }
 
@@ -966,26 +981,35 @@ impl<'a, C> BracketOrderBuilder<'a, C> {
 
     /// Build bracket orders with full validation
     pub fn build(mut self) -> Result<Vec<Order>, ValidationError> {
-        // Validate and convert prices
-        let entry_price_raw = self.entry_price.ok_or(ValidationError::MissingRequiredField("entry_price"))?;
+        // Validate and convert take profit and stop loss prices
         let take_profit_raw = self.take_profit_price.ok_or(ValidationError::MissingRequiredField("take_profit"))?;
         let stop_loss_raw = self.stop_loss_price.ok_or(ValidationError::MissingRequiredField("stop_loss"))?;
 
-        let entry_price = Price::new(entry_price_raw)?;
         let take_profit = Price::new(take_profit_raw)?;
         let stop_loss = Price::new(stop_loss_raw)?;
 
-        // Validate bracket order prices
-        validation::validate_bracket_prices(
-            self.parent_builder.action.as_ref(),
-            entry_price.value(),
-            take_profit.value(),
-            stop_loss.value(),
-        )?;
-
-        // Set the entry limit price on parent builder
-        self.parent_builder.order_type = Some(OrderType::Limit);
-        self.parent_builder.limit_price = Some(entry_price.value());
+        // Set order type based on entry type
+        match self.entry_type {
+            BracketEntryType::None => {
+                return Err(ValidationError::MissingRequiredField("entry (use entry_limit() or entry_market())"));
+            }
+            BracketEntryType::Limit(price) => {
+                let entry_price = Price::new(price)?;
+                // Validate bracket order prices
+                validation::validate_bracket_prices(
+                    self.parent_builder.action.as_ref(),
+                    entry_price.value(),
+                    take_profit.value(),
+                    stop_loss.value(),
+                )?;
+                self.parent_builder.order_type = Some(OrderType::Limit);
+                self.parent_builder.limit_price = Some(entry_price.value());
+            }
+            BracketEntryType::Market => {
+                // Skip price relationship validation for market orders
+                self.parent_builder.order_type = Some(OrderType::Market);
+            }
+        }
 
         // Build parent order
         let mut parent = self.parent_builder.build()?;
