@@ -546,8 +546,8 @@ pub trait Decodable: Sized {
 }
 
 // Implement for types that need this behavior
-impl Encodable for Order { ... }
-impl Encodable for Contract { ... }
+impl Encodable for Order { /* ... */ }
+impl Encodable for Contract { /* ... */ }
 ```
 
 ### Extension via Composition
@@ -558,9 +558,9 @@ pub struct Subscription<T> {
     cancel_fn: Box<dyn Fn() + Send>,
 }
 
-// Add behavior via trait impls, not inheritance
-impl<T> Iterator for Subscription<T> { ... }
-impl<T> Drop for Subscription<T> { ... }
+// Add behavior via trait impls
+impl<T> Iterator for Subscription<T> { /* ... */ }
+impl<T> Drop for Subscription<T> { /* ... */ }
 ```
 
 ### Newtype Wrappers for Domain Constraints
@@ -576,5 +576,5 @@ impl ContractId {
 }
 
 // Type system prevents invalid states
-fn lookup(id: ContractId) -> Contract { ... }  // Can't pass raw i32
+fn lookup(id: ContractId) -> Contract { /* ... */ }  // Can't pass raw i32
 ```

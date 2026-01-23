@@ -14,17 +14,18 @@
 - Functions do one thing: encode, decode, validate, or orchestrate
 - Max ~50 lines per function; extract if larger
 
-### Composition over Inheritance
-- Use traits for shared behavior, not struct hierarchies
-- Compose complex types from smaller components:
+### Composition
+- Break behavior into small, specialized components/structs
+- Use traits to define shared behavior across types
+- Compose complex types from smaller building blocks:
   ```rust
-  // Good: compose builders
+  // Good: compose via builders
   let order = order_builder::limit_order(Action::Buy, 100.0, 150.0)
       .condition(price_condition)
       .build();
 
   // Bad: monolithic constructor with many params
-  let order = Order::new(Action::Buy, 100.0, 150.0, Some(cond), ...);
+  let order = Order::new(Action::Buy, 100.0, 150.0, Some(cond), /* more params */);
   ```
 - Prefer `impl Trait` for flexible return types
 - Use newtype wrappers for domain constraints

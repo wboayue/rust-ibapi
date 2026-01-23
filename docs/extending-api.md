@@ -25,7 +25,7 @@ pub(crate) fn validate_param(param: &str) -> Result<(), Error> {
 }
 ```
 
-### God Functions
+### Monolithic Functions
 ```rust
 // Bad: function does encoding, validation, and error handling
 pub fn place_order(client: &Client, order: &Order) -> Result<(), Error> {

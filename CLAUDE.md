@@ -55,7 +55,7 @@ cargo test --all-features
 6. **Fluent conditional orders**: Use helper functions (`price()`, `time()`, `margin()`, etc.) and method chaining (`.condition()`, `.and_condition()`, `.or_condition()`) for building conditional orders. See [docs/order-types.md](docs/order-types.md#conditional-orders-with-conditions) and [docs/api-patterns.md](docs/api-patterns.md#conditional-order-builder-pattern) for details
 7. **DRY**: Extract repeated logic to `common/`; use shared helpers like `request_helpers`
 8. **SRP**: One responsibility per function/module; split orchestration from business logic
-9. **Composition**: Use builders for complex construction; traits for shared behavior; max 3-4 params per function
+9. **Composition**: Break into small components; use builders for complex construction; max 3-4 params per function
 
 ## Connection Settings
 
