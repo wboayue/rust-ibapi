@@ -6,22 +6,22 @@
 - Extract shared logic to `common/` modules
 - Use `request_helpers` for common request patterns
 - Prefer traits over code duplication across types
-- **When to extract**: If code appears 2+ times with same structure, extract it
+- **When to extract**: 2+ occurrences with identical structure (not just similar lines)
 - **When NOT to extract**: One-time code, or when extraction obscures intent
 
 ### SRP (Single Responsibility Principle)
 - One encoder/decoder per message type
 - Modules own one domain (accounts, orders, market_data)
 - Functions do one thing: encode, decode, validate, or orchestrate
-- Max ~50 lines per function; extract if larger
-- Max 3-4 parameters per function; use builder pattern if more
+- Max 50 lines per function; extract if larger
+- Max 3 parameters per function; use builder if 4+
 
 ### Composition
 - Combine small, focused components to build complex behavior
 - Use traits to define shared behavior across types
 - Compose complex types from smaller building blocks:
   ```rust
-  // Good: compose via builders
+  // Good: use builder when 4+ params, optional params, or complex construction
   let order = order_builder::limit_order(Action::Buy, 100.0, 150.0)
       .condition(price_condition)
       .build();
