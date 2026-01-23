@@ -537,7 +537,7 @@ loop {
 ### Domain Traits for Shared Behavior
 ```rust
 // Use domain traits when:
-// - Multiple types need the same operation (encode, decode, validate)
+// - 2+ types need the same operation (encode, decode, validate)
 // - You want to write generic functions over those types
 pub trait Encodable {
     fn encode(&self, message: &mut RequestMessage) -> Result<(), Error>;
@@ -569,6 +569,10 @@ impl<T> Drop for Subscription<T> { /* ... */ }
 
 ### Newtype Wrappers for Domain Constraints
 ```rust
+// Bad: raw i32 allows invalid IDs and type confusion
+fn lookup(contract_id: i32, order_id: i32) -> Contract { /* ... */ }  // easy to swap args
+
+// Good: newtype wrappers prevent mistakes
 // Use newtype wrappers when:
 // - A primitive has domain constraints (non-zero, positive, etc.)
 // - Type confusion is possible (ContractId vs OrderId)

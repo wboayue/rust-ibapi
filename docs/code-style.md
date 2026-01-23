@@ -6,7 +6,7 @@
 - Extract shared logic to `common/` modules
 - Use `request_helpers` for common request patterns
 - Prefer traits over code duplication across types
-- **When to extract**: 2+ occurrences with identical structure (not just similar lines)
+- **When to extract**: 2+ occurrences differing only in parameter values (same logic, types, and control flow)
 - **When NOT to extract**: One-time code, or when extraction obscures intent
 
 ### SRP (Single Responsibility Principle)
@@ -14,7 +14,7 @@
 - Modules own one domain (accounts, orders, market_data)
 - Functions do one thing: encode, decode, validate, or orchestrate
 - Max 50 lines per function; extract if larger
-- Max 3 parameters per function; use builder if 4+
+- Functions with 4+ parameters should use a builder pattern
 
 ### Composition
 - Combine small, focused components to build complex behavior
