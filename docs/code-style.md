@@ -1,5 +1,34 @@
 # Code Style Guidelines
 
+## Design Principles
+
+### DRY (Don't Repeat Yourself)
+- Extract shared logic to `common/` modules
+- Use `request_helpers` for common request patterns
+- Prefer traits over code duplication across types
+- **When to extract**: If code appears 2+ times with same structure, extract it
+
+### SRP (Single Responsibility Principle)
+- One encoder/decoder per message type
+- Modules own one domain (accounts, orders, market_data)
+- Functions do one thing: encode, decode, validate, or orchestrate
+- Max ~50 lines per function; extract if larger
+
+### Composition over Inheritance
+- Use traits for shared behavior, not struct hierarchies
+- Compose complex types from smaller components:
+  ```rust
+  // Good: compose builders
+  let order = order_builder::limit_order(Action::Buy, 100.0, 150.0)
+      .condition(price_condition)
+      .build();
+
+  // Bad: monolithic constructor with many params
+  let order = Order::new(Action::Buy, 100.0, 150.0, Some(cond), ...);
+  ```
+- Prefer `impl Trait` for flexible return types
+- Use newtype wrappers for domain constraints
+
 ## Comments
 
 - **Keep comments concise and avoid redundancy**. Don't state the obvious.

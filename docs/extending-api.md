@@ -2,6 +2,60 @@
 
 This guide covers advanced topics for extending the rust-ibapi functionality.
 
+## Anti-Patterns to Avoid
+
+### Duplicated Logic
+```rust
+// Bad: duplicated validation in sync and async
+pub fn my_func(client: &Client, param: &str) -> Result<Data, Error> {
+    if param.is_empty() { return Err(Error::InvalidParam); }
+    // ...
+}
+pub async fn my_func(client: &Client, param: &str) -> Result<Data, Error> {
+    if param.is_empty() { return Err(Error::InvalidParam); }  // duplicate!
+    // ...
+}
+```
+
+```rust
+// Good: shared validation in common/
+pub(crate) fn validate_param(param: &str) -> Result<(), Error> {
+    if param.is_empty() { return Err(Error::InvalidParam); }
+    Ok(())
+}
+```
+
+### God Functions
+```rust
+// Bad: function does encoding, validation, and error handling
+pub fn place_order(client: &Client, order: &Order) -> Result<(), Error> {
+    // 100+ lines of mixed concerns
+}
+```
+
+```rust
+// Good: split by responsibility
+pub fn place_order(client: &Client, order: &Order) -> Result<(), Error> {
+    validate_order(order)?;
+    let request = encode_order(order)?;
+    send_and_handle_response(client, request)
+}
+```
+
+### Large Parameter Lists
+```rust
+// Bad: many params signal need for builder
+fn create_order(action: Action, qty: f64, price: f64, tif: TimeInForce,
+                oca: Option<String>, cond: Option<Condition>, ...) { }
+
+// Good: use builder pattern
+order_builder::limit_order(action, qty, price)
+    .time_in_force(tif)
+    .oca_group(oca)
+    .condition(cond)
+    .build()
+```
+
 ## Module Organization
 
 Each API module follows a consistent structure to support both sync and async modes:

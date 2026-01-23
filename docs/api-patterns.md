@@ -523,11 +523,58 @@ loop {
         thread::sleep(Duration::from_secs(5));
         continue;
     }
-    
+
     match perform_operation(&client) {
         Ok(result) => return Ok(result),
         Err(Error::NotConnected) => continue,
         Err(e) => return Err(e),
     }
 }
+```
+
+## Trait Composition Patterns
+
+### Domain Traits for Shared Behavior
+```rust
+// Define focused traits
+pub trait Encodable {
+    fn encode(&self, message: &mut RequestMessage) -> Result<(), Error>;
+}
+
+pub trait Decodable: Sized {
+    fn decode(fields: &mut FieldIter) -> Result<Self, Error>;
+}
+
+// Implement for types that need this behavior
+impl Encodable for Order { ... }
+impl Encodable for Contract { ... }
+```
+
+### Extension via Composition
+```rust
+// Compose capabilities via traits
+pub struct Subscription<T> {
+    receiver: Receiver<T>,
+    cancel_fn: Box<dyn Fn() + Send>,
+}
+
+// Add behavior via trait impls, not inheritance
+impl<T> Iterator for Subscription<T> { ... }
+impl<T> Drop for Subscription<T> { ... }
+```
+
+### Newtype Wrappers for Domain Constraints
+```rust
+// Wrap primitives to enforce domain rules
+pub struct ContractId(i32);
+
+impl ContractId {
+    pub fn new(id: i32) -> Result<Self, Error> {
+        if id <= 0 { return Err(Error::InvalidContractId); }
+        Ok(Self(id))
+    }
+}
+
+// Type system prevents invalid states
+fn lookup(id: ContractId) -> Contract { ... }  // Can't pass raw i32
 ```
