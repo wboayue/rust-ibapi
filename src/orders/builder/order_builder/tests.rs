@@ -747,6 +747,43 @@ fn test_bracket_order_types() {
 }
 
 #[test]
+fn test_bracket_order_inherits_outside_rth() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    // Test with outside_rth enabled
+    let bracket = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .outside_rth()
+        .bracket()
+        .entry_limit(50.0)
+        .take_profit(55.0)
+        .stop_loss(45.0);
+
+    let orders = bracket.build().unwrap();
+
+    // All orders should inherit outside_rth from parent
+    assert!(orders[0].outside_rth, "Parent should have outside_rth");
+    assert!(orders[1].outside_rth, "Take profit should inherit outside_rth");
+    assert!(orders[2].outside_rth, "Stop loss should inherit outside_rth");
+
+    // Test without outside_rth (default)
+    let bracket = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .bracket()
+        .entry_limit(50.0)
+        .take_profit(55.0)
+        .stop_loss(45.0);
+
+    let orders = bracket.build().unwrap();
+
+    // All orders should have outside_rth = false
+    assert!(!orders[0].outside_rth);
+    assert!(!orders[1].outside_rth);
+    assert!(!orders[2].outside_rth);
+}
+
+#[test]
 fn test_bracket_order_with_missing_action() {
     let client = MockClient;
     let contract = create_test_contract();
