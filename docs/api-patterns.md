@@ -536,7 +536,9 @@ loop {
 
 ### Domain Traits for Shared Behavior
 ```rust
-// Define focused traits
+// Use domain traits when:
+// - Multiple types need the same operation (encode, decode, validate)
+// - You want to write generic functions over those types
 pub trait Encodable {
     fn encode(&self, message: &mut RequestMessage) -> Result<(), Error>;
 }
@@ -552,7 +554,9 @@ impl Encodable for Contract { /* ... */ }
 
 ### Extension via Composition
 ```rust
-// Compose capabilities via traits
+// Use composition when:
+// - A type needs capabilities from multiple sources
+// - Behavior should be added without modifying the original type
 pub struct Subscription<T> {
     receiver: Receiver<T>,
     cancel_fn: Box<dyn Fn() + Send>,
@@ -565,7 +569,9 @@ impl<T> Drop for Subscription<T> { /* ... */ }
 
 ### Newtype Wrappers for Domain Constraints
 ```rust
-// Wrap primitives to enforce domain rules
+// Use newtype wrappers when:
+// - A primitive has domain constraints (non-zero, positive, etc.)
+// - Type confusion is possible (ContractId vs OrderId)
 pub struct ContractId(i32);
 
 impl ContractId {

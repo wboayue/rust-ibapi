@@ -14,9 +14,10 @@
 - Modules own one domain (accounts, orders, market_data)
 - Functions do one thing: encode, decode, validate, or orchestrate
 - Max ~50 lines per function; extract if larger
+- Max 3-4 parameters per function; use builder pattern if more
 
 ### Composition
-- Break behavior into small, specialized components/structs
+- Combine small, focused components to build complex behavior
 - Use traits to define shared behavior across types
 - Compose complex types from smaller building blocks:
   ```rust
@@ -25,16 +26,18 @@
       .condition(price_condition)
       .build();
 
-  // Bad: monolithic constructor with many params
-  let order = Order::new(Action::Buy, 100.0, 150.0, Some(cond), /* more params */);
+  // Bad: monolithic constructor with 4+ params
+  let order = Order::new(Action::Buy, 100.0, 150.0, Some(cond), None, None);
   ```
 - Prefer `impl Trait` for flexible return types
 - Use newtype wrappers for domain constraints
 
 ### When Principles Conflict
-- Clarity > DRY (don't abstract if it obscures intent)
+- Clarity > DRY (if a reader must jump to another file to understand the flow, don't extract)
 - SRP > brevity (split even if it adds lines)
 - Consistency with existing code > ideal patterns
+
+See [extending-api.md#anti-patterns-to-avoid](extending-api.md#anti-patterns-to-avoid) for code examples of these violations.
 
 ## Comments
 

@@ -4,6 +4,8 @@ This guide covers advanced topics for extending the rust-ibapi functionality.
 
 ## Anti-Patterns to Avoid
 
+These examples demonstrate violations of principles in [code-style.md](code-style.md#design-principles).
+
 ### Duplicated Logic
 ```rust
 // Bad: duplicated validation in sync and async
@@ -47,9 +49,9 @@ pub fn place_order(client: &Client, order: &Order) -> Result<(), Error> {
 
 ### Large Parameter Lists
 ```rust
-// Bad: many params signal need for builder
+// Bad: 4+ params signal need for builder
 fn create_order(action: Action, qty: f64, price: f64, tif: TimeInForce,
-                oca: Option<String>, cond: Option<Condition>, /* additional params */) { }
+                oca: Option<String>, cond: Option<Condition>) { }
 
 // Good: use builder pattern
 order_builder::limit_order(action, qty, price)
