@@ -23,6 +23,9 @@ pub(crate) fn validate_param(param: &str) -> Result<(), Error> {
     if param.is_empty() { return Err(Error::InvalidParam); }
     Ok(())
 }
+
+// Usage in sync.rs and async.rs
+validate_param(param)?;
 ```
 
 ### Monolithic Functions
@@ -46,7 +49,7 @@ pub fn place_order(client: &Client, order: &Order) -> Result<(), Error> {
 ```rust
 // Bad: many params signal need for builder
 fn create_order(action: Action, qty: f64, price: f64, tif: TimeInForce,
-                oca: Option<String>, cond: Option<Condition>, ...) { }
+                oca: Option<String>, cond: Option<Condition>, /* additional params */) { }
 
 // Good: use builder pattern
 order_builder::limit_order(action, qty, price)

@@ -7,6 +7,7 @@
 - Use `request_helpers` for common request patterns
 - Prefer traits over code duplication across types
 - **When to extract**: If code appears 2+ times with same structure, extract it
+- **When NOT to extract**: One-time code, or when extraction obscures intent
 
 ### SRP (Single Responsibility Principle)
 - One encoder/decoder per message type
@@ -29,6 +30,11 @@
   ```
 - Prefer `impl Trait` for flexible return types
 - Use newtype wrappers for domain constraints
+
+### When Principles Conflict
+- Clarity > DRY (don't abstract if it obscures intent)
+- SRP > brevity (split even if it adds lines)
+- Consistency with existing code > ideal patterns
 
 ## Comments
 
