@@ -1,6 +1,6 @@
 [package]
 name = "ibapi"
-version = "2.6.1"
+version = "2.6.2"
 edition = "2021"
 authors = ["Wil Boayue <wil@wsbsolutions.com>"]
 description = "A Rust implementation of the Interactive Brokers TWS API, providing a reliable and user friendly interface for TWS and IB Gateway. Designed with a focus on simplicity and performance."
