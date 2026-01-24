@@ -53,6 +53,11 @@ cargo test --all-features
 4. **Minimal comments**: Keep comments concise, avoid stating the obvious
 5. **Run quality checks**: Before committing, run `cargo fmt`, `cargo clippy --features sync`, and `cargo clippy --features async`
 6. **Fluent conditional orders**: Use helper functions (`price()`, `time()`, `margin()`, etc.) and method chaining (`.condition()`, `.and_condition()`, `.or_condition()`) for building conditional orders. See [docs/order-types.md](docs/order-types.md#conditional-orders-with-conditions) and [docs/api-patterns.md](docs/api-patterns.md#conditional-order-builder-pattern) for details
+7. **Don't repeat code**: Extract repeated logic to `common/`; use shared helpers like `request_helpers`
+8. **Single responsibility**: One responsibility per function/module; split orchestration from business logic
+9. **Composition**: Single responsibility per struct; use builders for complex construction; max 3 params per function (use builder if 4+)
+
+See [docs/code-style.md](docs/code-style.md#design-principles) for detailed design guidelines.
 
 ## Connection Settings
 
