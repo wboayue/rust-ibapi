@@ -65,6 +65,8 @@ pub enum BarSize {
     Sec,
     /// Five-second bars.
     Sec5,
+    /// Ten-second bars.
+    Sec10,
     /// Fifteen-second bars.
     Sec15,
     /// Thirty-second bars.
@@ -106,6 +108,7 @@ impl Display for BarSize {
         match self {
             Self::Sec => write!(f, "1 secs"),
             Self::Sec5 => write!(f, "5 secs"),
+            Self::Sec10 => write!(f, "10 secs"),
             Self::Sec15 => write!(f, "15 secs"),
             Self::Sec30 => write!(f, "30 secs"),
             Self::Min => write!(f, "1 min"),
@@ -134,6 +137,7 @@ impl FromStr for BarSize {
         match s.to_uppercase().as_str() {
             "SEC" => Ok(Self::Sec),
             "SEC5" => Ok(Self::Sec5),
+            "SEC10" => Ok(Self::Sec10),
             "SEC15" => Ok(Self::Sec15),
             "SEC30" => Ok(Self::Sec30),
             "MIN" => Ok(Self::Min),
@@ -569,6 +573,7 @@ mod tests {
     fn test_bar_size_to_string() {
         assert_eq!("1 secs", BarSize::Sec.to_string());
         assert_eq!("5 secs", BarSize::Sec5.to_string());
+        assert_eq!("10 secs", BarSize::Sec10.to_string());
         assert_eq!("15 secs", BarSize::Sec15.to_string());
         assert_eq!("30 secs", BarSize::Sec30.to_string());
         assert_eq!("1 min", BarSize::Min.to_string());
@@ -592,6 +597,7 @@ mod tests {
     fn test_bar_size_from_string() {
         assert_eq!(BarSize::Sec, BarSize::from("SEC"));
         assert_eq!(BarSize::Sec5, BarSize::from("SEC5"));
+        assert_eq!(BarSize::Sec10, BarSize::from("SEC10"));
         assert_eq!(BarSize::Sec15, BarSize::from("SEC15"));
         assert_eq!(BarSize::Sec30, BarSize::from("SEC30"));
         assert_eq!(BarSize::Min, BarSize::from("MIN"));
