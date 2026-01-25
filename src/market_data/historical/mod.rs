@@ -65,6 +65,8 @@ pub enum BarSize {
     Sec,
     /// Five-second bars.
     Sec5,
+    /// Ten-second bars.
+    Sec10,
     /// Fifteen-second bars.
     Sec15,
     /// Thirty-second bars.
@@ -106,6 +108,7 @@ impl Display for BarSize {
         match self {
             Self::Sec => write!(f, "1 secs"),
             Self::Sec5 => write!(f, "5 secs"),
+            Self::Sec10 => write!(f, "10 secs"),
             Self::Sec15 => write!(f, "15 secs"),
             Self::Sec30 => write!(f, "30 secs"),
             Self::Min => write!(f, "1 min"),
