@@ -41,7 +41,7 @@ fn main() {
     );
 
     // Forex pair
-    let eur_usd = Contract::forex("EUR", "USD").amount(100_000).build();
+    let eur_usd = Contract::forex("EUR", "USD").build();
     println!("Forex: {}", eur_usd.symbol);
 
     // Cryptocurrency

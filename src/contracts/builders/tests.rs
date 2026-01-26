@@ -111,9 +111,9 @@ fn test_futures_multiplier() {
 
 #[test]
 fn test_forex_builder() {
-    let forex = Contract::forex("EUR", "USD").amount(100_000).on_exchange("IDEALPRO").build();
+    let forex = Contract::forex("EUR", "USD").on_exchange("IDEALPRO").build();
 
-    assert_eq!(forex.symbol, Symbol::from("EUR.USD"));
+    assert_eq!(forex.symbol, Symbol::from("EUR"));
     assert_eq!(forex.security_type, SecurityType::ForexPair);
     assert_eq!(forex.exchange, Exchange::from("IDEALPRO"));
     assert_eq!(forex.currency, Currency::from("USD"));
