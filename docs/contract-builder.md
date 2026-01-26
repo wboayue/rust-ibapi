@@ -173,13 +173,10 @@ Foreign exchange pairs with automatic pair formatting.
 use ibapi::contracts::Contract;
 
 // EUR/USD pair
-let eur_usd = Contract::forex("EUR", "USD")
-    .amount(100_000)
-    .build();
+let eur_usd = Contract::forex("EUR", "USD").build();
 
 // GBP/JPY with custom exchange
 let gbp_jpy = Contract::forex("GBP", "JPY")
-    .amount(50_000)
     .on_exchange("IDEALPRO")
     .build();
 ```
