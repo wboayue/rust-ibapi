@@ -288,9 +288,7 @@ impl Contract {
     /// ```
     /// use ibapi::contracts::{Contract, Currency};
     ///
-    /// let eur_usd = Contract::forex("EUR", "USD")
-    ///     .amount(100_000)
-    ///     .build();
+    /// let eur_usd = Contract::forex("EUR", "USD").build();
     /// ```
     pub fn forex(base: impl Into<Currency>, quote: impl Into<Currency>) -> ForexBuilder {
         ForexBuilder::new(base, quote)

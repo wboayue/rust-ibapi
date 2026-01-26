@@ -300,27 +300,19 @@ impl FuturesBuilder<Symbol, ContractMonth> {
 /// Forex pair builder
 #[derive(Debug, Clone)]
 pub struct ForexBuilder {
-    pair: String,
+    base: Currency,
+    quote: Currency,
     exchange: Exchange,
-    amount: u32,
 }
 
 impl ForexBuilder {
     /// Create a forex contract using the given base and quote currencies.
     pub fn new(base: impl Into<Currency>, quote: impl Into<Currency>) -> Self {
-        let base = base.into();
-        let quote = quote.into();
         ForexBuilder {
-            pair: format!("{}.{}", base, quote),
+            base: base.into(),
+            quote: quote.into(),
             exchange: "IDEALPRO".into(),
-            amount: 20_000,
         }
-    }
-
-    /// Adjust the standard order amount.
-    pub fn amount(mut self, amount: u32) -> Self {
-        self.amount = amount;
-        self
     }
 
     /// Route the trade to a different forex venue.
@@ -332,10 +324,10 @@ impl ForexBuilder {
     /// Complete the forex contract definition.
     pub fn build(self) -> Contract {
         Contract {
-            symbol: Symbol::new(self.pair),
+            symbol: Symbol::new(self.base.0),
             security_type: SecurityType::ForexPair,
             exchange: self.exchange,
-            currency: "USD".into(), // Quote currency
+            currency: self.quote,
             ..Default::default()
         }
     }
