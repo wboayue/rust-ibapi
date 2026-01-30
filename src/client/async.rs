@@ -1005,11 +1005,12 @@ impl Client {
         crate::market_data::historical::historical_data(self, contract, end_date, duration, bar_size, what_to_show, trading_hours).await
     }
 
-    /// Requests historical data with keepUpToDate=true for streaming updates.
+    /// Requests historical data with optional streaming updates.
     ///
-    /// This method returns a subscription that first yields the initial historical bars,
-    /// then continues to yield streaming updates for the current bar as it builds.
-    /// IBKR sends updated bars every ~4-6 seconds until the bar completes.
+    /// This method returns a subscription that first yields the initial historical bars.
+    /// When `keep_up_to_date` is `true`, it continues to yield streaming updates for
+    /// the current bar as it builds. IBKR sends updated bars every ~4-6 seconds until
+    /// the bar completes.
     ///
     /// # Arguments
     /// * `contract` - Contract object that is subject of query
@@ -1017,6 +1018,7 @@ impl Client {
     /// * `bar_size` - The bar size (resolution)
     /// * `what_to_show` - The type of data to retrieve (Trades, MidPoint, etc.)
     /// * `trading_hours` - Regular trading hours only, or include extended hours
+    /// * `keep_up_to_date` - If true, continue receiving streaming updates after initial data
     ///
     /// # Examples
     ///
@@ -1032,16 +1034,15 @@ impl Client {
     ///     let contract = Contract::stock("SPY").build();
     ///
     ///     let mut subscription = client
-    ///         .historical_data_streaming(&contract, 3.days(), BarSize::Min15, Some(WhatToShow::Trades), TradingHours::Extended)
+    ///         .historical_data_streaming(&contract, 3.days(), BarSize::Min15, Some(WhatToShow::Trades), TradingHours::Extended, true)
     ///         .await
     ///         .expect("streaming request failed");
     ///
     ///     while let Some(update) = subscription.next().await {
     ///         match update {
-    ///             Ok(HistoricalBarUpdate::Historical(data)) => println!("Initial bars: {}", data.bars.len()),
-    ///             Ok(HistoricalBarUpdate::Update(bar)) => println!("Streaming update: {:?}", bar),
-    ///             Ok(HistoricalBarUpdate::HistoricalEnd) => println!("Initial data complete"),
-    ///             Err(e) => eprintln!("Error: {}", e),
+    ///             HistoricalBarUpdate::Historical(data) => println!("Initial bars: {}", data.bars.len()),
+    ///             HistoricalBarUpdate::Update(bar) => println!("Streaming update: {:?}", bar),
+    ///             HistoricalBarUpdate::HistoricalEnd => println!("Initial data complete"),
     ///         }
     ///     }
     /// }
@@ -1053,8 +1054,9 @@ impl Client {
         bar_size: crate::market_data::historical::BarSize,
         what_to_show: Option<crate::market_data::historical::WhatToShow>,
         trading_hours: TradingHours,
+        keep_up_to_date: bool,
     ) -> Result<crate::market_data::historical::HistoricalDataStreamingSubscription, Error> {
-        crate::market_data::historical::historical_data_streaming(self, contract, duration, bar_size, what_to_show, trading_hours).await
+        crate::market_data::historical::historical_data_streaming(self, contract, duration, bar_size, what_to_show, trading_hours, keep_up_to_date).await
     }
 
     /// Requests historical schedule.
