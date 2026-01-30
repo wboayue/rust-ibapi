@@ -1056,7 +1056,8 @@ impl Client {
         trading_hours: TradingHours,
         keep_up_to_date: bool,
     ) -> Result<crate::market_data::historical::HistoricalDataStreamingSubscription, Error> {
-        crate::market_data::historical::historical_data_streaming(self, contract, duration, bar_size, what_to_show, trading_hours, keep_up_to_date).await
+        crate::market_data::historical::historical_data_streaming(self, contract, duration, bar_size, what_to_show, trading_hours, keep_up_to_date)
+            .await
     }
 
     /// Requests historical schedule.

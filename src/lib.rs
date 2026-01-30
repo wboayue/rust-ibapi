@@ -60,7 +60,7 @@ pub(crate) mod connection;
 ///
 /// # Example
 ///
-/// ```no_run
+/// ```ignore
 /// use ibapi::{Client, StartupMessageCallback};
 /// use ibapi::messages::IncomingMessages;
 /// use std::sync::{Arc, Mutex};

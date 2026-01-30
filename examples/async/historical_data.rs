@@ -103,8 +103,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
     println!("Requesting historical data for {} ({:?})", contract.symbol, args.asset);
-    println!("  local_symbol: '{}', exchange: {}, contract_month: '{}'\n",
-        contract.local_symbol, contract.exchange, contract.last_trade_date_or_contract_month);
+    println!(
+        "  local_symbol: '{}', exchange: {}, contract_month: '{}'\n",
+        contract.local_symbol, contract.exchange, contract.last_trade_date_or_contract_month
+    );
 
     if !args.streaming_only {
         // Example 1: Get the earliest available data timestamp
@@ -257,11 +259,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut subscription = client
         .historical_data_streaming(
             &contract,
-            1.days(),                           // Duration: 1 day of history
-            HistoricalBarSize::Min,             // 1-minute bars
+            1.days(),               // Duration: 1 day of history
+            HistoricalBarSize::Min, // 1-minute bars
             Some(what_to_show),
             TradingHours::Extended,
-            true,                               // keep_up_to_date: stream live updates
+            true, // keep_up_to_date: stream live updates
         )
         .await?;
 

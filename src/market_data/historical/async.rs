@@ -11,7 +11,9 @@ use crate::transport::AsyncInternalSubscription;
 use crate::{Client, Error, MAX_RETRIES};
 
 use super::common::{decoders, encoders};
-use super::{BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, Schedule, TickBidAsk, TickDecoder, TickLast, TickMidpoint, WhatToShow};
+use super::{
+    BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, Schedule, TickBidAsk, TickDecoder, TickLast, TickMidpoint, WhatToShow,
+};
 use crate::market_data::TradingHours;
 
 // === Public API Functions ===
@@ -420,11 +422,7 @@ pub async fn historical_data_streaming(
         time_tz::timezones::db::UTC
     });
 
-    Ok(HistoricalDataStreamingSubscription::new(
-        subscription,
-        client.server_version(),
-        tz,
-    ))
+    Ok(HistoricalDataStreamingSubscription::new(subscription, client.server_version(), tz))
 }
 
 /// Async subscription for streaming historical data with keepUpToDate=true.
@@ -1213,7 +1211,10 @@ mod tests {
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request");
         // The keepUpToDate field should be "1" (true)
-        assert!(request_messages[0].fields.contains(&"1".to_string()), "Request should have keepUpToDate=true");
+        assert!(
+            request_messages[0].fields.contains(&"1".to_string()),
+            "Request should have keepUpToDate=true"
+        );
     }
 
     #[tokio::test]
