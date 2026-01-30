@@ -543,7 +543,7 @@ impl AsyncTcpMessageBus {
                     if let Some(senders) = shared_channels.get(&message_type) {
                         for sender in senders {
                             if let Err(e) = sender.send(message.clone()) {
-                                info!("shared channel closed for {message_type:?}: {e}");
+                                warn!("error sending to shared channel for {message_type:?}: {e}");
                             }
                         }
                         return Ok(());
@@ -584,7 +584,7 @@ impl AsyncTcpMessageBus {
                 if let Some(senders) = shared_channels.get(&message_type) {
                     for sender in senders {
                         if let Err(e) = sender.send(message.clone()) {
-                            info!("shared channel closed for {message_type:?}: {e}");
+                            warn!("error sending to shared channel for {message_type:?}: {e}");
                         }
                     }
                     return Ok(());
@@ -633,7 +633,7 @@ impl AsyncTcpMessageBus {
             // Broadcast to all subscribers
             for sender in senders {
                 if let Err(e) = sender.send(message.clone()) {
-                    info!("shared channel closed for {message_type:?}: {e}");
+                    warn!("error sending to shared channel for {message_type:?}: {e}");
                 }
             }
         }
@@ -646,7 +646,7 @@ impl AsyncTcpMessageBus {
         let order_update_stream = self.order_update_stream.read().await;
         if let Some(sender) = order_update_stream.as_ref() {
             if let Err(e) = sender.send(message.clone()) {
-                info!("order update channel closed: {e}");
+                warn!("error sending to order update stream: {e}");
                 return false;
             }
             return true;
