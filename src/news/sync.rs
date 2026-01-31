@@ -69,11 +69,7 @@ pub(crate) fn news_bulletins(client: &Client, all_messages: bool) -> Result<Subs
     let request = encoders::encode_request_news_bulletins(all_messages)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestNewsBulletins, request)?;
 
-    Ok(Subscription::new(
-        Arc::clone(&client.message_bus),
-        subscription,
-        client.decoder_context(),
-    ))
+    Ok(Subscription::new(Arc::clone(&client.message_bus), subscription, client.decoder_context()))
 }
 
 /// Historical News Headlines
@@ -99,11 +95,7 @@ pub(crate) fn historical_news(
     )?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(
-        Arc::clone(&client.message_bus),
-        subscription,
-        client.decoder_context(),
-    ))
+    Ok(Subscription::new(Arc::clone(&client.message_bus), subscription, client.decoder_context()))
 }
 
 /// Requests news article body
@@ -135,11 +127,7 @@ pub(crate) fn contract_news(client: &Client, contract: &Contract, provider_codes
         realtime::common::encoders::encode_request_market_data(client.server_version, request_id, contract, generic_ticks.as_slice(), false, false)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(
-        Arc::clone(&client.message_bus),
-        subscription,
-        client.decoder_context(),
-    ))
+    Ok(Subscription::new(Arc::clone(&client.message_bus), subscription, client.decoder_context()))
 }
 
 /// Subscribe to broad tape news
@@ -151,11 +139,7 @@ pub(crate) fn broad_tape_news(client: &Client, provider_code: &str) -> Result<Su
     let request = realtime::common::encoders::encode_request_market_data(client.server_version, request_id, &contract, generic_ticks, false, false)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(
-        Arc::clone(&client.message_bus),
-        subscription,
-        client.decoder_context(),
-    ))
+    Ok(Subscription::new(Arc::clone(&client.message_bus), subscription, client.decoder_context()))
 }
 
 #[cfg(test)]

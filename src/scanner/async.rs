@@ -6,9 +6,9 @@ use crate::messages::OutgoingMessages;
 #[cfg(not(feature = "sync"))]
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::orders::TagValue;
+use crate::subscriptions::Subscription;
 #[cfg(not(feature = "sync"))]
 use crate::subscriptions::{DecoderContext, StreamDecoder};
-use crate::subscriptions::Subscription;
 use crate::{server_versions, Client, Error};
 
 #[cfg(not(feature = "sync"))]

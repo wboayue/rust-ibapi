@@ -124,10 +124,7 @@ pub(crate) fn market_depth(
     let builder = client.request();
     let request = encoders::encode_request_market_depth(client.server_version(), builder.request_id(), contract, number_of_rows, is_smart_depth)?;
 
-    builder.send_with_context(
-        request,
-        client.decoder_context().with_smart_depth(is_smart_depth),
-    )
+    builder.send_with_context(request, client.decoder_context().with_smart_depth(is_smart_depth))
 }
 
 /// Fetch the venues that provide market depth data for the connected account.

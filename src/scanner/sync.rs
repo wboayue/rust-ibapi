@@ -50,11 +50,7 @@ pub(crate) fn scanner_subscription(
     let request = encoders::encode_scanner_subscription(request_id, client.server_version, subscription, filter)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(
-        Arc::clone(&client.message_bus),
-        subscription,
-        client.decoder_context(),
-    ))
+    Ok(Subscription::new(Arc::clone(&client.message_bus), subscription, client.decoder_context()))
 }
 
 #[cfg(test)]

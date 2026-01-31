@@ -120,11 +120,7 @@ impl StreamDecoder<ExerciseOptions> for ExerciseOptions {
 /// This function returns a subscription that will receive updates of activity for all orders placed by the client.
 pub(crate) fn order_update_stream(client: &Client) -> Result<Subscription<OrderUpdate>, Error> {
     let subscription = client.create_order_update_subscription()?;
-    Ok(Subscription::new(
-        Arc::clone(&client.message_bus),
-        subscription,
-        client.decoder_context(),
-    ))
+    Ok(Subscription::new(Arc::clone(&client.message_bus), subscription, client.decoder_context()))
 }
 
 /// Submits an Order.
@@ -177,11 +173,7 @@ pub(crate) fn place_order(client: &Client, order_id: i32, contract: &Contract, o
     let request = encoders::encode_place_order(client.server_version, order_id, contract, order)?;
     let subscription = client.send_order(order_id, request)?;
 
-    Ok(Subscription::new(
-        Arc::clone(&client.message_bus),
-        subscription,
-        client.decoder_context(),
-    ))
+    Ok(Subscription::new(Arc::clone(&client.message_bus), subscription, client.decoder_context()))
 }
 
 /// Cancels an open Order and returns a subscription to receive cancellation events.
@@ -205,11 +197,7 @@ pub(crate) fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_t
     let request = encoders::encode_cancel_order(client.server_version, order_id, manual_order_cancel_time)?;
     let subscription = client.send_order(order_id, request)?;
 
-    Ok(Subscription::new(
-        Arc::clone(&client.message_bus),
-        subscription,
-        client.decoder_context(),
-    ))
+    Ok(Subscription::new(Arc::clone(&client.message_bus), subscription, client.decoder_context()))
 }
 
 /// Cancels all open Orders.
@@ -269,11 +257,7 @@ pub(crate) fn completed_orders(client: &Client, api_only: bool) -> Result<Subscr
     let request = encoders::encode_completed_orders(api_only)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestCompletedOrders, request)?;
 
-    Ok(Subscription::new(
-        Arc::clone(&client.message_bus),
-        subscription,
-        client.decoder_context(),
-    ))
+    Ok(Subscription::new(Arc::clone(&client.message_bus), subscription, client.decoder_context()))
 }
 
 /// Requests all open orders places by this specific API client (identified by the API client id).
@@ -286,11 +270,7 @@ pub(crate) fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error
     let request = encoders::encode_open_orders()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestOpenOrders, request)?;
 
-    Ok(Subscription::new(
-        Arc::clone(&client.message_bus),
-        subscription,
-        client.decoder_context(),
-    ))
+    Ok(Subscription::new(Arc::clone(&client.message_bus), subscription, client.decoder_context()))
 }
 
 /// Requests all current open orders in associated accounts at the current moment.
@@ -307,11 +287,7 @@ pub(crate) fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, E
     let request = encoders::encode_all_open_orders()?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAllOpenOrders, request)?;
 
-    Ok(Subscription::new(
-        Arc::clone(&client.message_bus),
-        subscription,
-        client.decoder_context(),
-    ))
+    Ok(Subscription::new(Arc::clone(&client.message_bus), subscription, client.decoder_context()))
 }
 
 /// Requests status updates about future orders placed from TWS.
@@ -329,11 +305,7 @@ pub(crate) fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subsc
     let request = encoders::encode_auto_open_orders(auto_bind)?;
     let subscription = client.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request)?;
 
-    Ok(Subscription::new(
-        Arc::clone(&client.message_bus),
-        subscription,
-        client.decoder_context(),
-    ))
+    Ok(Subscription::new(Arc::clone(&client.message_bus), subscription, client.decoder_context()))
 }
 
 /// Requests current day's (since midnight) executions matching the filter.
@@ -355,11 +327,7 @@ pub(crate) fn executions(client: &Client, filter: ExecutionFilter) -> Result<Sub
     let request = encoders::encode_executions(client.server_version, request_id, &filter)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(
-        Arc::clone(&client.message_bus),
-        subscription,
-        client.decoder_context(),
-    ))
+    Ok(Subscription::new(Arc::clone(&client.message_bus), subscription, client.decoder_context()))
 }
 
 /// Exercises options contracts.
@@ -399,11 +367,7 @@ pub(crate) fn exercise_options(
     )?;
     let subscription = client.send_order(order_id, request)?;
 
-    Ok(Subscription::new(
-        Arc::clone(&client.message_bus),
-        subscription,
-        client.decoder_context(),
-    ))
+    Ok(Subscription::new(Arc::clone(&client.message_bus), subscription, client.decoder_context()))
 }
 
 #[cfg(test)]
