@@ -221,6 +221,51 @@ pub(crate) fn decode_histogram_data(message: &mut ResponseMessage) -> Result<Vec
     Ok(items)
 }
 
+/// Decode a HistoricalDataUpdate message (message type 90).
+///
+/// This message is sent when historical data is requested with keepUpToDate=true.
+/// IBKR sends updates approximately every 4-6 seconds for the current (incomplete) bar.
+///
+/// Message format:
+/// - message_type (90)
+/// - request_id
+/// - bar_count (always -1 for streaming updates)
+/// - date (unix timestamp as string)
+/// - open
+/// - high
+/// - low
+/// - close
+/// - volume
+/// - wap
+/// - count
+#[cfg(feature = "async")]
+pub(crate) fn decode_historical_data_update(time_zone: &Tz, message: &mut ResponseMessage) -> Result<Bar, Error> {
+    message.skip(); // message type
+    message.skip(); // request_id
+    message.skip(); // bar_count (always -1 for updates)
+
+    let date = message.next_string()?;
+    let open = message.next_double()?;
+    let high = message.next_double()?;
+    let low = message.next_double()?;
+    let close = message.next_double()?;
+    let volume = message.next_double()?;
+    let wap = message.next_double()?;
+    // count field is optional in streaming updates - may not be present
+    let count = message.next_int().unwrap_or(0);
+
+    Ok(Bar {
+        date: parse_bar_date(&date, time_zone)?,
+        open,
+        high,
+        low,
+        close,
+        volume,
+        wap,
+        count,
+    })
+}
+
 fn parse_time_zone(name: &str) -> &Tz {
     let zones = find_timezone(name);
     if zones.is_empty() {
@@ -435,5 +480,45 @@ mod tests {
         assert_eq!(ticks[23].timestamp, datetime!(2023-04-10 13:30:00 UTC), "ticks[0].timestamp");
         assert_eq!(ticks[23].price, 91.31, "ticks[0].price");
         assert_eq!(ticks[23].size, 0, "ticks[0].size");
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_decode_historical_data_update() {
+        let time_zone: &Tz = time_tz::timezones::db::america::NEW_YORK;
+
+        // Message format: message_type|request_id|bar_count|timestamp|open|high|low|close|volume|wap|count
+        let mut message = ResponseMessage::from("90\09000\0-1\01681133400\0185.50\0186.00\0185.00\0185.75\01000.5\0185.625\0150\0");
+
+        let bar = decode_historical_data_update(time_zone, &mut message).expect("error decoding historical data update");
+
+        assert_eq!(bar.date, datetime!(2023-04-10 13:30:00 UTC), "bar.date");
+        assert_eq!(bar.open, 185.50, "bar.open");
+        assert_eq!(bar.high, 186.00, "bar.high");
+        assert_eq!(bar.low, 185.00, "bar.low");
+        assert_eq!(bar.close, 185.75, "bar.close");
+        assert_eq!(bar.volume, 1000.5, "bar.volume");
+        assert_eq!(bar.wap, 185.625, "bar.wap");
+        assert_eq!(bar.count, 150, "bar.count");
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_decode_historical_data_update_without_count() {
+        let time_zone: &Tz = time_tz::timezones::db::america::NEW_YORK;
+
+        // Message without count field (optional in streaming updates)
+        let mut message = ResponseMessage::from("90\09000\0-1\01681133400\0185.50\0186.00\0185.00\0185.75\01000.5\0185.625\0");
+
+        let bar = decode_historical_data_update(time_zone, &mut message).expect("error decoding historical data update");
+
+        assert_eq!(bar.date, datetime!(2023-04-10 13:30:00 UTC), "bar.date");
+        assert_eq!(bar.open, 185.50, "bar.open");
+        assert_eq!(bar.high, 186.00, "bar.high");
+        assert_eq!(bar.low, 185.00, "bar.low");
+        assert_eq!(bar.close, 185.75, "bar.close");
+        assert_eq!(bar.volume, 1000.5, "bar.volume");
+        assert_eq!(bar.wap, 185.625, "bar.wap");
+        assert_eq!(bar.count, 0, "bar.count should default to 0 when missing");
     }
 }

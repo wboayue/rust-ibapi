@@ -410,6 +410,7 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         IncomingMessages::HeadTimestamp => Some(1),
         IncomingMessages::HistogramData => Some(1),
         IncomingMessages::HistoricalData => Some(1),
+        IncomingMessages::HistoricalDataUpdate => Some(1),
         IncomingMessages::HistoricalNews => Some(1),
         IncomingMessages::HistoricalNewsEnd => Some(1),
         IncomingMessages::HistoricalSchedule => Some(1),
