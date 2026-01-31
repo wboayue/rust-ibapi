@@ -60,23 +60,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create contract based on asset type
     let contract = match args.asset {
         AssetType::Stock => Contract::stock("AAPL").build(),
-        AssetType::Forex => {
-            // Build forex contract manually - IB expects symbol=base, currency=quote
-            let mut contract = Contract::default();
-            contract.symbol = "EUR".into();
-            contract.security_type = SecurityType::ForexPair;
-            contract.exchange = "IDEALPRO".into();
-            contract.currency = "USD".into();
-            contract
-        }
+        AssetType::Forex => Contract::forex("EUR", "USD").build(),
         AssetType::Futures => {
             // For futures, we need to resolve the front-month contract via contract_details
             println!("Resolving front-month contract for ES...");
-            let mut query = Contract::default();
-            query.symbol = "ES".into();
-            query.security_type = SecurityType::Future;
-            query.exchange = "CME".into();
-            query.currency = "USD".into();
+            let query = Contract {
+                symbol: "ES".into(),
+                security_type: SecurityType::Future,
+                exchange: "CME".into(),
+                currency: "USD".into(),
+                ..Default::default()
+            };
 
             let details = client.contract_details(&query).await?;
             if details.is_empty() {
