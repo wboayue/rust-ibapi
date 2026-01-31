@@ -1,7 +1,7 @@
 //! Subscription types for sync/async streaming data
 
 mod common;
-pub(crate) use common::{ResponseContext, StreamDecoder};
+pub(crate) use common::{DecoderContext, StreamDecoder};
 
 #[cfg(feature = "sync")]
 pub mod sync;

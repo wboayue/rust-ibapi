@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use crate::client::r#async::Client;
 use crate::errors::Error;
 use crate::messages::{OutgoingMessages, RequestMessage};
-use crate::subscriptions::{ResponseContext, StreamDecoder, Subscription};
+use crate::subscriptions::{DecoderContext, StreamDecoder, Subscription};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 
 /// Builder for creating requests with IDs
@@ -49,22 +49,20 @@ impl<'a> RequestBuilder<'a> {
     where
         T: StreamDecoder<T> + Send + 'static,
     {
-        let server_version = self.client.server_version();
+        let context = self.client.decoder_context();
         let message_bus = self.client.message_bus.clone();
-        SubscriptionBuilder::<T>::new_with_components(server_version, message_bus)
+        SubscriptionBuilder::<T>::new_with_components(context, message_bus)
             .send_with_request_id::<T>(self.request_id, message)
             .await
     }
 
     /// Send the request and create a subscription with context
-    pub async fn send_with_context<T>(self, message: RequestMessage, context: ResponseContext) -> Result<Subscription<T>, Error>
+    pub async fn send_with_context<T>(self, message: RequestMessage, context: DecoderContext) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T> + Send + 'static,
     {
-        let server_version = self.client.server_version();
         let message_bus = self.client.message_bus.clone();
-        SubscriptionBuilder::<T>::new_with_components(server_version, message_bus)
-            .with_context(context)
+        SubscriptionBuilder::<T>::new_with_components(context, message_bus)
             .send_with_request_id::<T>(self.request_id, message)
             .await
     }
@@ -100,22 +98,20 @@ impl<'a> SharedRequestBuilder<'a> {
     where
         T: StreamDecoder<T> + Send + 'static,
     {
-        let server_version = self.client.server_version();
+        let context = self.client.decoder_context();
         let message_bus = self.client.message_bus.clone();
-        SubscriptionBuilder::<T>::new_with_components(server_version, message_bus)
+        SubscriptionBuilder::<T>::new_with_components(context, message_bus)
             .send_shared::<T>(self.message_type, message)
             .await
     }
 
     /// Send the request and create a subscription with context
-    pub async fn send_with_context<T>(self, message: RequestMessage, context: ResponseContext) -> Result<Subscription<T>, Error>
+    pub async fn send_with_context<T>(self, message: RequestMessage, context: DecoderContext) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T> + Send + 'static,
     {
-        let server_version = self.client.server_version();
         let message_bus = self.client.message_bus.clone();
-        SubscriptionBuilder::<T>::new_with_components(server_version, message_bus)
-            .with_context(context)
+        SubscriptionBuilder::<T>::new_with_components(context, message_bus)
             .send_shared::<T>(self.message_type, message)
             .await
     }
@@ -193,9 +189,8 @@ impl<'a> MessageBuilder<'a> {
 /// Builder for creating subscriptions with consistent patterns
 #[allow(dead_code)]
 pub(crate) struct SubscriptionBuilder<T> {
-    server_version: i32,
     message_bus: Arc<dyn AsyncMessageBus>,
-    context: ResponseContext,
+    context: DecoderContext,
     _phantom: PhantomData<T>,
 }
 
@@ -205,17 +200,16 @@ where
     T: Send + 'static,
 {
     /// Creates a new subscription builder from components
-    pub fn new_with_components(server_version: i32, message_bus: Arc<dyn AsyncMessageBus>) -> Self {
+    pub fn new_with_components(context: DecoderContext, message_bus: Arc<dyn AsyncMessageBus>) -> Self {
         Self {
-            server_version,
             message_bus,
-            context: ResponseContext::default(),
+            context,
             _phantom: PhantomData,
         }
     }
 
     /// Sets the response context
-    pub fn with_context(mut self, context: ResponseContext) -> Self {
+    pub fn with_context(mut self, context: DecoderContext) -> Self {
         self.context = context;
         self
     }
@@ -231,13 +225,10 @@ where
     where
         D: StreamDecoder<T> + 'static,
     {
-        // Use atomic subscribe + send
         let subscription = self.message_bus.send_request(request_id, message).await?;
 
-        // Create subscription with decoder
         Ok(Subscription::new_from_internal::<D>(
             subscription,
-            self.server_version,
             self.message_bus.clone(),
             Some(request_id),
             None,
@@ -251,12 +242,10 @@ where
     where
         D: StreamDecoder<T> + 'static,
     {
-        // Use atomic subscribe + send
         let subscription = self.message_bus.send_shared_request(message_type, message).await?;
 
         Ok(Subscription::new_from_internal::<D>(
             subscription,
-            self.server_version,
             self.message_bus.clone(),
             None,
             None,
@@ -270,12 +259,10 @@ where
     where
         D: StreamDecoder<T> + 'static,
     {
-        // Use atomic subscribe + send
         let subscription = self.message_bus.send_order_request(order_id, message).await?;
 
         Ok(Subscription::new_from_internal::<D>(
             subscription,
-            self.server_version,
             self.message_bus.clone(),
             None,
             Some(order_id),
@@ -348,9 +335,9 @@ impl SubscriptionBuilderExt for Client {
     where
         T: Send + 'static,
     {
-        let server_version = self.server_version();
+        let context = self.decoder_context();
         let message_bus = self.message_bus.clone();
-        SubscriptionBuilder::new_with_components(server_version, message_bus)
+        SubscriptionBuilder::new_with_components(context, message_bus)
     }
 }
 
@@ -449,9 +436,9 @@ mod tests {
     #[tokio::test]
     async fn test_subscription_builder_new() {
         let (client, _gateway) = create_test_client().await;
-        let server_version = client.server_version();
+        let context = client.decoder_context();
         let message_bus = client.message_bus.clone();
-        let builder: SubscriptionBuilder<Bar> = SubscriptionBuilder::new_with_components(server_version, message_bus);
+        let builder: SubscriptionBuilder<Bar> = SubscriptionBuilder::new_with_components(context, message_bus);
         // Builder created successfully
         let _ = builder;
     }
@@ -459,22 +446,22 @@ mod tests {
     #[tokio::test]
     async fn test_subscription_builder_with_context() {
         let (client, _gateway) = create_test_client().await;
-        let server_version = client.server_version();
+        let context = client
+            .decoder_context()
+            .with_smart_depth(true)
+            .with_request_type(OutgoingMessages::RequestMarketData);
         let message_bus = client.message_bus.clone();
-        let context = ResponseContext {
-            is_smart_depth: true,
-            request_type: Some(OutgoingMessages::RequestMarketData),
-        };
-        let builder: SubscriptionBuilder<Bar> = SubscriptionBuilder::new_with_components(server_version, message_bus).with_context(context.clone());
+        let builder: SubscriptionBuilder<Bar> =
+            SubscriptionBuilder::new_with_components(client.decoder_context(), message_bus).with_context(context.clone());
         assert_eq!(builder.context, context);
     }
 
     #[tokio::test]
     async fn test_subscription_builder_with_smart_depth() {
         let (client, _gateway) = create_test_client().await;
-        let server_version = client.server_version();
+        let context = client.decoder_context();
         let message_bus = client.message_bus.clone();
-        let builder: SubscriptionBuilder<Bar> = SubscriptionBuilder::new_with_components(server_version, message_bus).with_smart_depth(true);
+        let builder: SubscriptionBuilder<Bar> = SubscriptionBuilder::new_with_components(context, message_bus).with_smart_depth(true);
         assert!(builder.context.is_smart_depth);
     }
 
@@ -627,9 +614,9 @@ mod tests {
 
         for tc in test_cases {
             let (client, _gateway) = create_test_client().await;
-            let server_version = client.server_version();
+            let context = client.decoder_context();
             let message_bus = client.message_bus.clone();
-            let mut builder: SubscriptionBuilder<Bar> = SubscriptionBuilder::new_with_components(server_version, message_bus);
+            let mut builder: SubscriptionBuilder<Bar> = SubscriptionBuilder::new_with_components(context, message_bus);
 
             // Set initial context
             builder.context.is_smart_depth = tc.initial_smart_depth;
@@ -641,10 +628,9 @@ mod tests {
             }
 
             if let Some(request_type) = tc.set_request_type {
-                let context = ResponseContext {
-                    is_smart_depth: builder.context.is_smart_depth,
-                    request_type: Some(request_type),
-                };
+                let context = DecoderContext::new(builder.context.server_version, builder.context.time_zone)
+                    .with_smart_depth(builder.context.is_smart_depth)
+                    .with_request_type(request_type);
                 builder = builder.with_context(context);
             }
 

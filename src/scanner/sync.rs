@@ -5,17 +5,17 @@ use std::sync::Arc;
 use super::common::{decoders, encoders};
 use super::*;
 use crate::client::blocking::Subscription;
-use crate::client::{ResponseContext, StreamDecoder};
 use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::orders::TagValue;
+use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::{client::sync::Client, server_versions, Error};
 
 impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Vec<ScannerData>, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Vec<ScannerData>, Error> {
         decoders::decode_scanner_message(message)
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel scanner subscription.");
         encoders::encode_cancel_scanner_subscription(request_id)
     }
@@ -50,12 +50,7 @@ pub(crate) fn scanner_subscription(
     let request = encoders::encode_scanner_subscription(request_id, client.server_version, subscription, filter)?;
     let subscription = client.send_request(request_id, request)?;
 
-    Ok(Subscription::new(
-        client.server_version,
-        Arc::clone(&client.message_bus),
-        subscription,
-        None,
-    ))
+    Ok(Subscription::new(Arc::clone(&client.message_bus), subscription, client.decoder_context()))
 }
 
 #[cfg(test)]

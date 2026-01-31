@@ -6,15 +6,15 @@ use std::sync::Arc;
 use log::{debug, warn};
 use tokio::sync::mpsc;
 
-use super::common::{check_retry, process_decode_result, ProcessingResult, RetryDecision};
-use super::{ResponseContext, StreamDecoder};
+use super::common::{check_retry, process_decode_result, DecoderContext, ProcessingResult, RetryDecision};
+use super::StreamDecoder;
 use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 use crate::Error;
 
 // Type aliases to reduce complexity
-type CancelFn = Box<dyn Fn(i32, Option<i32>, Option<&ResponseContext>) -> Result<RequestMessage, Error> + Send + Sync>;
-type DecoderFn<T> = Arc<dyn Fn(i32, &mut ResponseMessage) -> Result<T, Error> + Send + Sync>;
+type CancelFn = Box<dyn Fn(i32, Option<i32>, Option<&DecoderContext>) -> Result<RequestMessage, Error> + Send + Sync>;
+type DecoderFn<T> = Arc<dyn Fn(&DecoderContext, &mut ResponseMessage) -> Result<T, Error> + Send + Sync>;
 
 /// Asynchronous subscription for streaming data
 pub struct Subscription<T> {
@@ -23,9 +23,8 @@ pub struct Subscription<T> {
     request_id: Option<i32>,
     order_id: Option<i32>,
     _message_type: Option<OutgoingMessages>,
-    response_context: ResponseContext,
+    context: DecoderContext,
     cancelled: Arc<AtomicBool>,
-    server_version: i32,
     message_bus: Option<Arc<dyn AsyncMessageBus>>,
     /// Cancel message generator
     cancel_fn: Option<Arc<CancelFn>>,
@@ -36,7 +35,7 @@ enum SubscriptionInner<T> {
     WithDecoder {
         subscription: AsyncInternalSubscription,
         decoder: DecoderFn<T>,
-        server_version: i32,
+        context: DecoderContext,
     },
     /// Pre-decoded subscription - receives T directly
     PreDecoded { receiver: mpsc::UnboundedReceiver<Result<T, Error>> },
@@ -48,11 +47,11 @@ impl<T> Clone for SubscriptionInner<T> {
             SubscriptionInner::WithDecoder {
                 subscription,
                 decoder,
-                server_version,
+                context,
             } => SubscriptionInner::WithDecoder {
                 subscription: subscription.clone(),
                 decoder: decoder.clone(),
-                server_version: *server_version,
+                context: context.clone(),
             },
             SubscriptionInner::PreDecoded { .. } => {
                 // Can't clone mpsc receivers
@@ -69,9 +68,8 @@ impl<T> Clone for Subscription<T> {
             request_id: self.request_id,
             order_id: self.order_id,
             _message_type: self._message_type,
-            response_context: self.response_context.clone(),
+            context: self.context.clone(),
             cancelled: self.cancelled.clone(),
-            server_version: self.server_version,
             message_bus: self.message_bus.clone(),
             cancel_fn: self.cancel_fn.clone(),
         }
@@ -83,29 +81,27 @@ impl<T> Subscription<T> {
     #[allow(clippy::too_many_arguments)]
     pub fn with_decoder<D>(
         internal: AsyncInternalSubscription,
-        server_version: i32,
         message_bus: Arc<dyn AsyncMessageBus>,
         decoder: D,
         request_id: Option<i32>,
         order_id: Option<i32>,
         message_type: Option<OutgoingMessages>,
-        response_context: ResponseContext,
+        context: DecoderContext,
     ) -> Self
     where
-        D: Fn(i32, &mut ResponseMessage) -> Result<T, Error> + Send + Sync + 'static,
+        D: Fn(&DecoderContext, &mut ResponseMessage) -> Result<T, Error> + Send + Sync + 'static,
     {
         Self {
             inner: SubscriptionInner::WithDecoder {
                 subscription: internal,
                 decoder: Arc::new(decoder),
-                server_version,
+                context: context.clone(),
             },
             request_id,
             order_id,
             _message_type: message_type,
-            response_context,
+            context,
             cancelled: Arc::new(AtomicBool::new(false)),
-            server_version,
             message_bus: Some(message_bus),
             cancel_fn: None,
         }
@@ -115,93 +111,67 @@ impl<T> Subscription<T> {
     #[allow(clippy::too_many_arguments)]
     pub fn new_with_decoder<F>(
         internal: AsyncInternalSubscription,
-        server_version: i32,
         message_bus: Arc<dyn AsyncMessageBus>,
         decoder: F,
         request_id: Option<i32>,
         order_id: Option<i32>,
         message_type: Option<OutgoingMessages>,
-        response_context: ResponseContext,
+        context: DecoderContext,
     ) -> Self
     where
-        F: Fn(i32, &mut ResponseMessage) -> Result<T, Error> + Send + Sync + 'static,
+        F: Fn(&DecoderContext, &mut ResponseMessage) -> Result<T, Error> + Send + Sync + 'static,
     {
-        Self::with_decoder(
-            internal,
-            server_version,
-            message_bus,
-            decoder,
-            request_id,
-            order_id,
-            message_type,
-            response_context,
-        )
+        Self::with_decoder(internal, message_bus, decoder, request_id, order_id, message_type, context)
     }
 
     /// Create a subscription from components and a decoder (alias for with_decoder)
     #[allow(clippy::too_many_arguments)]
     pub fn with_decoder_components<D>(
         internal: AsyncInternalSubscription,
-        server_version: i32,
         message_bus: Arc<dyn AsyncMessageBus>,
         decoder: D,
         request_id: Option<i32>,
         order_id: Option<i32>,
         message_type: Option<OutgoingMessages>,
-        response_context: ResponseContext,
+        context: DecoderContext,
     ) -> Self
     where
-        D: Fn(i32, &mut ResponseMessage) -> Result<T, Error> + Send + Sync + 'static,
+        D: Fn(&DecoderContext, &mut ResponseMessage) -> Result<T, Error> + Send + Sync + 'static,
     {
-        Self::with_decoder(
-            internal,
-            server_version,
-            message_bus,
-            decoder,
-            request_id,
-            order_id,
-            message_type,
-            response_context,
-        )
+        Self::with_decoder(internal, message_bus, decoder, request_id, order_id, message_type, context)
     }
 
     /// Create a subscription from an internal subscription using the DataStream decoder
     pub(crate) fn new_from_internal<D>(
         internal: AsyncInternalSubscription,
-        server_version: i32,
         message_bus: Arc<dyn AsyncMessageBus>,
         request_id: Option<i32>,
         order_id: Option<i32>,
         message_type: Option<OutgoingMessages>,
-        response_context: ResponseContext,
+        context: DecoderContext,
     ) -> Self
     where
         D: StreamDecoder<T> + 'static,
         T: 'static,
     {
-        let mut sub = Self::with_decoder_components(
-            internal,
-            server_version,
-            message_bus,
-            D::decode,
-            request_id,
-            order_id,
-            message_type,
-            response_context,
-        );
+        let mut sub = Self::with_decoder_components(internal, message_bus, D::decode, request_id, order_id, message_type, context);
         // Store the cancel function
         sub.cancel_fn = Some(Arc::new(Box::new(D::cancel_message)));
         sub
     }
 
     /// Create a subscription from internal subscription without explicit metadata
-    pub(crate) fn new_from_internal_simple<D>(internal: AsyncInternalSubscription, server_version: i32, message_bus: Arc<dyn AsyncMessageBus>) -> Self
+    pub(crate) fn new_from_internal_simple<D>(
+        internal: AsyncInternalSubscription,
+        context: DecoderContext,
+        message_bus: Arc<dyn AsyncMessageBus>,
+    ) -> Self
     where
         D: StreamDecoder<T> + 'static,
         T: 'static,
     {
         // The AsyncInternalSubscription already has cleanup logic, so we don't need cancel metadata
-        Self::new_from_internal::<D>(internal, server_version, message_bus, None, None, None, ResponseContext::default())
+        Self::new_from_internal::<D>(internal, message_bus, None, None, None, context)
     }
 
     /// Create subscription from existing receiver (for backward compatibility)
@@ -213,9 +183,8 @@ impl<T> Subscription<T> {
             request_id: None,
             order_id: None,
             _message_type: None,
-            response_context: ResponseContext::default(),
+            context: DecoderContext::default(),
             cancelled: Arc::new(AtomicBool::new(false)),
-            server_version: 0, // Default value for backward compatibility
             message_bus: None,
             cancel_fn: None,
         }
@@ -230,13 +199,13 @@ impl<T> Subscription<T> {
             SubscriptionInner::WithDecoder {
                 subscription,
                 decoder,
-                server_version,
+                context,
             } => {
                 let mut retry_count = 0;
                 loop {
                     match subscription.next().await {
                         Some(Ok(mut message)) => {
-                            let result = decoder(*server_version, &mut message);
+                            let result = decoder(context, &mut message);
                             match process_decode_result(result) {
                                 ProcessingResult::Success(val) => return Some(Ok(val)),
                                 ProcessingResult::EndOfStream => return None,
@@ -276,7 +245,7 @@ impl<T> Subscription<T> {
 
         if let (Some(message_bus), Some(cancel_fn)) = (&self.message_bus, &self.cancel_fn) {
             let id = self.request_id.or(self.order_id);
-            if let Ok(message) = cancel_fn(self.server_version, id, Some(&self.response_context)) {
+            if let Ok(message) = cancel_fn(self.context.server_version, id, Some(&self.context)) {
                 if let Err(e) = message_bus.send_message(message).await {
                     warn!("error sending cancel message: {e}")
                 }
@@ -302,11 +271,10 @@ impl<T> Drop for Subscription<T> {
         if let (Some(message_bus), Some(cancel_fn)) = (&self.message_bus, &self.cancel_fn) {
             let message_bus = message_bus.clone();
             let id = self.request_id.or(self.order_id);
-            let response_context = self.response_context.clone();
-            let server_version = self.server_version;
+            let context = self.context.clone();
 
             // Clone the cancel function for use in the spawned task
-            if let Ok(message) = cancel_fn(server_version, id, Some(&response_context)) {
+            if let Ok(message) = cancel_fn(context.server_version, id, Some(&context)) {
                 // Spawn a task to send the cancel message since drop can't be async
                 tokio::spawn(async move {
                     if let Err(e) = message_bus.send_message(message).await {
@@ -346,9 +314,8 @@ mod tests {
 
         let subscription: Subscription<Bar> = Subscription::with_decoder(
             internal,
-            176,
             message_bus,
-            |_server_version, _msg| {
+            |_context, _msg| {
                 let bar = Bar {
                     date: OffsetDateTime::now_utc(),
                     open: 100.5,
@@ -364,7 +331,7 @@ mod tests {
             Some(9000),
             None,
             Some(OutgoingMessages::RequestRealTimeBars),
-            ResponseContext::default(),
+            DecoderContext::default(),
         );
 
         // Send a test message
@@ -388,13 +355,12 @@ mod tests {
 
         let subscription: Subscription<String> = Subscription::new_with_decoder(
             internal,
-            176,
             message_bus,
-            |_version, _msg| Ok("decoded".to_string()),
+            |_context, _msg| Ok("decoded".to_string()),
             Some(1),
             None,
             Some(OutgoingMessages::RequestMarketData),
-            ResponseContext::default(),
+            DecoderContext::default(),
         );
 
         assert_eq!(subscription.request_id, Some(1));
@@ -409,13 +375,12 @@ mod tests {
 
         let subscription: Subscription<i32> = Subscription::with_decoder_components(
             internal,
-            176,
             message_bus,
-            |_version, _msg| Ok(42),
+            |_context, _msg| Ok(42),
             Some(100),
             Some(200),
             Some(OutgoingMessages::RequestPositions),
-            ResponseContext::default(),
+            DecoderContext::default(),
         );
 
         assert_eq!(subscription.request_id, Some(100));
@@ -444,13 +409,12 @@ mod tests {
 
         let mut subscription: Subscription<String> = Subscription::with_decoder(
             internal,
-            176,
             message_bus,
-            |_version, _msg| Err(Error::Simple("decode error".into())),
+            |_context, _msg| Err(Error::Simple("decode error".into())),
             None,
             None,
             None,
-            ResponseContext::default(),
+            DecoderContext::default(),
         );
 
         // Send a message that will trigger the error
@@ -470,13 +434,12 @@ mod tests {
 
         let mut subscription: Subscription<String> = Subscription::with_decoder(
             internal,
-            176,
             message_bus,
-            |_version, _msg| Err(Error::EndOfStream),
+            |_context, _msg| Err(Error::EndOfStream),
             None,
             None,
             None,
-            ResponseContext::default(),
+            DecoderContext::default(),
         );
 
         // Send a message that will trigger end of stream
@@ -502,13 +465,12 @@ mod tests {
 
         let mut subscription: Subscription<String> = Subscription::with_decoder(
             internal,
-            176,
             message_bus.clone(),
-            |_version, _msg| Ok("test".to_string()),
+            |_context, _msg| Ok("test".to_string()),
             Some(123),
             None,
             Some(OutgoingMessages::RequestMarketData),
-            ResponseContext::default(),
+            DecoderContext::default(),
         );
         subscription.cancel_fn = Some(Arc::new(cancel_fn));
 
@@ -530,23 +492,21 @@ mod tests {
 
         let subscription: Subscription<String> = Subscription::with_decoder(
             internal,
-            176,
             message_bus,
-            |_version, _msg| Ok("test".to_string()),
+            |_context, _msg| Ok("test".to_string()),
             Some(456),
             Some(789),
             Some(OutgoingMessages::RequestPositions),
-            ResponseContext {
-                is_smart_depth: true,
-                request_type: Some(OutgoingMessages::RequestPositions),
-            },
+            DecoderContext::default()
+                .with_smart_depth(true)
+                .with_request_type(OutgoingMessages::RequestPositions),
         );
 
         let cloned = subscription.clone();
         assert_eq!(cloned.request_id, Some(456));
         assert_eq!(cloned.order_id, Some(789));
         assert_eq!(cloned._message_type, Some(OutgoingMessages::RequestPositions));
-        assert!(cloned.response_context.is_smart_depth);
+        assert!(cloned.context.is_smart_depth);
     }
 
     #[tokio::test]
@@ -565,13 +525,12 @@ mod tests {
         {
             let mut subscription: Subscription<String> = Subscription::with_decoder(
                 internal,
-                176,
                 message_bus.clone(),
-                |_version, _msg| Ok("test".to_string()),
+                |_context, _msg| Ok("test".to_string()),
                 Some(999),
                 None,
                 Some(OutgoingMessages::RequestMarketData),
-                ResponseContext::default(),
+                DecoderContext::default(),
             );
             subscription.cancel_fn = Some(Arc::new(cancel_fn));
             // Subscription will be dropped here and should send cancel message
@@ -597,23 +556,21 @@ mod tests {
         let (_tx, rx) = broadcast::channel(100);
         let internal = AsyncInternalSubscription::new(rx);
 
-        let context = ResponseContext {
-            is_smart_depth: true,
-            request_type: Some(OutgoingMessages::RequestMarketDepth),
-        };
+        let context = DecoderContext::default()
+            .with_smart_depth(true)
+            .with_request_type(OutgoingMessages::RequestMarketDepth);
 
         let subscription: Subscription<String> = Subscription::with_decoder(
             internal,
-            176,
             message_bus,
-            |_version, _msg| Ok("test".to_string()),
+            |_context, _msg| Ok("test".to_string()),
             None,
             None,
             None,
             context.clone(),
         );
 
-        assert_eq!(subscription.response_context, context);
+        assert_eq!(subscription.context, context);
     }
 
     #[tokio::test]
@@ -622,11 +579,11 @@ mod tests {
         struct TestDecoder;
 
         impl StreamDecoder<String> for TestDecoder {
-            fn decode(_server_version: i32, _msg: &mut ResponseMessage) -> Result<String, Error> {
+            fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<String, Error> {
                 Ok("decoded".to_string())
             }
 
-            fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
+            fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
                 let mut msg = RequestMessage::new();
                 msg.push_field(&OutgoingMessages::CancelMarketData);
                 Ok(msg)
@@ -637,7 +594,8 @@ mod tests {
         let (_tx, rx) = broadcast::channel(100);
         let internal = AsyncInternalSubscription::new(rx);
 
-        let subscription: Subscription<String> = Subscription::new_from_internal_simple::<TestDecoder>(internal, 176, message_bus);
+        let subscription: Subscription<String> =
+            Subscription::new_from_internal_simple::<TestDecoder>(internal, DecoderContext::default(), message_bus);
 
         assert!(subscription.cancel_fn.is_some());
     }

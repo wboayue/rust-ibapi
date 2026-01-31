@@ -6,9 +6,9 @@ use crate::messages::OutgoingMessages;
 #[cfg(not(feature = "sync"))]
 use crate::messages::{IncomingMessages, Notice, ResponseMessage};
 use crate::protocol::{check_version, Features};
-#[cfg(not(feature = "sync"))]
-use crate::subscriptions::StreamDecoder;
 use crate::subscriptions::Subscription;
+#[cfg(not(feature = "sync"))]
+use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::{Client, Error};
 
 #[cfg(not(feature = "sync"))]
@@ -27,12 +27,21 @@ impl StreamDecoder<PlaceOrder> for PlaceOrder {
         IncomingMessages::Error,
     ];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(PlaceOrder::OpenOrder(decoders::decode_open_order(server_version, message.clone())?)),
-            IncomingMessages::OrderStatus => Ok(PlaceOrder::OrderStatus(decoders::decode_order_status(server_version, message)?)),
-            IncomingMessages::ExecutionData => Ok(PlaceOrder::ExecutionData(decoders::decode_execution_data(server_version, message)?)),
-            IncomingMessages::CommissionsReport => Ok(PlaceOrder::CommissionReport(decoders::decode_commission_report(server_version, message)?)),
+            IncomingMessages::OpenOrder => Ok(PlaceOrder::OpenOrder(decoders::decode_open_order(
+                context.server_version,
+                message.clone(),
+            )?)),
+            IncomingMessages::OrderStatus => Ok(PlaceOrder::OrderStatus(decoders::decode_order_status(context.server_version, message)?)),
+            IncomingMessages::ExecutionData => Ok(PlaceOrder::ExecutionData(decoders::decode_execution_data(
+                context.server_version,
+                message,
+            )?)),
+            IncomingMessages::CommissionsReport => Ok(PlaceOrder::CommissionReport(decoders::decode_commission_report(
+                context.server_version,
+                message,
+            )?)),
             IncomingMessages::Error => Ok(PlaceOrder::Message(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
@@ -49,13 +58,19 @@ impl StreamDecoder<OrderUpdate> for OrderUpdate {
         IncomingMessages::Error,
     ];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(OrderUpdate::OpenOrder(decoders::decode_open_order(server_version, message.clone())?)),
-            IncomingMessages::OrderStatus => Ok(OrderUpdate::OrderStatus(decoders::decode_order_status(server_version, message)?)),
-            IncomingMessages::ExecutionData => Ok(OrderUpdate::ExecutionData(decoders::decode_execution_data(server_version, message)?)),
+            IncomingMessages::OpenOrder => Ok(OrderUpdate::OpenOrder(decoders::decode_open_order(
+                context.server_version,
+                message.clone(),
+            )?)),
+            IncomingMessages::OrderStatus => Ok(OrderUpdate::OrderStatus(decoders::decode_order_status(context.server_version, message)?)),
+            IncomingMessages::ExecutionData => Ok(OrderUpdate::ExecutionData(decoders::decode_execution_data(
+                context.server_version,
+                message,
+            )?)),
             IncomingMessages::CommissionsReport => Ok(OrderUpdate::CommissionReport(decoders::decode_commission_report(
-                server_version,
+                context.server_version,
                 message,
             )?)),
             IncomingMessages::Error => Ok(OrderUpdate::Message(Notice::from(message))),
@@ -68,9 +83,9 @@ impl StreamDecoder<OrderUpdate> for OrderUpdate {
 impl StreamDecoder<CancelOrder> for CancelOrder {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::OrderStatus, IncomingMessages::Error];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::OrderStatus => Ok(CancelOrder::OrderStatus(decoders::decode_order_status(server_version, message)?)),
+            IncomingMessages::OrderStatus => Ok(CancelOrder::OrderStatus(decoders::decode_order_status(context.server_version, message)?)),
             IncomingMessages::Error => Ok(CancelOrder::Notice(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
@@ -89,12 +104,15 @@ impl StreamDecoder<Orders> for Orders {
         IncomingMessages::Error,
     ];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::CompletedOrder => Ok(Orders::OrderData(decoders::decode_completed_order(server_version, message.clone())?)),
-            IncomingMessages::CommissionsReport => Ok(Orders::OrderData(decoders::decode_open_order(server_version, message.clone())?)),
-            IncomingMessages::OpenOrder => Ok(Orders::OrderData(decoders::decode_open_order(server_version, message.clone())?)),
-            IncomingMessages::OrderStatus => Ok(Orders::OrderStatus(decoders::decode_order_status(server_version, message)?)),
+            IncomingMessages::CompletedOrder => Ok(Orders::OrderData(decoders::decode_completed_order(
+                context.server_version,
+                message.clone(),
+            )?)),
+            IncomingMessages::CommissionsReport => Ok(Orders::OrderData(decoders::decode_open_order(context.server_version, message.clone())?)),
+            IncomingMessages::OpenOrder => Ok(Orders::OrderData(decoders::decode_open_order(context.server_version, message.clone())?)),
+            IncomingMessages::OrderStatus => Ok(Orders::OrderStatus(decoders::decode_order_status(context.server_version, message)?)),
             IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => Err(Error::EndOfStream),
             IncomingMessages::Error => Ok(Orders::Notice(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
@@ -111,10 +129,16 @@ impl StreamDecoder<Executions> for Executions {
         IncomingMessages::Error,
     ];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::ExecutionData => Ok(Executions::ExecutionData(decoders::decode_execution_data(server_version, message)?)),
-            IncomingMessages::CommissionsReport => Ok(Executions::CommissionReport(decoders::decode_commission_report(server_version, message)?)),
+            IncomingMessages::ExecutionData => Ok(Executions::ExecutionData(decoders::decode_execution_data(
+                context.server_version,
+                message,
+            )?)),
+            IncomingMessages::CommissionsReport => Ok(Executions::CommissionReport(decoders::decode_commission_report(
+                context.server_version,
+                message,
+            )?)),
             IncomingMessages::ExecutionDataEnd => Err(Error::EndOfStream),
             IncomingMessages::Error => Ok(Executions::Notice(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
@@ -126,10 +150,16 @@ impl StreamDecoder<Executions> for Executions {
 impl StreamDecoder<ExerciseOptions> for ExerciseOptions {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus, IncomingMessages::Error];
 
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(ExerciseOptions::OpenOrder(decoders::decode_open_order(server_version, message.clone())?)),
-            IncomingMessages::OrderStatus => Ok(ExerciseOptions::OrderStatus(decoders::decode_order_status(server_version, message)?)),
+            IncomingMessages::OpenOrder => Ok(ExerciseOptions::OpenOrder(decoders::decode_open_order(
+                context.server_version,
+                message.clone(),
+            )?)),
+            IncomingMessages::OrderStatus => Ok(ExerciseOptions::OrderStatus(decoders::decode_order_status(
+                context.server_version,
+                message,
+            )?)),
             IncomingMessages::Error => Ok(ExerciseOptions::Notice(Notice::from(message))),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
@@ -143,7 +173,7 @@ pub(crate) async fn order_update_stream(client: &Client) -> Result<Subscription<
     let internal_subscription = client.create_order_update_subscription().await?;
     Ok(Subscription::new_from_internal_simple::<OrderUpdate>(
         internal_subscription,
-        client.server_version(),
+        client.decoder_context(),
         client.message_bus.clone(),
     ))
 }
@@ -187,7 +217,7 @@ pub(crate) async fn place_order(client: &Client, order_id: i32, contract: &Contr
 
     Ok(Subscription::new_from_internal_simple::<PlaceOrder>(
         internal_subscription,
-        client.server_version(),
+        client.decoder_context(),
         client.message_bus.clone(),
     ))
 }
@@ -203,7 +233,7 @@ pub(crate) async fn cancel_order(client: &Client, order_id: i32, manual_order_ca
 
     Ok(Subscription::new_from_internal_simple::<CancelOrder>(
         internal_subscription,
-        client.server_version(),
+        client.decoder_context(),
         client.message_bus.clone(),
     ))
 }
@@ -247,7 +277,7 @@ pub(crate) async fn completed_orders(client: &Client, api_only: bool) -> Result<
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestCompletedOrders, request).await?;
     Ok(Subscription::new_from_internal_simple::<Orders>(
         internal_subscription,
-        client.server_version(),
+        client.decoder_context(),
         client.message_bus.clone(),
     ))
 }
@@ -263,7 +293,7 @@ pub(crate) async fn open_orders(client: &Client) -> Result<Subscription<Orders>,
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestOpenOrders, request).await?;
     Ok(Subscription::new_from_internal_simple::<Orders>(
         internal_subscription,
-        client.server_version(),
+        client.decoder_context(),
         client.message_bus.clone(),
     ))
 }
@@ -276,7 +306,7 @@ pub(crate) async fn all_open_orders(client: &Client) -> Result<Subscription<Orde
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestAllOpenOrders, request).await?;
     Ok(Subscription::new_from_internal_simple::<Orders>(
         internal_subscription,
-        client.server_version(),
+        client.decoder_context(),
         client.message_bus.clone(),
     ))
 }
@@ -288,7 +318,7 @@ pub(crate) async fn auto_open_orders(client: &Client, auto_bind: bool) -> Result
     let internal_subscription = client.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request).await?;
     Ok(Subscription::new_from_internal_simple::<Orders>(
         internal_subscription,
-        client.server_version(),
+        client.decoder_context(),
         client.message_bus.clone(),
     ))
 }
@@ -307,7 +337,7 @@ pub(crate) async fn executions(client: &Client, filter: ExecutionFilter) -> Resu
     let internal_subscription = client.send_request(request_id, request).await?;
     Ok(Subscription::new_from_internal_simple::<Executions>(
         internal_subscription,
-        client.server_version(),
+        client.decoder_context(),
         client.message_bus.clone(),
     ))
 }
@@ -336,7 +366,7 @@ pub(crate) async fn exercise_options(
     let internal_subscription = client.send_order(order_id, request).await?;
     Ok(Subscription::new_from_internal_simple::<ExerciseOptions>(
         internal_subscription,
-        client.server_version(),
+        client.decoder_context(),
         client.message_bus.clone(),
     ))
 }

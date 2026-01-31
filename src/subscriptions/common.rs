@@ -1,5 +1,7 @@
 //! Common utilities for subscription processing
 
+use time_tz::Tz;
+
 use crate::errors::Error;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 
@@ -139,48 +141,77 @@ mod tests {
     }
 
     #[test]
-    fn test_response_context_default() {
-        let context = ResponseContext::default();
-        assert!(!context.is_smart_depth);
+    fn test_decoder_context_default() {
+        let context = DecoderContext::default();
+        assert_eq!(context.server_version, 0);
+        assert!(context.time_zone.is_none());
         assert!(context.request_type.is_none());
+        assert!(!context.is_smart_depth);
     }
 
     #[test]
-    fn test_response_context_clone() {
-        let context = ResponseContext {
+    fn test_decoder_context_new() {
+        let context = DecoderContext::new(176, None);
+        assert_eq!(context.server_version, 176);
+        assert!(context.time_zone.is_none());
+        assert!(context.request_type.is_none());
+        assert!(!context.is_smart_depth);
+    }
+
+    #[test]
+    fn test_decoder_context_builder() {
+        let context = DecoderContext::new(176, None)
+            .with_request_type(crate::messages::OutgoingMessages::RequestMarketData)
+            .with_smart_depth(true);
+
+        assert_eq!(context.server_version, 176);
+        assert_eq!(context.request_type, Some(crate::messages::OutgoingMessages::RequestMarketData));
+        assert!(context.is_smart_depth);
+    }
+
+    #[test]
+    fn test_decoder_context_clone() {
+        let context = DecoderContext {
+            server_version: 176,
+            time_zone: None,
             is_smart_depth: true,
             request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
         };
 
         let cloned = context.clone();
         assert_eq!(context, cloned);
-        assert_eq!(cloned.is_smart_depth, true);
+        assert_eq!(cloned.server_version, 176);
+        assert!(cloned.is_smart_depth);
         assert_eq!(cloned.request_type, Some(crate::messages::OutgoingMessages::RequestMarketData));
     }
 
     #[test]
-    fn test_response_context_equality() {
+    fn test_decoder_context_equality() {
         struct TestCase {
             name: &'static str,
-            context1: ResponseContext,
-            context2: ResponseContext,
+            context1: DecoderContext,
+            context2: DecoderContext,
             expected: bool,
         }
 
         let test_cases = vec![
             TestCase {
                 name: "default_contexts_equal",
-                context1: ResponseContext::default(),
-                context2: ResponseContext::default(),
+                context1: DecoderContext::default(),
+                context2: DecoderContext::default(),
                 expected: true,
             },
             TestCase {
                 name: "same_values_equal",
-                context1: ResponseContext {
+                context1: DecoderContext {
+                    server_version: 176,
+                    time_zone: None,
                     is_smart_depth: true,
                     request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
                 },
-                context2: ResponseContext {
+                context2: DecoderContext {
+                    server_version: 176,
+                    time_zone: None,
                     is_smart_depth: true,
                     request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
                 },
@@ -188,37 +219,37 @@ mod tests {
             },
             TestCase {
                 name: "different_smart_depth",
-                context1: ResponseContext {
+                context1: DecoderContext {
                     is_smart_depth: true,
-                    request_type: None,
+                    ..Default::default()
                 },
-                context2: ResponseContext {
+                context2: DecoderContext {
                     is_smart_depth: false,
-                    request_type: None,
+                    ..Default::default()
                 },
                 expected: false,
             },
             TestCase {
                 name: "different_request_type",
-                context1: ResponseContext {
-                    is_smart_depth: false,
+                context1: DecoderContext {
                     request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
+                    ..Default::default()
                 },
-                context2: ResponseContext {
-                    is_smart_depth: false,
+                context2: DecoderContext {
                     request_type: Some(crate::messages::OutgoingMessages::CancelMarketData),
+                    ..Default::default()
                 },
                 expected: false,
             },
             TestCase {
-                name: "one_none_one_some",
-                context1: ResponseContext {
-                    is_smart_depth: false,
-                    request_type: None,
+                name: "different_server_version",
+                context1: DecoderContext {
+                    server_version: 175,
+                    ..Default::default()
                 },
-                context2: ResponseContext {
-                    is_smart_depth: false,
-                    request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
+                context2: DecoderContext {
+                    server_version: 176,
+                    ..Default::default()
                 },
                 expected: false,
             },
@@ -230,14 +261,17 @@ mod tests {
     }
 
     #[test]
-    fn test_response_context_debug_format() {
-        let context = ResponseContext {
+    fn test_decoder_context_debug_format() {
+        let context = DecoderContext {
+            server_version: 176,
+            time_zone: None,
             is_smart_depth: true,
             request_type: Some(crate::messages::OutgoingMessages::RequestMarketData),
         };
 
         let debug_str = format!("{:?}", context);
-        assert!(debug_str.contains("ResponseContext"));
+        assert!(debug_str.contains("DecoderContext"));
+        assert!(debug_str.contains("server_version"));
         assert!(debug_str.contains("is_smart_depth"));
         assert!(debug_str.contains("true"));
         assert!(debug_str.contains("request_type"));
@@ -245,30 +279,59 @@ mod tests {
     }
 }
 
-/// Context information for response handling
+/// Context for decoding responses, providing all necessary state for decoders.
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct ResponseContext {
+pub struct DecoderContext {
+    /// Server version for protocol compatibility
+    pub server_version: i32,
+    /// Timezone for parsing timestamps (from TWS connection)
+    pub time_zone: Option<&'static Tz>,
     /// Type of the original request that initiated this subscription
     pub request_type: Option<OutgoingMessages>,
     /// Whether this is a smart depth subscription
     pub is_smart_depth: bool,
 }
 
+impl DecoderContext {
+    /// Create a new context with server version and optional timezone
+    pub fn new(server_version: i32, time_zone: Option<&'static Tz>) -> Self {
+        Self {
+            server_version,
+            time_zone,
+            request_type: None,
+            is_smart_depth: false,
+        }
+    }
+
+    /// Set the request type
+    #[allow(dead_code)]
+    pub fn with_request_type(mut self, request_type: OutgoingMessages) -> Self {
+        self.request_type = Some(request_type);
+        self
+    }
+
+    /// Set the smart depth flag
+    pub fn with_smart_depth(mut self, is_smart_depth: bool) -> Self {
+        self.is_smart_depth = is_smart_depth;
+        self
+    }
+}
+
 /// Common trait for decoding streaming data responses
 ///
 /// This trait is shared between sync and async implementations to avoid code duplication.
-/// The key change from the original design is that `decode` takes `server_version` directly
-/// instead of the entire `Client`, making it possible to share implementations.
+/// Decoders receive a `DecoderContext` containing server version, timezone, and other
+/// context needed to properly decode messages.
 pub(crate) trait StreamDecoder<T> {
     /// Message types this stream can handle
     #[allow(dead_code)]
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[];
 
     /// Decode a response message into the stream's data type
-    fn decode(server_version: i32, message: &mut ResponseMessage) -> Result<T, Error>;
+    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<T, Error>;
 
     /// Generate a cancellation message for this stream
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
         Err(Error::NotImplemented)
     }
 

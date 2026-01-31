@@ -204,12 +204,12 @@ mod tests {
     #[tokio::test]
     async fn test_wsh_metadata_decode_table() {
         use crate::messages::ResponseMessage;
-        use crate::subscriptions::StreamDecoder;
+        use crate::subscriptions::{DecoderContext, StreamDecoder};
         use crate::wsh::common::test_tables::WSH_METADATA_DECODE_TESTS;
 
         for test_case in WSH_METADATA_DECODE_TESTS {
             let mut message = ResponseMessage::from(test_case.message);
-            let result = WshMetadata::decode(0, &mut message);
+            let result = WshMetadata::decode(&DecoderContext::default(), &mut message);
 
             if test_case.should_error {
                 assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
@@ -232,12 +232,12 @@ mod tests {
     #[tokio::test]
     async fn test_wsh_event_data_decode_table() {
         use crate::messages::ResponseMessage;
-        use crate::subscriptions::StreamDecoder;
+        use crate::subscriptions::{DecoderContext, StreamDecoder};
         use crate::wsh::common::test_tables::WSH_EVENT_DATA_DECODE_TESTS;
 
         for test_case in WSH_EVENT_DATA_DECODE_TESTS {
             let mut message = ResponseMessage::from(test_case.message);
-            let result = WshEventData::decode(0, &mut message);
+            let result = WshEventData::decode(&DecoderContext::default(), &mut message);
 
             if test_case.should_error {
                 assert!(result.is_err(), "Test '{}' should have failed", test_case.name);

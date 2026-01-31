@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use log::{debug, error, warn};
 
-use super::common::{check_retry, process_decode_result, should_retry_error, should_store_error, ProcessingResult, RetryDecision};
-use super::{ResponseContext, StreamDecoder};
+use super::common::{check_retry, process_decode_result, should_retry_error, should_store_error, DecoderContext, ProcessingResult, RetryDecision};
+use super::StreamDecoder;
 use crate::errors::Error;
 use crate::messages::{OutgoingMessages, ResponseMessage};
 use crate::transport::{InternalSubscription, MessageBus};
@@ -20,7 +20,7 @@ use crate::transport::{InternalSubscription, MessageBus};
 /// Alternatively, you may poll subscriptions in a blocking or non-blocking manner using the [next](Subscription::next), [try_next](Subscription::try_next) or [next_timeout](Subscription::next_timeout) methods.
 #[allow(private_bounds)]
 pub struct Subscription<T: StreamDecoder<T>> {
-    server_version: i32,
+    context: DecoderContext,
     message_bus: Arc<dyn MessageBus>,
     request_id: Option<i32>,
     order_id: Option<i32>,
@@ -29,31 +29,24 @@ pub struct Subscription<T: StreamDecoder<T>> {
     cancelled: AtomicBool,
     snapshot_ended: AtomicBool,
     subscription: InternalSubscription,
-    response_context: Option<ResponseContext>,
     error: Mutex<Option<Error>>,
     retry_count: AtomicUsize,
 }
 
 #[allow(private_bounds)]
 impl<T: StreamDecoder<T>> Subscription<T> {
-    pub(crate) fn new(
-        server_version: i32,
-        message_bus: Arc<dyn MessageBus>,
-        subscription: InternalSubscription,
-        context: Option<ResponseContext>,
-    ) -> Self {
+    pub(crate) fn new(message_bus: Arc<dyn MessageBus>, subscription: InternalSubscription, context: DecoderContext) -> Self {
         let request_id = subscription.request_id;
         let order_id = subscription.order_id;
         let message_type = subscription.message_type;
 
         Subscription {
-            server_version,
+            context,
             message_bus,
             request_id,
             order_id,
             message_type,
             subscription,
-            response_context: context,
             phantom: PhantomData,
             cancelled: AtomicBool::new(false),
             snapshot_ended: AtomicBool::new(false),
@@ -77,21 +70,21 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         self.cancelled.store(true, Ordering::Relaxed);
 
         if let Some(request_id) = self.request_id {
-            if let Ok(message) = T::cancel_message(self.server_version, self.request_id, self.response_context.as_ref()) {
+            if let Ok(message) = T::cancel_message(self.context.server_version, self.request_id, Some(&self.context)) {
                 if let Err(e) = self.message_bus.cancel_subscription(request_id, &message) {
                     warn!("error cancelling subscription: {e}")
                 }
                 self.subscription.cancel();
             }
         } else if let Some(order_id) = self.order_id {
-            if let Ok(message) = T::cancel_message(self.server_version, self.request_id, self.response_context.as_ref()) {
+            if let Ok(message) = T::cancel_message(self.context.server_version, self.request_id, Some(&self.context)) {
                 if let Err(e) = self.message_bus.cancel_order_subscription(order_id, &message) {
                     warn!("error cancelling order subscription: {e}")
                 }
                 self.subscription.cancel();
             }
         } else if let Some(message_type) = self.message_type {
-            if let Ok(message) = T::cancel_message(self.server_version, self.request_id, self.response_context.as_ref()) {
+            if let Ok(message) = T::cancel_message(self.context.server_version, self.request_id, Some(&self.context)) {
                 if let Err(e) = self.message_bus.cancel_shared_subscription(message_type, &message) {
                     warn!("error cancelling shared subscription: {e}")
                 }
@@ -195,7 +188,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     }
 
     fn process_message(&self, mut message: ResponseMessage) -> Option<T> {
-        match process_decode_result(T::decode(self.server_version, &mut message)) {
+        match process_decode_result(T::decode(&self.context, &mut message)) {
             ProcessingResult::Success(val) => {
                 // Check if this decoded value represents the end of a snapshot subscription
                 if val.is_snapshot_end() {
