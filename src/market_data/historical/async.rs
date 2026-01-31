@@ -356,7 +356,18 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
 /// A `HistoricalDataStreamingSubscription` that yields `HistoricalBarUpdate` values
 ///
 /// # Example
-/// ```ignore
+/// ```no_run
+/// use ibapi::Client;
+/// use ibapi::contracts::Contract;
+/// use ibapi::market_data::historical::{
+///     BarSize, Duration, HistoricalBarUpdate, WhatToShow, historical_data_streaming
+/// };
+/// use ibapi::market_data::TradingHours;
+///
+/// # async fn example() -> Result<(), ibapi::Error> {
+/// let client = Client::connect("127.0.0.1:4002", 100).await?;
+/// let contract = Contract::stock("SPY").build();
+///
 /// let mut subscription = historical_data_streaming(
 ///     &client,
 ///     &contract,
@@ -375,11 +386,10 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
 ///         HistoricalBarUpdate::Update(bar) => {
 ///             println!("Bar update: {} close={}", bar.date, bar.close);
 ///         }
-///         HistoricalBarUpdate::HistoricalEnd => {
-///             println!("Initial historical data complete, now streaming");
-///         }
 ///     }
 /// }
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// # See Also
