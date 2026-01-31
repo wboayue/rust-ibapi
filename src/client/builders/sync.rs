@@ -8,7 +8,7 @@ use crate::client::StreamDecoder;
 use crate::errors::Error;
 use crate::messages::{OutgoingMessages, RequestMessage};
 use crate::subscriptions::sync::Subscription;
-use crate::subscriptions::ResponseContext;
+use crate::subscriptions::DecoderContext;
 use crate::transport::InternalSubscription;
 
 /// Builder for creating requests with IDs
@@ -53,7 +53,7 @@ impl<'a> RequestBuilder<'a> {
     }
 
     /// Send the request and create a subscription with context
-    pub fn send_with_context<T>(self, message: RequestMessage, context: ResponseContext) -> Result<Subscription<T>, Error>
+    pub fn send_with_context<T>(self, message: RequestMessage, context: DecoderContext) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T>,
     {
@@ -97,7 +97,7 @@ impl<'a> SharedRequestBuilder<'a> {
     }
 
     /// Send the request and create a subscription with context
-    pub fn send_with_context<T>(self, message: RequestMessage, context: ResponseContext) -> Result<Subscription<T>, Error>
+    pub fn send_with_context<T>(self, message: RequestMessage, context: DecoderContext) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T>,
     {
@@ -180,7 +180,7 @@ impl<'a> MessageBuilder<'a> {
 #[allow(dead_code)]
 pub(crate) struct SubscriptionBuilder<'a, T> {
     client: &'a Client,
-    context: ResponseContext,
+    context: DecoderContext,
     _phantom: PhantomData<T>,
 }
 
@@ -193,13 +193,13 @@ where
     pub fn new(client: &'a Client) -> Self {
         Self {
             client,
-            context: ResponseContext::default(),
+            context: client.decoder_context(),
             _phantom: PhantomData,
         }
     }
 
     /// Sets the response context for special handling
-    pub fn with_context(mut self, context: ResponseContext) -> Self {
+    pub fn with_context(mut self, context: DecoderContext) -> Self {
         self.context = context;
         self
     }
@@ -212,12 +212,7 @@ where
 
     /// Builds a subscription from an internal subscription (already sent)
     pub fn build(self, subscription: InternalSubscription) -> Subscription<T> {
-        Subscription::new(
-            self.client.server_version,
-            Arc::clone(&self.client.message_bus),
-            subscription,
-            Some(self.context),
-        )
+        Subscription::new(Arc::clone(&self.client.message_bus), subscription, self.context)
     }
 
     /// Sends a request with a specific request ID and builds the subscription
@@ -312,7 +307,7 @@ mod tests {
     use crate::client::common::tests::setup_connect;
     use crate::market_data::realtime::Bar;
     use crate::messages::OutgoingMessages;
-    use crate::subscriptions::ResponseContext;
+    use crate::subscriptions::DecoderContext;
 
     fn create_test_client() -> (Client, MockGateway) {
         let gateway = setup_connect();
@@ -409,10 +404,10 @@ mod tests {
     #[test]
     fn test_subscription_builder_with_context() {
         let (client, _gateway) = create_test_client();
-        let context = ResponseContext {
-            is_smart_depth: true,
-            request_type: Some(OutgoingMessages::RequestMarketData),
-        };
+        let context = client
+            .decoder_context()
+            .with_smart_depth(true)
+            .with_request_type(OutgoingMessages::RequestMarketData);
         let builder: SubscriptionBuilder<Bar> = SubscriptionBuilder::new(&client).with_context(context.clone());
         assert_eq!(builder.context, context);
     }
@@ -585,10 +580,9 @@ mod tests {
             }
 
             if let Some(request_type) = tc.set_request_type {
-                let context = ResponseContext {
-                    is_smart_depth: builder.context.is_smart_depth,
-                    request_type: Some(request_type),
-                };
+                let context = DecoderContext::new(builder.context.server_version, builder.context.time_zone)
+                    .with_smart_depth(builder.context.is_smart_depth)
+                    .with_request_type(request_type);
                 builder = builder.with_context(context);
             }
 

@@ -7,24 +7,23 @@ use crate::market_data::realtime;
 use crate::messages::OutgoingMessages;
 #[cfg(not(feature = "sync"))]
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
-use crate::subscriptions::ResponseContext;
-#[cfg(not(feature = "sync"))]
-use crate::subscriptions::StreamDecoder;
 use crate::subscriptions::Subscription;
+#[cfg(not(feature = "sync"))]
+use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::{server_versions, Client, Error};
 
 #[cfg(not(feature = "sync"))]
 impl StreamDecoder<NewsBulletin> for NewsBulletin {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::NewsBulletins];
 
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<NewsBulletin, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<NewsBulletin, Error> {
         match message.message_type() {
             IncomingMessages::NewsBulletins => Ok(decoders::decode_news_bulletin(message.clone())?),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
         encoders::encode_cancel_news_bulletin()
     }
 }
@@ -37,7 +36,7 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
         IncomingMessages::TickNews,
     ];
 
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<NewsArticle, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<NewsArticle, Error> {
         match message.message_type() {
             IncomingMessages::HistoricalNews => Ok(decoders::decode_historical_news(None, message.clone())?),
             IncomingMessages::HistoricalNewsEnd => Err(Error::EndOfStream),
@@ -46,7 +45,7 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
         // News articles can come from market data subscriptions, so use the appropriate cancel
         if context.and_then(|c| c.request_type) == Some(OutgoingMessages::RequestMarketData) {
             let request_id = request_id.expect("Request ID required to encode cancel market data");
@@ -79,12 +78,11 @@ pub(crate) async fn news_bulletins(client: &Client, all_messages: bool) -> Resul
 
     Ok(Subscription::new_from_internal::<NewsBulletin>(
         internal_subscription,
-        client.server_version(),
         client.message_bus.clone(),
         None,
         None,
         Some(OutgoingMessages::RequestNewsBulletins),
-        Default::default(),
+        client.decoder_context(),
     ))
 }
 
@@ -113,12 +111,11 @@ pub(crate) async fn historical_news(
 
     Ok(Subscription::new_from_internal::<NewsArticle>(
         internal_subscription,
-        client.server_version(),
         client.message_bus.clone(),
         Some(request_id),
         None,
         None,
-        Default::default(),
+        client.decoder_context(),
     ))
 }
 
@@ -159,15 +156,11 @@ pub(crate) async fn contract_news(client: &Client, contract: &Contract, provider
 
     Ok(Subscription::new_from_internal::<NewsArticle>(
         internal_subscription,
-        client.server_version(),
         client.message_bus.clone(),
         Some(request_id),
         None,
         None,
-        ResponseContext {
-            request_type: Some(OutgoingMessages::RequestMarketData),
-            ..Default::default()
-        },
+        client.decoder_context().with_request_type(OutgoingMessages::RequestMarketData),
     ))
 }
 
@@ -183,15 +176,11 @@ pub(crate) async fn broad_tape_news(client: &Client, provider_code: &str) -> Res
 
     Ok(Subscription::new_from_internal::<NewsArticle>(
         internal_subscription,
-        client.server_version(),
         client.message_bus.clone(),
         Some(request_id),
         None,
         None,
-        ResponseContext {
-            request_type: Some(OutgoingMessages::RequestMarketData),
-            ..Default::default()
-        },
+        client.decoder_context().with_request_type(OutgoingMessages::RequestMarketData),
     ))
 }
 
