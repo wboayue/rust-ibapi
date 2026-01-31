@@ -154,6 +154,16 @@ impl Client {
         self.connection_time
     }
 
+    /// Returns the server's time zone
+    pub fn time_zone(&self) -> Option<&'static Tz> {
+        self.time_zone
+    }
+
+    /// Returns a decoder context for this client
+    pub(crate) fn decoder_context(&self) -> crate::subscriptions::DecoderContext {
+        crate::subscriptions::DecoderContext::new(self.server_version, self.time_zone)
+    }
+
     /// Returns true if the client is currently connected to TWS/IB Gateway.
     ///
     /// This method checks if the underlying connection to TWS or IB Gateway is active.

@@ -143,7 +143,7 @@ pub async fn calculate_option_price(
     let mut subscription = builder.send_raw(message).await?;
 
     match subscription.next().await {
-        Some(Ok(mut message)) => OptionComputation::decode(client.server_version(), &mut message),
+        Some(Ok(mut message)) => OptionComputation::decode(&client.decoder_context(), &mut message),
         Some(Err(e)) => Err(e),
         None => Err(Error::Simple("no data for option calculation".into())),
     }
@@ -169,7 +169,7 @@ pub async fn calculate_implied_volatility(
     let mut subscription = builder.send_raw(message).await?;
 
     match subscription.next().await {
-        Some(Ok(mut message)) => OptionComputation::decode(client.server_version(), &mut message),
+        Some(Ok(mut message)) => OptionComputation::decode(&client.decoder_context(), &mut message),
         Some(Err(e)) => Err(e),
         None => Err(Error::Simple("no data for option calculation".into())),
     }
@@ -196,7 +196,7 @@ mod tests {
     use crate::messages::ResponseMessage;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
-    use crate::subscriptions::{ResponseContext, StreamDecoder};
+    use crate::subscriptions::{DecoderContext, StreamDecoder};
     use std::sync::{Arc, RwLock};
 
     #[tokio::test]
@@ -398,14 +398,14 @@ mod tests {
 
             match &test_case.expected_result {
                 StreamDecoderResult::OptionComputation { price, delta } => {
-                    let result = OptionComputation::decode(server_versions::SIZE_RULES, &mut message);
+                    let result = OptionComputation::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &mut message);
                     assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
                     let computation = result.unwrap();
                     assert_eq!(computation.option_price, Some(*price), "Test '{}' price mismatch", test_case.name);
                     assert_eq!(computation.delta, Some(*delta), "Test '{}' delta mismatch", test_case.name);
                 }
                 StreamDecoderResult::OptionChain { exchange, underlying_conid } => {
-                    let result = OptionChain::decode(server_versions::SIZE_RULES, &mut message);
+                    let result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &mut message);
                     assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
                     let chain = result.unwrap();
                     assert_eq!(chain.exchange, *exchange, "Test '{}' exchange mismatch", test_case.name);
@@ -419,7 +419,7 @@ mod tests {
                     match test_case.message {
                         msg if msg.starts_with("76") => {
                             // OptionChain end of stream
-                            let result = OptionChain::decode(server_versions::SIZE_RULES, &mut message);
+                            let result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &mut message);
                             assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
                             assert!(
                                 format!("{:?}", result.err()).contains(expected_error),
@@ -429,8 +429,8 @@ mod tests {
                         }
                         _ => {
                             // Try both decoders
-                            let opt_result = OptionComputation::decode(server_versions::SIZE_RULES, &mut message.clone());
-                            let chain_result = OptionChain::decode(server_versions::SIZE_RULES, &mut message);
+                            let opt_result = OptionComputation::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &mut message.clone());
+                            let chain_result = OptionChain::decode(&DecoderContext::new(server_versions::SIZE_RULES, None), &mut message);
                             assert!(
                                 opt_result.is_err() && chain_result.is_err(),
                                 "Test '{}' should have failed",
@@ -446,10 +446,7 @@ mod tests {
     #[tokio::test]
     async fn test_cancel_messages() {
         for test_case in cancel_message_test_cases() {
-            let context = test_case.request_type.map(|rt| ResponseContext {
-                request_type: Some(rt),
-                is_smart_depth: false,
-            });
+            let context = test_case.request_type.map(|rt| DecoderContext::default().with_request_type(rt));
 
             let result = match test_case.decoder_type {
                 "OptionComputation" => OptionComputation::cancel_message(server_versions::SIZE_RULES, test_case.request_id, context.as_ref()),

@@ -28,7 +28,7 @@ pub use r#async::Client;
 pub use sync::Client;
 
 #[cfg(feature = "sync")]
-pub(crate) use crate::subscriptions::{ResponseContext, StreamDecoder};
+pub(crate) use crate::subscriptions::StreamDecoder;
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
 pub use crate::subscriptions::sync::Subscription;

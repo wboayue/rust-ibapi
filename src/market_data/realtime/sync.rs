@@ -1,7 +1,6 @@
 use log::debug;
 
 use crate::client::blocking::{ClientRequestBuilders, Subscription};
-use crate::client::ResponseContext;
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::orders::TagValue;
@@ -127,10 +126,7 @@ pub(crate) fn market_depth(
 
     builder.send_with_context(
         request,
-        ResponseContext {
-            is_smart_depth,
-            ..Default::default()
-        },
+        client.decoder_context().with_smart_depth(is_smart_depth),
     )
 }
 

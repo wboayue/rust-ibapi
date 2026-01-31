@@ -2,7 +2,7 @@
 
 use crate::common::error_helpers;
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
-use crate::subscriptions::{ResponseContext, StreamDecoder};
+use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 
 use super::{decoders, encoders};
@@ -27,14 +27,14 @@ impl DisplayGroupUpdate {
 impl StreamDecoder<DisplayGroupUpdate> for DisplayGroupUpdate {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::DisplayGroupUpdated];
 
-    fn decode(_server_version: i32, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::DisplayGroupUpdated => decoders::decode_display_group_updated(message),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&ResponseContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "unsubscribe from group events")?;
         encoders::encode_unsubscribe_from_group_events(request_id)
     }
@@ -49,11 +49,15 @@ mod tests {
         ResponseMessage::from(&raw)
     }
 
+    fn test_context() -> DecoderContext {
+        DecoderContext::new(176, None)
+    }
+
     #[test]
     fn test_decode_display_group_update() {
         let mut message = make_response(&["68", "1", "9000", "265598@SMART"]);
 
-        let result = DisplayGroupUpdate::decode(176, &mut message).expect("decoding failed");
+        let result = DisplayGroupUpdate::decode(&test_context(), &mut message).expect("decoding failed");
 
         assert_eq!(result.contract_info, "265598@SMART");
     }
@@ -62,7 +66,7 @@ mod tests {
     fn test_decode_display_group_update_empty() {
         let mut message = make_response(&["68", "1", "9000"]);
 
-        let result = DisplayGroupUpdate::decode(176, &mut message).expect("decoding failed");
+        let result = DisplayGroupUpdate::decode(&test_context(), &mut message).expect("decoding failed");
 
         assert_eq!(result.contract_info, "");
     }
@@ -71,7 +75,7 @@ mod tests {
     fn test_decode_wrong_message_type() {
         let mut message = make_response(&["67", "1", "9000", "data"]);
 
-        let result = DisplayGroupUpdate::decode(176, &mut message);
+        let result = DisplayGroupUpdate::decode(&test_context(), &mut message);
 
         assert!(result.is_err());
     }
