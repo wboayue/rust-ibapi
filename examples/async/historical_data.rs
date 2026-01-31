@@ -275,9 +275,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         bar.close
                     );
                 }
-            }
-            HistoricalBarUpdate::HistoricalEnd => {
-                println!("Initial historical data complete. Now streaming updates...");
+                println!("Now streaming updates...");
             }
             HistoricalBarUpdate::Update(bar) => {
                 println!(
