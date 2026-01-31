@@ -1,6 +1,7 @@
 use log::{debug, warn};
 use std::collections::VecDeque;
 use time::OffsetDateTime;
+use time_tz::Tz;
 
 use crate::client::ClientRequestBuilders;
 use crate::contracts::Contract;
@@ -10,7 +11,9 @@ use crate::transport::AsyncInternalSubscription;
 use crate::{Client, Error, MAX_RETRIES};
 
 use super::common::{decoders, encoders};
-use super::{BarSize, Duration, HistogramEntry, HistoricalData, Schedule, TickBidAsk, TickDecoder, TickLast, TickMidpoint, WhatToShow};
+use super::{
+    BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, Schedule, TickBidAsk, TickDecoder, TickLast, TickMidpoint, WhatToShow,
+};
 use crate::market_data::TradingHours;
 
 // === Public API Functions ===
@@ -320,6 +323,200 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
 
     fn clear_error(&mut self) {
         self.error = None;
+    }
+}
+
+// === Historical Data Streaming with keepUpToDate ===
+
+/// Requests historical data for a contract with optional streaming updates.
+///
+/// When `keep_up_to_date` is `true`, this function requests historical bars and then
+/// continues to receive streaming updates for the current (incomplete) bar. IBKR sends
+/// updates approximately every 4-6 seconds until the bar completes, at which point a
+/// new bar begins.
+///
+/// When `keep_up_to_date` is `false`, only the initial historical data is returned
+/// and the subscription ends after delivering the data.
+///
+/// **Important IBKR behavior (when keepUpToDate=true):**
+/// - The same timestamp bar is sent multiple times as it builds (with updated OHLCV)
+/// - When a NEW timestamp appears, the previous bar is considered complete
+/// - Supported `what_to_show` values: Trades, Midpoint, Bid, Ask only
+///
+/// # Arguments
+/// * `client` - The IBKR client connection
+/// * `contract` - The contract to request data for
+/// * `duration` - How far back to request initial historical data
+/// * `bar_size` - The bar size (e.g., Min15 for 15-minute bars)
+/// * `what_to_show` - The data type (Trades, Midpoint, Bid, or Ask)
+/// * `trading_hours` - Whether to use regular trading hours only
+/// * `keep_up_to_date` - If true, continue receiving streaming updates after initial data
+///
+/// # Returns
+/// A `HistoricalDataStreamingSubscription` that yields `HistoricalBarUpdate` values
+///
+/// # Example
+/// ```ignore
+/// let mut subscription = historical_data_streaming(
+///     &client,
+///     &contract,
+///     Duration::days(1),
+///     BarSize::Min15,
+///     Some(WhatToShow::Trades),
+///     TradingHours::Regular,
+///     true,  // keep_up_to_date
+/// ).await?;
+///
+/// while let Some(update) = subscription.next().await {
+///     match update {
+///         HistoricalBarUpdate::Historical(data) => {
+///             println!("Received {} historical bars", data.bars.len());
+///         }
+///         HistoricalBarUpdate::Update(bar) => {
+///             println!("Bar update: {} close={}", bar.date, bar.close);
+///         }
+///         HistoricalBarUpdate::HistoricalEnd => {
+///             println!("Initial historical data complete, now streaming");
+///         }
+///     }
+/// }
+/// ```
+///
+/// # See Also
+/// * [IBKR Campus - keepUpToDate](https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/#hist-keepUp-date)
+pub async fn historical_data_streaming(
+    client: &Client,
+    contract: &Contract,
+    duration: Duration,
+    bar_size: BarSize,
+    what_to_show: Option<WhatToShow>,
+    trading_hours: TradingHours,
+    keep_up_to_date: bool,
+) -> Result<HistoricalDataStreamingSubscription, Error> {
+    if !contract.trading_class.is_empty() || contract.contract_id > 0 {
+        check_version(client.server_version(), Features::TRADING_CLASS)?;
+    }
+
+    // Note: end_date must be None when keepUpToDate=true (IBKR requirement)
+    let builder = client.request();
+    let request = encoders::encode_request_historical_data(
+        client.server_version(),
+        builder.request_id(),
+        contract,
+        None, // end_date must be None for keepUpToDate
+        duration,
+        bar_size,
+        what_to_show,
+        trading_hours.use_rth(),
+        keep_up_to_date,
+        Vec::<crate::contracts::TagValue>::default(),
+    )?;
+
+    let subscription = builder.send_raw(request).await?;
+
+    // Get the timezone directly to avoid lifetime issues
+    // time_zone(client) returns a reference tied to client's lifetime,
+    // but we need a 'static reference for the subscription struct
+    let tz: &'static Tz = client.time_zone.unwrap_or_else(|| {
+        warn!("server timezone unknown. assuming UTC, but that may be incorrect!");
+        time_tz::timezones::db::UTC
+    });
+
+    Ok(HistoricalDataStreamingSubscription::new(subscription, client.server_version(), tz))
+}
+
+/// Async subscription for streaming historical data with keepUpToDate=true.
+///
+/// This subscription first yields the initial historical bars, then continues
+/// to yield streaming updates for the current bar as it builds.
+pub struct HistoricalDataStreamingSubscription {
+    messages: AsyncInternalSubscription,
+    server_version: i32,
+    time_zone: &'static Tz,
+    pending_end: bool,
+    error: Option<Error>,
+}
+
+impl HistoricalDataStreamingSubscription {
+    fn new(messages: AsyncInternalSubscription, server_version: i32, time_zone: &'static Tz) -> Self {
+        Self {
+            messages,
+            server_version,
+            time_zone,
+            pending_end: false,
+            error: None,
+        }
+    }
+
+    /// Get the next update from the streaming subscription.
+    ///
+    /// Returns:
+    /// - `Some(HistoricalBarUpdate::Historical(data))` - Initial batch of historical bars
+    /// - `Some(HistoricalBarUpdate::HistoricalEnd)` - End of initial historical data
+    /// - `Some(HistoricalBarUpdate::Update(bar))` - Streaming bar update
+    /// - `None` - Subscription ended (connection closed or error)
+    pub async fn next(&mut self) -> Option<HistoricalBarUpdate> {
+        // Emit HistoricalEnd after Historical data was returned
+        if self.pending_end {
+            self.pending_end = false;
+            return Some(HistoricalBarUpdate::HistoricalEnd);
+        }
+
+        loop {
+            match self.messages.next().await {
+                Some(Ok(mut message)) => {
+                    match message.message_type() {
+                        IncomingMessages::HistoricalData => {
+                            // Initial historical data batch
+                            match decoders::decode_historical_data(self.server_version, self.time_zone, &mut message) {
+                                Ok(data) => {
+                                    self.pending_end = true;
+                                    return Some(HistoricalBarUpdate::Historical(data));
+                                }
+                                Err(e) => {
+                                    self.error = Some(e);
+                                    return None;
+                                }
+                            }
+                        }
+                        IncomingMessages::HistoricalDataUpdate => {
+                            // Streaming bar update
+                            match decoders::decode_historical_data_update(self.time_zone, &mut message) {
+                                Ok(bar) => {
+                                    return Some(HistoricalBarUpdate::Update(bar));
+                                }
+                                Err(e) => {
+                                    self.error = Some(e);
+                                    return None;
+                                }
+                            }
+                        }
+                        IncomingMessages::Error => {
+                            self.error = Some(Error::from(message));
+                            return None;
+                        }
+                        _ => {
+                            // Skip unexpected messages
+                            debug!("unexpected message in streaming subscription: {:?}", message.message_type());
+                            continue;
+                        }
+                    }
+                }
+                Some(Err(e)) => {
+                    self.error = Some(e);
+                    return None;
+                }
+                None => {
+                    // Channel closed
+                    return None;
+                }
+            }
+        }
+    }
+
+    /// Returns the last error that occurred, if any.
+    pub fn error(&self) -> Option<&Error> {
+        self.error.as_ref()
     }
 }
 
@@ -948,5 +1145,171 @@ mod tests {
 
         let tz = time_zone(&client);
         assert_eq!(tz, time_tz::timezones::db::UTC, "Should fallback to UTC when timezone not set");
+    }
+
+    #[tokio::test]
+    async fn test_historical_data_streaming_with_updates() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![
+                // Initial historical data (message type 17)
+                "17|9000|20230315  09:30:00|20230315  10:30:00|1|1678886400|185.50|186.00|185.25|185.75|1000|185.70|100|".to_owned(),
+                // Streaming update (message type 90)
+                "90|9000|-1|1678890000|185.80|186.10|185.60|185.90|500|185.85|50|".to_owned(),
+            ],
+        });
+
+        let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        client.time_zone = Some(time_tz::timezones::db::UTC);
+
+        let contract = Contract::stock("SPY").build();
+
+        let mut subscription = historical_data_streaming(
+            &client,
+            &contract,
+            Duration::days(1),
+            BarSize::Hour,
+            Some(WhatToShow::Trades),
+            TradingHours::Regular,
+            true,
+        )
+        .await
+        .expect("streaming request should succeed");
+
+        // First: receive initial historical data
+        let update1 = subscription.next().await;
+        assert!(update1.is_some(), "Should receive initial historical data");
+        match update1.unwrap() {
+            HistoricalBarUpdate::Historical(data) => {
+                assert_eq!(data.bars.len(), 1, "Should have 1 initial bar");
+                assert_eq!(data.bars[0].open, 185.50, "Wrong open price");
+            }
+            _ => panic!("Expected Historical variant"),
+        }
+
+        // Second: receive HistoricalEnd marker
+        let update2 = subscription.next().await;
+        assert!(update2.is_some(), "Should receive HistoricalEnd");
+        match update2.unwrap() {
+            HistoricalBarUpdate::HistoricalEnd => {}
+            _ => panic!("Expected HistoricalEnd variant"),
+        }
+
+        // Third: receive streaming update
+        let update3 = subscription.next().await;
+        assert!(update3.is_some(), "Should receive streaming update");
+        match update3.unwrap() {
+            HistoricalBarUpdate::Update(bar) => {
+                assert_eq!(bar.open, 185.80, "Wrong open price in update");
+                assert_eq!(bar.high, 186.10, "Wrong high price in update");
+                assert_eq!(bar.close, 185.90, "Wrong close price in update");
+            }
+            _ => panic!("Expected Update variant"),
+        }
+
+        // Verify request message includes keepUpToDate=true
+        let request_messages = message_bus.request_messages.read().unwrap();
+        assert_eq!(request_messages.len(), 1, "Should send one request");
+        // The keepUpToDate field should be "1" (true)
+        assert!(
+            request_messages[0].fields.contains(&"1".to_string()),
+            "Request should have keepUpToDate=true"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_historical_data_streaming_keep_up_to_date_false() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![
+                // Initial historical data only
+                "17|9000|20230315  09:30:00|20230315  10:30:00|1|1678886400|185.50|186.00|185.25|185.75|1000|185.70|100|".to_owned(),
+            ],
+        });
+
+        let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+        client.time_zone = Some(time_tz::timezones::db::UTC);
+
+        let contract = Contract::stock("SPY").build();
+
+        let mut subscription = historical_data_streaming(
+            &client,
+            &contract,
+            Duration::days(1),
+            BarSize::Hour,
+            Some(WhatToShow::Trades),
+            TradingHours::Regular,
+            false, // keep_up_to_date = false
+        )
+        .await
+        .expect("streaming request should succeed");
+
+        // Receive initial historical data
+        let update1 = subscription.next().await;
+        assert!(update1.is_some(), "Should receive initial historical data");
+        match update1.unwrap() {
+            HistoricalBarUpdate::Historical(data) => {
+                assert_eq!(data.bars.len(), 1, "Should have 1 initial bar");
+            }
+            _ => panic!("Expected Historical variant"),
+        }
+
+        // Receive HistoricalEnd marker
+        let update2 = subscription.next().await;
+        assert!(update2.is_some(), "Should receive HistoricalEnd");
+        match update2.unwrap() {
+            HistoricalBarUpdate::HistoricalEnd => {}
+            _ => panic!("Expected HistoricalEnd variant"),
+        }
+
+        // Verify request message includes keepUpToDate=false
+        let request_messages = message_bus.request_messages.read().unwrap();
+        assert_eq!(request_messages.len(), 1, "Should send one request");
+        // Find the keepUpToDate field - it should be "0" (false)
+        // The field order in historical data request puts keepUpToDate near the end
+        let request = &request_messages[0];
+        // Check the last few fields for the "0" value
+        let fields_str = request.fields.join("|");
+        assert!(fields_str.contains("|0|"), "Request should have keepUpToDate=false (0)");
+    }
+
+    #[tokio::test]
+    async fn test_historical_data_streaming_error_response() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![
+                // Error response
+                "4|2|9000|162|Historical Market Data Service error message:No market data permissions.|".to_owned(),
+            ],
+        });
+
+        let mut client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+        client.time_zone = Some(time_tz::timezones::db::UTC);
+
+        let contract = Contract::stock("SPY").build();
+
+        let mut subscription = historical_data_streaming(
+            &client,
+            &contract,
+            Duration::days(1),
+            BarSize::Hour,
+            Some(WhatToShow::Trades),
+            TradingHours::Regular,
+            true,
+        )
+        .await
+        .expect("streaming request should succeed");
+
+        // Should return None due to error
+        let update = subscription.next().await;
+        assert!(update.is_none(), "Should return None on error");
+
+        // Error should be accessible
+        let error = subscription.error();
+        assert!(error.is_some(), "Error should be stored");
+        assert!(
+            error.unwrap().to_string().contains("No market data permissions"),
+            "Error should contain the message"
+        );
     }
 }

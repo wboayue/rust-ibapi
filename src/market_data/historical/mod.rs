@@ -326,6 +326,23 @@ pub struct HistoricalData {
     pub bars: Vec<Bar>,
 }
 
+/// Update from historical data streaming with keepUpToDate=true.
+///
+/// When requesting historical data with `keepUpToDate=true`, IBKR first sends
+/// the historical bars, then continues streaming updates for the current bar.
+/// The current bar is updated approximately every 4-6 seconds until a new
+/// bar begins.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum HistoricalBarUpdate {
+    /// Initial batch of historical bars.
+    Historical(HistoricalData),
+    /// Real-time update of the current (incomplete) bar.
+    /// Note: Multiple updates with the same timestamp will be sent as the bar builds.
+    Update(Bar),
+    /// Signals the end of the initial historical data batch.
+    HistoricalEnd,
+}
+
 /// Trading schedule describing sessions for a contract.
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Schedule {
@@ -563,7 +580,7 @@ impl TickDecoder<TickMidpoint> for TickMidpoint {
 pub use sync::{TickSubscription, TickSubscriptionIter, TickSubscriptionOwnedIter, TickSubscriptionTimeoutIter, TickSubscriptionTryIter};
 
 #[cfg(feature = "async")]
-pub use r#async::TickSubscription;
+pub use r#async::{historical_data_streaming, HistoricalDataStreamingSubscription, TickSubscription};
 
 #[cfg(test)]
 mod tests {
