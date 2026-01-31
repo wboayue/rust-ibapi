@@ -1059,8 +1059,8 @@ impl Client {
     /// ```no_run
     /// use ibapi::contracts::Contract;
     /// use ibapi::Client;
-    /// use ibapi::market_data::historical::{ToDuration, BarSize, WhatToShow, HistoricalBarUpdate};
-    /// use ibapi::market_data::TradingHours;
+    /// use ibapi::market_data::historical::{ToDuration, HistoricalBarUpdate};
+    /// use ibapi::prelude::{HistoricalBarSize, HistoricalWhatToShow, TradingHours};
     ///
     /// #[tokio::main]
     /// async fn main() {
@@ -1068,7 +1068,10 @@ impl Client {
     ///     let contract = Contract::stock("SPY").build();
     ///
     ///     let mut subscription = client
-    ///         .historical_data_streaming(&contract, 3.days(), BarSize::Min15, Some(WhatToShow::Trades), TradingHours::Extended, true)
+    ///         .historical_data_streaming(
+    ///             &contract, 3.days(), HistoricalBarSize::Min15,
+    ///             Some(HistoricalWhatToShow::Trades), TradingHours::Extended, true
+    ///         )
     ///         .await
     ///         .expect("streaming request failed");
     ///
@@ -1076,7 +1079,6 @@ impl Client {
     ///         match update {
     ///             HistoricalBarUpdate::Historical(data) => println!("Initial bars: {}", data.bars.len()),
     ///             HistoricalBarUpdate::Update(bar) => println!("Streaming update: {:?}", bar),
-    ///             HistoricalBarUpdate::HistoricalEnd => println!("Initial data complete"),
     ///         }
     ///     }
     /// }

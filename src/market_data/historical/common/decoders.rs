@@ -238,7 +238,6 @@ pub(crate) fn decode_histogram_data(message: &mut ResponseMessage) -> Result<Vec
 /// - volume
 /// - wap
 /// - count
-#[cfg(feature = "async")]
 pub(crate) fn decode_historical_data_update(time_zone: &Tz, message: &mut ResponseMessage) -> Result<Bar, Error> {
     message.skip(); // message type
     message.skip(); // request_id
@@ -482,7 +481,6 @@ mod tests {
         assert_eq!(ticks[23].size, 0, "ticks[0].size");
     }
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_decode_historical_data_update() {
         let time_zone: &Tz = time_tz::timezones::db::america::NEW_YORK;
@@ -502,7 +500,6 @@ mod tests {
         assert_eq!(bar.count, 150, "bar.count");
     }
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_decode_historical_data_update_without_count() {
         let time_zone: &Tz = time_tz::timezones::db::america::NEW_YORK;

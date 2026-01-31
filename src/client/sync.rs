@@ -1114,6 +1114,58 @@ impl Client {
         historical::blocking::historical_data(self, contract, interval_end, duration, bar_size, Some(what_to_show), trading_hours)
     }
 
+    /// Requests historical data with optional streaming updates.
+    ///
+    /// This method returns a subscription that first yields the initial historical bars.
+    /// When `keep_up_to_date` is `true`, it continues to yield streaming updates for
+    /// the current bar as it builds. IBKR sends updated bars every ~4-6 seconds until
+    /// the bar completes.
+    ///
+    /// # Arguments
+    /// * `contract` - Contract object that is subject of query
+    /// * `duration` - The amount of time for which the data needs to be retrieved
+    /// * `bar_size` - The bar size (resolution)
+    /// * `what_to_show` - The type of data to retrieve (Trades, MidPoint, etc.)
+    /// * `trading_hours` - Regular trading hours only, or include extended hours
+    /// * `keep_up_to_date` - If true, continue receiving streaming updates after initial data
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::market_data::historical::{ToDuration, HistoricalBarUpdate};
+    /// use ibapi::prelude::{HistoricalBarSize, HistoricalWhatToShow, TradingHours};
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("SPY").build();
+    ///
+    /// let subscription = client
+    ///     .historical_data_streaming(
+    ///         &contract, 3.days(), HistoricalBarSize::Min15,
+    ///         Some(HistoricalWhatToShow::Trades), TradingHours::Extended, true
+    ///     )
+    ///     .expect("streaming request failed");
+    ///
+    /// while let Some(update) = subscription.next() {
+    ///     match update {
+    ///         HistoricalBarUpdate::Historical(data) => println!("Initial bars: {}", data.bars.len()),
+    ///         HistoricalBarUpdate::Update(bar) => println!("Streaming update: {:?}", bar),
+    ///     }
+    /// }
+    /// ```
+    pub fn historical_data_streaming(
+        &self,
+        contract: &Contract,
+        duration: historical::Duration,
+        bar_size: historical::BarSize,
+        what_to_show: Option<historical::WhatToShow>,
+        trading_hours: TradingHours,
+        keep_up_to_date: bool,
+    ) -> Result<historical::blocking::HistoricalDataStreamingSubscription, Error> {
+        historical::blocking::historical_data_streaming(self, contract, duration, bar_size, what_to_show, trading_hours, keep_up_to_date)
+    }
+
     /// Requests [Schedule](historical::Schedule) for an interval of given duration
     /// ending at specified date.
     ///

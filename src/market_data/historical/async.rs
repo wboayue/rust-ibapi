@@ -356,7 +356,18 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
 /// A `HistoricalDataStreamingSubscription` that yields `HistoricalBarUpdate` values
 ///
 /// # Example
-/// ```ignore
+/// ```no_run
+/// use ibapi::Client;
+/// use ibapi::contracts::Contract;
+/// use ibapi::market_data::historical::{
+///     BarSize, Duration, HistoricalBarUpdate, WhatToShow, historical_data_streaming
+/// };
+/// use ibapi::market_data::TradingHours;
+///
+/// # async fn example() -> Result<(), ibapi::Error> {
+/// let client = Client::connect("127.0.0.1:4002", 100).await?;
+/// let contract = Contract::stock("SPY").build();
+///
 /// let mut subscription = historical_data_streaming(
 ///     &client,
 ///     &contract,
@@ -375,11 +386,10 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
 ///         HistoricalBarUpdate::Update(bar) => {
 ///             println!("Bar update: {} close={}", bar.date, bar.close);
 ///         }
-///         HistoricalBarUpdate::HistoricalEnd => {
-///             println!("Initial historical data complete, now streaming");
-///         }
 ///     }
 /// }
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// # See Also
@@ -427,13 +437,12 @@ pub async fn historical_data_streaming(
 
 /// Async subscription for streaming historical data with keepUpToDate=true.
 ///
-/// This subscription first yields the initial historical bars, then continues
-/// to yield streaming updates for the current bar as it builds.
+/// This subscription first yields the initial historical bars as a `Historical` variant,
+/// then continues to yield streaming updates for the current bar as `Update` variants.
 pub struct HistoricalDataStreamingSubscription {
     messages: AsyncInternalSubscription,
     server_version: i32,
     time_zone: &'static Tz,
-    pending_end: bool,
     error: Option<Error>,
 }
 
@@ -443,7 +452,6 @@ impl HistoricalDataStreamingSubscription {
             messages,
             server_version,
             time_zone,
-            pending_end: false,
             error: None,
         }
     }
@@ -451,17 +459,10 @@ impl HistoricalDataStreamingSubscription {
     /// Get the next update from the streaming subscription.
     ///
     /// Returns:
-    /// - `Some(HistoricalBarUpdate::Historical(data))` - Initial batch of historical bars
-    /// - `Some(HistoricalBarUpdate::HistoricalEnd)` - End of initial historical data
+    /// - `Some(HistoricalBarUpdate::Historical(data))` - Initial batch of historical bars (always first)
     /// - `Some(HistoricalBarUpdate::Update(bar))` - Streaming bar update
     /// - `None` - Subscription ended (connection closed or error)
     pub async fn next(&mut self) -> Option<HistoricalBarUpdate> {
-        // Emit HistoricalEnd after Historical data was returned
-        if self.pending_end {
-            self.pending_end = false;
-            return Some(HistoricalBarUpdate::HistoricalEnd);
-        }
-
         loop {
             match self.messages.next().await {
                 Some(Ok(mut message)) => {
@@ -470,7 +471,6 @@ impl HistoricalDataStreamingSubscription {
                             // Initial historical data batch
                             match decoders::decode_historical_data(self.server_version, self.time_zone, &mut message) {
                                 Ok(data) => {
-                                    self.pending_end = true;
                                     return Some(HistoricalBarUpdate::Historical(data));
                                 }
                                 Err(e) => {
@@ -1187,18 +1187,10 @@ mod tests {
             _ => panic!("Expected Historical variant"),
         }
 
-        // Second: receive HistoricalEnd marker
+        // Second: receive streaming update
         let update2 = subscription.next().await;
-        assert!(update2.is_some(), "Should receive HistoricalEnd");
+        assert!(update2.is_some(), "Should receive streaming update");
         match update2.unwrap() {
-            HistoricalBarUpdate::HistoricalEnd => {}
-            _ => panic!("Expected HistoricalEnd variant"),
-        }
-
-        // Third: receive streaming update
-        let update3 = subscription.next().await;
-        assert!(update3.is_some(), "Should receive streaming update");
-        match update3.unwrap() {
             HistoricalBarUpdate::Update(bar) => {
                 assert_eq!(bar.open, 185.80, "Wrong open price in update");
                 assert_eq!(bar.high, 186.10, "Wrong high price in update");
@@ -1210,11 +1202,8 @@ mod tests {
         // Verify request message includes keepUpToDate=true
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request");
-        // The keepUpToDate field should be "1" (true)
-        assert!(
-            request_messages[0].fields.contains(&"1".to_string()),
-            "Request should have keepUpToDate=true"
-        );
+        // keepUpToDate is at field index 21 (for non-bag contracts)
+        assert_eq!(request_messages[0].fields[21], "1", "Request should have keepUpToDate=true at field[21]");
     }
 
     #[tokio::test]
@@ -1254,23 +1243,11 @@ mod tests {
             _ => panic!("Expected Historical variant"),
         }
 
-        // Receive HistoricalEnd marker
-        let update2 = subscription.next().await;
-        assert!(update2.is_some(), "Should receive HistoricalEnd");
-        match update2.unwrap() {
-            HistoricalBarUpdate::HistoricalEnd => {}
-            _ => panic!("Expected HistoricalEnd variant"),
-        }
-
         // Verify request message includes keepUpToDate=false
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request");
-        // Find the keepUpToDate field - it should be "0" (false)
-        // The field order in historical data request puts keepUpToDate near the end
-        let request = &request_messages[0];
-        // Check the last few fields for the "0" value
-        let fields_str = request.fields.join("|");
-        assert!(fields_str.contains("|0|"), "Request should have keepUpToDate=false (0)");
+        // keepUpToDate is at field index 21 (for non-bag contracts)
+        assert_eq!(request_messages[0].fields[21], "0", "Request should have keepUpToDate=false at field[21]");
     }
 
     #[tokio::test]
