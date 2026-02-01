@@ -488,6 +488,14 @@ pub(crate) fn encode_executions(server_version: i32, request_id: i32, filter: &E
     message.push_field(&filter.exchange);
     message.push_field(&filter.side);
 
+    if server_version >= server_versions::PARAMETRIZED_DAYS_OF_EXECUTIONS {
+        message.push_field(&filter.last_n_days);
+        message.push_field(&(filter.specific_dates.len() as i32));
+        for date in &filter.specific_dates {
+            message.push_field(date);
+        }
+    }
+
     Ok(message)
 }
 
