@@ -954,6 +954,7 @@ mod tests {
             security_type: "STK".to_owned(),
             exchange: "ISLAND".to_owned(),
             side: "BUY".to_owned(),
+            ..Default::default()
         };
         let results = client.executions(filter);
 

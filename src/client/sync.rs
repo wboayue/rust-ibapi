@@ -3426,6 +3426,7 @@ mod tests {
             security_type: "".to_string(), // Empty means all types
             exchange: "".to_string(),      // Empty means all exchanges
             side: "".to_string(),          // Empty means all sides
+            ..Default::default()
         };
 
         // Request executions

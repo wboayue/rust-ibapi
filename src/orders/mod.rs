@@ -1446,6 +1446,10 @@ pub struct ExecutionFilter {
     pub exchange: String,
     /// The Contract's side (BUY or SELL)
     pub side: String,
+    /// Filter executions from the last N days (0 = no filter).
+    pub last_n_days: i32,
+    /// Filter executions for specific dates (format: yyyymmdd, e.g., "20260130").
+    pub specific_dates: Vec<String>,
 }
 
 /// Enumerates possible results from querying an [Execution].

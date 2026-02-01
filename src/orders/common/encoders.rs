@@ -488,6 +488,14 @@ pub(crate) fn encode_executions(server_version: i32, request_id: i32, filter: &E
     message.push_field(&filter.exchange);
     message.push_field(&filter.side);
 
+    if server_version >= server_versions::PARAMETRIZED_DAYS_OF_EXECUTIONS {
+        message.push_field(&filter.last_n_days);
+        message.push_field(&(filter.specific_dates.len() as i32));
+        for date in &filter.specific_dates {
+            message.push_field(date);
+        }
+    }
+
     Ok(message)
 }
 
@@ -816,5 +824,72 @@ pub(crate) mod tests {
         assert_eq!(field_vec[3], "NASDAQ"); // exchange
         assert_eq!(field_vec[4], "0"); // is_more (false)
         assert_eq!(field_vec[5], "5.5"); // percent
+    }
+
+    #[test]
+    fn test_encode_executions_without_date_filter() {
+        let filter = ExecutionFilter {
+            client_id: Some(1),
+            account_code: "DU123456".to_string(),
+            time: "20260101 09:30:00".to_string(),
+            symbol: "AAPL".to_string(),
+            security_type: "STK".to_string(),
+            exchange: "SMART".to_string(),
+            side: "BUY".to_string(),
+            ..Default::default()
+        };
+
+        // Version below PARAMETRIZED_DAYS_OF_EXECUTIONS should not include date fields
+        let result = encode_executions(server_versions::WSH_EVENT_DATA_FILTERS_DATE, 9000, &filter).unwrap();
+        let fields = result.encode();
+        let field_vec: Vec<&str> = fields.split('\0').collect();
+
+        assert_eq!(field_vec[0], "7"); // RequestExecutions
+        assert_eq!(field_vec[1], "3"); // VERSION
+        assert_eq!(field_vec[2], "9000"); // request_id
+        assert_eq!(field_vec[3], "1"); // client_id
+        assert_eq!(field_vec[4], "DU123456"); // account_code
+        assert_eq!(field_vec[5], "20260101 09:30:00"); // time
+        assert_eq!(field_vec[6], "AAPL"); // symbol
+        assert_eq!(field_vec[7], "STK"); // security_type
+        assert_eq!(field_vec[8], "SMART"); // exchange
+        assert_eq!(field_vec[9], "BUY"); // side
+        assert_eq!(field_vec.len(), 11); // 10 fields + trailing empty
+    }
+
+    #[test]
+    fn test_encode_executions_with_date_filter() {
+        let filter = ExecutionFilter {
+            client_id: Some(1),
+            account_code: "DU123456".to_string(),
+            time: "".to_string(),
+            symbol: "".to_string(),
+            security_type: "".to_string(),
+            exchange: "".to_string(),
+            side: "".to_string(),
+            last_n_days: 7,
+            specific_dates: vec!["20260125".to_string(), "20260126".to_string()],
+        };
+
+        // Version at PARAMETRIZED_DAYS_OF_EXECUTIONS should include date fields
+        let result = encode_executions(server_versions::PARAMETRIZED_DAYS_OF_EXECUTIONS, 9000, &filter).unwrap();
+        let fields = result.encode();
+        let field_vec: Vec<&str> = fields.split('\0').collect();
+
+        assert_eq!(field_vec[0], "7"); // RequestExecutions
+        assert_eq!(field_vec[1], "3"); // VERSION
+        assert_eq!(field_vec[2], "9000"); // request_id
+        assert_eq!(field_vec[3], "1"); // client_id
+        assert_eq!(field_vec[4], "DU123456"); // account_code
+        assert_eq!(field_vec[5], ""); // time
+        assert_eq!(field_vec[6], ""); // symbol
+        assert_eq!(field_vec[7], ""); // security_type
+        assert_eq!(field_vec[8], ""); // exchange
+        assert_eq!(field_vec[9], ""); // side
+        assert_eq!(field_vec[10], "7"); // last_n_days
+        assert_eq!(field_vec[11], "2"); // specific_dates count
+        assert_eq!(field_vec[12], "20260125"); // specific_dates[0]
+        assert_eq!(field_vec[13], "20260126"); // specific_dates[1]
+        assert_eq!(field_vec.len(), 15); // 14 fields + trailing empty
     }
 }
