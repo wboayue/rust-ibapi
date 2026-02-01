@@ -65,7 +65,7 @@ impl Default for ConnectionHandler {
     fn default() -> Self {
         Self {
             min_version: 100,
-            max_version: server_versions::WSH_EVENT_DATA_FILTERS_DATE,
+            max_version: server_versions::PARAMETRIZED_DAYS_OF_EXECUTIONS,
         }
     }
 }
