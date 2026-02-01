@@ -822,6 +822,9 @@ mod tests {
         packet.push_field(&contract.security_id_type);
         packet.push_field(&contract.security_id);
 
+        // Server version 200 includes issuer_id (>= 176)
+        packet.push_field(&contract.issuer_id);
+
         Ok(packet)
     }
 
