@@ -24,6 +24,21 @@ pub(crate) fn encode_unsubscribe_from_group_events(request_id: i32) -> Result<Re
     Ok(message)
 }
 
+/// Encodes a request to update the contract displayed in a display group.
+///
+/// # Arguments
+/// * `request_id` - The request ID (should match the subscription request ID)
+/// * `contract_info` - Contract to display, format: "contractID@exchange" (e.g., "265598@SMART"),
+///   "none" for empty selection, or "combo" for combination contracts
+pub(crate) fn encode_update_display_group(request_id: i32, contract_info: &str) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+    message.push_field(&OutgoingMessages::UpdateDisplayGroup);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    message.push_field(&contract_info);
+    Ok(message)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -51,5 +66,29 @@ mod tests {
         assert_eq!(message[0], OutgoingMessages::UnsubscribeFromGroupEvents.to_field());
         assert_eq!(message[1], "1"); // version
         assert_eq!(message[2], request_id.to_field());
+    }
+
+    #[test]
+    fn test_encode_update_display_group() {
+        let request_id = 9000;
+        let contract_info = "265598@SMART";
+
+        let message = encode_update_display_group(request_id, contract_info).expect("encoding failed");
+
+        assert_eq!(message[0], OutgoingMessages::UpdateDisplayGroup.to_field());
+        assert_eq!(message[1], "1"); // version
+        assert_eq!(message[2], request_id.to_field());
+        assert_eq!(message[3], contract_info);
+    }
+
+    #[test]
+    fn test_encode_update_display_group_none() {
+        let request_id = 9000;
+        let contract_info = "none";
+
+        let message = encode_update_display_group(request_id, contract_info).expect("encoding failed");
+
+        assert_eq!(message[0], OutgoingMessages::UpdateDisplayGroup.to_field());
+        assert_eq!(message[3], "none");
     }
 }
