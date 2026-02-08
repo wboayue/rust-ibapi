@@ -79,6 +79,8 @@ pub enum BarSize {
     Min3,
     /// Five-minute bars.
     Min5,
+    /// Ten-minute bars.
+    Min10,
     /// Fifteen-minute bars.
     Min15,
     /// Twenty-minute bars.
@@ -115,6 +117,7 @@ impl Display for BarSize {
             Self::Min2 => write!(f, "2 mins"),
             Self::Min3 => write!(f, "3 mins"),
             Self::Min5 => write!(f, "5 mins"),
+            Self::Min10 => write!(f, "10 mins"),
             Self::Min15 => write!(f, "15 mins"),
             Self::Min20 => write!(f, "20 mins"),
             Self::Min30 => write!(f, "30 mins"),
@@ -144,6 +147,7 @@ impl FromStr for BarSize {
             "MIN2" => Ok(Self::Min2),
             "MIN3" => Ok(Self::Min3),
             "MIN5" => Ok(Self::Min5),
+            "MIN10" => Ok(Self::Min10),
             "MIN15" => Ok(Self::Min15),
             "MIN20" => Ok(Self::Min20),
             "MIN30" => Ok(Self::Min30),
@@ -599,6 +603,7 @@ mod tests {
         assert_eq!("2 mins", BarSize::Min2.to_string());
         assert_eq!("3 mins", BarSize::Min3.to_string());
         assert_eq!("5 mins", BarSize::Min5.to_string());
+        assert_eq!("10 mins", BarSize::Min10.to_string());
         assert_eq!("15 mins", BarSize::Min15.to_string());
         assert_eq!("20 mins", BarSize::Min20.to_string());
         assert_eq!("30 mins", BarSize::Min30.to_string());
@@ -623,6 +628,7 @@ mod tests {
         assert_eq!(BarSize::Min2, BarSize::from("MIN2"));
         assert_eq!(BarSize::Min3, BarSize::from("MIN3"));
         assert_eq!(BarSize::Min5, BarSize::from("MIN5"));
+        assert_eq!(BarSize::Min10, BarSize::from("MIN10"));
         assert_eq!(BarSize::Min15, BarSize::from("MIN15"));
         assert_eq!(BarSize::Min20, BarSize::from("MIN20"));
         assert_eq!(BarSize::Min30, BarSize::from("MIN30"));
