@@ -287,12 +287,19 @@ fn parse_schedule_date(text: &str) -> Result<Date, Error> {
 
 fn parse_bar_date(text: &str, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
     if text.len() == 8 {
+        // Format: YYYYMMDD
         let date_format = format_description!("[year][month][day]");
         let bar_date = Date::parse(text, date_format)?;
         let bar_date = bar_date.with_time(time!(00:00));
 
         Ok(bar_date.assume_timezone_utc(time_tz::timezones::db::UTC))
+    } else if text.len() > 8 && text.contains(' ') {
+        // Format: YYYYMMDD  HH:MM:SS (note: two spaces between date and time per IBKR format)
+        let datetime_format = format_description!("[year][month][day]  [hour]:[minute]:[second]");
+        let bar_datetime = PrimitiveDateTime::parse(text, datetime_format)?;
+        Ok(bar_datetime.assume_timezone(time_zone).unwrap())
     } else {
+        // Unix timestamp
         let timestamp: i64 = text.parse()?;
         let date_utc = OffsetDateTime::from_unix_timestamp(timestamp).unwrap();
         Ok(date_utc.to_timezone(time_zone))
