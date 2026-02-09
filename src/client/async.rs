@@ -22,7 +22,6 @@ use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::contracts::Contract;
 use crate::display_groups;
-use crate::display_groups::DisplayGroupUpdate;
 use crate::market_data::builder::MarketDataBuilder;
 use crate::market_data::TradingHours;
 use crate::orders::OrderBuilder;
@@ -603,49 +602,18 @@ impl Client {
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:7497", 100).await.expect("connection failed");
     ///
-    ///     let mut subscription = client.subscribe_to_group_events(1).await.expect("error subscribing to group events");
+    ///     let mut subscription = client.subscribe_to_group_events(1).await.expect("subscription failed");
+    ///
+    ///     // Update the displayed contract
+    ///     subscription.update("265598@SMART").await.expect("update failed");
     ///
     ///     while let Some(event) = subscription.next().await {
     ///         println!("Received group event: {:?}", event);
     ///     }
     /// }
     /// ```
-    pub async fn subscribe_to_group_events(&self, group_id: i32) -> Result<Subscription<DisplayGroupUpdate>, Error> {
+    pub async fn subscribe_to_group_events(&self, group_id: i32) -> Result<display_groups::DisplayGroupSubscription, Error> {
         display_groups::r#async::subscribe_to_group_events(self, group_id).await
-    }
-
-    /// Updates the contract displayed in a TWS display group.
-    ///
-    /// This function changes the contract shown in the specified display group within TWS.
-    /// You must first subscribe to the group using [`subscribe_to_group_events`](Self::subscribe_to_group_events)
-    /// before calling this function.
-    ///
-    /// # Arguments
-    /// * `request_id` - The request ID from the subscription (use `subscription.request_id()`)
-    /// * `contract_info` - Contract to display:
-    ///   - `"contractID@exchange"` for individual contracts (e.g., "265598@SMART")
-    ///   - `"none"` for empty selection
-    ///   - `"combo"` for combination contracts
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use ibapi::Client;
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let client = Client::connect("127.0.0.1:7497", 100).await.expect("connection failed");
-    ///
-    ///     // First subscribe to the display group
-    ///     let subscription = client.subscribe_to_group_events(1).await.expect("subscription failed");
-    ///     let request_id = subscription.request_id().expect("no request ID");
-    ///
-    ///     // Update the display group to show AAPL
-    ///     client.update_display_group(request_id, "265598@SMART").await.expect("update failed");
-    /// }
-    /// ```
-    pub async fn update_display_group(&self, request_id: i32, contract_info: &str) -> Result<(), Error> {
-        display_groups::r#async::update_display_group(self, request_id, contract_info).await
     }
 
     // === Market Data ===
