@@ -18,3 +18,15 @@ pub(crate) mod sync;
 pub(crate) use common::encoders;
 
 pub use common::DisplayGroupUpdate;
+
+#[cfg(feature = "sync")]
+/// Blocking display group helpers powered by the synchronous transport.
+pub mod blocking {
+    pub(crate) use super::sync::*;
+}
+
+#[cfg(all(feature = "sync", not(feature = "async")))]
+pub use sync::DisplayGroupSubscription;
+
+#[cfg(feature = "async")]
+pub use r#async::DisplayGroupSubscription;

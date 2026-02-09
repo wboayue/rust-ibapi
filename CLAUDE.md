@@ -101,3 +101,13 @@ For detailed information on any topic, refer to the linked documentation files a
 
 - DO NOT include "Generated with Claude Code" or similar attribution in commit messages
 - Keep commit messages focused on the technical changes and their purpose
+
+## Release Notes Guidelines
+
+Use this format for GitHub release notes:
+
+- Group changes under `## What's New` and `## Bug Fixes` headings as applicable
+- Each item gets an `### H3 heading` with short description and PR number (e.g., `### Feature name (#123)`)
+- One-sentence summary below the heading
+- A code sample showing typical usage in a fenced ```rust block
+- Order items by significance (most impactful first)

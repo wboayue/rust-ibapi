@@ -5,7 +5,6 @@
 //! subscriptions, and maintains the connection state.
 
 use std::fmt::Debug;
-use std::net::TcpStream;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -15,10 +14,9 @@ use time_tz::Tz;
 
 use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
-use crate::connection::common::StartupMessageCallback;
+use crate::connection::common::{ConnectionOptions, StartupMessageCallback};
 use crate::connection::{sync::Connection, ConnectionMetadata};
 use crate::contracts::{Contract, OptionComputation, SecurityType};
-use crate::display_groups::DisplayGroupUpdate;
 use crate::errors::Error;
 use crate::market_data::builder::MarketDataBuilder;
 use crate::market_data::historical::{self, HistogramEntry};
@@ -29,7 +27,7 @@ use crate::news::NewsArticle;
 use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, OrderBuilder, OrderUpdate, Orders, PlaceOrder};
 use crate::scanner::ScannerData;
 use crate::subscriptions::sync::Subscription;
-use crate::transport::{InternalSubscription, MessageBus, TcpMessageBus, TcpSocket};
+use crate::transport::{InternalSubscription, MessageBus, TcpMessageBus};
 use crate::wsh::AutoFill;
 use crate::{accounts, contracts, display_groups, market_data, news, orders, scanner, wsh};
 
@@ -115,10 +113,34 @@ impl Client {
     /// println!("Received {} startup orders", orders.lock().unwrap().len());
     /// ```
     pub fn connect_with_callback(address: &str, client_id: i32, startup_callback: Option<StartupMessageCallback>) -> Result<Client, Error> {
-        let stream = TcpStream::connect(address)?;
-        let socket = TcpSocket::new(stream, address)?;
+        Self::connect_with_options(address, client_id, startup_callback.into())
+    }
 
-        let connection = Connection::connect_with_callback(socket, client_id, startup_callback)?;
+    /// Establishes connection to TWS or Gateway with custom options
+    ///
+    /// This is similar to [`connect`](Self::connect), but allows you to configure
+    /// connection options like `TCP_NODELAY` and startup callbacks via
+    /// [`ConnectionOptions`].
+    ///
+    /// # Arguments
+    /// * `address`   - address of server. e.g. 127.0.0.1:4002
+    /// * `client_id` - id of client. e.g. 100
+    /// * `options`   - connection options
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::ConnectionOptions;
+    ///
+    /// let options = ConnectionOptions::default()
+    ///     .tcp_no_delay(true);
+    ///
+    /// let client = Client::connect_with_options("127.0.0.1:4002", 100, options)
+    ///     .expect("connection failed");
+    /// ```
+    pub fn connect_with_options(address: &str, client_id: i32, options: ConnectionOptions) -> Result<Client, Error> {
+        let connection = Connection::connect_with_options(address, client_id, options)?;
         let connection_metadata = connection.connection_metadata();
 
         let message_bus = Arc::new(TcpMessageBus::new(connection)?);
@@ -512,11 +534,15 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:7497", 100).expect("connection failed");
     ///
     /// let subscription = client.subscribe_to_group_events(1).expect("subscription failed");
+    ///
+    /// // Update the displayed contract
+    /// subscription.update("265598@SMART").expect("update failed");
+    ///
     /// for event in &subscription {
     ///     println!("group event: {:?}", event);
     /// }
     /// ```
-    pub fn subscribe_to_group_events(&self, group_id: i32) -> Result<Subscription<DisplayGroupUpdate>, Error> {
+    pub fn subscribe_to_group_events(&self, group_id: i32) -> Result<display_groups::blocking::DisplayGroupSubscription, Error> {
         display_groups::sync::subscribe_to_group_events(self, group_id)
     }
 

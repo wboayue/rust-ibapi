@@ -699,23 +699,25 @@ pub(crate) struct TcpSocket {
     reader: Mutex<TcpStream>,
     writer: Mutex<TcpStream>,
     connection_url: String,
+    tcp_no_delay: bool,
 }
 impl TcpSocket {
-    pub fn new(stream: TcpStream, connection_url: &str) -> Result<Self, Error> {
-        // Optionally disable Nagle's algorithm for low-latency order submission.
-        // Set IBAPI_TCP_NODELAY=1 to send small writes immediately.
-        if std::env::var("IBAPI_TCP_NODELAY").unwrap_or_default() == "1" {
-            stream.set_nodelay(true)?;
-        }
+    pub fn connect(address: &str, tcp_no_delay: bool) -> Result<Self, Error> {
+        let stream = TcpStream::connect(address)?;
+        Self::new(stream, address, tcp_no_delay)
+    }
 
+    pub fn new(stream: TcpStream, connection_url: &str, tcp_no_delay: bool) -> Result<Self, Error> {
         let writer = stream.try_clone()?;
 
         stream.set_read_timeout(Some(TWS_READ_TIMEOUT))?;
+        stream.set_nodelay(tcp_no_delay)?;
 
         Ok(Self {
             reader: Mutex::new(stream),
             writer: Mutex::new(writer),
             connection_url: connection_url.to_string(),
+            tcp_no_delay,
         })
     }
 }
@@ -724,10 +726,8 @@ impl Reconnect for TcpSocket {
     fn reconnect(&self) -> Result<(), Error> {
         match TcpStream::connect(&self.connection_url) {
             Ok(stream) => {
-                if std::env::var("IBAPI_TCP_NODELAY").unwrap_or_default() == "1" {
-                    stream.set_nodelay(true)?;
-                }
                 stream.set_read_timeout(Some(TWS_READ_TIMEOUT))?;
+                stream.set_nodelay(self.tcp_no_delay)?;
 
                 let mut reader = self.reader.lock()?;
                 *reader = stream.try_clone()?;

@@ -4,7 +4,7 @@ use std::sync::Mutex;
 
 use log::{debug, info};
 
-use super::common::{parse_connection_time, AccountInfo, ConnectionHandler, ConnectionProtocol, StartupMessageCallback};
+use super::common::{parse_connection_time, AccountInfo, ConnectionHandler, ConnectionOptions, ConnectionProtocol, StartupMessageCallback};
 use super::ConnectionMetadata;
 use crate::errors::Error;
 use crate::messages::{RequestMessage, ResponseMessage};
@@ -12,6 +12,7 @@ use crate::trace;
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::recorder::MessageRecorder;
 use crate::transport::sync::Stream;
+use crate::transport::sync::TcpSocket;
 
 type Response = Result<ResponseMessage, Error>;
 
@@ -26,18 +27,34 @@ pub struct Connection<S: Stream> {
     pub(crate) connection_handler: ConnectionHandler,
 }
 
+impl Connection<TcpSocket> {
+    /// Create a connection with custom options.
+    ///
+    /// Applies settings from [`ConnectionOptions`] (e.g. `TCP_NODELAY`, startup callback)
+    /// before performing the TWS handshake.
+    pub fn connect_with_options(address: &str, client_id: i32, options: ConnectionOptions) -> Result<Self, Error> {
+        let socket = TcpSocket::connect(address, options.tcp_no_delay)?;
+        Self::init(socket, client_id, options.startup_callback.as_deref())
+    }
+}
+
 impl<S: Stream> Connection<S> {
     /// Create a new connection
     #[allow(dead_code)]
     pub fn connect(socket: S, client_id: i32) -> Result<Self, Error> {
-        Self::connect_with_callback(socket, client_id, None)
+        Self::init(socket, client_id, None)
     }
 
     /// Create a new connection with a callback for unsolicited messages
     ///
     /// The callback will be invoked for any messages received during connection
     /// setup that are not part of the normal handshake (e.g., OpenOrder, OrderStatus).
+    #[allow(dead_code)]
     pub fn connect_with_callback(socket: S, client_id: i32, startup_callback: Option<StartupMessageCallback>) -> Result<Self, Error> {
+        Self::init(socket, client_id, startup_callback.as_deref())
+    }
+
+    fn init(socket: S, client_id: i32, startup_callback: Option<&(dyn Fn(ResponseMessage) + Send + Sync)>) -> Result<Self, Error> {
         let connection = Self {
             client_id,
             socket,
@@ -50,7 +67,7 @@ impl<S: Stream> Connection<S> {
             connection_handler: ConnectionHandler::default(),
         };
 
-        connection.establish_connection(startup_callback.as_ref())?;
+        connection.establish_connection(startup_callback)?;
 
         Ok(connection)
     }
@@ -95,7 +112,7 @@ impl<S: Stream> Connection<S> {
     }
 
     /// Establish connection to TWS
-    pub(crate) fn establish_connection(&self, startup_callback: Option<&StartupMessageCallback>) -> Result<(), Error> {
+    pub(crate) fn establish_connection(&self, startup_callback: Option<&(dyn Fn(ResponseMessage) + Send + Sync)>) -> Result<(), Error> {
         self.handshake()?;
         self.start_api()?;
         self.receive_account_info(startup_callback)?;
@@ -175,7 +192,7 @@ impl<S: Stream> Connection<S> {
     }
 
     // Fetches next order id and managed accounts.
-    pub(crate) fn receive_account_info(&self, startup_callback: Option<&StartupMessageCallback>) -> Result<(), Error> {
+    pub(crate) fn receive_account_info(&self, startup_callback: Option<&(dyn Fn(ResponseMessage) + Send + Sync)>) -> Result<(), Error> {
         let mut account_info = AccountInfo::default();
 
         let mut attempts = 0;
