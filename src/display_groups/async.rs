@@ -95,6 +95,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_update_display_group() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![],
+        });
+
+        let client = Client::stubbed(message_bus.clone(), 176);
+
+        update_display_group(&client, 9000, "265598@SMART").await.expect("update failed");
+
+        let requests = message_bus.request_messages.read().unwrap();
+        assert_eq!(requests.len(), 1);
+
+        let req = &requests[0];
+        assert_eq!(req[0], "69"); // UpdateDisplayGroup
+        assert_eq!(req[1], "1"); // Version
+        assert_eq!(req[2], "9000"); // Request ID
+        assert_eq!(req[3], "265598@SMART"); // Contract info
+    }
+
+    #[tokio::test]
     async fn test_subscribe_to_group_events_skips_wrong_message_type() {
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),

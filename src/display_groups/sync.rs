@@ -40,3 +40,31 @@ pub fn update_display_group(client: &Client, request_id: i32, contract_info: &st
     let request = encoders::encode_update_display_group(request_id, contract_info)?;
     client.send_message(request)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::stubs::MessageBusStub;
+    use std::sync::{Arc, RwLock};
+
+    #[test]
+    fn test_update_display_group() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![],
+        });
+
+        let client = Client::stubbed(message_bus.clone(), 176);
+
+        update_display_group(&client, 9000, "265598@SMART").expect("update failed");
+
+        let requests = message_bus.request_messages.read().unwrap();
+        assert_eq!(requests.len(), 1);
+
+        let req = &requests[0];
+        assert_eq!(req[0], "69"); // UpdateDisplayGroup
+        assert_eq!(req[1], "1"); // Version
+        assert_eq!(req[2], "9000"); // Request ID
+        assert_eq!(req[3], "265598@SMART"); // Contract info
+    }
+}
