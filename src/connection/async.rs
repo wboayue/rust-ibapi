@@ -40,11 +40,7 @@ impl AsyncConnection {
     /// The callback will be invoked for any messages received during connection
     /// setup that are not part of the normal handshake (e.g., OpenOrder, OrderStatus).
     pub async fn connect_with_callback(address: &str, client_id: i32, startup_callback: Option<StartupMessageCallback>) -> Result<Self, Error> {
-        let mut options = ConnectionOptions::default();
-        if let Some(cb) = startup_callback {
-            options.startup_callback = Some(std::sync::Arc::from(cb));
-        }
-        Self::connect_with_options(address, client_id, options).await
+        Self::connect_with_options(address, client_id, startup_callback.into()).await
     }
 
     /// Create a new async connection with custom options

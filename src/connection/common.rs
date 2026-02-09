@@ -59,6 +59,16 @@ impl ConnectionOptions {
     }
 }
 
+impl From<Option<StartupMessageCallback>> for ConnectionOptions {
+    fn from(callback: Option<StartupMessageCallback>) -> Self {
+        let mut opts = Self::default();
+        if let Some(cb) = callback {
+            opts.startup_callback = Some(Arc::from(cb));
+        }
+        opts
+    }
+}
+
 impl fmt::Debug for ConnectionOptions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ConnectionOptions")

@@ -114,11 +114,7 @@ impl Client {
     /// println!("Received {} startup orders", orders.lock().unwrap().len());
     /// ```
     pub fn connect_with_callback(address: &str, client_id: i32, startup_callback: Option<StartupMessageCallback>) -> Result<Client, Error> {
-        let mut options = ConnectionOptions::default();
-        if let Some(cb) = startup_callback {
-            options.startup_callback = Some(std::sync::Arc::from(cb));
-        }
-        Self::connect_with_options(address, client_id, options)
+        Self::connect_with_options(address, client_id, startup_callback.into())
     }
 
     /// Establishes connection to TWS or Gateway with custom options
