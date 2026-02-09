@@ -202,14 +202,24 @@ impl<T> Subscription<T> {
                 context,
             } => {
                 let mut retry_count = 0;
+                let mut stream_ended = false;
                 loop {
                     match subscription.next().await {
                         Some(Ok(mut message)) => {
                             let result = decoder(context, &mut message);
                             match process_decode_result(result) {
                                 ProcessingResult::Success(val) => return Some(Ok(val)),
-                                ProcessingResult::EndOfStream => return None,
+                                ProcessingResult::EndOfStream => {
+                                    stream_ended = true;
+                                    return None;
+                                }
                                 ProcessingResult::Retry => {
+                                    // Stop retrying if stream has already ended
+                                    // This prevents spurious retries after EndOfStream when
+                                    // extra messages arrive in the message bus queue
+                                    if stream_ended {
+                                        return None;
+                                    }
                                     if check_retry(retry_count) == RetryDecision::Stop {
                                         return None;
                                     }
