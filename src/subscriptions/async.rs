@@ -25,6 +25,7 @@ pub struct Subscription<T> {
     _message_type: Option<OutgoingMessages>,
     context: DecoderContext,
     cancelled: Arc<AtomicBool>,
+    stream_ended: Arc<AtomicBool>,
     message_bus: Option<Arc<dyn AsyncMessageBus>>,
     /// Cancel message generator
     cancel_fn: Option<Arc<CancelFn>>,
@@ -70,6 +71,7 @@ impl<T> Clone for Subscription<T> {
             _message_type: self._message_type,
             context: self.context.clone(),
             cancelled: self.cancelled.clone(),
+            stream_ended: self.stream_ended.clone(),
             message_bus: self.message_bus.clone(),
             cancel_fn: self.cancel_fn.clone(),
         }
@@ -102,6 +104,7 @@ impl<T> Subscription<T> {
             _message_type: message_type,
             context,
             cancelled: Arc::new(AtomicBool::new(false)),
+            stream_ended: Arc::new(AtomicBool::new(false)),
             message_bus: Some(message_bus),
             cancel_fn: None,
         }
@@ -185,6 +188,7 @@ impl<T> Subscription<T> {
             _message_type: None,
             context: DecoderContext::default(),
             cancelled: Arc::new(AtomicBool::new(false)),
+            stream_ended: Arc::new(AtomicBool::new(false)),
             message_bus: None,
             cancel_fn: None,
         }
@@ -202,7 +206,6 @@ impl<T> Subscription<T> {
                 context,
             } => {
                 let mut retry_count = 0;
-                let mut stream_ended = false;
                 loop {
                     match subscription.next().await {
                         Some(Ok(mut message)) => {
@@ -210,14 +213,14 @@ impl<T> Subscription<T> {
                             match process_decode_result(result) {
                                 ProcessingResult::Success(val) => return Some(Ok(val)),
                                 ProcessingResult::EndOfStream => {
-                                    stream_ended = true;
+                                    self.stream_ended.store(true, Ordering::Release);
                                     return None;
                                 }
                                 ProcessingResult::Retry => {
                                     // Stop retrying if stream has already ended
                                     // This prevents spurious retries after EndOfStream when
                                     // extra messages arrive in the message bus queue
-                                    if stream_ended {
+                                    if self.stream_ended.load(Ordering::Acquire) {
                                         return None;
                                     }
                                     if check_retry(retry_count) == RetryDecision::Stop {
@@ -252,6 +255,7 @@ impl<T> Subscription<T> {
         }
 
         self.cancelled.store(true, Ordering::Relaxed);
+        self.stream_ended.store(true, Ordering::Relaxed);
 
         if let (Some(message_bus), Some(cancel_fn)) = (&self.message_bus, &self.cancel_fn) {
             let id = self.request_id.or(self.order_id);
@@ -276,6 +280,7 @@ impl<T> Drop for Subscription<T> {
         }
 
         self.cancelled.store(true, Ordering::Relaxed);
+        self.stream_ended.store(true, Ordering::Relaxed);
 
         // Try to send cancel message if we have the necessary components
         if let (Some(message_bus), Some(cancel_fn)) = (&self.message_bus, &self.cancel_fn) {
