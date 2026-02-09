@@ -5,7 +5,6 @@ use time_tz::Tz;
 
 pub mod common;
 
-// Re-export StartupMessageCallback for lib.rs to re-export publicly
 pub use common::ConnectionOptions;
 pub use common::StartupMessageCallback;
 

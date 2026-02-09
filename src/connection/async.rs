@@ -25,7 +25,7 @@ pub struct AsyncConnection {
     pub(crate) recorder: MessageRecorder,
     pub(crate) connection_handler: ConnectionHandler,
     pub(crate) connection_url: String,
-    pub(crate) tcp_no_delay: bool,
+    pub(crate) options: ConnectionOptions,
 }
 
 impl AsyncConnection {
@@ -48,10 +48,7 @@ impl AsyncConnection {
     /// Applies settings from [`ConnectionOptions`] (e.g. `TCP_NODELAY`, startup callback)
     /// before performing the TWS handshake.
     pub async fn connect_with_options(address: &str, client_id: i32, options: ConnectionOptions) -> Result<Self, Error> {
-        let socket = TcpStream::connect(address).await?;
-        socket.set_nodelay(options.tcp_no_delay)?;
-
-        let cb_ref = options.startup_callback.as_deref();
+        let socket = Self::connect_socket(address, &options).await?;
 
         let connection = Self {
             client_id,
@@ -63,12 +60,19 @@ impl AsyncConnection {
             recorder: MessageRecorder::from_env(),
             connection_handler: ConnectionHandler::default(),
             connection_url: address.to_string(),
-            tcp_no_delay: options.tcp_no_delay,
+            options,
         };
 
+        let cb_ref = connection.options.startup_callback.as_deref();
         connection.establish_connection(cb_ref).await?;
 
         Ok(connection)
+    }
+
+    async fn connect_socket(address: &str, options: &ConnectionOptions) -> Result<TcpStream, Error> {
+        let socket = TcpStream::connect(address).await?;
+        socket.set_nodelay(options.tcp_no_delay)?;
+        Ok(socket)
     }
 
     /// Get a copy of the connection metadata
@@ -101,10 +105,9 @@ impl AsyncConnection {
 
             sleep(next_delay).await;
 
-            match TcpStream::connect(&self.connection_url).await {
+            match Self::connect_socket(&self.connection_url, &self.options).await {
                 Ok(new_socket) => {
                     info!("reconnected !!!");
-                    new_socket.set_nodelay(self.tcp_no_delay)?;
 
                     {
                         let mut socket = self.socket.lock().await;
