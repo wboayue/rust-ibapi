@@ -702,12 +702,6 @@ pub(crate) struct TcpSocket {
 }
 impl TcpSocket {
     pub fn new(stream: TcpStream, connection_url: &str) -> Result<Self, Error> {
-        // Optionally disable Nagle's algorithm for low-latency order submission.
-        // Set IBAPI_TCP_NODELAY=1 to send small writes immediately.
-        if std::env::var("IBAPI_TCP_NODELAY").unwrap_or_default() == "1" {
-            stream.set_nodelay(true)?;
-        }
-
         let writer = stream.try_clone()?;
 
         stream.set_read_timeout(Some(TWS_READ_TIMEOUT))?;
@@ -724,9 +718,6 @@ impl Reconnect for TcpSocket {
     fn reconnect(&self) -> Result<(), Error> {
         match TcpStream::connect(&self.connection_url) {
             Ok(stream) => {
-                if std::env::var("IBAPI_TCP_NODELAY").unwrap_or_default() == "1" {
-                    stream.set_nodelay(true)?;
-                }
                 stream.set_read_timeout(Some(TWS_READ_TIMEOUT))?;
 
                 let mut reader = self.reader.lock()?;
