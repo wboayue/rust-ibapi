@@ -267,9 +267,6 @@ impl SubscriptionBuilder {
 #[cfg(feature = "sync")]
 pub use sync::TcpMessageBus;
 
-#[cfg(feature = "sync")]
-pub(crate) use sync::TcpSocket;
-
 // Async exports (placeholder for now)
 #[cfg(feature = "async")]
 pub use r#async::{AsyncInternalSubscription, AsyncMessageBus};
