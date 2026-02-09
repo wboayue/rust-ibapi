@@ -18,7 +18,6 @@ use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, F
 use crate::connection::common::StartupMessageCallback;
 use crate::connection::{sync::Connection, ConnectionMetadata};
 use crate::contracts::{Contract, OptionComputation, SecurityType};
-use crate::display_groups::DisplayGroupUpdate;
 use crate::errors::Error;
 use crate::market_data::builder::MarketDataBuilder;
 use crate::market_data::historical::{self, HistogramEntry};
@@ -512,11 +511,15 @@ impl Client {
     /// let client = Client::connect("127.0.0.1:7497", 100).expect("connection failed");
     ///
     /// let subscription = client.subscribe_to_group_events(1).expect("subscription failed");
+    ///
+    /// // Update the displayed contract
+    /// subscription.update("265598@SMART").expect("update failed");
+    ///
     /// for event in &subscription {
     ///     println!("group event: {:?}", event);
     /// }
     /// ```
-    pub fn subscribe_to_group_events(&self, group_id: i32) -> Result<Subscription<DisplayGroupUpdate>, Error> {
+    pub fn subscribe_to_group_events(&self, group_id: i32) -> Result<display_groups::blocking::DisplayGroupSubscription, Error> {
         display_groups::sync::subscribe_to_group_events(self, group_id)
     }
 

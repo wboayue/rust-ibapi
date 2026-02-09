@@ -22,7 +22,6 @@ use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
 use crate::contracts::Contract;
 use crate::display_groups;
-use crate::display_groups::DisplayGroupUpdate;
 use crate::market_data::builder::MarketDataBuilder;
 use crate::market_data::TradingHours;
 use crate::orders::OrderBuilder;
@@ -603,14 +602,17 @@ impl Client {
     /// async fn main() {
     ///     let client = Client::connect("127.0.0.1:7497", 100).await.expect("connection failed");
     ///
-    ///     let mut subscription = client.subscribe_to_group_events(1).await.expect("error subscribing to group events");
+    ///     let mut subscription = client.subscribe_to_group_events(1).await.expect("subscription failed");
+    ///
+    ///     // Update the displayed contract
+    ///     subscription.update("265598@SMART").await.expect("update failed");
     ///
     ///     while let Some(event) = subscription.next().await {
     ///         println!("Received group event: {:?}", event);
     ///     }
     /// }
     /// ```
-    pub async fn subscribe_to_group_events(&self, group_id: i32) -> Result<Subscription<DisplayGroupUpdate>, Error> {
+    pub async fn subscribe_to_group_events(&self, group_id: i32) -> Result<display_groups::DisplayGroupSubscription, Error> {
         display_groups::r#async::subscribe_to_group_events(self, group_id).await
     }
 
