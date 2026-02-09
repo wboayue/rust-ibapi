@@ -4,8 +4,11 @@ use std::sync::Mutex;
 
 use log::{debug, info};
 
-use super::common::{parse_connection_time, AccountInfo, ConnectionHandler, ConnectionProtocol, StartupMessageCallback};
+use std::sync::Arc;
+
+use super::common::{parse_connection_time, AccountInfo, ConnectionHandler, ConnectionOptions, ConnectionProtocol};
 use super::ConnectionMetadata;
+use crate::transport::sync::TcpSocket;
 use crate::errors::Error;
 use crate::messages::{RequestMessage, ResponseMessage};
 use crate::trace;
@@ -26,6 +29,17 @@ pub struct Connection<S: Stream> {
     pub(crate) connection_handler: ConnectionHandler,
 }
 
+impl Connection<TcpSocket> {
+    /// Create a connection with custom options.
+    ///
+    /// Applies settings from [`ConnectionOptions`] (e.g. `TCP_NODELAY`, startup callback)
+    /// before performing the TWS handshake.
+    pub fn connect_with_options(address: &str, client_id: i32, options: ConnectionOptions) -> Result<Self, Error> {
+        let socket = TcpSocket::connect(address, options.tcp_no_delay)?;
+        Self::connect_with_callback(socket, client_id, options.startup_callback)
+    }
+}
+
 impl<S: Stream> Connection<S> {
     /// Create a new connection
     #[allow(dead_code)]
@@ -37,7 +51,7 @@ impl<S: Stream> Connection<S> {
     ///
     /// The callback will be invoked for any messages received during connection
     /// setup that are not part of the normal handshake (e.g., OpenOrder, OrderStatus).
-    pub fn connect_with_callback(socket: S, client_id: i32, startup_callback: Option<StartupMessageCallback>) -> Result<Self, Error> {
+    pub fn connect_with_callback(socket: S, client_id: i32, startup_callback: Option<Arc<dyn Fn(ResponseMessage) + Send + Sync>>) -> Result<Self, Error> {
         let connection = Self {
             client_id,
             socket,

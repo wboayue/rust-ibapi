@@ -702,6 +702,11 @@ pub(crate) struct TcpSocket {
     tcp_no_delay: bool,
 }
 impl TcpSocket {
+    pub fn connect(address: &str, tcp_no_delay: bool) -> Result<Self, Error> {
+        let stream = TcpStream::connect(address)?;
+        Self::new(stream, address, tcp_no_delay)
+    }
+
     pub fn new(stream: TcpStream, connection_url: &str, tcp_no_delay: bool) -> Result<Self, Error> {
         let writer = stream.try_clone()?;
 

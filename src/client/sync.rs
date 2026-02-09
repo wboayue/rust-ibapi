@@ -5,7 +5,6 @@
 //! subscriptions, and maintains the connection state.
 
 use std::fmt::Debug;
-use std::net::TcpStream;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -28,7 +27,7 @@ use crate::news::NewsArticle;
 use crate::orders::{CancelOrder, Executions, ExerciseOptions, Order, OrderBuilder, OrderUpdate, Orders, PlaceOrder};
 use crate::scanner::ScannerData;
 use crate::subscriptions::sync::Subscription;
-use crate::transport::{InternalSubscription, MessageBus, TcpMessageBus, TcpSocket};
+use crate::transport::{InternalSubscription, MessageBus, TcpMessageBus};
 use crate::wsh::AutoFill;
 use crate::{accounts, contracts, display_groups, market_data, news, orders, scanner, wsh};
 
@@ -141,13 +140,7 @@ impl Client {
     ///     .expect("connection failed");
     /// ```
     pub fn connect_with_options(address: &str, client_id: i32, options: ConnectionOptions) -> Result<Client, Error> {
-        let stream = TcpStream::connect(address)?;
-        let socket = TcpSocket::new(stream, address, options.tcp_no_delay)?;
-
-        let startup_callback: Option<StartupMessageCallback> =
-            options.startup_callback.map(|cb| Box::new(move |msg| cb(msg)) as StartupMessageCallback);
-
-        let connection = Connection::connect_with_callback(socket, client_id, startup_callback)?;
+        let connection = Connection::connect_with_options(address, client_id, options)?;
         let connection_metadata = connection.connection_metadata();
 
         let message_bus = Arc::new(TcpMessageBus::new(connection)?);
