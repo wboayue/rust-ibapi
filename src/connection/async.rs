@@ -43,12 +43,15 @@ impl AsyncConnection {
         Self::connect_with_options(address, client_id, startup_callback.into()).await
     }
 
-    /// Create a new async connection with custom options
+    /// Create a new async connection with custom options.
+    ///
+    /// Applies settings from [`ConnectionOptions`] (e.g. `TCP_NODELAY`, startup callback)
+    /// before performing the TWS handshake.
     pub async fn connect_with_options(address: &str, client_id: i32, options: ConnectionOptions) -> Result<Self, Error> {
         let socket = TcpStream::connect(address).await?;
         socket.set_nodelay(options.tcp_no_delay)?;
 
-        let callback = options.startup_callback.clone();
+        let cb_ref = options.startup_callback.as_deref();
 
         let connection = Self {
             client_id,
@@ -63,7 +66,6 @@ impl AsyncConnection {
             tcp_no_delay: options.tcp_no_delay,
         };
 
-        let cb_ref = callback.as_deref();
         connection.establish_connection(cb_ref).await?;
 
         Ok(connection)
