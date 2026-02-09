@@ -40,12 +40,6 @@ impl AsyncConnection {
     /// setup that are not part of the normal handshake (e.g., OpenOrder, OrderStatus).
     pub async fn connect_with_callback(address: &str, client_id: i32, startup_callback: Option<StartupMessageCallback>) -> Result<Self, Error> {
         let socket = TcpStream::connect(address).await?;
-        // Optionally disable Nagle's algorithm for low-latency order submission.
-        // Set IBAPI_TCP_NODELAY=1 to send small writes (order messages) immediately
-        // instead of buffering up to 40ms.
-        if std::env::var("IBAPI_TCP_NODELAY").unwrap_or_default() == "1" {
-            socket.set_nodelay(true)?;
-        }
 
         let connection = Self {
             client_id,
@@ -96,9 +90,6 @@ impl AsyncConnection {
 
             match TcpStream::connect(&self.connection_url).await {
                 Ok(new_socket) => {
-                    if std::env::var("IBAPI_TCP_NODELAY").unwrap_or_default() == "1" {
-                        new_socket.set_nodelay(true)?;
-                    }
                     info!("reconnected !!!");
 
                     {
