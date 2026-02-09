@@ -7,7 +7,7 @@ use log::debug;
 use time::OffsetDateTime;
 use time_tz::Tz;
 
-use crate::connection::common::StartupMessageCallback;
+use crate::connection::common::{ConnectionOptions, StartupMessageCallback};
 use crate::connection::{r#async::AsyncConnection, ConnectionMetadata};
 use crate::messages::{OutgoingMessages, RequestMessage};
 use crate::transport::{
@@ -117,7 +117,41 @@ impl Client {
     /// }
     /// ```
     pub async fn connect_with_callback(address: &str, client_id: i32, startup_callback: Option<StartupMessageCallback>) -> Result<Client, Error> {
-        let connection = AsyncConnection::connect_with_callback(address, client_id, startup_callback).await?;
+        let mut options = ConnectionOptions::default();
+        if let Some(cb) = startup_callback {
+            options.startup_callback = Some(std::sync::Arc::from(cb));
+        }
+        Self::connect_with_options(address, client_id, options).await
+    }
+
+    /// Establishes async connection to TWS or Gateway with custom options
+    ///
+    /// This is similar to [`connect`](Self::connect), but allows you to configure
+    /// connection options like `TCP_NODELAY` and startup callbacks via
+    /// [`ConnectionOptions`].
+    ///
+    /// # Arguments
+    /// * `address`   - address of server. e.g. 127.0.0.1:4002
+    /// * `client_id` - id of client. e.g. 100
+    /// * `options`   - connection options
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::{Client, ConnectionOptions};
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let options = ConnectionOptions::default()
+    ///         .tcp_no_delay(true);
+    ///
+    ///     let client = Client::connect_with_options("127.0.0.1:4002", 100, options)
+    ///         .await
+    ///         .expect("connection failed");
+    /// }
+    /// ```
+    pub async fn connect_with_options(address: &str, client_id: i32, options: ConnectionOptions) -> Result<Client, Error> {
+        let connection = AsyncConnection::connect_with_options(address, client_id, options).await?;
         let connection_metadata = connection.connection_metadata();
 
         let message_bus = Arc::new(AsyncTcpMessageBus::new(connection)?);

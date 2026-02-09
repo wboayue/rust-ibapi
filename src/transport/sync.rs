@@ -699,17 +699,20 @@ pub(crate) struct TcpSocket {
     reader: Mutex<TcpStream>,
     writer: Mutex<TcpStream>,
     connection_url: String,
+    tcp_no_delay: bool,
 }
 impl TcpSocket {
-    pub fn new(stream: TcpStream, connection_url: &str) -> Result<Self, Error> {
+    pub fn new(stream: TcpStream, connection_url: &str, tcp_no_delay: bool) -> Result<Self, Error> {
         let writer = stream.try_clone()?;
 
         stream.set_read_timeout(Some(TWS_READ_TIMEOUT))?;
+        stream.set_nodelay(tcp_no_delay)?;
 
         Ok(Self {
             reader: Mutex::new(stream),
             writer: Mutex::new(writer),
             connection_url: connection_url.to_string(),
+            tcp_no_delay,
         })
     }
 }
@@ -719,6 +722,7 @@ impl Reconnect for TcpSocket {
         match TcpStream::connect(&self.connection_url) {
             Ok(stream) => {
                 stream.set_read_timeout(Some(TWS_READ_TIMEOUT))?;
+                stream.set_nodelay(self.tcp_no_delay)?;
 
                 let mut reader = self.reader.lock()?;
                 *reader = stream.try_clone()?;

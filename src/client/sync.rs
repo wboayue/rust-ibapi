@@ -15,7 +15,7 @@ use time_tz::Tz;
 
 use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use crate::accounts::{AccountSummaryResult, AccountUpdate, AccountUpdateMulti, FamilyCode, PnL, PnLSingle, PositionUpdate, PositionUpdateMulti};
-use crate::connection::common::StartupMessageCallback;
+use crate::connection::common::{ConnectionOptions, StartupMessageCallback};
 use crate::connection::{sync::Connection, ConnectionMetadata};
 use crate::contracts::{Contract, OptionComputation, SecurityType};
 use crate::errors::Error;
@@ -114,8 +114,42 @@ impl Client {
     /// println!("Received {} startup orders", orders.lock().unwrap().len());
     /// ```
     pub fn connect_with_callback(address: &str, client_id: i32, startup_callback: Option<StartupMessageCallback>) -> Result<Client, Error> {
+        let mut options = ConnectionOptions::default();
+        if let Some(cb) = startup_callback {
+            options.startup_callback = Some(std::sync::Arc::from(cb));
+        }
+        Self::connect_with_options(address, client_id, options)
+    }
+
+    /// Establishes connection to TWS or Gateway with custom options
+    ///
+    /// This is similar to [`connect`](Self::connect), but allows you to configure
+    /// connection options like `TCP_NODELAY` and startup callbacks via
+    /// [`ConnectionOptions`].
+    ///
+    /// # Arguments
+    /// * `address`   - address of server. e.g. 127.0.0.1:4002
+    /// * `client_id` - id of client. e.g. 100
+    /// * `options`   - connection options
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::ConnectionOptions;
+    ///
+    /// let options = ConnectionOptions::default()
+    ///     .tcp_no_delay(true);
+    ///
+    /// let client = Client::connect_with_options("127.0.0.1:4002", 100, options)
+    ///     .expect("connection failed");
+    /// ```
+    pub fn connect_with_options(address: &str, client_id: i32, options: ConnectionOptions) -> Result<Client, Error> {
         let stream = TcpStream::connect(address)?;
-        let socket = TcpSocket::new(stream, address)?;
+        let socket = TcpSocket::new(stream, address, options.tcp_no_delay)?;
+
+        let startup_callback: Option<StartupMessageCallback> =
+            options.startup_callback.map(|cb| Box::new(move |msg| cb(msg)) as StartupMessageCallback);
 
         let connection = Connection::connect_with_callback(socket, client_id, startup_callback)?;
         let connection_metadata = connection.connection_metadata();

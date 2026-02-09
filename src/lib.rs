@@ -86,6 +86,7 @@ pub(crate) mod connection;
 ///     println!("Received {} startup orders", orders.lock().unwrap().len());
 /// }
 /// ```
+pub use connection::ConnectionOptions;
 pub use connection::StartupMessageCallback;
 
 /// Common utilities shared across modules

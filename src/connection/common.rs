@@ -1,5 +1,8 @@
 //! Common connection logic shared between sync and async implementations
 
+use std::fmt;
+use std::sync::Arc;
+
 use log::{debug, error, warn};
 use time::macros::format_description;
 use time::OffsetDateTime;
@@ -16,6 +19,54 @@ use crate::server_versions;
 /// handshake, this callback is invoked to allow the application to process them
 /// instead of discarding them.
 pub type StartupMessageCallback = Box<dyn Fn(ResponseMessage) + Send + Sync>;
+
+/// Options for configuring a connection to TWS or IB Gateway.
+///
+/// Use the builder methods to configure options, then pass to
+/// [`Client::connect_with_options`](crate::Client::connect_with_options).
+///
+/// # Examples
+///
+/// ```
+/// use ibapi::ConnectionOptions;
+///
+/// let options = ConnectionOptions::default()
+///     .tcp_no_delay(true);
+/// ```
+#[derive(Clone, Default)]
+pub struct ConnectionOptions {
+    pub(crate) tcp_no_delay: bool,
+    pub(crate) startup_callback: Option<Arc<dyn Fn(ResponseMessage) + Send + Sync>>,
+}
+
+impl ConnectionOptions {
+    /// Enable or disable `TCP_NODELAY` on the connection socket.
+    ///
+    /// When enabled, disables Nagle's algorithm for lower latency.
+    /// Default: `false`.
+    pub fn tcp_no_delay(mut self, enabled: bool) -> Self {
+        self.tcp_no_delay = enabled;
+        self
+    }
+
+    /// Set a callback for unsolicited messages during connection setup.
+    ///
+    /// When TWS sends messages like `OpenOrder` or `OrderStatus` during the
+    /// connection handshake, this callback processes them instead of discarding.
+    pub fn startup_callback(mut self, callback: impl Fn(ResponseMessage) + Send + Sync + 'static) -> Self {
+        self.startup_callback = Some(Arc::new(callback));
+        self
+    }
+}
+
+impl fmt::Debug for ConnectionOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ConnectionOptions")
+            .field("tcp_no_delay", &self.tcp_no_delay)
+            .field("startup_callback", &self.startup_callback.is_some())
+            .finish()
+    }
+}
 
 /// Data exchanged during the connection handshake
 #[derive(Debug, Clone)]
@@ -44,7 +95,11 @@ pub trait ConnectionProtocol {
     ///
     /// If a callback is provided, unsolicited messages (like OpenOrder, OrderStatus)
     /// will be passed to it instead of being discarded.
-    fn parse_account_info(&self, message: &mut ResponseMessage, callback: Option<&StartupMessageCallback>) -> Result<AccountInfo, Self::Error>;
+    fn parse_account_info(
+        &self,
+        message: &mut ResponseMessage,
+        callback: Option<&(dyn Fn(ResponseMessage) + Send + Sync)>,
+    ) -> Result<AccountInfo, Self::Error>;
 }
 
 /// Account information received during connection establishment
@@ -109,7 +164,11 @@ impl ConnectionProtocol for ConnectionHandler {
         message
     }
 
-    fn parse_account_info(&self, message: &mut ResponseMessage, callback: Option<&StartupMessageCallback>) -> Result<AccountInfo, Self::Error> {
+    fn parse_account_info(
+        &self,
+        message: &mut ResponseMessage,
+        callback: Option<&(dyn Fn(ResponseMessage) + Send + Sync)>,
+    ) -> Result<AccountInfo, Self::Error> {
         let mut info = AccountInfo::default();
 
         match message.message_type() {
@@ -441,5 +500,34 @@ mod tests {
         assert_eq!(handshake_data.server_version, 173);
         // server_time will contain replacement characters but parsing succeeds
         assert!(handshake_data.server_time.contains("20251205"));
+    }
+
+    #[test]
+    fn test_connection_options_default() {
+        let opts = ConnectionOptions::default();
+        assert_eq!(opts.tcp_no_delay, false);
+        assert!(opts.startup_callback.is_none());
+    }
+
+    #[test]
+    fn test_connection_options_builder() {
+        let opts = ConnectionOptions::default().tcp_no_delay(true).startup_callback(|_msg| {});
+        assert_eq!(opts.tcp_no_delay, true);
+        assert!(opts.startup_callback.is_some());
+    }
+
+    #[test]
+    fn test_connection_options_clone() {
+        let opts = ConnectionOptions::default().tcp_no_delay(true);
+        let cloned = opts.clone();
+        assert_eq!(cloned.tcp_no_delay, true);
+    }
+
+    #[test]
+    fn test_connection_options_debug() {
+        let opts = ConnectionOptions::default().tcp_no_delay(true);
+        let debug_str = format!("{:?}", opts);
+        assert!(debug_str.contains("tcp_no_delay: true"));
+        assert!(debug_str.contains("startup_callback: false"));
     }
 }

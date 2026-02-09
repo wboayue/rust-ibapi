@@ -50,7 +50,7 @@ impl<S: Stream> Connection<S> {
             connection_handler: ConnectionHandler::default(),
         };
 
-        connection.establish_connection(startup_callback.as_ref())?;
+        connection.establish_connection(startup_callback.as_deref())?;
 
         Ok(connection)
     }
@@ -95,7 +95,7 @@ impl<S: Stream> Connection<S> {
     }
 
     /// Establish connection to TWS
-    pub(crate) fn establish_connection(&self, startup_callback: Option<&StartupMessageCallback>) -> Result<(), Error> {
+    pub(crate) fn establish_connection(&self, startup_callback: Option<&(dyn Fn(ResponseMessage) + Send + Sync)>) -> Result<(), Error> {
         self.handshake()?;
         self.start_api()?;
         self.receive_account_info(startup_callback)?;
@@ -175,7 +175,7 @@ impl<S: Stream> Connection<S> {
     }
 
     // Fetches next order id and managed accounts.
-    pub(crate) fn receive_account_info(&self, startup_callback: Option<&StartupMessageCallback>) -> Result<(), Error> {
+    pub(crate) fn receive_account_info(&self, startup_callback: Option<&(dyn Fn(ResponseMessage) + Send + Sync)>) -> Result<(), Error> {
         let mut account_info = AccountInfo::default();
 
         let mut attempts = 0;
