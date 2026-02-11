@@ -2,6 +2,8 @@ use std::collections::BTreeSet;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+pub const GATEWAY: &str = "127.0.0.1:4002";
+
 // === Client ID Pool ===
 
 static POOL: Mutex<Option<BTreeSet<i32>>> = Mutex::new(None);
