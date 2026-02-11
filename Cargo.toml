@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "integration/async", "integration/sync"]
+members = [".", "integration/common", "integration/async", "integration/sync"]
 default-members = ["."]
 
 [package]

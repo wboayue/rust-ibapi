@@ -6,5 +6,6 @@ publish = false
 
 [dependencies]
 ibapi = { path = "../..", default-features = false, features = ["sync"] }
+ibapi-test = { path = "../common" }
 anyhow = "1"
 env_logger = "0.11"

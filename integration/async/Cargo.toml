@@ -7,5 +7,6 @@ publish = false
 [dependencies]
 ibapi = { path = "../..", features = ["async"] }
 tokio = { version = "1", features = ["full"] }
+ibapi-test = { path = "../common" }
 anyhow = "1"
 env_logger = "0.11"
