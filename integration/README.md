@@ -70,6 +70,25 @@ fn my_test() {
 }
 ```
 
+### Test Serialization
+
+Most tests run in parallel. Use `#[serial(group)]` for tests that modify shared gateway state.
+
+```rust
+use serial_test::serial;
+
+// Runs in parallel (default)
+#[test]
+fn reads_contract_details() { ... }
+
+// Runs serially within the "orders" group
+#[test]
+#[serial(orders)]
+fn places_order() { ... }
+```
+
+See [docs/integration-tests.md](../docs/integration-tests.md) for full guidelines.
+
 ## Running Tests
 
 ```bash

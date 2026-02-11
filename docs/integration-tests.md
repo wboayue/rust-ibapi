@@ -85,7 +85,39 @@ rate_limit();
 let details = client.contract_details(&contract)?;
 ```
 
-### 3. Keep `ClientId` alive for the duration of the connection
+### 3. Use `#[serial]` for tests that modify shared gateway state
+
+Most tests run in parallel by default. Use `#[serial(group)]` from `serial_test` when tests share mutable gateway state (e.g., orders, account subscriptions). Tests within the same group run serially; different groups and unmarked tests still run in parallel.
+
+```rust
+use serial_test::serial;
+
+// Parallel (default) — read-only operations
+#[test]
+fn reads_market_data() { ... }
+
+// Serial within "orders" group — tests that place/cancel orders
+#[test]
+#[serial(orders)]
+fn places_order() { ... }
+
+#[test]
+#[serial(orders)]
+fn cancels_order() { ... }
+
+// Serial within "account" group — independent of "orders"
+#[test]
+#[serial(account)]
+fn account_updates() { ... }
+```
+
+Common groups:
+- `orders` — order placement, modification, cancellation
+- `account` — account subscriptions and updates
+
+Only serialize when necessary. Read-only operations (market data, contract details, server time) should remain parallel.
+
+### 4. Keep `ClientId` alive for the duration of the connection
 
 The `ClientId` guard returns its ID to the pool on drop. Ensure it outlives the client.
 
