@@ -29,7 +29,7 @@ async fn head_timestamp_forex() {
     rate_limit();
     let contract = Contract::forex("EUR", "USD").build();
     let ts = client
-        .head_timestamp(&contract, WhatToShow::Midpoint, TradingHours::Extended)
+        .head_timestamp(&contract, WhatToShow::MidPoint, TradingHours::Extended)
         .await
         .expect("head_timestamp failed");
 
@@ -143,7 +143,7 @@ async fn historical_data_midpoint() {
             None,
             Duration::days(1),
             BarSize::Hour,
-            Some(WhatToShow::Midpoint),
+            Some(WhatToShow::MidPoint),
             TradingHours::Regular,
         )
         .await

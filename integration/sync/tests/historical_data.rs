@@ -1,6 +1,6 @@
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
-use ibapi::market_data::historical::{self, BarSize, Duration, WhatToShow};
+use ibapi::market_data::historical::{BarSize, Duration, WhatToShow};
 use ibapi::market_data::TradingHours;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 
@@ -28,7 +28,7 @@ fn head_timestamp_forex() {
     rate_limit();
     let contract = Contract::forex("EUR", "USD").build();
     let ts = client
-        .head_timestamp(&contract, WhatToShow::Midpoint, TradingHours::Extended)
+        .head_timestamp(&contract, WhatToShow::MidPoint, TradingHours::Extended)
         .expect("head_timestamp failed");
 
     assert!(ts.year() > 2000, "head timestamp year should be valid");
@@ -137,7 +137,7 @@ fn historical_data_midpoint() {
             None,
             Duration::days(1),
             BarSize::Hour,
-            WhatToShow::Midpoint,
+            WhatToShow::MidPoint,
             TradingHours::Regular,
         )
         .expect("historical_data failed");

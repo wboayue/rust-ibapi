@@ -1,8 +1,10 @@
+use ibapi::accounts::types::{AccountGroup, AccountId, ContractId};
+use ibapi::accounts::PositionUpdate;
 use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
 
-async fn connect_and_get_account() -> (Client, String) {
+async fn connect_and_get_account() -> (Client, AccountId) {
     let client_id = ClientId::get();
     rate_limit();
     let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
@@ -10,7 +12,7 @@ async fn connect_and_get_account() -> (Client, String) {
     rate_limit();
     let accounts = client.managed_accounts().await.expect("managed_accounts failed");
     assert!(!accounts.is_empty());
-    let account = accounts[0].clone();
+    let account = AccountId::from(accounts[0].as_str());
     (client, account)
 }
 
@@ -78,7 +80,7 @@ async fn account_summary_all_tags() {
 
     rate_limit();
     let mut subscription = client
-        .account_summary("All", &["NetLiquidation", "TotalCashValue"])
+        .account_summary(&AccountGroup::from("All"), &["NetLiquidation", "TotalCashValue"])
         .await
         .expect("account_summary failed");
 
@@ -93,7 +95,10 @@ async fn account_summary_specific_tag() {
     let (client, _account) = connect_and_get_account().await;
 
     rate_limit();
-    let mut subscription = client.account_summary("All", &["NetLiquidation"]).await.expect("account_summary failed");
+    let mut subscription = client
+        .account_summary(&AccountGroup::from("All"), &["NetLiquidation"])
+        .await
+        .expect("account_summary failed");
 
     let item = tokio::time::timeout(tokio::time::Duration::from_secs(10), subscription.next()).await;
     assert!(item.is_ok(), "account_summary timed out");
@@ -136,13 +141,16 @@ async fn pnl_single_receives_updates() {
     // Need a contract_id from a held position
     rate_limit();
     let mut subscription = client.positions().await.expect("positions failed");
-    let position = tokio::time::timeout(tokio::time::Duration::from_secs(5), subscription.next()).await;
-    let position = position.expect("timeout").expect("stream ended").expect("positions error");
-    let con_id = position.contract.contract_id;
+    let update = tokio::time::timeout(tokio::time::Duration::from_secs(5), subscription.next()).await;
+    let update = update.expect("timeout").expect("stream ended").expect("positions error");
+    let con_id = match update {
+        PositionUpdate::Position(pos) => pos.contract.contract_id,
+        PositionUpdate::PositionEnd => panic!("no positions held"),
+    };
     drop(subscription);
 
     rate_limit();
-    let mut pnl_sub = client.pnl_single(&account, con_id, None).await.expect("pnl_single failed");
+    let mut pnl_sub = client.pnl_single(&account, ContractId(con_id), None).await.expect("pnl_single failed");
 
     let item = tokio::time::timeout(tokio::time::Duration::from_secs(10), pnl_sub.next()).await;
     assert!(item.is_ok(), "pnl_single timed out");

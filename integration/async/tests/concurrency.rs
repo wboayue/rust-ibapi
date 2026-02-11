@@ -30,9 +30,9 @@ async fn concurrent_contract_details() {
     assert!(!d1.is_empty());
     assert!(!d2.is_empty());
     assert!(!d3.is_empty());
-    assert_eq!(d1[0].contract.symbol, "AAPL");
-    assert_eq!(d2[0].contract.symbol, "MSFT");
-    assert_eq!(d3[0].contract.symbol, "TSLA");
+    assert_eq!(d1[0].contract.symbol.0, "AAPL");
+    assert_eq!(d2[0].contract.symbol.0, "MSFT");
+    assert_eq!(d3[0].contract.symbol.0, "TSLA");
 }
 
 #[tokio::test]

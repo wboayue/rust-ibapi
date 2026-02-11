@@ -1,11 +1,12 @@
 use std::time::Duration;
 
+use ibapi::accounts::types::{AccountGroup, AccountId, ContractId};
+use ibapi::accounts::PositionUpdate;
 use ibapi::client::blocking::Client;
-use ibapi::contracts::Contract;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
 
-fn connect_and_get_account() -> (Client, String) {
+fn connect_and_get_account() -> (Client, AccountId) {
     let client_id = ClientId::get();
     rate_limit();
     let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
@@ -13,7 +14,7 @@ fn connect_and_get_account() -> (Client, String) {
     rate_limit();
     let accounts = client.managed_accounts().expect("managed_accounts failed");
     assert!(!accounts.is_empty());
-    let account = accounts[0].clone();
+    let account = AccountId::from(accounts[0].as_str());
     (client, account)
 }
 
@@ -80,7 +81,7 @@ fn account_summary_all_tags() {
 
     rate_limit();
     let subscription = client
-        .account_summary("All", &["NetLiquidation", "TotalCashValue"])
+        .account_summary(&AccountGroup::from("All"), &["NetLiquidation", "TotalCashValue"])
         .expect("account_summary failed");
 
     let item = subscription.next_timeout(Duration::from_secs(10));
@@ -93,7 +94,9 @@ fn account_summary_specific_tag() {
     let (client, _account) = connect_and_get_account();
 
     rate_limit();
-    let subscription = client.account_summary("All", &["NetLiquidation"]).expect("account_summary failed");
+    let subscription = client
+        .account_summary(&AccountGroup::from("All"), &["NetLiquidation"])
+        .expect("account_summary failed");
 
     let item = subscription.next_timeout(Duration::from_secs(10));
     assert!(item.is_some(), "expected NetLiquidation value");
@@ -131,12 +134,15 @@ fn pnl_single_receives_updates() {
     // Need a contract_id from a held position
     rate_limit();
     let subscription = client.positions().expect("positions failed");
-    let position = subscription.next_timeout(Duration::from_secs(5));
-    let position = position.expect("no positions held - cannot test pnl_single");
-    let con_id = position.contract.contract_id;
+    let update = subscription.next_timeout(Duration::from_secs(5));
+    let update = update.expect("no positions held - cannot test pnl_single");
+    let con_id = match update {
+        PositionUpdate::Position(pos) => pos.contract.contract_id,
+        PositionUpdate::PositionEnd => panic!("no positions held"),
+    };
 
     rate_limit();
-    let pnl_sub = client.pnl_single(&account, con_id, None).expect("pnl_single failed");
+    let pnl_sub = client.pnl_single(&account, ContractId(con_id), None).expect("pnl_single failed");
 
     let item = pnl_sub.next_timeout(Duration::from_secs(10));
     assert!(item.is_some(), "expected at least one PnL single update");

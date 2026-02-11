@@ -13,7 +13,7 @@ fn contract_details_stock() {
     let details = client.contract_details(&contract).expect("contract_details failed");
 
     assert!(!details.is_empty());
-    assert_eq!(details[0].contract.symbol, "AAPL");
+    assert_eq!(details[0].contract.symbol.0, "AAPL");
 }
 
 #[test]
@@ -27,7 +27,7 @@ fn contract_details_futures() {
     let details = client.contract_details(&contract).expect("contract_details failed");
 
     assert!(!details.is_empty());
-    assert_eq!(details[0].contract.symbol, "ES");
+    assert_eq!(details[0].contract.symbol.0, "ES");
 }
 
 #[test]
@@ -54,7 +54,7 @@ fn matching_symbols_exact() {
     let symbols: Vec<_> = client.matching_symbols("AAPL").expect("matching_symbols failed").collect();
 
     assert!(!symbols.is_empty());
-    assert!(symbols.iter().any(|s| s.contract.symbol == "AAPL"));
+    assert!(symbols.iter().any(|s| s.contract.symbol.0 == "AAPL"));
 }
 
 #[test]
@@ -96,12 +96,9 @@ fn option_chain_returns_data() {
     rate_limit();
     let subscription = client.option_chain("AAPL", "", SecurityType::Stock, con_id).expect("option_chain failed");
 
-    let mut found = false;
-    for chain in subscription.iter() {
-        assert!(!chain.expirations.is_empty());
-        assert!(!chain.strikes.is_empty());
-        found = true;
-        break;
-    }
-    assert!(found, "expected at least one option chain result");
+    let chain = subscription.iter().next();
+    assert!(chain.is_some(), "expected at least one option chain result");
+    let chain = chain.unwrap();
+    assert!(!chain.expirations.is_empty());
+    assert!(!chain.strikes.is_empty());
 }

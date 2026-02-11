@@ -13,7 +13,7 @@ async fn contract_details_stock() {
     let details = client.contract_details(&contract).await.expect("contract_details failed");
 
     assert!(!details.is_empty());
-    assert_eq!(details[0].contract.symbol, "AAPL");
+    assert_eq!(details[0].contract.symbol.0, "AAPL");
 }
 
 #[tokio::test]
@@ -27,7 +27,7 @@ async fn contract_details_futures() {
     let details = client.contract_details(&contract).await.expect("contract_details failed");
 
     assert!(!details.is_empty());
-    assert_eq!(details[0].contract.symbol, "ES");
+    assert_eq!(details[0].contract.symbol.0, "ES");
 }
 
 #[tokio::test]
@@ -54,7 +54,7 @@ async fn matching_symbols_exact() {
     let symbols = client.matching_symbols("AAPL").await.expect("matching_symbols failed");
 
     assert!(!symbols.is_empty());
-    assert!(symbols.iter().any(|s| s.contract.symbol == "AAPL"));
+    assert!(symbols.iter().any(|s| s.contract.symbol.0 == "AAPL"));
 }
 
 #[tokio::test]

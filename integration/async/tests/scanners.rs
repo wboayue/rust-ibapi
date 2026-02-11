@@ -1,4 +1,3 @@
-use ibapi::orders::TagValue;
 use ibapi::scanner::ScannerSubscription;
 use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
@@ -22,11 +21,13 @@ async fn scanner_subscription_top_gainers() {
     rate_limit();
     let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
 
-    let mut sub = ScannerSubscription::default();
-    sub.scan_code = Some("TOP_PERC_GAIN".to_string());
-    sub.instrument = Some("STK".to_string());
-    sub.location_code = Some("STK.US.MAJOR".to_string());
-    sub.number_of_rows = 10;
+    let sub = ScannerSubscription {
+        scan_code: Some("TOP_PERC_GAIN".to_string()),
+        instrument: Some("STK".to_string()),
+        location_code: Some("STK.US.MAJOR".to_string()),
+        number_of_rows: 10,
+        ..Default::default()
+    };
 
     rate_limit();
     let mut subscription = client.scanner_subscription(&sub, &vec![]).await.expect("scanner_subscription failed");

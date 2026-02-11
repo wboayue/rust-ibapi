@@ -11,12 +11,13 @@ async fn connect() -> Client {
 }
 
 fn limit_order(action: Action, quantity: f64, price: f64) -> Order {
-    let mut order = Order::default();
-    order.action = action;
-    order.total_quantity = quantity;
-    order.order_type = "LMT".to_string();
-    order.limit_price = Some(price);
-    order
+    Order {
+        action,
+        total_quantity: quantity,
+        order_type: "LMT".to_string(),
+        limit_price: Some(price),
+        ..Default::default()
+    }
 }
 
 #[tokio::test]
