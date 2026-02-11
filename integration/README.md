@@ -19,6 +19,8 @@ Paper trading (port 4002) is recommended.
 
 ```
 integration/
+├── common/         # ibapi-test: shared test helpers
+│   └── src/lib.rs  # ClientId pool, rate limiter
 ├── async/          # async client tests and binaries
 │   ├── src/lib.rs  # shared helpers
 │   ├── tests/      # test modules (cargo test)
@@ -27,6 +29,45 @@ integration/
     ├── src/lib.rs
     ├── tests/
     └── bin/
+```
+
+## Test Helpers (`ibapi-test`)
+
+### Client ID Pool
+
+Tests run in parallel and each need a unique client ID to avoid conflicts. Use `ClientId::get()` to acquire one — it's returned to the pool automatically when dropped.
+
+```rust
+use ibapi_test::ClientId;
+
+#[test]
+fn my_test() {
+    let client_id = ClientId::get();
+    let client = Client::connect("127.0.0.1:4002", client_id.id())
+        .expect("connection failed");
+    // client_id returned to pool when test ends
+}
+```
+
+IDs are allocated from range 200–399 to avoid conflicts with manual testing.
+
+### Rate Limiter
+
+IBKR enforces a 50 requests/second limit. Call `rate_limit()` before each API request to stay under the limit. Uses a token bucket — the first 50 requests pass instantly, then requests are spaced to maintain the average.
+
+```rust
+use ibapi_test::{rate_limit, ClientId};
+
+#[test]
+fn my_test() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect("127.0.0.1:4002", client_id.id())
+        .expect("connection failed");
+
+    rate_limit();
+    let time = client.server_time().expect("failed to get server time");
+}
 ```
 
 ## Running Tests
