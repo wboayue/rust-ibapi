@@ -23,7 +23,7 @@ fn contract_details_futures() {
     let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
 
     rate_limit();
-    let contract = Contract::futures("ES").front_month().build();
+    let contract = Contract::futures("ES").next_quarter().build();
     let details = client.contract_details(&contract).expect("contract_details failed");
 
     assert!(!details.is_empty());
