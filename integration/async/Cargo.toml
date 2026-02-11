@@ -1,0 +1,11 @@
+[package]
+name = "ibapi-integration-async"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+ibapi = { path = "../..", features = ["async"] }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+env_logger = "0.11"
