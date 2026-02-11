@@ -7,9 +7,7 @@ use ibapi_test::ClientId;
 #[tokio::test]
 async fn connect_to_gateway() {
     let client_id = ClientId::get();
-    let client = Client::connect("127.0.0.1:4002", client_id.id())
-        .await
-        .expect("connection failed");
+    let client = Client::connect("127.0.0.1:4002", client_id.id()).await.expect("connection failed");
 
     assert!(client.server_version() > 0);
     assert!(client.connection_time().is_some());
@@ -47,11 +45,9 @@ async fn connect_with_options_callback() {
     let messages: Arc<Mutex<Vec<ResponseMessage>>> = Arc::new(Mutex::new(Vec::new()));
     let messages_clone = messages.clone();
 
-    let options = ConnectionOptions::default()
-        .tcp_no_delay(true)
-        .startup_callback(move |msg| {
-            messages_clone.lock().unwrap().push(msg);
-        });
+    let options = ConnectionOptions::default().tcp_no_delay(true).startup_callback(move |msg| {
+        messages_clone.lock().unwrap().push(msg);
+    });
 
     let client = Client::connect_with_options("127.0.0.1:4002", client_id.id(), options)
         .await
