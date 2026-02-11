@@ -3,16 +3,18 @@ use std::sync::{Arc, Mutex};
 use ibapi::client::blocking::Client;
 use ibapi::messages::{IncomingMessages, ResponseMessage};
 use ibapi::{ConnectionOptions, StartupMessageCallback};
-use ibapi_test::ClientId;
+use ibapi_test::{rate_limit, ClientId};
 
 #[test]
 fn connect_to_gateway() {
     let client_id = ClientId::get();
+    rate_limit();
     let client = Client::connect("127.0.0.1:4002", client_id.id()).expect("connection failed");
 
     assert!(client.server_version() > 0);
     assert!(client.connection_time().is_some());
 
+    rate_limit();
     let time = client.server_time().expect("failed to get server time");
     assert!(time.year() >= 2025);
 }
@@ -27,6 +29,7 @@ fn connect_with_callback() {
         messages_clone.lock().unwrap().push(msg);
     });
 
+    rate_limit();
     let client = Client::connect_with_callback("127.0.0.1:4002", client_id.id(), Some(callback)).expect("connection failed");
 
     assert!(client.server_version() > 0);
@@ -48,6 +51,7 @@ fn connect_with_options_callback() {
         messages_clone.lock().unwrap().push(msg);
     });
 
+    rate_limit();
     let client = Client::connect_with_options("127.0.0.1:4002", client_id.id(), options).expect("connection failed");
 
     assert!(client.server_version() > 0);
