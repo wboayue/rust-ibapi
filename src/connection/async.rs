@@ -2,6 +2,7 @@
 
 use log::{debug, info};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
@@ -20,7 +21,8 @@ type Response = Result<ResponseMessage, Error>;
 #[derive(Debug)]
 pub struct AsyncConnection {
     pub(crate) client_id: i32,
-    pub(crate) socket: Mutex<TcpStream>,
+    pub(crate) reader: Mutex<OwnedReadHalf>,
+    pub(crate) writer: Mutex<OwnedWriteHalf>,
     pub(crate) connection_metadata: Mutex<ConnectionMetadata>,
     pub(crate) recorder: MessageRecorder,
     pub(crate) connection_handler: ConnectionHandler,
@@ -49,10 +51,12 @@ impl AsyncConnection {
     /// before performing the TWS handshake.
     pub async fn connect_with_options(address: &str, client_id: i32, options: ConnectionOptions) -> Result<Self, Error> {
         let socket = Self::connect_socket(address, &options).await?;
+        let (read_half, write_half) = socket.into_split();
 
         let connection = Self {
             client_id,
-            socket: Mutex::new(socket),
+            reader: Mutex::new(read_half),
+            writer: Mutex::new(write_half),
             connection_metadata: Mutex::new(ConnectionMetadata {
                 client_id,
                 ..Default::default()
@@ -109,9 +113,14 @@ impl AsyncConnection {
                 Ok(new_socket) => {
                     info!("reconnected !!!");
 
+                    let (new_reader, new_writer) = new_socket.into_split();
                     {
-                        let mut socket = self.socket.lock().await;
-                        *socket = new_socket;
+                        let mut reader = self.reader.lock().await;
+                        *reader = new_reader;
+                    }
+                    {
+                        let mut writer = self.writer.lock().await;
+                        *writer = new_writer;
                     }
 
                     // Reconnection doesn't use startup callback
@@ -149,24 +158,23 @@ impl AsyncConnection {
 
         let length_encoded = crate::messages::encode_length(&encoded);
 
-        let mut socket = self.socket.lock().await;
-        socket.write_all(&length_encoded).await?;
-        socket.flush().await?;
+        let mut writer = self.writer.lock().await;
+        writer.write_all(&length_encoded).await?;
+        writer.flush().await?;
         Ok(())
     }
 
     /// Read a message from the connection
     pub(crate) async fn read_message(&self) -> Response {
+        let mut reader = self.reader.lock().await;
+
         // Read message length
         let mut length_bytes = [0u8; 4];
-        {
-            let mut socket = self.socket.lock().await;
-            match socket.read_exact(&mut length_bytes).await {
-                Ok(_) => {}
-                Err(e) => {
-                    debug!("Error reading message length: {:?}", e);
-                    return Err(Error::Io(e));
-                }
+        match reader.read_exact(&mut length_bytes).await {
+            Ok(_) => {}
+            Err(e) => {
+                debug!("Error reading message length: {:?}", e);
+                return Err(Error::Io(e));
             }
         }
 
@@ -174,10 +182,9 @@ impl AsyncConnection {
 
         // Read message data
         let mut data = vec![0u8; message_length];
-        {
-            let mut socket = self.socket.lock().await;
-            socket.read_exact(&mut data).await?;
-        }
+        reader.read_exact(&mut data).await?;
+
+        drop(reader);
 
         let raw_string = String::from_utf8_lossy(&data).into_owned();
         debug!("<- {raw_string:?}");
@@ -200,8 +207,8 @@ impl AsyncConnection {
         debug!("-> handshake: {handshake:?}");
 
         {
-            let mut socket = self.socket.lock().await;
-            socket.write_all(&handshake).await?;
+            let mut writer = self.writer.lock().await;
+            writer.write_all(&handshake).await?;
         }
 
         let ack = self.read_message().await;

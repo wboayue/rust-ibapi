@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use log::{debug, error, info, warn};
-use tokio::sync::{broadcast, mpsc, RwLock};
+use tokio::sync::{broadcast, mpsc, Notify, RwLock};
 use tokio::task;
 use tokio::time::Duration;
 
@@ -178,14 +178,17 @@ pub struct AsyncTcpMessageBus {
     process_task: Arc<RwLock<Option<task::JoinHandle<()>>>>,
     /// Shutdown flag
     shutdown_requested: Arc<AtomicBool>,
+    /// Notification to wake the message loop on shutdown
+    shutdown_notify: Arc<Notify>,
     connected: Arc<AtomicBool>,
 }
 
 impl Drop for AsyncTcpMessageBus {
     fn drop(&mut self) {
         debug!("dropping async tcp message bus");
-        // Set the shutdown flag so the background task exits
+        // Set the shutdown flag and notify the message loop to exit
         self.shutdown_requested.store(true, Ordering::Relaxed);
+        self.shutdown_notify.notify_waiters();
     }
 }
 
@@ -219,6 +222,7 @@ impl AsyncTcpMessageBus {
             cleanup_sender,
             process_task: Arc::new(RwLock::new(None)),
             shutdown_requested: Arc::new(AtomicBool::new(false)),
+            shutdown_notify: Arc::new(Notify::new()),
             connected: Arc::new(AtomicBool::new(true)),
         };
 
@@ -255,21 +259,17 @@ impl AsyncTcpMessageBus {
     /// Start processing messages from TWS
     pub fn process_messages(self: Arc<Self>, _server_version: i32, _reconnect_delay: Duration) -> Result<(), Error> {
         let message_bus = self.clone();
-        let shutdown_flag = self.shutdown_requested.clone();
+        let shutdown_notify = self.shutdown_notify.clone();
 
         let handle = task::spawn(async move {
             loop {
-                // Check for shutdown request
-                if shutdown_flag.load(Ordering::Relaxed) {
-                    debug!("Shutdown requested, stopping message processing");
-                    break;
-                }
-
-                // Use tokio::select to check shutdown flag while waiting for messages
+                // Use select with shutdown notification instead of a polling sleep.
+                // This prevents cancelling read_and_route_message mid-read, which
+                // would corrupt the TCP stream (read_exact is not cancellation-safe).
                 tokio::select! {
-                    _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                        // Check shutdown flag periodically
-                        continue;
+                    _ = shutdown_notify.notified() => {
+                        debug!("Shutdown notification received, stopping message processing");
+                        break;
                     }
                     result = message_bus.read_and_route_message() => {
                         use crate::client::error_handler::{is_connection_error, is_timeout_error};
@@ -388,6 +388,7 @@ impl AsyncTcpMessageBus {
         // Set the shutdown flag and mark as disconnected
         self.connected.store(false, Ordering::Relaxed);
         self.shutdown_requested.store(true, Ordering::Relaxed);
+        self.shutdown_notify.notify_waiters();
 
         // Clear all channels - dropping the senders will close the channels
         // and cause all receivers to get RecvError::Closed
@@ -797,6 +798,7 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
         debug!("sync shutdown requested");
         self.connected.store(false, Ordering::Relaxed);
         self.shutdown_requested.store(true, Ordering::Relaxed);
+        self.shutdown_notify.notify_waiters();
     }
 
     fn is_connected(&self) -> bool {

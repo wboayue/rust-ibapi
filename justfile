@@ -21,3 +21,14 @@ test:
     @echo ""
     @echo "Running async tests..."
     cargo test --features async
+
+# Run sync integration tests (requires running gateway)
+integration-sync:
+    cargo test -p ibapi-integration-sync
+
+# Run async integration tests (requires running gateway)
+integration-async:
+    cargo test -p ibapi-integration-async
+
+# Run all integration tests (requires running gateway)
+integration: integration-sync integration-async

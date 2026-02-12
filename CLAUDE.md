@@ -43,6 +43,7 @@ cargo test --all-features
 - [**Code Style Guidelines**](docs/code-style.md) - Coding standards and conventions
 - [**Build and Test**](docs/build-and-test.md) - Build commands, testing patterns, and CI
 - [**Testing Patterns**](docs/testing-patterns.md) - Table-driven tests and MockGateway
+- [**Integration Tests**](docs/integration-tests.md) - Writing tests against a live gateway
 - [**Extending the API**](docs/extending-api.md) - Adding new TWS API functionality
 
 ## Key Points to Remember
