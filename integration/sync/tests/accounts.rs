@@ -6,7 +6,7 @@ use ibapi::client::blocking::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
 
-fn connect_and_get_account() -> (Client, AccountId) {
+fn connect_and_get_account() -> (Client, AccountId, ClientId) {
     let client_id = ClientId::get();
     rate_limit();
     let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
@@ -15,7 +15,7 @@ fn connect_and_get_account() -> (Client, AccountId) {
     let accounts = client.managed_accounts().expect("managed_accounts failed");
     assert!(!accounts.is_empty());
     let account = AccountId::from(accounts[0].as_str());
-    (client, account)
+    (client, account, client_id)
 }
 
 #[test]
@@ -42,7 +42,7 @@ fn family_codes_succeeds() {
 #[test]
 #[serial(account)]
 fn positions_receives_data() {
-    let (client, _account) = connect_and_get_account();
+    let (client, _account, _client_id) = connect_and_get_account();
 
     rate_limit();
     let subscription = client.positions().expect("positions failed");
@@ -54,7 +54,7 @@ fn positions_receives_data() {
 #[test]
 #[serial(account)]
 fn positions_multi_receives_data() {
-    let (client, account) = connect_and_get_account();
+    let (client, account, _client_id) = connect_and_get_account();
 
     rate_limit();
     let subscription = client.positions_multi(Some(&account), None).expect("positions_multi failed");
@@ -65,7 +65,7 @@ fn positions_multi_receives_data() {
 #[test]
 #[serial(account)]
 fn pnl_receives_updates() {
-    let (client, account) = connect_and_get_account();
+    let (client, account, _client_id) = connect_and_get_account();
 
     rate_limit();
     let subscription = client.pnl(&account, None).expect("pnl failed");
@@ -77,7 +77,7 @@ fn pnl_receives_updates() {
 #[test]
 #[serial(account)]
 fn account_summary_all_tags() {
-    let (client, _account) = connect_and_get_account();
+    let (client, _account, _client_id) = connect_and_get_account();
 
     rate_limit();
     let subscription = client
@@ -91,7 +91,7 @@ fn account_summary_all_tags() {
 #[test]
 #[serial(account)]
 fn account_summary_specific_tag() {
-    let (client, _account) = connect_and_get_account();
+    let (client, _account, _client_id) = connect_and_get_account();
 
     rate_limit();
     let subscription = client
@@ -105,7 +105,7 @@ fn account_summary_specific_tag() {
 #[test]
 #[serial(account)]
 fn account_updates_receives_data() {
-    let (client, account) = connect_and_get_account();
+    let (client, account, _client_id) = connect_and_get_account();
 
     rate_limit();
     let subscription = client.account_updates(&account).expect("account_updates failed");
@@ -117,7 +117,7 @@ fn account_updates_receives_data() {
 #[test]
 #[serial(account)]
 fn account_updates_multi() {
-    let (client, account) = connect_and_get_account();
+    let (client, account, _client_id) = connect_and_get_account();
 
     rate_limit();
     let subscription = client.account_updates_multi(Some(&account), None).expect("account_updates_multi failed");
@@ -129,7 +129,7 @@ fn account_updates_multi() {
 #[serial(account)]
 #[ignore]
 fn pnl_single_receives_updates() {
-    let (client, account) = connect_and_get_account();
+    let (client, account, _client_id) = connect_and_get_account();
 
     // Need a contract_id from a held position
     rate_limit();

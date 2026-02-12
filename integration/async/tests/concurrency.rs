@@ -90,13 +90,10 @@ async fn concurrent_subscriptions() {
     let timeout = tokio::time::Duration::from_secs(15);
     let (r1, r2) = tokio::join!(tokio::time::timeout(timeout, sub1.next()), tokio::time::timeout(timeout, sub2.next()),);
 
-    // Both subscriptions should produce data (may timeout outside market hours)
-    if let Ok(Some(_)) = r1 {
-        // AAPL tick received
-    }
-    if let Ok(Some(_)) = r2 {
-        // MSFT tick received
-    }
+    // At least one subscription should produce data
+    let got_aapl = matches!(r1, Ok(Some(_)));
+    let got_msft = matches!(r2, Ok(Some(_)));
+    assert!(got_aapl || got_msft, "expected at least one subscription to produce data");
 }
 
 #[tokio::test]

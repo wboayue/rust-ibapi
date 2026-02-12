@@ -4,10 +4,11 @@ use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
 
-async fn connect() -> Client {
+async fn connect() -> (Client, ClientId) {
     let client_id = ClientId::get();
     rate_limit();
-    Client::connect(GATEWAY, client_id.id()).await.expect("connection failed")
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+    (client, client_id)
 }
 
 fn limit_order(action: Action, quantity: f64, price: f64) -> Order {
@@ -23,7 +24,7 @@ fn limit_order(action: Action, quantity: f64, price: f64) -> Order {
 #[tokio::test]
 #[serial(orders)]
 async fn next_valid_order_id() {
-    let client = connect().await;
+    let (client, _client_id) = connect().await;
 
     rate_limit();
     let id = client.next_valid_order_id().await.expect("next_valid_order_id failed");
@@ -33,7 +34,7 @@ async fn next_valid_order_id() {
 #[tokio::test]
 #[serial(orders)]
 async fn open_orders() {
-    let client = connect().await;
+    let (client, _client_id) = connect().await;
 
     rate_limit();
     let mut subscription = client.open_orders().await.expect("open_orders failed");
@@ -43,7 +44,7 @@ async fn open_orders() {
 #[tokio::test]
 #[serial(orders)]
 async fn all_open_orders() {
-    let client = connect().await;
+    let (client, _client_id) = connect().await;
 
     rate_limit();
     let mut subscription = client.all_open_orders().await.expect("all_open_orders failed");
@@ -53,7 +54,7 @@ async fn all_open_orders() {
 #[tokio::test]
 #[serial(orders)]
 async fn completed_orders() {
-    let client = connect().await;
+    let (client, _client_id) = connect().await;
 
     rate_limit();
     let mut subscription = client.completed_orders(false).await.expect("completed_orders failed");
@@ -63,7 +64,7 @@ async fn completed_orders() {
 #[tokio::test]
 #[serial(orders)]
 async fn completed_orders_api_only() {
-    let client = connect().await;
+    let (client, _client_id) = connect().await;
 
     rate_limit();
     let mut subscription = client.completed_orders(true).await.expect("completed_orders api_only failed");
@@ -73,7 +74,7 @@ async fn completed_orders_api_only() {
 #[tokio::test]
 #[serial(orders)]
 async fn place_limit_buy() {
-    let client = connect().await;
+    let (client, _client_id) = connect().await;
 
     let contract = Contract::stock("AAPL").build();
     let order = limit_order(Action::Buy, 1.0, 1.0);
@@ -93,7 +94,7 @@ async fn place_limit_buy() {
 #[tokio::test]
 #[serial(orders)]
 async fn place_limit_sell() {
-    let client = connect().await;
+    let (client, _client_id) = connect().await;
 
     let contract = Contract::stock("AAPL").build();
     let order = limit_order(Action::Sell, 1.0, 9999.0);
@@ -113,7 +114,7 @@ async fn place_limit_sell() {
 #[tokio::test]
 #[serial(orders)]
 async fn cancel_order_succeeds() {
-    let client = connect().await;
+    let (client, _client_id) = connect().await;
 
     let contract = Contract::stock("AAPL").build();
     let order = limit_order(Action::Buy, 1.0, 1.0);
@@ -132,7 +133,7 @@ async fn cancel_order_succeeds() {
 #[tokio::test]
 #[serial(orders)]
 async fn global_cancel() {
-    let client = connect().await;
+    let (client, _client_id) = connect().await;
 
     rate_limit();
     client.global_cancel().await.expect("global_cancel failed");
@@ -141,7 +142,7 @@ async fn global_cancel() {
 #[tokio::test]
 #[serial(orders)]
 async fn order_builder_limit() {
-    let client = connect().await;
+    let (client, _client_id) = connect().await;
 
     let contract = Contract::stock("AAPL").build();
 
@@ -164,7 +165,7 @@ async fn order_builder_limit() {
 #[tokio::test]
 #[serial(orders)]
 async fn executions_returns_subscription() {
-    let client = connect().await;
+    let (client, _client_id) = connect().await;
 
     rate_limit();
     let mut subscription = client.executions(ExecutionFilter::default()).await.expect("executions failed");

@@ -4,7 +4,7 @@ use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
 
-async fn connect_and_get_account() -> (Client, AccountId) {
+async fn connect_and_get_account() -> (Client, AccountId, ClientId) {
     let client_id = ClientId::get();
     rate_limit();
     let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
@@ -13,7 +13,7 @@ async fn connect_and_get_account() -> (Client, AccountId) {
     let accounts = client.managed_accounts().await.expect("managed_accounts failed");
     assert!(!accounts.is_empty());
     let account = AccountId::from(accounts[0].as_str());
-    (client, account)
+    (client, account, client_id)
 }
 
 #[tokio::test]
@@ -40,7 +40,7 @@ async fn family_codes_succeeds() {
 #[tokio::test]
 #[serial(account)]
 async fn positions_receives_data() {
-    let (client, _account) = connect_and_get_account().await;
+    let (client, _account, _client_id) = connect_and_get_account().await;
 
     rate_limit();
     let mut subscription = client.positions().await.expect("positions failed");
@@ -52,7 +52,7 @@ async fn positions_receives_data() {
 #[tokio::test]
 #[serial(account)]
 async fn positions_multi_receives_data() {
-    let (client, account) = connect_and_get_account().await;
+    let (client, account, _client_id) = connect_and_get_account().await;
 
     rate_limit();
     let mut subscription = client.positions_multi(Some(&account), None).await.expect("positions_multi failed");
@@ -63,7 +63,7 @@ async fn positions_multi_receives_data() {
 #[tokio::test]
 #[serial(account)]
 async fn pnl_receives_updates() {
-    let (client, account) = connect_and_get_account().await;
+    let (client, account, _client_id) = connect_and_get_account().await;
 
     rate_limit();
     let mut subscription = client.pnl(&account, None).await.expect("pnl failed");
@@ -76,7 +76,7 @@ async fn pnl_receives_updates() {
 #[tokio::test]
 #[serial(account)]
 async fn account_summary_all_tags() {
-    let (client, _account) = connect_and_get_account().await;
+    let (client, _account, _client_id) = connect_and_get_account().await;
 
     rate_limit();
     let mut subscription = client
@@ -92,7 +92,7 @@ async fn account_summary_all_tags() {
 #[tokio::test]
 #[serial(account)]
 async fn account_summary_specific_tag() {
-    let (client, _account) = connect_and_get_account().await;
+    let (client, _account, _client_id) = connect_and_get_account().await;
 
     rate_limit();
     let mut subscription = client
@@ -108,7 +108,7 @@ async fn account_summary_specific_tag() {
 #[tokio::test]
 #[serial(account)]
 async fn account_updates_receives_data() {
-    let (client, account) = connect_and_get_account().await;
+    let (client, account, _client_id) = connect_and_get_account().await;
 
     rate_limit();
     let mut subscription = client.account_updates(&account).await.expect("account_updates failed");
@@ -121,7 +121,7 @@ async fn account_updates_receives_data() {
 #[tokio::test]
 #[serial(account)]
 async fn account_updates_multi() {
-    let (client, account) = connect_and_get_account().await;
+    let (client, account, _client_id) = connect_and_get_account().await;
 
     rate_limit();
     let mut subscription = client
@@ -136,7 +136,7 @@ async fn account_updates_multi() {
 #[serial(account)]
 #[ignore]
 async fn pnl_single_receives_updates() {
-    let (client, account) = connect_and_get_account().await;
+    let (client, account, _client_id) = connect_and_get_account().await;
 
     // Need a contract_id from a held position
     rate_limit();
