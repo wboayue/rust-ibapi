@@ -182,8 +182,7 @@ async fn historical_ticks_trade() {
         .await
         .expect("historical_ticks_trade failed");
 
-    // May be empty outside market hours
-    let _tick = subscription.next().await;
+    let _tick = tokio::time::timeout(std::time::Duration::from_secs(10), subscription.next()).await;
 }
 
 #[tokio::test]
@@ -200,7 +199,7 @@ async fn historical_ticks_bid_ask() {
         .await
         .expect("historical_ticks_bid_ask failed");
 
-    let _tick = subscription.next().await;
+    let _tick = tokio::time::timeout(std::time::Duration::from_secs(10), subscription.next()).await;
 }
 
 #[tokio::test]
@@ -217,7 +216,7 @@ async fn historical_ticks_mid_point() {
         .await
         .expect("historical_ticks_mid_point failed");
 
-    let _tick = subscription.next().await;
+    let _tick = tokio::time::timeout(std::time::Duration::from_secs(10), subscription.next()).await;
 }
 
 #[tokio::test]

@@ -175,7 +175,6 @@ fn historical_ticks_trade() {
         .historical_ticks_trade(&contract, None, Some(end), 100, TradingHours::Regular)
         .expect("historical_ticks_trade failed");
 
-    // May be empty outside market hours
     let _tick = subscription.next_timeout(StdDuration::from_secs(10));
 }
 
