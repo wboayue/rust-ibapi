@@ -5,8 +5,10 @@ use ibapi::contracts::Contract;
 use ibapi::market_data::historical::{BarSize, Duration, WhatToShow};
 use ibapi::market_data::TradingHours;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use serial_test::serial;
 
 #[test]
+#[serial(historical)]
 fn head_timestamp_stock() {
     let client_id = ClientId::get();
     rate_limit();
@@ -22,6 +24,7 @@ fn head_timestamp_stock() {
 }
 
 #[test]
+#[serial(historical)]
 fn head_timestamp_forex() {
     let client_id = ClientId::get();
     rate_limit();
@@ -37,6 +40,7 @@ fn head_timestamp_forex() {
 }
 
 #[test]
+#[serial(historical)]
 fn historical_data_daily() {
     let client_id = ClientId::get();
     rate_limit();
@@ -60,6 +64,7 @@ fn historical_data_daily() {
 }
 
 #[test]
+#[serial(historical)]
 fn historical_data_hourly() {
     let client_id = ClientId::get();
     rate_limit();
@@ -82,6 +87,7 @@ fn historical_data_hourly() {
 }
 
 #[test]
+#[serial(historical)]
 fn historical_data_minute() {
     let client_id = ClientId::get();
     rate_limit();
@@ -104,6 +110,7 @@ fn historical_data_minute() {
 }
 
 #[test]
+#[serial(historical)]
 fn historical_data_bid_ask() {
     let client_id = ClientId::get();
     rate_limit();
@@ -126,6 +133,7 @@ fn historical_data_bid_ask() {
 }
 
 #[test]
+#[serial(historical)]
 fn historical_data_midpoint() {
     let client_id = ClientId::get();
     rate_limit();
@@ -148,6 +156,7 @@ fn historical_data_midpoint() {
 }
 
 #[test]
+#[serial(historical)]
 fn historical_schedule() {
     let client_id = ClientId::get();
     rate_limit();
@@ -163,6 +172,7 @@ fn historical_schedule() {
 }
 
 #[test]
+#[serial(historical)]
 fn historical_ticks_trade() {
     let client_id = ClientId::get();
     rate_limit();
@@ -179,6 +189,7 @@ fn historical_ticks_trade() {
 }
 
 #[test]
+#[serial(historical)]
 fn historical_ticks_bid_ask() {
     let client_id = ClientId::get();
     rate_limit();
@@ -195,6 +206,7 @@ fn historical_ticks_bid_ask() {
 }
 
 #[test]
+#[serial(historical)]
 fn historical_ticks_mid_point() {
     let client_id = ClientId::get();
     rate_limit();
@@ -211,6 +223,7 @@ fn historical_ticks_mid_point() {
 }
 
 #[test]
+#[serial(historical)]
 fn histogram_data_weekly() {
     let client_id = ClientId::get();
     rate_limit();

@@ -3,8 +3,10 @@ use ibapi::market_data::historical::{BarSize, Duration, WhatToShow};
 use ibapi::market_data::TradingHours;
 use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use serial_test::serial;
 
 #[tokio::test]
+#[serial(historical)]
 async fn head_timestamp_stock() {
     let client_id = ClientId::get();
     rate_limit();
@@ -21,6 +23,7 @@ async fn head_timestamp_stock() {
 }
 
 #[tokio::test]
+#[serial(historical)]
 async fn head_timestamp_forex() {
     let client_id = ClientId::get();
     rate_limit();
@@ -37,6 +40,7 @@ async fn head_timestamp_forex() {
 }
 
 #[tokio::test]
+#[serial(historical)]
 async fn historical_data_daily() {
     let client_id = ClientId::get();
     rate_limit();
@@ -61,6 +65,7 @@ async fn historical_data_daily() {
 }
 
 #[tokio::test]
+#[serial(historical)]
 async fn historical_data_hourly() {
     let client_id = ClientId::get();
     rate_limit();
@@ -84,6 +89,7 @@ async fn historical_data_hourly() {
 }
 
 #[tokio::test]
+#[serial(historical)]
 async fn historical_data_minute() {
     let client_id = ClientId::get();
     rate_limit();
@@ -107,6 +113,7 @@ async fn historical_data_minute() {
 }
 
 #[tokio::test]
+#[serial(historical)]
 async fn historical_data_bid_ask() {
     let client_id = ClientId::get();
     rate_limit();
@@ -130,6 +137,7 @@ async fn historical_data_bid_ask() {
 }
 
 #[tokio::test]
+#[serial(historical)]
 async fn historical_data_midpoint() {
     let client_id = ClientId::get();
     rate_limit();
@@ -153,6 +161,7 @@ async fn historical_data_midpoint() {
 }
 
 #[tokio::test]
+#[serial(historical)]
 async fn historical_schedule() {
     let client_id = ClientId::get();
     rate_limit();
@@ -169,6 +178,7 @@ async fn historical_schedule() {
 }
 
 #[tokio::test]
+#[serial(historical)]
 async fn historical_ticks_trade() {
     let client_id = ClientId::get();
     rate_limit();
@@ -186,6 +196,7 @@ async fn historical_ticks_trade() {
 }
 
 #[tokio::test]
+#[serial(historical)]
 async fn historical_ticks_bid_ask() {
     let client_id = ClientId::get();
     rate_limit();
@@ -203,6 +214,7 @@ async fn historical_ticks_bid_ask() {
 }
 
 #[tokio::test]
+#[serial(historical)]
 async fn historical_ticks_mid_point() {
     let client_id = ClientId::get();
     rate_limit();
@@ -220,6 +232,7 @@ async fn historical_ticks_mid_point() {
 }
 
 #[tokio::test]
+#[serial(historical)]
 async fn histogram_data_weekly() {
     let client_id = ClientId::get();
     rate_limit();
@@ -237,6 +250,7 @@ async fn histogram_data_weekly() {
 }
 
 #[tokio::test]
+#[serial(historical)]
 async fn historical_data_streaming() {
     let client_id = ClientId::get();
     rate_limit();
