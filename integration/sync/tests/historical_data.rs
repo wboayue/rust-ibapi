@@ -20,7 +20,8 @@ fn head_timestamp_stock() {
         .head_timestamp(&contract, WhatToShow::Trades, TradingHours::Regular)
         .expect("head_timestamp failed");
 
-    assert!(ts.year() < 2026, "head timestamp should be in the past");
+    let now = time::OffsetDateTime::now_utc();
+    assert!(ts.year() <= now.year(), "head timestamp should be in the past");
 }
 
 #[test]

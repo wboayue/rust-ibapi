@@ -91,7 +91,7 @@ fn place_limit_buy() {
 
     // Cancel the order
     rate_limit();
-    let _cancel = client.cancel_order(order_id, "");
+    client.cancel_order(order_id, "").expect("cancel_order failed");
 }
 
 #[test]
@@ -110,7 +110,7 @@ fn place_limit_sell() {
     assert!(item.is_some(), "expected order status update");
 
     rate_limit();
-    let _cancel = client.cancel_order(order_id, "");
+    client.cancel_order(order_id, "").expect("cancel_order failed");
 }
 
 #[test]
@@ -155,7 +155,7 @@ fn order_builder_limit() {
 
     // Cancel the placed order
     rate_limit();
-    let _cancel = client.cancel_order(order_id.0, "");
+    client.cancel_order(order_id.0, "").expect("cancel_order failed");
 }
 
 #[test]

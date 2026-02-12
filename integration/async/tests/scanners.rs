@@ -3,7 +3,6 @@ use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 
 #[tokio::test]
-#[ignore] // async scanner_parameters hangs — suspected library bug (sync version works)
 async fn scanner_parameters_returns_xml() {
     let client_id = ClientId::get();
     rate_limit();

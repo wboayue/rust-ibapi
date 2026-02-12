@@ -88,7 +88,7 @@ async fn place_limit_buy() {
     assert!(item.unwrap().is_some(), "expected order status update");
 
     rate_limit();
-    let _cancel = client.cancel_order(order_id, "").await;
+    client.cancel_order(order_id, "").await.expect("cancel_order failed");
 }
 
 #[tokio::test]
@@ -108,7 +108,7 @@ async fn place_limit_sell() {
     assert!(item.unwrap().is_some(), "expected order status update");
 
     rate_limit();
-    let _cancel = client.cancel_order(order_id, "").await;
+    client.cancel_order(order_id, "").await.expect("cancel_order failed");
 }
 
 #[tokio::test]
@@ -159,7 +159,7 @@ async fn order_builder_limit() {
 
     // Cancel the placed order
     rate_limit();
-    let _cancel = client.cancel_order(order_id.0, "").await;
+    client.cancel_order(order_id.0, "").await.expect("cancel_order failed");
 }
 
 #[tokio::test]
