@@ -1,6 +1,7 @@
 use ibapi::client::blocking::Client;
 use ibapi::contracts::{Contract, SecurityType};
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use serial_test::serial;
 
 #[test]
 fn contract_details_stock() {
@@ -23,7 +24,7 @@ fn contract_details_futures() {
     let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
 
     rate_limit();
-    let contract = Contract::futures("ES").next_quarter().build();
+    let contract = Contract::futures("ES").next_quarter().on_exchange("CME").build();
     let details = client.contract_details(&contract).expect("contract_details failed");
 
     assert!(!details.is_empty());
@@ -45,6 +46,7 @@ fn contract_details_forex() {
 }
 
 #[test]
+#[serial(matching_symbols)]
 fn matching_symbols_exact() {
     let client_id = ClientId::get();
     rate_limit();
@@ -58,6 +60,7 @@ fn matching_symbols_exact() {
 }
 
 #[test]
+#[serial(matching_symbols)]
 fn matching_symbols_partial() {
     let client_id = ClientId::get();
     rate_limit();

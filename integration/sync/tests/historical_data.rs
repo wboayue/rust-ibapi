@@ -1,3 +1,5 @@
+use std::time::Duration as StdDuration;
+
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::market_data::historical::{BarSize, Duration, WhatToShow};
@@ -173,14 +175,8 @@ fn historical_ticks_trade() {
         .historical_ticks_trade(&contract, None, Some(end), 100, TradingHours::Regular)
         .expect("historical_ticks_trade failed");
 
-    let mut count = 0;
-    for _tick in subscription.iter() {
-        count += 1;
-        if count >= 1 {
-            break;
-        }
-    }
     // May be empty outside market hours
+    let _tick = subscription.next_timeout(StdDuration::from_secs(10));
 }
 
 #[test]
@@ -196,13 +192,7 @@ fn historical_ticks_bid_ask() {
         .historical_ticks_bid_ask(&contract, None, Some(end), 100, TradingHours::Regular, false)
         .expect("historical_ticks_bid_ask failed");
 
-    let mut count = 0;
-    for _tick in subscription.iter() {
-        count += 1;
-        if count >= 1 {
-            break;
-        }
-    }
+    let _tick = subscription.next_timeout(StdDuration::from_secs(10));
 }
 
 #[test]
@@ -218,13 +208,7 @@ fn historical_ticks_mid_point() {
         .historical_ticks_mid_point(&contract, None, Some(end), 100, TradingHours::Regular)
         .expect("historical_ticks_mid_point failed");
 
-    let mut count = 0;
-    for _tick in subscription.iter() {
-        count += 1;
-        if count >= 1 {
-            break;
-        }
-    }
+    let _tick = subscription.next_timeout(StdDuration::from_secs(10));
 }
 
 #[test]

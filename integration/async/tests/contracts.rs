@@ -1,6 +1,7 @@
 use ibapi::contracts::{Contract, SecurityType};
 use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use serial_test::serial;
 
 #[tokio::test]
 async fn contract_details_stock() {
@@ -23,7 +24,7 @@ async fn contract_details_futures() {
     let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
 
     rate_limit();
-    let contract = Contract::futures("ES").next_quarter().build();
+    let contract = Contract::futures("ES").next_quarter().on_exchange("CME").build();
     let details = client.contract_details(&contract).await.expect("contract_details failed");
 
     assert!(!details.is_empty());
@@ -45,6 +46,7 @@ async fn contract_details_forex() {
 }
 
 #[tokio::test]
+#[serial(matching_symbols)]
 async fn matching_symbols_exact() {
     let client_id = ClientId::get();
     rate_limit();
@@ -58,6 +60,7 @@ async fn matching_symbols_exact() {
 }
 
 #[tokio::test]
+#[serial(matching_symbols)]
 async fn matching_symbols_partial() {
     let client_id = ClientId::get();
     rate_limit();
