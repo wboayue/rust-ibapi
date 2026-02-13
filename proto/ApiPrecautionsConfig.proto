@@ -1,0 +1,23 @@
+/* Copyright (C) 2025 Interactive Brokers LLC. All rights reserved. This code is subject to the terms
+ * and conditions of the IB API Non-Commercial License or the IB API Commercial License, as applicable. */
+
+syntax = "proto3";
+
+package protobuf;
+
+option java_outer_classname = "ApiPrecautionsConfigProto";
+option java_package = "com.ib.client.protobuf";
+option csharp_namespace = "IBApi.protobuf";
+
+message ApiPrecautionsConfig {
+    optional bool bypassOrderPrecautions = 1;
+    optional bool bypassBondWarning = 2;
+    optional bool bypassNegativeYieldConfirmation = 3;
+    optional bool bypassCalledBondWarning = 4;
+    optional bool bypassSameActionPairTradeWarning = 5;
+    optional bool bypassFlaggedAccountsWarning = 6;
+    optional bool bypassPriceBasedVolatilityWarning = 7;
+    optional bool bypassRedirectOrderWarning = 8;
+    optional bool bypassNoOverfillProtection = 9;
+    optional bool bypassRouteMarketableToBBO = 10;
+}

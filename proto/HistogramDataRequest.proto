@@ -1,0 +1,19 @@
+/* Copyright (C) 2025 Interactive Brokers LLC. All rights reserved. This code is subject to the terms
+ * and conditions of the IB API Non-Commercial License or the IB API Commercial License, as applicable. */
+
+syntax = "proto3";
+
+package protobuf;
+
+import "Contract.proto";
+
+option java_outer_classname = "HistogramDataRequestProto";
+option java_package = "com.ib.client.protobuf";
+option csharp_namespace = "IBApi.protobuf";
+
+message HistogramDataRequest {
+    optional int32 reqId = 1;
+	optional Contract contract = 2;
+	optional bool useRTH = 3;
+	optional string timePeriod = 4;
+}

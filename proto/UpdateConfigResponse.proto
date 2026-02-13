@@ -1,0 +1,21 @@
+/* Copyright (C) 2025 Interactive Brokers LLC. All rights reserved. This code is subject to the terms
+ * and conditions of the IB API Non-Commercial License or the IB API Commercial License, as applicable. */
+
+syntax = "proto3";
+
+package protobuf;
+
+import "UpdateConfigWarning.proto";
+
+option java_outer_classname = "UpdateConfigResponseProto";
+option java_package = "com.ib.client.protobuf";
+option csharp_namespace = "IBApi.protobuf";
+
+message UpdateConfigResponse {
+    optional int32 reqId = 1;
+    optional string status = 2;
+    optional string message = 3;
+    repeated string changedFields = 4;
+    repeated string errors = 5;
+    repeated UpdateConfigWarning warnings = 6;
+}

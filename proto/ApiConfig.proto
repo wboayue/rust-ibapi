@@ -1,0 +1,18 @@
+/* Copyright (C) 2025 Interactive Brokers LLC. All rights reserved. This code is subject to the terms
+ * and conditions of the IB API Non-Commercial License or the IB API Commercial License, as applicable. */
+
+syntax = "proto3";
+
+package protobuf;
+
+import "ApiPrecautionsConfig.proto";
+import "ApiSettingsConfig.proto";
+
+option java_outer_classname = "ApiConfigProto";
+option java_package = "com.ib.client.protobuf";
+option csharp_namespace = "IBApi.protobuf";
+
+message ApiConfig {
+    optional ApiPrecautionsConfig precautions = 1;
+    optional ApiSettingsConfig settings = 2;
+}

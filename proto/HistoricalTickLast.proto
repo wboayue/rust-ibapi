@@ -1,0 +1,21 @@
+/* Copyright (C) 2025 Interactive Brokers LLC. All rights reserved. This code is subject to the terms
+ * and conditions of the IB API Non-Commercial License or the IB API Commercial License, as applicable. */
+
+syntax = "proto3";
+
+package protobuf;
+
+import "TickAttribLast.proto";
+
+option java_outer_classname = "HistoricalTickLastProto";
+option java_package = "com.ib.client.protobuf";
+option csharp_namespace = "IBApi.protobuf";
+
+message HistoricalTickLast {
+    optional int64 time = 1;
+	optional TickAttribLast tickAttribLast = 2;
+    optional double price = 3;
+    optional string size = 4;
+    optional string exchange = 5;
+    optional string specialConditions = 6;
+}

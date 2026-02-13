@@ -1,0 +1,25 @@
+/* Copyright (C) 2025 Interactive Brokers LLC. All rights reserved. This code is subject to the terms
+ * and conditions of the IB API Non-Commercial License or the IB API Commercial License, as applicable. */
+
+syntax = "proto3";
+
+package protobuf;
+
+import "Contract.proto";
+
+option java_outer_classname = "HistoricalDataRequestProto";
+option java_package = "com.ib.client.protobuf";
+option csharp_namespace = "IBApi.protobuf";
+
+message HistoricalDataRequest {
+    optional int32 reqId = 1;
+	optional Contract contract = 2;
+	optional string endDateTime = 3;
+	optional string barSizeSetting = 4;
+	optional string duration = 5;
+	optional bool useRTH = 6;
+	optional string whatToShow = 7;
+    optional int32 formatDate = 8;
+	optional bool keepUpToDate = 9;
+    map<string, string> chartOptions = 10;
+}

@@ -1,0 +1,48 @@
+/* Copyright (C) 2025 Interactive Brokers LLC. All rights reserved. This code is subject to the terms
+ * and conditions of the IB API Non-Commercial License or the IB API Commercial License, as applicable. */
+
+syntax = "proto3";
+
+package protobuf;
+
+import "OrderAllocation.proto";
+
+option java_outer_classname = "OrderStateProto";
+option java_package = "com.ib.client.protobuf";
+option csharp_namespace = "IBApi.protobuf";
+
+message OrderState {
+    optional string status = 1;
+    optional double initMarginBefore = 2;
+    optional double maintMarginBefore = 3;
+    optional double equityWithLoanBefore = 4;
+    optional double initMarginChange = 5;
+    optional double maintMarginChange = 6;
+    optional double equityWithLoanChange = 7;
+    optional double initMarginAfter = 8;
+    optional double maintMarginAfter = 9;
+    optional double equityWithLoanAfter = 10;
+
+    optional double commissionAndFees = 11;
+    optional double minCommissionAndFees = 12;
+    optional double maxCommissionAndFees = 13;
+    optional string commissionAndFeesCurrency = 14;
+    optional string marginCurrency = 15;
+
+    optional double initMarginBeforeOutsideRTH = 16;
+    optional double maintMarginBeforeOutsideRTH = 17;
+    optional double equityWithLoanBeforeOutsideRTH = 18;
+    optional double initMarginChangeOutsideRTH = 19;
+    optional double maintMarginChangeOutsideRTH = 20;
+    optional double equityWithLoanChangeOutsideRTH = 21;
+    optional double initMarginAfterOutsideRTH = 22;
+    optional double maintMarginAfterOutsideRTH = 23;
+    optional double equityWithLoanAfterOutsideRTH = 24;
+
+    optional string suggestedSize = 25;
+    optional string rejectReason = 26;
+    repeated OrderAllocation orderAllocations = 27;
+    optional string warningText = 28;
+    optional string completedTime = 29;
+    optional string completedStatus = 30;
+}

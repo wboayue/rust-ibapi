@@ -1,0 +1,21 @@
+/* Copyright (C) 2025 Interactive Brokers LLC. All rights reserved. This code is subject to the terms
+ * and conditions of the IB API Non-Commercial License or the IB API Commercial License, as applicable. */
+
+syntax = "proto3";
+
+package protobuf;
+
+import "Contract.proto";
+import "Order.proto";
+import "OrderState.proto";
+
+option java_outer_classname = "OpenOrderProto";
+option java_package = "com.ib.client.protobuf";
+option csharp_namespace = "IBApi.protobuf";
+
+message OpenOrder {
+    optional int32 orderId = 1;
+    optional Contract contract = 2;
+    optional Order order = 3;
+    optional OrderState orderState = 4;
+}

@@ -1,0 +1,20 @@
+/* Copyright (C) 2025 Interactive Brokers LLC. All rights reserved. This code is subject to the terms
+ * and conditions of the IB API Non-Commercial License or the IB API Commercial License, as applicable. */
+
+syntax = "proto3";
+
+package protobuf;
+
+option java_outer_classname = "SecDefOptParameterProto";
+option java_package = "com.ib.client.protobuf";
+option csharp_namespace = "IBApi.protobuf";
+
+message SecDefOptParameter {
+    optional int32 reqId = 1;
+	optional string exchange = 2;
+    optional int32 underlyingConId = 3;
+	optional string tradingClass = 4;
+	optional string multiplier = 5;
+	repeated string expirations = 6;
+	repeated double strikes = 7;
+}

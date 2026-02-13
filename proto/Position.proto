@@ -1,0 +1,19 @@
+/* Copyright (C) 2025 Interactive Brokers LLC. All rights reserved. This code is subject to the terms
+ * and conditions of the IB API Non-Commercial License or the IB API Commercial License, as applicable. */
+
+syntax = "proto3";
+
+package protobuf;
+
+import "Contract.proto";
+
+option java_outer_classname = "PositionProto";
+option java_package = "com.ib.client.protobuf";
+option csharp_namespace = "IBApi.protobuf";
+
+message Position {
+    optional string account = 1;
+	optional Contract contract = 2;
+    optional string position = 3;
+    optional double avgCost = 4;
+}

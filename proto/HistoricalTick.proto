@@ -1,0 +1,16 @@
+/* Copyright (C) 2025 Interactive Brokers LLC. All rights reserved. This code is subject to the terms
+ * and conditions of the IB API Non-Commercial License or the IB API Commercial License, as applicable. */
+
+syntax = "proto3";
+
+package protobuf;
+
+option java_outer_classname = "HistoricalTickProto";
+option java_package = "com.ib.client.protobuf";
+option csharp_namespace = "IBApi.protobuf";
+
+message HistoricalTick {
+    optional int64 time = 1;
+    optional double price = 2;
+    optional string size = 3;
+}
