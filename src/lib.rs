@@ -125,6 +125,9 @@ pub mod prelude;
 /// Protocol version checking and constants for TWS API features.
 pub mod protocol;
 
+/// Generated protobuf message types for the TWS API wire protocol.
+pub mod proto;
+
 mod server_versions;
 
 #[doc(inline)]

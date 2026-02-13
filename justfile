@@ -1,4 +1,8 @@
 
+# Compile proto files to Rust (output: src/proto/protobuf.rs)
+proto:
+    cargo run -p proto-gen
+
 # Generate and save coverage report using tarpaulin
 cover:
     cargo tarpaulin -o html
