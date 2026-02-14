@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-// Requires SSH key access to the IB repo. If you use HTTPS, change to:
-//   "https://github.com/InteractiveBrokers/tws-api.git"
+// Private repo — requires IB partner access and SSH key configured for GitHub.
+// For HTTPS, change to "https://github.com/InteractiveBrokers/tws-api.git"
 // and ensure credentials are available (e.g. via GH_TOKEN or credential helper).
 const IB_REPO: &str = "git@github.com:InteractiveBrokers/tws-api.git";
 const PROTO_PATH: &str = "source/proto";
@@ -28,6 +28,7 @@ fn fetch_proto_files(dest: &Path) {
     run("git", &["clone", "--depth", "1", "--filter=blob:none", "--sparse", IB_REPO, tmp_str]);
     run("git", &["-C", tmp_str, "sparse-checkout", "set", PROTO_PATH]);
 
+    // Flat scan — assumes all .proto files live directly under source/proto/
     let src = tmp.join(PROTO_PATH);
     let mut count = 0u32;
     for entry in std::fs::read_dir(&src).expect("failed to read cloned proto dir") {
@@ -54,11 +55,21 @@ fn run(cmd: &str, args: &[&str]) {
     }
 }
 
+fn workspace_root() -> PathBuf {
+    let output = Command::new("cargo")
+        .args(["locate-project", "--workspace", "--message-format=plain"])
+        .output()
+        .expect("failed to run cargo locate-project");
+    assert!(output.status.success(), "cargo locate-project failed");
+    let cargo_toml = String::from_utf8(output.stdout).expect("non-UTF-8 path");
+    PathBuf::from(cargo_toml.trim())
+        .parent()
+        .expect("Cargo.toml has no parent")
+        .to_path_buf()
+}
+
 fn main() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .canonicalize()
-        .expect("failed to resolve project root");
+    let root = workspace_root();
 
     let proto_dir = root.join("target/proto");
     let out_dir = root.join("src/proto");
