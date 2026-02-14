@@ -1641,6 +1641,10 @@ pub struct TickReqParams {
     pub bbo_exchange: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(int32, optional, tag = "4")]
     pub snapshot_permissions: ::core::option::Option<i32>,
+    #[prost(string, optional, tag = "5")]
+    pub last_price_precision: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "6")]
+    pub last_size_precision: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ReceiveFa {
@@ -1935,6 +1939,10 @@ pub struct ContractDetails {
     >,
     #[prost(string, optional, tag = "62")]
     pub min_algo_size: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "63")]
+    pub last_price_precision: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "64")]
+    pub last_size_precision: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PositionMulti {
