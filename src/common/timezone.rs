@@ -7,7 +7,7 @@ use time_tz::{timezones, Tz};
 /// IB Gateway may send timezone names in various formats:
 /// - IANA names: "America/New_York", "Asia/Shanghai"
 /// - Abbreviations: "PST", "EST"
-/// - Windows names: "China Standard Time"
+/// - Windows names: "China Standard Time", "Greenwich Mean Time"
 /// - Localized names: "中国标准时间" (Chinese)
 /// - Mojibake from encoding issues (GB2312 decoded as UTF-8)
 pub fn find_timezone(name: &str) -> Vec<&'static Tz> {
@@ -22,9 +22,12 @@ fn map_timezone_name(name: &str) -> &str {
         return "Asia/Shanghai";
     }
 
-    // Windows English timezone name
+    // Windows English timezone names
     if name == "China Standard Time" {
         return "Asia/Shanghai";
+    }
+    if name == "Greenwich Mean Time" || name == "GMT Standard Time" {
+        return "Europe/London";
     }
 
     // GB2312/GBK encoded strings decoded as UTF-8 lossy contain U+FFFD.
@@ -63,6 +66,17 @@ mod tests {
         let zones = find_timezone("China Standard Time");
         assert!(!zones.is_empty());
         assert_eq!(zones[0].name(), "Asia/Shanghai");
+    }
+
+    #[test]
+    fn test_find_timezone_gmt() {
+        let zones = find_timezone("Greenwich Mean Time");
+        assert!(!zones.is_empty());
+        assert_eq!(zones[0].name(), "Europe/London");
+
+        let zones = find_timezone("GMT Standard Time");
+        assert!(!zones.is_empty());
+        assert_eq!(zones[0].name(), "Europe/London");
     }
 
     #[test]
