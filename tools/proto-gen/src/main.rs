@@ -34,8 +34,7 @@ fn fetch_proto_files(dest: &Path) {
     for entry in std::fs::read_dir(&src).expect("failed to read cloned proto dir") {
         let path = entry.expect("bad entry").path();
         if is_proto(&path) {
-            std::fs::copy(&path, dest.join(path.file_name().unwrap()))
-                .unwrap_or_else(|e| panic!("failed to copy {}: {e}", path.display()));
+            std::fs::copy(&path, dest.join(path.file_name().unwrap())).unwrap_or_else(|e| panic!("failed to copy {}: {e}", path.display()));
             count += 1;
         }
     }
@@ -62,10 +61,7 @@ fn workspace_root() -> PathBuf {
         .expect("failed to run cargo locate-project");
     assert!(output.status.success(), "cargo locate-project failed");
     let cargo_toml = String::from_utf8(output.stdout).expect("non-UTF-8 path");
-    PathBuf::from(cargo_toml.trim())
-        .parent()
-        .expect("Cargo.toml has no parent")
-        .to_path_buf()
+    PathBuf::from(cargo_toml.trim()).parent().expect("Cargo.toml has no parent").to_path_buf()
 }
 
 fn main() {
