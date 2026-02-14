@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "integration/common", "integration/async", "integration/sync"]
+members = [".", "integration/common", "integration/async", "integration/sync", "tools/proto-gen"]
 default-members = ["."]
 
 [package]
@@ -29,6 +29,7 @@ all-features = true
 default = ["async"]
 sync = ["dep:crossbeam"]
 async = ["dep:tokio", "dep:futures", "dep:async-trait"]
+proto = ["dep:prost"]
 
 [dependencies]
 byteorder = "1.5.0"
@@ -39,6 +40,7 @@ time = {version = "0.3.36", features = ["formatting", "macros", "local-offset", 
 time-tz = "2.0.0"
 serde = {version = "1.0.214" , features = ["derive"]}
 serde_json = "1.0"
+prost = { version = "0.14", optional = true }
 
 # Async dependencies
 tokio = { version = "1.41", features = ["net", "rt-multi-thread", "sync", "time", "macros", "io-util"], optional = true }
