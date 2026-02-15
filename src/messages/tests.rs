@@ -420,7 +420,11 @@ fn test_incoming_message_from_i32() {
     assert_eq!(IncomingMessages::from(105), IncomingMessages::WshEventData);
     assert_eq!(IncomingMessages::from(106), IncomingMessages::HistoricalSchedule);
     assert_eq!(IncomingMessages::from(107), IncomingMessages::UserInfo);
-    assert_eq!(IncomingMessages::from(108), IncomingMessages::NotValid);
+    assert_eq!(IncomingMessages::from(108), IncomingMessages::HistoricalDataEnd);
+    assert_eq!(IncomingMessages::from(109), IncomingMessages::CurrentTimeInMillis);
+    assert_eq!(IncomingMessages::from(110), IncomingMessages::ConfigResponse);
+    assert_eq!(IncomingMessages::from(111), IncomingMessages::UpdateConfigResponse);
+    assert_eq!(IncomingMessages::from(112), IncomingMessages::NotValid);
 }
 
 #[test]
@@ -1356,8 +1360,11 @@ fn test_all_incoming_message_conversions() {
     let test_cases = vec![
         (0, IncomingMessages::NotValid),
         (1, IncomingMessages::TickPrice),
-        (108, IncomingMessages::NotValid),
-        (109, IncomingMessages::NotValid),
+        (108, IncomingMessages::HistoricalDataEnd),
+        (109, IncomingMessages::CurrentTimeInMillis),
+        (110, IncomingMessages::ConfigResponse),
+        (111, IncomingMessages::UpdateConfigResponse),
+        (112, IncomingMessages::NotValid),
         (i32::MAX, IncomingMessages::NotValid),
         (i32::MIN, IncomingMessages::NotValid),
         (-1, IncomingMessages::NotValid),
@@ -1551,6 +1558,11 @@ fn test_outgoing_messages_from_str_comprehensive() {
         ("102", OutgoingMessages::RequestWshEventData),
         ("103", OutgoingMessages::CancelWshEventData),
         ("104", OutgoingMessages::RequestUserInfo),
+        ("105", OutgoingMessages::RequestCurrentTimeInMillis),
+        ("106", OutgoingMessages::CancelContractData),
+        ("107", OutgoingMessages::CancelHistoricalTicks),
+        ("108", OutgoingMessages::ReqConfig),
+        ("109", OutgoingMessages::UpdateConfig),
     ];
 
     for (input, expected) in test_cases {
@@ -1559,7 +1571,7 @@ fn test_outgoing_messages_from_str_comprehensive() {
     }
 
     // Test invalid cases
-    assert!(OutgoingMessages::from_str("105").is_err());
+    assert!(OutgoingMessages::from_str("110").is_err());
     assert!(OutgoingMessages::from_str("999").is_err());
     assert!(OutgoingMessages::from_str("-1").is_err());
     assert!(OutgoingMessages::from_str("abc").is_err());
