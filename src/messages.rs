@@ -282,6 +282,14 @@ pub enum IncomingMessages {
     HistoricalSchedule = 106,
     /// User information response.
     UserInfo = 107,
+    /// End marker for historical data.
+    HistoricalDataEnd = 108,
+    /// Current time in milliseconds.
+    CurrentTimeInMillis = 109,
+    /// Configuration response.
+    ConfigResponse = 110,
+    /// Update configuration response.
+    UpdateConfigResponse = 111,
 }
 
 impl From<i32> for IncomingMessages {
@@ -370,6 +378,10 @@ impl From<i32> for IncomingMessages {
             105 => IncomingMessages::WshEventData,
             106 => IncomingMessages::HistoricalSchedule,
             107 => IncomingMessages::UserInfo,
+            108 => IncomingMessages::HistoricalDataEnd,
+            109 => IncomingMessages::CurrentTimeInMillis,
+            110 => IncomingMessages::ConfigResponse,
+            111 => IncomingMessages::UpdateConfigResponse,
             _ => IncomingMessages::NotValid,
         }
     }
@@ -456,166 +468,176 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
 #[allow(dead_code)]
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
 pub enum OutgoingMessages {
-    /// Request streaming market data (`reqMktData`).
+    /// Request streaming market data.
     RequestMarketData = 1,
-    /// Cancel streaming market data (`cancelMktData`).
+    /// Cancel streaming market data.
     CancelMarketData = 2,
-    /// Submit a new order (`placeOrder`).
+    /// Submit a new order.
     PlaceOrder = 3,
-    /// Cancel an existing order (`cancelOrder`).
+    /// Cancel an existing order.
     CancelOrder = 4,
-    /// Request the current open orders (`reqOpenOrders`).
+    /// Request the current open orders.
     RequestOpenOrders = 5,
-    /// Request account value updates (`reqAccountUpdates`).
+    /// Request account value updates.
     RequestAccountData = 6,
-    /// Request execution reports (`reqExecutions`).
+    /// Request execution reports.
     RequestExecutions = 7,
-    /// Request a block of valid order ids (`reqIds`).
+    /// Request a block of valid order ids.
     RequestIds = 8,
-    /// Request contract details (`reqContractDetails`).
+    /// Request contract details.
     RequestContractData = 9,
-    /// Request level-two market depth (`reqMktDepth`).
+    /// Request level-two market depth.
     RequestMarketDepth = 10,
-    /// Cancel level-two market depth (`cancelMktDepth`).
+    /// Cancel level-two market depth.
     CancelMarketDepth = 11,
-    /// Subscribe to news bulletins (`reqNewsBulletins`).
+    /// Subscribe to news bulletins.
     RequestNewsBulletins = 12,
-    /// Cancel news bulletin subscription (`cancelNewsBulletins`).
+    /// Cancel news bulletin subscription.
     CancelNewsBulletin = 13,
-    /// Change the server log level (`setServerLogLevel`).
+    /// Change the server log level.
     ChangeServerLog = 14,
-    /// Request auto-open orders (`reqAutoOpenOrders`).
+    /// Request auto-open orders.
     RequestAutoOpenOrders = 15,
-    /// Request all open orders (`reqAllOpenOrders`).
+    /// Request all open orders.
     RequestAllOpenOrders = 16,
-    /// Request managed accounts list (`reqManagedAccts`).
+    /// Request managed accounts list.
     RequestManagedAccounts = 17,
-    /// Request financial advisor configuration (`requestFA`).
+    /// Request financial advisor configuration.
     RequestFA = 18,
-    /// Replace financial advisor configuration (`replaceFA`).
+    /// Replace financial advisor configuration.
     ReplaceFA = 19,
-    /// Request historical bar data (`reqHistoricalData`).
+    /// Request historical bar data.
     RequestHistoricalData = 20,
-    /// Exercise an option contract (`exerciseOptions`).
+    /// Exercise an option contract.
     ExerciseOptions = 21,
-    /// Subscribe to a market scanner (`reqScannerSubscription`).
+    /// Subscribe to a market scanner.
     RequestScannerSubscription = 22,
-    /// Cancel a market scanner subscription (`cancelScannerSubscription`).
+    /// Cancel a market scanner subscription.
     CancelScannerSubscription = 23,
-    /// Request scanner parameter definitions (`reqScannerParameters`).
+    /// Request scanner parameter definitions.
     RequestScannerParameters = 24,
-    /// Cancel an in-flight historical data request (`cancelHistoricalData`).
+    /// Cancel an in-flight historical data request.
     CancelHistoricalData = 25,
-    /// Request the current TWS/Gateway time (`reqCurrentTime`).
+    /// Request the current TWS/Gateway time.
     RequestCurrentTime = 49,
-    /// Request real-time bars (`reqRealTimeBars`).
+    /// Request real-time bars.
     RequestRealTimeBars = 50,
-    /// Cancel real-time bars (`cancelRealTimeBars`).
+    /// Cancel real-time bars.
     CancelRealTimeBars = 51,
-    /// Request fundamental data (`reqFundamentalData`).
+    /// Request fundamental data.
     RequestFundamentalData = 52,
-    /// Cancel fundamental data (`cancelFundamentalData`).
+    /// Cancel fundamental data.
     CancelFundamentalData = 53,
-    /// Request implied volatility calculation (`calculateImpliedVolatility`).
+    /// Request implied volatility calculation.
     ReqCalcImpliedVolat = 54,
-    /// Request option price calculation (`calculateOptionPrice`).
+    /// Request option price calculation.
     ReqCalcOptionPrice = 55,
-    /// Cancel implied volatility calculation (`cancelImpliedVolatility`).
+    /// Cancel implied volatility calculation.
     CancelImpliedVolatility = 56,
-    /// Cancel option price calculation (`cancelCalculateOptionPrice`).
+    /// Cancel option price calculation.
     CancelOptionPrice = 57,
-    /// Issue a global cancel request (`reqGlobalCancel`).
+    /// Issue a global cancel request.
     RequestGlobalCancel = 58,
-    /// Change the active market data type (`reqMarketDataType`).
+    /// Change the active market data type.
     RequestMarketDataType = 59,
-    /// Subscribe to position updates (`reqPositions`).
+    /// Subscribe to position updates.
     RequestPositions = 61,
-    /// Subscribe to account summary (`reqAccountSummary`).
+    /// Subscribe to account summary.
     RequestAccountSummary = 62,
-    /// Cancel account summary subscription (`cancelAccountSummary`).
+    /// Cancel account summary subscription.
     CancelAccountSummary = 63,
-    /// Cancel position subscription (`cancelPositions`).
+    /// Cancel position subscription.
     CancelPositions = 64,
-    /// Begin API verification handshake (`verifyRequest`).
+    /// Begin API verification handshake.
     VerifyRequest = 65,
-    /// Respond to verification handshake (`verifyMessage`).
+    /// Respond to verification handshake.
     VerifyMessage = 66,
-    /// Query display groups (`queryDisplayGroups`).
+    /// Query display groups.
     QueryDisplayGroups = 67,
-    /// Subscribe to display group events (`subscribeToGroupEvents`).
+    /// Subscribe to display group events.
     SubscribeToGroupEvents = 68,
-    /// Update a display group subscription (`updateDisplayGroup`).
+    /// Update a display group subscription.
     UpdateDisplayGroup = 69,
-    /// Unsubscribe from display group events (`unsubscribeFromGroupEvents`).
+    /// Unsubscribe from display group events.
     UnsubscribeFromGroupEvents = 70,
-    /// Start the API session (`startApi`).
+    /// Start the API session.
     StartApi = 71,
-    /// Verification handshake with auth (`verifyAndAuthRequest`).
+    /// Verification handshake with auth.
     VerifyAndAuthRequest = 72,
-    /// Verification message with auth (`verifyAndAuthMessage`).
+    /// Verification message with auth.
     VerifyAndAuthMessage = 73,
-    /// Request multi-account/model positions (`reqPositionsMulti`).
+    /// Request multi-account/model positions.
     RequestPositionsMulti = 74,
-    /// Cancel multi-account/model positions (`cancelPositionsMulti`).
+    /// Cancel multi-account/model positions.
     CancelPositionsMulti = 75,
-    /// Request multi-account/model updates (`reqAccountUpdatesMulti`).
+    /// Request multi-account/model updates.
     RequestAccountUpdatesMulti = 76,
-    /// Cancel multi-account/model updates (`cancelAccountUpdatesMulti`).
+    /// Cancel multi-account/model updates.
     CancelAccountUpdatesMulti = 77,
-    /// Request optional option security parameters (`reqSecDefOptParams`).
+    /// Request option security definition parameters.
     RequestSecurityDefinitionOptionalParameters = 78,
-    /// Request soft-dollar tier definitions (`reqSoftDollarTiers`).
+    /// Request soft-dollar tier definitions.
     RequestSoftDollarTiers = 79,
-    /// Request family codes (`reqFamilyCodes`).
+    /// Request family codes.
     RequestFamilyCodes = 80,
-    /// Request matching symbols (`reqMatchingSymbols`).
+    /// Request matching symbols.
     RequestMatchingSymbols = 81,
-    /// Request exchanges that support depth (`reqMktDepthExchanges`).
+    /// Request exchanges that support depth.
     RequestMktDepthExchanges = 82,
-    /// Request smart routing component map (`reqSmartComponents`).
+    /// Request smart routing component map.
     RequestSmartComponents = 83,
-    /// Request detailed news article (`reqNewsArticle`).
+    /// Request detailed news article.
     RequestNewsArticle = 84,
-    /// Request available news providers (`reqNewsProviders`).
+    /// Request available news providers.
     RequestNewsProviders = 85,
-    /// Request historical news headlines (`reqHistoricalNews`).
+    /// Request historical news headlines.
     RequestHistoricalNews = 86,
-    /// Request earliest timestamp for historical data (`reqHeadTimestamp`).
+    /// Request earliest timestamp for historical data.
     RequestHeadTimestamp = 87,
-    /// Request histogram snapshot (`reqHistogramData`).
+    /// Request histogram snapshot.
     RequestHistogramData = 88,
-    /// Cancel histogram snapshot (`cancelHistogramData`).
+    /// Cancel histogram snapshot.
     CancelHistogramData = 89,
-    /// Cancel head timestamp request (`cancelHeadTimestamp`).
+    /// Cancel head timestamp request.
     CancelHeadTimestamp = 90,
-    /// Request market rule definition (`reqMarketRule`).
+    /// Request market rule definition.
     RequestMarketRule = 91,
-    /// Request account-wide PnL stream (`reqPnL`).
+    /// Request account-wide PnL stream.
     RequestPnL = 92,
-    /// Cancel account-wide PnL stream (`cancelPnL`).
+    /// Cancel account-wide PnL stream.
     CancelPnL = 93,
-    /// Request single-position PnL stream (`reqPnLSingle`).
+    /// Request single-position PnL stream.
     RequestPnLSingle = 94,
-    /// Cancel single-position PnL stream (`cancelPnLSingle`).
+    /// Cancel single-position PnL stream.
     CancelPnLSingle = 95,
-    /// Request historical tick data (`reqHistoricalTicks`).
+    /// Request historical tick data.
     RequestHistoricalTicks = 96,
-    /// Request tick-by-tick data (`reqTickByTickData`).
+    /// Request tick-by-tick data.
     RequestTickByTickData = 97,
-    /// Cancel tick-by-tick data (`cancelTickByTickData`).
+    /// Cancel tick-by-tick data.
     CancelTickByTickData = 98,
-    /// Request completed order history (`reqCompletedOrders`).
+    /// Request completed order history.
     RequestCompletedOrders = 99,
-    /// Request Wall Street Horizon metadata (`reqWshMetaData`).
+    /// Request Wall Street Horizon metadata.
     RequestWshMetaData = 100,
-    /// Cancel Wall Street Horizon metadata (`cancelWshMetaData`).
+    /// Cancel Wall Street Horizon metadata.
     CancelWshMetaData = 101,
-    /// Request Wall Street Horizon event data (`reqWshEventData`).
+    /// Request Wall Street Horizon event data.
     RequestWshEventData = 102,
-    /// Cancel Wall Street Horizon event data (`cancelWshEventData`).
+    /// Cancel Wall Street Horizon event data.
     CancelWshEventData = 103,
-    /// Request user information (`reqUserInfo`).
+    /// Request user information.
     RequestUserInfo = 104,
+    /// Request current time in milliseconds.
+    RequestCurrentTimeInMillis = 105,
+    /// Cancel contract data request.
+    CancelContractData = 106,
+    /// Cancel historical ticks request.
+    CancelHistoricalTicks = 107,
+    /// Request configuration.
+    ReqConfig = 108,
+    /// Update configuration.
+    UpdateConfig = 109,
 }
 
 impl ToField for OutgoingMessages {
@@ -715,6 +737,11 @@ impl FromStr for OutgoingMessages {
             Ok(102) => Ok(OutgoingMessages::RequestWshEventData),
             Ok(103) => Ok(OutgoingMessages::CancelWshEventData),
             Ok(104) => Ok(OutgoingMessages::RequestUserInfo),
+            Ok(105) => Ok(OutgoingMessages::RequestCurrentTimeInMillis),
+            Ok(106) => Ok(OutgoingMessages::CancelContractData),
+            Ok(107) => Ok(OutgoingMessages::CancelHistoricalTicks),
+            Ok(108) => Ok(OutgoingMessages::ReqConfig),
+            Ok(109) => Ok(OutgoingMessages::UpdateConfig),
             Ok(n) => Err(Error::Simple(format!("Unknown outgoing message type: {}", n))),
             Err(_) => Err(Error::Simple(format!("Invalid outgoing message type: {}", s))),
         }

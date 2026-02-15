@@ -112,6 +112,7 @@ pub const PAST_LIMIT: i32 = 109;
 pub const MD_SIZE_MULTIPLIER: i32 = 110;
 /// Minimum server version for cash quantity orders.
 pub const CASH_QTY: i32 = 111;
+/// Minimum server version for market depth exchanges.
 pub const REQ_MKT_DEPTH_EXCHANGES: i32 = 112;
 /// Minimum server version for tick news.
 pub const TICK_NEWS: i32 = 113;
@@ -242,78 +243,91 @@ pub const BOND_ISSUERID: i32 = 176;
 /// Minimum server version for FA profile desupport.
 pub const FA_PROFILE_DESUPPORT: i32 = 177;
 
+/// Minimum server version for pending price revision.
 pub const PENDING_PRICE_REVISION: i32 = 178;
-
+/// Minimum server version for fund data fields.
 pub const FUND_DATA_FIELDS: i32 = 179;
-
+/// Minimum server version for manual order time on exercise options.
 pub const MANUAL_ORDER_TIME_EXERCISE_OPTIONS: i32 = 180;
-
+/// Minimum server version for open order AD strategy.
 pub const OPEN_ORDER_AD_STRATEGY: i32 = 181;
-
+/// Minimum server version for last trade date.
 pub const LAST_TRADE_DATE: i32 = 182;
-
+/// Minimum server version for customer account.
 pub const CUSTOMER_ACCOUNT: i32 = 183;
-
+/// Minimum server version for professional customer.
 pub const PROFESSIONAL_CUSTOMER: i32 = 184;
-
+/// Minimum server version for bond accrued interest.
 pub const BOND_ACCRUED_INTEREST: i32 = 185;
-
+/// Minimum server version for ineligibility reasons.
 pub const INELIGIBILITY_REASONS: i32 = 186;
-
+/// Minimum server version for RFQ fields.
 pub const RFQ_FIELDS: i32 = 187;
-
+/// Minimum server version for bond trading hours.
 pub const BOND_TRADING_HOURS: i32 = 188;
-
+/// Minimum server version for include overnight.
 pub const INCLUDE_OVERNIGHT: i32 = 189;
-
+/// Minimum server version for undo RFQ fields.
 pub const UNDO_RFQ_FIELDS: i32 = 190;
-
+/// Minimum server version for perm ID as long.
 pub const PERM_ID_AS_LONG: i32 = 191;
-
+/// Minimum server version for CME tagging fields.
 pub const CME_TAGGING_FIELDS: i32 = 192;
-
+/// Minimum server version for CME tagging fields in open order.
 pub const CME_TAGGING_FIELDS_IN_OPEN_ORDER: i32 = 193;
-
+/// Minimum server version for error time.
 pub const ERROR_TIME: i32 = 194;
-
+/// Minimum server version for full order preview fields.
 pub const FULL_ORDER_PREVIEW_FIELDS: i32 = 195;
-
+/// Minimum server version for historical data end message.
 pub const HISTORICAL_DATA_END: i32 = 196;
-
+/// Minimum server version for current time in milliseconds.
 pub const CURRENT_TIME_IN_MILLIS: i32 = 197;
-
+/// Minimum server version for submitter.
 pub const SUBMITTER: i32 = 198;
-
+/// Minimum server version for imbalance only.
 pub const IMBALANCE_ONLY: i32 = 199;
-
+/// Minimum server version for parametrized days of executions.
 pub const PARAMETRIZED_DAYS_OF_EXECUTIONS: i32 = 200;
-
+/// Minimum server version for protobuf messages.
 pub const PROTOBUF: i32 = 201;
-
+/// Minimum server version for zero strike.
 pub const ZERO_STRIKE: i32 = 202;
-
+/// Minimum server version for protobuf place order.
 pub const PROTOBUF_PLACE_ORDER: i32 = 203;
-
+/// Minimum server version for protobuf completed order.
 pub const PROTOBUF_COMPLETED_ORDER: i32 = 204;
-
+/// Minimum server version for protobuf contract data.
 pub const PROTOBUF_CONTRACT_DATA: i32 = 205;
-
+/// Minimum server version for protobuf market data.
 pub const PROTOBUF_MARKET_DATA: i32 = 206;
-
+/// Minimum server version for protobuf accounts and positions.
 pub const PROTOBUF_ACCOUNTS_POSITIONS: i32 = 207;
-
+/// Minimum server version for protobuf historical data.
 pub const PROTOBUF_HISTORICAL_DATA: i32 = 208;
-
+/// Minimum server version for protobuf news data.
 pub const PROTOBUF_NEWS_DATA: i32 = 209;
-
+/// Minimum server version for protobuf scan data.
 pub const PROTOBUF_SCAN_DATA: i32 = 210;
-
+/// Minimum server version for protobuf REST messages (batch 1).
 pub const PROTOBUF_REST_MESSAGES_1: i32 = 211;
-
+/// Minimum server version for protobuf REST messages (batch 2).
 pub const PROTOBUF_REST_MESSAGES_2: i32 = 212;
-
+/// Minimum server version for protobuf REST messages (batch 3).
 pub const PROTOBUF_REST_MESSAGES_3: i32 = 213;
-
+/// Minimum server version for adding Z suffix to UTC date time.
 pub const ADD_Z_SUFFIX_TO_UTC_DATE_TIME: i32 = 214;
-
+/// Minimum server version for cancel contract data.
 pub const CANCEL_CONTRACT_DATA: i32 = 215;
+/// Minimum server version for additional order params (batch 1).
+pub const ADDITIONAL_ORDER_PARAMS_1: i32 = 216;
+/// Minimum server version for additional order params (batch 2).
+pub const ADDITIONAL_ORDER_PARAMS_2: i32 = 217;
+/// Minimum server version for attached orders.
+pub const ATTACHED_ORDERS: i32 = 218;
+/// Minimum server version for configuration.
+pub const CONFIG: i32 = 219;
+/// Minimum server version for market data volumes in shares.
+pub const MARKET_DATA_VOLUMES_IN_SHARES: i32 = 220;
+/// Minimum server version for update configuration.
+pub const UPDATE_CONFIG: i32 = 221;
