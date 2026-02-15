@@ -1092,7 +1092,7 @@ impl Client {
     ///         match update {
     ///             HistoricalBarUpdate::Historical(data) => println!("Initial bars: {}", data.bars.len()),
     ///             HistoricalBarUpdate::Update(bar) => println!("Streaming update: {:?}", bar),
-    ///             HistoricalBarUpdate::End { start, end } => println!("Stream ended: {start} - {end}"),
+    ///             HistoricalBarUpdate::End { start, end } => println!("Stream ended: {} - {}", start, end),
     ///         }
     ///     }
     /// }

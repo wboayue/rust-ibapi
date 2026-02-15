@@ -289,7 +289,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
             HistoricalBarUpdate::End { start, end } => {
-                println!("Stream ended: {start} - {end}");
+                println!("Stream ended: {} - {}", start, end);
                 break;
             }
         }

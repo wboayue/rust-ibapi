@@ -344,12 +344,12 @@ pub enum HistoricalBarUpdate {
     /// Real-time update of the current (incomplete) bar.
     /// Multiple updates with the same timestamp will be sent as the bar builds.
     Update(Bar),
-    /// End of the streaming subscription. Contains the start and end date strings.
+    /// End of the streaming subscription.
     End {
         /// Start date of the historical data range.
-        start: String,
+        start: OffsetDateTime,
         /// End date of the historical data range.
-        end: String,
+        end: OffsetDateTime,
     },
 }
 

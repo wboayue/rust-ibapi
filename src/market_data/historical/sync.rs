@@ -89,7 +89,17 @@ pub(crate) fn historical_data(
 
         match subscription.next() {
             Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalData => {
-                return decoders::decode_historical_data(client.server_version, time_zone(client), &mut message)
+                let mut data = decoders::decode_historical_data(client.server_version, time_zone(client), &mut message)?;
+
+                if client.server_version >= crate::server_versions::HISTORICAL_DATA_END {
+                    if let Some(Ok(mut end_msg)) = subscription.next() {
+                        let (start, end) = decoders::decode_historical_data_end(time_zone(client), &mut end_msg)?;
+                        data.start = start;
+                        data.end = end;
+                    }
+                }
+
+                return Ok(data);
             }
             Some(Ok(message)) if message.message_type() == IncomingMessages::Error => return Err(Error::from(message)),
             Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
@@ -387,13 +397,13 @@ impl HistoricalDataStreamingSubscription {
                                 }
                             }
                         }
-                        IncomingMessages::HistoricalDataEnd => {
-                            message.skip(); // message type
-                            message.skip(); // request_id
-                            let start = message.next_string().unwrap_or_default();
-                            let end = message.next_string().unwrap_or_default();
-                            return Some(HistoricalBarUpdate::End { start, end });
-                        }
+                        IncomingMessages::HistoricalDataEnd => match decoders::decode_historical_data_end(self.time_zone, &mut message) {
+                            Ok((start, end)) => return Some(HistoricalBarUpdate::End { start, end }),
+                            Err(e) => {
+                                self.set_error(e);
+                                return None;
+                            }
+                        },
                         IncomingMessages::Error => {
                             self.set_error(Error::from(message));
                             return None;

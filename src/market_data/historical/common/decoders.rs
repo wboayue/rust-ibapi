@@ -79,6 +79,22 @@ pub(crate) fn decode_historical_data(server_version: i32, time_zone: &Tz, messag
     Ok(HistoricalData { start, end, bars })
 }
 
+pub(crate) fn decode_historical_data_end(time_zone: &Tz, message: &mut ResponseMessage) -> Result<(OffsetDateTime, OffsetDateTime), Error> {
+    message.skip(); // message type
+    message.skip(); // request_id
+
+    let slice_format = format_description!("[year][month][day]  [hour]:[minute]:[second]");
+
+    let start = PrimitiveDateTime::parse(&message.next_string()?, slice_format)?
+        .assume_timezone(time_zone)
+        .unwrap();
+    let end = PrimitiveDateTime::parse(&message.next_string()?, slice_format)?
+        .assume_timezone(time_zone)
+        .unwrap();
+
+    Ok((start, end))
+}
+
 pub(crate) fn decode_historical_schedule(message: &mut ResponseMessage) -> Result<Schedule, Error> {
     message.skip(); // message type
     message.skip(); // request_id
