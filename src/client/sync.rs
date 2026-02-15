@@ -301,6 +301,11 @@ impl Client {
         accounts::blocking::server_time(self)
     }
 
+    /// Requests the current server time with millisecond precision.
+    pub fn server_time_millis(&self) -> Result<OffsetDateTime, Error> {
+        accounts::blocking::server_time_millis(self)
+    }
+
     /// Subscribes to [PositionUpdate]s for all accessible accounts.
     /// All positions sent initially, and then only updates as positions change.
     ///
@@ -571,6 +576,14 @@ impl Client {
     /// ```
     pub fn contract_details(&self, contract: &Contract) -> Result<Vec<contracts::ContractDetails>, Error> {
         contracts::blocking::contract_details(self, contract)
+    }
+
+    /// Cancels an in-flight contract details request.
+    ///
+    /// # Arguments
+    /// * `request_id` - The request ID returned by a prior `contract_details` call.
+    pub fn cancel_contract_details(&self, request_id: i32) -> Result<(), Error> {
+        contracts::blocking::cancel_contract_details(self, request_id)
     }
 
     /// Get current [FamilyCode]s for all accessible accounts.
@@ -1156,6 +1169,7 @@ impl Client {
     ///     match update {
     ///         HistoricalBarUpdate::Historical(data) => println!("Initial bars: {}", data.bars.len()),
     ///         HistoricalBarUpdate::Update(bar) => println!("Streaming update: {:?}", bar),
+    ///         HistoricalBarUpdate::End { start, end } => println!("Stream ended: {start} - {end}"),
     ///     }
     /// }
     /// ```
@@ -1364,6 +1378,14 @@ impl Client {
         trading_hours: TradingHours,
     ) -> Result<historical::blocking::TickSubscription<historical::TickLast>, Error> {
         historical::blocking::historical_ticks_trade(self, contract, start, end, number_of_ticks, trading_hours)
+    }
+
+    /// Cancels an in-flight historical ticks request.
+    ///
+    /// # Arguments
+    /// * `request_id` - The request ID of the historical ticks subscription to cancel.
+    pub fn cancel_historical_ticks(&self, request_id: i32) -> Result<(), Error> {
+        historical::blocking::cancel_historical_ticks(self, request_id)
     }
 
     /// Requests data histogram of specified contract.

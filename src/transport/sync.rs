@@ -1061,7 +1061,7 @@ mod tests {
         let request = encode_place_order(176, 5, contract, &order)?;
 
         let events = vec![
-            Exchange::simple("v100..173", &["173|20250415 19:38:30 British Summer Time|"]),
+            Exchange::simple("v100..197", &["173|20250415 19:38:30 British Summer Time|"]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|5|"]),
             Exchange::request(request.clone(),
                 &[
@@ -1094,7 +1094,7 @@ mod tests {
     #[test]
     fn test_connection_establish_connection() -> Result<(), Error> {
         let events = vec![
-            Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+            Exchange::simple("v100..197", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple(
                 "71|2|28||",
                 &[
@@ -1116,7 +1116,7 @@ mod tests {
     #[test]
     fn test_reconnect_failed() -> Result<(), Error> {
         let events = vec![
-            Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+            Exchange::simple("v100..197", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
         ];
         let socket = MockSocket::new(events, MAX_RECONNECT_ATTEMPTS as usize + 1);
@@ -1136,9 +1136,9 @@ mod tests {
     #[test]
     fn test_reconnect_success() -> Result<(), Error> {
         let events = vec![
-            Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+            Exchange::simple("v100..197", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
-            Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+            Exchange::simple("v100..197", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
         ];
         let socket = MockSocket::new(events, MAX_RECONNECT_ATTEMPTS as usize - 1);
@@ -1155,10 +1155,10 @@ mod tests {
     #[test]
     fn test_client_reconnect() -> Result<(), Error> {
         let events = vec![
-            Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+            Exchange::simple("v100..197", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
             Exchange::simple("17|1|", &["\0"]), // ManagedAccounts RESTART
-            Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+            Exchange::simple("v100..197", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
             Exchange::simple("17|1|", &["15|1|DU1234567|"]), // ManagedAccounts
         ];
@@ -1184,9 +1184,9 @@ mod tests {
         let expected_response = &format!("10|9000|{AAPL_CONTRACT_RESPONSE}");
 
         let events = vec![
-            Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+            Exchange::simple("v100..197", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
-            Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+            Exchange::simple("v100..197", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
             Exchange::request(packet.clone(), &[expected_response, "52|1|9001|"]),
         ];
@@ -1218,10 +1218,10 @@ mod tests {
         let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL").build())?;
 
         let events = vec![
-            Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+            Exchange::simple("v100..197", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
             Exchange::request(packet.clone(), &["\0"]), // RESTART
-            Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+            Exchange::simple("v100..197", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
         ];
 
@@ -1250,9 +1250,9 @@ mod tests {
         let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL").build())?;
 
         let events = vec![
-            Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+            Exchange::simple("v100..197", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
-            Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+            Exchange::simple("v100..197", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::request(packet.clone(), &[]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
         ];
@@ -1282,10 +1282,10 @@ mod tests {
         let packet = encode_request_contract_data(173, 9000, contract)?;
 
         let events = vec![
-            Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+            Exchange::simple("v100..197", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
             Exchange::request(packet.clone(), &["\0"]),
-            Exchange::simple("v100..173", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+            Exchange::simple("v100..197", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
         ];
 

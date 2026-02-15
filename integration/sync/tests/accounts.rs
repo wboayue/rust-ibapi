@@ -19,6 +19,19 @@ fn connect_and_get_account() -> (Client, AccountId, ClientId) {
 }
 
 #[test]
+fn server_time_millis_returns_recent_time() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).expect("connection failed");
+
+    rate_limit();
+    let time = client.server_time_millis().expect("server_time_millis failed");
+    let now = time::OffsetDateTime::now_utc();
+
+    assert!((now - time).whole_seconds().abs() < 60, "server time should be within 60s of local time");
+}
+
+#[test]
 fn managed_accounts_returns_list() {
     let client_id = ClientId::get();
     rate_limit();

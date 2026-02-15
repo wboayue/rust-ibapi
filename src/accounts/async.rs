@@ -147,6 +147,27 @@ pub async fn server_time(client: &Client) -> Result<OffsetDateTime, Error> {
     .await
 }
 
+/// Query the current server time in milliseconds reported by TWS or IB Gateway.
+pub async fn server_time_millis(client: &Client) -> Result<OffsetDateTime, Error> {
+    check_version(client.server_version(), Features::CURRENT_TIME_IN_MILLIS)?;
+
+    crate::common::request_helpers::one_shot_with_retry(
+        client,
+        OutgoingMessages::RequestCurrentTimeInMillis,
+        encoders::encode_request_server_time_millis,
+        |message| {
+            message.skip(); // message type
+            let millis = message.next_long()?;
+            match OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000) {
+                Ok(date) => Ok(date),
+                Err(e) => Err(Error::Simple(format!("Error parsing date: {e}"))),
+            }
+        },
+        || Err(Error::Simple("No response from server".to_string())),
+    )
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

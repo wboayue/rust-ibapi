@@ -70,6 +70,10 @@ pub(crate) const CHANNEL_MAPPINGS: &[ChannelMapping] = &[
         responses: &[IncomingMessages::CurrentTime],
     },
     ChannelMapping {
+        request: OutgoingMessages::RequestCurrentTimeInMillis,
+        responses: &[IncomingMessages::CurrentTimeInMillis],
+    },
+    ChannelMapping {
         request: OutgoingMessages::RequestNewsProviders,
         responses: &[IncomingMessages::NewsProviders],
     },

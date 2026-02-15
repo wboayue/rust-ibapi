@@ -141,6 +141,12 @@ pub(in crate::accounts) fn encode_request_server_time() -> Result<RequestMessage
     encode_simple(OutgoingMessages::RequestCurrentTime, VERSION_1)
 }
 
+pub(in crate::accounts) fn encode_request_server_time_millis() -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::new();
+    message.push_field(&OutgoingMessages::RequestCurrentTimeInMillis);
+    Ok(message)
+}
+
 fn encode_simple(message_type: OutgoingMessages, version: i32) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::new();
     message.push_field(&message_type);
@@ -358,6 +364,13 @@ mod tests {
         let message = super::encode_request_server_time().expect("encoding failed");
         assert_eq!(message[0], OutgoingMessages::RequestCurrentTime.to_field());
         assert_eq!(message[1], "1"); // Version
+    }
+
+    #[test]
+    fn test_encode_request_server_time_millis() {
+        let message = super::encode_request_server_time_millis().expect("encoding failed");
+        assert_eq!(message[0], OutgoingMessages::RequestCurrentTimeInMillis.to_field());
+        assert_eq!(message.len(), 1);
     }
 
     #[test]

@@ -180,6 +180,9 @@ pub struct Contract {
     /// Delta and underlying price for Delta-Neutral combo orders. Underlying (STK or FUT), delta and underlying price goes into this attribute.
     pub delta_neutral_contract: Option<DeltaNeutralContract>,
 
+    /// The last trade date of the contract, returned by the server for derivatives.
+    // TODO: consider using a date type (e.g. time::Date) instead of String
+    pub last_trade_date: Option<String>,
     /// Identifier of the issuer for bonds and structured products.
     pub issuer_id: String,
     /// Human-readable description provided by TWS.
@@ -207,6 +210,7 @@ impl Default for Contract {
             combo_legs_description: String::new(),
             combo_legs: Vec::new(),
             delta_neutral_contract: None,
+            last_trade_date: None,
             issuer_id: String::new(),
             description: String::new(),
         }
@@ -783,16 +787,20 @@ pub struct PriceIncrement {
 /// Blocking contract lookup helpers backed by the synchronous transport.
 pub mod blocking {
     pub(crate) use super::sync::{
-        calculate_implied_volatility, calculate_option_price, contract_details, market_rule, matching_symbols, option_chain,
+        calculate_implied_volatility, calculate_option_price, cancel_contract_details, contract_details, market_rule, matching_symbols, option_chain,
     };
 }
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
 #[allow(unused_imports)]
-pub(crate) use sync::{calculate_implied_volatility, calculate_option_price, contract_details, market_rule, matching_symbols, option_chain};
+pub(crate) use sync::{
+    calculate_implied_volatility, calculate_option_price, cancel_contract_details, contract_details, market_rule, matching_symbols, option_chain,
+};
 
 #[cfg(feature = "async")]
-pub(crate) use r#async::{calculate_implied_volatility, calculate_option_price, contract_details, market_rule, matching_symbols, option_chain};
+pub(crate) use r#async::{
+    calculate_implied_volatility, calculate_option_price, cancel_contract_details, contract_details, market_rule, matching_symbols, option_chain,
+};
 
 // Public function for decoding option computation (used by market_data module)
 pub(crate) fn decode_option_computation(server_version: i32, message: &mut ResponseMessage) -> Result<OptionComputation, Error> {

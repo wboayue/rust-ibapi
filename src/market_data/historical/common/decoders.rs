@@ -33,7 +33,7 @@ pub(crate) fn decode_historical_data(server_version: i32, time_zone: &Tz, messag
 
     let mut start = OffsetDateTime::now_utc();
     let mut end = OffsetDateTime::now_utc();
-    if message_version > 2 {
+    if message_version > 2 && server_version < server_versions::HISTORICAL_DATA_END {
         start = PrimitiveDateTime::parse(&message.next_string()?, slice_format)?
             .assume_timezone(time_zone)
             .unwrap();

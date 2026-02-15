@@ -326,6 +326,11 @@ impl Client {
         accounts::server_time(self).await
     }
 
+    /// Requests the current server time with millisecond precision.
+    pub async fn server_time_millis(&self) -> Result<OffsetDateTime, Error> {
+        accounts::server_time_millis(self).await
+    }
+
     /// Subscribes to position updates for all accessible accounts.
     /// All positions sent initially, and then only updates as positions change.
     ///
@@ -1087,6 +1092,7 @@ impl Client {
     ///         match update {
     ///             HistoricalBarUpdate::Historical(data) => println!("Initial bars: {}", data.bars.len()),
     ///             HistoricalBarUpdate::Update(bar) => println!("Streaming update: {:?}", bar),
+    ///             HistoricalBarUpdate::End { start, end } => println!("Stream ended: {start} - {end}"),
     ///         }
     ///     }
     /// }
@@ -1239,6 +1245,14 @@ impl Client {
         trading_hours: TradingHours,
     ) -> Result<crate::market_data::historical::TickSubscription<crate::market_data::historical::TickLast>, Error> {
         crate::market_data::historical::historical_ticks_trade(self, contract, start, end, number_of_ticks, trading_hours).await
+    }
+
+    /// Cancels an in-flight historical ticks request.
+    ///
+    /// # Arguments
+    /// * `request_id` - The request ID of the historical ticks subscription to cancel.
+    pub async fn cancel_historical_ticks(&self, request_id: i32) -> Result<(), Error> {
+        crate::market_data::historical::cancel_historical_ticks(self, request_id).await
     }
 
     /// Returns histogram of market data for a contract.
@@ -1431,6 +1445,14 @@ impl Client {
     /// ```
     pub async fn contract_details(&self, contract: &crate::contracts::Contract) -> Result<Vec<crate::contracts::ContractDetails>, Error> {
         crate::contracts::contract_details(self, contract).await
+    }
+
+    /// Cancels an in-flight contract details request.
+    ///
+    /// # Arguments
+    /// * `request_id` - The request ID returned by a prior `contract_details` call.
+    pub async fn cancel_contract_details(&self, request_id: i32) -> Result<(), Error> {
+        crate::contracts::cancel_contract_details(self, request_id).await
     }
 
     /// Searches for stock contracts matching the provided pattern.

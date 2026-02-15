@@ -234,6 +234,20 @@ async fn historical_ticks_mid_point() {
 
 #[tokio::test]
 #[serial(historical)]
+#[ignore] // requires server version >= 215
+async fn cancel_historical_ticks_succeeds() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+
+    // Cancel with an arbitrary request_id - should not error even if no request is pending
+    rate_limit();
+    let result = client.cancel_historical_ticks(99999).await;
+    assert!(result.is_ok(), "cancel_historical_ticks failed: {:?}", result.err());
+}
+
+#[tokio::test]
+#[serial(historical)]
 async fn histogram_data_weekly() {
     let client_id = ClientId::get();
     rate_limit();

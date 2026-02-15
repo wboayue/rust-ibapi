@@ -152,6 +152,13 @@ pub(crate) fn encode_cancel_option_computation(message_type: OutgoingMessages, r
     Ok(message)
 }
 
+pub(crate) fn encode_cancel_contract_data(request_id: i32) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::default();
+    message.push_field(&OutgoingMessages::CancelContractData);
+    message.push_field(&request_id);
+    Ok(message)
+}
+
 pub(in crate::contracts) fn encode_request_option_chain(
     request_id: i32,
     symbol: &str,
@@ -408,6 +415,16 @@ mod tests {
         assert_eq!(message[9], contract.currency.to_field(), "message.currency");
         assert_eq!(message[10], contract.local_symbol, "message.local_symbol");
         assert_eq!(message[11], contract.trading_class, "message.trading_class");
+    }
+
+    #[test]
+    fn test_encode_cancel_contract_data() {
+        let request_id = 5000;
+
+        let message = super::encode_cancel_contract_data(request_id).expect("error encoding cancel contract data");
+
+        assert_eq!(message[0], OutgoingMessages::CancelContractData.to_field(), "message.type");
+        assert_eq!(message[1], request_id.to_field(), "message.request_id");
     }
 
     #[test]

@@ -135,6 +135,11 @@ impl Features {
     /// Enables requests for option security definition parameters.
     pub const SEC_DEF_OPT_PARAMS_REQ: ProtocolFeature =
         ProtocolFeature::new("security definition option parameters", server_versions::SEC_DEF_OPT_PARAMS_REQ);
+
+    /// Enables requesting current time in milliseconds.
+    pub const CURRENT_TIME_IN_MILLIS: ProtocolFeature = ProtocolFeature::new("current time in millis", server_versions::CURRENT_TIME_IN_MILLIS);
+    /// Enables cancelling in-flight contract data and historical ticks requests.
+    pub const CANCEL_CONTRACT_DATA: ProtocolFeature = ProtocolFeature::new("cancel contract data", server_versions::CANCEL_CONTRACT_DATA);
 }
 
 /// Checks if the server version supports a given feature.

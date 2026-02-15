@@ -25,6 +25,9 @@ pub(in crate::contracts) fn decode_contract_details(server_version: i32, message
     contract.contract.symbol = Symbol::from(message.next_string()?);
     contract.contract.security_type = SecurityType::from(&message.next_string()?);
     read_last_trade_date(&mut contract, &message.next_string()?, false)?;
+    if server_version >= server_versions::LAST_TRADE_DATE {
+        contract.contract.last_trade_date = Some(message.next_string()?);
+    }
     contract.contract.strike = message.next_double()?;
     contract.contract.right = message.next_string()?;
     contract.contract.exchange = Exchange::from(message.next_string()?);

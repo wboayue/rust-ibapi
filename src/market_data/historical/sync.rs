@@ -231,6 +231,15 @@ pub(crate) fn historical_ticks_trade(
     Ok(TickSubscription::new(subscription))
 }
 
+/// Cancels an in-flight historical ticks request.
+pub(crate) fn cancel_historical_ticks(client: &Client, request_id: i32) -> Result<(), Error> {
+    check_version(client.server_version(), Features::CANCEL_CONTRACT_DATA)?;
+
+    let message = encoders::encode_cancel_historical_ticks(request_id)?;
+    client.send_message(message)?;
+    Ok(())
+}
+
 pub(crate) fn histogram_data(
     client: &Client,
     contract: &Contract,
@@ -377,6 +386,13 @@ impl HistoricalDataStreamingSubscription {
                                     return None;
                                 }
                             }
+                        }
+                        IncomingMessages::HistoricalDataEnd => {
+                            message.skip(); // message type
+                            message.skip(); // request_id
+                            let start = message.next_string().unwrap_or_default();
+                            let end = message.next_string().unwrap_or_default();
+                            return Some(HistoricalBarUpdate::End { start, end });
                         }
                         IncomingMessages::Error => {
                             self.set_error(Error::from(message));

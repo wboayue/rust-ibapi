@@ -325,16 +325,18 @@ mod r#async;
 pub mod blocking {
     pub use super::sync::{
         account_summary, account_updates, account_updates_multi, family_codes, managed_accounts, pnl, pnl_single, positions, positions_multi,
-        server_time,
+        server_time, server_time_millis,
     };
 }
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
 pub use sync::{
-    account_summary, account_updates, account_updates_multi, family_codes, managed_accounts, pnl, pnl_single, positions, positions_multi, server_time,
+    account_summary, account_updates, account_updates_multi, family_codes, managed_accounts, pnl, pnl_single, positions, positions_multi,
+    server_time, server_time_millis,
 };
 
 #[cfg(feature = "async")]
 pub use r#async::{
-    account_summary, account_updates, account_updates_multi, family_codes, managed_accounts, pnl, pnl_single, positions, positions_multi, server_time,
+    account_summary, account_updates, account_updates_multi, family_codes, managed_accounts, pnl, pnl_single, positions, positions_multi,
+    server_time, server_time_millis,
 };

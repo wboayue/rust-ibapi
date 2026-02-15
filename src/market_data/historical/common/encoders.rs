@@ -152,6 +152,13 @@ pub(crate) fn encode_request_historical_ticks(
     Ok(message)
 }
 
+pub(crate) fn encode_cancel_historical_ticks(request_id: i32) -> Result<RequestMessage, Error> {
+    let mut message = RequestMessage::default();
+    message.push_field(&OutgoingMessages::CancelHistoricalTicks);
+    message.push_field(&request_id);
+    Ok(message)
+}
+
 pub(crate) fn encode_request_histogram_data(request_id: i32, contract: &Contract, use_rth: bool, period: BarSize) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::default();
 
@@ -329,6 +336,16 @@ mod tests {
         assert_eq!(message[19], use_rth.to_field(), "message.use_rth");
         assert_eq!(message[20], ignore_size.to_field(), "message.ignore_size");
         assert_eq!(message[21], "", "message.misc_options");
+    }
+
+    #[test]
+    fn test_encode_cancel_historical_ticks() {
+        let request_id = 9001;
+
+        let message = encode_cancel_historical_ticks(request_id).expect("error encoding cancel historical ticks");
+
+        assert_eq!(message[0], OutgoingMessages::CancelHistoricalTicks.to_field(), "message.type");
+        assert_eq!(message[1], request_id.to_field(), "message.request_id");
     }
 
     #[test]

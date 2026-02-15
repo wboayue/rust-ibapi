@@ -233,6 +233,15 @@ pub async fn historical_ticks_trade(
     Ok(TickSubscription::new(subscription))
 }
 
+/// Cancels an in-flight historical ticks request.
+pub async fn cancel_historical_ticks(client: &Client, request_id: i32) -> Result<(), Error> {
+    check_version(client.server_version(), Features::CANCEL_CONTRACT_DATA)?;
+
+    let message = encoders::encode_cancel_historical_ticks(request_id)?;
+    client.send_message(message).await?;
+    Ok(())
+}
+
 /// Requests histogram data for a contract.
 pub async fn histogram_data(
     client: &Client,
@@ -386,6 +395,7 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
 ///         HistoricalBarUpdate::Update(bar) => {
 ///             println!("Bar update: {} close={}", bar.date, bar.close);
 ///         }
+///         HistoricalBarUpdate::End { .. } => break,
 ///     }
 /// }
 /// # Ok(())
@@ -490,6 +500,13 @@ impl HistoricalDataStreamingSubscription {
                                     return None;
                                 }
                             }
+                        }
+                        IncomingMessages::HistoricalDataEnd => {
+                            message.skip(); // message type
+                            message.skip(); // request_id
+                            let start = message.next_string().unwrap_or_default();
+                            let end = message.next_string().unwrap_or_default();
+                            return Some(HistoricalBarUpdate::End { start, end });
                         }
                         IncomingMessages::Error => {
                             self.error = Some(Error::from(message));

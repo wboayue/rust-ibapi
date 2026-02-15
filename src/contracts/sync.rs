@@ -165,6 +165,15 @@ pub(crate) fn calculate_implied_volatility(
     }
 }
 
+/// Cancels an in-flight contract details request.
+pub(crate) fn cancel_contract_details(client: &Client, request_id: i32) -> Result<(), Error> {
+    check_version(client.server_version, Features::CANCEL_CONTRACT_DATA)?;
+
+    let message = encoders::encode_cancel_contract_data(request_id)?;
+    client.send_message(message)?;
+    Ok(())
+}
+
 pub(crate) fn option_chain(
     client: &Client,
     symbol: &str,
