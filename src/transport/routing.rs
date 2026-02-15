@@ -29,9 +29,8 @@ pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
 
     // Special handling for error messages
     if message_type == IncomingMessages::Error {
-        // Error messages have: message_type, version, request_id, error_code
-        let request_id = message.peek_int(2).unwrap_or(-1);
-        let error_code = message.peek_int(3).unwrap_or(0);
+        let request_id = message.error_request_id();
+        let error_code = message.error_code();
         return RoutingDecision::Error { request_id, error_code };
     }
 
@@ -98,10 +97,26 @@ mod tests {
     }
 
     #[test]
-    fn test_determine_routing_error() {
-        // Error message format: message_type|version|request_id|error_code|error_msg
+    fn test_determine_routing_error_old_format() {
+        // Old format (server_version < ERROR_TIME): message_type|version|request_id|error_code|error_msg
         let message_str = "4\02\0123\0200\0No security definition found\0";
         let message = ResponseMessage::from(message_str);
+
+        match determine_routing(&message) {
+            RoutingDecision::Error { request_id, error_code } => {
+                assert_eq!(request_id, 123);
+                assert_eq!(error_code, 200);
+            }
+            routing => panic!("Expected Error routing, got {routing:?}"),
+        }
+    }
+
+    #[test]
+    fn test_determine_routing_error_new_format() {
+        // New format (server_version >= ERROR_TIME): message_type|request_id|error_code|error_msg
+        let message_str = "4\0123\0200\0No security definition found\0\0";
+        let mut message = ResponseMessage::from(message_str);
+        message.server_version = crate::server_versions::ERROR_TIME;
 
         match determine_routing(&message) {
             RoutingDecision::Error { request_id, error_code } => {

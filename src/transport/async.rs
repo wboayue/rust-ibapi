@@ -422,12 +422,7 @@ impl AsyncTcpMessageBus {
     async fn route_error_message(&self, message: ResponseMessage, request_id: i32, error_code: i32) -> Result<(), Error> {
         let _ = self.send_order_update(&message).await;
 
-        // Log the error for visibility
-        let error_msg = if message.len() > 4 {
-            message.peek_string(4)
-        } else {
-            String::from("Unknown error")
-        };
+        let error_msg = message.error_message();
 
         // Check if this is a warning or unspecified error
         if request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(error_code) {

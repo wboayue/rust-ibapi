@@ -106,11 +106,6 @@ const UNSET_DOUBLE: &str = "1.7976931348623157E308";
 const UNSET_INTEGER: &str = "2147483647";
 const UNSET_LONG: &str = "9223372036854775807";
 
-// Index of message text in the response message
-pub(crate) const MESSAGE_INDEX: usize = 4;
-// Index of message code in the response message
-pub(crate) const CODE_INDEX: usize = 3;
-
 /// Messages emitted by TWS/Gateway over the market data socket.
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub enum IncomingMessages {
@@ -416,7 +411,7 @@ pub fn request_id_index(kind: IncomingMessages) -> Option<usize> {
         IncomingMessages::AccountUpdateMultiEnd => Some(2),
         IncomingMessages::ContractData => Some(1),
         IncomingMessages::ContractDataEnd => Some(2),
-        IncomingMessages::Error => Some(2),
+        // Error uses version-dependent indices; use ResponseMessage::error_request_id() instead.
         IncomingMessages::ExecutionData => Some(1),
         IncomingMessages::ExecutionDataEnd => Some(2),
         IncomingMessages::HeadTimestamp => Some(1),
@@ -828,6 +823,8 @@ pub struct ResponseMessage {
     pub i: usize,
     /// Raw field buffer backing this message.
     pub fields: Vec<String>,
+    /// Server version for version-gated decoding (e.g. error message format).
+    pub server_version: i32,
 }
 
 impl ResponseMessage {
@@ -1057,11 +1054,61 @@ impl ResponseMessage {
         }
     }
 
+    /// Field index of the request ID in an error message.
+    /// Old format (< ERROR_TIME): [msg_type, version, request_id, ...] → index 2
+    /// New format (>= ERROR_TIME): [msg_type, request_id, ...] → index 1
+    pub fn error_request_id_index(&self) -> usize {
+        if self.server_version >= crate::server_versions::ERROR_TIME {
+            1
+        } else {
+            2
+        }
+    }
+
+    /// Field index of the error code in an error message.
+    pub fn error_code_index(&self) -> usize {
+        if self.server_version >= crate::server_versions::ERROR_TIME {
+            2
+        } else {
+            3
+        }
+    }
+
+    /// Field index of the error message text in an error message.
+    pub fn error_message_index(&self) -> usize {
+        if self.server_version >= crate::server_versions::ERROR_TIME {
+            3
+        } else {
+            4
+        }
+    }
+
+    /// Extract the request ID from an error message.
+    pub fn error_request_id(&self) -> i32 {
+        self.peek_int(self.error_request_id_index()).unwrap_or(-1)
+    }
+
+    /// Extract the error code from an error message.
+    pub fn error_code(&self) -> i32 {
+        self.peek_int(self.error_code_index()).unwrap_or(0)
+    }
+
+    /// Extract the error message text from an error message.
+    pub fn error_message(&self) -> String {
+        let idx = self.error_message_index();
+        if idx < self.fields.len() {
+            self.peek_string(idx)
+        } else {
+            String::from("Unknown error")
+        }
+    }
+
     /// Build a response message from a NUL-delimited payload.
     pub fn from(fields: &str) -> ResponseMessage {
         ResponseMessage {
             i: 0,
             fields: fields.split_terminator('\x00').map(|x| x.to_string()).collect(),
+            server_version: 0,
         }
     }
     #[cfg(test)]
@@ -1070,6 +1117,7 @@ impl ResponseMessage {
         ResponseMessage {
             i: 0,
             fields: fields.split_terminator('|').map(|x| x.to_string()).collect(),
+            server_version: 0,
         }
     }
 
@@ -1120,8 +1168,8 @@ impl Notice {
     #[allow(private_interfaces)]
     /// Construct a notice from a response message.
     pub fn from(message: &ResponseMessage) -> Notice {
-        let code = message.peek_int(CODE_INDEX).unwrap_or(-1);
-        let message = message.peek_string(MESSAGE_INDEX);
+        let code = message.error_code();
+        let message = message.error_message();
         Notice { code, message }
     }
 

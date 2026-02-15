@@ -451,7 +451,8 @@ fn test_request_id_index() {
 
     assert_eq!(request_id_index(IncomingMessages::ContractDataEnd), Some(2));
     assert_eq!(request_id_index(IncomingMessages::RealTimeBars), Some(2));
-    assert_eq!(request_id_index(IncomingMessages::Error), Some(2));
+    // Error uses version-dependent indices via ResponseMessage::error_request_id()
+    assert_eq!(request_id_index(IncomingMessages::Error), None);
     assert_eq!(request_id_index(IncomingMessages::ExecutionDataEnd), Some(2));
 }
 

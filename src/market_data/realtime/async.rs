@@ -109,7 +109,6 @@ impl StreamDecoder<MarketDepths> for MarketDepths {
         &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2, IncomingMessages::Error];
 
     fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
-        use crate::messages;
         match message.message_type() {
             IncomingMessages::MarketDepth => Ok(MarketDepths::MarketDepth(decoders::decode_market_depth(message)?)),
             IncomingMessages::MarketDepthL2 => Ok(MarketDepths::MarketDepthL2(decoders::decode_market_depth_l2(
@@ -117,7 +116,7 @@ impl StreamDecoder<MarketDepths> for MarketDepths {
                 message,
             )?)),
             IncomingMessages::Error => {
-                let code = message.peek_int(messages::CODE_INDEX).unwrap();
+                let code = message.error_code();
                 if (2100..2200).contains(&code) {
                     Ok(MarketDepths::Notice(Notice::from(message)))
                 } else {

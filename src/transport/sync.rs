@@ -275,7 +275,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 if request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(error_code) {
                     error_event(server_version, message).unwrap();
                 } else {
-                    self.process_response(message, routed);
+                    self.process_response_with_id(request_id, message, routed);
                 }
             }
             RoutingDecision::ByOrderId(_) => {
@@ -290,7 +290,11 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     fn process_response(&self, message: ResponseMessage, routed: bool) {
-        let request_id = message.request_id().unwrap_or(-1); // pass in request id?
+        let request_id = message.request_id().unwrap_or(-1);
+        self.process_response_with_id(request_id, message, routed);
+    }
+
+    fn process_response_with_id(&self, request_id: i32, message: ResponseMessage, routed: bool) {
         if self.requests.contains(&request_id) {
             self.requests.send(&request_id, Ok(message)).unwrap();
         } else if self.orders.contains(&request_id) {
@@ -596,22 +600,14 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
 fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), Error> {
     packet.skip(); // message_id
 
-    let version = packet.next_int()?;
-
-    if version < 2 {
-        let message = packet.next_string()?;
-        error!("version 2 error: {message}");
-        Ok(())
-    } else {
+    if server_version >= server_versions::ERROR_TIME {
+        // New format (>= ERROR_TIME): no version field
         let request_id = packet.next_int()?;
         let error_code = packet.next_int()?;
         let error_message = packet.next_string()?;
 
-        let mut advanced_order_reject_json: String = "".to_string();
-        if server_version >= server_versions::ADVANCED_ORDER_REJECT {
-            advanced_order_reject_json = packet.next_string()?;
-        }
-        // Log warnings and errors differently
+        let advanced_order_reject_json = packet.next_string().unwrap_or_default();
+
         let is_warning = WARNING_CODES.contains(&error_code);
         if is_warning {
             warn!(
@@ -622,8 +618,36 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), E
                 "request_id: {request_id}, error_code: {error_code}, error_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}"
             );
         }
-        Ok(())
+    } else {
+        // Old format (< ERROR_TIME): has version field
+        let version = packet.next_int()?;
+
+        if version < 2 {
+            let message = packet.next_string()?;
+            error!("version 2 error: {message}");
+        } else {
+            let request_id = packet.next_int()?;
+            let error_code = packet.next_int()?;
+            let error_message = packet.next_string()?;
+
+            let mut advanced_order_reject_json: String = "".to_string();
+            if server_version >= server_versions::ADVANCED_ORDER_REJECT {
+                advanced_order_reject_json = packet.next_string()?;
+            }
+
+            let is_warning = WARNING_CODES.contains(&error_code);
+            if is_warning {
+                warn!(
+                    "request_id: {request_id}, warning_code: {error_code}, warning_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}"
+                );
+            } else {
+                error!(
+                    "request_id: {request_id}, error_code: {error_code}, error_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}"
+                );
+            }
+        }
     }
+    Ok(())
 }
 
 #[derive(Debug)]

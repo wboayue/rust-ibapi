@@ -6,7 +6,7 @@ use crate::ToField;
 use crate::contracts::OptionComputation;
 use crate::messages::Notice;
 #[cfg(feature = "sync")]
-use crate::messages::{self, IncomingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 #[cfg(feature = "sync")]
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 #[cfg(feature = "sync")]
@@ -288,7 +288,7 @@ impl StreamDecoder<MarketDepths> for MarketDepths {
                 message,
             )?)),
             IncomingMessages::Error => {
-                let code = message.peek_int(messages::CODE_INDEX).unwrap();
+                let code = message.error_code();
                 if (2100..2200).contains(&code) {
                     Ok(MarketDepths::Notice(Notice::from(message)))
                 } else {
