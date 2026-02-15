@@ -93,7 +93,7 @@ pub(crate) fn historical_data(
 
                 if client.server_version >= crate::server_versions::HISTORICAL_DATA_END {
                     if let Some(Ok(mut end_msg)) = subscription.next() {
-                        let (start, end) = decoders::decode_historical_data_end(time_zone(client), &mut end_msg)?;
+                        let (start, end) = decoders::decode_historical_data_end(client.server_version, time_zone(client), &mut end_msg)?;
                         data.start = start;
                         data.end = end;
                     }
@@ -397,7 +397,7 @@ impl HistoricalDataStreamingSubscription {
                                 }
                             }
                         }
-                        IncomingMessages::HistoricalDataEnd => match decoders::decode_historical_data_end(self.time_zone, &mut message) {
+                        IncomingMessages::HistoricalDataEnd => match decoders::decode_historical_data_end(self.server_version, self.time_zone, &mut message) {
                             Ok((start, end)) => return Some(HistoricalBarUpdate::End { start, end }),
                             Err(e) => {
                                 self.set_error(e);

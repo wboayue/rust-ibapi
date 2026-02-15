@@ -29,17 +29,11 @@ pub(crate) fn decode_historical_data(server_version: i32, time_zone: &Tz, messag
 
     message.skip(); // request_id
 
-    let slice_format = format_description!("[year][month][day]  [hour]:[minute]:[second]");
-
     let mut start = OffsetDateTime::now_utc();
     let mut end = OffsetDateTime::now_utc();
     if message_version > 2 && server_version < server_versions::HISTORICAL_DATA_END {
-        start = PrimitiveDateTime::parse(&message.next_string()?, slice_format)?
-            .assume_timezone(time_zone)
-            .unwrap();
-        end = PrimitiveDateTime::parse(&message.next_string()?, slice_format)?
-            .assume_timezone(time_zone)
-            .unwrap();
+        start = parse_date(&message.next_string()?, time_zone)?;
+        end = parse_date(&message.next_string()?, time_zone)?;
     }
 
     let mut bars = Vec::new();
@@ -79,20 +73,26 @@ pub(crate) fn decode_historical_data(server_version: i32, time_zone: &Tz, messag
     Ok(HistoricalData { start, end, bars })
 }
 
-pub(crate) fn decode_historical_data_end(time_zone: &Tz, message: &mut ResponseMessage) -> Result<(OffsetDateTime, OffsetDateTime), Error> {
+pub(crate) fn decode_historical_data_end(
+    server_version: i32,
+    time_zone: &Tz,
+    message: &mut ResponseMessage,
+) -> Result<(OffsetDateTime, OffsetDateTime), Error> {
     message.skip(); // message type
     message.skip(); // request_id
 
-    let slice_format = format_description!("[year][month][day]  [hour]:[minute]:[second]");
+    let start_str = message.next_string()?;
+    let end_str = message.next_string()?;
 
-    let start = PrimitiveDateTime::parse(&message.next_string()?, slice_format)?
-        .assume_timezone(time_zone)
-        .unwrap();
-    let end = PrimitiveDateTime::parse(&message.next_string()?, slice_format)?
-        .assume_timezone(time_zone)
-        .unwrap();
-
-    Ok((start, end))
+    if server_version >= server_versions::HISTORICAL_DATA_END {
+        let start = parse_date_with_tz(&start_str)?;
+        let end = parse_date_with_tz(&end_str)?;
+        Ok((start, end))
+    } else {
+        let start = parse_date(&start_str, time_zone)?;
+        let end = parse_date(&end_str, time_zone)?;
+        Ok((start, end))
+    }
 }
 
 pub(crate) fn decode_historical_schedule(message: &mut ResponseMessage) -> Result<Schedule, Error> {
@@ -299,6 +299,24 @@ fn parse_schedule_date(text: &str) -> Result<Date, Error> {
     let schedule_date_format = format_description!("[year][month][day]");
     let schedule_date = Date::parse(text, schedule_date_format)?;
     Ok(schedule_date)
+}
+
+/// Parses "YYYYMMDD  HH:MM:SS" (double space, no timezone).
+fn parse_date(text: &str, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
+    let fmt = format_description!("[year][month][day]  [hour]:[minute]:[second]");
+    let dt = PrimitiveDateTime::parse(text, fmt)?;
+    Ok(dt.assume_timezone(time_zone).unwrap())
+}
+
+/// Parses "YYYYMMDD HH:MM:SS TZ" (single space + embedded timezone).
+fn parse_date_with_tz(text: &str) -> Result<OffsetDateTime, Error> {
+    let fmt = format_description!("[year][month][day] [hour]:[minute]:[second]");
+    // Split off the trailing timezone name (e.g., "US/Eastern")
+    let datetime_part = &text[..17];
+    let tz_name = text[18..].trim();
+    let tz = parse_time_zone(tz_name);
+    let dt = PrimitiveDateTime::parse(datetime_part, fmt)?;
+    Ok(dt.assume_timezone(tz).unwrap())
 }
 
 fn parse_bar_date(text: &str, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
