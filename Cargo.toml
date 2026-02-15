@@ -196,6 +196,11 @@ path = "examples/async/connection_monitoring.rs"
 required-features = ["async"]
 
 [[example]]
+name = "async_last_trade_date_check"
+path = "examples/async/last_trade_date_check.rs"
+required-features = ["async"]
+
+[[example]]
 name = "async_contract_details"
 path = "examples/async/contract_details.rs"
 required-features = ["async"]

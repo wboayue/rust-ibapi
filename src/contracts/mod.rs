@@ -181,8 +181,7 @@ pub struct Contract {
     pub delta_neutral_contract: Option<DeltaNeutralContract>,
 
     /// The last trade date of the contract, returned by the server for derivatives.
-    // TODO: consider using a date type (e.g. time::Date) instead of String
-    pub last_trade_date: Option<String>,
+    pub last_trade_date: Option<time::Date>,
 
     /// Identifier of the issuer for bonds and structured products.
     pub issuer_id: String,
