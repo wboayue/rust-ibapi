@@ -605,19 +605,8 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), E
         let request_id = packet.next_int()?;
         let error_code = packet.next_int()?;
         let error_message = packet.next_string()?;
-
         let advanced_order_reject_json = packet.next_string().unwrap_or_default();
-
-        let is_warning = WARNING_CODES.contains(&error_code);
-        if is_warning {
-            warn!(
-                "request_id: {request_id}, warning_code: {error_code}, warning_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}"
-            );
-        } else {
-            error!(
-                "request_id: {request_id}, error_code: {error_code}, error_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}"
-            );
-        }
+        log_error_fields(request_id, error_code, &error_message, &advanced_order_reject_json);
     } else {
         // Old format (< ERROR_TIME): has version field
         let version = packet.next_int()?;
@@ -629,25 +618,27 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), E
             let request_id = packet.next_int()?;
             let error_code = packet.next_int()?;
             let error_message = packet.next_string()?;
-
-            let mut advanced_order_reject_json: String = "".to_string();
-            if server_version >= server_versions::ADVANCED_ORDER_REJECT {
-                advanced_order_reject_json = packet.next_string()?;
-            }
-
-            let is_warning = WARNING_CODES.contains(&error_code);
-            if is_warning {
-                warn!(
-                    "request_id: {request_id}, warning_code: {error_code}, warning_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}"
-                );
+            let advanced_order_reject_json = if server_version >= server_versions::ADVANCED_ORDER_REJECT {
+                packet.next_string()?
             } else {
-                error!(
-                    "request_id: {request_id}, error_code: {error_code}, error_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}"
-                );
-            }
+                String::new()
+            };
+            log_error_fields(request_id, error_code, &error_message, &advanced_order_reject_json);
         }
     }
     Ok(())
+}
+
+fn log_error_fields(request_id: i32, error_code: i32, error_message: &str, advanced_order_reject_json: &str) {
+    if WARNING_CODES.contains(&error_code) {
+        warn!(
+            "request_id: {request_id}, warning_code: {error_code}, warning_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}"
+        );
+    } else {
+        error!(
+            "request_id: {request_id}, error_code: {error_code}, error_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}"
+        );
+    }
 }
 
 #[derive(Debug)]

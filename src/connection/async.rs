@@ -194,8 +194,7 @@ impl AsyncConnection {
             trace::record_response(raw_string.clone()).await;
         }
 
-        let mut message = ResponseMessage::from(&raw_string);
-        message.server_version = self.server_version();
+        let message = ResponseMessage::from(&raw_string).with_server_version(self.server_version());
 
         self.recorder.record_response(&message);
 

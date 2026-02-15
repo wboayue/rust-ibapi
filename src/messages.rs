@@ -1054,33 +1054,29 @@ impl ResponseMessage {
         }
     }
 
-    /// Field index of the request ID in an error message.
-    /// Old format (< ERROR_TIME): [msg_type, version, request_id, ...] → index 2
-    /// New format (>= ERROR_TIME): [msg_type, request_id, ...] → index 1
-    pub fn error_request_id_index(&self) -> usize {
+    /// Offset applied to error field indices based on server version.
+    /// New format (>= ERROR_TIME) drops the version field, shifting indices by -1.
+    fn error_field_offset(&self) -> usize {
         if self.server_version >= crate::server_versions::ERROR_TIME {
-            1
+            0
         } else {
-            2
+            1
         }
+    }
+
+    /// Field index of the request ID in an error message.
+    pub fn error_request_id_index(&self) -> usize {
+        1 + self.error_field_offset()
     }
 
     /// Field index of the error code in an error message.
     pub fn error_code_index(&self) -> usize {
-        if self.server_version >= crate::server_versions::ERROR_TIME {
-            2
-        } else {
-            3
-        }
+        2 + self.error_field_offset()
     }
 
     /// Field index of the error message text in an error message.
     pub fn error_message_index(&self) -> usize {
-        if self.server_version >= crate::server_versions::ERROR_TIME {
-            3
-        } else {
-            4
-        }
+        3 + self.error_field_offset()
     }
 
     /// Extract the request ID from an error message.
@@ -1119,6 +1115,12 @@ impl ResponseMessage {
             fields: fields.split_terminator('|').map(|x| x.to_string()).collect(),
             server_version: 0,
         }
+    }
+
+    /// Set the server version for version-gated decoding (builder style).
+    pub fn with_server_version(mut self, server_version: i32) -> Self {
+        self.server_version = server_version;
+        self
     }
 
     /// Advance the cursor past the next field.

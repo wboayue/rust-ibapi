@@ -115,8 +115,7 @@ mod tests {
     fn test_determine_routing_error_new_format() {
         // New format (server_version >= ERROR_TIME): message_type|request_id|error_code|error_msg
         let message_str = "4\0123\0200\0No security definition found\0\0";
-        let mut message = ResponseMessage::from(message_str);
-        message.server_version = crate::server_versions::ERROR_TIME;
+        let message = ResponseMessage::from(message_str).with_server_version(crate::server_versions::ERROR_TIME);
 
         match determine_routing(&message) {
             RoutingDecision::Error { request_id, error_code } => {

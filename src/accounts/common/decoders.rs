@@ -1,3 +1,5 @@
+use time::OffsetDateTime;
+
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::messages::ResponseMessage;
 use crate::{server_versions, Error};
@@ -225,6 +227,15 @@ pub(crate) fn decode_account_update_time(message: &mut ResponseMessage) -> Resul
     Ok(AccountUpdateTime {
         timestamp: message.next_string()?,
     })
+}
+
+pub(crate) fn decode_server_time_millis(message: &mut ResponseMessage) -> Result<OffsetDateTime, Error> {
+    message.skip(); // message type
+    let millis = message.next_long()?;
+    match OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000) {
+        Ok(date) => Ok(date),
+        Err(e) => Err(Error::Simple(format!("Error parsing date: {e}"))),
+    }
 }
 
 pub(crate) fn decode_account_multi_value(message: &mut ResponseMessage) -> Result<AccountMultiValue, Error> {

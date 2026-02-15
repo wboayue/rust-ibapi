@@ -311,10 +311,10 @@ fn parse_date(text: &str, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
 /// Parses "YYYYMMDD HH:MM:SS TZ" (single space + embedded timezone).
 fn parse_date_with_tz(text: &str) -> Result<OffsetDateTime, Error> {
     let fmt = format_description!("[year][month][day] [hour]:[minute]:[second]");
-    // Split off the trailing timezone name (e.g., "US/Eastern")
-    let datetime_part = &text[..17];
-    let tz_name = text[18..].trim();
-    let tz = parse_time_zone(tz_name);
+    let (datetime_part, tz_name) = text
+        .rsplit_once(' ')
+        .ok_or_else(|| Error::Simple(format!("expected 'YYYYMMDD HH:MM:SS TZ', got: {text}")))?;
+    let tz = parse_time_zone(tz_name.trim());
     let dt = PrimitiveDateTime::parse(datetime_part, fmt)?;
     Ok(dt.assume_timezone(tz).unwrap())
 }

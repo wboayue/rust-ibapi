@@ -511,13 +511,15 @@ impl HistoricalDataStreamingSubscription {
                                 }
                             }
                         }
-                        IncomingMessages::HistoricalDataEnd => match decoders::decode_historical_data_end(self.server_version, self.time_zone, &mut message) {
-                            Ok((start, end)) => return Some(HistoricalBarUpdate::End { start, end }),
-                            Err(e) => {
-                                self.error = Some(e);
-                                return None;
+                        IncomingMessages::HistoricalDataEnd => {
+                            match decoders::decode_historical_data_end(self.server_version, self.time_zone, &mut message) {
+                                Ok((start, end)) => return Some(HistoricalBarUpdate::End { start, end }),
+                                Err(e) => {
+                                    self.error = Some(e);
+                                    return None;
+                                }
                             }
-                        },
+                        }
                         IncomingMessages::Error => {
                             self.error = Some(Error::from(message));
                             return None;

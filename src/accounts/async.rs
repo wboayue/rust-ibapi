@@ -155,14 +155,7 @@ pub async fn server_time_millis(client: &Client) -> Result<OffsetDateTime, Error
         client,
         OutgoingMessages::RequestCurrentTimeInMillis,
         encoders::encode_request_server_time_millis,
-        |message| {
-            message.skip(); // message type
-            let millis = message.next_long()?;
-            match OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000) {
-                Ok(date) => Ok(date),
-                Err(e) => Err(Error::Simple(format!("Error parsing date: {e}"))),
-            }
-        },
+        decoders::decode_server_time_millis,
         || Err(Error::Simple("No response from server".to_string())),
     )
     .await
