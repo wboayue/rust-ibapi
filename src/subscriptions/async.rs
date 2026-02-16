@@ -25,6 +25,7 @@ pub struct Subscription<T> {
     _message_type: Option<OutgoingMessages>,
     context: DecoderContext,
     cancelled: Arc<AtomicBool>,
+    stream_ended: Arc<AtomicBool>,
     message_bus: Option<Arc<dyn AsyncMessageBus>>,
     /// Cancel message generator
     cancel_fn: Option<Arc<CancelFn>>,
@@ -70,6 +71,7 @@ impl<T> Clone for Subscription<T> {
             _message_type: self._message_type,
             context: self.context.clone(),
             cancelled: self.cancelled.clone(),
+            stream_ended: self.stream_ended.clone(),
             message_bus: self.message_bus.clone(),
             cancel_fn: self.cancel_fn.clone(),
         }
@@ -102,6 +104,7 @@ impl<T> Subscription<T> {
             _message_type: message_type,
             context,
             cancelled: Arc::new(AtomicBool::new(false)),
+            stream_ended: Arc::new(AtomicBool::new(false)),
             message_bus: Some(message_bus),
             cancel_fn: None,
         }
@@ -185,6 +188,7 @@ impl<T> Subscription<T> {
             _message_type: None,
             context: DecoderContext::default(),
             cancelled: Arc::new(AtomicBool::new(false)),
+            stream_ended: Arc::new(AtomicBool::new(false)),
             message_bus: None,
             cancel_fn: None,
         }
@@ -195,6 +199,10 @@ impl<T> Subscription<T> {
     where
         T: 'static,
     {
+        if self.stream_ended.load(Ordering::Relaxed) {
+            return None;
+        }
+
         match &mut self.inner {
             SubscriptionInner::WithDecoder {
                 subscription,
@@ -208,7 +216,10 @@ impl<T> Subscription<T> {
                             let result = decoder(context, &mut message);
                             match process_decode_result(result) {
                                 ProcessingResult::Success(val) => return Some(Ok(val)),
-                                ProcessingResult::EndOfStream => return None,
+                                ProcessingResult::EndOfStream => {
+                                    self.stream_ended.store(true, Ordering::Relaxed);
+                                    return None;
+                                }
                                 ProcessingResult::Retry => {
                                     if check_retry(retry_count) == RetryDecision::Stop {
                                         return None;
@@ -448,6 +459,49 @@ mod tests {
 
         let result = subscription.next().await;
         assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_subscription_no_retries_after_end_of_stream() {
+        let message_bus = Arc::new(MessageBusStub::default());
+        let (tx, rx) = broadcast::channel(100);
+        let internal = AsyncInternalSubscription::new(rx);
+
+        let call_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let call_count_clone = call_count.clone();
+
+        let mut subscription: Subscription<String> = Subscription::with_decoder(
+            internal,
+            message_bus,
+            move |_context, _msg| {
+                let n = call_count_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if n == 0 {
+                    Err(Error::EndOfStream)
+                } else {
+                    Err(Error::UnexpectedResponse(ResponseMessage::from("stray\0")))
+                }
+            },
+            None,
+            None,
+            None,
+            DecoderContext::default(),
+        );
+
+        // First message triggers EndOfStream
+        tx.send(ResponseMessage::from("end\0")).unwrap();
+        let result = subscription.next().await;
+        assert!(result.is_none());
+
+        // Send stray messages after stream ended
+        tx.send(ResponseMessage::from("stray1\0")).unwrap();
+        tx.send(ResponseMessage::from("stray2\0")).unwrap();
+
+        // Subsequent calls should return None immediately without invoking decoder
+        let result = subscription.next().await;
+        assert!(result.is_none());
+
+        // Decoder should have been called only once (for the EndOfStream message)
+        assert_eq!(call_count.load(std::sync::atomic::Ordering::Relaxed), 1);
     }
 
     #[tokio::test]

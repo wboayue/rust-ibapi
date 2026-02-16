@@ -28,6 +28,7 @@ pub struct Subscription<T: StreamDecoder<T>> {
     phantom: PhantomData<T>,
     cancelled: AtomicBool,
     snapshot_ended: AtomicBool,
+    stream_ended: AtomicBool,
     subscription: InternalSubscription,
     error: Mutex<Option<Error>>,
     retry_count: AtomicUsize,
@@ -50,6 +51,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             phantom: PhantomData,
             cancelled: AtomicBool::new(false),
             snapshot_ended: AtomicBool::new(false),
+            stream_ended: AtomicBool::new(false),
             error: Mutex::new(None),
             retry_count: AtomicUsize::new(0),
         }
@@ -130,6 +132,10 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// * `Some(T)` - The next available item from the subscription
     /// * `None` - If the subscription has ended or encountered an error
     pub fn next(&self) -> Option<T> {
+        if self.stream_ended.load(Ordering::Relaxed) {
+            return None;
+        }
+
         match self.process_response(self.subscription.next()) {
             Some(val) => {
                 self.retry_count.store(0, Ordering::Relaxed);
@@ -196,7 +202,10 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 }
                 Some(val)
             }
-            ProcessingResult::EndOfStream => None,
+            ProcessingResult::EndOfStream => {
+                self.stream_ended.store(true, Ordering::Relaxed);
+                None
+            }
             ProcessingResult::Retry => {
                 // This case shouldn't happen here since UnexpectedResponse is handled at the next() level
                 // but we handle it for completeness
@@ -472,3 +481,47 @@ impl<T: StreamDecoder<T>> Iterator for SubscriptionTimeoutIter<'_, T> {
 
 /// Marker trait for subscriptions that share a channel based on message type
 pub trait SharesChannel {}
+
+#[cfg(all(test, feature = "sync"))]
+mod tests {
+    use super::*;
+    use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
+    use crate::stubs::MessageBusStub;
+    use std::sync::Arc;
+
+    #[derive(Debug)]
+    struct EndOfStreamItem;
+
+    impl StreamDecoder<EndOfStreamItem> for EndOfStreamItem {
+        fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<EndOfStreamItem, Error> {
+            Err(Error::EndOfStream)
+        }
+
+        fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
+            let mut msg = RequestMessage::new();
+            msg.push_field(&OutgoingMessages::CancelMarketData);
+            Ok(msg)
+        }
+    }
+
+    #[test]
+    fn test_no_retries_after_end_of_stream() {
+        let stub = MessageBusStub::with_responses(vec![
+            "1|data".to_string(),  // triggers EndOfStream via decoder
+            "1|stray".to_string(), // stray message after stream ended
+        ]);
+        let message_bus = Arc::new(stub);
+
+        let sub: Subscription<EndOfStreamItem> = {
+            let internal = message_bus.send_request(1, &RequestMessage::new()).unwrap();
+            Subscription::new(message_bus.clone(), internal, DecoderContext::default())
+        };
+
+        // First call hits EndOfStream, returns None
+        assert!(sub.next().is_none());
+
+        // Second call should return None immediately (stream_ended guard)
+        assert!(sub.next().is_none());
+        assert!(sub.stream_ended.load(Ordering::Relaxed));
+    }
+}

@@ -22,7 +22,7 @@ pub(crate) enum RetryDecision {
 /// Returns `RetryDecision::Continue` if retry count is below max, `RetryDecision::Stop` otherwise.
 pub(crate) fn check_retry(retry_count: usize) -> RetryDecision {
     if retry_count < MAX_DECODE_RETRIES {
-        log::warn!("retrying after unexpected response (attempt {}/{})", retry_count + 1, MAX_DECODE_RETRIES);
+        log::debug!("retrying after unexpected response (attempt {}/{})", retry_count + 1, MAX_DECODE_RETRIES);
         RetryDecision::Continue
     } else {
         log::error!("max retries ({}) exceeded, stopping subscription", MAX_DECODE_RETRIES);
