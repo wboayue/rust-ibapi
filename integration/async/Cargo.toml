@@ -8,6 +8,7 @@ publish = false
 ibapi = { path = "../..", features = ["async"] }
 tokio = { version = "1", features = ["full"] }
 ibapi-test = { path = "../common" }
+ibapi-test-macros = { path = "../macros" }
 anyhow = "1"
 env_logger = "0.11"
 serial_test = "3.1.1"

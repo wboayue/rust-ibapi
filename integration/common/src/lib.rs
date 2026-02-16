@@ -20,13 +20,6 @@ pub fn us_market_open() -> bool {
     now.time() >= open && now.time() < close
 }
 
-/// Panics if US equity markets are closed. Call at the start of tests that
-/// require live market activity (e.g. placing market orders).
-pub fn require_market_open() {
-    if !us_market_open() {
-        panic!("SKIPPED: US equity market is closed");
-    }
-}
 
 // === Client ID Pool ===
 

@@ -2,7 +2,8 @@ use ibapi::accounts::types::{AccountGroup, AccountId, ContractId};
 use ibapi::contracts::Contract;
 use ibapi::orders::{Action, Order, PlaceOrder};
 use ibapi::Client;
-use ibapi_test::{rate_limit, require_market_open, ClientId, GATEWAY};
+use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use ibapi_test_macros::require_market_open;
 use serial_test::serial;
 
 async fn connect_and_get_account() -> (Client, AccountId, ClientId) {
@@ -148,8 +149,8 @@ async fn account_updates_multi() {
 
 #[tokio::test]
 #[serial(account)]
+#[require_market_open]
 async fn pnl_single_receives_updates() {
-    require_market_open();
     let (client, account, _client_id) = connect_and_get_account().await;
 
     // Resolve AAPL contract_id
