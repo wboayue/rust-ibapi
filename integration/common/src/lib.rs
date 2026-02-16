@@ -2,7 +2,21 @@ use std::collections::BTreeSet;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use time::Weekday;
+use time_tz::{timezones::db::america::NEW_YORK, OffsetDateTimeExt};
+
 pub const GATEWAY: &str = "127.0.0.1:4002";
+
+/// Panics if US equity markets are closed (outside Mon-Fri 9:30-16:00 Eastern).
+/// Does not account for holidays.
+pub fn require_market_open() {
+    let now = time::OffsetDateTime::now_utc().to_timezone(NEW_YORK);
+    let day = now.weekday();
+    let open = time::Time::from_hms(9, 30, 0).unwrap();
+    let close = time::Time::from_hms(16, 0, 0).unwrap();
+    let is_open = day != Weekday::Saturday && day != Weekday::Sunday && now.time() >= open && now.time() < close;
+    assert!(is_open, "US equity market is closed");
+}
 
 // === Client ID Pool ===
 
