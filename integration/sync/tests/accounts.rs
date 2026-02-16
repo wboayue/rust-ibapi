@@ -1,8 +1,9 @@
 use std::time::Duration;
 
 use ibapi::accounts::types::{AccountGroup, AccountId, ContractId};
-use ibapi::accounts::PositionUpdate;
 use ibapi::client::blocking::Client;
+use ibapi::contracts::Contract;
+use ibapi::orders::{Action, Order, PlaceOrder};
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
 
@@ -140,23 +141,47 @@ fn account_updates_multi() {
 
 #[test]
 #[serial(account)]
-#[ignore]
 fn pnl_single_receives_updates() {
     let (client, account, _client_id) = connect_and_get_account();
 
-    // Need a contract_id from a held position
+    // Resolve AAPL contract_id
+    let contract = Contract::stock("AAPL").build();
     rate_limit();
-    let subscription = client.positions().expect("positions failed");
-    let update = subscription.next_timeout(Duration::from_secs(5));
-    let update = update.expect("no positions held - cannot test pnl_single");
-    let con_id = match update {
-        PositionUpdate::Position(pos) => pos.contract.contract_id,
-        PositionUpdate::PositionEnd => panic!("no positions held"),
-    };
+    let details = client.contract_details(&contract).expect("contract_details failed");
+    let con_id = details[0].contract.contract_id;
 
+    // Buy 1 share to create a position
+    let buy = Order {
+        action: Action::Buy,
+        total_quantity: 1.0,
+        order_type: "MKT".into(),
+        ..Default::default()
+    };
+    rate_limit();
+    let order_id = client.next_order_id();
+    let sub = client.place_order(order_id, &contract, &buy).expect("buy failed");
+    for event in sub {
+        if let PlaceOrder::OrderStatus(status) = &event {
+            if status.status == "Filled" {
+                break;
+            }
+        }
+    }
+
+    // Test pnl_single
     rate_limit();
     let pnl_sub = client.pnl_single(&account, ContractId(con_id), None).expect("pnl_single failed");
-
     let item = pnl_sub.next_timeout(Duration::from_secs(10));
     assert!(item.is_some(), "expected at least one PnL single update");
+
+    // Clean up - sell the share
+    let sell = Order {
+        action: Action::Sell,
+        total_quantity: 1.0,
+        order_type: "MKT".into(),
+        ..Default::default()
+    };
+    rate_limit();
+    let sell_id = client.next_order_id();
+    let _ = client.place_order(sell_id, &contract, &sell);
 }

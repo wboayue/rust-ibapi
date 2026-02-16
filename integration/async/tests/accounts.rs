@@ -1,5 +1,6 @@
 use ibapi::accounts::types::{AccountGroup, AccountId, ContractId};
-use ibapi::accounts::PositionUpdate;
+use ibapi::contracts::Contract;
+use ibapi::orders::{Action, Order, PlaceOrder};
 use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
@@ -147,25 +148,48 @@ async fn account_updates_multi() {
 
 #[tokio::test]
 #[serial(account)]
-#[ignore]
 async fn pnl_single_receives_updates() {
     let (client, account, _client_id) = connect_and_get_account().await;
 
-    // Need a contract_id from a held position
+    // Resolve AAPL contract_id
+    let contract = Contract::stock("AAPL").build();
     rate_limit();
-    let mut subscription = client.positions().await.expect("positions failed");
-    let update = tokio::time::timeout(tokio::time::Duration::from_secs(5), subscription.next()).await;
-    let update = update.expect("timeout").expect("stream ended").expect("positions error");
-    let con_id = match update {
-        PositionUpdate::Position(pos) => pos.contract.contract_id,
-        PositionUpdate::PositionEnd => panic!("no positions held"),
-    };
-    drop(subscription);
+    let details = client.contract_details(&contract).await.expect("contract_details failed");
+    let con_id = details[0].contract.contract_id;
 
+    // Buy 1 share to create a position
+    let buy = Order {
+        action: Action::Buy,
+        total_quantity: 1.0,
+        order_type: "MKT".into(),
+        ..Default::default()
+    };
+    rate_limit();
+    let order_id = client.next_order_id();
+    let mut sub = client.place_order(order_id, &contract, &buy).await.expect("buy failed");
+    while let Some(event) = sub.next().await {
+        if let PlaceOrder::OrderStatus(status) = &event {
+            if status.status == "Filled" {
+                break;
+            }
+        }
+    }
+
+    // Test pnl_single
     rate_limit();
     let mut pnl_sub = client.pnl_single(&account, ContractId(con_id), None).await.expect("pnl_single failed");
-
     let item = tokio::time::timeout(tokio::time::Duration::from_secs(10), pnl_sub.next()).await;
     assert!(item.is_ok(), "pnl_single timed out");
     assert!(item.unwrap().is_some(), "expected at least one PnL single update");
+
+    // Clean up - sell the share
+    let sell = Order {
+        action: Action::Sell,
+        total_quantity: 1.0,
+        order_type: "MKT".into(),
+        ..Default::default()
+    };
+    rate_limit();
+    let sell_id = client.next_order_id();
+    let _ = client.place_order(sell_id, &contract, &sell).await;
 }
