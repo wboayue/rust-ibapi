@@ -3268,7 +3268,7 @@ mod tests {
                             order_status_received = true;
                             println!("Received OrderStatus: {:?}", status);
                         }
-                        Ok(CancelOrder::Notice(Notice { code, message })) => {
+                        Ok(CancelOrder::Notice(Notice { code, message, .. })) => {
                             // Notice messages with code 202 are order cancellation confirmations
                             // The message should contain the order ID in the format
                             assert_eq!(code, 202);

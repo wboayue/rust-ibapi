@@ -895,6 +895,19 @@ impl ResponseMessage {
         }
     }
 
+    /// Peek a long field without advancing the cursor.
+    pub fn peek_long(&self, i: usize) -> Result<i64, Error> {
+        if i >= self.fields.len() {
+            return Err(Error::Simple("expected long and found end of message".into()));
+        }
+
+        let field = &self.fields[i];
+        match field.parse() {
+            Ok(val) => Ok(val),
+            Err(err) => Err(Error::Parse(i, field.into(), err.to_string())),
+        }
+    }
+
     /// Peek a string field without advancing the cursor.
     pub fn peek_string(&self, i: usize) -> String {
         self.fields[i].to_owned()
@@ -1099,6 +1112,19 @@ impl ResponseMessage {
         }
     }
 
+    /// Extract the error timestamp from an error message.
+    /// Only present for server versions >= ERROR_TIME.
+    pub fn error_time(&self) -> Option<OffsetDateTime> {
+        if self.server_version >= crate::server_versions::ERROR_TIME {
+            // New format: msg_type, request_id, error_code, error_msg, advanced_order_reject_json, error_time
+            let idx = self.error_message_index() + 2;
+            let millis = self.peek_long(idx).ok()?;
+            OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).ok()
+        } else {
+            None
+        }
+    }
+
     /// Build a response message from a NUL-delimited payload.
     pub fn from(fields: &str) -> ResponseMessage {
         ResponseMessage {
@@ -1151,6 +1177,9 @@ pub struct Notice {
     pub code: i32,
     /// Human-readable error message text.
     pub message: String,
+    /// Timestamp when the error occurred.
+    /// Only present for server versions >= ERROR_TIME (194).
+    pub error_time: Option<OffsetDateTime>,
 }
 
 /// Error code indicating an order was cancelled (confirmation, not an error).
@@ -1171,8 +1200,9 @@ impl Notice {
     /// Construct a notice from a response message.
     pub fn from(message: &ResponseMessage) -> Notice {
         let code = message.error_code();
+        let error_time = message.error_time();
         let message = message.error_message();
-        Notice { code, message }
+        Notice { code, message, error_time }
     }
 
     /// Returns `true` if this notice indicates an order was cancelled (code 202).

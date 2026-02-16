@@ -601,12 +601,13 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), E
     packet.skip(); // message_id
 
     if server_version >= server_versions::ERROR_TIME {
-        // New format (>= ERROR_TIME): no version field
+        // New format (>= ERROR_TIME): no version field, includes error_time
         let request_id = packet.next_int()?;
         let error_code = packet.next_int()?;
         let error_message = packet.next_string()?;
         let advanced_order_reject_json = packet.next_string().unwrap_or_default();
-        log_error_fields(request_id, error_code, &error_message, &advanced_order_reject_json);
+        let error_time = packet.next_long().unwrap_or(0);
+        log_error_fields(request_id, error_code, &error_message, &advanced_order_reject_json, error_time);
     } else {
         // Old format (< ERROR_TIME): has version field
         let version = packet.next_int()?;
@@ -623,20 +624,20 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), E
             } else {
                 String::new()
             };
-            log_error_fields(request_id, error_code, &error_message, &advanced_order_reject_json);
+            log_error_fields(request_id, error_code, &error_message, &advanced_order_reject_json, 0);
         }
     }
     Ok(())
 }
 
-fn log_error_fields(request_id: i32, error_code: i32, error_message: &str, advanced_order_reject_json: &str) {
+fn log_error_fields(request_id: i32, error_code: i32, error_message: &str, advanced_order_reject_json: &str, error_time: i64) {
     if WARNING_CODES.contains(&error_code) {
         warn!(
-            "request_id: {request_id}, warning_code: {error_code}, warning_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}"
+            "request_id: {request_id}, warning_code: {error_code}, warning_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}, error_time: {error_time}"
         );
     } else {
         error!(
-            "request_id: {request_id}, error_code: {error_code}, error_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}"
+            "request_id: {request_id}, error_code: {error_code}, error_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}, error_time: {error_time}"
         );
     }
 }
