@@ -620,12 +620,36 @@ impl OrderDecoder {
         Ok(())
     }
 
+    fn read_bond_accrued_interest(&mut self) -> Result<(), Error> {
+        if self.server_version < server_versions::BOND_ACCRUED_INTEREST {
+            return Ok(());
+        }
+        self.order.bond_accrued_interest = self.message.next_string()?;
+        Ok(())
+    }
+
+    fn read_include_overnight(&mut self) -> Result<(), Error> {
+        if self.server_version < server_versions::INCLUDE_OVERNIGHT {
+            return Ok(());
+        }
+        self.order.include_overnight = self.message.next_bool()?;
+        Ok(())
+    }
+
+    fn read_cme_tagging_fields(&mut self) -> Result<(), Error> {
+        if self.server_version < server_versions::CME_TAGGING_FIELDS_IN_OPEN_ORDER {
+            return Ok(());
+        }
+        self.order.ext_operator = self.message.next_string()?;
+        self.order.manual_order_indicator = self.message.next_optional_int()?;
+        Ok(())
+    }
+
     fn read_submitter(&mut self) -> Result<(), Error> {
         if self.server_version < server_versions::SUBMITTER {
             return Ok(());
         }
-        let _submitter = self.message.next_string()?;
-        // Note: We don't store submitter in the Order struct currently
+        self.order.submitter = self.message.next_string()?;
         Ok(())
     }
 
@@ -660,7 +684,10 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_imbalance_only(&mut self) -> Result<(), Error> {
+    fn read_imbalance_only(&mut self, min_version: i32) -> Result<(), Error> {
+        if self.server_version < min_version {
+            return Ok(());
+        }
         self.order.imbalance_only = self.message.next_bool()?;
         Ok(())
     }
@@ -772,6 +799,13 @@ pub(crate) fn decode_open_order(server_version: i32, message: ResponseMessage) -
     decoder.read_post_to_ats()?;
     decoder.read_auto_cancel_parent()?;
     decoder.read_peg_best_peg_mid_order_attributes()?;
+    decoder.read_customer_account()?;
+    decoder.read_professional_customer()?;
+    decoder.read_bond_accrued_interest()?;
+    decoder.read_include_overnight()?;
+    decoder.read_cme_tagging_fields()?;
+    decoder.read_submitter()?;
+    decoder.read_imbalance_only(server_versions::IMBALANCE_ONLY)?;
 
     Ok(decoder.into_order_data())
 }
@@ -853,6 +887,14 @@ pub(crate) fn decode_execution_data(server_version: i32, message: &mut ResponseM
         execution.last_liquidity = Liquidity::from(message.next_int()?);
     }
 
+    if server_version >= server_versions::PENDING_PRICE_REVISION {
+        execution.pending_price_revision = message.next_bool()?;
+    }
+
+    if server_version >= server_versions::SUBMITTER {
+        execution.submitter = message.next_string()?;
+    }
+
     Ok(execution_data)
 }
 
@@ -932,7 +974,7 @@ pub(crate) fn decode_completed_order(server_version: i32, message: ResponseMessa
     decoder.read_ref_futures_contract_id()?;
     decoder.read_auto_cancel_parent()?;
     decoder.read_shareholder()?;
-    decoder.read_imbalance_only()?;
+    decoder.read_imbalance_only(0)?;
     decoder.read_route_marketable_to_bbo()?;
     decoder.read_parent_perm_id()?;
     decoder.read_completed_time()?;

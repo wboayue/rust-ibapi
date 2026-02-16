@@ -130,7 +130,7 @@ impl Default for ConnectionHandler {
     fn default() -> Self {
         Self {
             min_version: 100,
-            max_version: server_versions::CURRENT_TIME_IN_MILLIS,
+            max_version: server_versions::PARAMETRIZED_DAYS_OF_EXECUTIONS,
         }
     }
 }

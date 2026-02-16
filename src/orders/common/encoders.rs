@@ -383,6 +383,31 @@ pub(crate) fn encode_place_order(server_version: i32, order_id: i32, contract: &
         }
     }
 
+    if server_version >= server_versions::CUSTOMER_ACCOUNT {
+        message.push_field(&order.customer_account);
+    }
+
+    if server_version >= server_versions::PROFESSIONAL_CUSTOMER {
+        message.push_field(&order.professional_customer);
+    }
+
+    if (server_versions::RFQ_FIELDS..server_versions::UNDO_RFQ_FIELDS).contains(&server_version) {
+        message.push_field(&"");
+        message.push_field(&i32::MAX);
+    }
+
+    if server_version >= server_versions::INCLUDE_OVERNIGHT {
+        message.push_field(&order.include_overnight);
+    }
+
+    if server_version >= server_versions::CME_TAGGING_FIELDS {
+        message.push_field(&order.manual_order_indicator);
+    }
+
+    if server_version >= server_versions::IMBALANCE_ONLY {
+        message.push_field(&order.imbalance_only);
+    }
+
     Ok(message)
 }
 

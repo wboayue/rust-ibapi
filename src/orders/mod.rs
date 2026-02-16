@@ -465,6 +465,14 @@ pub struct Order {
     pub customer_account: String,
     /// Indicates if this is a professional customer order.
     pub professional_customer: bool,
+    /// Accrued interest for bond orders.
+    pub bond_accrued_interest: String,
+    /// Include overnight trading.
+    pub include_overnight: bool,
+    /// Manual order indicator.
+    pub manual_order_indicator: Option<i32>,
+    /// Identifies the submitter of the order.
+    pub submitter: String,
 }
 
 impl Default for Order {
@@ -608,6 +616,10 @@ impl Default for Order {
             post_to_ats: None,
             customer_account: String::new(),
             professional_customer: false,
+            bond_accrued_interest: String::new(),
+            include_overnight: false,
+            manual_order_indicator: None,
+            submitter: String::new(),
         }
     }
 }
@@ -1325,6 +1337,10 @@ pub struct Execution {
     pub model_code: String,
     /// Liquidity type of the execution (requires TWS 968+ / API v973.05+).
     pub last_liquidity: Liquidity,
+    /// Indicates whether a price revision is pending.
+    pub pending_price_revision: bool,
+    /// Identifies the submitter of the execution.
+    pub submitter: String,
 }
 
 /// Contains execution information including the request ID, contract, and execution details.
