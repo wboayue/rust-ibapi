@@ -684,10 +684,16 @@ impl OrderDecoder {
         Ok(())
     }
 
-    fn read_imbalance_only(&mut self, min_version: i32) -> Result<(), Error> {
-        if self.server_version < min_version {
+    fn read_imbalance_only(&mut self) -> Result<(), Error> {
+        if self.server_version < server_versions::IMBALANCE_ONLY {
             return Ok(());
         }
+        self.order.imbalance_only = self.message.next_bool()?;
+        Ok(())
+    }
+
+    /// Reads imbalance_only unconditionally (completed orders always include this field).
+    fn read_imbalance_only_always(&mut self) -> Result<(), Error> {
         self.order.imbalance_only = self.message.next_bool()?;
         Ok(())
     }
@@ -805,7 +811,7 @@ pub(crate) fn decode_open_order(server_version: i32, message: ResponseMessage) -
     decoder.read_include_overnight()?;
     decoder.read_cme_tagging_fields()?;
     decoder.read_submitter()?;
-    decoder.read_imbalance_only(server_versions::IMBALANCE_ONLY)?;
+    decoder.read_imbalance_only()?;
 
     Ok(decoder.into_order_data())
 }
@@ -974,7 +980,7 @@ pub(crate) fn decode_completed_order(server_version: i32, message: ResponseMessa
     decoder.read_ref_futures_contract_id()?;
     decoder.read_auto_cancel_parent()?;
     decoder.read_shareholder()?;
-    decoder.read_imbalance_only(0)?;
+    decoder.read_imbalance_only_always()?;
     decoder.read_route_marketable_to_bbo()?;
     decoder.read_parent_perm_id()?;
     decoder.read_completed_time()?;
@@ -1611,145 +1617,145 @@ mod tests {
     /// Server version must be >= ORDER_CONTAINER (145) and >= FA_PROFILE_DESUPPORT (177).
     fn build_open_order_base_fields() -> Vec<&'static str> {
         vec![
-            "5",       // message type (OpenOrder)
+            "5", // message type (OpenOrder)
             // No message version (server_version >= ORDER_CONTAINER)
-            "42",      // order_id
+            "42", // order_id
             // contract fields
-            "265598",  // contract_id
-            "AAPL",    // symbol
-            "STK",     // security_type
-            "",        // last_trade_date
-            "0",       // strike
-            "?",       // right
-            "",        // multiplier
-            "SMART",   // exchange
-            "USD",     // currency
-            "AAPL",    // local_symbol
-            "NMS",     // trading_class
+            "265598", // contract_id
+            "AAPL",   // symbol
+            "STK",    // security_type
+            "",       // last_trade_date
+            "0",      // strike
+            "?",      // right
+            "",       // multiplier
+            "SMART",  // exchange
+            "USD",    // currency
+            "AAPL",   // local_symbol
+            "NMS",    // trading_class
             // order fields
-            "BUY",     // action
-            "100",     // total_quantity
-            "LMT",     // order_type
-            "150.50",  // limit_price
-            "0",       // aux_price
-            "DAY",     // tif
-            "",        // oca_group
+            "BUY",       // action
+            "100",       // total_quantity
+            "LMT",       // order_type
+            "150.50",    // limit_price
+            "0",         // aux_price
+            "DAY",       // tif
+            "",          // oca_group
             "DU1234567", // account
-            "",        // open_close
-            "0",       // origin
-            "",        // order_ref
-            "1",       // client_id
-            "123456",  // perm_id
-            "0",       // outside_rth
-            "0",       // hidden
-            "0",       // discretionary_amt
-            "",        // good_after_time
-            "",        // skip_shares_allocation
-            "",        // fa_group
-            "",        // fa_method
-            "",        // fa_percentage
+            "",          // open_close
+            "0",         // origin
+            "",          // order_ref
+            "1",         // client_id
+            "123456",    // perm_id
+            "0",         // outside_rth
+            "0",         // hidden
+            "0",         // discretionary_amt
+            "",          // good_after_time
+            "",          // skip_shares_allocation
+            "",          // fa_group
+            "",          // fa_method
+            "",          // fa_percentage
             // no fa_profile (server_version >= FA_PROFILE_DESUPPORT)
-            "",        // model_code (>= MODELS_SUPPORT)
-            "",        // good_till_date
-            "",        // rule_80_a
-            "",        // percent_offset
-            "",        // settling_firm
-            "0",       // short_sale_slot
-            "",        // designated_location
-            "-1",      // exempt_code
-            "0",       // auction_strategy
-            "",        // starting_price
-            "",        // stock_ref_price
-            "",        // delta
-            "",        // stock_range_lower
-            "",        // stock_range_upper
-            "",        // display_size
-            "0",       // block_order
-            "0",       // sweep_to_fill
-            "0",       // all_or_none
-            "",        // min_qty
-            "0",       // oca_type
-            "",        // skip_etrade_only
-            "",        // skip_firm_quote_only
-            "",        // skip_nbbo_price_cap
-            "0",       // parent_id
-            "0",       // trigger_method
+            "",   // model_code (>= MODELS_SUPPORT)
+            "",   // good_till_date
+            "",   // rule_80_a
+            "",   // percent_offset
+            "",   // settling_firm
+            "0",  // short_sale_slot
+            "",   // designated_location
+            "-1", // exempt_code
+            "0",  // auction_strategy
+            "",   // starting_price
+            "",   // stock_ref_price
+            "",   // delta
+            "",   // stock_range_lower
+            "",   // stock_range_upper
+            "",   // display_size
+            "0",  // block_order
+            "0",  // sweep_to_fill
+            "0",  // all_or_none
+            "",   // min_qty
+            "0",  // oca_type
+            "",   // skip_etrade_only
+            "",   // skip_firm_quote_only
+            "",   // skip_nbbo_price_cap
+            "0",  // parent_id
+            "0",  // trigger_method
             // volatility_order_params (read_open_order_attributes=true)
-            "",        // volatility
-            "",        // volatility_type
-            "",        // delta_neutral_order_type
-            "",        // delta_neutral_aux_price
+            "", // volatility
+            "", // volatility_type
+            "", // delta_neutral_order_type
+            "", // delta_neutral_aux_price
             // (not delta neutral, so no extra fields)
-            "0",       // continuous_update
-            "",        // reference_price_type
+            "0", // continuous_update
+            "",  // reference_price_type
             // trail_params
-            "",        // trail_stop_price
-            "",        // trailing_percent
+            "", // trail_stop_price
+            "", // trailing_percent
             // basis_points
-            "",        // basis_points
-            "",        // basis_points_type
+            "", // basis_points
+            "", // basis_points_type
             // combo_legs
-            "",        // combo_legs_description
-            "0",       // combo_legs_count
-            "0",       // order_combo_legs_count
+            "",  // combo_legs_description
+            "0", // combo_legs_count
+            "0", // order_combo_legs_count
             // smart_combo_routing_params
-            "0",       // count
+            "0", // count
             // scale_order_params
-            "",        // scale_init_level_size
-            "",        // scale_subs_level_size
-            "",        // scale_price_increment
+            "", // scale_init_level_size
+            "", // scale_subs_level_size
+            "", // scale_price_increment
             // hedge_params
-            "",        // hedge_type (empty, no hedge_param)
+            "", // hedge_type (empty, no hedge_param)
             // opt_out_smart_routing
             "0",
             // clearing_params
-            "",        // clearing_account
-            "",        // clearing_intent
+            "", // clearing_account
+            "", // clearing_intent
             // not_held
             "0",
             // delta_neutral
-            "0",       // has_delta_neutral_contract (false)
+            "0", // has_delta_neutral_contract (false)
             // algo_params
-            "",        // algo_strategy (empty, no params)
+            "", // algo_strategy (empty, no params)
             // solicited
             "0",
             // what_if_info_and_commission
-            "0",       // what_if
+            "0",         // what_if
             "Submitted", // order_status
             // what_if_ext_fields (>= WHAT_IF_EXT_FIELDS)
-            "",        // initial_margin_before
-            "",        // maintenance_margin_before
-            "",        // equity_with_loan_before
-            "",        // initial_margin_change
-            "",        // maintenance_margin_change
-            "",        // equity_with_loan_change
-            "",        // initial_margin_after
-            "",        // maintenance_margin_after
-            "",        // equity_with_loan_after
-            "",        // commission
-            "",        // minimum_commission
-            "",        // maximum_commission
-            "",        // commission_currency
-            "",        // warning_text
+            "", // initial_margin_before
+            "", // maintenance_margin_before
+            "", // equity_with_loan_before
+            "", // initial_margin_change
+            "", // maintenance_margin_change
+            "", // equity_with_loan_change
+            "", // initial_margin_after
+            "", // maintenance_margin_after
+            "", // equity_with_loan_after
+            "", // commission
+            "", // minimum_commission
+            "", // maximum_commission
+            "", // commission_currency
+            "", // warning_text
             // vol_randomize_flags
-            "0",       // randomize_size
-            "0",       // randomize_price
+            "0", // randomize_size
+            "0", // randomize_price
             // peg_to_bench: skipped (order_type != "PEG BENCH")
             // conditions (>= PEGGED_TO_BENCHMARK)
-            "0",       // conditions_count
+            "0", // conditions_count
             // adjusted_order_params (>= PEGGED_TO_BENCHMARK)
-            "",        // adjusted_order_type
-            "",        // trigger_price
-            "",        // trail_stop_price
-            "",        // limit_price_offset
-            "",        // adjusted_stop_price
-            "",        // adjusted_stop_limit_price
-            "",        // adjusted_trailing_amount
-            "0",       // adjustable_trailing_unit
+            "",  // adjusted_order_type
+            "",  // trigger_price
+            "",  // trail_stop_price
+            "",  // limit_price_offset
+            "",  // adjusted_stop_price
+            "",  // adjusted_stop_limit_price
+            "",  // adjusted_trailing_amount
+            "0", // adjustable_trailing_unit
             // soft_dollar_tier (>= SOFT_DOLLAR_TIER)
-            "",        // name
-            "",        // value
-            "",        // display_name
+            "", // name
+            "", // value
+            "", // display_name
             // cash_qty (>= CASH_QTY)
             "",
             // dont_use_auto_price_for_hedge (>= AUTO_PRICE_FOR_HEDGE)
@@ -1767,11 +1773,11 @@ mod tests {
             // auto_cancel_parent (>= AUTO_CANCEL_PARENT)
             "0",
             // peg_best_peg_mid (>= PEGBEST_PEGMID_OFFSETS)
-            "",        // min_trade_qty
-            "",        // min_compete_size
-            "",        // compete_against_best_offset
-            "",        // mid_offset_at_whole
-            "",        // mid_offset_at_half
+            "", // min_trade_qty
+            "", // min_compete_size
+            "", // compete_against_best_offset
+            "", // mid_offset_at_whole
+            "", // mid_offset_at_half
         ]
     }
 
@@ -1780,14 +1786,14 @@ mod tests {
         let mut fields = build_open_order_base_fields();
 
         // New fields for v183-v199
-        fields.push("CUST001");  // customer_account (>= CUSTOMER_ACCOUNT=183)
-        fields.push("1");        // professional_customer (>= PROFESSIONAL_CUSTOMER=184)
-        fields.push("1.25");     // bond_accrued_interest (>= BOND_ACCRUED_INTEREST=185)
-        fields.push("1");        // include_overnight (>= INCLUDE_OVERNIGHT=189)
-        fields.push("EXTOP1");   // ext_operator (>= CME_TAGGING_FIELDS_IN_OPEN_ORDER=193)
-        fields.push("3");        // manual_order_indicator (>= CME_TAGGING_FIELDS_IN_OPEN_ORDER)
-        fields.push("SUB001");   // submitter (>= SUBMITTER=198)
-        fields.push("1");        // imbalance_only (>= IMBALANCE_ONLY=199)
+        fields.push("CUST001"); // customer_account (>= CUSTOMER_ACCOUNT=183)
+        fields.push("1"); // professional_customer (>= PROFESSIONAL_CUSTOMER=184)
+        fields.push("1.25"); // bond_accrued_interest (>= BOND_ACCRUED_INTEREST=185)
+        fields.push("1"); // include_overnight (>= INCLUDE_OVERNIGHT=189)
+        fields.push("EXTOP1"); // ext_operator (>= CME_TAGGING_FIELDS_IN_OPEN_ORDER=193)
+        fields.push("3"); // manual_order_indicator (>= CME_TAGGING_FIELDS_IN_OPEN_ORDER)
+        fields.push("SUB001"); // submitter (>= SUBMITTER=198)
+        fields.push("1"); // imbalance_only (>= IMBALANCE_ONLY=199)
 
         let mut message_str = fields.join("\0");
         message_str.push('\0');
@@ -1845,40 +1851,40 @@ mod tests {
     #[test]
     fn test_decode_execution_data_v200_new_fields() {
         let fields = vec![
-            "11",          // message type (ExecutionData)
+            "11", // message type (ExecutionData)
             // no version (server_version >= LAST_LIQUIDITY)
-            "9000",        // request_id
-            "42",          // order_id
-            "265598",      // contract_id
-            "AAPL",        // symbol
-            "STK",         // security_type
-            "",            // last_trade_date
-            "0",           // strike
-            "?",           // right
-            "",            // multiplier
-            "SMART",       // exchange
-            "USD",         // currency
-            "AAPL",        // local_symbol
-            "NMS",         // trading_class
-            "0001f4e8.67890abc.01.01", // execution_id
+            "9000",                         // request_id
+            "42",                           // order_id
+            "265598",                       // contract_id
+            "AAPL",                         // symbol
+            "STK",                          // security_type
+            "",                             // last_trade_date
+            "0",                            // strike
+            "?",                            // right
+            "",                             // multiplier
+            "SMART",                        // exchange
+            "USD",                          // currency
+            "AAPL",                         // local_symbol
+            "NMS",                          // trading_class
+            "0001f4e8.67890abc.01.01",      // execution_id
             "20260115 10:30:00 US/Eastern", // time
-            "DU1234567",   // account_number
-            "SMART",       // exchange
-            "BOT",         // side
-            "100",         // shares
-            "150.50",      // price
-            "123456",      // perm_id
-            "1",           // client_id
-            "0",           // liquidation
-            "100",         // cumulative_quantity
-            "150.50",      // average_price
-            "",            // order_reference
-            "",            // ev_rule
-            "",            // ev_multiplier
-            "",            // model_code (>= MODELS_SUPPORT)
-            "2",           // last_liquidity (>= LAST_LIQUIDITY)
-            "1",           // pending_price_revision (>= PENDING_PRICE_REVISION=178)
-            "SUB002",      // submitter (>= SUBMITTER=198)
+            "DU1234567",                    // account_number
+            "SMART",                        // exchange
+            "BOT",                          // side
+            "100",                          // shares
+            "150.50",                       // price
+            "123456",                       // perm_id
+            "1",                            // client_id
+            "0",                            // liquidation
+            "100",                          // cumulative_quantity
+            "150.50",                       // average_price
+            "",                             // order_reference
+            "",                             // ev_rule
+            "",                             // ev_multiplier
+            "",                             // model_code (>= MODELS_SUPPORT)
+            "2",                            // last_liquidity (>= LAST_LIQUIDITY)
+            "1",                            // pending_price_revision (>= PENDING_PRICE_REVISION=178)
+            "SUB002",                       // submitter (>= SUBMITTER=198)
         ];
 
         let mut message_str = fields.join("\0");
@@ -1904,39 +1910,39 @@ mod tests {
     fn test_decode_execution_data_v177_skips_new_fields() {
         // v177 is below PENDING_PRICE_REVISION (178) and SUBMITTER (198)
         let fields = vec![
-            "11",          // message type
-            "9000",        // request_id
-            "42",          // order_id
-            "265598",      // contract_id
-            "AAPL",        // symbol
-            "STK",         // security_type
-            "",            // last_trade_date
-            "0",           // strike
-            "?",           // right
-            "",            // multiplier
-            "SMART",       // exchange
-            "USD",         // currency
-            "AAPL",        // local_symbol
-            "NMS",         // trading_class
-            "0001f4e8.67890abc.01.01", // execution_id
+            "11",                           // message type
+            "9000",                         // request_id
+            "42",                           // order_id
+            "265598",                       // contract_id
+            "AAPL",                         // symbol
+            "STK",                          // security_type
+            "",                             // last_trade_date
+            "0",                            // strike
+            "?",                            // right
+            "",                             // multiplier
+            "SMART",                        // exchange
+            "USD",                          // currency
+            "AAPL",                         // local_symbol
+            "NMS",                          // trading_class
+            "0001f4e8.67890abc.01.01",      // execution_id
             "20260115 10:30:00 US/Eastern", // time
-            "DU1234567",   // account_number
-            "SMART",       // exchange
-            "BOT",         // side
-            "100",         // shares
-            "150.50",      // price
-            "123456",      // perm_id
-            "1",           // client_id
-            "0",           // liquidation
-            "100",         // cumulative_quantity
-            "150.50",      // average_price
-            "",            // order_reference
-            "",            // ev_rule
-            "",            // ev_multiplier
-            "",            // model_code (>= MODELS_SUPPORT)
-            "2",           // last_liquidity (>= LAST_LIQUIDITY)
-            // No pending_price_revision (v177 < 178)
-            // No submitter (v177 < 198)
+            "DU1234567",                    // account_number
+            "SMART",                        // exchange
+            "BOT",                          // side
+            "100",                          // shares
+            "150.50",                       // price
+            "123456",                       // perm_id
+            "1",                            // client_id
+            "0",                            // liquidation
+            "100",                          // cumulative_quantity
+            "150.50",                       // average_price
+            "",                             // order_reference
+            "",                             // ev_rule
+            "",                             // ev_multiplier
+            "",                             // model_code (>= MODELS_SUPPORT)
+            "2",                            // last_liquidity (>= LAST_LIQUIDITY)
+                                            // No pending_price_revision (v177 < 178)
+                                            // No submitter (v177 < 198)
         ];
 
         let mut message_str = fields.join("\0");
@@ -1953,112 +1959,112 @@ mod tests {
     /// Builds base completed order message fields for a simple AAPL LMT order.
     fn build_completed_order_base_fields() -> Vec<&'static str> {
         vec![
-            "101",     // message type (CompletedOrder)
+            "101", // message type (CompletedOrder)
             // No message version (server_version >= ORDER_CONTAINER)
             // contract fields
-            "265598",  // contract_id
-            "AAPL",    // symbol
-            "STK",     // security_type
-            "",        // last_trade_date
-            "0",       // strike
-            "?",       // right
-            "",        // multiplier
-            "SMART",   // exchange
-            "USD",     // currency
-            "AAPL",    // local_symbol
-            "NMS",     // trading_class
+            "265598", // contract_id
+            "AAPL",   // symbol
+            "STK",    // security_type
+            "",       // last_trade_date
+            "0",      // strike
+            "?",      // right
+            "",       // multiplier
+            "SMART",  // exchange
+            "USD",    // currency
+            "AAPL",   // local_symbol
+            "NMS",    // trading_class
             // order fields
-            "BUY",     // action
-            "1",       // total_quantity
-            "LMT",     // order_type
-            "100.0",   // limit_price
-            "0.0",     // aux_price
-            "DAY",     // tif
-            "",        // oca_group
+            "BUY",       // action
+            "1",         // total_quantity
+            "LMT",       // order_type
+            "100.0",     // limit_price
+            "0.0",       // aux_price
+            "DAY",       // tif
+            "",          // oca_group
             "DU1234567", // account
-            "",        // open_close
-            "0",       // origin
-            "",        // order_ref
+            "",          // open_close
+            "0",         // origin
+            "",          // order_ref
             // (no client_id in completed orders)
             "1295810623", // perm_id
-            "0",       // outside_rth
-            "0",       // hidden
-            "0",       // discretionary_amt
-            "",        // good_after_time
+            "0",          // outside_rth
+            "0",          // hidden
+            "0",          // discretionary_amt
+            "",           // good_after_time
             // (no skip_shares_allocation in completed orders)
-            "",        // fa_group
-            "",        // fa_method
-            "",        // fa_percentage
+            "", // fa_group
+            "", // fa_method
+            "", // fa_percentage
             // no fa_profile (>= FA_PROFILE_DESUPPORT)
-            "",        // model_code (>= MODELS_SUPPORT)
-            "",        // good_till_date
-            "",        // rule_80_a
-            "",        // percent_offset
-            "",        // settling_firm
-            "0",       // short_sale_slot
-            "",        // designated_location
-            "-1",      // exempt_code
+            "",   // model_code (>= MODELS_SUPPORT)
+            "",   // good_till_date
+            "",   // rule_80_a
+            "",   // percent_offset
+            "",   // settling_firm
+            "0",  // short_sale_slot
+            "",   // designated_location
+            "-1", // exempt_code
             // (no auction_strategy in completed orders)
-            "",        // starting_price
-            "",        // stock_ref_price
-            "",        // delta
-            "",        // stock_range_lower
-            "",        // stock_range_upper
-            "",        // display_size
+            "", // starting_price
+            "", // stock_ref_price
+            "", // delta
+            "", // stock_range_lower
+            "", // stock_range_upper
+            "", // display_size
             // (no block_order in completed orders)
-            "0",       // sweep_to_fill
-            "0",       // all_or_none
-            "",        // min_qty
-            "0",       // oca_type
+            "0", // sweep_to_fill
+            "0", // all_or_none
+            "",  // min_qty
+            "0", // oca_type
             // (no skip_etrade_only, skip_firm_quote_only, skip_nbbo_price_cap)
             // (no parent_id)
-            "0",       // trigger_method
+            "0", // trigger_method
             // volatility_order_params (read_open_order_attributes=false)
-            "",        // volatility
-            "",        // volatility_type
-            "",        // delta_neutral_order_type
-            "",        // delta_neutral_aux_price
-            "0",       // continuous_update
-            "",        // reference_price_type
+            "",  // volatility
+            "",  // volatility_type
+            "",  // delta_neutral_order_type
+            "",  // delta_neutral_aux_price
+            "0", // continuous_update
+            "",  // reference_price_type
             // trail_params
-            "",        // trail_stop_price
-            "",        // trailing_percent
+            "", // trail_stop_price
+            "", // trailing_percent
             // (no basis_points in completed orders)
             // combo_legs
-            "",        // combo_legs_description
-            "0",       // combo_legs_count
-            "0",       // order_combo_legs_count
+            "",  // combo_legs_description
+            "0", // combo_legs_count
+            "0", // order_combo_legs_count
             // smart_combo_routing_params
-            "0",       // count
+            "0", // count
             // scale_order_params
-            "",        // scale_init_level_size
-            "",        // scale_subs_level_size
-            "",        // scale_price_increment
+            "", // scale_init_level_size
+            "", // scale_subs_level_size
+            "", // scale_price_increment
             // hedge_params
-            "",        // hedge_type (empty)
+            "", // hedge_type (empty)
             // (no opt_out_smart_routing in completed orders)
             // clearing_params
-            "",        // clearing_account
-            "",        // clearing_intent
+            "", // clearing_account
+            "", // clearing_intent
             // not_held
             "0",
             // delta_neutral
-            "0",       // has_delta_neutral_contract
+            "0", // has_delta_neutral_contract
             // algo_params
-            "",        // algo_strategy
+            "", // algo_strategy
             // solicited
             "0",
             // order_status
             "Cancelled",
             // vol_randomize_flags
-            "0",       // randomize_size
-            "0",       // randomize_price
+            "0", // randomize_size
+            "0", // randomize_price
             // peg_to_bench: skipped (order_type != "PEG BENCH")
             // conditions (>= PEGGED_TO_BENCHMARK)
-            "0",       // conditions_count
+            "0", // conditions_count
             // stop_price_and_limit_price_offset
-            "",        // trail_stop_price
-            "",        // limit_price_offset
+            "", // trail_stop_price
+            "", // limit_price_offset
             // cash_qty (>= CASH_QTY)
             "",
             // dont_use_auto_price_for_hedge (>= AUTO_PRICE_FOR_HEDGE)
@@ -2086,11 +2092,11 @@ mod tests {
             // completed_status
             "Cancelled by Trader",
             // peg_best_peg_mid (>= PEGBEST_PEGMID_OFFSETS)
-            "",        // min_trade_qty
-            "",        // min_compete_size
-            "",        // compete_against_best_offset
-            "",        // mid_offset_at_whole
-            "",        // mid_offset_at_half
+            "", // min_trade_qty
+            "", // min_compete_size
+            "", // compete_against_best_offset
+            "", // mid_offset_at_whole
+            "", // mid_offset_at_half
         ]
     }
 
@@ -2099,11 +2105,11 @@ mod tests {
         let mut fields = build_completed_order_base_fields();
 
         // New fields for completed orders at v200
-        fields.push("CUST002");  // customer_account (>= CUSTOMER_ACCOUNT=183)
-        fields.push("1");        // professional_customer (>= PROFESSIONAL_CUSTOMER=184)
-        fields.push("SUB003");   // submitter (>= SUBMITTER=198)
-        // Note: completed orders do NOT decode bond_accrued_interest,
-        // include_overnight, or cme_tagging_fields per C# reference
+        fields.push("CUST002"); // customer_account (>= CUSTOMER_ACCOUNT=183)
+        fields.push("1"); // professional_customer (>= PROFESSIONAL_CUSTOMER=184)
+        fields.push("SUB003"); // submitter (>= SUBMITTER=198)
+                               // Note: completed orders do NOT decode bond_accrued_interest,
+                               // include_overnight, or cme_tagging_fields per C# reference
 
         let mut message_str = fields.join("\0");
         message_str.push('\0');
