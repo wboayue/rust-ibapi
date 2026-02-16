@@ -162,11 +162,11 @@ fn pnl_single_receives_updates() {
     rate_limit();
     let order_id = client.next_order_id();
     let sub = client.place_order(order_id, &contract, &buy).expect("buy failed");
-    for event in sub {
-        if let PlaceOrder::OrderStatus(status) = &event {
-            if status.status == "Filled" {
-                break;
-            }
+    loop {
+        match sub.next_timeout(Duration::from_secs(5)) {
+            Some(PlaceOrder::OrderStatus(status)) if status.status == "Filled" => break,
+            Some(_) => continue,
+            None => panic!("buy order did not fill within 5s"),
         }
     }
 

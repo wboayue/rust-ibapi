@@ -169,13 +169,17 @@ async fn pnl_single_receives_updates() {
     rate_limit();
     let order_id = client.next_order_id();
     let mut sub = client.place_order(order_id, &contract, &buy).await.expect("buy failed");
-    while let Some(event) = sub.next().await {
-        if let PlaceOrder::OrderStatus(status) = &event {
-            if status.status == "Filled" {
-                break;
+    let filled = tokio::time::timeout(tokio::time::Duration::from_secs(5), async {
+        while let Some(Ok(event)) = sub.next().await {
+            if let PlaceOrder::OrderStatus(status) = &event {
+                if status.status == "Filled" {
+                    return;
+                }
             }
         }
-    }
+    })
+    .await;
+    assert!(filled.is_ok(), "buy order did not fill within 5s");
 
     // Test pnl_single
     rate_limit();
