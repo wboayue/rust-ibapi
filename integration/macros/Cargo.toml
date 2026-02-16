@@ -11,3 +11,5 @@ proc-macro = true
 quote = "1"
 syn = { version = "2", features = ["full"] }
 proc-macro2 = "1"
+time = { version = "0.3", features = ["macros"] }
+time-tz = "2.0.0"
