@@ -75,8 +75,19 @@ graph TD
     style TestAsync fill:#fff9c4
 ```
 
+## Branches
+
+| Branch | Purpose |
+|--------|---------|
+| `main` | Active development (next major release) |
+| `v2-stable` | Maintenance branch for v2.x releases |
+| `v1-stable` | Maintenance branch for v1.x releases |
+
+Bug fixes and security patches for older releases should target the appropriate stable branch.
+
 ## Table of Contents
 
+- [Branches](#branches)
 - [Development Setup](#development-setup)
 - [Making Changes](#making-changes)
 - [Testing](#testing)
