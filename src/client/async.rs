@@ -148,7 +148,7 @@ impl Client {
     /// ```
     pub async fn connect_with_options(address: &str, client_id: i32, options: ConnectionOptions) -> Result<Client, Error> {
         let connection = AsyncConnection::connect_with_options(address, client_id, options).await?;
-        let connection_metadata = connection.connection_metadata();
+        let connection_metadata = connection.connection_metadata().await;
 
         let message_bus = Arc::new(AsyncTcpMessageBus::new(connection)?);
 
