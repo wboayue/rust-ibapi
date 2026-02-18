@@ -1,8 +1,8 @@
 use crate::contracts::{ComboLeg, ComboLegOpenClose, Contract, Currency, DeltaNeutralContract, Exchange, SecurityType, Symbol, TagValue};
 use crate::messages::ResponseMessage;
 use crate::orders::{
-    Action, CommissionReport, ExecutionData, Liquidity, Order, OrderComboLeg, OrderCondition, OrderData, OrderOpenClose, OrderState, OrderStatus,
-    Rule80A, SoftDollarTier, TimeInForce,
+    Action, CommissionReport, ExecutionData, Liquidity, Order, OrderAllocation, OrderComboLeg, OrderCondition, OrderData, OrderOpenClose, OrderState,
+    OrderStatus, Rule80A, SoftDollarTier, TimeInForce,
 };
 use crate::{server_versions, Error};
 
@@ -454,6 +454,35 @@ impl OrderDecoder {
         self.order_state.minimum_commission = self.message.next_optional_double()?;
         self.order_state.maximum_commission = self.message.next_optional_double()?;
         self.order_state.commission_currency = self.message.next_string()?;
+
+        if self.server_version >= server_versions::FULL_ORDER_PREVIEW_FIELDS {
+            self.order_state.margin_currency = self.message.next_string()?;
+            self.order_state.initial_margin_before_outside_rth = self.message.next_optional_double()?;
+            self.order_state.maintenance_margin_before_outside_rth = self.message.next_optional_double()?;
+            self.order_state.equity_with_loan_before_outside_rth = self.message.next_optional_double()?;
+            self.order_state.initial_margin_change_outside_rth = self.message.next_optional_double()?;
+            self.order_state.maintenance_margin_change_outside_rth = self.message.next_optional_double()?;
+            self.order_state.equity_with_loan_change_outside_rth = self.message.next_optional_double()?;
+            self.order_state.initial_margin_after_outside_rth = self.message.next_optional_double()?;
+            self.order_state.maintenance_margin_after_outside_rth = self.message.next_optional_double()?;
+            self.order_state.equity_with_loan_after_outside_rth = self.message.next_optional_double()?;
+            self.order_state.suggested_size = self.message.next_optional_double()?;
+            self.order_state.reject_reason = self.message.next_string()?;
+
+            let count = self.message.next_int()?;
+            for _ in 0..count {
+                self.order_state.order_allocations.push(OrderAllocation {
+                    account: self.message.next_string()?,
+                    position: self.message.next_optional_double()?,
+                    position_desired: self.message.next_optional_double()?,
+                    position_after: self.message.next_optional_double()?,
+                    desired_alloc_qty: self.message.next_optional_double()?,
+                    allowed_alloc_qty: self.message.next_optional_double()?,
+                    is_monetary: self.message.next_bool()?,
+                });
+            }
+        }
+
         self.order_state.warning_text = self.message.next_string()?;
 
         Ok(())
@@ -1615,8 +1644,8 @@ mod tests {
 
     /// Builds a base open order message fields for a simple AAPL LMT order.
     /// Server version must be >= ORDER_CONTAINER (145) and >= FA_PROFILE_DESUPPORT (177).
-    fn build_open_order_base_fields() -> Vec<&'static str> {
-        vec![
+    fn build_open_order_base_fields(server_version: i32) -> Vec<&'static str> {
+        let mut fields = vec![
             "5", // message type (OpenOrder)
             // No message version (server_version >= ORDER_CONTAINER)
             "42", // order_id
@@ -1736,6 +1765,28 @@ mod tests {
             "", // minimum_commission
             "", // maximum_commission
             "", // commission_currency
+        ];
+
+        // full_order_preview_fields (>= FULL_ORDER_PREVIEW_FIELDS=195)
+        if server_version >= server_versions::FULL_ORDER_PREVIEW_FIELDS {
+            fields.extend_from_slice(&[
+                "",  // margin_currency
+                "",  // initial_margin_before_outside_rth
+                "",  // maintenance_margin_before_outside_rth
+                "",  // equity_with_loan_before_outside_rth
+                "",  // initial_margin_change_outside_rth
+                "",  // maintenance_margin_change_outside_rth
+                "",  // equity_with_loan_change_outside_rth
+                "",  // initial_margin_after_outside_rth
+                "",  // maintenance_margin_after_outside_rth
+                "",  // equity_with_loan_after_outside_rth
+                "",  // suggested_size
+                "",  // reject_reason
+                "0", // order_allocations_count
+            ]);
+        }
+
+        fields.extend_from_slice(&[
             "", // warning_text
             // vol_randomize_flags
             "0", // randomize_size
@@ -1757,33 +1808,27 @@ mod tests {
             "", // value
             "", // display_name
             // cash_qty (>= CASH_QTY)
-            "",
-            // dont_use_auto_price_for_hedge (>= AUTO_PRICE_FOR_HEDGE)
-            "0",
-            // is_oms_container (>= ORDER_CONTAINER)
-            "0",
-            // discretionary_up_to_limit_price (>= D_PEG_ORDERS)
-            "0",
-            // use_price_mgmt_algo (>= PRICE_MGMT_ALGO)
-            "0",
-            // duration (>= DURATION)
-            "",
-            // post_to_ats (>= POST_TO_ATS)
-            "",
-            // auto_cancel_parent (>= AUTO_CANCEL_PARENT)
-            "0",
-            // peg_best_peg_mid (>= PEGBEST_PEGMID_OFFSETS)
+            "", // dont_use_auto_price_for_hedge (>= AUTO_PRICE_FOR_HEDGE)
+            "0", // is_oms_container (>= ORDER_CONTAINER)
+            "0", // discretionary_up_to_limit_price (>= D_PEG_ORDERS)
+            "0", // use_price_mgmt_algo (>= PRICE_MGMT_ALGO)
+            "0", // duration (>= DURATION)
+            "", // post_to_ats (>= POST_TO_ATS)
+            "", // auto_cancel_parent (>= AUTO_CANCEL_PARENT)
+            "0", // peg_best_peg_mid (>= PEGBEST_PEGMID_OFFSETS)
             "", // min_trade_qty
             "", // min_compete_size
             "", // compete_against_best_offset
             "", // mid_offset_at_whole
             "", // mid_offset_at_half
-        ]
+        ]);
+
+        fields
     }
 
     #[test]
     fn test_decode_open_order_v200_new_fields() {
-        let mut fields = build_open_order_base_fields();
+        let mut fields = build_open_order_base_fields(200);
 
         // New fields for v183-v199
         fields.push("CUST001"); // customer_account (>= CUSTOMER_ACCOUNT=183)
@@ -1822,7 +1867,7 @@ mod tests {
 
     #[test]
     fn test_decode_open_order_v182_skips_new_fields() {
-        let fields = build_open_order_base_fields();
+        let fields = build_open_order_base_fields(182);
 
         // At v182, none of the new fields (>= v183) are present.
         // The message ends after peg_best_peg_mid fields.
@@ -1846,6 +1891,127 @@ mod tests {
         assert_eq!(result.order.manual_order_indicator, None);
         assert_eq!(result.order.submitter, "");
         assert!(!result.order.imbalance_only);
+    }
+
+    #[test]
+    fn test_decode_open_order_v200_full_order_preview_fields() {
+        let mut fields = build_open_order_base_fields(200);
+
+        // Append v183-v199 fields
+        fields.extend_from_slice(&[
+            "CUST001", // customer_account
+            "1",       // professional_customer
+            "1.25",    // bond_accrued_interest
+            "1",       // include_overnight
+            "EXTOP1",  // ext_operator
+            "3",       // manual_order_indicator
+            "SUB001",  // submitter
+            "1",       // imbalance_only
+        ]);
+
+        let mut message_str = fields.join("\0");
+        message_str.push('\0');
+        let message = ResponseMessage::from(&message_str);
+
+        let result = decode_open_order(200, message).unwrap();
+
+        // Verify full order preview fields are default (empty in base)
+        assert_eq!(result.order_state.margin_currency, "");
+        assert_eq!(result.order_state.initial_margin_before_outside_rth, None);
+        assert_eq!(result.order_state.maintenance_margin_before_outside_rth, None);
+        assert_eq!(result.order_state.equity_with_loan_before_outside_rth, None);
+        assert_eq!(result.order_state.initial_margin_change_outside_rth, None);
+        assert_eq!(result.order_state.maintenance_margin_change_outside_rth, None);
+        assert_eq!(result.order_state.equity_with_loan_change_outside_rth, None);
+        assert_eq!(result.order_state.initial_margin_after_outside_rth, None);
+        assert_eq!(result.order_state.maintenance_margin_after_outside_rth, None);
+        assert_eq!(result.order_state.equity_with_loan_after_outside_rth, None);
+        assert_eq!(result.order_state.suggested_size, None);
+        assert_eq!(result.order_state.reject_reason, "");
+        assert!(result.order_state.order_allocations.is_empty());
+    }
+
+    #[test]
+    fn test_decode_open_order_v200_full_order_preview_with_values() {
+        // Build v194 base (no preview block), then splice in preview fields with values
+        let base = build_open_order_base_fields(194);
+
+        // Find "Submitted" (order_status) to locate the insertion point
+        let status_idx = base.iter().position(|&f| f == "Submitted").unwrap();
+        // After status: 6 ext margins + 3 after margins + 3 commissions + commission_currency = 13
+        let after_commission_currency = status_idx + 1 + 13;
+
+        let mut fields: Vec<&str> = base[..after_commission_currency].to_vec();
+
+        // Insert full_order_preview_fields with values
+        fields.extend_from_slice(&[
+            "USD",                // margin_currency
+            "5000.0",             // initial_margin_before_outside_rth
+            "4000.0",             // maintenance_margin_before_outside_rth
+            "3000.0",             // equity_with_loan_before_outside_rth
+            "100.0",              // initial_margin_change_outside_rth
+            "80.0",               // maintenance_margin_change_outside_rth
+            "60.0",               // equity_with_loan_change_outside_rth
+            "5100.0",             // initial_margin_after_outside_rth
+            "4080.0",             // maintenance_margin_after_outside_rth
+            "3060.0",             // equity_with_loan_after_outside_rth
+            "50.0",               // suggested_size
+            "some reject reason", // reject_reason
+            "2",                  // order_allocations_count
+            "ACC1",               // allocation[0].account
+            "100.0",              // allocation[0].position
+            "150.0",              // allocation[0].position_desired
+            "150.0",              // allocation[0].position_after
+            "50.0",               // allocation[0].desired_alloc_qty
+            "50.0",               // allocation[0].allowed_alloc_qty
+            "0",                  // allocation[0].is_monetary
+            "ACC2",               // allocation[1].account
+            "200.0",              // allocation[1].position
+            "250.0",              // allocation[1].position_desired
+            "250.0",              // allocation[1].position_after
+            "50.0",               // allocation[1].desired_alloc_qty
+            "50.0",               // allocation[1].allowed_alloc_qty
+            "1",                  // allocation[1].is_monetary
+        ]);
+
+        // Append rest of base (warning_text onward)
+        fields.extend_from_slice(&base[after_commission_currency..]);
+
+        // Append v183+ fields
+        fields.extend_from_slice(&["CUST001", "1", "1.25", "1", "EXTOP1", "3", "SUB001", "1"]);
+
+        let mut message_str = fields.join("\0");
+        message_str.push('\0');
+        let message = ResponseMessage::from(&message_str);
+
+        let result = decode_open_order(200, message).unwrap();
+
+        assert_eq!(result.order_state.margin_currency, "USD");
+        assert_eq!(result.order_state.initial_margin_before_outside_rth, Some(5000.0));
+        assert_eq!(result.order_state.maintenance_margin_before_outside_rth, Some(4000.0));
+        assert_eq!(result.order_state.equity_with_loan_before_outside_rth, Some(3000.0));
+        assert_eq!(result.order_state.initial_margin_change_outside_rth, Some(100.0));
+        assert_eq!(result.order_state.maintenance_margin_change_outside_rth, Some(80.0));
+        assert_eq!(result.order_state.equity_with_loan_change_outside_rth, Some(60.0));
+        assert_eq!(result.order_state.initial_margin_after_outside_rth, Some(5100.0));
+        assert_eq!(result.order_state.maintenance_margin_after_outside_rth, Some(4080.0));
+        assert_eq!(result.order_state.equity_with_loan_after_outside_rth, Some(3060.0));
+        assert_eq!(result.order_state.suggested_size, Some(50.0));
+        assert_eq!(result.order_state.reject_reason, "some reject reason");
+
+        assert_eq!(result.order_state.order_allocations.len(), 2);
+        let alloc0 = &result.order_state.order_allocations[0];
+        assert_eq!(alloc0.account, "ACC1");
+        assert_eq!(alloc0.position, Some(100.0));
+        assert_eq!(alloc0.position_desired, Some(150.0));
+        assert_eq!(alloc0.position_after, Some(150.0));
+        assert_eq!(alloc0.desired_alloc_qty, Some(50.0));
+        assert_eq!(alloc0.allowed_alloc_qty, Some(50.0));
+        assert!(!alloc0.is_monetary);
+
+        let alloc1 = &result.order_state.order_allocations[1];
+        assert_eq!(alloc1.account, "ACC2");
+        assert!(alloc1.is_monetary);
     }
 
     #[test]

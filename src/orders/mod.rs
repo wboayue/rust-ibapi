@@ -1195,12 +1195,57 @@ pub struct OrderState {
     pub maximum_commission: Option<f64>,
     /// The generated commission currency
     pub commission_currency: String,
+    /// Margin currency
+    pub margin_currency: String,
+    /// The account's current initial margin outside RTH
+    pub initial_margin_before_outside_rth: Option<f64>,
+    /// The account's current maintenance margin outside RTH
+    pub maintenance_margin_before_outside_rth: Option<f64>,
+    /// The account's current equity with loan outside RTH
+    pub equity_with_loan_before_outside_rth: Option<f64>,
+    /// The change of the account's initial margin outside RTH
+    pub initial_margin_change_outside_rth: Option<f64>,
+    /// The change of the account's maintenance margin outside RTH
+    pub maintenance_margin_change_outside_rth: Option<f64>,
+    /// The change of the account's equity with loan outside RTH
+    pub equity_with_loan_change_outside_rth: Option<f64>,
+    /// The order's impact on the account's initial margin outside RTH
+    pub initial_margin_after_outside_rth: Option<f64>,
+    /// The order's impact on the account's maintenance margin outside RTH
+    pub maintenance_margin_after_outside_rth: Option<f64>,
+    /// Shows the impact the order would have on the account's equity with loan outside RTH
+    pub equity_with_loan_after_outside_rth: Option<f64>,
+    /// Suggested order size
+    pub suggested_size: Option<f64>,
+    /// Reject reason
+    pub reject_reason: String,
+    /// Order allocations
+    pub order_allocations: Vec<OrderAllocation>,
     /// If the order is warranted, a descriptive message will be provided.
     pub warning_text: String,
     /// Timestamp when the order completed execution.
     pub completed_time: String,
     /// Status value after completion (e.g. `Filled`).
     pub completed_status: String,
+}
+
+/// Allocation of an order across accounts.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct OrderAllocation {
+    /// Allocation account
+    pub account: String,
+    /// Position
+    pub position: Option<f64>,
+    /// Desired position
+    pub position_desired: Option<f64>,
+    /// Position after
+    pub position_after: Option<f64>,
+    /// Desired allocation quantity
+    pub desired_alloc_qty: Option<f64>,
+    /// Allowed allocation quantity
+    pub allowed_alloc_qty: Option<f64>,
+    /// Is monetary
+    pub is_monetary: bool,
 }
 
 /// For institutional customers only. Valid values are O (open) and C (close).
