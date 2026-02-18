@@ -1808,19 +1808,19 @@ mod tests {
             "", // value
             "", // display_name
             // cash_qty (>= CASH_QTY)
-            "", // dont_use_auto_price_for_hedge (>= AUTO_PRICE_FOR_HEDGE)
+            "",  // dont_use_auto_price_for_hedge (>= AUTO_PRICE_FOR_HEDGE)
             "0", // is_oms_container (>= ORDER_CONTAINER)
             "0", // discretionary_up_to_limit_price (>= D_PEG_ORDERS)
             "0", // use_price_mgmt_algo (>= PRICE_MGMT_ALGO)
             "0", // duration (>= DURATION)
-            "", // post_to_ats (>= POST_TO_ATS)
-            "", // auto_cancel_parent (>= AUTO_CANCEL_PARENT)
+            "",  // post_to_ats (>= POST_TO_ATS)
+            "",  // auto_cancel_parent (>= AUTO_CANCEL_PARENT)
             "0", // peg_best_peg_mid (>= PEGBEST_PEGMID_OFFSETS)
-            "", // min_trade_qty
-            "", // min_compete_size
-            "", // compete_against_best_offset
-            "", // mid_offset_at_whole
-            "", // mid_offset_at_half
+            "",  // min_trade_qty
+            "",  // min_compete_size
+            "",  // compete_against_best_offset
+            "",  // mid_offset_at_whole
+            "",  // mid_offset_at_half
         ]);
 
         fields
