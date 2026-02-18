@@ -1,9 +1,6 @@
-use std::sync::RwLock;
-
-#[cfg(any(feature = "sync", feature = "async"))]
 use std::{
     collections::HashSet,
-    sync::{LazyLock, Mutex},
+    sync::{LazyLock, Mutex, RwLock},
 };
 
 #[cfg(feature = "sync")]
@@ -40,7 +37,6 @@ pub(crate) struct MessageBusStub {
 }
 
 // Separate tracking for order update subscriptions to maintain backward compatibility
-#[cfg(any(feature = "sync", feature = "async"))]
 static ORDER_UPDATE_SUBSCRIPTION_TRACKER: LazyLock<Mutex<HashSet<usize>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 
 impl Default for MessageBusStub {
@@ -52,7 +48,6 @@ impl Default for MessageBusStub {
     }
 }
 
-#[cfg(any(feature = "sync", feature = "async"))]
 impl Drop for MessageBusStub {
     fn drop(&mut self) {
         // Clean up the subscription tracker to prevent test isolation issues

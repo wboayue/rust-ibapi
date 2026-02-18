@@ -753,21 +753,11 @@ mod tests {
         let stream1 = order_update_stream(&client).await.expect("failed to create initial order update stream");
         drop(stream1);
 
-        let mut recovered = None;
-        for _ in 0..25 {
-            match order_update_stream(&client).await {
-                Ok(stream) => {
-                    recovered = Some(stream);
-                    break;
-                }
-                Err(Error::AlreadySubscribed) => {
-                    tokio::time::sleep(Duration::from_millis(20)).await;
-                }
-                Err(err) => panic!("unexpected error while re-subscribing: {err:?}"),
-            }
-        }
+        // Allow cleanup task to process the drop signal
+        tokio::task::yield_now().await;
+        tokio::time::sleep(Duration::from_millis(10)).await;
 
-        assert!(recovered.is_some(), "order update stream should be re-subscribable after drop");
+        order_update_stream(&client).await.expect("should be re-subscribable after drop");
     }
 
     #[tokio::test]
