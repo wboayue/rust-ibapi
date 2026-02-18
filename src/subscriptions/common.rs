@@ -5,40 +5,6 @@ use time_tz::Tz;
 use crate::errors::Error;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 
-/// Maximum number of retry attempts when encountering unexpected responses.
-/// This prevents infinite loops when TWS sends unexpected message types.
-pub(crate) const MAX_DECODE_RETRIES: usize = 10;
-
-/// Result of checking whether a retry should be attempted
-#[derive(Debug, PartialEq)]
-pub(crate) enum RetryDecision {
-    /// Continue retrying
-    Continue,
-    /// Stop retrying, max attempts exceeded
-    Stop,
-}
-
-/// Checks if a retry should be attempted and logs appropriately.
-/// Returns `RetryDecision::Continue` if retry count is below max, `RetryDecision::Stop` otherwise.
-pub(crate) fn check_retry(retry_count: usize) -> RetryDecision {
-    if retry_count < MAX_DECODE_RETRIES {
-        log::debug!("retrying after unexpected response (attempt {}/{})", retry_count + 1, MAX_DECODE_RETRIES);
-        RetryDecision::Continue
-    } else {
-        log::error!("max retries ({}) exceeded, stopping subscription", MAX_DECODE_RETRIES);
-        RetryDecision::Stop
-    }
-}
-
-/// Checks if an error indicates the subscription should retry processing.
-/// `UnexpectedResponse` on shared channels is a skip (wrong-channel message),
-/// not a true retry, but the sync subscription uses this to recurse.
-#[allow(dead_code)]
-pub(crate) fn should_retry_error(error: &Error) -> bool {
-    matches!(error, Error::UnexpectedResponse(_))
-}
-
-
 /// Checks if an error indicates the end of a stream
 #[allow(dead_code)]
 pub(crate) fn is_stream_end(error: &Error) -> bool {
@@ -56,14 +22,9 @@ pub(crate) fn should_store_error(error: &Error) -> bool {
 pub(crate) enum ProcessingResult<T> {
     /// Successfully processed a value
     Success(T),
-    /// Encountered an error that should be retried (counted toward max retries).
-    /// Currently unused — `UnexpectedResponse` maps to `Skip` instead — but
-    /// retained for future error types that warrant counted retries.
-    #[allow(dead_code)]
-    Retry,
-    /// Message not intended for this subscription — skip without counting as a retry.
-    /// This happens on shared broadcast channels where messages from other
-    /// subscriptions or asynchronous updates can arrive on the same channel.
+    /// Message not intended for this subscription — skip silently.
+    /// Occurs on shared broadcast channels where messages from other
+    /// subscriptions can arrive on the same channel.
     Skip,
     /// Encountered an error that should be stored
     Error(Error),
@@ -87,14 +48,6 @@ mod tests {
     use crate::messages::ResponseMessage;
 
     #[test]
-    fn test_should_retry_error() {
-        let test_msg = ResponseMessage::from_simple("test");
-        assert!(should_retry_error(&Error::UnexpectedResponse(test_msg)));
-        assert!(!should_retry_error(&Error::EndOfStream));
-        assert!(!should_retry_error(&Error::ConnectionFailed));
-    }
-
-    #[test]
     fn test_is_stream_end() {
         let test_msg = ResponseMessage::from_simple("test");
         assert!(is_stream_end(&Error::EndOfStream));
@@ -108,18 +61,6 @@ mod tests {
         assert!(!should_store_error(&Error::EndOfStream));
         assert!(should_store_error(&Error::UnexpectedResponse(test_msg)));
         assert!(should_store_error(&Error::ConnectionFailed));
-    }
-
-    #[test]
-    fn test_check_retry() {
-        // Should continue when under max retries
-        assert_eq!(check_retry(0), RetryDecision::Continue);
-        assert_eq!(check_retry(5), RetryDecision::Continue);
-        assert_eq!(check_retry(MAX_DECODE_RETRIES - 1), RetryDecision::Continue);
-
-        // Should stop when at or over max retries
-        assert_eq!(check_retry(MAX_DECODE_RETRIES), RetryDecision::Stop);
-        assert_eq!(check_retry(MAX_DECODE_RETRIES + 1), RetryDecision::Stop);
     }
 
     #[test]

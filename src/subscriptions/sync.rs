@@ -1,13 +1,13 @@
 //! Synchronous subscription implementation
 
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use log::{debug, error, warn};
 
-use super::common::{check_retry, process_decode_result, should_retry_error, should_store_error, DecoderContext, ProcessingResult, RetryDecision};
+use super::common::{process_decode_result, should_store_error, DecoderContext, ProcessingResult};
 use super::StreamDecoder;
 use crate::errors::Error;
 use crate::messages::{OutgoingMessages, ResponseMessage};
@@ -31,7 +31,6 @@ pub struct Subscription<T: StreamDecoder<T>> {
     stream_ended: AtomicBool,
     subscription: InternalSubscription,
     error: Mutex<Option<Error>>,
-    retry_count: AtomicUsize,
 }
 
 #[allow(private_bounds)]
@@ -53,7 +52,6 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             snapshot_ended: AtomicBool::new(false),
             stream_ended: AtomicBool::new(false),
             error: Mutex::new(None),
-            retry_count: AtomicUsize::new(0),
         }
     }
 
@@ -136,23 +134,41 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             return None;
         }
 
-        match self.process_response(self.subscription.next()) {
-            Some(val) => {
-                self.retry_count.store(0, Ordering::Relaxed);
-                Some(val)
+        loop {
+            self.clear_error();
+
+            match self.subscription.next() {
+                Some(Ok(mut message)) => match process_decode_result(T::decode(&self.context, &mut message)) {
+                    ProcessingResult::Success(val) => {
+                        if val.is_snapshot_end() {
+                            self.snapshot_ended.store(true, Ordering::Relaxed);
+                        }
+                        return Some(val);
+                    }
+                    ProcessingResult::Skip => {
+                        log::trace!("skipping unexpected message on shared channel");
+                        continue;
+                    }
+                    ProcessingResult::EndOfStream => {
+                        self.stream_ended.store(true, Ordering::Relaxed);
+                        return None;
+                    }
+                    ProcessingResult::Error(err) => {
+                        error!("error decoding message: {err}");
+                        let mut error = self.error.lock().unwrap();
+                        *error = Some(err);
+                        return None;
+                    }
+                },
+                Some(Err(e)) => {
+                    if should_store_error(&e) {
+                        let mut error = self.error.lock().unwrap();
+                        *error = Some(e);
+                    }
+                    return None;
+                }
+                None => return None,
             }
-            None => match self.error() {
-                Some(ref err) if should_retry_error(err) => {
-                    // Wrong-channel message on shared broadcast — skip silently
-                    // without counting toward the retry limit.
-                    log::trace!("skipping unexpected message on shared channel");
-                    self.next()
-                }
-                _ => {
-                    self.retry_count.store(0, Ordering::Relaxed);
-                    None
-                }
-            },
         }
     }
 
@@ -204,12 +220,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                 None
             }
             ProcessingResult::Skip => {
-                // Wrong-channel message — handled at the next() level by recursing
-                None
-            }
-            ProcessingResult::Retry => {
-                // This case shouldn't happen here since UnexpectedResponse is handled at the next() level
-                // but we handle it for completeness
+                // Wrong-channel message — handled at the next() level by looping
                 None
             }
             ProcessingResult::Error(err) => {
@@ -503,6 +514,45 @@ mod tests {
             msg.push_field(&OutgoingMessages::CancelMarketData);
             Ok(msg)
         }
+    }
+
+    /// Decoder that returns UnexpectedResponse for the first N messages, then succeeds.
+    #[derive(Debug)]
+    struct SkipThenSuccessItem;
+
+    static SKIP_CALL_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+    impl StreamDecoder<SkipThenSuccessItem> for SkipThenSuccessItem {
+        fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<SkipThenSuccessItem, Error> {
+            let n = SKIP_CALL_COUNT.fetch_add(1, Ordering::Relaxed);
+            if n < 20 {
+                Err(Error::UnexpectedResponse(ResponseMessage::from("stray\0")))
+            } else {
+                Ok(SkipThenSuccessItem)
+            }
+        }
+    }
+
+    #[test]
+    fn test_subscription_skips_unexpected_messages_without_limit() {
+        SKIP_CALL_COUNT.store(0, Ordering::Relaxed);
+
+        // 20 stray messages + 1 valid (more than the old MAX_DECODE_RETRIES=10)
+        let mut responses: Vec<String> = (0..21).map(|_| "1|msg".to_string()).collect();
+        // Sentinel to avoid blocking on the channel after success
+        responses.push("1|done".to_string());
+
+        let stub = MessageBusStub::with_responses(responses);
+        let message_bus = Arc::new(stub);
+
+        let sub: Subscription<SkipThenSuccessItem> = {
+            let internal = message_bus.send_request(1, &RequestMessage::new()).unwrap();
+            Subscription::new(message_bus.clone(), internal, DecoderContext::default())
+        };
+
+        let result = sub.next();
+        assert!(result.is_some(), "subscription should survive 20 skips and return valid message");
+        assert_eq!(SKIP_CALL_COUNT.load(Ordering::Relaxed), 21);
     }
 
     #[test]

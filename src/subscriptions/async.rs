@@ -6,7 +6,7 @@ use std::sync::Arc;
 use log::{debug, warn};
 use tokio::sync::mpsc;
 
-use super::common::{check_retry, process_decode_result, DecoderContext, ProcessingResult, RetryDecision};
+use super::common::{process_decode_result, DecoderContext, ProcessingResult};
 use super::StreamDecoder;
 use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
@@ -208,39 +208,27 @@ impl<T> Subscription<T> {
                 subscription,
                 decoder,
                 context,
-            } => {
-                let mut retry_count = 0;
-                loop {
-                    match subscription.next().await {
-                        Some(Ok(mut message)) => {
-                            let result = decoder(context, &mut message);
-                            match process_decode_result(result) {
-                                ProcessingResult::Success(val) => return Some(Ok(val)),
-                                ProcessingResult::EndOfStream => {
-                                    self.stream_ended.store(true, Ordering::Relaxed);
-                                    return None;
-                                }
-                                ProcessingResult::Skip => {
-                                    // Message not for this subscription (wrong channel).
-                                    // Silently discard without counting toward retry limit.
-                                    log::trace!("skipping unexpected message on shared channel");
-                                    continue;
-                                }
-                                ProcessingResult::Retry => {
-                                    if check_retry(retry_count) == RetryDecision::Stop {
-                                        return None;
-                                    }
-                                    retry_count += 1;
-                                    continue;
-                                }
-                                ProcessingResult::Error(err) => return Some(Err(err)),
+            } => loop {
+                match subscription.next().await {
+                    Some(Ok(mut message)) => {
+                        let result = decoder(context, &mut message);
+                        match process_decode_result(result) {
+                            ProcessingResult::Success(val) => return Some(Ok(val)),
+                            ProcessingResult::EndOfStream => {
+                                self.stream_ended.store(true, Ordering::Relaxed);
+                                return None;
                             }
+                            ProcessingResult::Skip => {
+                                log::trace!("skipping unexpected message on shared channel");
+                                continue;
+                            }
+                            ProcessingResult::Error(err) => return Some(Err(err)),
                         }
-                        Some(Err(e)) => return Some(Err(e)),
-                        None => return None,
                     }
+                    Some(Err(e)) => return Some(Err(e)),
+                    None => return None,
                 }
-            }
+            },
             SubscriptionInner::PreDecoded { receiver } => receiver.recv().await,
         }
     }
@@ -545,7 +533,10 @@ mod tests {
         }
 
         let result = subscription.next().await;
-        assert!(result.is_some(), "subscription should not have stopped after skipping unexpected messages");
+        assert!(
+            result.is_some(),
+            "subscription should not have stopped after skipping unexpected messages"
+        );
         assert_eq!(result.unwrap().unwrap(), "success");
         // All 21 messages should have been processed (20 skipped + 1 success)
         assert_eq!(call_count.load(std::sync::atomic::Ordering::Relaxed), 21);
