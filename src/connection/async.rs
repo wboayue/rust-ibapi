@@ -85,13 +85,14 @@ impl AsyncConnection {
 
     /// Get a copy of the connection metadata
     pub async fn connection_metadata(&self) -> ConnectionMetadata {
-        let metadata = self.connection_metadata.lock().await;
-        metadata.clone()
+        let mut metadata = self.connection_metadata.lock().await.clone();
+        metadata.server_version = self.server_version_cache.load(Ordering::Acquire);
+        metadata
     }
 
     /// Get the server version (lock-free; cached after handshake)
     pub(crate) fn server_version(&self) -> i32 {
-        self.server_version_cache.load(Ordering::Relaxed)
+        self.server_version_cache.load(Ordering::Acquire)
     }
 
     /// Reconnect to TWS with fibonacci backoff
@@ -213,8 +214,7 @@ impl AsyncConnection {
         match ack {
             Ok(mut response) => {
                 let handshake_data = self.connection_handler.parse_handshake_response(&mut response)?;
-                connection_metadata.server_version = handshake_data.server_version;
-                self.server_version_cache.store(handshake_data.server_version, Ordering::Relaxed);
+                self.server_version_cache.store(handshake_data.server_version, Ordering::Release);
 
                 let (time, tz) = parse_connection_time(&handshake_data.server_time);
                 connection_metadata.connection_time = time;
