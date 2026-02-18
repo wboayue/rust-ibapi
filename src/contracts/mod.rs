@@ -733,9 +733,12 @@ pub struct ContractDetails {
 /// Fund distribution policy indicator.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub enum FundDistributionPolicyIndicator {
+    /// No distribution policy specified.
     #[default]
     None,
+    /// Accumulation fund.
     AccumulationFund,
+    /// Income fund.
     IncomeFund,
 }
 
@@ -752,15 +755,24 @@ impl From<&str> for FundDistributionPolicyIndicator {
 /// Fund asset type.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub enum FundAssetType {
+    /// No asset type specified.
     #[default]
     None,
+    /// Other asset types.
     Others,
+    /// Money market fund.
     MoneyMarket,
+    /// Fixed income fund.
     FixedIncome,
+    /// Multi-asset fund.
     MultiAsset,
+    /// Equity fund.
     Equity,
+    /// Sector fund.
     Sector,
+    /// Guaranteed fund.
     Guaranteed,
+    /// Alternative fund.
     Alternative,
 }
 
