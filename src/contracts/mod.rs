@@ -689,6 +689,104 @@ pub struct ContractDetails {
     pub size_increment: f64,
     /// Order's suggested size increment.
     pub suggested_size_increment: f64,
+
+    // Fund fields (populated only for FUND security type)
+    /// Fund name.
+    pub fund_name: String,
+    /// Fund family.
+    pub fund_family: String,
+    /// Fund type.
+    pub fund_type: String,
+    /// Fund front load.
+    pub fund_front_load: String,
+    /// Fund back load.
+    pub fund_back_load: String,
+    /// Fund back load time interval.
+    pub fund_back_load_time_interval: String,
+    /// Fund management fee.
+    pub fund_management_fee: String,
+    /// Whether the fund is closed.
+    pub fund_closed: bool,
+    /// Whether the fund is closed for new investors.
+    pub fund_closed_for_new_investors: bool,
+    /// Whether the fund is closed for new money.
+    pub fund_closed_for_new_money: bool,
+    /// Fund notify amount.
+    pub fund_notify_amount: String,
+    /// Fund minimum initial purchase.
+    pub fund_minimum_initial_purchase: String,
+    /// Fund subsequent minimum purchase.
+    pub fund_subsequent_minimum_purchase: String,
+    /// Fund blue sky states.
+    pub fund_blue_sky_states: String,
+    /// Fund blue sky territories.
+    pub fund_blue_sky_territories: String,
+    /// Fund distribution policy indicator.
+    pub fund_distribution_policy_indicator: FundDistributionPolicyIndicator,
+    /// Fund asset type.
+    pub fund_asset_type: FundAssetType,
+
+    /// Ineligibility reasons for the contract.
+    pub ineligibility_reasons: Vec<IneligibilityReason>,
+}
+
+/// Fund distribution policy indicator.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub enum FundDistributionPolicyIndicator {
+    #[default]
+    None,
+    AccumulationFund,
+    IncomeFund,
+}
+
+impl From<&str> for FundDistributionPolicyIndicator {
+    fn from(s: &str) -> Self {
+        match s {
+            "N" => FundDistributionPolicyIndicator::AccumulationFund,
+            "Y" => FundDistributionPolicyIndicator::IncomeFund,
+            _ => FundDistributionPolicyIndicator::None,
+        }
+    }
+}
+
+/// Fund asset type.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub enum FundAssetType {
+    #[default]
+    None,
+    Others,
+    MoneyMarket,
+    FixedIncome,
+    MultiAsset,
+    Equity,
+    Sector,
+    Guaranteed,
+    Alternative,
+}
+
+impl From<&str> for FundAssetType {
+    fn from(s: &str) -> Self {
+        match s {
+            "000" => FundAssetType::Others,
+            "001" => FundAssetType::MoneyMarket,
+            "002" => FundAssetType::FixedIncome,
+            "003" => FundAssetType::MultiAsset,
+            "004" => FundAssetType::Equity,
+            "005" => FundAssetType::Sector,
+            "006" => FundAssetType::Guaranteed,
+            "007" => FundAssetType::Alternative,
+            _ => FundAssetType::None,
+        }
+    }
+}
+
+/// Reason why a contract is ineligible for trading.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct IneligibilityReason {
+    /// Reason identifier.
+    pub id: String,
+    /// Human-readable description.
+    pub description: String,
 }
 
 /// TagValue is a convenience struct to define key-value pairs.

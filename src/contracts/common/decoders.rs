@@ -8,7 +8,10 @@ use crate::{
     server_versions, Error,
 };
 
-use super::super::{Contract, ContractDescription, ContractDetails, MarketRule, OptionChain, OptionComputation, PriceIncrement, TagValue};
+use super::super::{
+    Contract, ContractDescription, ContractDetails, FundAssetType, FundDistributionPolicyIndicator, IneligibilityReason, MarketRule, OptionChain,
+    OptionComputation, PriceIncrement, TagValue,
+};
 
 pub(in crate::contracts) fn decode_contract_details(server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails, Error> {
     message.skip(); // message type
@@ -105,6 +108,34 @@ pub(in crate::contracts) fn decode_contract_details(server_version: i32, message
         contract.min_size = message.next_double()?;
         contract.size_increment = message.next_double()?;
         contract.suggested_size_increment = message.next_double()?;
+    }
+    if server_version >= server_versions::FUND_DATA_FIELDS && contract.contract.security_type == SecurityType::MutualFund {
+        contract.fund_name = message.next_string()?;
+        contract.fund_family = message.next_string()?;
+        contract.fund_type = message.next_string()?;
+        contract.fund_front_load = message.next_string()?;
+        contract.fund_back_load = message.next_string()?;
+        contract.fund_back_load_time_interval = message.next_string()?;
+        contract.fund_management_fee = message.next_string()?;
+        contract.fund_closed = message.next_bool()?;
+        contract.fund_closed_for_new_investors = message.next_bool()?;
+        contract.fund_closed_for_new_money = message.next_bool()?;
+        contract.fund_notify_amount = message.next_string()?;
+        contract.fund_minimum_initial_purchase = message.next_string()?;
+        contract.fund_subsequent_minimum_purchase = message.next_string()?;
+        contract.fund_blue_sky_states = message.next_string()?;
+        contract.fund_blue_sky_territories = message.next_string()?;
+        contract.fund_distribution_policy_indicator = FundDistributionPolicyIndicator::from(message.next_string()?.as_str());
+        contract.fund_asset_type = FundAssetType::from(message.next_string()?.as_str());
+    }
+    if server_version >= server_versions::INELIGIBILITY_REASONS {
+        let count = message.next_int()?;
+        for _ in 0..count {
+            contract.ineligibility_reasons.push(IneligibilityReason {
+                id: message.next_string()?,
+                description: message.next_string()?,
+            });
+        }
     }
 
     Ok(contract)
@@ -631,5 +662,90 @@ mod tests {
         assert_eq!(contract_details.min_size, 0.1, "min_size");
         assert_eq!(contract_details.size_increment, 0.01, "size_increment");
         assert_eq!(contract_details.suggested_size_increment, 1.0, "suggested_size_increment");
+    }
+
+    #[test]
+    fn test_decode_contract_details_with_ineligibility_reasons() {
+        // STK contract at v200 — no fund fields, but has ineligibility reasons
+        // At v200: no message_version read (defaults to 8), LAST_TRADE_DATE field present
+        let mut message = ResponseMessage::from_simple(
+            "10|9001|AAPL|STK||20230630|0||SMART|USD|AAPL|Apple Inc.|AAPL|12345|0.01|100|\
+            ACTIVETIM,AD|SMART,NYSE|1000|\
+            0|Apple Inc.|NASDAQ|JUN23|TECHNOLOGY|ELECTRONICS|COMPUTERS|US/Eastern|\
+            09:30-16:00|09:30-16:00|VOL=P|1.0|1|ISIN|US0378331005|\
+            1|AAPL|STK|26|20230630|COMMON|0.1|0.01|1|\
+            2|REASON1|Not eligible for margin|REASON2|Account restriction|",
+        );
+
+        let cd = decode_contract_details(200, &mut message).expect("error decoding");
+
+        assert_eq!(cd.ineligibility_reasons.len(), 2);
+        assert_eq!(cd.ineligibility_reasons[0].id, "REASON1");
+        assert_eq!(cd.ineligibility_reasons[0].description, "Not eligible for margin");
+        assert_eq!(cd.ineligibility_reasons[1].id, "REASON2");
+        assert_eq!(cd.ineligibility_reasons[1].description, "Account restriction");
+    }
+
+    #[test]
+    fn test_decode_contract_details_fund_with_all_fields() {
+        // FUND contract at v200 — has fund data fields + ineligibility reasons
+        let mut message = ResponseMessage::from_simple(
+            "10|9001|VFINX|FUND||20990101|0||SMART|USD|VFINX|Vanguard|VFINX|99999|0.01|1|\
+            LMT,MKT|SMART|0|\
+            0|Vanguard 500 Index Fund|FUNDSERV|JAN00|FUNDS|INDEX|LARGE_CAP|US/Eastern|\
+            09:30-16:00|09:30-16:00||0|0|\
+            1|VFINX|FUND|26|20990101|COMMON|0.01|0.001|1|\
+            Vanguard 500 Index|Vanguard|Index Fund|0.5%|||\
+            0.14%|0|0|0|10000|3000|1000|CA,NY|US,PR|N|004|\
+            1|INEL1|Fund restriction|",
+        );
+
+        let cd = decode_contract_details(200, &mut message).expect("error decoding fund");
+
+        assert_eq!(cd.contract.symbol, Symbol::from("VFINX"));
+        assert_eq!(cd.contract.security_type, SecurityType::MutualFund);
+
+        // Fund fields
+        assert_eq!(cd.fund_name, "Vanguard 500 Index");
+        assert_eq!(cd.fund_family, "Vanguard");
+        assert_eq!(cd.fund_type, "Index Fund");
+        assert_eq!(cd.fund_front_load, "0.5%");
+        assert_eq!(cd.fund_back_load, "");
+        assert_eq!(cd.fund_back_load_time_interval, "");
+        assert_eq!(cd.fund_management_fee, "0.14%");
+        assert!(!cd.fund_closed);
+        assert!(!cd.fund_closed_for_new_investors);
+        assert!(!cd.fund_closed_for_new_money);
+        assert_eq!(cd.fund_notify_amount, "10000");
+        assert_eq!(cd.fund_minimum_initial_purchase, "3000");
+        assert_eq!(cd.fund_subsequent_minimum_purchase, "1000");
+        assert_eq!(cd.fund_blue_sky_states, "CA,NY");
+        assert_eq!(cd.fund_blue_sky_territories, "US,PR");
+        assert_eq!(cd.fund_distribution_policy_indicator, FundDistributionPolicyIndicator::AccumulationFund);
+        assert_eq!(cd.fund_asset_type, FundAssetType::Equity);
+
+        // Ineligibility reasons
+        assert_eq!(cd.ineligibility_reasons.len(), 1);
+        assert_eq!(cd.ineligibility_reasons[0].id, "INEL1");
+        assert_eq!(cd.ineligibility_reasons[0].description, "Fund restriction");
+    }
+
+    #[test]
+    fn test_decode_contract_details_stock_skips_fund_fields() {
+        // STK at v200 — no fund fields sent, just ineligibility count = 0
+        let mut message = ResponseMessage::from_simple(
+            "10|9001|AAPL|STK||20230630|0||SMART|USD|AAPL|Apple Inc.|AAPL|12345|0.01|100|\
+            LMT|SMART|1000|\
+            0|Apple Inc.|NASDAQ|JUN23|TECH|ELEC|COMP|US/Eastern|\
+            09:30-16:00|09:30-16:00|VOL=P|1.0|1|ISIN|US0378331005|\
+            1|AAPL|STK|26|20230630|COMMON|0.1|0.01|1|\
+            0|",
+        );
+
+        let cd = decode_contract_details(200, &mut message).expect("error decoding");
+
+        assert_eq!(cd.contract.security_type, SecurityType::Stock);
+        assert_eq!(cd.fund_name, "");
+        assert!(cd.ineligibility_reasons.is_empty());
     }
 }
