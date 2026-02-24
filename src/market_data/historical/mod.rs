@@ -37,6 +37,7 @@ pub enum HistoricalParseError {
 }
 
 /// Bar describes the historical data bar.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Copy, Serialize, Deserialize)]
 pub struct Bar {
     /// The bar's date and time (either as a yyyymmss hh:mm:ss formatted string or as system time according to the request). Time zone is the TWS time zone chosen on login.
@@ -58,6 +59,7 @@ pub struct Bar {
     pub count: i32,
 }
 
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Copy, PartialEq, Serialize, Deserialize)]
 /// Request granularity for historical bars.
 pub enum BarSize {
@@ -182,6 +184,7 @@ impl ToField for BarSize {
 }
 
 /// Duration specifier used in historical data requests (e.g. `1 D`).
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Duration {
     value: i32,
@@ -311,6 +314,7 @@ impl ToDuration for i32 {
 }
 
 /// Histogram bucket entry returned from `reqHistogramData`.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct HistogramEntry {
     /// Price level represented by the bucket.
@@ -320,6 +324,7 @@ pub struct HistogramEntry {
 }
 
 /// Container for historical bar responses.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct HistoricalData {
     /// Start timestamp of the requested window.
@@ -337,6 +342,7 @@ pub struct HistoricalData {
 /// streaming real-time updates for the current bar as `Update` variants.
 /// The current bar is updated approximately every 4-6 seconds until a new
 /// bar begins.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum HistoricalBarUpdate {
     /// Initial batch of historical bars. Always received first.
@@ -354,6 +360,7 @@ pub enum HistoricalBarUpdate {
 }
 
 /// Trading schedule describing sessions for a contract.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Schedule {
     /// Overall start timestamp for the schedule.
@@ -367,6 +374,7 @@ pub struct Schedule {
 }
 
 /// Individual regular or special session entry.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct Session {
     /// Calendar date for the session.
@@ -378,6 +386,7 @@ pub struct Session {
 }
 
 /// The historical tick's description. Used when requesting historical tick data with whatToShow = MIDPOINT
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct TickMidpoint {
     /// timestamp of the historical tick.
@@ -389,6 +398,7 @@ pub struct TickMidpoint {
 }
 
 /// The historical tick's description. Used when requesting historical tick data with whatToShow = BID_ASK.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct TickBidAsk {
     /// Timestamp of the historical tick.
@@ -406,6 +416,7 @@ pub struct TickBidAsk {
 }
 
 /// Tick attributes accompanying bid/ask historical ticks.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct TickAttributeBidAsk {
     /// Indicates whether the bid is past the lower price band.
@@ -415,6 +426,7 @@ pub struct TickAttributeBidAsk {
 }
 
 /// The historical last tick's description. Used when requesting historical tick data with whatToShow = TRADES.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct TickLast {
     /// Timestamp of the historical tick.
@@ -432,6 +444,7 @@ pub struct TickLast {
 }
 
 /// Tick attributes accompanying trade historical ticks.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
 pub struct TickAttributeLast {
     /// `true` if the trade occurred outside exchange limits.
@@ -441,6 +454,7 @@ pub struct TickAttributeLast {
 }
 
 /// Enumerates the data payload returned when requesting historical data.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Copy, PartialEq, Serialize, Deserialize)]
 pub enum WhatToShow {
     /// Trade data including OHLC and volume.

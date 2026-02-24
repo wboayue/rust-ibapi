@@ -13,6 +13,7 @@ use crate::{server_versions, Error};
 use serde::{Deserialize, Serialize};
 
 /// Specifies whether to include only regular trading hours or extended hours
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TradingHours {
     /// Regular Trading Hours only (RTH)
@@ -39,6 +40,7 @@ impl TradingHours {
 }
 
 /// Market data type for switching between real-time and frozen/delayed.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MarketDataType {
     /// Live market data

@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 
 // Public types - always available regardless of feature flags
 
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize)]
 /// Account information as it appears in the TWS' Account Summary Window
 pub struct AccountSummary {
@@ -143,6 +144,7 @@ impl AccountSummaryTags {
 }
 
 /// Result of an account summary request emitted by the [Client](crate::client::Client).
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 pub enum AccountSummaryResult {
     /// Summary of account details such as net liquidation, cash balance, etc.
@@ -152,6 +154,7 @@ pub enum AccountSummaryResult {
 }
 
 /// Aggregated profit and loss metrics for the entire account.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct PnL {
     /// DailyPnL for the position
@@ -163,6 +166,7 @@ pub struct PnL {
 }
 
 /// Real-time profit and loss metrics for a single position.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct PnLSingle {
     /// Current size of the position
@@ -178,6 +182,7 @@ pub struct PnLSingle {
 }
 
 /// Open position held within the account.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Position {
     /// Account holding position
@@ -192,6 +197,7 @@ pub struct Position {
 
 /// Messages emitted while streaming position updates.
 #[allow(clippy::large_enum_variant)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 pub enum PositionUpdate {
     /// Update for a position in the account
@@ -202,6 +208,7 @@ pub enum PositionUpdate {
 
 /// Messages emitted while streaming model-code scoped position updates.
 #[allow(clippy::large_enum_variant)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 pub enum PositionUpdateMulti {
     /// Position update scoped to a specific account/model code pair.
@@ -211,6 +218,7 @@ pub enum PositionUpdateMulti {
 }
 
 /// Position scoped to a specific account and model code.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct PositionMulti {
     /// Account holding position
@@ -226,6 +234,7 @@ pub struct PositionMulti {
 }
 
 /// Family code assigned to a group of accounts.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct FamilyCode {
     /// Account ID for the account family
@@ -236,6 +245,7 @@ pub struct FamilyCode {
 
 /// Account update events delivered while streaming high-level account data.
 #[allow(clippy::large_enum_variant)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 pub enum AccountUpdate {
     /// Key/value update describing an account metric.
@@ -249,6 +259,7 @@ pub enum AccountUpdate {
 }
 
 /// Single account value update emitted by the API.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct AccountValue {
     /// Key describing the value
@@ -262,6 +273,7 @@ pub struct AccountValue {
 }
 
 /// Aggregated valuation details for a single contract within the account.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct AccountPortfolioValue {
     /// Contract for the position
@@ -283,6 +295,7 @@ pub struct AccountPortfolioValue {
 }
 
 /// Timestamp wrapper for account update streams.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct AccountUpdateTime {
     /// Timestamp of the last account update
@@ -290,6 +303,7 @@ pub struct AccountUpdateTime {
 }
 
 /// Account update events scoped to an account/model code pair.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq)]
 pub enum AccountUpdateMulti {
     /// Key/value update for a specific account/model code pair.
@@ -299,6 +313,7 @@ pub enum AccountUpdateMulti {
 }
 
 /// Key/value pair returned for a specific account/model code pair.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct AccountMultiValue {
     /// Account ID

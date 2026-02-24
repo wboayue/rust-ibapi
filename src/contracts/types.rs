@@ -5,6 +5,7 @@ use std::fmt;
 use time::{Date, Duration, Month, OffsetDateTime, Weekday};
 
 /// Strong type for trading symbols
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Symbol(pub String);
 
@@ -54,6 +55,7 @@ impl ToField for Symbol {
 ///
 /// IBKR supports 160+ exchanges worldwide. This type provides a lightweight wrapper
 /// around exchange codes.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Exchange(pub String);
 
@@ -114,6 +116,7 @@ impl ToField for Exchange {
 ///
 /// IBKR supports trading in many currencies worldwide. This type provides a lightweight
 /// wrapper around currency codes.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Currency(pub String);
 
@@ -166,6 +169,7 @@ impl ToField for Currency {
 }
 
 /// Option right (Call or Put)
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OptionRight {
     /// Call option right.
@@ -191,6 +195,7 @@ impl fmt::Display for OptionRight {
 }
 
 /// Validated strike price (must be positive)
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Strike(f64);
 
@@ -216,6 +221,7 @@ impl Strike {
 }
 
 /// Date for option expiration
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExpirationDate {
     year: u16,
@@ -305,6 +311,7 @@ impl fmt::Display for ExpirationDate {
 }
 
 /// Contract month for futures
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContractMonth {
     year: u16,
@@ -399,6 +406,7 @@ impl fmt::Display for ContractMonth {
 }
 
 /// CUSIP identifier
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cusip(pub String);
 
@@ -439,6 +447,7 @@ impl fmt::Display for Cusip {
 }
 
 /// ISIN identifier
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Isin(pub String);
 
@@ -479,6 +488,7 @@ impl fmt::Display for Isin {
 }
 
 /// Bond identifier type
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BondIdentifier {
     /// A bond identified by a CUSIP code.
@@ -488,6 +498,7 @@ pub enum BondIdentifier {
 }
 
 /// Trading action for spread/combo legs
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LegAction {
     /// Buy the leg.

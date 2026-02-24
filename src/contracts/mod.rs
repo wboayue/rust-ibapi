@@ -41,6 +41,7 @@ pub mod tick_types;
 
 // Models
 
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 /// SecurityType enumerates available security types
 pub enum SecurityType {
@@ -137,6 +138,7 @@ impl SecurityType {
     }
 }
 
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 /// Contract describes an instrument's definition
 pub struct Contract {
@@ -533,6 +535,7 @@ impl Contract {
 }
 
 /// A single component within a combo contract.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ComboLeg {
     /// The Contract's IB's unique id.
@@ -554,6 +557,7 @@ pub struct ComboLeg {
     pub exempt_code: i32,
 }
 
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 /// OpenClose specifies whether an order is an open or closing order.
 pub enum ComboLegOpenClose {
@@ -587,6 +591,7 @@ impl From<i32> for ComboLegOpenClose {
     }
 }
 
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 /// Delta and underlying price for Delta-Neutral combo orders.
 /// Underlying (STK or FUT), delta and underlying price goes into this attribute.
@@ -600,6 +605,7 @@ pub struct DeltaNeutralContract {
 }
 
 /// ContractDetails provides extended contract details.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ContractDetails {
     /// A fully-defined Contract object.
@@ -731,6 +737,7 @@ pub struct ContractDetails {
 }
 
 /// Fund distribution policy indicator.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub enum FundDistributionPolicyIndicator {
     /// No distribution policy specified.
@@ -753,6 +760,7 @@ impl From<&str> for FundDistributionPolicyIndicator {
 }
 
 /// Fund asset type.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub enum FundAssetType {
     /// No asset type specified.
@@ -793,6 +801,7 @@ impl From<&str> for FundAssetType {
 }
 
 /// Reason why a contract is ineligible for trading.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct IneligibilityReason {
     /// Reason identifier.
@@ -802,6 +811,7 @@ pub struct IneligibilityReason {
 }
 
 /// TagValue is a convenience struct to define key-value pairs.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct TagValue {
     /// Name of the tag.
@@ -822,6 +832,7 @@ impl ToField for Vec<TagValue> {
 
 /// Receives option specific market data.
 /// TWS’s options model volatility, prices, and deltas, along with the present value of dividends expected on that options underlier.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 pub struct OptionComputation {
     /// Specifies the type of option computation.
@@ -847,6 +858,7 @@ pub struct OptionComputation {
 }
 
 /// Option chain metadata for a specific underlying security.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 pub struct OptionChain {
     /// The contract ID of the underlying security.
@@ -866,6 +878,7 @@ pub struct OptionChain {
 // === API ===
 
 /// Contract data and list of derivative security types
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 pub struct ContractDescription {
     /// Fully qualified contract metadata.
@@ -874,6 +887,7 @@ pub struct ContractDescription {
     pub derivative_security_types: Vec<String>,
 }
 
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 /// Minimum price increment structure for a particular market rule ID.
 pub struct MarketRule {
@@ -884,6 +898,7 @@ pub struct MarketRule {
 }
 
 /// Price ladder entry describing the minimum tick between price bands.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 pub struct PriceIncrement {
     /// Lower inclusive edge where the increment applies.
@@ -919,6 +934,20 @@ pub(crate) fn decode_option_computation(server_version: i32, message: &mut Respo
 
 // ContractBuilder is deprecated - use the new builder methods on Contract instead
 // e.g., Contract::stock(), Contract::call(), Contract::put(), etc.
+
+#[cfg(all(test, feature = "utoipa"))]
+mod utoipa_tests {
+    use super::*;
+    fn assert_schema<T: utoipa::ToSchema>() {}
+
+    #[test]
+    fn schema_derives_work() {
+        assert_schema::<Contract>();
+        assert_schema::<ContractDetails>();
+        assert_schema::<SecurityType>();
+        assert_schema::<TagValue>();
+    }
+}
 
 #[cfg(test)]
 mod tests {

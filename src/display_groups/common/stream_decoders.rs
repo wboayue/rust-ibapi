@@ -11,6 +11,7 @@ use super::{decoders, encoders};
 ///
 /// When subscribed to a display group, this type is returned whenever the user
 /// changes the contract displayed in that group within TWS.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DisplayGroupUpdate {
     /// Contract information string (e.g., "265598@SMART")

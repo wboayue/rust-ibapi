@@ -5,6 +5,7 @@ use std::fmt;
 /// These represent different types of market data that can be requested
 /// and received from Interactive Brokers. Each tick type corresponds to
 /// a specific piece of market information like bid, ask, last trade, volume, etc.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq, Default)]
 pub enum TickType {
     /// Unknown or invalid tick type.

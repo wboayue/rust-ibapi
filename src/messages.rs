@@ -1171,6 +1171,7 @@ impl ResponseMessage {
 }
 
 /// An error message from the TWS API.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Notice {
     /// Error code reported by TWS.
