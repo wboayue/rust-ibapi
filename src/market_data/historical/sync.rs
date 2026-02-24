@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use log::{debug, warn};
 use time::OffsetDateTime;
@@ -9,7 +9,7 @@ use crate::client::blocking::ClientRequestBuilders;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::protocol::{check_version, Features};
-use crate::transport::{InternalSubscription, Response};
+use crate::transport::{InternalSubscription, MessageBus, Response};
 use crate::{client::sync::Client, Error, MAX_RETRIES};
 
 use time_tz::Tz;
@@ -311,6 +311,7 @@ pub(crate) fn historical_data_streaming(
         Vec::<crate::contracts::TagValue>::default(),
     )?;
 
+    let request_id = builder.request_id();
     let subscription = builder.send_raw(request)?;
 
     // Get the timezone directly
@@ -319,7 +320,13 @@ pub(crate) fn historical_data_streaming(
         time_tz::timezones::db::UTC
     });
 
-    Ok(HistoricalDataStreamingSubscription::new(subscription, client.server_version, tz))
+    Ok(HistoricalDataStreamingSubscription::new(
+        subscription,
+        client.server_version,
+        tz,
+        request_id,
+        client.message_bus.clone(),
+    ))
 }
 
 /// Blocking subscription for streaming historical data with keepUpToDate=true.
@@ -331,15 +338,21 @@ pub struct HistoricalDataStreamingSubscription {
     server_version: i32,
     time_zone: &'static Tz,
     error: Mutex<Option<Error>>,
+    request_id: i32,
+    message_bus: Arc<dyn MessageBus>,
+    cancelled: AtomicBool,
 }
 
 impl HistoricalDataStreamingSubscription {
-    fn new(messages: InternalSubscription, server_version: i32, time_zone: &'static Tz) -> Self {
+    fn new(messages: InternalSubscription, server_version: i32, time_zone: &'static Tz, request_id: i32, message_bus: Arc<dyn MessageBus>) -> Self {
         Self {
             messages,
             server_version,
             time_zone,
             error: Mutex::new(None),
+            request_id,
+            message_bus,
+            cancelled: AtomicBool::new(false),
         }
     }
 
@@ -441,9 +454,23 @@ impl HistoricalDataStreamingSubscription {
         *self.error.lock().unwrap() = None;
     }
 
-    /// Cancel the subscription.
+    /// Cancel the subscription, sending CancelHistoricalData to the server.
     pub fn cancel(&self) {
+        if self.cancelled.swap(true, Ordering::Relaxed) {
+            return;
+        }
+        if let Ok(message) = encoders::encode_cancel_historical_data(self.request_id) {
+            if let Err(e) = self.message_bus.cancel_subscription(self.request_id, &message) {
+                warn!("error sending cancel historical data: {e}");
+            }
+        }
         self.messages.cancel();
+    }
+}
+
+impl Drop for HistoricalDataStreamingSubscription {
+    fn drop(&mut self) {
+        self.cancel();
     }
 }
 
@@ -640,7 +667,7 @@ mod tests {
     use crate::contracts::Contract;
     use crate::market_data::historical::ToDuration;
     use crate::market_data::TradingHours;
-    use crate::messages::OutgoingMessages;
+    use crate::messages::{OutgoingMessages, RequestMessage};
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
     use crate::ToField;
@@ -1427,5 +1454,68 @@ mod tests {
             error.unwrap().to_string().contains("No market data permissions"),
             "Error should contain the message"
         );
+    }
+
+    #[test]
+    fn test_streaming_subscription_sends_cancel_on_drop() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![],
+        });
+
+        let internal = message_bus.send_request(9000, &RequestMessage::new()).unwrap();
+
+        {
+            let _subscription = HistoricalDataStreamingSubscription::new(
+                internal,
+                server_versions::SIZE_RULES,
+                time_tz::timezones::db::UTC,
+                9000,
+                message_bus.clone(),
+            );
+            // subscription dropped here
+        }
+
+        let messages = message_bus.request_messages.read().unwrap();
+        // First message is the send_request call, second is the cancel
+        let cancel_msg = messages.last().expect("should have cancel message");
+        assert_eq!(
+            cancel_msg.fields[0],
+            OutgoingMessages::CancelHistoricalData.to_field(),
+            "message type should be CancelHistoricalData"
+        );
+        assert_eq!(cancel_msg.fields[2], 9000.to_field(), "request_id should match");
+    }
+
+    #[test]
+    fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![],
+        });
+
+        let internal = message_bus.send_request(9001, &RequestMessage::new()).unwrap();
+
+        {
+            let subscription = HistoricalDataStreamingSubscription::new(
+                internal,
+                server_versions::SIZE_RULES,
+                time_tz::timezones::db::UTC,
+                9001,
+                message_bus.clone(),
+            );
+
+            // Explicit cancel
+            subscription.cancel();
+
+            // Drop should not send a second cancel
+        }
+
+        let messages = message_bus.request_messages.read().unwrap();
+        let cancel_count = messages
+            .iter()
+            .filter(|m| m.fields.first().map(|f| f.as_str()) == Some(&OutgoingMessages::CancelHistoricalData.to_field()))
+            .count();
+        assert_eq!(cancel_count, 1, "should send cancel only once");
     }
 }

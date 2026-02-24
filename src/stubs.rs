@@ -221,7 +221,8 @@ impl AsyncMessageBus for MessageBusStub {
         Ok(())
     }
 
-    async fn cancel_subscription(&self, _request_id: i32, _message: RequestMessage) -> Result<(), Error> {
+    async fn cancel_subscription(&self, _request_id: i32, message: RequestMessage) -> Result<(), Error> {
+        self.request_messages.write().unwrap().push(message);
         Ok(())
     }
 
