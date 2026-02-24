@@ -19,13 +19,13 @@ rust-ibapi ships both asynchronous (Tokio) and blocking (threaded) clients. The 
 
 ```toml
 # Async only (default features)
-ibapi = "2.7"
+ibapi = "2.9"
 
 # Blocking only
-ibapi = { version = "2.7", default-features = false, features = ["sync"] }
+ibapi = { version = "2.9", default-features = false, features = ["sync"] }
 
 # Async + blocking together
-ibapi = { version = "2.7", default-features = false, features = ["sync", "async"] }
+ibapi = { version = "2.9", default-features = false, features = ["sync", "async"] }
 ```
 
 ```bash
