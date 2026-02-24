@@ -1,5 +1,5 @@
 use ibapi::contracts::Contract;
-use ibapi::orders::{Action, ExecutionFilter, Order};
+use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId};
 use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
@@ -19,6 +19,37 @@ fn limit_order(action: Action, quantity: f64, price: f64) -> Order {
         limit_price: Some(price),
         ..Default::default()
     }
+}
+
+async fn place_bracket_order(client: &Client, contract: &Contract) -> BracketOrderIds {
+    rate_limit();
+    let ids = client
+        .order(contract)
+        .buy(1)
+        .bracket()
+        .entry_limit(1.0)
+        .take_profit(300.0)
+        .stop_loss(0.50)
+        .submit_all()
+        .await
+        .expect("bracket order submit failed");
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    ids
+}
+
+async fn place_and_cleanup(client: &Client, contract: &Contract) -> OrderId {
+    rate_limit();
+    let order_id = client
+        .order(contract)
+        .buy(1)
+        .limit(1.0)
+        .submit()
+        .await
+        .expect("placing order after cancel should succeed");
+    assert!(order_id.0 > 0, "new order id should be positive");
+    rate_limit();
+    client.cancel_order(order_id.0, "").await.expect("cleanup cancel failed");
+    order_id
 }
 
 #[tokio::test]
@@ -160,6 +191,56 @@ async fn order_builder_limit() {
     // Cancel the placed order
     rate_limit();
     client.cancel_order(order_id.0, "").await.expect("cancel_order failed");
+}
+
+// Regression test for https://github.com/wboayue/rust-ibapi/issues/426
+#[tokio::test]
+#[serial(orders)]
+async fn cancel_bracket_order() {
+    let (client, _client_id) = connect().await;
+    let contract = Contract::stock("AAPL").build();
+    let ids = place_bracket_order(&client, &contract).await;
+
+    rate_limit();
+    let mut cancel_sub = client.cancel_order(ids.parent.0, "").await.expect("cancel_order failed");
+
+    let item = tokio::time::timeout(tokio::time::Duration::from_secs(10), cancel_sub.next()).await;
+    assert!(item.is_ok(), "cancel order status timed out");
+    let status = item.unwrap().expect("expected cancel order status").expect("cancel order returned error");
+    match status {
+        CancelOrder::OrderStatus(s) => assert_eq!(s.status, "Cancelled", "parent order should be cancelled"),
+        CancelOrder::Notice(_) => {} // cancellation notice is also acceptable
+    }
+}
+
+// Regression test for https://github.com/wboayue/rust-ibapi/issues/426
+#[tokio::test]
+#[serial(orders)]
+async fn cancel_bracket_order_then_place_new_order() {
+    let (client, _client_id) = connect().await;
+    let contract = Contract::stock("AAPL").build();
+    let ids = place_bracket_order(&client, &contract).await;
+
+    rate_limit();
+    let _cancel_sub = client.cancel_order(ids.parent.0, "").await.expect("cancel_order failed");
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    place_and_cleanup(&client, &contract).await;
+}
+
+// Regression test for https://github.com/wboayue/rust-ibapi/issues/426
+#[tokio::test]
+#[serial(orders)]
+async fn global_cancel_bracket_order_then_place_new_order() {
+    let (client, _client_id) = connect().await;
+    let contract = Contract::stock("AAPL").build();
+    place_bracket_order(&client, &contract).await;
+
+    rate_limit();
+    client.global_cancel().await.expect("global_cancel failed");
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    place_and_cleanup(&client, &contract).await;
 }
 
 #[tokio::test]

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
-use ibapi::orders::{Action, ExecutionFilter, Order};
+use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId};
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
 
@@ -21,6 +21,35 @@ fn limit_order(action: Action, quantity: f64, price: f64) -> Order {
         limit_price: Some(price),
         ..Default::default()
     }
+}
+
+fn place_bracket_order(client: &Client, contract: &Contract) -> BracketOrderIds {
+    rate_limit();
+    let ids = client
+        .order(contract)
+        .buy(1)
+        .bracket()
+        .entry_limit(1.0)
+        .take_profit(300.0)
+        .stop_loss(0.50)
+        .submit_all()
+        .expect("bracket order submit failed");
+    std::thread::sleep(Duration::from_millis(500));
+    ids
+}
+
+fn place_and_cleanup(client: &Client, contract: &Contract) -> OrderId {
+    rate_limit();
+    let order_id = client
+        .order(contract)
+        .buy(1)
+        .limit(1.0)
+        .submit()
+        .expect("placing order after cancel should succeed");
+    assert!(order_id.0 > 0, "new order id should be positive");
+    rate_limit();
+    client.cancel_order(order_id.0, "").expect("cleanup cancel failed");
+    order_id
 }
 
 #[test]
@@ -156,6 +185,55 @@ fn order_builder_limit() {
     // Cancel the placed order
     rate_limit();
     client.cancel_order(order_id.0, "").expect("cancel_order failed");
+}
+
+// Regression test for https://github.com/wboayue/rust-ibapi/issues/426
+#[test]
+#[serial(orders)]
+fn cancel_bracket_order() {
+    let (client, _client_id) = connect();
+    let contract = Contract::stock("AAPL").build();
+    let ids = place_bracket_order(&client, &contract);
+
+    rate_limit();
+    let cancel_sub = client.cancel_order(ids.parent.0, "").expect("cancel_order failed");
+
+    let item = cancel_sub.next_timeout(Duration::from_secs(10));
+    assert!(item.is_some(), "cancel order status timed out");
+    match item.unwrap() {
+        CancelOrder::OrderStatus(s) => assert_eq!(s.status, "Cancelled", "parent order should be cancelled"),
+        CancelOrder::Notice(_) => {} // cancellation notice is also acceptable
+    }
+}
+
+// Regression test for https://github.com/wboayue/rust-ibapi/issues/426
+#[test]
+#[serial(orders)]
+fn cancel_bracket_order_then_place_new_order() {
+    let (client, _client_id) = connect();
+    let contract = Contract::stock("AAPL").build();
+    let ids = place_bracket_order(&client, &contract);
+
+    rate_limit();
+    let _cancel_sub = client.cancel_order(ids.parent.0, "").expect("cancel_order failed");
+    std::thread::sleep(Duration::from_millis(500));
+
+    place_and_cleanup(&client, &contract);
+}
+
+// Regression test for https://github.com/wboayue/rust-ibapi/issues/426
+#[test]
+#[serial(orders)]
+fn global_cancel_bracket_order_then_place_new_order() {
+    let (client, _client_id) = connect();
+    let contract = Contract::stock("AAPL").build();
+    place_bracket_order(&client, &contract);
+
+    rate_limit();
+    client.global_cancel().expect("global_cancel failed");
+    std::thread::sleep(Duration::from_millis(500));
+
+    place_and_cleanup(&client, &contract);
 }
 
 #[test]
