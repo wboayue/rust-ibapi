@@ -5,6 +5,7 @@ use std::fmt;
 use time::{Date, Duration, Month, OffsetDateTime, Weekday};
 
 /// Strong type for trading symbols
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Symbol(pub String);
 
@@ -54,6 +55,7 @@ impl ToField for Symbol {
 ///
 /// IBKR supports 160+ exchanges worldwide. This type provides a lightweight wrapper
 /// around exchange codes.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Exchange(pub String);
 
@@ -114,6 +116,7 @@ impl ToField for Exchange {
 ///
 /// IBKR supports trading in many currencies worldwide. This type provides a lightweight
 /// wrapper around currency codes.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Currency(pub String);
 

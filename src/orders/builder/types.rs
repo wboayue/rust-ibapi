@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Represents a unique order identifier
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct OrderId(pub i32);
 
@@ -36,6 +37,7 @@ impl From<OrderId> for i32 {
 }
 
 /// Represents the order IDs for a bracket order
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct BracketOrderIds {
     /// The parent order ID
@@ -91,6 +93,7 @@ impl From<[i32; 3]> for BracketOrderIds {
 }
 
 /// Represents a quantity of shares/contracts
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Quantity(f64);
 
@@ -113,6 +116,7 @@ impl Quantity {
 }
 
 /// Represents a price value
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Price(f64);
 
@@ -132,6 +136,7 @@ impl Price {
 }
 
 /// Time in force options
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TimeInForce {
     /// Order is active only for the current trading day.
@@ -175,6 +180,7 @@ impl TimeInForce {
 }
 
 /// Auction type for auction orders
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AuctionType {
     /// Opening auction strategy.
@@ -197,6 +203,7 @@ impl AuctionType {
 }
 
 /// Order types supported by Interactive Brokers
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OrderType {
     // Basic Orders

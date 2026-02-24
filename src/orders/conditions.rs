@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 /// Price evaluation method for price conditions.
 ///
 /// Determines which price feed to use when evaluating price conditions.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TriggerMethod {
     /// Default method (last for most securities, double bid/ask for OTC and options)
@@ -87,6 +88,7 @@ impl crate::ToField for TriggerMethod {
 ///
 /// let order_condition = OrderCondition::Price(condition);
 /// ```
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PriceCondition {
     /// Contract identifier for the instrument to monitor.
@@ -167,6 +169,7 @@ where
 ///
 /// let order_condition = OrderCondition::Time(condition);
 /// ```
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct TimeCondition {
     /// Time in format "YYYYMMDD HH:MM:SS TZ".
@@ -207,6 +210,7 @@ pub struct TimeCondition {
 ///
 /// let order_condition = OrderCondition::Margin(condition);
 /// ```
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MarginCondition {
     /// Margin cushion percentage threshold (0-100).
@@ -244,6 +248,7 @@ pub struct MarginCondition {
 ///
 /// let order_condition = OrderCondition::Execution(condition);
 /// ```
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ExecutionCondition {
     /// Symbol of the contract to monitor for executions.
@@ -282,6 +287,7 @@ pub struct ExecutionCondition {
 ///
 /// let order_condition = OrderCondition::Volume(condition);
 /// ```
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct VolumeCondition {
     /// Contract identifier for the instrument to monitor.
@@ -325,6 +331,7 @@ pub struct VolumeCondition {
 ///
 /// let order_condition = OrderCondition::PercentChange(condition);
 /// ```
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PercentChangeCondition {
     /// Contract identifier for the instrument to monitor.
