@@ -1,5 +1,8 @@
-use log::{debug, warn};
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+use log::{debug, warn};
 use time::OffsetDateTime;
 use time_tz::Tz;
 
@@ -7,7 +10,7 @@ use crate::client::ClientRequestBuilders;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::protocol::{check_version, Features};
-use crate::transport::AsyncInternalSubscription;
+use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 use crate::{Client, Error, MAX_RETRIES};
 
 use super::common::{decoders, encoders};
@@ -442,6 +445,7 @@ pub async fn historical_data_streaming(
         Vec::<crate::contracts::TagValue>::default(),
     )?;
 
+    let request_id = builder.request_id();
     let subscription = builder.send_raw(request).await?;
 
     // Get the timezone directly to avoid lifetime issues
@@ -452,7 +456,13 @@ pub async fn historical_data_streaming(
         time_tz::timezones::db::UTC
     });
 
-    Ok(HistoricalDataStreamingSubscription::new(subscription, client.server_version(), tz))
+    Ok(HistoricalDataStreamingSubscription::new(
+        subscription,
+        client.server_version(),
+        tz,
+        request_id,
+        client.message_bus.clone(),
+    ))
 }
 
 /// Async subscription for streaming historical data with keepUpToDate=true.
@@ -464,15 +474,39 @@ pub struct HistoricalDataStreamingSubscription {
     server_version: i32,
     time_zone: &'static Tz,
     error: Option<Error>,
+    request_id: i32,
+    message_bus: Arc<dyn AsyncMessageBus>,
+    cancelled: AtomicBool,
 }
 
 impl HistoricalDataStreamingSubscription {
-    fn new(messages: AsyncInternalSubscription, server_version: i32, time_zone: &'static Tz) -> Self {
+    fn new(
+        messages: AsyncInternalSubscription,
+        server_version: i32,
+        time_zone: &'static Tz,
+        request_id: i32,
+        message_bus: Arc<dyn AsyncMessageBus>,
+    ) -> Self {
         Self {
             messages,
             server_version,
             time_zone,
             error: None,
+            request_id,
+            message_bus,
+            cancelled: AtomicBool::new(false),
+        }
+    }
+
+    /// Cancel the streaming subscription, sending CancelHistoricalData to the server.
+    pub async fn cancel(&self) {
+        if self.cancelled.swap(true, Ordering::Relaxed) {
+            return;
+        }
+        if let Ok(message) = encoders::encode_cancel_historical_data(self.request_id) {
+            if let Err(e) = self.message_bus.cancel_subscription(self.request_id, message).await {
+                warn!("error sending cancel historical data: {e}");
+            }
         }
     }
 
@@ -546,6 +580,23 @@ impl HistoricalDataStreamingSubscription {
     /// Returns the last error that occurred, if any.
     pub fn error(&self) -> Option<&Error> {
         self.error.as_ref()
+    }
+}
+
+impl Drop for HistoricalDataStreamingSubscription {
+    fn drop(&mut self) {
+        if self.cancelled.swap(true, Ordering::Relaxed) {
+            return;
+        }
+        let request_id = self.request_id;
+        let message_bus = self.message_bus.clone();
+        if let Ok(message) = encoders::encode_cancel_historical_data(request_id) {
+            tokio::spawn(async move {
+                if let Err(e) = message_bus.cancel_subscription(request_id, message).await {
+                    warn!("error sending cancel historical data in drop: {e}");
+                }
+            });
+        }
     }
 }
 
@@ -1317,5 +1368,72 @@ mod tests {
             error.unwrap().to_string().contains("No market data permissions"),
             "Error should contain the message"
         );
+    }
+
+    #[tokio::test]
+    async fn test_streaming_subscription_sends_cancel_on_drop() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![],
+        });
+
+        let (_tx, rx) = tokio::sync::broadcast::channel(16);
+        let internal = AsyncInternalSubscription::new(rx);
+        let request_id = 9000;
+
+        {
+            let _subscription = HistoricalDataStreamingSubscription::new(
+                internal,
+                server_versions::SIZE_RULES,
+                time_tz::timezones::db::UTC,
+                request_id,
+                message_bus.clone(),
+            );
+            // subscription dropped here
+        }
+
+        // Give tokio::spawn time to execute
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        let messages = message_bus.request_messages.read().unwrap();
+        assert_eq!(messages.len(), 1, "should send cancel message on drop");
+        assert_eq!(
+            messages[0].fields[0],
+            OutgoingMessages::CancelHistoricalData.to_field(),
+            "message type should be CancelHistoricalData"
+        );
+        assert_eq!(messages[0].fields[2], request_id.to_field(), "request_id should match");
+    }
+
+    #[tokio::test]
+    async fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![],
+        });
+
+        let (_tx, rx) = tokio::sync::broadcast::channel(16);
+        let internal = AsyncInternalSubscription::new(rx);
+        let request_id = 9001;
+
+        {
+            let subscription = HistoricalDataStreamingSubscription::new(
+                internal,
+                server_versions::SIZE_RULES,
+                time_tz::timezones::db::UTC,
+                request_id,
+                message_bus.clone(),
+            );
+
+            // Explicit cancel
+            subscription.cancel().await;
+
+            // Drop should not send a second cancel
+        }
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        let messages = message_bus.request_messages.read().unwrap();
+        assert_eq!(messages.len(), 1, "should send cancel only once");
     }
 }

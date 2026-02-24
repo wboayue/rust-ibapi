@@ -152,6 +152,16 @@ pub(crate) fn encode_request_historical_ticks(
     Ok(message)
 }
 
+pub(crate) fn encode_cancel_historical_data(request_id: i32) -> Result<RequestMessage, Error> {
+    const VERSION: i32 = 1;
+
+    let mut message = RequestMessage::default();
+    message.push_field(&OutgoingMessages::CancelHistoricalData);
+    message.push_field(&VERSION);
+    message.push_field(&request_id);
+    Ok(message)
+}
+
 pub(crate) fn encode_cancel_historical_ticks(request_id: i32) -> Result<RequestMessage, Error> {
     let mut message = RequestMessage::default();
     message.push_field(&OutgoingMessages::CancelHistoricalTicks);
@@ -336,6 +346,17 @@ mod tests {
         assert_eq!(message[19], use_rth.to_field(), "message.use_rth");
         assert_eq!(message[20], ignore_size.to_field(), "message.ignore_size");
         assert_eq!(message[21], "", "message.misc_options");
+    }
+
+    #[test]
+    fn test_encode_cancel_historical_data() {
+        let request_id = 9001;
+
+        let message = encode_cancel_historical_data(request_id).expect("error encoding cancel historical data");
+
+        assert_eq!(message[0], OutgoingMessages::CancelHistoricalData.to_field(), "message.type");
+        assert_eq!(message[1], "1", "message.version");
+        assert_eq!(message[2], request_id.to_field(), "message.request_id");
     }
 
     #[test]
