@@ -209,6 +209,7 @@ pub struct TradeAttribute {
 }
 
 /// Specifies the type of data to show for real-time bars.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Copy)]
 pub enum WhatToShow {
     /// Trade data.
@@ -316,6 +317,7 @@ impl StreamDecoder<MarketDepths> for MarketDepths {
 }
 
 /// Stores depth market data description.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 pub struct DepthMarketDataDescription {
     /// The exchange name
@@ -331,6 +333,7 @@ pub struct DepthMarketDataDescription {
 }
 
 /// Various types of market data ticks.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 pub enum TickTypes {
     /// Price update tick.
@@ -398,6 +401,7 @@ impl StreamDecoder<TickTypes> for TickTypes {
 }
 
 /// Price tick data.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 pub struct TickPrice {
     /// Type of price tick (bid, ask, last, etc.).
@@ -409,6 +413,7 @@ pub struct TickPrice {
 }
 
 /// Attributes associated with price ticks.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq, Default)]
 pub struct TickAttribute {
     /// Indicates if the order can be automatically executed.
@@ -420,6 +425,7 @@ pub struct TickAttribute {
 }
 
 /// Size tick data.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 pub struct TickSize {
     /// Type of size tick (bid size, ask size, etc.).
@@ -429,6 +435,7 @@ pub struct TickSize {
 }
 
 /// Combined price and size tick data.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 pub struct TickPriceSize {
     /// Type of price tick.
@@ -444,6 +451,7 @@ pub struct TickPriceSize {
 }
 
 /// String-based tick data.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 pub struct TickString {
     /// Type of string tick.
@@ -453,6 +461,7 @@ pub struct TickString {
 }
 
 /// Exchange for Physical (EFP) tick data.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 pub struct TickEFP {
     /// Type of EFP tick.
@@ -474,6 +483,7 @@ pub struct TickEFP {
 }
 
 /// Generic tick data.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 pub struct TickGeneric {
     /// Type of generic tick.
@@ -483,6 +493,7 @@ pub struct TickGeneric {
 }
 
 /// Parameters related to tick data requests.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 pub struct TickRequestParameters {
     /// Minimum tick increment.

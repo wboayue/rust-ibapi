@@ -40,6 +40,7 @@ impl TradingHours {
 }
 
 /// Market data type for switching between real-time and frozen/delayed.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MarketDataType {
     /// Live market data

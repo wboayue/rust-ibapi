@@ -832,6 +832,7 @@ impl ToField for Vec<TagValue> {
 
 /// Receives option specific market data.
 /// TWS’s options model volatility, prices, and deltas, along with the present value of dividends expected on that options underlier.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 pub struct OptionComputation {
     /// Specifies the type of option computation.
@@ -857,6 +858,7 @@ pub struct OptionComputation {
 }
 
 /// Option chain metadata for a specific underlying security.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 pub struct OptionChain {
     /// The contract ID of the underlying security.
@@ -876,6 +878,7 @@ pub struct OptionChain {
 // === API ===
 
 /// Contract data and list of derivative security types
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 pub struct ContractDescription {
     /// Fully qualified contract metadata.
@@ -884,6 +887,7 @@ pub struct ContractDescription {
     pub derivative_security_types: Vec<String>,
 }
 
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 /// Minimum price increment structure for a particular market rule ID.
 pub struct MarketRule {
@@ -894,6 +898,7 @@ pub struct MarketRule {
 }
 
 /// Price ladder entry describing the minimum tick between price bands.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Default)]
 pub struct PriceIncrement {
     /// Lower inclusive edge where the increment applies.

@@ -144,6 +144,7 @@ impl AccountSummaryTags {
 }
 
 /// Result of an account summary request emitted by the [Client](crate::client::Client).
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 pub enum AccountSummaryResult {
     /// Summary of account details such as net liquidation, cash balance, etc.
@@ -196,6 +197,7 @@ pub struct Position {
 
 /// Messages emitted while streaming position updates.
 #[allow(clippy::large_enum_variant)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 pub enum PositionUpdate {
     /// Update for a position in the account
@@ -206,6 +208,7 @@ pub enum PositionUpdate {
 
 /// Messages emitted while streaming model-code scoped position updates.
 #[allow(clippy::large_enum_variant)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 pub enum PositionUpdateMulti {
     /// Position update scoped to a specific account/model code pair.
@@ -242,6 +245,7 @@ pub struct FamilyCode {
 
 /// Account update events delivered while streaming high-level account data.
 #[allow(clippy::large_enum_variant)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug)]
 pub enum AccountUpdate {
     /// Key/value update describing an account metric.
@@ -299,6 +303,7 @@ pub struct AccountUpdateTime {
 }
 
 /// Account update events scoped to an account/model code pair.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq)]
 pub enum AccountUpdateMulti {
     /// Key/value update for a specific account/model code pair.
