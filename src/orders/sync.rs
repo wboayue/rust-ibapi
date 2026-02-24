@@ -211,7 +211,7 @@ pub(crate) fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_t
 pub(crate) fn global_cancel(client: &Client) -> Result<(), Error> {
     client.check_server_version(server_versions::REQ_GLOBAL_CANCEL, "It does not support global cancel requests.")?;
 
-    let message = encoders::encode_global_cancel()?;
+    let message = encoders::encode_global_cancel(client.server_version)?;
     client.send_message(message)?;
 
     Ok(())
@@ -724,6 +724,44 @@ mod tests {
         let request_messages = client.message_bus.request_messages();
 
         assert_eq!(request_messages[0].encode(), "58\x001\x00");
+        assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
+    }
+
+    #[test]
+    fn cancel_order_cme_tagging() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec!["3|41|Cancelled|0|100|0|71270927|0|0|100||0||".to_owned()],
+        });
+
+        let client = Client::stubbed(message_bus, server_versions::CME_TAGGING_FIELDS);
+
+        let order_id = 41;
+        let results = client.cancel_order(order_id, "");
+
+        let request_messages = client.message_bus.request_messages();
+
+        // No VERSION field, has empty ext_operator and i32::MAX manual_order_indicator
+        assert_eq!(request_messages[0].encode(), format!("4\x0041\x00\x00\x00{}\x00", i32::MAX));
+
+        assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
+    }
+
+    #[test]
+    fn global_cancel_cme_tagging() {
+        let message_bus = Arc::new(MessageBusStub {
+            request_messages: RwLock::new(vec![]),
+            response_messages: vec![],
+        });
+
+        let client = Client::stubbed(message_bus, server_versions::CME_TAGGING_FIELDS);
+
+        let results = super::global_cancel(&client);
+
+        let request_messages = client.message_bus.request_messages();
+
+        // No VERSION field, has empty ext_operator and i32::MAX manual_order_indicator
+        assert_eq!(request_messages[0].encode(), format!("58\x00\x00{}\x00", i32::MAX));
         assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
     }
 

@@ -242,7 +242,7 @@ pub(crate) async fn cancel_order(client: &Client, order_id: i32, manual_order_ca
 pub(crate) async fn global_cancel(client: &Client) -> Result<(), Error> {
     check_version(client.server_version(), Features::REQ_GLOBAL_CANCEL)?;
 
-    let message = encoders::encode_global_cancel()?;
+    let message = encoders::encode_global_cancel(client.server_version())?;
     client.send_message(message).await?;
 
     Ok(())

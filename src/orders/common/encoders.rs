@@ -417,23 +417,43 @@ pub(crate) fn encode_cancel_order(server_version: i32, order_id: i32, manual_ord
     let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::CancelOrder);
-    message.push_field(&VERSION);
+    if server_version < server_versions::CME_TAGGING_FIELDS {
+        message.push_field(&VERSION);
+    }
     message.push_field(&order_id);
 
     if server_version >= server_versions::MANUAL_ORDER_TIME {
         message.push_field(&manual_order_cancel_time);
     }
 
+    if (server_versions::RFQ_FIELDS..server_versions::UNDO_RFQ_FIELDS).contains(&server_version) {
+        message.push_field(&"");
+        message.push_field(&"");
+        message.push_field(&i32::MAX);
+    }
+
+    if server_version >= server_versions::CME_TAGGING_FIELDS {
+        message.push_field(&""); // ext_operator
+        message.push_field(&i32::MAX); // manual_order_indicator
+    }
+
     Ok(message)
 }
 
-pub(crate) fn encode_global_cancel() -> Result<RequestMessage, Error> {
+pub(crate) fn encode_global_cancel(server_version: i32) -> Result<RequestMessage, Error> {
     const VERSION: i32 = 1;
 
     let mut message = RequestMessage::default();
 
     message.push_field(&OutgoingMessages::RequestGlobalCancel);
-    message.push_field(&VERSION);
+    if server_version < server_versions::CME_TAGGING_FIELDS {
+        message.push_field(&VERSION);
+    }
+
+    if server_version >= server_versions::CME_TAGGING_FIELDS {
+        message.push_field(&""); // ext_operator
+        message.push_field(&i32::MAX); // manual_order_indicator
+    }
 
     Ok(message)
 }
