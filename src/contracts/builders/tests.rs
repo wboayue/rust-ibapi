@@ -110,6 +110,38 @@ fn test_futures_multiplier() {
 }
 
 #[test]
+fn test_continuous_futures_builder() {
+    let es = Contract::continuous_futures("ES")
+        .on_exchange("CME")
+        .multiplier(50)
+        .in_currency("USD")
+        .build();
+
+    assert_eq!(es.symbol, Symbol::from("ES"));
+    assert_eq!(es.security_type, SecurityType::ContinuousFuture);
+    assert_eq!(es.exchange, Exchange::from("CME"));
+    assert_eq!(es.currency, Currency::from("USD"));
+    assert_eq!(es.multiplier, "50");
+}
+
+#[test]
+fn test_continuous_futures_multiplier() {
+    // Default: no multiplier set (empty string)
+    let es = Contract::continuous_futures("ES").on_exchange("CME").build();
+    assert_eq!(es.multiplier, "");
+
+    let nq = Contract::continuous_futures("NQ").on_exchange("CME").build();
+    assert_eq!(nq.multiplier, "");
+
+    // Explicit multiplier is used when specified
+    let custom = Contract::continuous_futures("ES").on_exchange("CME").multiplier(50).build();
+    assert_eq!(custom.multiplier, "50");
+
+    let cl = Contract::continuous_futures("CL").on_exchange("CME").multiplier(1000).build();
+    assert_eq!(cl.multiplier, "1000");
+}
+
+#[test]
 fn test_forex_builder() {
     let forex = Contract::forex("EUR", "USD").on_exchange("IDEALPRO").build();
 

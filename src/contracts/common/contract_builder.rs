@@ -382,6 +382,28 @@ impl ContractBuilder {
             .currency(currency)
     }
 
+    /// Creates a continuous futures contract builder with common defaults
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::ContractBuilder;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let contract = ContractBuilder::continuous_futures("ES", "GLOBEX", "USD")
+    ///     .multiplier("50")
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn continuous_futures<S: Into<String>>(symbol: S, exchange: S, currency: S) -> Self {
+        Self::new()
+            .symbol(symbol)
+            .security_type(SecurityType::ContinuousFuture)
+            .exchange(exchange)
+            .currency(currency)
+    }
+
     /// Creates a crypto contract builder with common defaults
     ///
     /// # Examples

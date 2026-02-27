@@ -52,6 +52,8 @@ pub enum SecurityType {
     Option,
     /// Future
     Future,
+    /// Continuous Future
+    ContinuousFuture,
     /// Index
     Index,
     /// Futures option
@@ -96,6 +98,7 @@ impl std::fmt::Display for SecurityType {
             SecurityType::Stock => write!(f, "STK"),
             SecurityType::Option => write!(f, "OPT"),
             SecurityType::Future => write!(f, "FUT"),
+            SecurityType::ContinuousFuture => write!(f, "CONTFUT"),
             SecurityType::Index => write!(f, "IND"),
             SecurityType::FuturesOption => write!(f, "FOP"),
             SecurityType::ForexPair => write!(f, "CASH"),
@@ -119,6 +122,7 @@ impl SecurityType {
             "STK" => SecurityType::Stock,
             "OPT" => SecurityType::Option,
             "FUT" => SecurityType::Future,
+            "CONTFUT" => SecurityType::ContinuousFuture,
             "IND" => SecurityType::Index,
             "FOP" => SecurityType::FuturesOption,
             "CASH" => SecurityType::ForexPair,
@@ -285,6 +289,21 @@ impl Contract {
     /// ```
     pub fn futures(symbol: impl Into<Symbol>) -> FuturesBuilder<Symbol, Missing> {
         FuturesBuilder::new(symbol)
+    }
+
+    /// Creates a continuous futures contract builder.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ibapi::contracts::{Contract, ContractMonth};
+    ///
+    /// let es = Contract::continuous_futures("ES")
+    ///     .on_exchange("CME")
+    ///     .build();
+    /// ```
+    pub fn continuous_futures(symbol: impl Into<Symbol>) -> ContinuousFuturesBuilder<Symbol> {
+        ContinuousFuturesBuilder::new(symbol)
     }
 
     /// Creates a forex contract builder.
@@ -1016,6 +1035,7 @@ mod tests {
         assert_eq!(SecurityType::from("STK"), SecurityType::Stock, "STK should be Stock");
         assert_eq!(SecurityType::from("OPT"), SecurityType::Option, "OPT should be Option");
         assert_eq!(SecurityType::from("FUT"), SecurityType::Future, "FUT should be Future");
+        assert_eq!(SecurityType::from("CONTFUT"), SecurityType::ContinuousFuture, "CONTFUT should be ContinuousFuture");
         assert_eq!(SecurityType::from("IND"), SecurityType::Index, "IND should be Index");
         assert_eq!(SecurityType::from("FOP"), SecurityType::FuturesOption, "FOP should be FuturesOption");
         assert_eq!(SecurityType::from("CASH"), SecurityType::ForexPair, "CASH should be ForexPair");

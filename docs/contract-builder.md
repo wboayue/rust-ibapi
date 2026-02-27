@@ -10,6 +10,7 @@ The V2 Contract Builder API provides a type-safe, ergonomic way to create contra
   - [Stocks](#stocks)
   - [Options](#options)
   - [Futures](#futures)
+  - [Continuous Futures](#continuous-futures)
   - [Forex](#forex)
   - [Cryptocurrency](#cryptocurrency)
   - [Index](#index)
@@ -164,6 +165,24 @@ let zc_futures = Contract::futures("ZC")
 ```
 
 **Note:** The futures builder leaves the multiplier field empty by default, allowing TWS to determine the correct value. Use `.multiplier()` only when needed for non-standard contracts.
+
+### Continuous Futures
+
+Continuous futures cannot be used with real time data or to place orders, but only for historical data.
+
+```rust
+use ibapi::contracts::Contract;
+
+// ES contract
+let es_front = Contract::continuous_futures("ES")
+    .on_exchange("CME")
+    .build();
+
+// Custom futures on specific exchange
+let zc_futures = Contract::continuous_futures("ZC")
+    .on_exchange("ECBOT")
+    .build();
+```
 
 ### Forex
 
@@ -418,4 +437,3 @@ let contract = Contract::stock("AAPL").build();
 3. **Flexible types**: Builder methods accept string literals directly (e.g., `.on_exchange("SMART")`), or use `Exchange::from("SMART")` for explicit type creation
 4. **Leverage defaults**: Don't specify values that match the defaults
 5. **Handle errors appropriately**: Strike validation and spread building return `Result`
-
