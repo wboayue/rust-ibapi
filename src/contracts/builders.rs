@@ -297,6 +297,59 @@ impl FuturesBuilder<Symbol, ContractMonth> {
     }
 }
 
+/// Continuous futures contract builder with type states
+#[derive(Debug, Clone)]
+pub struct ContinuousFuturesBuilder<Symbol = Missing> {
+    symbol: Symbol,
+    exchange: Exchange,
+    currency: Currency,
+    multiplier: Option<u32>,
+}
+
+impl ContinuousFuturesBuilder<Missing> {
+    /// Create a continuous future contract for the given symbol.
+    pub fn new(symbol: impl Into<Symbol>) -> ContinuousFuturesBuilder<Symbol> {
+        ContinuousFuturesBuilder {
+            symbol: symbol.into(),
+            exchange: "GLOBEX".into(),
+            currency: "USD".into(),
+            multiplier: None,
+        }
+    }
+}
+
+impl ContinuousFuturesBuilder<Symbol> {
+    /// Route the continuous future to a specific exchange.
+    pub fn on_exchange(mut self, exchange: impl Into<Exchange>) -> Self {
+        self.exchange = exchange.into();
+        self
+    }
+
+    /// Quote the continuous future in a different currency.
+    pub fn in_currency(mut self, currency: impl Into<Currency>) -> Self {
+        self.currency = currency.into();
+        self
+    }
+
+    /// Set a custom multiplier value for the continuous future.
+    pub fn multiplier(mut self, value: u32) -> Self {
+        self.multiplier = Some(value);
+        self
+    }
+
+    /// Finalize the continuous future contract definition.
+    pub fn build(self) -> Contract {
+        Contract {
+            symbol: self.symbol,
+            security_type: SecurityType::ContinuousFuture,
+            exchange: self.exchange,
+            currency: self.currency,
+            multiplier: self.multiplier.map(|m| m.to_string()).unwrap_or_default(),
+            ..Default::default()
+        }
+    }
+}
+
 /// Forex pair builder
 #[derive(Debug, Clone)]
 pub struct ForexBuilder {
