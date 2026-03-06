@@ -286,7 +286,7 @@ pub async fn market_depth(
     let builder = client.request();
     let request = encoders::encode_request_market_depth(client.server_version(), builder.request_id(), contract, number_of_rows, is_smart_depth)?;
 
-    builder.send::<MarketDepths>(request).await
+    builder.send_with_context::<MarketDepths>(request, client.decoder_context().with_smart_depth(is_smart_depth)).await
 }
 
 /// Requests venues for which market data is returned to market_depth (those with market makers)
