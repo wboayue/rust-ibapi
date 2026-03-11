@@ -327,7 +327,9 @@ fn parse_bar_date(text: &str, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
 
         Ok(bar_date.assume_timezone_utc(time_tz::timezones::db::UTC))
     } else {
-        let timestamp: i64 = text.parse()?;
+        let timestamp: i64 = text
+            .parse()
+            .map_err(|e: std::num::ParseIntError| Error::Simple(format!("parse error: \"{text}\" - {e}")))?;
         let date_utc = OffsetDateTime::from_unix_timestamp(timestamp).unwrap();
         Ok(date_utc.to_timezone(time_zone))
     }

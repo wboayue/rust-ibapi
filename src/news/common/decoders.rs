@@ -86,7 +86,9 @@ pub(in crate::news) fn decode_tick_news(mut message: ResponseMessage) -> Result<
 }
 
 fn parse_unix_timestamp(time: &str) -> Result<OffsetDateTime, Error> {
-    let time: i64 = time.parse()?;
+    let time: i64 = time
+        .parse()
+        .map_err(|e: std::num::ParseIntError| Error::Simple(format!("parse error: \"{time}\" - {e}")))?;
     let time = time / 1000;
 
     match OffsetDateTime::from_unix_timestamp(time) {
