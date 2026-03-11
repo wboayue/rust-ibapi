@@ -1009,7 +1009,7 @@ impl ResponseMessage {
         // from_unix_timestamp
         let timestamp: i64 = field
             .parse()
-            .map_err(|e| Error::Parse(self.i, field.into(), e.to_string()))?;
+            .map_err(|e: std::num::ParseIntError| Error::Parse(self.i, field.into(), e.to_string()))?;
         match OffsetDateTime::from_unix_timestamp(timestamp) {
             Ok(val) => Ok(val),
             Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
