@@ -99,6 +99,11 @@ just cover
 
 For detailed information on any topic, refer to the linked documentation files above.
 
+## Branches
+
+- **`main`** — v3.0 development
+- **`v2-stable`** — v2.x maintenance and bug fixes
+
 ## Git Commit Guidelines
 
 - DO NOT include "Generated with Claude Code" or similar attribution in commit messages
