@@ -23,9 +23,9 @@ use crate::market_data::TradingHours;
 impl StreamDecoder<BidAsk> for BidAsk {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickByTick => decoders::decode_bid_ask_tick(message),
+            IncomingMessages::TickByTick => decoders::decode_bid_ask_tick(context, message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
@@ -45,9 +45,9 @@ impl StreamDecoder<BidAsk> for BidAsk {
 impl StreamDecoder<MidPoint> for MidPoint {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickByTick => decoders::decode_mid_point_tick(message),
+            IncomingMessages::TickByTick => decoders::decode_mid_point_tick(context, message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
@@ -65,10 +65,14 @@ impl StreamDecoder<MidPoint> for MidPoint {
 
 #[cfg(not(feature = "sync"))]
 impl StreamDecoder<Bar> for Bar {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::RealTimeBars];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::RealTimeBars, IncomingMessages::Error];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
-        decoders::decode_realtime_bar(message)
+    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+        match message.message_type() {
+            IncomingMessages::RealTimeBars => decoders::decode_realtime_bar(context, message),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
+        }
     }
 
     fn cancel_message(
@@ -85,9 +89,9 @@ impl StreamDecoder<Bar> for Bar {
 impl StreamDecoder<Trade> for Trade {
     const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickByTick => decoders::decode_trade_tick(message),
+            IncomingMessages::TickByTick => decoders::decode_trade_tick(context, message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
