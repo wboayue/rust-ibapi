@@ -2,6 +2,7 @@ use crate::contracts::{ComboLegOpenClose, SecurityType};
 #[cfg(feature = "sync")]
 use crate::orders::{Action, OrderCondition, OrderOpenClose, Rule80A};
 use time::macros::datetime;
+use time_tz::timezones::db::america::NEW_YORK;
 
 use super::*;
 
@@ -1637,6 +1638,48 @@ fn test_response_message_error_paths() {
     msg.i = 1;
     let result = msg.next_date_time();
     assert!(result.is_err());
+}
+
+#[test]
+fn test_response_message_next_date_time_with_timezone_uses_utc_for_utc_format() {
+    let mut msg = ResponseMessage::from("test\020260328-12:34:56\0");
+    msg.i = 1;
+
+    let result = msg.next_date_time_with_timezone(Some(&NEW_YORK)).unwrap();
+
+    assert_eq!(result, datetime!(2026-03-28 12:34:56 UTC));
+}
+
+#[test]
+fn test_response_message_next_date_time_with_timezone_parses_date_only_in_session_timezone() {
+    let mut msg = ResponseMessage::from("test\020260328\0");
+    msg.i = 1;
+
+    let result = msg.next_date_time_with_timezone(Some(&NEW_YORK)).unwrap();
+
+    assert_eq!(result, datetime!(2026-03-28 00:00:00 -4));
+}
+
+#[test]
+fn test_response_message_next_date_time_with_timezone_rejects_ambiguous_local_time() {
+    let mut msg = ResponseMessage::from("test\020261101  01:30:00\0");
+    msg.i = 1;
+
+    let result = msg.next_date_time_with_timezone(Some(&NEW_YORK));
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("ambiguous IB datetime field"));
+}
+
+#[test]
+fn test_response_message_next_date_time_with_timezone_rejects_nonexistent_local_time() {
+    let mut msg = ResponseMessage::from("test\020260308  02:30:00\0");
+    msg.i = 1;
+
+    let result = msg.next_date_time_with_timezone(Some(&NEW_YORK));
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("invalid IB datetime field"));
 }
 
 #[test]

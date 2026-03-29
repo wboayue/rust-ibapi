@@ -13,8 +13,10 @@ use byteorder::{BigEndian, WriteBytesExt};
 
 use log::debug;
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
+use time::{macros::format_description, Date, OffsetDateTime, PrimitiveDateTime};
+use time_tz::{OffsetResult, PrimitiveDateTimeExt, TimeZone, Tz};
 
+use crate::common::timezone::find_timezone;
 use crate::{Error, ToField};
 
 pub mod parser_registry;
@@ -993,7 +995,7 @@ impl ResponseMessage {
         }
     }
 
-    /// Consume the next field and parse it as a UTC timestamp.
+    /// Consume the next field and parse it as an IB timestamp.
     pub fn next_date_time(&mut self) -> Result<OffsetDateTime, Error> {
         if self.i >= self.fields.len() {
             return Err(Error::Simple("expected datetime and found end of message".into()));
@@ -1006,12 +1008,29 @@ impl ResponseMessage {
             return Err(Error::Simple("expected timestamp and found empty string".into()));
         }
 
-        // from_unix_timestamp
-        let timestamp: i64 = field.parse()?;
-        match OffsetDateTime::from_unix_timestamp(timestamp) {
-            Ok(val) => Ok(val),
-            Err(err) => Err(Error::Parse(self.i, field.into(), err.to_string())),
+        parse_ib_date_time(field).map_err(|err| match err {
+            Error::Parse(_, _, _) | Error::Simple(_) => Error::Parse(self.i, field.into(), err.to_string()),
+            other => other,
+        })
+    }
+
+    /// Consume the next field and parse it as a timestamp using an optional session timezone.
+    pub fn next_date_time_with_timezone(&mut self, time_zone: Option<&Tz>) -> Result<OffsetDateTime, Error> {
+        if self.i >= self.fields.len() {
+            return Err(Error::Simple("expected datetime and found end of message".into()));
         }
+
+        let field = &self.fields[self.i];
+        self.i += 1;
+
+        if field.is_empty() {
+            return Err(Error::Simple("expected timestamp and found empty string".into()));
+        }
+
+        parse_ib_date_time_with_timezone(field, time_zone).map_err(|err| match err {
+            Error::Parse(_, _, _) | Error::Simple(_) => Error::Parse(self.i, field.into(), err.to_string()),
+            other => other,
+        })
     }
 
     /// Consume the next field as a string.
@@ -1167,6 +1186,61 @@ impl ResponseMessage {
         let mut data = self.fields.join("|");
         data.push('|');
         data
+    }
+}
+
+pub(crate) fn parse_ib_date_time_with_timezone(field: &str, time_zone: Option<&Tz>) -> Result<OffsetDateTime, Error> {
+    let utc_format = format_description!("[year][month][day]-[hour]:[minute]:[second]");
+    if let Ok(dt) = PrimitiveDateTime::parse(field, utc_format) {
+        return Ok(dt.assume_utc());
+    }
+
+    let tz_format = format_description!("[year][month][day] [hour]:[minute]:[second]");
+    if let Some((datetime_part, tz_name)) = field.rsplit_once(' ') {
+        if let Ok(dt) = PrimitiveDateTime::parse(datetime_part, tz_format) {
+            let zones = find_timezone(tz_name.trim());
+            if let Some(tz) = zones.first().copied() {
+                return resolve_primitive_date_time(field, dt, tz);
+            }
+        }
+    }
+
+    if let Some(tz) = time_zone {
+        let naive_format = format_description!("[year][month][day]  [hour]:[minute]:[second]");
+        if let Ok(dt) = PrimitiveDateTime::parse(field, naive_format) {
+            return resolve_primitive_date_time(field, dt, tz);
+        }
+
+        if field.len() == 8 {
+            let date_format = format_description!("[year][month][day]");
+            if let Ok(date) = Date::parse(field, date_format) {
+                return resolve_primitive_date_time(field, date.midnight(), tz);
+            }
+        }
+    }
+
+    if let Ok(timestamp) = field.parse::<i64>() {
+        return OffsetDateTime::from_unix_timestamp(timestamp).map_err(|err| Error::Simple(err.to_string()));
+    }
+
+    Err(Error::Simple(format!("failed to parse IB datetime field: {field}")))
+}
+
+fn parse_ib_date_time(field: &str) -> Result<OffsetDateTime, Error> {
+    parse_ib_date_time_with_timezone(field, None)
+}
+
+fn resolve_primitive_date_time(field: &str, date_time: PrimitiveDateTime, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
+    match date_time.assume_timezone(time_zone) {
+        OffsetResult::Some(value) => Ok(value),
+        OffsetResult::Ambiguous(_, _) => Err(Error::Simple(format!(
+            "ambiguous IB datetime field in timezone {}: {field}",
+            time_zone.name(),
+        ))),
+        OffsetResult::None => Err(Error::Simple(format!(
+            "invalid IB datetime field in timezone {}: {field}",
+            time_zone.name(),
+        ))),
     }
 }
 
