@@ -26,7 +26,7 @@ fn map_timezone_name(name: &str) -> &str {
     if name == "China Standard Time" {
         return "Asia/Shanghai";
     }
-    if name == "Greenwich Mean Time" || name == "GMT Standard Time" {
+    if name == "Greenwich Mean Time" || name == "GMT Standard Time" || name == "British Summer Time" {
         return "Europe/London";
     }
 
@@ -75,6 +75,10 @@ mod tests {
         assert_eq!(zones[0].name(), "Europe/London");
 
         let zones = find_timezone("GMT Standard Time");
+        assert!(!zones.is_empty());
+        assert_eq!(zones[0].name(), "Europe/London");
+
+        let zones = find_timezone("British Summer Time");
         assert!(!zones.is_empty());
         assert_eq!(zones[0].name(), "Europe/London");
     }
