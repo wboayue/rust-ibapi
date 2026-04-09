@@ -2,6 +2,18 @@
 
 use time_tz::{timezones, Tz};
 
+/// Non-standard timezone names sent by IB Gateway mapped to IANA identifiers.
+const TIMEZONE_ALIASES: &[(&str, &str)] = &[
+    // Chinese
+    ("中国标准时间", "Asia/Shanghai"),
+    ("北京时间", "Asia/Shanghai"),
+    // Windows English
+    ("China Standard Time", "Asia/Shanghai"),
+    ("Greenwich Mean Time", "Europe/London"),
+    ("GMT Standard Time", "Europe/London"),
+    ("British Summer Time", "Europe/London"),
+];
+
 /// Find timezone by name, handling non-standard names from IB Gateway.
 ///
 /// IB Gateway may send timezone names in various formats:
@@ -17,17 +29,10 @@ pub fn find_timezone(name: &str) -> Vec<&'static Tz> {
 
 /// Map non-standard timezone names to IANA identifiers.
 fn map_timezone_name(name: &str) -> &str {
-    // UTF-8 Chinese timezone names
-    if name == "中国标准时间" || name == "北京时间" {
-        return "Asia/Shanghai";
-    }
-
-    // Windows English timezone names
-    if name == "China Standard Time" {
-        return "Asia/Shanghai";
-    }
-    if name == "Greenwich Mean Time" || name == "GMT Standard Time" {
-        return "Europe/London";
+    for &(alias, iana) in TIMEZONE_ALIASES {
+        if name == alias {
+            return iana;
+        }
     }
 
     // GB2312/GBK encoded strings decoded as UTF-8 lossy contain U+FFFD.
@@ -75,6 +80,10 @@ mod tests {
         assert_eq!(zones[0].name(), "Europe/London");
 
         let zones = find_timezone("GMT Standard Time");
+        assert!(!zones.is_empty());
+        assert_eq!(zones[0].name(), "Europe/London");
+
+        let zones = find_timezone("British Summer Time");
         assert!(!zones.is_empty());
         assert_eq!(zones[0].name(), "Europe/London");
     }
