@@ -554,4 +554,27 @@ mod tests {
         assert_eq!(bar.wap, 185.625, "bar.wap");
         assert_eq!(bar.count, 0, "bar.count should default to 0 when missing");
     }
+
+    #[test]
+    fn test_parse_bar_date_yyyymmdd() {
+        let tz = time_tz::timezones::db::UTC;
+        let result = parse_bar_date("20230414", tz).unwrap();
+        assert_eq!(result, datetime!(2023-04-14 0:00:00 UTC));
+    }
+
+    #[test]
+    fn test_parse_bar_date_unix_timestamp() {
+        let tz = time_tz::timezones::db::america::NEW_YORK;
+        let result = parse_bar_date("1681133400", tz).unwrap();
+        assert_eq!(result, datetime!(2023-04-10 9:30:00).assume_timezone(tz).unwrap());
+    }
+
+    #[test]
+    fn test_parse_bar_date_invalid_timestamp() {
+        let tz = time_tz::timezones::db::UTC;
+        let err = parse_bar_date("not_a_number", tz).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("not_a_number"), "error should include the bad value: {msg}");
+        assert!(msg.contains("invalid digit"), "error should include parse reason: {msg}");
+    }
 }

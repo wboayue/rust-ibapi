@@ -96,3 +96,23 @@ fn parse_unix_timestamp(time: &str) -> Result<OffsetDateTime, Error> {
         Err(err) => Err(Error::Simple(err.to_string())),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use time::macros::datetime;
+
+    #[test]
+    fn test_parse_unix_timestamp() {
+        let result = parse_unix_timestamp("1681133400000").unwrap();
+        assert_eq!(result, datetime!(2023-04-10 13:30:00 UTC));
+    }
+
+    #[test]
+    fn test_parse_unix_timestamp_invalid() {
+        let err = parse_unix_timestamp("not_a_number").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("not_a_number"), "error should include the bad value: {msg}");
+        assert!(msg.contains("invalid digit"), "error should include parse reason: {msg}");
+    }
+}
