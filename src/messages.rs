@@ -1188,10 +1188,12 @@ pub(crate) fn parse_ib_date_time_with_timezone(field: &str, time_zone: Option<&T
             if let Some(tz) = zones.first().copied() {
                 return resolve_primitive_date_time(field, dt, tz);
             }
+            return Err(Error::Simple(format!("unrecognized timezone in IB datetime field: {field}")));
         }
     }
 
     if let Some(tz) = time_zone {
+        // IB uses double-space between date and time for session-local timestamps
         let naive_format = format_description!("[year][month][day]  [hour]:[minute]:[second]");
         if let Ok(dt) = PrimitiveDateTime::parse(field, naive_format) {
             return resolve_primitive_date_time(field, dt, tz);

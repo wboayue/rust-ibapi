@@ -1643,7 +1643,7 @@ fn test_response_message_error_paths() {
 #[test]
 fn test_response_message_next_date_time_with_timezone_uses_utc_for_utc_format() {
     let mut msg = ResponseMessage::from("test\020260328-12:34:56\0");
-    msg.i = 1;
+    msg.skip();
 
     let result = msg.next_date_time_with_timezone(Some(NEW_YORK)).unwrap();
 
@@ -1651,9 +1651,30 @@ fn test_response_message_next_date_time_with_timezone_uses_utc_for_utc_format() 
 }
 
 #[test]
+fn test_response_message_next_date_time_with_timezone_parses_embedded_timezone() {
+    let mut msg = ResponseMessage::from("test\020260328 12:34:56 US/Eastern\0");
+    msg.skip();
+
+    let result = msg.next_date_time_with_timezone(None).unwrap();
+
+    assert_eq!(result, datetime!(2026-03-28 16:34:56 UTC));
+}
+
+#[test]
+fn test_response_message_next_date_time_with_timezone_rejects_unrecognized_timezone() {
+    let mut msg = ResponseMessage::from("test\020260328 12:34:56 Bogus/Zone\0");
+    msg.skip();
+
+    let result = msg.next_date_time_with_timezone(None);
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("unrecognized timezone"));
+}
+
+#[test]
 fn test_response_message_next_date_time_with_timezone_parses_date_only_in_session_timezone() {
     let mut msg = ResponseMessage::from("test\020260328\0");
-    msg.i = 1;
+    msg.skip();
 
     let result = msg.next_date_time_with_timezone(Some(NEW_YORK)).unwrap();
 
@@ -1663,7 +1684,7 @@ fn test_response_message_next_date_time_with_timezone_parses_date_only_in_sessio
 #[test]
 fn test_response_message_next_date_time_with_timezone_rejects_ambiguous_local_time() {
     let mut msg = ResponseMessage::from("test\020261101  01:30:00\0");
-    msg.i = 1;
+    msg.skip();
 
     let result = msg.next_date_time_with_timezone(Some(NEW_YORK));
 
@@ -1674,7 +1695,7 @@ fn test_response_message_next_date_time_with_timezone_rejects_ambiguous_local_ti
 #[test]
 fn test_response_message_next_date_time_with_timezone_rejects_nonexistent_local_time() {
     let mut msg = ResponseMessage::from("test\020260308  02:30:00\0");
-    msg.i = 1;
+    msg.skip();
 
     let result = msg.next_date_time_with_timezone(Some(NEW_YORK));
 
