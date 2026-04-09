@@ -10,7 +10,7 @@ use crate::market_data::historical::{
     Bar, HistogramEntry, HistoricalData, Schedule, Session, TickAttributeBidAsk, TickAttributeLast, TickBidAsk, TickLast, TickMidpoint,
 };
 
-pub(crate) fn decode_head_timestamp_with_timezone(message: &mut ResponseMessage, time_zone: Option<&Tz>) -> Result<OffsetDateTime, Error> {
+pub(crate) fn decode_head_timestamp(message: &mut ResponseMessage, time_zone: Option<&Tz>) -> Result<OffsetDateTime, Error> {
     message.skip(); // message type
     message.skip(); // request_id
 
@@ -343,7 +343,7 @@ mod tests {
     fn test_decode_head_timestamp() {
         let mut message = ResponseMessage::from("88\09000\01560346200\0");
 
-        let head_timestamp = super::decode_head_timestamp_with_timezone(&mut message, None).expect("error decoding trade tick");
+        let head_timestamp = super::decode_head_timestamp(&mut message, None).expect("error decoding trade tick");
 
         assert_eq!(head_timestamp, datetime!(2019-06-12 13:30).assume_utc(), "head_timestamp");
     }

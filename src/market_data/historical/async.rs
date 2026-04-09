@@ -36,7 +36,7 @@ pub async fn head_timestamp(
 
     match subscription.next().await {
         Some(Ok(mut message)) if message.message_type() == IncomingMessages::HeadTimestamp => {
-            Ok(decoders::decode_head_timestamp_with_timezone(&mut message, client.time_zone())?)
+            Ok(decoders::decode_head_timestamp(&mut message, client.time_zone())?)
         }
         Some(Ok(message)) => Err(Error::UnexpectedResponse(message)),
         Some(Err(e)) => Err(e),
