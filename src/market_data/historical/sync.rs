@@ -34,7 +34,9 @@ pub(crate) fn head_timestamp(
     let subscription = builder.send_raw(request)?;
 
     match subscription.next() {
-        Some(Ok(mut message)) if message.message_type() == IncomingMessages::HeadTimestamp => Ok(decoders::decode_head_timestamp(&mut message)?),
+        Some(Ok(mut message)) if message.message_type() == IncomingMessages::HeadTimestamp => {
+            Ok(decoders::decode_head_timestamp(&mut message, client.time_zone())?)
+        }
         Some(Ok(message)) => Err(Error::UnexpectedResponse(message)),
         Some(Err(Error::ConnectionReset)) => head_timestamp(client, contract, what_to_show, trading_hours),
         Some(Err(e)) => Err(e),

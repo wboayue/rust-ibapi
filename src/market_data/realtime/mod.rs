@@ -5,11 +5,8 @@ use crate::ToField;
 
 use crate::contracts::OptionComputation;
 use crate::messages::Notice;
-#[cfg(feature = "sync")]
 use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
-#[cfg(feature = "sync")]
 use crate::subscriptions::{DecoderContext, StreamDecoder};
-#[cfg(feature = "sync")]
 use crate::Error;
 
 // Common modules
@@ -68,13 +65,12 @@ pub struct BidAsk {
     pub bid_ask_attribute: BidAskAttribute,
 }
 
-#[cfg(feature = "sync")]
 impl StreamDecoder<BidAsk> for BidAsk {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickByTick => common::decoders::decode_bid_ask_tick(message),
+            IncomingMessages::TickByTick => common::decoders::decode_bid_ask_tick(context, message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
@@ -106,13 +102,12 @@ pub struct MidPoint {
     pub mid_point: f64,
 }
 
-#[cfg(feature = "sync")]
 impl StreamDecoder<MidPoint> for MidPoint {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickByTick => common::decoders::decode_mid_point_tick(message),
+            IncomingMessages::TickByTick => common::decoders::decode_mid_point_tick(context, message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
@@ -146,12 +141,15 @@ pub struct Bar {
     pub count: i32,
 }
 
-#[cfg(feature = "sync")]
 impl StreamDecoder<Bar> for Bar {
-    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::RealTimeBars];
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::RealTimeBars, IncomingMessages::Error];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
-        common::decoders::decode_realtime_bar(message)
+    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+        match message.message_type() {
+            IncomingMessages::RealTimeBars => common::decoders::decode_realtime_bar(context, message),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
+        }
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
@@ -180,13 +178,12 @@ pub struct Trade {
     pub special_conditions: String,
 }
 
-#[cfg(feature = "sync")]
 impl StreamDecoder<Trade> for Trade {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::TickByTick];
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
-            IncomingMessages::TickByTick => common::decoders::decode_trade_tick(message),
+            IncomingMessages::TickByTick => common::decoders::decode_trade_tick(context, message),
             IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
@@ -287,7 +284,6 @@ pub struct MarketDepthL2 {
     pub smart_depth: bool,
 }
 
-#[cfg(feature = "sync")]
 impl StreamDecoder<MarketDepths> for MarketDepths {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2, IncomingMessages::Error];
 
@@ -358,7 +354,6 @@ pub enum TickTypes {
     PriceSize(TickPriceSize),
 }
 
-#[cfg(feature = "sync")]
 impl StreamDecoder<TickTypes> for TickTypes {
     const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[
         IncomingMessages::TickPrice,

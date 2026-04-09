@@ -1,5 +1,6 @@
 use crate::contracts::decode_option_computation;
 use crate::contracts::OptionComputation;
+use crate::subscriptions::DecoderContext;
 use crate::Error;
 use crate::{messages::ResponseMessage, server_versions};
 
@@ -8,12 +9,12 @@ use crate::market_data::realtime::{
     TickRequestParameters, TickSize, TickString, TickType, TickTypes, Trade, TradeAttribute,
 };
 
-pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, Error> {
+pub(crate) fn decode_realtime_bar(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Bar, Error> {
     message.skip(); // message type
     message.skip(); // message version
     message.skip(); // message request id
     Ok(Bar {
-        date: message.next_date_time()?,
+        date: message.next_date_time_with_timezone(context.time_zone)?,
         open: message.next_double()?,
         high: message.next_double()?,
         low: message.next_double()?,
@@ -23,14 +24,14 @@ pub(crate) fn decode_realtime_bar(message: &mut ResponseMessage) -> Result<Bar, 
         count: message.next_int()?,
     })
 }
-pub(crate) fn decode_trade_tick(message: &mut ResponseMessage) -> Result<Trade, Error> {
+pub(crate) fn decode_trade_tick(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Trade, Error> {
     message.skip(); // message type
     message.skip(); // message request id
     let tick_type = message.next_int()?;
     if !(tick_type == 1 || tick_type == 2) {
         return Err(Error::Simple(format!("Unexpected tick_type: {tick_type}")));
     }
-    let date = message.next_date_time()?;
+    let date = message.next_date_time_with_timezone(context.time_zone)?;
     let price = message.next_double()?;
     let size = message.next_double()?;
     let mask = message.next_int()?;
@@ -49,14 +50,14 @@ pub(crate) fn decode_trade_tick(message: &mut ResponseMessage) -> Result<Trade, 
         special_conditions,
     })
 }
-pub(crate) fn decode_bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAsk, Error> {
+pub(crate) fn decode_bid_ask_tick(context: &DecoderContext, message: &mut ResponseMessage) -> Result<BidAsk, Error> {
     message.skip(); // message type
     message.skip(); // message request id
     let tick_type = message.next_int()?;
     if tick_type != 3 {
         return Err(Error::Simple(format!("Unexpected tick_type: {tick_type}")));
     }
-    let date = message.next_date_time()?;
+    let date = message.next_date_time_with_timezone(context.time_zone)?;
     let bid_price = message.next_double()?;
     let ask_price = message.next_double()?;
     let bid_size = message.next_double()?;
@@ -74,7 +75,7 @@ pub(crate) fn decode_bid_ask_tick(message: &mut ResponseMessage) -> Result<BidAs
         },
     })
 }
-pub(crate) fn decode_mid_point_tick(message: &mut ResponseMessage) -> Result<MidPoint, Error> {
+pub(crate) fn decode_mid_point_tick(context: &DecoderContext, message: &mut ResponseMessage) -> Result<MidPoint, Error> {
     message.skip(); // message type
     message.skip(); // message request id
     let tick_type = message.next_int()?;
@@ -82,7 +83,7 @@ pub(crate) fn decode_mid_point_tick(message: &mut ResponseMessage) -> Result<Mid
         return Err(Error::Simple(format!("Unexpected tick_type: {tick_type}")));
     }
     Ok(MidPoint {
-        time: message.next_date_time()?,
+        time: message.next_date_time_with_timezone(context.time_zone)?,
         mid_point: message.next_double()?,
     })
 }
@@ -244,16 +245,25 @@ mod tests {
     use super::*;
     use crate::messages::ResponseMessage;
     use time::OffsetDateTime;
+    use time_tz::timezones::db::america::NEW_YORK;
 
     #[cfg(test)]
     mod realtime_bar_tests {
         use super::*;
 
+        fn test_context() -> DecoderContext {
+            DecoderContext::new(0, None)
+        }
+
+        fn test_context_with_timezone() -> DecoderContext {
+            DecoderContext::new(0, Some(NEW_YORK))
+        }
+
         #[test]
         fn test_decode_realtime_bar() {
             let mut message = ResponseMessage::from("50\0\09000\01678323335\04028.75\04029.00\04028.25\04028.50\02\04026.75\01\0");
 
-            let bar = decode_realtime_bar(&mut message).expect("Failed to decode realtime bar");
+            let bar = decode_realtime_bar(&test_context(), &mut message).expect("Failed to decode realtime bar");
 
             assert_eq!(bar.date, OffsetDateTime::from_unix_timestamp(1678323335).unwrap(), "Wrong timestamp");
             assert_eq!(bar.open, 4028.75, "Wrong open price");
@@ -269,15 +279,37 @@ mod tests {
         fn test_decode_realtime_bar_invalid_format() {
             let mut message = ResponseMessage::from("50\0\09000\0invalid_timestamp\04028.75\04029.00\04028.25\04028.50\02\04026.75\01\0");
 
-            let result = decode_realtime_bar(&mut message);
+            let result = decode_realtime_bar(&test_context(), &mut message);
             assert!(result.is_err(), "Should fail with invalid timestamp");
         }
 
         #[test]
         fn test_decode_realtime_bar_empty_message() {
             let mut message = ResponseMessage::from("");
-            let result = decode_realtime_bar(&mut message);
+            let result = decode_realtime_bar(&test_context(), &mut message);
             assert!(result.is_err(), "Should fail with empty message");
+        }
+
+        #[test]
+        fn test_decode_realtime_bar_empty_count_fails() {
+            let mut message = ResponseMessage::from("50\0\09000\01678323335\04028.75\04029.00\04028.25\04028.50\02\04026.75\0\0");
+
+            let result = decode_realtime_bar(&test_context(), &mut message);
+            assert!(result.is_err(), "Should fail with empty count");
+        }
+
+        #[test]
+        fn test_decode_realtime_bar_formatted_timestamp() {
+            let mut message = ResponseMessage::from("50\0\09000\020260328-12:34:56\04028.75\04029.00\04028.25\04028.50\02\04026.75\01\0");
+
+            let bar =
+                decode_realtime_bar(&test_context_with_timezone(), &mut message).expect("Failed to decode realtime bar with formatted timestamp");
+
+            assert_eq!(
+                bar.date,
+                OffsetDateTime::from_unix_timestamp(1_774_701_296).unwrap(),
+                "Wrong formatted timestamp",
+            );
         }
     }
 
@@ -289,7 +321,7 @@ mod tests {
         fn test_decode_trade_tick() {
             let mut message = ResponseMessage::from("99\09000\01\01678740829\03895.25\07\02\0NASDAQ\0Regular\0");
 
-            let trade = decode_trade_tick(&mut message).expect("Failed to decode trade tick");
+            let trade = decode_trade_tick(&DecoderContext::new(0, None), &mut message).expect("Failed to decode trade tick");
 
             assert_eq!(trade.tick_type, "1", "Wrong tick type");
             assert_eq!(trade.time, OffsetDateTime::from_unix_timestamp(1678740829).unwrap(), "Wrong timestamp");
@@ -305,7 +337,7 @@ mod tests {
         fn test_decode_trade_tick_invalid_type() {
             let mut message = ResponseMessage::from("99\09000\03\01678740829\03895.25\07\02\0NASDAQ\0Regular\0");
 
-            let result = decode_trade_tick(&mut message);
+            let result = decode_trade_tick(&DecoderContext::new(0, None), &mut message);
             assert!(result.is_err(), "Should fail with invalid tick type");
             assert!(result.unwrap_err().to_string().contains("Unexpected tick_type"));
         }
@@ -314,7 +346,7 @@ mod tests {
         fn test_decode_trade_tick_with_empty_fields() {
             let mut message = ResponseMessage::from("99\09000\01\01678740829\03895.25\07\02\0\0\0");
 
-            let trade = decode_trade_tick(&mut message).expect("Failed to decode trade tick");
+            let trade = decode_trade_tick(&DecoderContext::new(0, None), &mut message).expect("Failed to decode trade tick");
 
             assert_eq!(trade.exchange, "", "Exchange should be empty");
             assert_eq!(trade.special_conditions, "", "Special conditions should be empty");
@@ -329,7 +361,7 @@ mod tests {
         fn test_decode_bid_ask_basic() {
             let mut message = ResponseMessage::from("99\09000\03\01678745793\03895.50\03896.00\09\011\03\0");
 
-            let bid_ask = decode_bid_ask_tick(&mut message).expect("Failed to decode bid/ask tick");
+            let bid_ask = decode_bid_ask_tick(&DecoderContext::new(0, None), &mut message).expect("Failed to decode bid/ask tick");
 
             assert_eq!(bid_ask.time, OffsetDateTime::from_unix_timestamp(1678745793).unwrap(), "Wrong timestamp");
             assert_eq!(bid_ask.bid_price, 3895.50, "Wrong bid price");
@@ -353,7 +385,7 @@ mod tests {
             for (mask, expected_bid_past_low, expected_ask_past_high) in test_cases {
                 let mut message = ResponseMessage::from(format!("99\09000\03\01678745793\03895.50\03896.00\09\011\0{}\0", mask).as_str());
 
-                let bid_ask = decode_bid_ask_tick(&mut message).expect("Failed to decode bid/ask tick");
+                let bid_ask = decode_bid_ask_tick(&DecoderContext::new(0, None), &mut message).expect("Failed to decode bid/ask tick");
 
                 assert_eq!(
                     bid_ask.bid_ask_attribute.bid_past_low, expected_bid_past_low,
@@ -372,7 +404,7 @@ mod tests {
         fn test_decode_bid_ask_invalid_type() {
             let mut message = ResponseMessage::from("99\09000\01\01678745793\03895.50\03896.00\09\011\03\0");
 
-            let result = decode_bid_ask_tick(&mut message);
+            let result = decode_bid_ask_tick(&DecoderContext::new(0, None), &mut message);
             assert!(result.is_err(), "Should fail with invalid tick type");
             assert!(result.unwrap_err().to_string().contains("Unexpected tick_type"));
         }
