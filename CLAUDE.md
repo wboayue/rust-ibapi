@@ -11,22 +11,6 @@ The rust-ibapi crate is a Rust implementation of the Interactive Brokers TWS API
 - `cargo build --no-default-features --features sync` enables only the blocking client
 - `cargo build --no-default-features --features "sync async"` enables both; the blocking API lives under `client::blocking::Client`
 
-```bash
-# Build with async support (default)
-cargo build
-
-# Build with sync support only
-cargo build --no-default-features --features sync
-
-# Build with both clients
-cargo build --no-default-features --features "sync async"
-
-# Run tests (cover every configuration)
-cargo test
-cargo test --no-default-features --features sync
-cargo test --all-features
-```
-
 ## Documentation Index
 
 ### Getting Started
@@ -46,13 +30,18 @@ cargo test --all-features
 - [**Integration Tests**](docs/integration-tests.md) - Writing tests against a live gateway
 - [**Extending the API**](docs/extending-api.md) - Adding new TWS API functionality
 
+## Branches
+
+- **`main`** — 3.x development and releases
+- **`v2-stable`** — 2.x maintenance
+
 ## Key Points to Remember
 
 1. **Be explicit about feature coverage**: Default async, sync-only, and combined builds must compile when touched
 2. **Test each configuration**: Run tests for default, sync-only, and `--all-features`
 3. **Follow module structure**: Use the common pattern for shared logic between sync/async
 4. **Minimal comments**: Keep comments concise, avoid stating the obvious
-5. **Run quality checks**: Before committing, run `cargo fmt`, `cargo clippy --features sync`, and `cargo clippy --features async`
+5. **Run quality checks**: Before committing, run `cargo fmt`, `cargo clippy`, `cargo clippy --no-default-features --features sync`, and `cargo clippy --all-features`
 6. **Fluent conditional orders**: Use helper functions (`price()`, `time()`, `margin()`, etc.) and method chaining (`.condition()`, `.and_condition()`, `.or_condition()`) for building conditional orders. See [docs/order-types.md](docs/order-types.md#conditional-orders-with-conditions) and [docs/api-patterns.md](docs/api-patterns.md#conditional-order-builder-pattern) for details
 7. **Don't repeat code**: Extract repeated logic to `common/`; use shared helpers like `request_helpers`
 8. **Single responsibility**: One responsibility per function/module; split orchestration from business logic
@@ -60,24 +49,6 @@ cargo test --all-features
 10. **Never use `block_on` in async code**: Do not use `futures::executor::block_on()` inside async contexts — it blocks tokio worker threads and risks deadlocks. Use atomics (`AtomicI32`, etc.) for lock-free access to rarely-written values, or make the function `async` and `.await` the lock
 
 See [docs/code-style.md](docs/code-style.md#design-principles) for detailed design guidelines.
-
-## Connection Settings
-
-When running examples or tests:
-- **IB Gateway Paper Trading**: 127.0.0.1:4002 (recommended)
-- **IB Gateway Live Trading**: 127.0.0.1:4001
-- **TWS Paper Trading**: 127.0.0.1:7497
-- **TWS Live Trading**: 127.0.0.1:7496
-
-## Environment Variables
-
-```bash
-# Set log level
-RUST_LOG=debug cargo run --example <example_name>
-
-# Record TWS messages for debugging
-IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --example <example_name>
-```
 
 ## Quick Commands
 
@@ -97,7 +68,23 @@ just test
 just cover
 ```
 
-For detailed information on any topic, refer to the linked documentation files above.
+## Connection Settings
+
+When running examples or tests:
+- **IB Gateway Paper Trading**: 127.0.0.1:4002 (recommended)
+- **IB Gateway Live Trading**: 127.0.0.1:4001
+- **TWS Paper Trading**: 127.0.0.1:7497
+- **TWS Live Trading**: 127.0.0.1:7496
+
+## Environment Variables
+
+```bash
+# Set log level
+RUST_LOG=debug cargo run --example <example_name>
+
+# Record TWS messages for debugging
+IBAPI_RECORDING_DIR=/tmp/tws-messages cargo run --example <example_name>
+```
 
 ## Git Commit Guidelines
 
@@ -113,3 +100,7 @@ Use this format for GitHub release notes:
 - One-sentence summary below the heading
 - A code sample showing typical usage in a fenced ```rust block
 - Order items by significance (most impactful first)
+
+## Maintaining Documentation
+
+Keep `CLAUDE.md`, `README.md`, and documentation up to date as the codebase evolves. When patterns change, conventions are established, or new modules are added, update the relevant files.
