@@ -21,7 +21,7 @@ pub(crate) fn decode_realtime_bar(context: &DecoderContext, message: &mut Respon
         close: message.next_double()?,
         volume: message.next_double()?,
         wap: message.next_double()?,
-        count: message.next_optional_int()?.unwrap_or_default(),
+        count: message.next_int()?,
     })
 }
 pub(crate) fn decode_trade_tick(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Trade, Error> {
@@ -34,7 +34,7 @@ pub(crate) fn decode_trade_tick(context: &DecoderContext, message: &mut Response
     let date = message.next_date_time_with_timezone(context.time_zone)?;
     let price = message.next_double()?;
     let size = message.next_double()?;
-    let mask = message.next_optional_int()?.unwrap_or_default();
+    let mask = message.next_int()?;
     let exchange = message.next_string()?;
     let special_conditions = message.next_string()?;
     Ok(Trade {
@@ -62,7 +62,7 @@ pub(crate) fn decode_bid_ask_tick(context: &DecoderContext, message: &mut Respon
     let ask_price = message.next_double()?;
     let bid_size = message.next_double()?;
     let ask_size = message.next_double()?;
-    let mask = message.next_optional_int()?.unwrap_or_default();
+    let mask = message.next_int()?;
     Ok(BidAsk {
         time: date,
         bid_price,
@@ -92,9 +92,9 @@ pub(crate) fn decode_market_depth(message: &mut ResponseMessage) -> Result<Marke
     message.skip(); // message version
     message.skip(); // message request id
     let depth = MarketDepth {
-        position: message.next_optional_int()?.unwrap_or_default(),
-        operation: message.next_optional_int()?.unwrap_or_default(),
-        side: message.next_optional_int()?.unwrap_or_default(),
+        position: message.next_int()?,
+        operation: message.next_int()?,
+        side: message.next_int()?,
         price: message.next_double()?,
         size: message.next_double()?,
     };
@@ -105,10 +105,10 @@ pub(crate) fn decode_market_depth_l2(server_version: i32, message: &mut Response
     message.skip(); // message version
     message.skip(); // message request id
     let mut depth = MarketDepthL2 {
-        position: message.next_optional_int()?.unwrap_or_default(),
+        position: message.next_int()?,
         market_maker: message.next_string()?,
-        operation: message.next_optional_int()?.unwrap_or_default(),
-        side: message.next_optional_int()?.unwrap_or_default(),
+        operation: message.next_int()?,
+        side: message.next_int()?,
         price: message.next_double()?,
         size: message.next_double()?,
         ..Default::default()
@@ -120,7 +120,7 @@ pub(crate) fn decode_market_depth_l2(server_version: i32, message: &mut Response
 }
 pub(crate) fn decode_market_depth_exchanges(server_version: i32, message: &mut ResponseMessage) -> Result<Vec<DepthMarketDataDescription>, Error> {
     message.skip(); // message type
-    let count = message.next_optional_int()?.unwrap_or_default();
+    let count = message.next_int()?;
     let mut descriptions = Vec::with_capacity(count as usize);
     for _ in 0..count {
         let description = if server_version >= server_versions::SERVICE_DATA_TYPE {
@@ -146,7 +146,7 @@ pub(crate) fn decode_market_depth_exchanges(server_version: i32, message: &mut R
 }
 pub(crate) fn decode_tick_price(server_version: i32, message: &mut ResponseMessage) -> Result<TickTypes, Error> {
     message.skip(); // message type
-    let message_version = message.next_optional_int()?.unwrap_or_default();
+    let message_version = message.next_int()?;
     message.skip(); // message request id
     let mut tick_price = TickPrice {
         tick_type: TickType::from(message.next_int()?),
@@ -155,7 +155,7 @@ pub(crate) fn decode_tick_price(server_version: i32, message: &mut ResponseMessa
     };
     let size = if message_version >= 2 { message.next_double()? } else { f64::MAX };
     if message_version >= 3 {
-        let mask = message.next_optional_int()?.unwrap_or_default();
+        let mask = message.next_int()?;
         if server_version >= server_versions::PAST_LIMIT {
             tick_price.attributes.can_auto_execute = mask & 0x1 == 0x1;
             tick_price.attributes.past_limit = mask & 0x2 == 0x2;
@@ -190,7 +190,7 @@ pub(crate) fn decode_tick_size(message: &mut ResponseMessage) -> Result<TickSize
     message.skip(); // message version
     message.skip(); // message request id
     Ok(TickSize {
-        tick_type: TickType::from(message.next_optional_int()?.unwrap_or_default()),
+        tick_type: TickType::from(message.next_int()?),
         size: message.next_double()?,
     })
 }
@@ -199,7 +199,7 @@ pub(crate) fn decode_tick_string(message: &mut ResponseMessage) -> Result<TickSt
     message.skip(); // message version
     message.skip(); // message request id
     Ok(TickString {
-        tick_type: TickType::from(message.next_optional_int()?.unwrap_or_default()),
+        tick_type: TickType::from(message.next_int()?),
         value: message.next_string()?,
     })
 }
@@ -208,11 +208,11 @@ pub(crate) fn decode_tick_efp(message: &mut ResponseMessage) -> Result<TickEFP, 
     message.skip(); // message version
     message.skip(); // message request id
     Ok(TickEFP {
-        tick_type: TickType::from(message.next_optional_int()?.unwrap_or_default()),
+        tick_type: TickType::from(message.next_int()?),
         basis_points: message.next_double()?,
         formatted_basis_points: message.next_string()?,
         implied_futures_price: message.next_double()?,
-        hold_days: message.next_optional_int()?.unwrap_or_default(),
+        hold_days: message.next_int()?,
         future_last_trade_date: message.next_string()?,
         dividend_impact: message.next_double()?,
         dividends_to_last_trade_date: message.next_double()?,
@@ -223,7 +223,7 @@ pub(crate) fn decode_tick_generic(message: &mut ResponseMessage) -> Result<TickG
     message.skip(); // message version
     message.skip(); // message request id
     Ok(TickGeneric {
-        tick_type: TickType::from(message.next_optional_int()?.unwrap_or_default()),
+        tick_type: TickType::from(message.next_int()?),
         value: message.next_double()?,
     })
 }
@@ -236,7 +236,7 @@ pub(crate) fn decode_tick_request_parameters(message: &mut ResponseMessage) -> R
     Ok(TickRequestParameters {
         min_tick: message.next_double()?,
         bbo_exchange: message.next_string()?,
-        snapshot_permissions: message.next_optional_int()?.unwrap_or_default(),
+        snapshot_permissions: message.next_int()?,
     })
 }
 
@@ -291,12 +291,11 @@ mod tests {
         }
 
         #[test]
-        fn test_decode_realtime_bar_empty_count_defaults_to_zero() {
+        fn test_decode_realtime_bar_empty_count_fails() {
             let mut message = ResponseMessage::from("50\0\09000\01678323335\04028.75\04029.00\04028.25\04028.50\02\04026.75\0\0");
 
-            let bar = decode_realtime_bar(&test_context(), &mut message).expect("Failed to decode realtime bar with empty count");
-
-            assert_eq!(bar.count, 0, "Wrong default count");
+            let result = decode_realtime_bar(&test_context(), &mut message);
+            assert!(result.is_err(), "Should fail with empty count");
         }
 
         #[test]
