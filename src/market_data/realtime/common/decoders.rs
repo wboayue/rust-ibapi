@@ -256,7 +256,7 @@ mod tests {
         }
 
         fn test_context_with_timezone() -> DecoderContext {
-            DecoderContext::new(0, Some(&NEW_YORK))
+            DecoderContext::new(0, Some(NEW_YORK))
         }
 
         #[test]
