@@ -997,21 +997,7 @@ impl ResponseMessage {
 
     /// Consume the next field and parse it as an IB timestamp.
     pub fn next_date_time(&mut self) -> Result<OffsetDateTime, Error> {
-        if self.i >= self.fields.len() {
-            return Err(Error::Simple("expected datetime and found end of message".into()));
-        }
-
-        let field = &self.fields[self.i];
-        self.i += 1;
-
-        if field.is_empty() {
-            return Err(Error::Simple("expected timestamp and found empty string".into()));
-        }
-
-        parse_ib_date_time(field).map_err(|err| match err {
-            Error::Parse(_, _, _) | Error::Simple(_) => Error::Parse(self.i, field.into(), err.to_string()),
-            other => other,
-        })
+        self.next_date_time_with_timezone(None)
     }
 
     /// Consume the next field and parse it as a timestamp using an optional session timezone.
@@ -1224,10 +1210,6 @@ pub(crate) fn parse_ib_date_time_with_timezone(field: &str, time_zone: Option<&T
     }
 
     Err(Error::Simple(format!("failed to parse IB datetime field: {field}")))
-}
-
-fn parse_ib_date_time(field: &str) -> Result<OffsetDateTime, Error> {
-    parse_ib_date_time_with_timezone(field, None)
 }
 
 fn resolve_primitive_date_time(field: &str, date_time: PrimitiveDateTime, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
