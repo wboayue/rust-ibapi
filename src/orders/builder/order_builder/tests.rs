@@ -1291,3 +1291,23 @@ fn test_execution_condition_no_threshold() {
         _ => panic!("Expected Execution condition"),
     }
 }
+
+#[test]
+fn bracket_order_propagates_tif() {
+    let client = MockClient;
+    let contract = create_test_contract();
+
+    let orders = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .good_till_cancel()
+        .bracket()
+        .entry_limit(50.0)
+        .take_profit(55.0)
+        .stop_loss(45.0)
+        .build()
+        .unwrap();
+
+    assert_eq!(orders[0].tif, crate::orders::TimeInForce::GoodTilCanceled);
+    assert_eq!(orders[1].tif, crate::orders::TimeInForce::GoodTilCanceled);
+    assert_eq!(orders[2].tif, crate::orders::TimeInForce::GoodTilCanceled);
+}

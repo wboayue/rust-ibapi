@@ -1024,6 +1024,7 @@ impl<'a, C> BracketOrderBuilder<'a, C> {
             parent_id: parent.order_id,
             transmit: false,
             outside_rth: parent.outside_rth,
+            tif: parent.tif.clone(),
             ..Default::default()
         };
 
@@ -1036,6 +1037,7 @@ impl<'a, C> BracketOrderBuilder<'a, C> {
             parent_id: parent.order_id,
             transmit: true,
             outside_rth: parent.outside_rth,
+            tif: parent.tif.clone(),
             ..Default::default()
         };
 
