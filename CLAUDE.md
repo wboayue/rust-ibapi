@@ -35,6 +35,8 @@ The rust-ibapi crate is a Rust implementation of the Interactive Brokers TWS API
 - **`main`** — 3.x development and releases
 - **`v2-stable`** — 2.x maintenance
 
+Changes to both branches should be made via pull requests.
+
 ## Key Points to Remember
 
 1. **Be explicit about feature coverage**: Default async, sync-only, and combined builds must compile when touched
