@@ -5,188 +5,140 @@ use super::*;
 use crate::contracts::Contract;
 use crate::market_data::realtime;
 use crate::messages::OutgoingMessages;
-#[cfg(not(feature = "sync"))]
-use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::subscriptions::Subscription;
-#[cfg(not(feature = "sync"))]
-use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::{server_versions, Client, Error};
 
-#[cfg(not(feature = "sync"))]
-impl StreamDecoder<NewsBulletin> for NewsBulletin {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::NewsBulletins];
+impl Client {
+    /// Requests news providers which the user has subscribed to.
+    pub async fn news_providers(&self) -> Result<Vec<NewsProvider>, Error> {
+        self.check_server_version(server_versions::REQ_NEWS_PROVIDERS, "It does not support news providers requests.")?;
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<NewsBulletin, Error> {
-        match message.message_type() {
-            IncomingMessages::NewsBulletins => Ok(decoders::decode_news_bulletin(message.clone())?),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+        let request = encoders::encode_request_news_providers()?;
+        let mut subscription = self.send_shared_request(OutgoingMessages::RequestNewsProviders, request).await?;
+
+        match subscription.next().await {
+            Some(Ok(message)) => decoders::decode_news_providers(message),
+            Some(Err(e)) => Err(e),
+            None => Err(Error::UnexpectedEndOfStream),
         }
     }
 
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
-        encoders::encode_cancel_news_bulletin()
+    /// Subscribes to IB's News Bulletins.
+    pub async fn news_bulletins(&self, all_messages: bool) -> Result<Subscription<NewsBulletin>, Error> {
+        let request = encoders::encode_request_news_bulletins(all_messages)?;
+        let internal_subscription = self.send_shared_request(OutgoingMessages::RequestNewsBulletins, request).await?;
+
+        Ok(Subscription::new_from_internal::<NewsBulletin>(
+            internal_subscription,
+            self.message_bus.clone(),
+            None,
+            None,
+            Some(OutgoingMessages::RequestNewsBulletins),
+            self.decoder_context(),
+        ))
     }
-}
 
-#[cfg(not(feature = "sync"))]
-impl StreamDecoder<NewsArticle> for NewsArticle {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
-        IncomingMessages::HistoricalNews,
-        IncomingMessages::HistoricalNewsEnd,
-        IncomingMessages::TickNews,
-    ];
+    /// Historical News Headlines
+    pub async fn historical_news(
+        &self,
+        contract_id: i32,
+        provider_codes: &[&str],
+        start_time: OffsetDateTime,
+        end_time: OffsetDateTime,
+        total_results: u8,
+    ) -> Result<Subscription<NewsArticle>, Error> {
+        self.check_server_version(server_versions::REQ_HISTORICAL_NEWS, "It does not support historical news requests.")?;
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<NewsArticle, Error> {
-        match message.message_type() {
-            IncomingMessages::HistoricalNews => Ok(decoders::decode_historical_news(None, message.clone())?),
-            IncomingMessages::HistoricalNewsEnd => Err(Error::EndOfStream),
-            IncomingMessages::TickNews => Ok(decoders::decode_tick_news(message.clone())?),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+        let request_id = self.next_request_id();
+        let request = encoders::encode_request_historical_news(
+            self.server_version(),
+            request_id,
+            contract_id,
+            provider_codes,
+            start_time,
+            end_time,
+            total_results,
+        )?;
+        let internal_subscription = self.send_request(request_id, request).await?;
+
+        Ok(Subscription::new_from_internal::<NewsArticle>(
+            internal_subscription,
+            self.message_bus.clone(),
+            Some(request_id),
+            None,
+            None,
+            self.decoder_context(),
+        ))
+    }
+
+    /// Requests news article body
+    pub async fn news_article(&self, provider_code: &str, article_id: &str) -> Result<NewsArticleBody, Error> {
+        self.check_server_version(server_versions::REQ_NEWS_ARTICLE, "It does not support news article requests.")?;
+
+        let request_id = self.next_request_id();
+        let request = encoders::encode_request_news_article(self.server_version(), request_id, provider_code, article_id)?;
+
+        let mut subscription = self.send_request(request_id, request).await?;
+
+        match subscription.next().await {
+            Some(Ok(message)) => decoders::decode_news_article(message),
+            Some(Err(e)) => Err(e),
+            None => Err(Error::UnexpectedEndOfStream),
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
-        // News articles can come from market data subscriptions, so use the appropriate cancel
-        if context.and_then(|c| c.request_type) == Some(OutgoingMessages::RequestMarketData) {
-            let request_id = request_id.expect("Request ID required to encode cancel market data");
-            realtime::common::encoders::encode_cancel_market_data(request_id)
-        } else {
-            // Historical news requests don't need cancellation (they end with HistoricalNewsEnd)
-            Err(Error::NotImplemented)
+    /// Subscribe to news for a specific contract
+    pub async fn contract_news(&self, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<NewsArticle>, Error> {
+        let mut generic_ticks = vec!["mdoff".to_string()];
+        for provider in provider_codes {
+            generic_ticks.push(format!("292:{provider}"));
         }
+        let generic_ticks: Vec<_> = generic_ticks.iter().map(|s| s.as_str()).collect();
+
+        let request_id = self.next_request_id();
+        let request = realtime::common::encoders::encode_request_market_data(
+            self.server_version(),
+            request_id,
+            contract,
+            generic_ticks.as_slice(),
+            false,
+            false,
+        )?;
+        let internal_subscription = self.send_request(request_id, request).await?;
+
+        Ok(Subscription::new_from_internal::<NewsArticle>(
+            internal_subscription,
+            self.message_bus.clone(),
+            Some(request_id),
+            None,
+            None,
+            self.decoder_context().with_request_type(OutgoingMessages::RequestMarketData),
+        ))
     }
-}
 
-/// Requests news providers which the user has subscribed to.
-pub(crate) async fn news_providers(client: &Client) -> Result<Vec<NewsProvider>, Error> {
-    client.check_server_version(server_versions::REQ_NEWS_PROVIDERS, "It does not support news providers requests.")?;
+    /// Subscribe to broad tape news
+    pub async fn broad_tape_news(&self, provider_code: &str) -> Result<Subscription<NewsArticle>, Error> {
+        let contract = Contract::news(provider_code);
+        let generic_ticks = &["mdoff", "292"];
 
-    let request = encoders::encode_request_news_providers()?;
-    let mut subscription = client.send_shared_request(OutgoingMessages::RequestNewsProviders, request).await?;
+        let request_id = self.next_request_id();
+        let request =
+            realtime::common::encoders::encode_request_market_data(self.server_version(), request_id, &contract, generic_ticks, false, false)?;
+        let internal_subscription = self.send_request(request_id, request).await?;
 
-    match subscription.next().await {
-        Some(Ok(message)) => decoders::decode_news_providers(message),
-        Some(Err(e)) => Err(e),
-        None => Err(Error::UnexpectedEndOfStream),
+        Ok(Subscription::new_from_internal::<NewsArticle>(
+            internal_subscription,
+            self.message_bus.clone(),
+            Some(request_id),
+            None,
+            None,
+            self.decoder_context().with_request_type(OutgoingMessages::RequestMarketData),
+        ))
     }
-}
-
-/// Subscribes to IB's News Bulletins.
-pub(crate) async fn news_bulletins(client: &Client, all_messages: bool) -> Result<Subscription<NewsBulletin>, Error> {
-    let request = encoders::encode_request_news_bulletins(all_messages)?;
-    let internal_subscription = client.send_shared_request(OutgoingMessages::RequestNewsBulletins, request).await?;
-
-    Ok(Subscription::new_from_internal::<NewsBulletin>(
-        internal_subscription,
-        client.message_bus.clone(),
-        None,
-        None,
-        Some(OutgoingMessages::RequestNewsBulletins),
-        client.decoder_context(),
-    ))
-}
-
-/// Historical News Headlines
-pub(crate) async fn historical_news(
-    client: &Client,
-    contract_id: i32,
-    provider_codes: &[&str],
-    start_time: OffsetDateTime,
-    end_time: OffsetDateTime,
-    total_results: u8,
-) -> Result<Subscription<NewsArticle>, Error> {
-    client.check_server_version(server_versions::REQ_HISTORICAL_NEWS, "It does not support historical news requests.")?;
-
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_historical_news(
-        client.server_version(),
-        request_id,
-        contract_id,
-        provider_codes,
-        start_time,
-        end_time,
-        total_results,
-    )?;
-    let internal_subscription = client.send_request(request_id, request).await?;
-
-    Ok(Subscription::new_from_internal::<NewsArticle>(
-        internal_subscription,
-        client.message_bus.clone(),
-        Some(request_id),
-        None,
-        None,
-        client.decoder_context(),
-    ))
-}
-
-/// Requests news article body
-pub(crate) async fn news_article(client: &Client, provider_code: &str, article_id: &str) -> Result<NewsArticleBody, Error> {
-    client.check_server_version(server_versions::REQ_NEWS_ARTICLE, "It does not support news article requests.")?;
-
-    let request_id = client.next_request_id();
-    let request = encoders::encode_request_news_article(client.server_version(), request_id, provider_code, article_id)?;
-
-    let mut subscription = client.send_request(request_id, request).await?;
-
-    match subscription.next().await {
-        Some(Ok(message)) => decoders::decode_news_article(message),
-        Some(Err(e)) => Err(e),
-        None => Err(Error::UnexpectedEndOfStream),
-    }
-}
-
-/// Subscribe to news for a specific contract
-pub(crate) async fn contract_news(client: &Client, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<NewsArticle>, Error> {
-    let mut generic_ticks = vec!["mdoff".to_string()];
-    for provider in provider_codes {
-        generic_ticks.push(format!("292:{provider}"));
-    }
-    let generic_ticks: Vec<_> = generic_ticks.iter().map(|s| s.as_str()).collect();
-
-    let request_id = client.next_request_id();
-    let request = realtime::common::encoders::encode_request_market_data(
-        client.server_version(),
-        request_id,
-        contract,
-        generic_ticks.as_slice(),
-        false,
-        false,
-    )?;
-    let internal_subscription = client.send_request(request_id, request).await?;
-
-    Ok(Subscription::new_from_internal::<NewsArticle>(
-        internal_subscription,
-        client.message_bus.clone(),
-        Some(request_id),
-        None,
-        None,
-        client.decoder_context().with_request_type(OutgoingMessages::RequestMarketData),
-    ))
-}
-
-/// Subscribe to broad tape news
-pub(crate) async fn broad_tape_news(client: &Client, provider_code: &str) -> Result<Subscription<NewsArticle>, Error> {
-    let contract = Contract::news(provider_code);
-    let generic_ticks = &["mdoff", "292"];
-
-    let request_id = client.next_request_id();
-    let request =
-        realtime::common::encoders::encode_request_market_data(client.server_version(), request_id, &contract, generic_ticks, false, false)?;
-    let internal_subscription = client.send_request(request_id, request).await?;
-
-    Ok(Subscription::new_from_internal::<NewsArticle>(
-        internal_subscription,
-        client.message_bus.clone(),
-        Some(request_id),
-        None,
-        None,
-        client.decoder_context().with_request_type(OutgoingMessages::RequestMarketData),
-    ))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::contracts::Contract;
     use crate::news::ArticleType;
     use crate::stubs::MessageBusStub;
@@ -203,7 +155,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-        let results = news_providers(&client).await;
+        let results = client.news_providers().await;
         assert!(results.is_ok(), "failed to request news providers: {}", results.err().unwrap());
 
         let request_messages = message_bus.request_messages.read().unwrap();
@@ -231,7 +183,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-        let results = news_bulletins(&client, true).await;
+        let results = client.news_bulletins(true).await;
         assert!(results.is_ok(), "failed to request news bulletins: {}", results.err().unwrap());
 
         {
@@ -266,7 +218,7 @@ mod tests {
         let start_time = datetime!(2023-01-01 0:00 UTC);
         let end_time = datetime!(2023-01-02 0:00 UTC);
 
-        let results = historical_news(&client, 8314, &["BZ", "DJ"], start_time, end_time, 10).await;
+        let results = client.historical_news(8314, &["BZ", "DJ"], start_time, end_time, 10).await;
         assert!(results.is_ok(), "failed to request historical news: {}", results.err().unwrap());
 
         {
@@ -299,7 +251,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-        let results = news_article(&client, "BZ", "BZ$123").await;
+        let results = client.news_article("BZ", "BZ$123").await;
         assert!(results.is_ok(), "failed to request news article: {}", results.err().unwrap());
 
         let request_messages = message_bus.request_messages.read().unwrap();
@@ -320,7 +272,7 @@ mod tests {
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
         let contract = Contract::stock("TSLA").build();
-        let results = contract_news(&client, &contract, &["BZ", "DJ"]).await;
+        let results = client.contract_news(&contract, &["BZ", "DJ"]).await;
         assert!(results.is_ok(), "failed to request contract news: {}", results.err().unwrap());
 
         {
@@ -350,7 +302,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-        let results = broad_tape_news(&client, "BZ").await;
+        let results = client.broad_tape_news("BZ").await;
         assert!(results.is_ok(), "failed to request broad tape news: {}", results.err().unwrap());
 
         {

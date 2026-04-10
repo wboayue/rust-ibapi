@@ -3,65 +3,49 @@
 use super::common::{decoders, encoders};
 use super::*;
 use crate::messages::OutgoingMessages;
-#[cfg(not(feature = "sync"))]
-use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::orders::TagValue;
 use crate::subscriptions::Subscription;
-#[cfg(not(feature = "sync"))]
-use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::{server_versions, Client, Error};
 
-#[cfg(not(feature = "sync"))]
-impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::ScannerData];
+impl Client {
+    /// Requests an XML list of scanner parameters valid in TWS.
+    pub async fn scanner_parameters(&self) -> Result<String, Error> {
+        let request = encoders::encode_scanner_parameters()?;
+        let mut subscription = self.send_shared_request(OutgoingMessages::RequestScannerParameters, request).await?;
 
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Vec<ScannerData>, Error> {
-        decoders::decode_scanner_message(message)
+        match subscription.next().await {
+            Some(Ok(message)) => decoders::decode_scanner_parameters(message),
+            Some(Err(e)) => Err(e),
+            None => Err(Error::UnexpectedEndOfStream),
+        }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
-        let request_id = request_id.expect("Request ID required to encode cancel scanner subscription.");
-        encoders::encode_cancel_scanner_subscription(request_id)
+    /// Starts a subscription to market scan results based on the provided parameters.
+    pub async fn scanner_subscription(
+        &self,
+        subscription: &ScannerSubscription,
+        filter: &Vec<TagValue>,
+    ) -> Result<Subscription<Vec<ScannerData>>, Error> {
+        if !filter.is_empty() {
+            self.check_server_version(
+                server_versions::SCANNER_GENERIC_OPTS,
+                "It does not support API scanner subscription generic filter options.",
+            )?
+        }
+
+        let request_id = self.next_request_id();
+        let request = encoders::encode_scanner_subscription(request_id, self.server_version(), subscription, filter)?;
+        let internal_subscription = self.send_request(request_id, request).await?;
+
+        Ok(Subscription::new_from_internal::<Vec<ScannerData>>(
+            internal_subscription,
+            self.message_bus.clone(),
+            Some(request_id),
+            None,
+            None,
+            self.decoder_context(),
+        ))
     }
-}
-
-/// Requests an XML list of scanner parameters valid in TWS.
-pub(crate) async fn scanner_parameters(client: &Client) -> Result<String, Error> {
-    let request = encoders::encode_scanner_parameters()?;
-    let mut subscription = client.send_shared_request(OutgoingMessages::RequestScannerParameters, request).await?;
-
-    match subscription.next().await {
-        Some(Ok(message)) => decoders::decode_scanner_parameters(message),
-        Some(Err(e)) => Err(e),
-        None => Err(Error::UnexpectedEndOfStream),
-    }
-}
-
-/// Starts a subscription to market scan results based on the provided parameters.
-pub(crate) async fn scanner_subscription(
-    client: &Client,
-    subscription: &ScannerSubscription,
-    filter: &Vec<TagValue>,
-) -> Result<Subscription<Vec<ScannerData>>, Error> {
-    if !filter.is_empty() {
-        client.check_server_version(
-            server_versions::SCANNER_GENERIC_OPTS,
-            "It does not support API scanner subscription generic filter options.",
-        )?
-    }
-
-    let request_id = client.next_request_id();
-    let request = encoders::encode_scanner_subscription(request_id, client.server_version(), subscription, filter)?;
-    let internal_subscription = client.send_request(request_id, request).await?;
-
-    Ok(Subscription::new_from_internal::<Vec<ScannerData>>(
-        internal_subscription,
-        client.message_bus.clone(),
-        Some(request_id),
-        None,
-        None,
-        client.decoder_context(),
-    ))
 }
 
 #[cfg(test)]

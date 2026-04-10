@@ -9,13 +9,17 @@ These examples demonstrate violations of principles in [code-style.md](code-styl
 ### Duplicated Logic
 ```rust
 // Bad: duplicated validation in sync and async
-pub fn my_func(client: &Client, param: &str) -> Result<Data, Error> {
-    if param.is_empty() { return Err(Error::InvalidParam); }
-    // ...
+impl Client {
+    pub fn my_func(&self, param: &str) -> Result<Data, Error> {
+        if param.is_empty() { return Err(Error::InvalidParam); }
+        // ...
+    }
 }
-pub async fn my_func(client: &Client, param: &str) -> Result<Data, Error> {
-    if param.is_empty() { return Err(Error::InvalidParam); }  // duplicate!
-    // ...
+impl Client {
+    pub async fn my_func(&self, param: &str) -> Result<Data, Error> {
+        if param.is_empty() { return Err(Error::InvalidParam); }  // duplicate!
+        // ...
+    }
 }
 ```
 
@@ -32,18 +36,22 @@ validate_param(param)?;
 
 ### Monolithic Functions
 ```rust
-// Bad: function does encoding, validation, and error handling
-pub fn place_order(client: &Client, order: &Order) -> Result<(), Error> {
-    // 100+ lines of mixed concerns
+// Bad: method does encoding, validation, and error handling
+impl Client {
+    pub fn place_order(&self, order: &Order) -> Result<(), Error> {
+        // 100+ lines of mixed concerns
+    }
 }
 ```
 
 ```rust
 // Good: split by responsibility
-pub fn place_order(client: &Client, order: &Order) -> Result<(), Error> {
-    validate_order(order)?;
-    let request = encode_order(order)?;
-    send_and_handle_response(client, request)
+impl Client {
+    pub fn place_order(&self, order: &Order) -> Result<(), Error> {
+        validate_order(order)?;
+        let request = encode_order(order)?;
+        send_and_handle_response(self, request)
+    }
 }
 ```
 
@@ -102,19 +110,13 @@ pub struct MyData {
     pub field: String,
 }
 
-// Re-export API functions based on active feature
-#[cfg(feature = "sync")]
-pub use sync::{my_function};
-
-#[cfg(feature = "async")]
-pub use r#async::{my_function};
 ```
 
 ## Adding New API Functionality
 
 ### Step 1: Define Public Types and API Interface
 
-Define data types in the module's `mod.rs` file - these should be available regardless of feature flags. The API exposed to the user is defined on the Client struct. Define the interface for the new API on the Client struct with proper docstrings and examples.
+Define data types in the module's `mod.rs` file - these should be available regardless of feature flags. The API is exposed as `impl Client` methods in the domain module's `sync.rs` / `async.rs` files (not in `client/sync.rs` or `client/async.rs`).
 
 ### Step 2: Ensure Message Identifiers Are Defined
 
@@ -150,50 +152,51 @@ pub(in crate::<module>) fn decode_my_response(message: ResponseMessage) -> Resul
 
 ### Step 5: Implement Sync Version
 
+Add an `impl Client` block in the domain module's `sync.rs`:
+
 ```rust
 // src/<module>/sync.rs
 use super::common::{encoders, decoders};
 use crate::common::request_helpers;
+use crate::client::sync::Client;
 
-pub fn my_function(client: &Client, param: &str) -> Result<MyData, Error> {
-    request_helpers::one_shot_with_retry(
-        client,
-        OutgoingMessages::MyRequest,
-        || encoders::encode_my_request(client.next_request_id(), param),
-        |message| decoders::decode_my_response(message),
-        || Err(Error::UnexpectedEndOfStream),
-    )
+impl Client {
+    pub fn my_function(&self, param: &str) -> Result<MyData, Error> {
+        request_helpers::blocking::one_shot_with_retry(
+            self,
+            OutgoingMessages::MyRequest,
+            || encoders::encode_my_request(self.next_request_id(), param),
+            |message| decoders::decode_my_response(message),
+            || Err(Error::UnexpectedEndOfStream),
+        )
+    }
 }
 ```
 
 ### Step 6: Implement Async Version
 
+Add an `impl Client` block in the domain module's `async.rs`:
+
 ```rust
 // src/<module>/async.rs
 use super::common::{encoders, decoders};
 use crate::common::request_helpers;
+use crate::Client;
 
-pub async fn my_function(client: &Client, param: &str) -> Result<MyData, Error> {
-    request_helpers::one_shot_with_retry(
-        client,
-        OutgoingMessages::MyRequest,
-        || encoders::encode_my_request(client.next_request_id(), param),
-        |message| decoders::decode_my_response(message),
-        || Err(Error::UnexpectedEndOfStream),
-    ).await
+impl Client {
+    pub async fn my_function(&self, param: &str) -> Result<MyData, Error> {
+        request_helpers::one_shot_with_retry(
+            self,
+            OutgoingMessages::MyRequest,
+            || encoders::encode_my_request(self.next_request_id(), param),
+            |message| decoders::decode_my_response(message),
+            || Err(Error::UnexpectedEndOfStream),
+        ).await
+    }
 }
 ```
 
-### Step 7: Update Module Exports
-
-```rust
-// src/<module>/mod.rs
-#[cfg(feature = "sync")]
-pub use sync::{my_function};
-
-#[cfg(feature = "async")]
-pub use r#async::{my_function};
-```
+No module re-exports needed — the `impl Client` methods are automatically available on the Client type.
 
 ### Step 8: Add Comprehensive Tests
 
@@ -270,31 +273,31 @@ Provides common request patterns for both sync and async modes:
 ```rust
 use crate::common::request_helpers;
 
-// For one-shot requests with retry logic (sync)
-pub fn my_api_call(client: &Client) -> Result<MyData, Error> {
-    request_helpers::one_shot_with_retry(
-        client,
+// For one-shot requests with retry logic (sync, inside impl Client)
+pub fn my_api_call(&self) -> Result<MyData, Error> {
+    request_helpers::blocking::one_shot_with_retry(
+        self,
         OutgoingMessages::MyRequest,
-        || encode_my_request(client.next_request_id()),
+        || encode_my_request(self.next_request_id()),
         |message| decode_my_response(message),
         || Err(Error::UnexpectedEndOfStream),
     )
 }
 
-// For one-shot requests with retry logic (async)
-pub async fn my_api_call(client: &Client) -> Result<MyData, Error> {
+// For one-shot requests with retry logic (async, inside impl Client)
+pub async fn my_api_call(&self) -> Result<MyData, Error> {
     request_helpers::one_shot_with_retry(
-        client,
+        self,
         OutgoingMessages::MyRequest,
-        || encode_my_request(client.next_request_id()),
+        || encode_my_request(self.next_request_id()),
         |message| decode_my_response(message),
         || Err(Error::UnexpectedEndOfStream),
     ).await
 }
 
-// For requests with IDs and subscriptions
-pub fn my_subscription(client: &Client) -> Result<Subscription<MyData>, Error> {
-    request_helpers::request_with_id(client, Features::MY_FEATURE, |request_id| {
+// For requests with IDs and subscriptions (inside impl Client)
+pub fn my_subscription(&self) -> Result<Subscription<MyData>, Error> {
+    request_helpers::blocking::request_with_id(self, Features::MY_FEATURE, |request_id| {
         encode_my_request(request_id)
     })
 }

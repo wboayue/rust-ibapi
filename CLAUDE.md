@@ -41,9 +41,9 @@ Changes to both branches should be made via pull requests.
 
 1. **Be explicit about feature coverage**: Default async, sync-only, and combined builds must compile when touched
 2. **Test each configuration**: Run tests for default, sync-only, and `--all-features`
-3. **Follow module structure**: Use the common pattern for shared logic between sync/async
+3. **Follow module structure**: Client methods live as `impl Client` blocks in domain modules (e.g., `accounts/sync.rs`), not in `client/sync.rs` or `client/async.rs`. Use `common/` for shared logic between sync/async
 4. **Minimal comments**: Keep comments concise, avoid stating the obvious
-5. **Run quality checks**: Before committing, run `cargo fmt`, `cargo clippy`, `cargo clippy --no-default-features --features sync`, and `cargo clippy --all-features`
+5. **Run quality checks**: Before committing, run `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `cargo clippy --all-targets --features sync -- -D warnings`, and `cargo clippy --all-features`
 6. **Fluent conditional orders**: Use helper functions (`price()`, `time()`, `margin()`, etc.) and method chaining (`.condition()`, `.and_condition()`, `.or_condition()`) for building conditional orders. See [docs/order-types.md](docs/order-types.md#conditional-orders-with-conditions) and [docs/api-patterns.md](docs/api-patterns.md#conditional-order-builder-pattern) for details
 7. **Don't repeat code**: Extract repeated logic to `common/`; use shared helpers like `request_helpers`
 8. **Single responsibility**: One responsibility per function/module; split orchestration from business logic
@@ -59,8 +59,8 @@ See [docs/code-style.md](docs/code-style.md#design-principles) for detailed desi
 cargo fmt
 
 # Run clippy (cover every configuration)
-cargo clippy
-cargo clippy --no-default-features --features sync
+cargo clippy --all-targets -- -D warnings
+cargo clippy --all-targets --features sync -- -D warnings
 cargo clippy --all-features
 
 # Run all tests

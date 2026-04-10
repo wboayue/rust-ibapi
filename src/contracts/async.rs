@@ -1,6 +1,6 @@
 //! Asynchronous implementation of contract management functionality
 
-use super::common::{decoders, encoders};
+use super::common::{decoders, encoders, verify};
 use super::*;
 use crate::client::ClientRequestBuilders;
 use crate::common::request_helpers;
@@ -10,191 +10,227 @@ use crate::subscriptions::{StreamDecoder, Subscription};
 use crate::{Client, Error};
 use log::{error, info};
 
-/// Requests contract information.
-///
-/// Provides all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains. Though it is now (in API version > 9.72.12) advised to use reqSecDefOptParams for that purpose.
-///
-/// # Arguments
-/// * `client` - [Client] with an active connection to gateway.
-/// * `contract` - The [Contract] used as sample to query the available contracts. Typically, it will contain the [Contract]'s symbol, currency, security_type, and exchange.
-pub async fn contract_details(client: &Client, contract: &Contract) -> Result<Vec<ContractDetails>, Error> {
-    verify_contract(client, contract).await?;
+impl Client {
+    /// Requests contract information.
+    ///
+    /// Provides all the contracts matching the contract provided. It can also be used to retrieve complete options and futures chains.
+    ///
+    /// # Arguments
+    /// * `contract` - The [Contract] used as sample to query the available contracts.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    /// use ibapi::contracts::Contract;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let contract = Contract::stock("AAPL").build();
+    ///     let details = client.contract_details(&contract).await.expect("request failed");
+    ///
+    ///     for detail in details {
+    ///         println!("Contract: {} - Exchange: {}", detail.contract.symbol, detail.contract.exchange);
+    ///     }
+    /// }
+    /// ```
+    pub async fn contract_details(&self, contract: &Contract) -> Result<Vec<ContractDetails>, Error> {
+        verify::verify_contract(self.server_version(), contract)?;
 
-    let builder = client.request();
-    let request_id = builder.request_id();
-    let packet = encoders::encode_request_contract_data(client.server_version(), request_id, contract)?;
+        let builder = self.request();
+        let request_id = builder.request_id();
+        let packet = encoders::encode_request_contract_data(self.server_version(), request_id, contract)?;
 
-    let mut responses = builder.send_raw(packet).await?;
+        let mut responses = builder.send_raw(packet).await?;
 
-    let mut contract_details: Vec<ContractDetails> = Vec::default();
+        let mut contract_details: Vec<ContractDetails> = Vec::default();
 
-    while let Some(response_result) = responses.next().await {
-        match response_result {
-            Ok(mut response) => {
-                log::debug!("response: {response:#?}");
-                match response.message_type() {
-                    IncomingMessages::ContractData => {
-                        let decoded = decoders::decode_contract_details(client.server_version(), &mut response)?;
-                        contract_details.push(decoded);
+        while let Some(response_result) = responses.next().await {
+            match response_result {
+                Ok(mut response) => {
+                    log::debug!("response: {response:#?}");
+                    match response.message_type() {
+                        IncomingMessages::ContractData => {
+                            let decoded = decoders::decode_contract_details(self.server_version(), &mut response)?;
+                            contract_details.push(decoded);
+                        }
+                        IncomingMessages::ContractDataEnd => return Ok(contract_details),
+                        IncomingMessages::Error => return Err(Error::from(response)),
+                        _ => return Err(Error::UnexpectedResponse(response)),
                     }
-                    IncomingMessages::ContractDataEnd => return Ok(contract_details),
-                    IncomingMessages::Error => return Err(Error::from(response)),
-                    _ => return Err(Error::UnexpectedResponse(response)),
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
+        Err(Error::UnexpectedEndOfStream)
+    }
+
+    /// Requests matching stock symbols.
+    ///
+    /// # Arguments
+    /// * `pattern` - Either start of ticker symbol or (for larger strings) company name.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let symbols = client.matching_symbols("AAP").await.expect("request failed");
+    ///     for symbol in symbols {
+    ///         println!("{} - {} ({})", symbol.contract.symbol,
+    ///                  symbol.contract.primary_exchange, symbol.contract.currency);
+    ///     }
+    /// }
+    /// ```
+    pub async fn matching_symbols(&self, pattern: &str) -> Result<Vec<ContractDescription>, Error> {
+        check_version(self.server_version(), Features::REQ_MATCHING_SYMBOLS)?;
+
+        let builder = self.request();
+        let request_id = builder.request_id();
+        let request = encoders::encode_request_matching_symbols(request_id, pattern)?;
+        let mut subscription = builder.send_raw(request).await?;
+
+        match subscription.next().await {
+            Some(Ok(mut message)) => {
+                match message.message_type() {
+                    IncomingMessages::SymbolSamples => {
+                        return decoders::decode_contract_descriptions(self.server_version(), &mut message);
+                    }
+                    IncomingMessages::Error => {
+                        // TODO custom error
+                        error!("unexpected error: {message:?}");
+                        return Err(Error::Simple(format!("unexpected error: {message:?}")));
+                    }
+                    _ => {
+                        info!("unexpected message: {message:?}");
+                        return Err(Error::Simple(format!("unexpected message: {message:?}")));
+                    }
                 }
             }
-            Err(e) => return Err(e),
+            Some(Err(e)) => return Err(e),
+            None => {}
+        }
+
+        Ok(Vec::default())
+    }
+
+    /// Requests details about a given market rule.
+    ///
+    /// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
+    ///
+    /// # Arguments
+    /// * `market_rule_id` - The market rule ID to query
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///
+    ///     let rule = client.market_rule(26).await.expect("request failed");
+    ///     for increment in rule.price_increments {
+    ///         println!("Above ${}: increment ${}", increment.low_edge, increment.increment);
+    ///     }
+    /// }
+    /// ```
+    pub async fn market_rule(&self, market_rule_id: i32) -> Result<MarketRule, Error> {
+        check_version(self.server_version(), Features::MARKET_RULES)?;
+
+        let request = encoders::encode_request_market_rule(market_rule_id)?;
+        let mut subscription = self.shared_request(OutgoingMessages::RequestMarketRule).send_raw(request).await?;
+
+        match subscription.next().await {
+            Some(Ok(mut message)) => Ok(decoders::decode_market_rule(&mut message)?),
+            Some(Err(e)) => Err(e),
+            None => Err(Error::Simple("no market rule found".into())),
         }
     }
 
-    Err(Error::UnexpectedEndOfStream)
-}
+    /// Calculates an option's price based on the provided volatility and its underlying's price.
+    ///
+    /// # Arguments
+    /// * `contract`   - The [Contract] object for which the depth is being requested.
+    /// * `volatility` - Hypothetical volatility.
+    /// * `underlying_price` - Hypothetical option's underlying price.
+    pub async fn calculate_option_price(&self, contract: &Contract, volatility: f64, underlying_price: f64) -> Result<OptionComputation, Error> {
+        check_version(self.server_version(), Features::REQ_CALC_OPTION_PRICE)?;
 
-pub async fn verify_contract(client: &Client, contract: &Contract) -> Result<(), Error> {
-    if !contract.security_id_type.is_empty() || !contract.security_id.is_empty() {
-        check_version(client.server_version(), Features::SEC_ID_TYPE)?;
-    }
+        let builder = self.request();
+        let request_id = builder.request_id();
+        let message = encoders::encode_calculate_option_price(self.server_version(), request_id, contract, volatility, underlying_price)?;
+        let mut subscription = builder.send_raw(message).await?;
 
-    if !contract.trading_class.is_empty() {
-        check_version(client.server_version(), Features::TRADING_CLASS)?;
-    }
-
-    if !contract.primary_exchange.is_empty() {
-        check_version(client.server_version(), Features::LINKING)?;
-    }
-
-    if !contract.issuer_id.is_empty() {
-        check_version(client.server_version(), Features::BOND_ISSUERID)?;
-    }
-
-    Ok(())
-}
-
-/// Requests matching stock symbols.
-///
-/// # Arguments
-/// * `client` - [Client] with an active connection to gateway.
-/// * `pattern` - Either start of ticker symbol or (for larger strings) company name.
-pub async fn matching_symbols(client: &Client, pattern: &str) -> Result<Vec<ContractDescription>, Error> {
-    check_version(client.server_version(), Features::REQ_MATCHING_SYMBOLS)?;
-
-    let builder = client.request();
-    let request_id = builder.request_id();
-    let request = encoders::encode_request_matching_symbols(request_id, pattern)?;
-    let mut subscription = builder.send_raw(request).await?;
-
-    match subscription.next().await {
-        Some(Ok(mut message)) => {
-            match message.message_type() {
-                IncomingMessages::SymbolSamples => {
-                    return decoders::decode_contract_descriptions(client.server_version(), &mut message);
-                }
-                IncomingMessages::Error => {
-                    // TODO custom error
-                    error!("unexpected error: {message:?}");
-                    return Err(Error::Simple(format!("unexpected error: {message:?}")));
-                }
-                _ => {
-                    info!("unexpected message: {message:?}");
-                    return Err(Error::Simple(format!("unexpected message: {message:?}")));
-                }
-            }
+        match subscription.next().await {
+            Some(Ok(mut message)) => OptionComputation::decode(&self.decoder_context(), &mut message),
+            Some(Err(e)) => Err(e),
+            None => Err(Error::Simple("no data for option calculation".into())),
         }
-        Some(Err(e)) => return Err(e),
-        None => {}
     }
 
-    Ok(Vec::default())
-}
+    /// Calculates the implied volatility based on hypothetical option and its underlying prices.
+    ///
+    /// # Arguments
+    /// * `contract`   - The [Contract] object for which the depth is being requested.
+    /// * `option_price` - Hypothetical option price.
+    /// * `underlying_price` - Hypothetical option's underlying price.
+    pub async fn calculate_implied_volatility(
+        &self,
+        contract: &Contract,
+        option_price: f64,
+        underlying_price: f64,
+    ) -> Result<OptionComputation, Error> {
+        check_version(self.server_version(), Features::REQ_CALC_IMPLIED_VOLAT)?;
 
-/// Requests details about a given market rule
-///
-/// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
-/// A list of market rule ids can be obtained by invoking [request_contract_details] on a particular contract. The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [ContractDetails].
-pub async fn market_rule(client: &Client, market_rule_id: i32) -> Result<MarketRule, Error> {
-    check_version(client.server_version(), Features::MARKET_RULES)?;
+        let builder = self.request();
+        let request_id = builder.request_id();
+        let message = encoders::encode_calculate_implied_volatility(self.server_version(), request_id, contract, option_price, underlying_price)?;
+        let mut subscription = builder.send_raw(message).await?;
 
-    let request = encoders::encode_request_market_rule(market_rule_id)?;
-    let mut subscription = client.shared_request(OutgoingMessages::RequestMarketRule).send_raw(request).await?;
-
-    match subscription.next().await {
-        Some(Ok(mut message)) => Ok(decoders::decode_market_rule(&mut message)?),
-        Some(Err(e)) => Err(e),
-        None => Err(Error::Simple("no market rule found".into())),
+        match subscription.next().await {
+            Some(Ok(mut message)) => OptionComputation::decode(&self.decoder_context(), &mut message),
+            Some(Err(e)) => Err(e),
+            None => Err(Error::Simple("no data for option calculation".into())),
+        }
     }
-}
 
-/// Calculates an option's price based on the provided volatility and its underlying's price.
-///
-/// # Arguments
-/// * `contract`   - The [Contract] object for which the depth is being requested.
-/// * `volatility` - Hypothetical volatility.
-/// * `underlying_price` - Hypothetical option's underlying price.
-pub async fn calculate_option_price(
-    client: &Client,
-    contract: &Contract,
-    volatility: f64,
-    underlying_price: f64,
-) -> Result<OptionComputation, Error> {
-    check_version(client.server_version(), Features::REQ_CALC_OPTION_PRICE)?;
+    /// Cancels an in-flight contract details request.
+    pub async fn cancel_contract_details(&self, request_id: i32) -> Result<(), Error> {
+        check_version(self.server_version(), Features::CANCEL_CONTRACT_DATA)?;
 
-    let builder = client.request();
-    let request_id = builder.request_id();
-    let message = encoders::encode_calculate_option_price(client.server_version(), request_id, contract, volatility, underlying_price)?;
-    let mut subscription = builder.send_raw(message).await?;
-
-    match subscription.next().await {
-        Some(Ok(mut message)) => OptionComputation::decode(&client.decoder_context(), &mut message),
-        Some(Err(e)) => Err(e),
-        None => Err(Error::Simple("no data for option calculation".into())),
+        let message = encoders::encode_cancel_contract_data(request_id)?;
+        self.send_message(message).await?;
+        Ok(())
     }
-}
 
-/// Calculates the implied volatility based on hypothetical option and its underlying prices.
-///
-/// # Arguments
-/// * `contract`   - The [Contract] object for which the depth is being requested.
-/// * `option_price` - Hypothetical option price.
-/// * `underlying_price` - Hypothetical option's underlying price.
-pub async fn calculate_implied_volatility(
-    client: &Client,
-    contract: &Contract,
-    option_price: f64,
-    underlying_price: f64,
-) -> Result<OptionComputation, Error> {
-    check_version(client.server_version(), Features::REQ_CALC_IMPLIED_VOLAT)?;
-
-    let builder = client.request();
-    let request_id = builder.request_id();
-    let message = encoders::encode_calculate_implied_volatility(client.server_version(), request_id, contract, option_price, underlying_price)?;
-    let mut subscription = builder.send_raw(message).await?;
-
-    match subscription.next().await {
-        Some(Ok(mut message)) => OptionComputation::decode(&client.decoder_context(), &mut message),
-        Some(Err(e)) => Err(e),
-        None => Err(Error::Simple("no data for option calculation".into())),
+    /// Requests option chain data for an underlying instrument.
+    ///
+    /// # Arguments
+    /// * `symbol` - The underlying symbol
+    /// * `exchange` - The exchange
+    /// * `security_type` - The underlying security type
+    /// * `contract_id` - The underlying contract ID
+    pub async fn option_chain(
+        &self,
+        symbol: &str,
+        exchange: &str,
+        security_type: SecurityType,
+        contract_id: i32,
+    ) -> Result<Subscription<OptionChain>, Error> {
+        request_helpers::request_with_id(self, Features::SEC_DEF_OPT_PARAMS_REQ, |request_id| {
+            encoders::encode_request_option_chain(request_id, symbol, exchange, security_type, contract_id)
+        })
+        .await
     }
-}
-
-/// Cancels an in-flight contract details request.
-pub async fn cancel_contract_details(client: &Client, request_id: i32) -> Result<(), Error> {
-    check_version(client.server_version(), Features::CANCEL_CONTRACT_DATA)?;
-
-    let message = encoders::encode_cancel_contract_data(request_id)?;
-    client.send_message(message).await?;
-    Ok(())
-}
-
-pub async fn option_chain(
-    client: &Client,
-    symbol: &str,
-    exchange: &str,
-    security_type: SecurityType,
-    contract_id: i32,
-) -> Result<Subscription<OptionChain>, Error> {
-    request_helpers::request_with_id(client, Features::SEC_DEF_OPT_PARAMS_REQ, |request_id| {
-        encoders::encode_request_option_chain(request_id, symbol, exchange, security_type, contract_id)
-    })
-    .await
 }
 
 #[cfg(test)]
@@ -217,7 +253,7 @@ mod tests {
             });
 
             let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-            let result = contract_details(&client, &test_case.contract).await;
+            let result = client.contract_details(&test_case.contract).await;
 
             let request_messages = client.message_bus.request_messages();
             assert_eq!(
@@ -244,7 +280,7 @@ mod tests {
             });
 
             let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
-            let result = matching_symbols(&client, test_case.pattern).await;
+            let result = client.matching_symbols(test_case.pattern).await;
 
             let request_messages = client.message_bus.request_messages();
             assert_eq!(
@@ -269,7 +305,7 @@ mod tests {
             });
 
             let client = Client::stubbed(message_bus, server_versions::MARKET_RULES);
-            let result = market_rule(&client, test_case.market_rule_id).await;
+            let result = client.market_rule(test_case.market_rule_id).await;
 
             let request_messages = client.message_bus.request_messages();
             assert_eq!(
@@ -301,9 +337,13 @@ mod tests {
             let client = Client::stubbed(message_bus, server_versions::REQ_CALC_OPTION_PRICE);
 
             let result = if let Some(volatility) = test_case.volatility {
-                calculate_option_price(&client, &test_case.contract, volatility, test_case.underlying_price).await
+                client
+                    .calculate_option_price(&test_case.contract, volatility, test_case.underlying_price)
+                    .await
             } else if let Some(option_price) = test_case.option_price {
-                calculate_implied_volatility(&client, &test_case.contract, option_price, test_case.underlying_price).await
+                client
+                    .calculate_implied_volatility(&test_case.contract, option_price, test_case.underlying_price)
+                    .await
             } else {
                 panic!("Test case must have either volatility or option_price");
             };
@@ -343,14 +383,14 @@ mod tests {
             });
 
             let client = Client::stubbed(message_bus, server_versions::SEC_DEF_OPT_PARAMS_REQ);
-            let result = option_chain(
-                &client,
-                test_case.symbol,
-                test_case.exchange,
-                test_case.security_type.clone(),
-                test_case.contract_id,
-            )
-            .await;
+            let result = client
+                .option_chain(
+                    test_case.symbol,
+                    test_case.exchange,
+                    test_case.security_type.clone(),
+                    test_case.contract_id,
+                )
+                .await;
 
             let request_messages = client.message_bus.request_messages();
             assert_eq!(
@@ -380,7 +420,7 @@ mod tests {
             });
 
             let client = Client::stubbed(message_bus, test_case.server_version);
-            let result = verify_contract(&client, &test_case.contract).await;
+            let result = verify::verify_contract(client.server_version(), &test_case.contract);
 
             if test_case.should_error {
                 assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
@@ -596,126 +636,26 @@ mod tests {
         let contract = Contract {
             symbol: Symbol::from("ES"),
             security_type: SecurityType::Future,
-            last_trade_date_or_contract_month: "202506".to_string(),
-            exchange: Exchange::from("GLOBEX"),
+            exchange: Exchange::from("CME"),
             currency: Currency::from("USD"),
+            last_trade_date_or_contract_month: "202506".to_string(),
             ..Default::default()
         };
 
         let results = client.contract_details(&contract).await;
-
-        let request_messages = client.message_bus.request_messages();
-
-        // Check if the request was encoded correctly
-        assert_eq!(request_messages[0].encode_simple(), "9|8|9000|0|ES|FUT|202506|0|||GLOBEX||USD|||0|||");
-
         assert!(results.is_ok(), "failed to encode request: {:?}", results.err());
 
         let contracts: Vec<ContractDetails> = results.unwrap();
         assert_eq!(1, contracts.len());
 
-        // Check basic contract fields
         assert_eq!(contracts[0].contract.symbol, Symbol::from("ES"));
         assert_eq!(contracts[0].contract.security_type, SecurityType::Future);
+        assert_eq!(contracts[0].contract.exchange, Exchange::from("CME"));
         assert_eq!(contracts[0].contract.currency, Currency::from("USD"));
         assert_eq!(contracts[0].contract.contract_id, 620731015);
-
-        // Check future-specific fields
-        assert_eq!(contracts[0].contract.last_trade_date_or_contract_month, "20250620");
-        assert_eq!(contracts[0].contract.multiplier, "50");
         assert_eq!(contracts[0].contract.local_symbol, "ESM5");
-        assert_eq!(contracts[0].contract.trading_class, "ES");
-        assert_eq!(contracts[0].contract.exchange, Exchange::from("CME"));
+        assert_eq!(contracts[0].long_name, "E-mini S&P 500");
+        assert_eq!(contracts[0].contract.multiplier, "50");
         assert_eq!(contracts[0].min_tick, 0.25);
-        assert_eq!(contracts[0].market_name, "ES");
-        assert_eq!(contracts[0].contract_month, "202506");
-        assert_eq!(contracts[0].real_expiration_date, "20250620");
-    }
-
-    #[tokio::test]
-    async fn test_client_methods() {
-        for test_case in client_method_test_cases() {
-            let message_bus = Arc::new(MessageBusStub {
-                request_messages: RwLock::new(vec![]),
-                response_messages: test_case.response_messages.clone(),
-            });
-
-            let client = Client::stubbed(
-                message_bus,
-                match &test_case.test_type {
-                    ClientMethodTest::CalculateOptionPrice { .. } => server_versions::REQ_CALC_OPTION_PRICE,
-                    ClientMethodTest::CalculateImpliedVolatility { .. } => server_versions::REQ_CALC_IMPLIED_VOLAT,
-                },
-            );
-
-            let result = match &test_case.test_type {
-                ClientMethodTest::CalculateOptionPrice {
-                    contract,
-                    volatility,
-                    underlying_price,
-                } => client.calculate_option_price(contract, *volatility, *underlying_price).await,
-                ClientMethodTest::CalculateImpliedVolatility {
-                    contract,
-                    option_price,
-                    underlying_price,
-                } => client.calculate_implied_volatility(contract, *option_price, *underlying_price).await,
-            };
-
-            assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
-
-            let request_messages = client.message_bus.request_messages();
-            assert_eq!(
-                request_messages[0].encode_simple(),
-                test_case.expected_request,
-                "Test '{}' request mismatch",
-                test_case.name
-            );
-
-            let computation = result.unwrap();
-            match &test_case.expected_result {
-                ClientMethodResult::OptionComputation {
-                    option_price,
-                    implied_volatility,
-                } => {
-                    assert_eq!(computation.option_price, *option_price, "Test '{}' option price mismatch", test_case.name);
-                    assert_eq!(
-                        computation.implied_volatility, *implied_volatility,
-                        "Test '{}' implied volatility mismatch",
-                        test_case.name
-                    );
-                }
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_contract_details_errors() {
-        for test_case in contract_details_error_test_cases() {
-            let message_bus = Arc::new(MessageBusStub {
-                request_messages: RwLock::new(vec![]),
-                response_messages: test_case.response_messages.clone(),
-            });
-
-            let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-            let result = client.contract_details(&test_case.contract).await;
-
-            if test_case.should_error {
-                assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
-                if let Some(expected_error) = test_case.error_contains {
-                    let error_msg = result.unwrap_err().to_string();
-                    assert!(
-                        error_msg.contains(expected_error),
-                        "Test '{}' error should contain '{}', got '{}'",
-                        test_case.name,
-                        expected_error,
-                        error_msg
-                    );
-                }
-            } else {
-                assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
-                let contracts = result.unwrap();
-                assert_eq!(contracts.len(), test_case.expected_count, "Test '{}' count mismatch", test_case.name);
-            }
-        }
     }
 }

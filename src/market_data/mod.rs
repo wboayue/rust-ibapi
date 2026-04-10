@@ -54,13 +54,16 @@ pub enum MarketDataType {
 }
 
 #[cfg(feature = "async")]
-pub(crate) async fn switch_market_data_type(client: &crate::client::r#async::Client, market_data_type: MarketDataType) -> Result<(), Error> {
-    client.check_server_version(server_versions::REQ_MARKET_DATA_TYPE, "It does not support market data type requests.")?;
+impl crate::client::r#async::Client {
+    /// Switches market data type returned from market data request.
+    pub async fn switch_market_data_type(&self, market_data_type: MarketDataType) -> Result<(), Error> {
+        self.check_server_version(server_versions::REQ_MARKET_DATA_TYPE, "It does not support market data type requests.")?;
 
-    let message = encoders::encode_request_market_data_type(market_data_type)?;
-    client.send_message(message).await?;
+        let message = encoders::encode_request_market_data_type(market_data_type)?;
+        self.send_message(message).await?;
 
-    Ok(())
+        Ok(())
+    }
 }
 
 mod encoders {
@@ -88,7 +91,7 @@ pub(crate) mod blocking {
 
     use super::{encoders, MarketDataType};
 
-    pub(crate) fn switch_market_data_type(client: &Client, market_data_type: MarketDataType) -> Result<(), Error> {
+    pub fn switch_market_data_type(client: &Client, market_data_type: MarketDataType) -> Result<(), Error> {
         client.check_server_version(server_versions::REQ_MARKET_DATA_TYPE, "It does not support market data type requests.")?;
 
         let message = encoders::encode_request_market_data_type(market_data_type)?;

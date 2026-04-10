@@ -60,24 +60,42 @@ impl IntoIterator for DisplayGroupSubscription {
     }
 }
 
-/// Subscribes to display group events for the specified group.
-///
-/// Display Groups are a TWS-only feature (not available in IB Gateway).
-/// Returns a [`DisplayGroupSubscription`] that receives updates when the user changes
-/// the displayed contract in TWS, and supports [`update()`](DisplayGroupSubscription::update)
-/// to change the displayed contract programmatically.
-///
-/// # Arguments
-/// * `client` - The connected client
-/// * `group_id` - The ID of the group to subscribe to (1-9)
-pub fn subscribe_to_group_events(client: &Client, group_id: i32) -> Result<DisplayGroupSubscription, Error> {
-    let builder = client.request();
-    let request = encoders::encode_subscribe_to_group_events(builder.request_id(), group_id)?;
-    let inner = builder.send(request)?;
-    Ok(DisplayGroupSubscription {
-        inner,
-        message_bus: client.message_bus.clone(),
-    })
+impl Client {
+    /// Subscribes to display group events for the specified group.
+    ///
+    /// Display Groups are a TWS-only feature (not available in IB Gateway).
+    /// They allow organizing contracts into color-coded groups in the TWS UI.
+    /// When subscribed, you receive updates whenever the user changes the contract
+    /// displayed in that group within TWS.
+    ///
+    /// # Arguments
+    /// * `group_id` - The ID of the group to subscribe to (1-9)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:7497", 100).expect("connection failed");
+    ///
+    /// let subscription = client.subscribe_to_group_events(1).expect("subscription failed");
+    ///
+    /// // Update the displayed contract
+    /// subscription.update("265598@SMART").expect("update failed");
+    ///
+    /// for event in &subscription {
+    ///     println!("group event: {:?}", event);
+    /// }
+    /// ```
+    pub fn subscribe_to_group_events(&self, group_id: i32) -> Result<DisplayGroupSubscription, Error> {
+        let builder = self.request();
+        let request = encoders::encode_subscribe_to_group_events(builder.request_id(), group_id)?;
+        let inner = builder.send(request)?;
+        Ok(DisplayGroupSubscription {
+            inner,
+            message_bus: self.message_bus.clone(),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -96,7 +114,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), 176);
 
-        let subscription = subscribe_to_group_events(&client, 1).expect("failed to subscribe");
+        let subscription = client.subscribe_to_group_events(1).expect("failed to subscribe");
         subscription.update("265598@SMART").expect("update failed");
 
         let requests = message_bus.request_messages.read().unwrap();

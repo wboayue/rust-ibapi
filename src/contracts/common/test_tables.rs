@@ -456,6 +456,7 @@ pub fn cancel_message_test_cases() -> Vec<CancelMessageTestCase> {
     ]
 }
 
+#[cfg(feature = "sync")]
 /// Test case for client method tests (tests that use the Client convenience methods)
 pub struct ClientMethodTestCase {
     pub name: &'static str,
@@ -465,6 +466,7 @@ pub struct ClientMethodTestCase {
     pub expected_result: ClientMethodResult,
 }
 
+#[cfg(feature = "sync")]
 pub enum ClientMethodTest {
     CalculateOptionPrice {
         contract: Contract,
@@ -478,6 +480,7 @@ pub enum ClientMethodTest {
     },
 }
 
+#[cfg(feature = "sync")]
 pub enum ClientMethodResult {
     OptionComputation {
         option_price: Option<f64>,
@@ -485,6 +488,7 @@ pub enum ClientMethodResult {
     },
 }
 
+#[cfg(feature = "sync")]
 /// Test cases for client method tests
 pub fn client_method_test_cases() -> Vec<ClientMethodTestCase> {
     vec![
@@ -519,6 +523,7 @@ pub fn client_method_test_cases() -> Vec<ClientMethodTestCase> {
     ]
 }
 
+#[cfg(feature = "sync")]
 /// Test case for contract details error handling
 pub struct ContractDetailsErrorTestCase {
     pub name: &'static str,
@@ -529,6 +534,7 @@ pub struct ContractDetailsErrorTestCase {
     pub expected_count: usize,
 }
 
+#[cfg(feature = "sync")]
 /// Test cases for contract details error handling
 pub fn contract_details_error_test_cases() -> Vec<ContractDetailsErrorTestCase> {
     vec![

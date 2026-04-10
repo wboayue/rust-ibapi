@@ -20,98 +20,521 @@ use super::{
 };
 use crate::market_data::TradingHours;
 
-// Returns the timestamp of earliest available historical data for a contract and data type.
-pub(crate) fn head_timestamp(
-    client: &Client,
-    contract: &Contract,
-    what_to_show: WhatToShow,
-    trading_hours: TradingHours,
-) -> Result<OffsetDateTime, Error> {
-    check_version(client.server_version(), Features::HEAD_TIMESTAMP)?;
+impl Client {
+    /// Returns the timestamp of earliest available historical data for a contract and data type.
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::market_data::historical::{self, WhatToShow};
+    /// use ibapi::market_data::TradingHours;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("MSFT").build();
+    /// let what_to_show = WhatToShow::Trades;
+    /// let trading_hours = TradingHours::Regular;
+    ///
+    /// let result = client.head_timestamp(&contract, what_to_show, trading_hours).expect("head timestamp failed");
+    ///
+    /// print!("head_timestamp: {result:?}");
+    /// ```
+    pub fn head_timestamp(&self, contract: &Contract, what_to_show: WhatToShow, trading_hours: TradingHours) -> Result<OffsetDateTime, Error> {
+        check_version(self.server_version(), Features::HEAD_TIMESTAMP)?;
 
-    let builder = client.request();
-    let request = encoders::encode_request_head_timestamp(builder.request_id(), contract, what_to_show, trading_hours.use_rth())?;
-    let subscription = builder.send_raw(request)?;
+        let builder = self.request();
+        let request = encoders::encode_request_head_timestamp(builder.request_id(), contract, what_to_show, trading_hours.use_rth())?;
+        let subscription = builder.send_raw(request)?;
 
-    match subscription.next() {
-        Some(Ok(mut message)) if message.message_type() == IncomingMessages::HeadTimestamp => {
-            Ok(decoders::decode_head_timestamp(&mut message, client.time_zone())?)
+        match subscription.next() {
+            Some(Ok(mut message)) if message.message_type() == IncomingMessages::HeadTimestamp => {
+                Ok(decoders::decode_head_timestamp(&mut message, self.time_zone())?)
+            }
+            Some(Ok(message)) => Err(Error::UnexpectedResponse(message)),
+            Some(Err(Error::ConnectionReset)) => self.head_timestamp(contract, what_to_show, trading_hours),
+            Some(Err(e)) => Err(e),
+            None => Err(Error::UnexpectedEndOfStream),
         }
-        Some(Ok(message)) => Err(Error::UnexpectedResponse(message)),
-        Some(Err(Error::ConnectionReset)) => head_timestamp(client, contract, what_to_show, trading_hours),
-        Some(Err(e)) => Err(e),
-        None => Err(Error::UnexpectedEndOfStream),
-    }
-}
-
-/// Requests historical data for a contract.
-///
-/// # See Also
-/// * [TWS API Documentation](https://interactivebrokers.github.io/tws-api/historical_bars.html#hd_duration)
-/// * IB also recommends [IBKR Campus](https://ibkrcampus.com/ibkr-api-page/trader-workstation-api/)
-pub(crate) fn historical_data(
-    client: &Client,
-    contract: &Contract,
-    end_date: Option<OffsetDateTime>,
-    duration: Duration,
-    bar_size: BarSize,
-    what_to_show: Option<WhatToShow>,
-    trading_hours: TradingHours,
-) -> Result<HistoricalData, Error> {
-    if !contract.trading_class.is_empty() || contract.contract_id > 0 {
-        check_version(client.server_version(), Features::TRADING_CLASS)?;
     }
 
-    if what_to_show == Some(WhatToShow::Schedule) {
-        check_version(client.server_version(), Features::HISTORICAL_SCHEDULE)?;
+    /// Requests interval of historical data ending at specified time for [Contract].
+    ///
+    /// # Arguments
+    /// * `contract`     - [Contract] to retrieve [HistoricalData] for.
+    /// * `interval_end` - optional end date of interval to retrieve [HistoricalData] for. If `None` current time or last trading of contract is implied.
+    /// * `duration`     - duration of interval to retrieve [HistoricalData] for.
+    /// * `bar_size`     - [BarSize] to return.
+    /// * `what_to_show` - requested bar type: [WhatToShow].
+    /// * `trading_hours` - Use [TradingHours::Regular] for data generated only during regular trading hours, or [TradingHours::Extended] to include data from outside regular trading hours.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    ///
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::market_data::historical::{BarSize, ToDuration, WhatToShow};
+    /// use ibapi::market_data::TradingHours;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("TSLA").build();
+    ///
+    /// let historical_data = client
+    ///     .historical_data(&contract, Some(datetime!(2023-04-15 0:00 UTC)), 7.days(), BarSize::Day, WhatToShow::Trades, TradingHours::Regular)
+    ///     .expect("historical data request failed");
+    ///
+    /// println!("start_date: {}, end_date: {}", historical_data.start, historical_data.end);
+    ///
+    /// for bar in &historical_data.bars {
+    ///     println!("{bar:?}");
+    /// }
+    /// ```
+    pub fn historical_data(
+        &self,
+        contract: &Contract,
+        interval_end: Option<OffsetDateTime>,
+        duration: Duration,
+        bar_size: BarSize,
+        what_to_show: WhatToShow,
+        trading_hours: TradingHours,
+    ) -> Result<HistoricalData, Error> {
+        if !contract.trading_class.is_empty() || contract.contract_id > 0 {
+            check_version(self.server_version(), Features::TRADING_CLASS)?;
+        }
+
+        if what_to_show == WhatToShow::Schedule {
+            check_version(self.server_version(), Features::HISTORICAL_SCHEDULE)?;
+        }
+
+        if interval_end.is_some() && what_to_show == WhatToShow::AdjustedLast {
+            return Err(Error::InvalidArgument(
+                "end_date must be None when requesting WhatToShow::AdjustedLast.".into(),
+            ));
+        }
+
+        for _ in 0..MAX_RETRIES {
+            let builder = self.request();
+            let request = encoders::encode_request_historical_data(
+                self.server_version(),
+                builder.request_id(),
+                contract,
+                interval_end,
+                duration,
+                bar_size,
+                Some(what_to_show),
+                trading_hours.use_rth(),
+                false,
+                Vec::<crate::contracts::TagValue>::default(),
+            )?;
+
+            let subscription = builder.send_raw(request)?;
+
+            match subscription.next() {
+                Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalData => {
+                    let mut data = decoders::decode_historical_data(self.server_version, time_zone(self), &mut message)?;
+
+                    if self.server_version >= crate::server_versions::HISTORICAL_DATA_END {
+                        if let Some(Ok(mut end_msg)) = subscription.next() {
+                            let (start, end) = decoders::decode_historical_data_end(self.server_version, time_zone(self), &mut end_msg)?;
+                            data.start = start;
+                            data.end = end;
+                        }
+                    }
+
+                    return Ok(data);
+                }
+                Some(Ok(message)) if message.message_type() == IncomingMessages::Error => return Err(Error::from(message)),
+                Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
+                Some(Err(Error::ConnectionReset)) => {}
+                Some(Err(e)) => return Err(e),
+                None => return Err(Error::UnexpectedEndOfStream),
+            }
+        }
+
+        Err(Error::ConnectionReset)
     }
 
-    if end_date.is_some() && what_to_show == Some(WhatToShow::AdjustedLast) {
-        return Err(Error::InvalidArgument(
-            "end_date must be None when requesting WhatToShow::AdjustedLast.".into(),
-        ));
-    }
+    /// Requests historical data with optional streaming updates.
+    ///
+    /// This method returns a subscription that first yields the initial historical bars.
+    /// When `keep_up_to_date` is `true`, it continues to yield streaming updates for
+    /// the current bar as it builds. IBKR sends updated bars every ~4-6 seconds until
+    /// the bar completes.
+    ///
+    /// # Arguments
+    /// * `contract` - Contract object that is subject of query
+    /// * `duration` - The amount of time for which the data needs to be retrieved
+    /// * `bar_size` - The bar size (resolution)
+    /// * `what_to_show` - The type of data to retrieve (Trades, MidPoint, etc.)
+    /// * `trading_hours` - Regular trading hours only, or include extended hours
+    /// * `keep_up_to_date` - If true, continue receiving streaming updates after initial data
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::market_data::historical::{ToDuration, HistoricalBarUpdate};
+    /// use ibapi::prelude::{HistoricalBarSize, HistoricalWhatToShow, TradingHours};
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// let contract = Contract::stock("SPY").build();
+    ///
+    /// let subscription = client
+    ///     .historical_data_streaming(
+    ///         &contract, 3.days(), HistoricalBarSize::Min15,
+    ///         Some(HistoricalWhatToShow::Trades), TradingHours::Extended, true
+    ///     )
+    ///     .expect("streaming request failed");
+    ///
+    /// while let Some(update) = subscription.next() {
+    ///     match update {
+    ///         HistoricalBarUpdate::Historical(data) => println!("Initial bars: {}", data.bars.len()),
+    ///         HistoricalBarUpdate::Update(bar) => println!("Streaming update: {:?}", bar),
+    ///         HistoricalBarUpdate::End { start, end } => println!("Stream ended: {} - {}", start, end),
+    ///     }
+    /// }
+    /// ```
+    pub fn historical_data_streaming(
+        &self,
+        contract: &Contract,
+        duration: Duration,
+        bar_size: BarSize,
+        what_to_show: Option<WhatToShow>,
+        trading_hours: TradingHours,
+        keep_up_to_date: bool,
+    ) -> Result<HistoricalDataStreamingSubscription, Error> {
+        if !contract.trading_class.is_empty() || contract.contract_id > 0 {
+            check_version(self.server_version(), Features::TRADING_CLASS)?;
+        }
 
-    for _ in 0..MAX_RETRIES {
-        let builder = client.request();
+        // Note: end_date must be None when keepUpToDate=true (IBKR requirement)
+        let builder = self.request();
         let request = encoders::encode_request_historical_data(
-            client.server_version(),
+            self.server_version(),
             builder.request_id(),
             contract,
-            end_date,
+            None, // end_date must be None for keepUpToDate
             duration,
             bar_size,
             what_to_show,
             trading_hours.use_rth(),
-            false,
+            keep_up_to_date,
             Vec::<crate::contracts::TagValue>::default(),
         )?;
 
+        let request_id = builder.request_id();
         let subscription = builder.send_raw(request)?;
 
-        match subscription.next() {
-            Some(Ok(mut message)) if message.message_type() == IncomingMessages::HistoricalData => {
-                let mut data = decoders::decode_historical_data(client.server_version, time_zone(client), &mut message)?;
+        // Get the timezone directly
+        let tz: &'static Tz = self.time_zone.unwrap_or_else(|| {
+            warn!("server timezone unknown. assuming UTC, but that may be incorrect!");
+            time_tz::timezones::db::UTC
+        });
 
-                if client.server_version >= crate::server_versions::HISTORICAL_DATA_END {
-                    if let Some(Ok(mut end_msg)) = subscription.next() {
-                        let (start, end) = decoders::decode_historical_data_end(client.server_version, time_zone(client), &mut end_msg)?;
-                        data.start = start;
-                        data.end = end;
-                    }
-                }
-
-                return Ok(data);
-            }
-            Some(Ok(message)) if message.message_type() == IncomingMessages::Error => return Err(Error::from(message)),
-            Some(Ok(message)) => return Err(Error::UnexpectedResponse(message)),
-            Some(Err(Error::ConnectionReset)) => {}
-            Some(Err(e)) => return Err(e),
-            None => return Err(Error::UnexpectedEndOfStream),
-        }
+        Ok(HistoricalDataStreamingSubscription::new(
+            subscription,
+            self.server_version,
+            tz,
+            request_id,
+            self.message_bus.clone(),
+        ))
     }
 
-    Err(Error::ConnectionReset)
+    /// Requests [Schedule] for an interval of given duration
+    /// ending at specified date.
+    ///
+    /// # Arguments
+    /// * `contract`     - [Contract] to retrieve [Schedule] for.
+    /// * `interval_end` - end date of interval to retrieve [Schedule] for.
+    /// * `duration`     - duration of interval to retrieve [Schedule] for.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::market_data::historical::ToDuration;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("GM").build();
+    ///
+    /// let historical_data = client
+    ///     .historical_schedules(&contract, datetime!(2023-04-15 0:00 UTC), 30.days())
+    ///     .expect("historical schedule request failed");
+    ///
+    /// println!("start: {:?}, end: {:?}", historical_data.start, historical_data.end);
+    ///
+    /// for session in &historical_data.sessions {
+    ///     println!("{session:?}");
+    /// }
+    /// ```
+    pub fn historical_schedules(&self, contract: &Contract, interval_end: OffsetDateTime, duration: Duration) -> Result<Schedule, Error> {
+        historical_schedule(self, contract, Some(interval_end), duration)
+    }
+
+    /// Requests [Schedule] for interval ending at current time.
+    ///
+    /// # Arguments
+    /// * `contract` - [Contract] to retrieve [Schedule] for.
+    /// * `duration` - [Duration] for interval to retrieve [Schedule] for.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::market_data::historical::ToDuration;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("GM").build();
+    ///
+    /// let historical_data = client
+    ///     .historical_schedules_ending_now(&contract, 30.days())
+    ///     .expect("historical schedule request failed");
+    ///
+    /// println!("start: {:?}, end: {:?}", historical_data.start, historical_data.end);
+    ///
+    /// for session in &historical_data.sessions {
+    ///     println!("{session:?}");
+    /// }
+    /// ```
+    pub fn historical_schedules_ending_now(&self, contract: &Contract, duration: Duration) -> Result<Schedule, Error> {
+        historical_schedule(self, contract, None, duration)
+    }
+
+    /// Requests historical time & sales data (Bid/Ask) for an instrument.
+    ///
+    /// # Arguments
+    /// * `contract` - [Contract] object that is subject of query
+    /// * `start`    - Start time. Either start time or end time is specified.
+    /// * `end`      - End time. Either start time or end time is specified.
+    /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
+    /// * `trading_hours`   - Regular trading hours only, or include extended hours
+    /// * `ignore_size`     - A filter only used when the source price is Bid_Ask
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    ///
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::market_data::TradingHours;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("TSLA").build();
+    ///
+    /// let ticks = client
+    ///     .historical_ticks_bid_ask(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, TradingHours::Regular, false)
+    ///     .expect("historical ticks request failed");
+    ///
+    /// for tick in ticks {
+    ///     println!("{tick:?}");
+    /// }
+    /// ```
+    pub fn historical_ticks_bid_ask(
+        &self,
+        contract: &Contract,
+        start: Option<OffsetDateTime>,
+        end: Option<OffsetDateTime>,
+        number_of_ticks: i32,
+        trading_hours: TradingHours,
+        ignore_size: bool,
+    ) -> Result<TickSubscription<TickBidAsk>, Error> {
+        check_version(self.server_version(), Features::HISTORICAL_TICKS)?;
+
+        let builder = self.request();
+        let request = encoders::encode_request_historical_ticks(
+            builder.request_id(),
+            contract,
+            start,
+            end,
+            number_of_ticks,
+            WhatToShow::BidAsk,
+            trading_hours.use_rth(),
+            ignore_size,
+        )?;
+        let subscription = builder.send_raw(request)?;
+
+        Ok(TickSubscription::new(subscription))
+    }
+
+    /// Requests historical time & sales data (Midpoint) for an instrument.
+    ///
+    /// # Arguments
+    /// * `contract` - [Contract] object that is subject of query
+    /// * `start`    - Start time. Either start time or end time is specified.
+    /// * `end`      - End time. Either start time or end time is specified.
+    /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
+    /// * `trading_hours`   - Regular trading hours only, or include extended hours
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    ///
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::market_data::TradingHours;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("TSLA").build();
+    ///
+    /// let ticks = client
+    ///     .historical_ticks_mid_point(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, TradingHours::Regular)
+    ///     .expect("historical ticks request failed");
+    ///
+    /// for tick in ticks {
+    ///     println!("{tick:?}");
+    /// }
+    /// ```
+    pub fn historical_ticks_mid_point(
+        &self,
+        contract: &Contract,
+        start: Option<OffsetDateTime>,
+        end: Option<OffsetDateTime>,
+        number_of_ticks: i32,
+        trading_hours: TradingHours,
+    ) -> Result<TickSubscription<TickMidpoint>, Error> {
+        check_version(self.server_version(), Features::HISTORICAL_TICKS)?;
+
+        let builder = self.request();
+        let request = encoders::encode_request_historical_ticks(
+            builder.request_id(),
+            contract,
+            start,
+            end,
+            number_of_ticks,
+            WhatToShow::MidPoint,
+            trading_hours.use_rth(),
+            false,
+        )?;
+        let subscription = builder.send_raw(request)?;
+
+        Ok(TickSubscription::new(subscription))
+    }
+
+    /// Requests historical time & sales data (Trades) for an instrument.
+    ///
+    /// # Arguments
+    /// * `contract` - [Contract] object that is subject of query
+    /// * `start`    - Start time. Either start time or end time is specified.
+    /// * `end`      - End time. Either start time or end time is specified.
+    /// * `number_of_ticks` - Number of distinct data points. Max currently 1000 per request.
+    /// * `trading_hours`   - Regular trading hours only, or include extended hours
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    ///
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::market_data::TradingHours;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("TSLA").build();
+    ///
+    /// let ticks = client
+    ///     .historical_ticks_trade(&contract, Some(datetime!(2023-04-15 0:00 UTC)), None, 100, TradingHours::Regular)
+    ///     .expect("historical ticks request failed");
+    ///
+    /// for tick in ticks {
+    ///     println!("{tick:?}");
+    /// }
+    /// ```
+    pub fn historical_ticks_trade(
+        &self,
+        contract: &Contract,
+        start: Option<OffsetDateTime>,
+        end: Option<OffsetDateTime>,
+        number_of_ticks: i32,
+        trading_hours: TradingHours,
+    ) -> Result<TickSubscription<TickLast>, Error> {
+        check_version(self.server_version(), Features::HISTORICAL_TICKS)?;
+
+        let builder = self.request();
+        let request = encoders::encode_request_historical_ticks(
+            builder.request_id(),
+            contract,
+            start,
+            end,
+            number_of_ticks,
+            WhatToShow::Trades,
+            trading_hours.use_rth(),
+            false,
+        )?;
+        let subscription = builder.send_raw(request)?;
+
+        Ok(TickSubscription::new(subscription))
+    }
+
+    /// Cancels an in-flight historical ticks request.
+    ///
+    /// # Arguments
+    /// * `request_id` - The request ID of the historical ticks subscription to cancel.
+    pub fn cancel_historical_ticks(&self, request_id: i32) -> Result<(), Error> {
+        check_version(self.server_version(), Features::CANCEL_CONTRACT_DATA)?;
+
+        let message = encoders::encode_cancel_historical_ticks(request_id)?;
+        self.send_message(message)?;
+        Ok(())
+    }
+
+    /// Requests data histogram of specified contract.
+    ///
+    /// # Arguments
+    /// * `contract`  - [Contract] to retrieve [Histogram Entries](HistogramEntry) for.
+    /// * `trading_hours` - Regular trading hours only, or include extended hours.
+    /// * `period`    - The time period of each histogram bar (e.g., `BarSize::Day`, `BarSize::Week`, `BarSize::Month`).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use time::macros::datetime;
+    //
+    /// use ibapi::contracts::Contract;
+    /// use ibapi::client::blocking::Client;
+    /// use ibapi::market_data::historical::BarSize;
+    /// use ibapi::market_data::TradingHours;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract = Contract::stock("GM").build();
+    ///
+    /// let histogram = client
+    ///     .histogram_data(&contract, TradingHours::Regular, BarSize::Week)
+    ///     .expect("histogram request failed");
+    ///
+    /// for item in &histogram {
+    ///     println!("{item:?}");
+    /// }
+    /// ```
+    pub fn histogram_data(&self, contract: &Contract, trading_hours: TradingHours, period: BarSize) -> Result<Vec<HistogramEntry>, Error> {
+        check_version(self.server_version(), Features::HISTOGRAM)?;
+
+        loop {
+            let builder = self.request();
+            let request = encoders::encode_request_histogram_data(builder.request_id(), contract, trading_hours.use_rth(), period)?;
+            let subscription = builder.send_raw(request)?;
+
+            match subscription.next() {
+                Some(Ok(mut message)) => return decoders::decode_histogram_data(&mut message),
+                Some(Err(Error::ConnectionReset)) => continue,
+                Some(Err(e)) => return Err(e),
+                None => return Ok(Vec::new()),
+            }
+        }
+    }
 }
 
 pub(crate) fn time_zone(client: &Client) -> &time_tz::Tz {
@@ -123,12 +546,7 @@ pub(crate) fn time_zone(client: &Client) -> &time_tz::Tz {
     }
 }
 
-pub(crate) fn historical_schedule(
-    client: &Client,
-    contract: &Contract,
-    end_date: Option<OffsetDateTime>,
-    duration: Duration,
-) -> Result<Schedule, Error> {
+fn historical_schedule(client: &Client, contract: &Contract, end_date: Option<OffsetDateTime>, duration: Duration) -> Result<Schedule, Error> {
     if !contract.trading_class.is_empty() || contract.contract_id > 0 {
         check_version(client.server_version(), Features::TRADING_CLASS)?;
     }
@@ -164,172 +582,7 @@ pub(crate) fn historical_schedule(
     }
 }
 
-pub(crate) fn historical_ticks_bid_ask(
-    client: &Client,
-    contract: &Contract,
-    start: Option<OffsetDateTime>,
-    end: Option<OffsetDateTime>,
-    number_of_ticks: i32,
-    trading_hours: TradingHours,
-    ignore_size: bool,
-) -> Result<TickSubscription<TickBidAsk>, Error> {
-    check_version(client.server_version(), Features::HISTORICAL_TICKS)?;
-
-    let builder = client.request();
-    let request = encoders::encode_request_historical_ticks(
-        builder.request_id(),
-        contract,
-        start,
-        end,
-        number_of_ticks,
-        WhatToShow::BidAsk,
-        trading_hours.use_rth(),
-        ignore_size,
-    )?;
-    let subscription = builder.send_raw(request)?;
-
-    Ok(TickSubscription::new(subscription))
-}
-
-pub(crate) fn historical_ticks_mid_point(
-    client: &Client,
-    contract: &Contract,
-    start: Option<OffsetDateTime>,
-    end: Option<OffsetDateTime>,
-    number_of_ticks: i32,
-    trading_hours: TradingHours,
-) -> Result<TickSubscription<TickMidpoint>, Error> {
-    check_version(client.server_version(), Features::HISTORICAL_TICKS)?;
-
-    let builder = client.request();
-    let request = encoders::encode_request_historical_ticks(
-        builder.request_id(),
-        contract,
-        start,
-        end,
-        number_of_ticks,
-        WhatToShow::MidPoint,
-        trading_hours.use_rth(),
-        false,
-    )?;
-    let subscription = builder.send_raw(request)?;
-
-    Ok(TickSubscription::new(subscription))
-}
-
-pub(crate) fn historical_ticks_trade(
-    client: &Client,
-    contract: &Contract,
-    start: Option<OffsetDateTime>,
-    end: Option<OffsetDateTime>,
-    number_of_ticks: i32,
-    trading_hours: TradingHours,
-) -> Result<TickSubscription<TickLast>, Error> {
-    check_version(client.server_version(), Features::HISTORICAL_TICKS)?;
-
-    let builder = client.request();
-    let request = encoders::encode_request_historical_ticks(
-        builder.request_id(),
-        contract,
-        start,
-        end,
-        number_of_ticks,
-        WhatToShow::Trades,
-        trading_hours.use_rth(),
-        false,
-    )?;
-    let subscription = builder.send_raw(request)?;
-
-    Ok(TickSubscription::new(subscription))
-}
-
-/// Cancels an in-flight historical ticks request.
-pub(crate) fn cancel_historical_ticks(client: &Client, request_id: i32) -> Result<(), Error> {
-    check_version(client.server_version(), Features::CANCEL_CONTRACT_DATA)?;
-
-    let message = encoders::encode_cancel_historical_ticks(request_id)?;
-    client.send_message(message)?;
-    Ok(())
-}
-
-pub(crate) fn histogram_data(
-    client: &Client,
-    contract: &Contract,
-    trading_hours: TradingHours,
-    period: BarSize,
-) -> Result<Vec<HistogramEntry>, Error> {
-    check_version(client.server_version(), Features::HISTOGRAM)?;
-
-    loop {
-        let builder = client.request();
-        let request = encoders::encode_request_histogram_data(builder.request_id(), contract, trading_hours.use_rth(), period)?;
-        let subscription = builder.send_raw(request)?;
-
-        match subscription.next() {
-            Some(Ok(mut message)) => return decoders::decode_histogram_data(&mut message),
-            Some(Err(Error::ConnectionReset)) => continue,
-            Some(Err(e)) => return Err(e),
-            None => return Ok(Vec::new()),
-        }
-    }
-}
-
 // === Historical Data Streaming with keepUpToDate ===
-
-/// Requests historical data for a contract with optional streaming updates.
-///
-/// When `keep_up_to_date` is `true`, this function requests historical bars and then
-/// continues to receive streaming updates for the current (incomplete) bar. IBKR sends
-/// updates approximately every 4-6 seconds until the bar completes, at which point a
-/// new bar begins.
-///
-/// When `keep_up_to_date` is `false`, only the initial historical data is returned
-/// and the subscription ends after delivering the data.
-pub(crate) fn historical_data_streaming(
-    client: &Client,
-    contract: &Contract,
-    duration: Duration,
-    bar_size: BarSize,
-    what_to_show: Option<WhatToShow>,
-    trading_hours: TradingHours,
-    keep_up_to_date: bool,
-) -> Result<HistoricalDataStreamingSubscription, Error> {
-    if !contract.trading_class.is_empty() || contract.contract_id > 0 {
-        check_version(client.server_version(), Features::TRADING_CLASS)?;
-    }
-
-    // Note: end_date must be None when keepUpToDate=true (IBKR requirement)
-    let builder = client.request();
-    let request = encoders::encode_request_historical_data(
-        client.server_version(),
-        builder.request_id(),
-        contract,
-        None, // end_date must be None for keepUpToDate
-        duration,
-        bar_size,
-        what_to_show,
-        trading_hours.use_rth(),
-        keep_up_to_date,
-        Vec::<crate::contracts::TagValue>::default(),
-    )?;
-
-    let request_id = builder.request_id();
-    let subscription = builder.send_raw(request)?;
-
-    // Get the timezone directly
-    let tz: &'static Tz = client.time_zone.unwrap_or_else(|| {
-        warn!("server timezone unknown. assuming UTC, but that may be incorrect!");
-        time_tz::timezones::db::UTC
-    });
-
-    Ok(HistoricalDataStreamingSubscription::new(
-        subscription,
-        client.server_version,
-        tz,
-        request_id,
-        client.message_bus.clone(),
-    ))
-}
 
 /// Blocking subscription for streaming historical data with keepUpToDate=true.
 ///
@@ -1335,16 +1588,16 @@ mod tests {
 
         let contract = Contract::stock("SPY").build();
 
-        let subscription = historical_data_streaming(
-            &client,
-            &contract,
-            Duration::days(1),
-            BarSize::Hour,
-            Some(WhatToShow::Trades),
-            TradingHours::Regular,
-            true,
-        )
-        .expect("streaming request should succeed");
+        let subscription = client
+            .historical_data_streaming(
+                &contract,
+                Duration::days(1),
+                BarSize::Hour,
+                Some(WhatToShow::Trades),
+                TradingHours::Regular,
+                true,
+            )
+            .expect("streaming request should succeed");
 
         // First: receive initial historical data
         let update1 = subscription.next();
@@ -1391,16 +1644,16 @@ mod tests {
 
         let contract = Contract::stock("SPY").build();
 
-        let subscription = historical_data_streaming(
-            &client,
-            &contract,
-            Duration::days(1),
-            BarSize::Hour,
-            Some(WhatToShow::Trades),
-            TradingHours::Regular,
-            false, // keep_up_to_date = false
-        )
-        .expect("streaming request should succeed");
+        let subscription = client
+            .historical_data_streaming(
+                &contract,
+                Duration::days(1),
+                BarSize::Hour,
+                Some(WhatToShow::Trades),
+                TradingHours::Regular,
+                false, // keep_up_to_date = false
+            )
+            .expect("streaming request should succeed");
 
         // Receive initial historical data
         let update1 = subscription.next();
@@ -1434,16 +1687,16 @@ mod tests {
 
         let contract = Contract::stock("SPY").build();
 
-        let subscription = historical_data_streaming(
-            &client,
-            &contract,
-            Duration::days(1),
-            BarSize::Hour,
-            Some(WhatToShow::Trades),
-            TradingHours::Regular,
-            true,
-        )
-        .expect("streaming request should succeed");
+        let subscription = client
+            .historical_data_streaming(
+                &contract,
+                Duration::days(1),
+                BarSize::Hour,
+                Some(WhatToShow::Trades),
+                TradingHours::Regular,
+                true,
+            )
+            .expect("streaming request should succeed");
 
         // Should return None due to error
         let update = subscription.next();

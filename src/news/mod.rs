@@ -95,16 +95,4 @@ pub struct NewsArticleBody {
     pub article_text: String,
 }
 
-// Re-export API functions based on active feature
-#[cfg(feature = "sync")]
-/// Blocking news data helpers that wrap the synchronous client.
-pub mod blocking {
-    pub(crate) use super::sync::{broad_tape_news, contract_news, historical_news, news_article, news_bulletins, news_providers};
-}
-
-#[cfg(all(feature = "sync", not(feature = "async")))]
-#[allow(unused_imports)]
-pub(crate) use sync::{broad_tape_news, contract_news, historical_news, news_article, news_bulletins, news_providers};
-
-#[cfg(feature = "async")]
-pub(crate) use r#async::{broad_tape_news, contract_news, historical_news, news_article, news_bulletins, news_providers};
+// Async API methods are now on Client directly via news/async.rs

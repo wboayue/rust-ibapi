@@ -553,19 +553,14 @@ impl ToField for Option<WhatToShow> {
     }
 }
 
-// Re-export functions based on active feature
-#[cfg(feature = "sync")]
-/// Blocking historical market data helpers powered by the synchronous transport.
-pub mod blocking {
-    pub(crate) use super::sync::*;
-}
-
 #[cfg(all(feature = "sync", not(feature = "async")))]
 #[allow(unused_imports)]
 pub use sync::*;
 
+// Async API methods are now on Client directly via historical/async.rs
+// Re-export non-function items
 #[cfg(feature = "async")]
-pub use r#async::*;
+pub use r#async::{HistoricalDataStreamingSubscription, TickSubscription};
 
 /// Trait implemented by historical tick types that can decode IB messages.
 pub trait TickDecoder<T> {
@@ -606,8 +601,7 @@ pub use sync::{
     TickSubscriptionTryIter,
 };
 
-#[cfg(feature = "async")]
-pub use r#async::{historical_data_streaming, HistoricalDataStreamingSubscription, TickSubscription};
+// (TickSubscription and HistoricalDataStreamingSubscription already re-exported above)
 
 #[cfg(test)]
 mod tests {

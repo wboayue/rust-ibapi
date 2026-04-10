@@ -106,16 +106,4 @@ pub struct ScannerData {
     pub leg: String,
 }
 
-// Re-export API functions based on active feature
-#[cfg(feature = "sync")]
-/// Blocking scanner APIs layered on top of the synchronous client.
-pub mod blocking {
-    pub(crate) use super::sync::{scanner_parameters, scanner_subscription};
-}
-
-#[cfg(all(feature = "sync", not(feature = "async")))]
-#[allow(unused_imports)]
-pub(crate) use sync::{scanner_parameters, scanner_subscription};
-
-#[cfg(feature = "async")]
-pub(crate) use r#async::{scanner_parameters, scanner_subscription};
+// Async API methods are now on Client directly via scanner/async.rs

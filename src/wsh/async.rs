@@ -11,83 +11,85 @@ use crate::{
 
 use super::{common::decoders, encoders, AutoFill, WshEventData, WshMetadata};
 
-/// Fetch Wall Street Horizon metadata table with retry semantics.
-pub(crate) async fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
-    check_version(client.server_version(), Features::WSHE_CALENDAR)?;
+impl Client {
+    /// Fetch Wall Street Horizon metadata table with retry semantics.
+    pub async fn wsh_metadata(&self) -> Result<WshMetadata, Error> {
+        check_version(self.server_version(), Features::WSHE_CALENDAR)?;
 
-    request_helpers::one_shot_request_with_retry(
-        client,
-        encoders::encode_request_wsh_metadata,
-        |message| decoders::decode_wsh_metadata(message.clone()),
-        || Err(Error::UnexpectedEndOfStream),
-    )
-    .await
-}
-
-/// Fetch WSH event data filtered by contract identifier.
-pub(crate) async fn wsh_event_data_by_contract(
-    client: &Client,
-    contract_id: i32,
-    start_date: Option<Date>,
-    end_date: Option<Date>,
-    limit: Option<i32>,
-    auto_fill: Option<AutoFill>,
-) -> Result<WshEventData, Error> {
-    check_version(client.server_version(), Features::WSHE_CALENDAR)?;
-
-    if auto_fill.is_some() {
-        check_version(client.server_version(), Features::WSH_EVENT_DATA_FILTERS)?;
+        request_helpers::one_shot_request_with_retry(
+            self,
+            encoders::encode_request_wsh_metadata,
+            |message| decoders::decode_wsh_metadata(message.clone()),
+            || Err(Error::UnexpectedEndOfStream),
+        )
+        .await
     }
 
-    if start_date.is_some() || end_date.is_some() || limit.is_some() {
-        check_version(client.server_version(), Features::WSH_EVENT_DATA_FILTERS_DATE)?;
+    /// Fetch WSH event data filtered by contract identifier.
+    pub async fn wsh_event_data_by_contract(
+        &self,
+        contract_id: i32,
+        start_date: Option<Date>,
+        end_date: Option<Date>,
+        limit: Option<i32>,
+        auto_fill: Option<AutoFill>,
+    ) -> Result<WshEventData, Error> {
+        check_version(self.server_version(), Features::WSHE_CALENDAR)?;
+
+        if auto_fill.is_some() {
+            check_version(self.server_version(), Features::WSH_EVENT_DATA_FILTERS)?;
+        }
+
+        if start_date.is_some() || end_date.is_some() || limit.is_some() {
+            check_version(self.server_version(), Features::WSH_EVENT_DATA_FILTERS_DATE)?;
+        }
+
+        let server_version = self.server_version();
+        request_helpers::one_shot_request_with_retry(
+            self,
+            |request_id| {
+                encoders::encode_request_wsh_event_data(
+                    server_version,
+                    request_id,
+                    Some(contract_id),
+                    None,
+                    start_date,
+                    end_date,
+                    limit,
+                    auto_fill,
+                )
+            },
+            |message| decoders::decode_event_data_message(message.clone()),
+            || Err(Error::UnexpectedEndOfStream),
+        )
+        .await
     }
 
-    let server_version = client.server_version();
-    request_helpers::one_shot_request_with_retry(
-        client,
-        |request_id| {
+    /// Subscribe to WSH event data using a filter expression.
+    pub async fn wsh_event_data_by_filter(
+        &self,
+        filter: &str,
+        limit: Option<i32>,
+        auto_fill: Option<AutoFill>,
+    ) -> Result<Subscription<WshEventData>, Error> {
+        if limit.is_some() {
+            check_version(self.server_version(), Features::WSH_EVENT_DATA_FILTERS_DATE)?;
+        }
+
+        request_helpers::request_with_id(self, Features::WSH_EVENT_DATA_FILTERS, |request_id| {
             encoders::encode_request_wsh_event_data(
-                server_version,
+                self.server_version(),
                 request_id,
-                Some(contract_id),
                 None,
-                start_date,
-                end_date,
+                Some(filter),
+                None, // start_date
+                None, // end_date
                 limit,
                 auto_fill,
             )
-        },
-        |message| decoders::decode_event_data_message(message.clone()),
-        || Err(Error::UnexpectedEndOfStream),
-    )
-    .await
-}
-
-/// Subscribe to WSH event data using a filter expression.
-pub(crate) async fn wsh_event_data_by_filter(
-    client: &Client,
-    filter: &str,
-    limit: Option<i32>,
-    auto_fill: Option<AutoFill>,
-) -> Result<Subscription<WshEventData>, Error> {
-    if limit.is_some() {
-        check_version(client.server_version(), Features::WSH_EVENT_DATA_FILTERS_DATE)?;
+        })
+        .await
     }
-
-    request_helpers::request_with_id(client, Features::WSH_EVENT_DATA_FILTERS, |request_id| {
-        encoders::encode_request_wsh_event_data(
-            client.server_version(),
-            request_id,
-            None,
-            Some(filter),
-            None, // start_date
-            None, // end_date
-            limit,
-            auto_fill,
-        )
-    })
-    .await
 }
 
 #[cfg(test)]
@@ -108,7 +110,7 @@ mod tests {
             });
 
             let client = Client::stubbed(message_bus, test_case.server_version);
-            let result = wsh_metadata(&client).await;
+            let result = client.wsh_metadata().await;
 
             match test_case.expected_result {
                 ApiExpectedResult::Success { json } => {
@@ -138,15 +140,15 @@ mod tests {
             });
 
             let client = Client::stubbed(message_bus, test_case.server_version);
-            let result = wsh_event_data_by_contract(
-                &client,
-                test_case.contract_id,
-                test_case.start_date,
-                test_case.end_date,
-                test_case.limit,
-                test_case.auto_fill,
-            )
-            .await;
+            let result = client
+                .wsh_event_data_by_contract(
+                    test_case.contract_id,
+                    test_case.start_date,
+                    test_case.end_date,
+                    test_case.limit,
+                    test_case.auto_fill,
+                )
+                .await;
 
             match test_case.expected_result {
                 ApiExpectedResult::Success { json } => {
@@ -176,7 +178,8 @@ mod tests {
             });
 
             let client = Client::stubbed(message_bus, crate::server_versions::WSH_EVENT_DATA_FILTERS_DATE);
-            let mut subscription = wsh_event_data_by_filter(&client, test_case.filter, test_case.limit, test_case.auto_fill)
+            let mut subscription = client
+                .wsh_event_data_by_filter(test_case.filter, test_case.limit, test_case.auto_fill)
                 .await
                 .unwrap_or_else(|_| panic!("Test '{}' failed to create subscription", test_case.name));
 
@@ -274,17 +277,17 @@ mod tests {
             let result = match test_case.name {
                 "successful filter request with autofill" => {
                     let filter = "filter=value";
-                    let result = wsh_event_data_by_filter(
-                        &client,
-                        filter,
-                        Some(100),
-                        Some(AutoFill {
-                            competitors: true,
-                            portfolio: false,
-                            watchlist: true,
-                        }),
-                    )
-                    .await;
+                    let result = client
+                        .wsh_event_data_by_filter(
+                            filter,
+                            Some(100),
+                            Some(AutoFill {
+                                competitors: true,
+                                portfolio: false,
+                                watchlist: true,
+                            }),
+                        )
+                        .await;
 
                     if result.is_ok() {
                         let request_messages = stub.request_messages();
@@ -294,7 +297,7 @@ mod tests {
                 }
                 "successful filter request without autofill" => {
                     let filter = "filter=value";
-                    let result = wsh_event_data_by_filter(&client, filter, None, None).await;
+                    let result = client.wsh_event_data_by_filter(filter, None, None).await;
 
                     if result.is_ok() {
                         let request_messages = stub.request_messages();
@@ -302,7 +305,7 @@ mod tests {
                     }
                     result
                 }
-                _ => wsh_event_data_by_filter(&client, "filter", None, None).await,
+                _ => client.wsh_event_data_by_filter("filter", None, None).await,
             };
 
             match test_case.expected_result {
@@ -336,17 +339,18 @@ mod tests {
             let client = Client::stubbed(message_bus, test_case.server_version);
 
             let result = if let Some(contract_id) = test_case.contract_id {
-                wsh_event_data_by_contract(
-                    &client,
-                    contract_id,
-                    test_case.start_date,
-                    test_case.end_date,
-                    test_case.limit,
-                    test_case.auto_fill,
-                )
-                .await
+                client
+                    .wsh_event_data_by_contract(
+                        contract_id,
+                        test_case.start_date,
+                        test_case.end_date,
+                        test_case.limit,
+                        test_case.auto_fill,
+                    )
+                    .await
             } else {
-                wsh_event_data_by_filter(&client, "filter", test_case.limit, test_case.auto_fill)
+                client
+                    .wsh_event_data_by_filter("filter", test_case.limit, test_case.auto_fill)
                     .await
                     .map(|_| WshEventData { data_json: "".to_string() })
             };
@@ -377,7 +381,7 @@ mod tests {
             });
 
             let client = Client::stubbed(message_bus, test_case.server_version);
-            let result = wsh_event_data_by_filter(&client, "test_filter", None, None).await;
+            let result = client.wsh_event_data_by_filter("test_filter", None, None).await;
 
             assert!(result.is_ok(), "Test '{}' failed to create subscription", test_case.name);
             let mut subscription = result.unwrap();

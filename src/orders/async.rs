@@ -3,372 +3,186 @@
 use time::OffsetDateTime;
 
 use crate::messages::OutgoingMessages;
-#[cfg(not(feature = "sync"))]
-use crate::messages::{IncomingMessages, Notice, ResponseMessage};
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::Subscription;
-#[cfg(not(feature = "sync"))]
-use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::{Client, Error};
 
-#[cfg(not(feature = "sync"))]
-use super::common::decoders;
 use super::common::{encoders, verify};
 use super::*;
 
-// Implement DataStream traits for the order types
-#[cfg(not(feature = "sync"))]
-impl StreamDecoder<PlaceOrder> for PlaceOrder {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
-        IncomingMessages::OpenOrder,
-        IncomingMessages::OrderStatus,
-        IncomingMessages::ExecutionData,
-        IncomingMessages::CommissionsReport,
-        IncomingMessages::Error,
-    ];
+impl Client {
+    /// Subscribes to order update events. Only one subscription can be active at a time.
+    pub async fn order_update_stream(&self) -> Result<Subscription<OrderUpdate>, Error> {
+        let internal_subscription = self.create_order_update_subscription().await?;
+        Ok(Subscription::new_from_internal_simple::<OrderUpdate>(
+            internal_subscription,
+            self.decoder_context(),
+            self.message_bus.clone(),
+        ))
+    }
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(PlaceOrder::OpenOrder(decoders::decode_open_order(
-                context.server_version,
-                message.clone(),
-            )?)),
-            IncomingMessages::OrderStatus => Ok(PlaceOrder::OrderStatus(decoders::decode_order_status(context.server_version, message)?)),
-            IncomingMessages::ExecutionData => Ok(PlaceOrder::ExecutionData(decoders::decode_execution_data(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::CommissionsReport => Ok(PlaceOrder::CommissionReport(decoders::decode_commission_report(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::Error => Ok(PlaceOrder::Message(Notice::from(message))),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
+    /// Submits an Order (fire-and-forget).
+    pub async fn submit_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<(), Error> {
+        verify::verify_order(self, order, order_id)?;
+        verify::verify_order_contract(self, contract, order_id)?;
+
+        let request = encoders::encode_place_order(self.server_version(), order_id, contract, order)?;
+        self.send_message(request).await?;
+
+        Ok(())
+    }
+
+    /// Submits an Order with a subscription for updates.
+    pub async fn place_order(&self, order_id: i32, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
+        verify::verify_order(self, order, order_id)?;
+        verify::verify_order_contract(self, contract, order_id)?;
+
+        let request = encoders::encode_place_order(self.server_version(), order_id, contract, order)?;
+        let internal_subscription = self.send_order(order_id, request).await?;
+
+        Ok(Subscription::new_from_internal_simple::<PlaceOrder>(
+            internal_subscription,
+            self.decoder_context(),
+            self.message_bus.clone(),
+        ))
+    }
+
+    /// Cancels an open [Order].
+    pub async fn cancel_order(&self, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
+        if !manual_order_cancel_time.is_empty() {
+            check_version(self.server_version(), Features::MANUAL_ORDER_TIME)?;
+        }
+
+        let request = encoders::encode_cancel_order(self.server_version(), order_id, manual_order_cancel_time)?;
+        let internal_subscription = self.send_order(order_id, request).await?;
+
+        Ok(Subscription::new_from_internal_simple::<CancelOrder>(
+            internal_subscription,
+            self.decoder_context(),
+            self.message_bus.clone(),
+        ))
+    }
+
+    /// Cancels all open [Order]s.
+    pub async fn global_cancel(&self) -> Result<(), Error> {
+        check_version(self.server_version(), Features::REQ_GLOBAL_CANCEL)?;
+
+        let message = encoders::encode_global_cancel(self.server_version())?;
+        self.send_message(message).await?;
+
+        Ok(())
+    }
+
+    /// Gets next valid order id
+    pub async fn next_valid_order_id(&self) -> Result<i32, Error> {
+        let message = encoders::encode_next_valid_order_id()?;
+
+        let mut internal_subscription = self.send_shared_request(OutgoingMessages::RequestIds, message).await?;
+
+        match internal_subscription.next().await {
+            Some(Ok(message)) => {
+                let order_id_index = 2;
+                let next_order_id = message.peek_int(order_id_index)?;
+
+                self.set_next_order_id(next_order_id);
+
+                Ok(next_order_id)
+            }
+            Some(Err(e)) => Err(e),
+            None => Err(Error::Simple("no response from server".into())),
         }
     }
-}
 
-#[cfg(not(feature = "sync"))]
-impl StreamDecoder<OrderUpdate> for OrderUpdate {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
-        IncomingMessages::OpenOrder,
-        IncomingMessages::OrderStatus,
-        IncomingMessages::ExecutionData,
-        IncomingMessages::CommissionsReport,
-        IncomingMessages::Error,
-    ];
+    /// Requests completed [Order]s.
+    pub async fn completed_orders(&self, api_only: bool) -> Result<Subscription<Orders>, Error> {
+        check_version(self.server_version(), Features::COMPLETED_ORDERS)?;
 
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(OrderUpdate::OpenOrder(decoders::decode_open_order(
-                context.server_version,
-                message.clone(),
-            )?)),
-            IncomingMessages::OrderStatus => Ok(OrderUpdate::OrderStatus(decoders::decode_order_status(context.server_version, message)?)),
-            IncomingMessages::ExecutionData => Ok(OrderUpdate::ExecutionData(decoders::decode_execution_data(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::CommissionsReport => Ok(OrderUpdate::CommissionReport(decoders::decode_commission_report(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::Error => Ok(OrderUpdate::Message(Notice::from(message))),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
-    }
-}
+        let request = encoders::encode_completed_orders(api_only)?;
 
-#[cfg(not(feature = "sync"))]
-impl StreamDecoder<CancelOrder> for CancelOrder {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::OrderStatus, IncomingMessages::Error];
-
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::OrderStatus => Ok(CancelOrder::OrderStatus(decoders::decode_order_status(context.server_version, message)?)),
-            IncomingMessages::Error => Ok(CancelOrder::Notice(Notice::from(message))),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
-    }
-}
-
-#[cfg(not(feature = "sync"))]
-impl StreamDecoder<Orders> for Orders {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
-        IncomingMessages::CompletedOrder,
-        IncomingMessages::CommissionsReport,
-        IncomingMessages::OpenOrder,
-        IncomingMessages::OrderStatus,
-        IncomingMessages::OpenOrderEnd,
-        IncomingMessages::CompletedOrdersEnd,
-        IncomingMessages::Error,
-    ];
-
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::CompletedOrder => Ok(Orders::OrderData(decoders::decode_completed_order(
-                context.server_version,
-                message.clone(),
-            )?)),
-            IncomingMessages::CommissionsReport => Ok(Orders::OrderData(decoders::decode_open_order(context.server_version, message.clone())?)),
-            IncomingMessages::OpenOrder => Ok(Orders::OrderData(decoders::decode_open_order(context.server_version, message.clone())?)),
-            IncomingMessages::OrderStatus => Ok(Orders::OrderStatus(decoders::decode_order_status(context.server_version, message)?)),
-            IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => Err(Error::EndOfStream),
-            IncomingMessages::Error => Ok(Orders::Notice(Notice::from(message))),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
-    }
-}
-
-#[cfg(not(feature = "sync"))]
-impl StreamDecoder<Executions> for Executions {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
-        IncomingMessages::ExecutionData,
-        IncomingMessages::CommissionsReport,
-        IncomingMessages::ExecutionDataEnd,
-        IncomingMessages::Error,
-    ];
-
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::ExecutionData => Ok(Executions::ExecutionData(decoders::decode_execution_data(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::CommissionsReport => Ok(Executions::CommissionReport(decoders::decode_commission_report(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::ExecutionDataEnd => Err(Error::EndOfStream),
-            IncomingMessages::Error => Ok(Executions::Notice(Notice::from(message))),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
-    }
-}
-
-#[cfg(not(feature = "sync"))]
-impl StreamDecoder<ExerciseOptions> for ExerciseOptions {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::OpenOrder, IncomingMessages::OrderStatus, IncomingMessages::Error];
-
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
-        match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(ExerciseOptions::OpenOrder(decoders::decode_open_order(
-                context.server_version,
-                message.clone(),
-            )?)),
-            IncomingMessages::OrderStatus => Ok(ExerciseOptions::OrderStatus(decoders::decode_order_status(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::Error => Ok(ExerciseOptions::Notice(Notice::from(message))),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
-    }
-}
-
-/// Subscribes to order update events. Only one subscription can be active at a time.
-///
-/// This function returns a subscription that will receive updates of activity for all orders placed by the client.
-pub(crate) async fn order_update_stream(client: &Client) -> Result<Subscription<OrderUpdate>, Error> {
-    let internal_subscription = client.create_order_update_subscription().await?;
-    Ok(Subscription::new_from_internal_simple::<OrderUpdate>(
-        internal_subscription,
-        client.decoder_context(),
-        client.message_bus.clone(),
-    ))
-}
-
-/// Submits an Order.
-///
-/// After the order is submitted correctly, events will be returned concerning the order's activity.
-/// This is a fire-and-forget method that does not wait for confirmation or return a subscription.
-///
-/// # Arguments
-/// * `client` - The client instance
-/// * `order_id` - Unique order identifier
-/// * `contract` - Contract to submit order for
-/// * `order` - Order details
-///
-/// # Returns
-/// * `Ok(())` if the order was successfully sent
-/// * `Err(Error)` if validation failed or sending failed
-///
-/// # See Also
-/// * [TWS API Documentation](https://interactivebrokers.github.io/tws-api/order_submission.html)
-pub(crate) async fn submit_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<(), Error> {
-    verify::verify_order(client, order, order_id)?;
-    verify::verify_order_contract(client, contract, order_id)?;
-
-    let request = encoders::encode_place_order(client.server_version(), order_id, contract, order)?;
-    client.send_message(request).await?;
-
-    Ok(())
-}
-
-/// Submits an Order.
-/// After the order is submitted correctly, events will be returned concerning the order's activity.
-/// <https://interactivebrokers.github.io/tws-api/order_submission.html>
-pub(crate) async fn place_order(client: &Client, order_id: i32, contract: &Contract, order: &Order) -> Result<Subscription<PlaceOrder>, Error> {
-    verify::verify_order(client, order, order_id)?;
-    verify::verify_order_contract(client, contract, order_id)?;
-
-    let request = encoders::encode_place_order(client.server_version(), order_id, contract, order)?;
-    let internal_subscription = client.send_order(order_id, request).await?;
-
-    Ok(Subscription::new_from_internal_simple::<PlaceOrder>(
-        internal_subscription,
-        client.decoder_context(),
-        client.message_bus.clone(),
-    ))
-}
-
-/// Cancels an open [Order].
-pub(crate) async fn cancel_order(client: &Client, order_id: i32, manual_order_cancel_time: &str) -> Result<Subscription<CancelOrder>, Error> {
-    if !manual_order_cancel_time.is_empty() {
-        check_version(client.server_version(), Features::MANUAL_ORDER_TIME)?;
+        let internal_subscription = self.send_shared_request(OutgoingMessages::RequestCompletedOrders, request).await?;
+        Ok(Subscription::new_from_internal_simple::<Orders>(
+            internal_subscription,
+            self.decoder_context(),
+            self.message_bus.clone(),
+        ))
     }
 
-    let request = encoders::encode_cancel_order(client.server_version(), order_id, manual_order_cancel_time)?;
-    let internal_subscription = client.send_order(order_id, request).await?;
+    /// Requests all open orders placed by this specific API client.
+    pub async fn open_orders(&self) -> Result<Subscription<Orders>, Error> {
+        let request = encoders::encode_open_orders()?;
 
-    Ok(Subscription::new_from_internal_simple::<CancelOrder>(
-        internal_subscription,
-        client.decoder_context(),
-        client.message_bus.clone(),
-    ))
-}
-
-/// Cancels all open [Order]s.
-pub(crate) async fn global_cancel(client: &Client) -> Result<(), Error> {
-    check_version(client.server_version(), Features::REQ_GLOBAL_CANCEL)?;
-
-    let message = encoders::encode_global_cancel(client.server_version())?;
-    client.send_message(message).await?;
-
-    Ok(())
-}
-
-/// Gets next valid order id
-pub(crate) async fn next_valid_order_id(client: &Client) -> Result<i32, Error> {
-    let message = encoders::encode_next_valid_order_id()?;
-
-    let mut internal_subscription = client.send_shared_request(OutgoingMessages::RequestIds, message).await?;
-
-    match internal_subscription.next().await {
-        Some(Ok(message)) => {
-            let order_id_index = 2;
-            let next_order_id = message.peek_int(order_id_index)?;
-
-            client.set_next_order_id(next_order_id);
-
-            Ok(next_order_id)
-        }
-        Some(Err(e)) => Err(e),
-        None => Err(Error::Simple("no response from server".into())),
+        let internal_subscription = self.send_shared_request(OutgoingMessages::RequestOpenOrders, request).await?;
+        Ok(Subscription::new_from_internal_simple::<Orders>(
+            internal_subscription,
+            self.decoder_context(),
+            self.message_bus.clone(),
+        ))
     }
-}
 
-/// Requests completed [Order]s.
-pub(crate) async fn completed_orders(client: &Client, api_only: bool) -> Result<Subscription<Orders>, Error> {
-    check_version(client.server_version(), Features::COMPLETED_ORDERS)?;
+    /// Requests all *current* open orders in associated accounts.
+    pub async fn all_open_orders(&self) -> Result<Subscription<Orders>, Error> {
+        let request = encoders::encode_all_open_orders()?;
 
-    let request = encoders::encode_completed_orders(api_only)?;
+        let internal_subscription = self.send_shared_request(OutgoingMessages::RequestAllOpenOrders, request).await?;
+        Ok(Subscription::new_from_internal_simple::<Orders>(
+            internal_subscription,
+            self.decoder_context(),
+            self.message_bus.clone(),
+        ))
+    }
 
-    let internal_subscription = client.send_shared_request(OutgoingMessages::RequestCompletedOrders, request).await?;
-    Ok(Subscription::new_from_internal_simple::<Orders>(
-        internal_subscription,
-        client.decoder_context(),
-        client.message_bus.clone(),
-    ))
-}
+    /// Requests status updates about future orders placed from TWS.
+    pub async fn auto_open_orders(&self, auto_bind: bool) -> Result<Subscription<Orders>, Error> {
+        let request = encoders::encode_auto_open_orders(auto_bind)?;
 
-/// Requests all open orders places by this specific API client (identified by the API client id).
-/// For client ID 0, this will bind previous manual TWS orders.
-///
-/// # Arguments
-/// * `client` - [Client] used to communicate with server.
-pub(crate) async fn open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
-    let request = encoders::encode_open_orders()?;
+        let internal_subscription = self.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request).await?;
+        Ok(Subscription::new_from_internal_simple::<Orders>(
+            internal_subscription,
+            self.decoder_context(),
+            self.message_bus.clone(),
+        ))
+    }
 
-    let internal_subscription = client.send_shared_request(OutgoingMessages::RequestOpenOrders, request).await?;
-    Ok(Subscription::new_from_internal_simple::<Orders>(
-        internal_subscription,
-        client.decoder_context(),
-        client.message_bus.clone(),
-    ))
-}
+    /// Requests current day's executions matching the filter.
+    pub async fn executions(&self, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
+        let request_id = self.next_request_id();
+        let request = encoders::encode_executions(self.server_version(), request_id, &filter)?;
+        let internal_subscription = self.send_request(request_id, request).await?;
+        Ok(Subscription::new_from_internal_simple::<Executions>(
+            internal_subscription,
+            self.decoder_context(),
+            self.message_bus.clone(),
+        ))
+    }
 
-/// Requests all *current* open orders in associated accounts at the current moment.
-/// Open orders are returned once; this function does not initiate a subscription.
-pub(crate) async fn all_open_orders(client: &Client) -> Result<Subscription<Orders>, Error> {
-    let request = encoders::encode_all_open_orders()?;
-
-    let internal_subscription = client.send_shared_request(OutgoingMessages::RequestAllOpenOrders, request).await?;
-    Ok(Subscription::new_from_internal_simple::<Orders>(
-        internal_subscription,
-        client.decoder_context(),
-        client.message_bus.clone(),
-    ))
-}
-
-/// Requests status updates about future orders placed from TWS. Can only be used with client ID 0.
-pub(crate) async fn auto_open_orders(client: &Client, auto_bind: bool) -> Result<Subscription<Orders>, Error> {
-    let request = encoders::encode_auto_open_orders(auto_bind)?;
-
-    let internal_subscription = client.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, request).await?;
-    Ok(Subscription::new_from_internal_simple::<Orders>(
-        internal_subscription,
-        client.decoder_context(),
-        client.message_bus.clone(),
-    ))
-}
-
-/// Requests current day's (since midnight) executions matching the filter.
-///
-/// Only the current day's executions can be retrieved.
-/// Along with the [ExecutionData], the [CommissionReport] will also be returned.
-/// When requesting executions, a filter can be specified to receive only a subset of them
-///
-/// # Arguments
-/// * `filter` - filter criteria used to determine which execution reports are returned
-pub(crate) async fn executions(client: &Client, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
-    let request_id = client.next_request_id();
-    let request = encoders::encode_executions(client.server_version(), request_id, &filter)?;
-    let internal_subscription = client.send_request(request_id, request).await?;
-    Ok(Subscription::new_from_internal_simple::<Executions>(
-        internal_subscription,
-        client.decoder_context(),
-        client.message_bus.clone(),
-    ))
-}
-
-/// Exercise an option contract through the async client API.
-pub(crate) async fn exercise_options(
-    client: &Client,
-    contract: &Contract,
-    exercise_action: ExerciseAction,
-    exercise_quantity: i32,
-    account: &str,
-    ovrd: bool,
-    manual_order_time: Option<OffsetDateTime>,
-) -> Result<Subscription<ExerciseOptions>, Error> {
-    let order_id = client.next_order_id();
-    let request = encoders::encode_exercise_options(
-        client.server_version(),
-        order_id,
-        contract,
-        exercise_action,
-        exercise_quantity,
-        account,
-        ovrd,
-        manual_order_time,
-    )?;
-    let internal_subscription = client.send_order(order_id, request).await?;
-    Ok(Subscription::new_from_internal_simple::<ExerciseOptions>(
-        internal_subscription,
-        client.decoder_context(),
-        client.message_bus.clone(),
-    ))
+    /// Exercise an option contract.
+    pub async fn exercise_options(
+        &self,
+        contract: &Contract,
+        exercise_action: ExerciseAction,
+        exercise_quantity: i32,
+        account: &str,
+        ovrd: bool,
+        manual_order_time: Option<OffsetDateTime>,
+    ) -> Result<Subscription<ExerciseOptions>, Error> {
+        let order_id = self.next_order_id();
+        let request = encoders::encode_exercise_options(
+            self.server_version(),
+            order_id,
+            contract,
+            exercise_action,
+            exercise_quantity,
+            account,
+            ovrd,
+            manual_order_time,
+        )?;
+        let internal_subscription = self.send_order(order_id, request).await?;
+        Ok(Subscription::new_from_internal_simple::<ExerciseOptions>(
+            internal_subscription,
+            self.decoder_context(),
+            self.message_bus.clone(),
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -411,7 +225,7 @@ mod tests {
         let mut order = order_builder::limit_order(Action::Buy, 1.0, 5800.0);
         order.order_id = 1;
 
-        let mut subscription = place_order(&client, 1, &contract, &order).await.expect("failed to place order");
+        let mut subscription = client.place_order(1, &contract, &order).await.expect("failed to place order");
 
         // Test OpenOrder response
         let open_order = subscription.next().await;
@@ -463,7 +277,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-        let mut subscription = cancel_order(&client, 1, "").await.expect("failed to cancel order");
+        let mut subscription = client.cancel_order(1, "").await.expect("failed to cancel order");
 
         let cancel_response = subscription.next().await;
         assert!(
@@ -493,7 +307,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-        let mut subscription = open_orders(&client).await.expect("failed to get open orders");
+        let mut subscription = client.open_orders().await.expect("failed to get open orders");
 
         // Test OrderData response
         let order_data = subscription.next().await;
@@ -535,7 +349,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::COMPLETED_ORDERS);
 
-        let mut subscription = completed_orders(&client, true).await.expect("failed to get completed orders");
+        let mut subscription = client.completed_orders(true).await.expect("failed to get completed orders");
 
         // Test CompletedOrder response
         let completed_order = subscription.next().await;
@@ -572,7 +386,7 @@ mod tests {
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
         let filter = ExecutionFilter::default();
-        let mut subscription = executions(&client, filter).await.expect("failed to get executions");
+        let mut subscription = client.executions(filter).await.expect("failed to get executions");
 
         // Test ExecutionData response
         let execution_data = subscription.next().await;
@@ -620,7 +434,7 @@ mod tests {
         let mut order = order_builder::limit_order(Action::Buy, 1.0, 5800.0);
         order.order_id = 2;
 
-        submit_order(&client, 2, &contract, &order).await.expect("failed to submit order");
+        client.submit_order(2, &contract, &order).await.expect("failed to submit order");
 
         // Check request message was sent
         let request_messages = message_bus.request_messages.read().unwrap();
@@ -650,7 +464,8 @@ mod tests {
             ..Default::default()
         };
 
-        let mut subscription = exercise_options(&client, &contract, ExerciseAction::Exercise, 1, "", false, None)
+        let mut subscription = client
+            .exercise_options(&contract, ExerciseAction::Exercise, 1, "", false, None)
             .await
             .expect("failed to exercise options");
 
@@ -678,7 +493,7 @@ mod tests {
         // Check initial order ID
         let initial_order_id = client.next_order_id();
 
-        let order_id = next_valid_order_id(&client).await.expect("failed to get next valid order id");
+        let order_id = client.next_valid_order_id().await.expect("failed to get next valid order id");
 
         assert_eq!(order_id, 123, "Expected order ID 123");
 
@@ -708,7 +523,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-        let mut stream = order_update_stream(&client).await.unwrap();
+        let mut stream = client.order_update_stream().await.unwrap();
 
         // Test that we can receive OrderStatus
         let update = stream.next().await.unwrap().unwrap();
@@ -731,10 +546,10 @@ mod tests {
         });
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
-        let stream1 = order_update_stream(&client).await;
+        let stream1 = client.order_update_stream().await;
         assert!(stream1.is_ok(), "failed to create first order update stream");
 
-        let stream2 = order_update_stream(&client).await;
+        let stream2 = client.order_update_stream().await;
         assert!(stream2.is_err(), "second order update stream should fail with AlreadySubscribed");
         assert!(
             matches!(stream2.err().unwrap(), Error::AlreadySubscribed),
@@ -750,14 +565,14 @@ mod tests {
         });
         let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
-        let stream1 = order_update_stream(&client).await.expect("failed to create initial order update stream");
+        let stream1 = client.order_update_stream().await.expect("failed to create initial order update stream");
         drop(stream1);
 
         // Allow cleanup task to process the drop signal
         tokio::task::yield_now().await;
         tokio::time::sleep(Duration::from_millis(10)).await;
 
-        order_update_stream(&client).await.expect("should be re-subscribable after drop");
+        client.order_update_stream().await.expect("should be re-subscribable after drop");
     }
 
     #[tokio::test]
@@ -769,7 +584,7 @@ mod tests {
 
         let client = Client::stubbed(message_bus.clone(), server_versions::REQ_GLOBAL_CANCEL);
 
-        global_cancel(&client).await.expect("failed to send global cancel");
+        client.global_cancel().await.expect("failed to send global cancel");
 
         // Check request message
         let request_messages = message_bus.request_messages.read().unwrap();

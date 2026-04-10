@@ -112,7 +112,7 @@ impl<'a> MarketDataBuilder<'a, crate::client::sync::Client> {
     pub fn subscribe(self) -> Result<crate::subscriptions::sync::Subscription<TickTypes>, Error> {
         let generic_ticks: Vec<&str> = self.generic_ticks.iter().map(|s| s.as_str()).collect();
 
-        crate::market_data::realtime::blocking::market_data(self.client, self.contract, &generic_ticks, self.snapshot, self.regulatory_snapshot)
+        crate::market_data::realtime::sync::market_data(self.client, self.contract, &generic_ticks, self.snapshot, self.regulatory_snapshot)
     }
 }
 
@@ -148,6 +148,8 @@ impl<'a> MarketDataBuilder<'a, crate::client::r#async::Client> {
     pub async fn subscribe(self) -> Result<crate::subscriptions::Subscription<TickTypes>, Error> {
         let generic_ticks: Vec<&str> = self.generic_ticks.iter().map(|s| s.as_str()).collect();
 
-        crate::market_data::realtime::market_data(self.client, self.contract, &generic_ticks, self.snapshot, self.regulatory_snapshot).await
+        self.client
+            .subscribe_market_data(self.contract, &generic_ticks, self.snapshot, self.regulatory_snapshot)
+            .await
     }
 }

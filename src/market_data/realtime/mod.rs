@@ -501,18 +501,10 @@ pub struct TickRequestParameters {
 
 // === Implementation ===
 
-// Re-export functions based on active feature
-#[cfg(feature = "sync")]
-/// Blocking real-time market data helpers layered on top of the synchronous client.
-pub mod blocking {
-    pub(crate) use super::sync::*;
-}
-
 #[cfg(all(feature = "sync", not(feature = "async")))]
 pub use sync::*;
 
-#[cfg(feature = "async")]
-pub use r#async::*;
+// Async API methods are now on Client directly via realtime/async.rs
 
 #[cfg(test)]
 mod tests {
