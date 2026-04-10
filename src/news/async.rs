@@ -139,7 +139,6 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::contracts::Contract;
     use crate::news::ArticleType;
     use crate::stubs::MessageBusStub;

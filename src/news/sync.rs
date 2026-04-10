@@ -251,7 +251,6 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::client::blocking::Client;
     use crate::contracts::Contract;
     use crate::news::ArticleType;

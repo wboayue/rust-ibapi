@@ -1,5 +1,6 @@
 //! Table-driven test data for accounts module tests
 
+#[allow(unused_imports)]
 use crate::accounts::types::*;
 use crate::server_versions;
 use time::macros::datetime;
@@ -30,6 +31,7 @@ pub struct ServerTimeTestCase {
     pub expected_request: &'static str,
 }
 
+#[cfg(feature = "sync")]
 /// Test case for contract ID edge cases
 #[derive(Debug, Clone)]
 pub struct ContractIdTestCase {
@@ -38,6 +40,7 @@ pub struct ContractIdTestCase {
     pub expected_pattern: String,
 }
 
+#[cfg(feature = "sync")]
 /// Test case for PnL parameter combinations
 #[derive(Debug, Clone)]
 pub struct PnLTestCase {
@@ -46,6 +49,7 @@ pub struct PnLTestCase {
     pub expected_pattern: &'static str,
 }
 
+#[cfg(feature = "sync")]
 /// Test case for positions multi parameter combinations
 #[derive(Debug, Clone)]
 pub struct PositionsMultiTestCase {
@@ -61,10 +65,12 @@ pub struct AccountSummaryTagTestCase {
     pub group: String,
     pub tags: Vec<&'static str>,
     pub expected_tag_encoding: Option<&'static str>,
+    #[allow(dead_code)]
     pub should_succeed: bool,
     pub expect_responses: bool,
 }
 
+#[cfg(feature = "sync")]
 /// Test case for subscription lifecycle testing
 #[derive(Debug, Clone)]
 pub struct SubscriptionLifecycleTestCase {
@@ -74,6 +80,7 @@ pub struct SubscriptionLifecycleTestCase {
     pub expected_cancel_pattern: &'static str,
 }
 
+#[cfg(feature = "sync")]
 /// Types of subscriptions for lifecycle testing
 #[derive(Debug, Clone)]
 pub enum SubscriptionType {
@@ -215,6 +222,7 @@ pub fn server_time_test_cases() -> Vec<ServerTimeTestCase> {
     ]
 }
 
+#[cfg(feature = "sync")]
 /// Contract ID edge case test cases
 pub fn contract_id_test_cases() -> Vec<ContractIdTestCase> {
     vec![
@@ -246,6 +254,7 @@ pub fn contract_id_test_cases() -> Vec<ContractIdTestCase> {
     ]
 }
 
+#[cfg(feature = "sync")]
 /// PnL parameter combination test cases
 pub fn pnl_parameter_test_cases() -> Vec<PnLTestCase> {
     vec![
@@ -277,6 +286,7 @@ pub fn pnl_parameter_test_cases() -> Vec<PnLTestCase> {
     ]
 }
 
+#[cfg(feature = "sync")]
 /// Positions multi parameter combination test cases
 pub fn positions_multi_parameter_test_cases() -> Vec<PositionsMultiTestCase> {
     vec![
@@ -366,6 +376,7 @@ pub fn account_summary_tag_test_cases() -> Vec<AccountSummaryTagTestCase> {
     ]
 }
 
+#[cfg(feature = "sync")]
 /// Subscription lifecycle test cases
 pub fn subscription_lifecycle_test_cases() -> Vec<SubscriptionLifecycleTestCase> {
     vec![
