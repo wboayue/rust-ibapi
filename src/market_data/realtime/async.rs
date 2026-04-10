@@ -13,44 +13,135 @@ use crate::market_data::TradingHours;
 
 // === Public API Functions ===
 
-/// Requests realtime bars.
-pub async fn realtime_bars(
-    client: &Client,
-    contract: &Contract,
-    bar_size: &BarSize,
-    what_to_show: &WhatToShow,
-    trading_hours: TradingHours,
-    options: Vec<TagValue>,
-) -> Result<Subscription<Bar>, Error> {
-    let builder = client.request();
-    let request = encoders::encode_request_realtime_bars(
-        client.server_version(),
-        builder.request_id(),
-        contract,
-        bar_size,
-        what_to_show,
-        trading_hours.use_rth(),
-        options,
-    )?;
+impl Client {
+    /// Requests realtime bars.
+    pub async fn realtime_bars(
+        &self,
+        contract: &Contract,
+        bar_size: &BarSize,
+        what_to_show: &WhatToShow,
+        trading_hours: TradingHours,
+        options: Vec<TagValue>,
+    ) -> Result<Subscription<Bar>, Error> {
+        let builder = self.request();
+        let request = encoders::encode_request_realtime_bars(
+            self.server_version(),
+            builder.request_id(),
+            contract,
+            bar_size,
+            what_to_show,
+            trading_hours.use_rth(),
+            options,
+        )?;
 
-    builder.send::<Bar>(request).await
-}
+        builder.send::<Bar>(request).await
+    }
 
-/// Requests tick by tick AllLast ticks.
-pub async fn tick_by_tick_all_last(
-    client: &Client,
-    contract: &Contract,
-    number_of_ticks: i32,
-    ignore_size: bool,
-) -> Result<Subscription<Trade>, Error> {
-    validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
+    /// Requests tick by tick AllLast ticks.
+    pub async fn tick_by_tick_all_last(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<Trade>, Error> {
+        validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
 
-    let server_version = client.server_version();
-    let builder = client.request();
+        let server_version = self.server_version();
+        let builder = self.request();
 
-    let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "AllLast", number_of_ticks, ignore_size)?;
+        let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "AllLast", number_of_ticks, ignore_size)?;
 
-    builder.send::<Trade>(request).await
+        builder.send::<Trade>(request).await
+    }
+
+    /// Requests tick by tick Last ticks.
+    pub async fn tick_by_tick_last(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<Trade>, Error> {
+        validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
+
+        let server_version = self.server_version();
+        let builder = self.request();
+
+        let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "Last", number_of_ticks, ignore_size)?;
+
+        builder.send::<Trade>(request).await
+    }
+
+    /// Requests tick by tick BidAsk ticks.
+    pub async fn tick_by_tick_bid_ask(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<BidAsk>, Error> {
+        validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
+
+        let server_version = self.server_version();
+        let builder = self.request();
+
+        let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "BidAsk", number_of_ticks, ignore_size)?;
+
+        builder.send::<BidAsk>(request).await
+    }
+
+    /// Requests tick by tick MidPoint ticks.
+    pub async fn tick_by_tick_midpoint(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<MidPoint>, Error> {
+        validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
+
+        let server_version = self.server_version();
+        let builder = self.request();
+
+        let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "MidPoint", number_of_ticks, ignore_size)?;
+
+        builder.send::<MidPoint>(request).await
+    }
+
+    /// Requests market depth data.
+    pub async fn market_depth(&self, contract: &Contract, number_of_rows: i32, is_smart_depth: bool) -> Result<Subscription<MarketDepths>, Error> {
+        if is_smart_depth {
+            check_version(self.server_version(), Features::SMART_DEPTH)?;
+        }
+        if !contract.primary_exchange.is_empty() {
+            check_version(self.server_version(), Features::MKT_DEPTH_PRIM_EXCHANGE)?;
+        }
+
+        let builder = self.request();
+        let request = encoders::encode_request_market_depth(self.server_version(), builder.request_id(), contract, number_of_rows, is_smart_depth)?;
+
+        builder
+            .send_with_context::<MarketDepths>(request, self.decoder_context().with_smart_depth(is_smart_depth))
+            .await
+    }
+
+    /// Requests venues for which market data is returned to market_depth (those with market makers)
+    pub async fn market_depth_exchanges(&self) -> Result<Vec<DepthMarketDataDescription>, Error> {
+        check_version(self.server_version(), Features::REQ_MKT_DEPTH_EXCHANGES)?;
+
+        loop {
+            let request = encoders::encode_request_market_depth_exchanges()?;
+            let mut subscription = self.shared_request(OutgoingMessages::RequestMktDepthExchanges).send_raw(request).await?;
+            let response = subscription.next().await;
+
+            match response {
+                Some(Ok(mut message)) => return decoders::decode_market_depth_exchanges(self.server_version(), &mut message),
+                Some(Err(e)) => return Err(e),
+                None => {
+                    debug!("connection reset. retrying market_depth_exchanges");
+                    continue;
+                }
+            }
+        }
+    }
+
+    /// Requests real time market data (low-level).
+    pub(crate) async fn subscribe_market_data(
+        &self,
+        contract: &Contract,
+        generic_ticks: &[&str],
+        snapshot: bool,
+        regulatory_snapshot: bool,
+    ) -> Result<Subscription<TickTypes>, Error> {
+        let builder = self.request();
+        let request = encoders::encode_request_market_data(
+            self.server_version(),
+            builder.request_id(),
+            contract,
+            generic_ticks,
+            snapshot,
+            regulatory_snapshot,
+        )?;
+
+        builder.send::<TickTypes>(request).await
+    }
 }
 
 /// Validates that server supports the given request.
@@ -62,118 +153,6 @@ pub(super) fn validate_tick_by_tick_request(client: &Client, _contract: &Contrac
     }
 
     Ok(())
-}
-
-/// Requests tick by tick Last ticks.
-pub async fn tick_by_tick_last(client: &Client, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<Trade>, Error> {
-    validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
-
-    let server_version = client.server_version();
-    let builder = client.request();
-
-    let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "Last", number_of_ticks, ignore_size)?;
-
-    builder.send::<Trade>(request).await
-}
-
-/// Requests tick by tick BidAsk ticks.
-pub async fn tick_by_tick_bid_ask(
-    client: &Client,
-    contract: &Contract,
-    number_of_ticks: i32,
-    ignore_size: bool,
-) -> Result<Subscription<BidAsk>, Error> {
-    validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
-
-    let server_version = client.server_version();
-    let builder = client.request();
-
-    let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "BidAsk", number_of_ticks, ignore_size)?;
-
-    builder.send::<BidAsk>(request).await
-}
-
-/// Requests tick by tick MidPoint ticks.
-pub async fn tick_by_tick_midpoint(
-    client: &Client,
-    contract: &Contract,
-    number_of_ticks: i32,
-    ignore_size: bool,
-) -> Result<Subscription<MidPoint>, Error> {
-    validate_tick_by_tick_request(client, contract, number_of_ticks, ignore_size)?;
-
-    let server_version = client.server_version();
-    let builder = client.request();
-
-    let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "MidPoint", number_of_ticks, ignore_size)?;
-
-    builder.send::<MidPoint>(request).await
-}
-
-/// Requests market depth data.
-pub async fn market_depth(
-    client: &Client,
-    contract: &Contract,
-    number_of_rows: i32,
-    is_smart_depth: bool,
-) -> Result<Subscription<MarketDepths>, Error> {
-    if is_smart_depth {
-        check_version(client.server_version(), Features::SMART_DEPTH)?;
-    }
-    if !contract.primary_exchange.is_empty() {
-        check_version(client.server_version(), Features::MKT_DEPTH_PRIM_EXCHANGE)?;
-    }
-
-    let builder = client.request();
-    let request = encoders::encode_request_market_depth(client.server_version(), builder.request_id(), contract, number_of_rows, is_smart_depth)?;
-
-    builder
-        .send_with_context::<MarketDepths>(request, client.decoder_context().with_smart_depth(is_smart_depth))
-        .await
-}
-
-/// Requests venues for which market data is returned to market_depth (those with market makers)
-pub async fn market_depth_exchanges(client: &Client) -> Result<Vec<DepthMarketDataDescription>, Error> {
-    check_version(client.server_version(), Features::REQ_MKT_DEPTH_EXCHANGES)?;
-
-    loop {
-        let request = encoders::encode_request_market_depth_exchanges()?;
-        let mut subscription = client
-            .shared_request(OutgoingMessages::RequestMktDepthExchanges)
-            .send_raw(request)
-            .await?;
-        let response = subscription.next().await;
-
-        match response {
-            Some(Ok(mut message)) => return decoders::decode_market_depth_exchanges(client.server_version(), &mut message),
-            Some(Err(e)) => return Err(e),
-            None => {
-                debug!("connection reset. retrying market_depth_exchanges");
-                continue;
-            }
-        }
-    }
-}
-
-/// Requests real time market data.
-pub async fn market_data(
-    client: &Client,
-    contract: &Contract,
-    generic_ticks: &[&str],
-    snapshot: bool,
-    regulatory_snapshot: bool,
-) -> Result<Subscription<TickTypes>, Error> {
-    let builder = client.request();
-    let request = encoders::encode_request_market_data(
-        client.server_version(),
-        builder.request_id(),
-        contract,
-        generic_ticks,
-        snapshot,
-        regulatory_snapshot,
-    )?;
-
-    builder.send::<TickTypes>(request).await
 }
 
 #[cfg(test)]
@@ -243,7 +222,8 @@ mod tests {
         let trading_hours = TradingHours::Regular;
 
         // Test subscription creation
-        let mut bars = realtime_bars(&client, &contract, &bar_size, &what_to_show, trading_hours, vec![])
+        let mut bars = client
+            .realtime_bars(&contract, &bar_size, &what_to_show, trading_hours, vec![])
             .await
             .expect("Failed to create realtime bars subscription");
 
@@ -309,7 +289,8 @@ mod tests {
         let ignore_size = false;
 
         // Test subscription creation
-        let mut trades = tick_by_tick_all_last(&client, &contract, number_of_ticks, ignore_size)
+        let mut trades = client
+            .tick_by_tick_all_last(&contract, number_of_ticks, ignore_size)
             .await
             .expect("Failed to create tick-by-tick subscription");
 
@@ -368,7 +349,8 @@ mod tests {
         let ignore_size = false;
 
         // Test subscription creation
-        let mut trades = tick_by_tick_last(&client, &contract, number_of_ticks, ignore_size)
+        let mut trades = client
+            .tick_by_tick_last(&contract, number_of_ticks, ignore_size)
             .await
             .expect("Failed to receive tick-by-tick last data");
 
@@ -412,7 +394,8 @@ mod tests {
         let ignore_size = false;
 
         // Test subscription creation
-        let mut subscription = tick_by_tick_bid_ask(&client, &contract, number_of_ticks, ignore_size)
+        let mut subscription = client
+            .tick_by_tick_bid_ask(&contract, number_of_ticks, ignore_size)
             .await
             .expect("Failed to create bid/ask subscription");
 
@@ -457,7 +440,8 @@ mod tests {
         let ignore_size = false;
 
         // Test subscription creation
-        let mut midpoints = tick_by_tick_midpoint(&client, &contract, number_of_ticks, ignore_size)
+        let mut midpoints = client
+            .tick_by_tick_midpoint(&contract, number_of_ticks, ignore_size)
             .await
             .expect("Failed to create tick-by-tick midpoint subscription");
 
@@ -522,7 +506,8 @@ mod tests {
         let is_smart_depth = false;
 
         // Test subscription creation
-        let mut depth = market_depth(&client, &contract, number_of_rows, is_smart_depth)
+        let mut depth = client
+            .market_depth(&contract, number_of_rows, is_smart_depth)
             .await
             .expect("Failed to create market depth subscription");
 
@@ -579,7 +564,7 @@ mod tests {
         let client = Client::stubbed(message_bus.clone(), server_versions::SERVICE_DATA_TYPE);
 
         // Test request execution
-        let exchanges = market_depth_exchanges(&client).await.expect("Failed to request market depth exchanges");
+        let exchanges = client.market_depth_exchanges().await.expect("Failed to request market depth exchanges");
 
         assert_eq!(exchanges.len(), 2, "Should receive 2 exchange descriptions");
 
@@ -634,7 +619,8 @@ mod tests {
         let regulatory_snapshot = false;
 
         // Test subscription creation
-        let mut subscription = market_data(&client, &contract, generic_ticks, snapshot, regulatory_snapshot)
+        let mut subscription = client
+            .subscribe_market_data(&contract, generic_ticks, snapshot, regulatory_snapshot)
             .await
             .expect("Failed to create market data subscription");
 
@@ -702,7 +688,9 @@ mod tests {
         let regulatory_snapshot = false;
 
         // Test subscription creation
-        let result = market_data(&client, &contract, &generic_ticks, snapshot, regulatory_snapshot).await;
+        let result = client
+            .subscribe_market_data(&contract, &generic_ticks, snapshot, regulatory_snapshot)
+            .await;
         assert!(result.is_ok(), "Failed to create market data subscription with combo legs");
 
         // Verify request message was sent
@@ -732,7 +720,9 @@ mod tests {
         let regulatory_snapshot = false;
 
         // Test subscription creation
-        let result = market_data(&client, &contract, &generic_ticks, snapshot, regulatory_snapshot).await;
+        let result = client
+            .subscribe_market_data(&contract, &generic_ticks, snapshot, regulatory_snapshot)
+            .await;
         assert!(result.is_ok(), "Failed to create market data subscription with delta neutral");
 
         // Verify request message was sent
@@ -764,7 +754,9 @@ mod tests {
         let regulatory_snapshot = true;
 
         // Test subscription creation
-        let result = market_data(&client, &contract, &generic_ticks, snapshot, regulatory_snapshot).await;
+        let result = client
+            .subscribe_market_data(&contract, &generic_ticks, snapshot, regulatory_snapshot)
+            .await;
         assert!(result.is_ok(), "Failed to create regulatory snapshot market data subscription");
 
         // Verify request message
@@ -800,7 +792,8 @@ mod tests {
         let regulatory_snapshot = false;
 
         // Test subscription creation
-        let mut market_data = market_data(&client, &contract, &generic_ticks, snapshot, regulatory_snapshot)
+        let mut market_data = client
+            .subscribe_market_data(&contract, &generic_ticks, snapshot, regulatory_snapshot)
             .await
             .expect("Failed to create market data subscription");
 

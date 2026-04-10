@@ -25,43 +25,45 @@ impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
     }
 }
 
-/// Requests an XML list of scanner parameters valid in TWS.
-pub(crate) async fn scanner_parameters(client: &Client) -> Result<String, Error> {
-    let request = encoders::encode_scanner_parameters()?;
-    let mut subscription = client.send_shared_request(OutgoingMessages::RequestScannerParameters, request).await?;
+impl Client {
+    /// Requests an XML list of scanner parameters valid in TWS.
+    pub async fn scanner_parameters(&self) -> Result<String, Error> {
+        let request = encoders::encode_scanner_parameters()?;
+        let mut subscription = self.send_shared_request(OutgoingMessages::RequestScannerParameters, request).await?;
 
-    match subscription.next().await {
-        Some(Ok(message)) => decoders::decode_scanner_parameters(message),
-        Some(Err(e)) => Err(e),
-        None => Err(Error::UnexpectedEndOfStream),
-    }
-}
-
-/// Starts a subscription to market scan results based on the provided parameters.
-pub(crate) async fn scanner_subscription(
-    client: &Client,
-    subscription: &ScannerSubscription,
-    filter: &Vec<TagValue>,
-) -> Result<Subscription<Vec<ScannerData>>, Error> {
-    if !filter.is_empty() {
-        client.check_server_version(
-            server_versions::SCANNER_GENERIC_OPTS,
-            "It does not support API scanner subscription generic filter options.",
-        )?
+        match subscription.next().await {
+            Some(Ok(message)) => decoders::decode_scanner_parameters(message),
+            Some(Err(e)) => Err(e),
+            None => Err(Error::UnexpectedEndOfStream),
+        }
     }
 
-    let request_id = client.next_request_id();
-    let request = encoders::encode_scanner_subscription(request_id, client.server_version(), subscription, filter)?;
-    let internal_subscription = client.send_request(request_id, request).await?;
+    /// Starts a subscription to market scan results based on the provided parameters.
+    pub async fn scanner_subscription(
+        &self,
+        subscription: &ScannerSubscription,
+        filter: &Vec<TagValue>,
+    ) -> Result<Subscription<Vec<ScannerData>>, Error> {
+        if !filter.is_empty() {
+            self.check_server_version(
+                server_versions::SCANNER_GENERIC_OPTS,
+                "It does not support API scanner subscription generic filter options.",
+            )?
+        }
 
-    Ok(Subscription::new_from_internal::<Vec<ScannerData>>(
-        internal_subscription,
-        client.message_bus.clone(),
-        Some(request_id),
-        None,
-        None,
-        client.decoder_context(),
-    ))
+        let request_id = self.next_request_id();
+        let request = encoders::encode_scanner_subscription(request_id, self.server_version(), subscription, filter)?;
+        let internal_subscription = self.send_request(request_id, request).await?;
+
+        Ok(Subscription::new_from_internal::<Vec<ScannerData>>(
+            internal_subscription,
+            self.message_bus.clone(),
+            Some(request_id),
+            None,
+            None,
+            self.decoder_context(),
+        ))
+    }
 }
 
 #[cfg(test)]

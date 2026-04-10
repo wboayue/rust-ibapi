@@ -926,25 +926,7 @@ pub struct PriceIncrement {
     pub increment: f64,
 }
 
-// Re-export API functions based on active feature
-#[cfg(feature = "sync")]
-/// Blocking contract lookup helpers backed by the synchronous transport.
-pub mod blocking {
-    pub(crate) use super::sync::{
-        calculate_implied_volatility, calculate_option_price, cancel_contract_details, contract_details, market_rule, matching_symbols, option_chain,
-    };
-}
-
-#[cfg(all(feature = "sync", not(feature = "async")))]
-#[allow(unused_imports)]
-pub(crate) use sync::{
-    calculate_implied_volatility, calculate_option_price, cancel_contract_details, contract_details, market_rule, matching_symbols, option_chain,
-};
-
-#[cfg(feature = "async")]
-pub(crate) use r#async::{
-    calculate_implied_volatility, calculate_option_price, cancel_contract_details, contract_details, market_rule, matching_symbols, option_chain,
-};
+// Async API methods are now on Client directly via contracts/async.rs
 
 // Public function for decoding option computation (used by market_data module)
 pub(crate) fn decode_option_computation(server_version: i32, message: &mut ResponseMessage) -> Result<OptionComputation, Error> {

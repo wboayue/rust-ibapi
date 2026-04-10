@@ -12,116 +12,133 @@ use crate::{
 
 use super::{common::decoders, encoders, AutoFill, WshEventData, WshMetadata};
 
-/// Requests Wall Street Horizon metadata.
-///
-/// Returns metadata about available Wall Street Horizon events and filters.
-///
-/// # Arguments
-/// * `client` - The client instance
-///
-/// # Returns
-/// * `Ok(WshMetadata)` - The WSH metadata including available event types
-/// * `Err(Error)` - If the server version doesn't support WSH or the request failed
-pub(crate) fn wsh_metadata(client: &Client) -> Result<WshMetadata, Error> {
-    check_version(client.server_version, Features::WSHE_CALENDAR)?;
+impl Client {
+    /// Requests metadata from the WSH calendar.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let metadata = client.wsh_metadata().expect("request wsh metadata failed");
+    /// println!("{metadata:?}");
+    /// ```
+    pub fn wsh_metadata(&self) -> Result<WshMetadata, Error> {
+        check_version(self.server_version, Features::WSHE_CALENDAR)?;
 
-    request_helpers::blocking::one_shot_request_with_retry(
-        client,
-        encoders::encode_request_wsh_metadata,
-        |message| decoders::decode_wsh_metadata(message.clone()),
-        || Err(Error::UnexpectedEndOfStream),
-    )
-}
-
-/// Requests Wall Street Horizon event data for a specific contract.
-///
-/// Returns WSH event data (earnings, dividends, etc.) for the specified contract within
-/// the optional date range.
-///
-/// # Arguments
-/// * `client` - The client instance
-/// * `contract_id` - Contract identifier to get events for
-/// * `start_date` - Optional start date for event data
-/// * `end_date` - Optional end date for event data
-/// * `limit` - Optional maximum number of events to return
-/// * `auto_fill` - Optional auto-fill settings for related securities
-///
-/// # Returns
-/// * `Ok(WshEventData)` - The event data as JSON
-/// * `Err(Error)` - If the server version doesn't support this feature or the request failed
-pub(crate) fn wsh_event_data_by_contract(
-    client: &Client,
-    contract_id: i32,
-    start_date: Option<Date>,
-    end_date: Option<Date>,
-    limit: Option<i32>,
-    auto_fill: Option<AutoFill>,
-) -> Result<WshEventData, Error> {
-    check_version(client.server_version, Features::WSHE_CALENDAR)?;
-
-    if auto_fill.is_some() {
-        check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS)?;
+        request_helpers::blocking::one_shot_request_with_retry(
+            self,
+            encoders::encode_request_wsh_metadata,
+            |message| decoders::decode_wsh_metadata(message.clone()),
+            || Err(Error::UnexpectedEndOfStream),
+        )
     }
 
-    if start_date.is_some() || end_date.is_some() || limit.is_some() {
-        check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
+    /// Requests event data for a specified contract from the Wall Street Horizons (WSH) calendar.
+    ///
+    /// # Arguments
+    ///
+    /// * `contract_id` - Contract identifier for the event request.
+    /// * `start_date`  - Start date of the event request.
+    /// * `end_date`    - End date of the event request.
+    /// * `limit`       - Maximum number of events to return. Maximum of 100.
+    /// * `auto_fill`   - Fields to automatically fill in. See [AutoFill] for more information.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let contract_id = 76792991; // TSLA
+    /// let event_data = client.wsh_event_data_by_contract(contract_id, None, None, None, None).expect("request wsh event data failed");
+    /// println!("{event_data:?}");
+    /// ```
+    pub fn wsh_event_data_by_contract(
+        &self,
+        contract_id: i32,
+        start_date: Option<Date>,
+        end_date: Option<Date>,
+        limit: Option<i32>,
+        auto_fill: Option<AutoFill>,
+    ) -> Result<WshEventData, Error> {
+        check_version(self.server_version, Features::WSHE_CALENDAR)?;
+
+        if auto_fill.is_some() {
+            check_version(self.server_version, Features::WSH_EVENT_DATA_FILTERS)?;
+        }
+
+        if start_date.is_some() || end_date.is_some() || limit.is_some() {
+            check_version(self.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
+        }
+
+        let server_version = self.server_version;
+        request_helpers::blocking::one_shot_request_with_retry(
+            self,
+            |request_id| {
+                encoders::encode_request_wsh_event_data(
+                    server_version,
+                    request_id,
+                    Some(contract_id),
+                    None,
+                    start_date,
+                    end_date,
+                    limit,
+                    auto_fill,
+                )
+            },
+            |message| decoders::decode_event_data_message(message.clone()),
+            || Err(Error::UnexpectedEndOfStream),
+        )
     }
 
-    let server_version = client.server_version;
-    request_helpers::blocking::one_shot_request_with_retry(
-        client,
-        |request_id| {
+    /// Requests event data from the Wall Street Horizons (WSH) calendar using a JSON filter.
+    ///
+    /// # Arguments
+    ///
+    /// * `filter`    - Json-formatted string containing all filter values.
+    /// * `limit`     - Maximum number of events to return. Maximum of 100.
+    /// * `auto_fill` - Fields to automatically fill in. See [AutoFill] for more information.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    ///
+    /// let filter = ""; // see https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/#wsheventdata-object
+    /// let event_data = client.wsh_event_data_by_filter(filter, None, None).expect("request wsh event data failed");
+    /// for result in event_data {
+    ///     println!("{result:?}");
+    /// }
+    /// ```
+    pub fn wsh_event_data_by_filter(
+        &self,
+        filter: &str,
+        limit: Option<i32>,
+        auto_fill: Option<AutoFill>,
+    ) -> Result<Subscription<WshEventData>, Error> {
+        if limit.is_some() {
+            check_version(self.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
+        }
+
+        request_helpers::blocking::request_with_id(self, Features::WSH_EVENT_DATA_FILTERS, |request_id| {
             encoders::encode_request_wsh_event_data(
-                server_version,
+                self.server_version,
                 request_id,
-                Some(contract_id),
                 None,
-                start_date,
-                end_date,
+                Some(filter),
+                None, // start_date
+                None, // end_date
                 limit,
                 auto_fill,
             )
-        },
-        |message| decoders::decode_event_data_message(message.clone()),
-        || Err(Error::UnexpectedEndOfStream),
-    )
-}
-
-/// Requests Wall Street Horizon event data by filter criteria.
-///
-/// Returns a subscription that streams WSH events matching the filter criteria.
-///
-/// # Arguments
-/// * `client` - The client instance
-/// * `filter` - Filter string to select events (e.g., "symbol=AAPL")
-/// * `limit` - Optional maximum number of events to return
-/// * `auto_fill` - Optional auto-fill settings for related securities
-///
-/// # Returns
-/// * `Ok(Subscription<WshEventData>)` - Subscription to receive matching events
-/// * `Err(Error)` - If the server version doesn't support filters or the request failed
-pub(crate) fn wsh_event_data_by_filter(
-    client: &Client,
-    filter: &str,
-    limit: Option<i32>,
-    auto_fill: Option<AutoFill>,
-) -> Result<Subscription<WshEventData>, Error> {
-    if limit.is_some() {
-        check_version(client.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
+        })
     }
-
-    request_helpers::blocking::request_with_id(client, Features::WSH_EVENT_DATA_FILTERS, |request_id| {
-        encoders::encode_request_wsh_event_data(
-            client.server_version,
-            request_id,
-            None,
-            Some(filter),
-            None, // start_date
-            None, // end_date
-            limit,
-            auto_fill,
-        )
-    })
 }
 
 #[cfg(test)]
@@ -144,7 +161,7 @@ mod tests {
             });
 
             let client = Client::stubbed(message_bus, test_case.server_version);
-            let result = wsh_metadata(&client);
+            let result = client.wsh_metadata();
 
             match test_case.expected_result {
                 ApiExpectedResult::Success { json } => {
@@ -174,8 +191,7 @@ mod tests {
             });
 
             let client = Client::stubbed(message_bus, test_case.server_version);
-            let result = wsh_event_data_by_contract(
-                &client,
+            let result = client.wsh_event_data_by_contract(
                 test_case.contract_id,
                 test_case.start_date,
                 test_case.end_date,
@@ -211,7 +227,7 @@ mod tests {
         });
 
         let client = Client::stubbed(message_bus, crate::server_versions::WSH_EVENT_DATA_FILTERS_DATE);
-        let result = wsh_event_data_by_filter(&client, test_data::TEST_FILTER, Some(50), None);
+        let result = client.wsh_event_data_by_filter(test_data::TEST_FILTER, Some(50), None);
 
         assert!(result.is_ok());
         let subscription = result.unwrap();
@@ -248,8 +264,7 @@ mod tests {
             let result = match test_case.name {
                 "successful filter request with autofill" => {
                     let filter = "filter=value";
-                    let result = wsh_event_data_by_filter(
-                        &client,
+                    let result = client.wsh_event_data_by_filter(
                         filter,
                         Some(100),
                         Some(AutoFill {
@@ -267,7 +282,7 @@ mod tests {
                 }
                 "successful filter request without autofill" => {
                     let filter = "filter=value";
-                    let result = wsh_event_data_by_filter(&client, filter, None, None);
+                    let result = client.wsh_event_data_by_filter(filter, None, None);
 
                     if result.is_ok() {
                         let request_messages = client.message_bus.request_messages();
@@ -275,7 +290,7 @@ mod tests {
                     }
                     result
                 }
-                _ => wsh_event_data_by_filter(&client, "filter", None, None),
+                _ => client.wsh_event_data_by_filter("filter", None, None),
             };
 
             match test_case.expected_result {
@@ -307,8 +322,7 @@ mod tests {
             let client = Client::stubbed(message_bus, test_case.server_version);
 
             let result = if let Some(contract_id) = test_case.contract_id {
-                wsh_event_data_by_contract(
-                    &client,
+                client.wsh_event_data_by_contract(
                     contract_id,
                     test_case.start_date,
                     test_case.end_date,
@@ -316,7 +330,9 @@ mod tests {
                     test_case.auto_fill,
                 )
             } else {
-                wsh_event_data_by_filter(&client, "filter", test_case.limit, test_case.auto_fill).map(|_| WshEventData { data_json: "".to_string() })
+                client
+                    .wsh_event_data_by_filter("filter", test_case.limit, test_case.auto_fill)
+                    .map(|_| WshEventData { data_json: "".to_string() })
             };
 
             if test_case.expected_error {
@@ -343,7 +359,7 @@ mod tests {
             });
 
             let client = Client::stubbed(message_bus, test_case.server_version);
-            let result = wsh_event_data_by_filter(&client, "test_filter", None, None);
+            let result = client.wsh_event_data_by_filter("test_filter", None, None);
 
             assert!(result.is_ok(), "Test '{}' failed to create subscription", test_case.name);
             let subscription = result.unwrap();

@@ -38,9 +38,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let realtime_bars = client
         .realtime_bars(
             &contract,
-            RealtimeBarSize::Sec5,      // 5-second bars
-            RealtimeWhatToShow::Trades, // Trade data
-            TradingHours::Regular,      // Use regular trading hours
+            &RealtimeBarSize::Sec5,      // 5-second bars
+            &RealtimeWhatToShow::Trades, // Trade data
+            TradingHours::Regular,       // Use regular trading hours
+            vec![],                      // No additional options
         )
         .await?;
     println!("Real-time bars subscription created");

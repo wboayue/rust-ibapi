@@ -2,8 +2,6 @@ use super::{BracketOrderBuilder, BracketOrderIds, OrderBuilder, OrderId};
 use crate::client::sync::Client;
 use crate::contracts::Contract;
 use crate::errors::Error;
-use crate::orders;
-
 #[cfg(test)]
 mod tests;
 
@@ -15,7 +13,7 @@ impl<'a> OrderBuilder<'a, Client> {
         let contract = self.contract;
         let order_id = client.next_order_id();
         let order = self.build()?;
-        orders::blocking::submit_order(client, order_id, contract, &order)?;
+        client.submit_order(order_id, contract, &order)?;
         Ok(OrderId::new(order_id))
     }
 
@@ -34,7 +32,7 @@ impl<'a> OrderBuilder<'a, Client> {
         let order = self.build()?;
 
         // Submit what-if order and get the response
-        let responses = orders::blocking::place_order(client, order_id, contract, &order)?;
+        let responses = client.place_order(order_id, contract, &order)?;
 
         // Look for the order state in the responses
         for response in responses {
@@ -77,7 +75,7 @@ impl<'a> BracketOrderBuilder<'a, Client> {
                 order.transmit = true;
             }
 
-            orders::blocking::submit_order(client, order_id, contract, &order)?;
+            client.submit_order(order_id, contract, &order)?;
         }
 
         Ok(BracketOrderIds::new(parent_id, tp_id, sl_id))
@@ -123,7 +121,7 @@ impl Client {
             let order_id = self.next_order_id();
             order.order_id = order_id;
             order_ids.push(OrderId::new(order_id));
-            orders::blocking::submit_order(self, order_id, &contract, &order)?;
+            self.submit_order(order_id, &contract, &order)?;
         }
 
         Ok(order_ids)
