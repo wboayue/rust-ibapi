@@ -30,6 +30,10 @@ The rust-ibapi crate is a Rust implementation of the Interactive Brokers TWS API
 - [**Integration Tests**](docs/integration-tests.md) - Writing tests against a live gateway
 - [**Extending the API**](docs/extending-api.md) - Adding new TWS API functionality
 
+## Version 3.0 Philosophy
+
+Version 3.0 is a breaking release. Fix API inconsistencies even when it means breaking changes — consistent naming, idiomatic Rust patterns, and a clean public API take priority over backward compatibility.
+
 ## Branches
 
 - **`main`** — 3.x development and releases
