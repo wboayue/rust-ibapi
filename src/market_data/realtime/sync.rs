@@ -5,7 +5,7 @@ use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::orders::TagValue;
 use crate::protocol::{check_version, Features};
-use crate::{client::sync::Client, Error};
+use crate::{client::sync::Client, server_versions, Error};
 
 use super::common::{decoders, encoders};
 use super::{Bar, BarSize, BidAsk, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, Trade, WhatToShow};
@@ -306,7 +306,12 @@ impl Client {
     /// println!("market data switched: {market_data_type:?}");
     /// ```
     pub fn switch_market_data_type(&self, market_data_type: crate::market_data::MarketDataType) -> Result<(), Error> {
-        crate::market_data::blocking::switch_market_data_type(self, market_data_type)
+        self.check_server_version(server_versions::REQ_MARKET_DATA_TYPE, "It does not support market data type requests.")?;
+
+        let message = crate::market_data::encoders::encode_request_market_data_type(market_data_type)?;
+        let _ = self.send_shared_request(OutgoingMessages::RequestMarketDataType, message)?;
+
+        Ok(())
     }
 }
 

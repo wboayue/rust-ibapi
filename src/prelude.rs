@@ -39,7 +39,7 @@ pub use crate::market_data::{MarketDataType, TradingHours};
 pub use crate::orders::{order_builder, Action, ExecutionFilter, OrderUpdate, Orders, PlaceOrder};
 
 #[cfg(feature = "async")]
-pub use crate::orders::{order_builder, Action, PlaceOrder};
+pub use crate::orders::{order_builder, Action, ExecutionFilter, OrderUpdate, Orders, PlaceOrder};
 
 // Account types
 pub use crate::accounts::{

@@ -39,8 +39,5 @@ pub use crate::subscriptions::r#async::Subscription;
 #[cfg(feature = "sync")]
 pub use crate::subscriptions::sync::SharesChannel;
 
-#[cfg(all(feature = "sync", feature = "async"))]
-pub(crate) use builders::r#async::{ClientRequestBuilders, SubscriptionBuilderExt};
-
-#[cfg(all(not(feature = "sync"), feature = "async"))]
+#[cfg(feature = "async")]
 pub(crate) use builders::r#async::{ClientRequestBuilders, SubscriptionBuilderExt};
