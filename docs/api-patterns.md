@@ -48,25 +48,29 @@ For comprehensive documentation, see the [Contract Builder Guide](contract-build
 For client methods with request IDs:
 
 ```rust
-// Sync mode
-pub fn pnl(client: &Client, account: &str) -> Result<Subscription<PnL>, Error> {
-    let builder = client
-        .request()
-        .check_version(server_versions::PNL, "PnL not supported")?;
-    
-    let request = encode_request_pnl(builder.request_id(), account)?;
-    builder.send(request)
+// Sync mode (in domain/sync.rs as impl Client block)
+impl Client {
+    pub fn pnl(&self, account: &str) -> Result<Subscription<PnL>, Error> {
+        let builder = self
+            .request()
+            .check_version(server_versions::PNL, "PnL not supported")?;
+        
+        let request = encode_request_pnl(builder.request_id(), account)?;
+        builder.send(request)
+    }
 }
 
-// Async mode - identical except for .await
-pub async fn pnl(client: &Client, account: &str) -> Result<Subscription<PnL>, Error> {
-    let builder = client
-        .request()
-        .check_version(server_versions::PNL, "PnL not supported")
-        .await?;
-    
-    let request = encode_request_pnl(builder.request_id(), account)?;
-    builder.send(request).await
+// Async mode (in domain/async.rs as impl Client block)
+impl Client {
+    pub async fn pnl(&self, account: &str) -> Result<Subscription<PnL>, Error> {
+        let builder = self
+            .request()
+            .check_version(server_versions::PNL, "PnL not supported")
+            .await?;
+        
+        let request = encode_request_pnl(builder.request_id(), account)?;
+        builder.send(request).await
+    }
 }
 ```
 
@@ -75,23 +79,25 @@ pub async fn pnl(client: &Client, account: &str) -> Result<Subscription<PnL>, Er
 For requests using shared channels (no request ID):
 
 ```rust
-// Sync mode
-pub fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
-    let request = encode_request_positions()?;
-    
-    client
-        .shared_request(OutgoingMessages::RequestPositions)
-        .send(request)
+// Sync mode (in domain/sync.rs)
+impl Client {
+    pub fn positions(&self) -> Result<Subscription<PositionUpdate>, Error> {
+        let request = encode_request_positions()?;
+        
+        self.shared_request(OutgoingMessages::RequestPositions)
+            .send(request)
+    }
 }
 
-// Async mode
-pub async fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, Error> {
-    let request = encode_request_positions()?;
-    
-    client
-        .shared_request(OutgoingMessages::RequestPositions)
-        .send(request)
-        .await
+// Async mode (in domain/async.rs)
+impl Client {
+    pub async fn positions(&self) -> Result<Subscription<PositionUpdate>, Error> {
+        let request = encode_request_positions()?;
+        
+        self.shared_request(OutgoingMessages::RequestPositions)
+            .send(request)
+            .await
+    }
 }
 ```
 
@@ -100,11 +106,13 @@ pub async fn positions(client: &Client) -> Result<Subscription<PositionUpdate>, 
 For order operations:
 
 ```rust
-pub fn place_order(client: &Client, contract: &Contract, order: &Order) -> Result<(), Error> {
-    let builder = client.order_request();
-    let request = encode_order(builder.order_id(), contract, order)?;
-    builder.send(request)?;  // .await for async
-    Ok(())
+impl Client {
+    pub fn place_order(&self, contract: &Contract, order: &Order) -> Result<(), Error> {
+        let builder = self.order_request();
+        let request = encode_order(builder.order_id(), contract, order)?;
+        builder.send(request)?;  // .await for async
+        Ok(())
+    }
 }
 ```
 
@@ -113,17 +121,18 @@ pub fn place_order(client: &Client, contract: &Contract, order: &Order) -> Resul
 Create subscriptions with additional context:
 
 ```rust
-pub fn market_depth(client: &Client, contract: &Contract, num_rows: i32) 
-    -> Result<Subscription<MarketDepth>, Error> 
-{
-    let request_id = client.next_request_id();
-    let request = encode_market_depth(request_id, contract, num_rows)?;
-    
-    client
-        .subscription::<MarketDepth>()
-        .with_smart_depth(true)
-        .send_with_request_id(request_id, request)
-        // .await for async version
+impl Client {
+    pub fn market_depth(&self, contract: &Contract, num_rows: i32) 
+        -> Result<Subscription<MarketDepth>, Error> 
+    {
+        let request_id = self.next_request_id();
+        let request = encode_market_depth(request_id, contract, num_rows)?;
+        
+        self.subscription::<MarketDepth>()
+            .with_smart_depth(true)
+            .send_with_request_id(request_id, request)
+            // .await for async version
+    }
 }
 ```
 
