@@ -5,15 +5,23 @@ use crate::contracts::{Contract, TagValue};
 use crate::messages::OutgoingMessages;
 use crate::protocol::{check_version, Features};
 use crate::subscriptions::Subscription;
-use crate::{Client, Error};
+use crate::{server_versions, Client, Error};
 
 use super::common::{decoders, encoders};
 use super::{Bar, BarSize, BidAsk, DepthMarketDataDescription, MarketDepths, MidPoint, TickTypes, Trade, WhatToShow};
 use crate::market_data::TradingHours;
 
-// === Public API Functions ===
-
 impl Client {
+    /// Switches market data type returned from market data request.
+    pub async fn switch_market_data_type(&self, market_data_type: crate::market_data::MarketDataType) -> Result<(), Error> {
+        self.check_server_version(server_versions::REQ_MARKET_DATA_TYPE, "It does not support market data type requests.")?;
+
+        let message = crate::market_data::encoders::encode_request_market_data_type(market_data_type)?;
+        self.send_message(message).await?;
+
+        Ok(())
+    }
+
     /// Requests realtime bars.
     pub async fn realtime_bars(
         &self,
