@@ -1,6 +1,6 @@
-use crate::orders::common::decoders;
 use crate::messages::{IncomingMessages, Notice, ResponseMessage};
-use crate::orders::{CancelOrder, ExerciseOptions, Executions, OrderUpdate, Orders, PlaceOrder};
+use crate::orders::common::decoders;
+use crate::orders::{CancelOrder, Executions, ExerciseOptions, OrderUpdate, Orders, PlaceOrder};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 

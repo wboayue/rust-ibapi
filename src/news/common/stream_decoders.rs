@@ -1,7 +1,7 @@
-use crate::news::common::decoders;
-use crate::news::common::encoders;
 use crate::market_data::realtime;
 use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::news::common::decoders;
+use crate::news::common::encoders;
 use crate::news::{NewsArticle, NewsBulletin};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;

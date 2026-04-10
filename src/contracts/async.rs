@@ -68,7 +68,6 @@ impl Client {
         Err(Error::UnexpectedEndOfStream)
     }
 
-
     /// Requests matching stock symbols.
     ///
     /// # Arguments

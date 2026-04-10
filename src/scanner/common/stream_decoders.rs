@@ -1,6 +1,6 @@
+use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::scanner::common::decoders;
 use crate::scanner::common::encoders;
-use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::scanner::ScannerData;
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
