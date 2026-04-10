@@ -5,57 +5,8 @@ use super::*;
 use crate::contracts::Contract;
 use crate::market_data::realtime;
 use crate::messages::OutgoingMessages;
-#[cfg(not(feature = "sync"))]
-use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
 use crate::subscriptions::Subscription;
-#[cfg(not(feature = "sync"))]
-use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::{server_versions, Client, Error};
-
-#[cfg(not(feature = "sync"))]
-impl StreamDecoder<NewsBulletin> for NewsBulletin {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::NewsBulletins];
-
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<NewsBulletin, Error> {
-        match message.message_type() {
-            IncomingMessages::NewsBulletins => Ok(decoders::decode_news_bulletin(message.clone())?),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
-    }
-
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
-        encoders::encode_cancel_news_bulletin()
-    }
-}
-
-#[cfg(not(feature = "sync"))]
-impl StreamDecoder<NewsArticle> for NewsArticle {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
-        IncomingMessages::HistoricalNews,
-        IncomingMessages::HistoricalNewsEnd,
-        IncomingMessages::TickNews,
-    ];
-
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<NewsArticle, Error> {
-        match message.message_type() {
-            IncomingMessages::HistoricalNews => Ok(decoders::decode_historical_news(None, message.clone())?),
-            IncomingMessages::HistoricalNewsEnd => Err(Error::EndOfStream),
-            IncomingMessages::TickNews => Ok(decoders::decode_tick_news(message.clone())?),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
-    }
-
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
-        // News articles can come from market data subscriptions, so use the appropriate cancel
-        if context.and_then(|c| c.request_type) == Some(OutgoingMessages::RequestMarketData) {
-            let request_id = request_id.expect("Request ID required to encode cancel market data");
-            realtime::common::encoders::encode_cancel_market_data(request_id)
-        } else {
-            // Historical news requests don't need cancellation (they end with HistoricalNewsEnd)
-            Err(Error::NotImplemented)
-        }
-    }
-}
 
 impl Client {
     /// Requests news providers which the user has subscribed to.

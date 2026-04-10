@@ -6,21 +6,9 @@ use super::common::{decoders, encoders};
 use super::*;
 use crate::client::blocking::Subscription;
 use crate::client::sync::Client;
-use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::OutgoingMessages;
 use crate::orders::TagValue;
-use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::{server_versions, Error};
-
-impl StreamDecoder<Vec<ScannerData>> for Vec<ScannerData> {
-    fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Vec<ScannerData>, Error> {
-        decoders::decode_scanner_message(message)
-    }
-
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
-        let request_id = request_id.expect("Request ID required to encode cancel scanner subscription.");
-        encoders::encode_cancel_scanner_subscription(request_id)
-    }
-}
 
 impl Client {
     /// Requests an XML list of scanner parameters valid in TWS.

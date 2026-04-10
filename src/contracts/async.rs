@@ -1,6 +1,6 @@
 //! Asynchronous implementation of contract management functionality
 
-use super::common::{decoders, encoders};
+use super::common::{decoders, encoders, verify};
 use super::*;
 use crate::client::ClientRequestBuilders;
 use crate::common::request_helpers;
@@ -37,7 +37,7 @@ impl Client {
     /// }
     /// ```
     pub async fn contract_details(&self, contract: &Contract) -> Result<Vec<ContractDetails>, Error> {
-        self.verify_contract(contract).await?;
+        verify::verify_contract(self.server_version(), contract)?;
 
         let builder = self.request();
         let request_id = builder.request_id();
@@ -68,26 +68,6 @@ impl Client {
         Err(Error::UnexpectedEndOfStream)
     }
 
-    /// Validates contract fields against server version requirements.
-    pub async fn verify_contract(&self, contract: &Contract) -> Result<(), Error> {
-        if !contract.security_id_type.is_empty() || !contract.security_id.is_empty() {
-            check_version(self.server_version(), Features::SEC_ID_TYPE)?;
-        }
-
-        if !contract.trading_class.is_empty() {
-            check_version(self.server_version(), Features::TRADING_CLASS)?;
-        }
-
-        if !contract.primary_exchange.is_empty() {
-            check_version(self.server_version(), Features::LINKING)?;
-        }
-
-        if !contract.issuer_id.is_empty() {
-            check_version(self.server_version(), Features::BOND_ISSUERID)?;
-        }
-
-        Ok(())
-    }
 
     /// Requests matching stock symbols.
     ///
@@ -441,7 +421,7 @@ mod tests {
             });
 
             let client = Client::stubbed(message_bus, test_case.server_version);
-            let result = client.verify_contract(&test_case.contract).await;
+            let result = verify::verify_contract(client.server_version(), &test_case.contract);
 
             if test_case.should_error {
                 assert!(result.is_err(), "Test '{}' should have failed", test_case.name);

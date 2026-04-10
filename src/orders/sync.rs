@@ -1,119 +1,12 @@
 use std::sync::Arc;
 
-use super::common::{decoders, encoders, verify};
+use super::common::{encoders, verify};
 use super::{CancelOrder, ExecutionFilter, Executions, ExerciseAction, ExerciseOptions, OrderUpdate, Orders, PlaceOrder};
 use crate::client::blocking::Subscription;
 use crate::contracts::Contract;
-use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
-use crate::subscriptions::{DecoderContext, StreamDecoder};
+use crate::messages::OutgoingMessages;
 use crate::{client::sync::Client, server_versions, Error};
 use time::OffsetDateTime;
-
-impl StreamDecoder<PlaceOrder> for PlaceOrder {
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<PlaceOrder, Error> {
-        match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(PlaceOrder::OpenOrder(decoders::decode_open_order(
-                context.server_version,
-                message.clone(),
-            )?)),
-            IncomingMessages::OrderStatus => Ok(PlaceOrder::OrderStatus(decoders::decode_order_status(context.server_version, message)?)),
-            IncomingMessages::ExecutionData => Ok(PlaceOrder::ExecutionData(decoders::decode_execution_data(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::CommissionsReport => Ok(PlaceOrder::CommissionReport(decoders::decode_commission_report(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::Error => Ok(PlaceOrder::Message(Notice::from(message))),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
-    }
-}
-
-impl StreamDecoder<OrderUpdate> for OrderUpdate {
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<OrderUpdate, Error> {
-        match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(OrderUpdate::OpenOrder(decoders::decode_open_order(
-                context.server_version,
-                message.clone(),
-            )?)),
-            IncomingMessages::OrderStatus => Ok(OrderUpdate::OrderStatus(decoders::decode_order_status(context.server_version, message)?)),
-            IncomingMessages::ExecutionData => Ok(OrderUpdate::ExecutionData(decoders::decode_execution_data(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::CommissionsReport => Ok(OrderUpdate::CommissionReport(decoders::decode_commission_report(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::Error => Ok(OrderUpdate::Message(Notice::from(message))),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
-    }
-}
-
-impl StreamDecoder<CancelOrder> for CancelOrder {
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<CancelOrder, Error> {
-        match message.message_type() {
-            IncomingMessages::OrderStatus => Ok(CancelOrder::OrderStatus(decoders::decode_order_status(context.server_version, message)?)),
-            IncomingMessages::Error => Ok(CancelOrder::Notice(Notice::from(message))),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
-    }
-}
-
-impl StreamDecoder<Orders> for Orders {
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Orders, Error> {
-        match message.message_type() {
-            IncomingMessages::CompletedOrder => Ok(Orders::OrderData(decoders::decode_completed_order(
-                context.server_version,
-                message.clone(),
-            )?)),
-            IncomingMessages::CommissionsReport => Ok(Orders::OrderData(decoders::decode_open_order(context.server_version, message.clone())?)),
-            IncomingMessages::OpenOrder => Ok(Orders::OrderData(decoders::decode_open_order(context.server_version, message.clone())?)),
-            IncomingMessages::OrderStatus => Ok(Orders::OrderStatus(decoders::decode_order_status(context.server_version, message)?)),
-            IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => Err(Error::EndOfStream),
-            IncomingMessages::Error => Ok(Orders::Notice(Notice::from(message))),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
-    }
-}
-
-impl StreamDecoder<Executions> for Executions {
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Executions, Error> {
-        match message.message_type() {
-            IncomingMessages::ExecutionData => Ok(Executions::ExecutionData(decoders::decode_execution_data(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::CommissionsReport => Ok(Executions::CommissionReport(decoders::decode_commission_report(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::ExecutionDataEnd => Err(Error::EndOfStream),
-            IncomingMessages::Error => Ok(Executions::Notice(Notice::from(message))),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
-    }
-}
-
-impl StreamDecoder<ExerciseOptions> for ExerciseOptions {
-    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<ExerciseOptions, Error> {
-        match message.message_type() {
-            IncomingMessages::OpenOrder => Ok(ExerciseOptions::OpenOrder(decoders::decode_open_order(
-                context.server_version,
-                message.clone(),
-            )?)),
-            IncomingMessages::OrderStatus => Ok(ExerciseOptions::OrderStatus(decoders::decode_order_status(
-                context.server_version,
-                message,
-            )?)),
-            IncomingMessages::Error => Ok(ExerciseOptions::Notice(Notice::from(message))),
-            _ => Err(Error::UnexpectedResponse(message.clone())),
-        }
-    }
-}
 
 impl Client {
     /// Requests all *current* open orders in associated accounts at the current moment.
