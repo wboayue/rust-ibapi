@@ -2,7 +2,7 @@ use crate::contracts::{Contract, Currency, Exchange, Symbol};
 use crate::errors::Error;
 use crate::orders::builder::tests::mock_client::mock::MockOrderClient;
 use crate::orders::builder::{BracketOrderBuilder, BracketOrderIds, OrderBuilder, OrderId};
-use crate::orders::{Action, Order, OrderData, OrderState, PlaceOrder};
+use crate::orders::{Action, Order, OrderData, OrderState, PlaceOrder, TimeInForce};
 
 fn create_stock_contract(symbol: &str) -> Contract {
     Contract {
@@ -201,6 +201,32 @@ fn test_bracket_order_submit_all() {
     assert_eq!(submitted[2].2.aux_price, Some(45.0));
     assert_eq!(submitted[2].2.parent_id, 200);
     assert!(submitted[2].2.transmit);
+}
+
+#[test]
+fn test_bracket_order_propagates_tif() {
+    let client = MockOrderClient::new();
+    let contract = create_stock_contract("AAPL");
+
+    client.set_next_order_id(200);
+
+    let bracket_builder = OrderBuilder::new(&client, &contract)
+        .buy(100)
+        .good_till_cancel()
+        .bracket()
+        .entry_limit(50.0)
+        .take_profit(55.0)
+        .stop_loss(45.0);
+
+    let _bracket_ids = bracket_builder.submit_all().unwrap();
+
+    let submitted = client.get_submitted_orders();
+    assert_eq!(submitted.len(), 3);
+
+    // All three orders should have GTC
+    assert_eq!(submitted[0].2.tif, TimeInForce::GoodTilCanceled);
+    assert_eq!(submitted[1].2.tif, TimeInForce::GoodTilCanceled);
+    assert_eq!(submitted[2].2.tif, TimeInForce::GoodTilCanceled);
 }
 
 #[test]

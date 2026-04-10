@@ -1023,8 +1023,8 @@ impl<'a, C> BracketOrderBuilder<'a, C> {
             limit_price: Some(take_profit.value()),
             parent_id: parent.order_id,
             transmit: false,
-            outside_rth: parent.outside_rth,
             tif: parent.tif.clone(),
+            outside_rth: parent.outside_rth,
             ..Default::default()
         };
 
@@ -1036,8 +1036,8 @@ impl<'a, C> BracketOrderBuilder<'a, C> {
             aux_price: Some(stop_loss.value()),
             parent_id: parent.order_id,
             transmit: true,
-            outside_rth: parent.outside_rth,
             tif: parent.tif.clone(),
+            outside_rth: parent.outside_rth,
             ..Default::default()
         };
 

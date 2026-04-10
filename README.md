@@ -4,6 +4,8 @@
 [![Documentation](https://img.shields.io/badge/Documentation-green.svg)](https://docs.rs/ibapi/latest/ibapi/)
 [![Coverage Status](https://coveralls.io/repos/github/wboayue/rust-ibapi/badge.png?branch=main)](https://coveralls.io/github/wboayue/rust-ibapi?branch=main)
 
+> **Branch notice:** The `main` branch is now tracking **v3.0** development. For v2.x maintenance and bug fixes, see the [`v2-stable`](https://github.com/wboayue/rust-ibapi/tree/v2-stable) branch.
+
 ## Introduction
 
 This library provides a comprehensive Rust implementation of the Interactive Brokers [TWS API](https://ibkrcampus.com/campus/ibkr-api-page/twsapi-doc/), offering a robust and user-friendly interface for TWS and IB Gateway. Designed with performance and simplicity in mind, `ibapi` is a good fit for automated trading systems, market analysis, real-time data collection and portfolio management tools.
@@ -19,13 +21,13 @@ rust-ibapi ships both asynchronous (Tokio) and blocking (threaded) clients. The 
 
 ```toml
 # Async only (default features)
-ibapi = "2.9"
+ibapi = "3.0"
 
 # Blocking only
-ibapi = { version = "2.9", default-features = false, features = ["sync"] }
+ibapi = { version = "3.0", default-features = false, features = ["sync"] }
 
 # Async + blocking together
-ibapi = { version = "2.9", default-features = false, features = ["sync", "async"] }
+ibapi = { version = "3.0", default-features = false, features = ["sync", "async"] }
 ```
 
 ```bash
