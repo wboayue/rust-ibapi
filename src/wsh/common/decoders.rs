@@ -26,7 +26,7 @@ pub(in crate::wsh) fn decode_wsh_event_data(mut message: ResponseMessage) -> Res
 
 #[allow(dead_code)]
 pub(crate) fn decode_wsh_metadata_proto(bytes: &[u8]) -> Result<WshMetadata, Error> {
-    let p = crate::proto::WshMetaData::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p = crate::proto::WshMetaData::decode(bytes)?;
     Ok(WshMetadata {
         data_json: p.data_json.unwrap_or_default(),
     })
@@ -34,7 +34,7 @@ pub(crate) fn decode_wsh_metadata_proto(bytes: &[u8]) -> Result<WshMetadata, Err
 
 #[allow(dead_code)]
 pub(crate) fn decode_wsh_event_data_proto(bytes: &[u8]) -> Result<WshEventData, Error> {
-    let p = crate::proto::WshEventData::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p = crate::proto::WshEventData::decode(bytes)?;
     Ok(WshEventData {
         data_json: p.data_json.unwrap_or_default(),
     })

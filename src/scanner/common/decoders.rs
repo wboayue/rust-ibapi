@@ -63,7 +63,7 @@ pub(in crate::scanner) fn decode_scanner_data(mut message: ResponseMessage) -> R
 
 #[allow(dead_code)]
 pub(crate) fn decode_scanner_data_proto(bytes: &[u8]) -> Result<Vec<ScannerData>, Error> {
-    let p = crate::proto::ScannerData::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p = crate::proto::ScannerData::decode(bytes)?;
 
     let mut results = Vec::with_capacity(p.scanner_data_element.len());
     for elem in &p.scanner_data_element {

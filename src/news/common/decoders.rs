@@ -100,7 +100,7 @@ fn parse_unix_timestamp(time: &str) -> Result<OffsetDateTime, Error> {
 
 #[allow(dead_code)]
 pub(crate) fn decode_news_bulletin_proto(bytes: &[u8]) -> Result<NewsBulletin, Error> {
-    let p = crate::proto::NewsBulletin::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p = crate::proto::NewsBulletin::decode(bytes)?;
     Ok(NewsBulletin {
         message_id: p.news_msg_id.unwrap_or_default(),
         message_type: p.news_msg_type.unwrap_or_default(),
@@ -111,7 +111,7 @@ pub(crate) fn decode_news_bulletin_proto(bytes: &[u8]) -> Result<NewsBulletin, E
 
 #[allow(dead_code)]
 pub(crate) fn decode_news_article_proto(bytes: &[u8]) -> Result<NewsArticleBody, Error> {
-    let p = crate::proto::NewsArticle::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p = crate::proto::NewsArticle::decode(bytes)?;
     Ok(NewsArticleBody {
         article_type: ArticleType::from(p.article_type.unwrap_or_default()),
         article_text: p.article_text.unwrap_or_default(),
@@ -120,7 +120,7 @@ pub(crate) fn decode_news_article_proto(bytes: &[u8]) -> Result<NewsArticleBody,
 
 #[allow(dead_code)]
 pub(crate) fn decode_historical_news_proto(bytes: &[u8]) -> Result<NewsArticle, Error> {
-    let p = crate::proto::HistoricalNews::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p = crate::proto::HistoricalNews::decode(bytes)?;
 
     let time = p
         .time

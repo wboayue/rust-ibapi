@@ -1132,7 +1132,7 @@ fn decode_percent_change_condition(message: &mut ResponseMessage, is_conjunction
 
 #[allow(dead_code)]
 pub(crate) fn decode_open_order_proto(bytes: &[u8]) -> Result<OrderData, Error> {
-    let p: crate::proto::OpenOrder = prost::Message::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p: crate::proto::OpenOrder = prost::Message::decode(bytes)?;
     let contract = p.contract.as_ref().map(crate::proto::decoders::decode_contract).unwrap_or_default();
     let order = p.order.as_ref().map(crate::proto::decoders::decode_order).unwrap_or_default();
     let order_state = p.order_state.as_ref().map(crate::proto::decoders::decode_order_state).unwrap_or_default();
@@ -1147,7 +1147,7 @@ pub(crate) fn decode_open_order_proto(bytes: &[u8]) -> Result<OrderData, Error> 
 
 #[allow(dead_code)]
 pub(crate) fn decode_order_status_proto(bytes: &[u8]) -> Result<OrderStatus, Error> {
-    let p: crate::proto::OrderStatus = prost::Message::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p: crate::proto::OrderStatus = prost::Message::decode(bytes)?;
 
     Ok(OrderStatus {
         order_id: p.order_id.unwrap_or_default(),
@@ -1166,7 +1166,7 @@ pub(crate) fn decode_order_status_proto(bytes: &[u8]) -> Result<OrderStatus, Err
 
 #[allow(dead_code)]
 pub(crate) fn decode_execution_data_proto(bytes: &[u8]) -> Result<ExecutionData, Error> {
-    let p: crate::proto::ExecutionDetails = prost::Message::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p: crate::proto::ExecutionDetails = prost::Message::decode(bytes)?;
 
     Ok(ExecutionData {
         request_id: p.req_id.unwrap_or_default(),
@@ -1177,7 +1177,7 @@ pub(crate) fn decode_execution_data_proto(bytes: &[u8]) -> Result<ExecutionData,
 
 #[allow(dead_code)]
 pub(crate) fn decode_completed_order_proto(bytes: &[u8]) -> Result<OrderData, Error> {
-    let p: crate::proto::CompletedOrder = prost::Message::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p: crate::proto::CompletedOrder = prost::Message::decode(bytes)?;
     let contract = p.contract.as_ref().map(crate::proto::decoders::decode_contract).unwrap_or_default();
     let order = p.order.as_ref().map(crate::proto::decoders::decode_order).unwrap_or_default();
     let order_state = p.order_state.as_ref().map(crate::proto::decoders::decode_order_state).unwrap_or_default();
@@ -1192,7 +1192,7 @@ pub(crate) fn decode_completed_order_proto(bytes: &[u8]) -> Result<OrderData, Er
 
 #[allow(dead_code)]
 pub(crate) fn decode_commission_report_proto(bytes: &[u8]) -> Result<CommissionReport, Error> {
-    let p: crate::proto::CommissionAndFeesReport = prost::Message::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p: crate::proto::CommissionAndFeesReport = prost::Message::decode(bytes)?;
 
     Ok(CommissionReport {
         execution_id: p.exec_id.unwrap_or_default(),

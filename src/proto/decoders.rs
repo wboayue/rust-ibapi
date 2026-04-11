@@ -532,7 +532,7 @@ pub fn decode_contract_details(proto_contract: &proto::Contract, proto_details: 
 }
 
 pub fn decode_error_message(bytes: &[u8]) -> Result<(i32, i32, String, String), Error> {
-    let p = proto::ErrorMessage::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p = proto::ErrorMessage::decode(bytes)?;
     Ok((
         p.id.unwrap_or_default(),
         p.error_code.unwrap_or_default(),

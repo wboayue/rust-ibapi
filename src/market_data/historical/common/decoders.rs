@@ -358,7 +358,7 @@ fn ts(secs: i64) -> OffsetDateTime {
 
 #[allow(dead_code)]
 pub(crate) fn decode_historical_data_proto(bytes: &[u8]) -> Result<Vec<Bar>, Error> {
-    let msg = proto::HistoricalData::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let msg = proto::HistoricalData::decode(bytes)?;
 
     let bars = msg
         .historical_data_bars
@@ -388,13 +388,13 @@ pub(crate) fn decode_historical_data_proto(bytes: &[u8]) -> Result<Vec<Bar>, Err
 
 #[allow(dead_code)]
 pub(crate) fn decode_head_timestamp_proto(bytes: &[u8]) -> Result<String, Error> {
-    let msg = proto::HeadTimestamp::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let msg = proto::HeadTimestamp::decode(bytes)?;
     Ok(msg.head_timestamp.unwrap_or_default())
 }
 
 #[allow(dead_code)]
 pub(crate) fn decode_real_time_bar_proto(bytes: &[u8]) -> Result<crate::market_data::realtime::Bar, Error> {
-    let msg = proto::RealTimeBarTick::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let msg = proto::RealTimeBarTick::decode(bytes)?;
 
     Ok(crate::market_data::realtime::Bar {
         date: OffsetDateTime::from_unix_timestamp(msg.time.unwrap_or_default()).unwrap_or(OffsetDateTime::UNIX_EPOCH),
@@ -410,7 +410,7 @@ pub(crate) fn decode_real_time_bar_proto(bytes: &[u8]) -> Result<crate::market_d
 
 #[allow(dead_code)]
 pub(crate) fn decode_historical_ticks_proto(bytes: &[u8]) -> Result<(Vec<TickMidpoint>, bool), Error> {
-    let msg = proto::HistoricalTicks::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let msg = proto::HistoricalTicks::decode(bytes)?;
 
     let ticks = msg
         .historical_ticks
@@ -427,7 +427,7 @@ pub(crate) fn decode_historical_ticks_proto(bytes: &[u8]) -> Result<(Vec<TickMid
 
 #[allow(dead_code)]
 pub(crate) fn decode_historical_ticks_last_proto(bytes: &[u8]) -> Result<(Vec<TickLast>, bool), Error> {
-    let msg = proto::HistoricalTicksLast::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let msg = proto::HistoricalTicksLast::decode(bytes)?;
 
     let ticks = msg
         .historical_ticks_last
@@ -453,7 +453,7 @@ pub(crate) fn decode_historical_ticks_last_proto(bytes: &[u8]) -> Result<(Vec<Ti
 
 #[allow(dead_code)]
 pub(crate) fn decode_historical_ticks_bid_ask_proto(bytes: &[u8]) -> Result<(Vec<TickBidAsk>, bool), Error> {
-    let msg = proto::HistoricalTicksBidAsk::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let msg = proto::HistoricalTicksBidAsk::decode(bytes)?;
 
     let ticks = msg
         .historical_ticks_bid_ask

@@ -260,7 +260,7 @@ pub(crate) fn decode_account_multi_value(message: &mut ResponseMessage) -> Resul
 
 #[allow(dead_code)]
 pub(crate) fn decode_position_proto(bytes: &[u8]) -> Result<Position, Error> {
-    let p = proto::Position::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p = proto::Position::decode(bytes)?;
     let contract = p.contract.as_ref().map(proto::decoders::decode_contract).unwrap_or_default();
     Ok(Position {
         account: p.account.unwrap_or_default(),
@@ -272,7 +272,7 @@ pub(crate) fn decode_position_proto(bytes: &[u8]) -> Result<Position, Error> {
 
 #[allow(dead_code)]
 pub(crate) fn decode_account_value_proto(bytes: &[u8]) -> Result<AccountValue, Error> {
-    let p = proto::AccountValue::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p = proto::AccountValue::decode(bytes)?;
     Ok(AccountValue {
         key: p.key.unwrap_or_default(),
         value: p.value.unwrap_or_default(),
@@ -283,7 +283,7 @@ pub(crate) fn decode_account_value_proto(bytes: &[u8]) -> Result<AccountValue, E
 
 #[allow(dead_code)]
 pub(crate) fn decode_account_portfolio_value_proto(bytes: &[u8]) -> Result<AccountPortfolioValue, Error> {
-    let p = proto::PortfolioValue::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p = proto::PortfolioValue::decode(bytes)?;
     let contract = p.contract.as_ref().map(proto::decoders::decode_contract).unwrap_or_default();
     Ok(AccountPortfolioValue {
         contract,
@@ -299,7 +299,7 @@ pub(crate) fn decode_account_portfolio_value_proto(bytes: &[u8]) -> Result<Accou
 
 #[allow(dead_code)]
 pub(crate) fn decode_pnl_proto(bytes: &[u8]) -> Result<PnL, Error> {
-    let p = proto::PnL::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p = proto::PnL::decode(bytes)?;
     Ok(PnL {
         daily_pnl: p.daily_pn_l.unwrap_or_default(),
         unrealized_pnl: p.unrealized_pn_l.filter(|&v| v != f64::MAX),
@@ -309,7 +309,7 @@ pub(crate) fn decode_pnl_proto(bytes: &[u8]) -> Result<PnL, Error> {
 
 #[allow(dead_code)]
 pub(crate) fn decode_pnl_single_proto(bytes: &[u8]) -> Result<PnLSingle, Error> {
-    let p = proto::PnLSingle::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p = proto::PnLSingle::decode(bytes)?;
     Ok(PnLSingle {
         position: p.position.as_deref().and_then(|s| s.parse::<f64>().ok()).unwrap_or_default(),
         daily_pnl: p.daily_pn_l.unwrap_or_default(),
@@ -321,7 +321,7 @@ pub(crate) fn decode_pnl_single_proto(bytes: &[u8]) -> Result<PnLSingle, Error> 
 
 #[allow(dead_code)]
 pub(crate) fn decode_account_summary_proto(bytes: &[u8]) -> Result<AccountSummary, Error> {
-    let p = proto::AccountSummary::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p = proto::AccountSummary::decode(bytes)?;
     Ok(AccountSummary {
         account: p.account.unwrap_or_default(),
         tag: p.tag.unwrap_or_default(),
@@ -332,7 +332,7 @@ pub(crate) fn decode_account_summary_proto(bytes: &[u8]) -> Result<AccountSummar
 
 #[allow(dead_code)]
 pub(crate) fn decode_position_multi_proto(bytes: &[u8]) -> Result<PositionMulti, Error> {
-    let p = proto::PositionMulti::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p = proto::PositionMulti::decode(bytes)?;
     let contract = p.contract.as_ref().map(proto::decoders::decode_contract).unwrap_or_default();
     Ok(PositionMulti {
         account: p.account.unwrap_or_default(),
@@ -345,7 +345,7 @@ pub(crate) fn decode_position_multi_proto(bytes: &[u8]) -> Result<PositionMulti,
 
 #[allow(dead_code)]
 pub(crate) fn decode_account_multi_value_proto(bytes: &[u8]) -> Result<AccountMultiValue, Error> {
-    let p = proto::AccountUpdateMulti::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p = proto::AccountUpdateMulti::decode(bytes)?;
     Ok(AccountMultiValue {
         account: p.account.unwrap_or_default(),
         model_code: p.model_code.unwrap_or_default(),

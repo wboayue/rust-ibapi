@@ -246,7 +246,7 @@ pub(crate) fn decode_tick_request_parameters(message: &mut ResponseMessage) -> R
 
 #[allow(dead_code)]
 pub(crate) fn decode_tick_price_proto(bytes: &[u8]) -> Result<TickTypes, Error> {
-    let msg = crate::proto::TickPrice::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let msg = crate::proto::TickPrice::decode(bytes)?;
 
     let tick_type = TickType::from(msg.tick_type.unwrap_or_default());
     let price = msg.price.unwrap_or_default();
@@ -288,7 +288,7 @@ pub(crate) fn decode_tick_price_proto(bytes: &[u8]) -> Result<TickTypes, Error> 
 
 #[allow(dead_code)]
 pub(crate) fn decode_tick_size_proto(bytes: &[u8]) -> Result<TickSize, Error> {
-    let msg = crate::proto::TickSize::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let msg = crate::proto::TickSize::decode(bytes)?;
 
     Ok(TickSize {
         tick_type: TickType::from(msg.tick_type.unwrap_or_default()),
@@ -298,7 +298,7 @@ pub(crate) fn decode_tick_size_proto(bytes: &[u8]) -> Result<TickSize, Error> {
 
 #[allow(dead_code)]
 pub(crate) fn decode_tick_string_proto(bytes: &[u8]) -> Result<TickString, Error> {
-    let msg = crate::proto::TickString::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let msg = crate::proto::TickString::decode(bytes)?;
 
     Ok(TickString {
         tick_type: TickType::from(msg.tick_type.unwrap_or_default()),
@@ -308,7 +308,7 @@ pub(crate) fn decode_tick_string_proto(bytes: &[u8]) -> Result<TickString, Error
 
 #[allow(dead_code)]
 pub(crate) fn decode_tick_generic_proto(bytes: &[u8]) -> Result<TickGeneric, Error> {
-    let msg = crate::proto::TickGeneric::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let msg = crate::proto::TickGeneric::decode(bytes)?;
 
     Ok(TickGeneric {
         tick_type: TickType::from(msg.tick_type.unwrap_or_default()),
@@ -318,7 +318,7 @@ pub(crate) fn decode_tick_generic_proto(bytes: &[u8]) -> Result<TickGeneric, Err
 
 #[allow(dead_code)]
 pub(crate) fn decode_tick_option_computation_proto(bytes: &[u8]) -> Result<OptionComputation, Error> {
-    let msg = crate::proto::TickOptionComputation::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let msg = crate::proto::TickOptionComputation::decode(bytes)?;
 
     fn optional(val: Option<f64>) -> Option<f64> {
         val.filter(|&v| v != f64::MAX)
@@ -340,7 +340,7 @@ pub(crate) fn decode_tick_option_computation_proto(bytes: &[u8]) -> Result<Optio
 
 #[allow(dead_code)]
 pub(crate) fn decode_market_depth_proto(bytes: &[u8]) -> Result<MarketDepth, Error> {
-    let msg = crate::proto::MarketDepth::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let msg = crate::proto::MarketDepth::decode(bytes)?;
 
     let data = msg.market_depth_data.ok_or_else(|| Error::Simple("missing market_depth_data".into()))?;
 
@@ -355,7 +355,7 @@ pub(crate) fn decode_market_depth_proto(bytes: &[u8]) -> Result<MarketDepth, Err
 
 #[allow(dead_code)]
 pub(crate) fn decode_market_depth_l2_proto(bytes: &[u8]) -> Result<MarketDepthL2, Error> {
-    let msg = crate::proto::MarketDepthL2::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let msg = crate::proto::MarketDepthL2::decode(bytes)?;
 
     let data = msg.market_depth_data.ok_or_else(|| Error::Simple("missing market_depth_data".into()))?;
 
