@@ -43,13 +43,7 @@ pub(crate) fn encode_update_display_group(request_id: i32, contract_info: &str) 
 
 #[allow(dead_code)]
 pub(crate) fn encode_query_display_groups_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::QueryDisplayGroupsRequest { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(
-        OutgoingMessages::QueryDisplayGroups as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_cancel_by_id!(request_id, QueryDisplayGroupsRequest, OutgoingMessages::QueryDisplayGroups)
 }
 
 #[allow(dead_code)]
@@ -82,13 +76,11 @@ pub(crate) fn encode_update_display_group_proto(request_id: i32, contract_info: 
 
 #[allow(dead_code)]
 pub(crate) fn encode_unsubscribe_from_group_events_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::UnsubscribeFromGroupEventsRequest { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(
-        OutgoingMessages::UnsubscribeFromGroupEvents as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_cancel_by_id!(
+        request_id,
+        UnsubscribeFromGroupEventsRequest,
+        OutgoingMessages::UnsubscribeFromGroupEvents
+    )
 }
 
 #[cfg(test)]

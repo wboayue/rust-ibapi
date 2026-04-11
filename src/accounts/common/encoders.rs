@@ -194,24 +194,12 @@ pub(in crate::accounts) fn encode_cancel_account_updates_proto() -> Result<Vec<u
 
 #[allow(dead_code)]
 pub(in crate::accounts) fn encode_request_positions_proto() -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::PositionsRequest {};
-    Ok(encode_protobuf_message(
-        OutgoingMessages::RequestPositions as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_empty_proto!(PositionsRequest, OutgoingMessages::RequestPositions)
 }
 
 #[allow(dead_code)]
 pub(in crate::accounts) fn encode_cancel_positions_proto() -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::CancelPositions {};
-    Ok(encode_protobuf_message(
-        OutgoingMessages::CancelPositions as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_empty_proto!(CancelPositions, OutgoingMessages::CancelPositions)
 }
 
 #[allow(dead_code)]
@@ -231,13 +219,7 @@ pub(in crate::accounts) fn encode_request_account_summary_proto(request_id: i32,
 
 #[allow(dead_code)]
 pub(in crate::accounts) fn encode_cancel_account_summary_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::CancelAccountSummary { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(
-        OutgoingMessages::CancelAccountSummary as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelAccountSummary, OutgoingMessages::CancelAccountSummary)
 }
 
 #[allow(dead_code)]
@@ -254,10 +236,7 @@ pub(in crate::accounts) fn encode_request_pnl_proto(request_id: i32, account: &A
 
 #[allow(dead_code)]
 pub(in crate::accounts) fn encode_cancel_pnl_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::CancelPnL { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(OutgoingMessages::CancelPnL as i32, &request.encode_to_vec()))
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelPnL, OutgoingMessages::CancelPnL)
 }
 
 #[allow(dead_code)]
@@ -283,13 +262,7 @@ pub(in crate::accounts) fn encode_request_pnl_single_proto(
 
 #[allow(dead_code)]
 pub(in crate::accounts) fn encode_cancel_pnl_single_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::CancelPnLSingle { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(
-        OutgoingMessages::CancelPnLSingle as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelPnLSingle, OutgoingMessages::CancelPnLSingle)
 }
 
 #[allow(dead_code)]
@@ -313,13 +286,7 @@ pub(in crate::accounts) fn encode_request_positions_multi_proto(
 
 #[allow(dead_code)]
 pub(in crate::accounts) fn encode_cancel_positions_multi_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::CancelPositionsMulti { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(
-        OutgoingMessages::CancelPositionsMulti as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelPositionsMulti, OutgoingMessages::CancelPositionsMulti)
 }
 
 #[allow(dead_code)]
@@ -344,13 +311,7 @@ pub(in crate::accounts) fn encode_request_account_updates_multi_proto(
 
 #[allow(dead_code)]
 pub(in crate::accounts) fn encode_cancel_account_updates_multi_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::CancelAccountUpdatesMulti { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(
-        OutgoingMessages::CancelAccountUpdatesMulti as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelAccountUpdatesMulti, OutgoingMessages::CancelAccountUpdatesMulti)
 }
 
 #[cfg(test)]

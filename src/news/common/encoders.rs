@@ -85,13 +85,7 @@ pub(in crate::news) fn encode_request_news_article(
 
 #[allow(dead_code)]
 pub(in crate::news) fn encode_request_news_providers_proto() -> Result<Vec<u8>, crate::Error> {
-    use crate::messages::{encode_protobuf_message, OutgoingMessages};
-    use prost::Message;
-    let request = crate::proto::NewsProvidersRequest {};
-    Ok(encode_protobuf_message(
-        OutgoingMessages::RequestNewsProviders as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_empty_proto!(NewsProvidersRequest, crate::messages::OutgoingMessages::RequestNewsProviders)
 }
 
 #[allow(dead_code)]
@@ -109,13 +103,7 @@ pub(in crate::news) fn encode_request_news_bulletins_proto(all_messages: bool) -
 
 #[allow(dead_code)]
 pub(in crate::news) fn encode_cancel_news_bulletin_proto() -> Result<Vec<u8>, crate::Error> {
-    use crate::messages::{encode_protobuf_message, OutgoingMessages};
-    use prost::Message;
-    let request = crate::proto::CancelNewsBulletins {};
-    Ok(encode_protobuf_message(
-        OutgoingMessages::CancelNewsBulletin as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_empty_proto!(CancelNewsBulletins, crate::messages::OutgoingMessages::CancelNewsBulletin)
 }
 
 #[allow(dead_code)]

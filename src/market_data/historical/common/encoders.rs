@@ -242,13 +242,7 @@ pub(crate) fn encode_request_historical_data_proto(
 
 #[allow(dead_code)]
 pub(crate) fn encode_cancel_historical_data_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::CancelHistoricalData { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(
-        crate::messages::OutgoingMessages::CancelHistoricalData as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelHistoricalData, crate::messages::OutgoingMessages::CancelHistoricalData)
 }
 
 #[allow(dead_code)]
@@ -286,13 +280,11 @@ pub(crate) fn encode_request_historical_ticks_proto(
 
 #[allow(dead_code)]
 pub(crate) fn encode_cancel_historical_ticks_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::CancelHistoricalTicks { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(
-        crate::messages::OutgoingMessages::CancelHistoricalTicks as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_cancel_by_id!(
+        request_id,
+        CancelHistoricalTicks,
+        crate::messages::OutgoingMessages::CancelHistoricalTicks
+    )
 }
 
 #[allow(dead_code)]
@@ -313,24 +305,12 @@ pub(crate) fn encode_request_histogram_data_proto(request_id: i32, contract: &Co
 
 #[allow(dead_code)]
 pub(crate) fn encode_cancel_histogram_data_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::CancelHistogramData { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(
-        crate::messages::OutgoingMessages::CancelHistogramData as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelHistogramData, crate::messages::OutgoingMessages::CancelHistogramData)
 }
 
 #[allow(dead_code)]
 pub(crate) fn encode_cancel_head_timestamp_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::CancelHeadTimestamp { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(
-        crate::messages::OutgoingMessages::CancelHeadTimestamp as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelHeadTimestamp, crate::messages::OutgoingMessages::CancelHeadTimestamp)
 }
 
 #[cfg(test)]

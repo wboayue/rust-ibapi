@@ -4,6 +4,27 @@ use crate::contracts::{self, Contract};
 use crate::orders::{self, Order, OrderCondition, SoftDollarTier};
 use crate::proto;
 
+/// Encode a cancel-by-request-ID protobuf message.
+/// All cancel proto types with a single `req_id` field share this pattern.
+macro_rules! encode_cancel_by_id {
+    ($request_id:expr, $proto_type:ident, $msg_id:expr) => {{
+        use prost::Message;
+        let request = crate::proto::$proto_type { req_id: Some($request_id) };
+        Ok(crate::messages::encode_protobuf_message($msg_id as i32, &request.encode_to_vec()))
+    }};
+}
+pub(crate) use encode_cancel_by_id;
+
+/// Encode an empty (no-field) protobuf request message.
+macro_rules! encode_empty_proto {
+    ($proto_type:ident, $msg_id:expr) => {{
+        use prost::Message;
+        let request = crate::proto::$proto_type {};
+        Ok(crate::messages::encode_protobuf_message($msg_id as i32, &request.encode_to_vec()))
+    }};
+}
+pub(crate) use encode_empty_proto;
+
 // === Helper: set Some only for non-empty strings ===
 
 fn some_str(s: &str) -> Option<String> {

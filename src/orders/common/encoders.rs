@@ -576,22 +576,12 @@ pub(crate) fn encode_cancel_order_proto(order_id: i32, manual_order_cancel_time:
 
 #[allow(dead_code)]
 pub(crate) fn encode_open_orders_proto() -> Result<Vec<u8>, Error> {
-    use prost::Message;
-    let request = crate::proto::OpenOrdersRequest {};
-    Ok(crate::messages::encode_protobuf_message(
-        OutgoingMessages::RequestOpenOrders as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_empty_proto!(OpenOrdersRequest, OutgoingMessages::RequestOpenOrders)
 }
 
 #[allow(dead_code)]
 pub(crate) fn encode_all_open_orders_proto() -> Result<Vec<u8>, Error> {
-    use prost::Message;
-    let request = crate::proto::AllOpenOrdersRequest {};
-    Ok(crate::messages::encode_protobuf_message(
-        OutgoingMessages::RequestAllOpenOrders as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_empty_proto!(AllOpenOrdersRequest, OutgoingMessages::RequestAllOpenOrders)
 }
 
 #[allow(dead_code)]

@@ -77,24 +77,12 @@ pub(in crate::wsh) fn encode_cancel_wsh_event_data(request_id: i32) -> Result<Re
 
 #[allow(dead_code)]
 pub(in crate::wsh) fn encode_request_wsh_metadata_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::WshMetaDataRequest { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(
-        OutgoingMessages::RequestWshMetaData as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_cancel_by_id!(request_id, WshMetaDataRequest, OutgoingMessages::RequestWshMetaData)
 }
 
 #[allow(dead_code)]
 pub(in crate::wsh) fn encode_cancel_wsh_metadata_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::CancelWshMetaData { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(
-        OutgoingMessages::CancelWshMetaData as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelWshMetaData, OutgoingMessages::CancelWshMetaData)
 }
 
 #[allow(dead_code)]
@@ -129,13 +117,7 @@ pub(in crate::wsh) fn encode_request_wsh_event_data_proto(
 
 #[allow(dead_code)]
 pub(in crate::wsh) fn encode_cancel_wsh_event_data_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::CancelWshEventData { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(
-        OutgoingMessages::CancelWshEventData as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelWshEventData, OutgoingMessages::CancelWshEventData)
 }
 
 #[cfg(test)]

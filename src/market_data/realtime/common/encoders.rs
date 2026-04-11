@@ -229,13 +229,7 @@ pub(crate) fn encode_request_market_data_proto(
 
 #[allow(dead_code)]
 pub(crate) fn encode_cancel_market_data_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::CancelMarketData { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(
-        OutgoingMessages::CancelMarketData as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelMarketData, OutgoingMessages::CancelMarketData)
 }
 
 #[allow(dead_code)]
@@ -299,13 +293,7 @@ pub(crate) fn encode_tick_by_tick_proto(
 
 #[allow(dead_code)]
 pub(crate) fn encode_cancel_tick_by_tick_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::CancelTickByTick { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(
-        OutgoingMessages::CancelTickByTickData as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelTickByTick, OutgoingMessages::CancelTickByTickData)
 }
 
 #[allow(dead_code)]
@@ -334,13 +322,7 @@ pub(crate) fn encode_request_realtime_bars_proto(
 
 #[allow(dead_code)]
 pub(crate) fn encode_cancel_realtime_bars_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::CancelRealTimeBars { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(
-        OutgoingMessages::CancelRealTimeBars as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelRealTimeBars, OutgoingMessages::CancelRealTimeBars)
 }
 
 #[cfg(test)]

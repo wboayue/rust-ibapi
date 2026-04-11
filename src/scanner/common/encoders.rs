@@ -80,13 +80,7 @@ pub(in crate::scanner) fn encode_cancel_scanner_subscription(request_id: i32) ->
 
 #[allow(dead_code)]
 pub(in crate::scanner) fn encode_scanner_parameters_proto() -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::ScannerParametersRequest {};
-    Ok(encode_protobuf_message(
-        OutgoingMessages::RequestScannerParameters as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_empty_proto!(ScannerParametersRequest, OutgoingMessages::RequestScannerParameters)
 }
 
 #[allow(dead_code)]
@@ -109,13 +103,7 @@ pub(in crate::scanner) fn encode_scanner_subscription_proto(
 
 #[allow(dead_code)]
 pub(in crate::scanner) fn encode_cancel_scanner_subscription_proto(request_id: i32) -> Result<Vec<u8>, Error> {
-    use crate::messages::encode_protobuf_message;
-    use prost::Message;
-    let request = crate::proto::CancelScannerSubscription { req_id: Some(request_id) };
-    Ok(encode_protobuf_message(
-        OutgoingMessages::CancelScannerSubscription as i32,
-        &request.encode_to_vec(),
-    ))
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelScannerSubscription, OutgoingMessages::CancelScannerSubscription)
 }
 
 #[cfg(test)]
