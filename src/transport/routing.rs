@@ -31,9 +31,7 @@ struct RoutingEnvelope {
 /// Messages where tag 1 is not the routing ID (e.g. CommissionsReport) will need
 /// per-message-type handling when those messages migrate to protobuf.
 fn protobuf_first_int(raw_bytes: &[u8]) -> Option<i32> {
-    prost::Message::decode(raw_bytes)
-        .ok()
-        .and_then(|e: RoutingEnvelope| e.id)
+    prost::Message::decode(raw_bytes).ok().and_then(|e: RoutingEnvelope| e.id)
 }
 
 fn is_order_message(message_type: IncomingMessages) -> bool {
