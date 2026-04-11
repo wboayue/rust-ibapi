@@ -340,21 +340,7 @@ fn parse_bar_date(text: &str, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
 use prost::Message;
 
 use crate::proto;
-
-#[allow(dead_code)]
-fn parse_str_f64(opt: &Option<String>) -> f64 {
-    opt.as_deref().and_then(|s| s.parse::<f64>().ok()).unwrap_or_default()
-}
-
-#[allow(dead_code)]
-fn parse_str_i32(opt: &Option<String>) -> i32 {
-    opt.as_deref().and_then(|s| s.parse::<i32>().ok()).unwrap_or_default()
-}
-
-#[allow(dead_code)]
-fn ts(secs: i64) -> OffsetDateTime {
-    OffsetDateTime::from_unix_timestamp(secs).unwrap_or(OffsetDateTime::UNIX_EPOCH)
-}
+use crate::proto::decoders::{parse_f64 as parse_str_f64, parse_i32 as parse_str_i32, ts};
 
 #[allow(dead_code)]
 pub(crate) fn decode_historical_data_proto(bytes: &[u8]) -> Result<Vec<Bar>, Error> {

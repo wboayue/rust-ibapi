@@ -14,22 +14,39 @@ use crate::Error;
 
 // === Helper functions ===
 
-fn s(opt: &Option<String>) -> String {
+pub(crate) fn s(opt: &Option<String>) -> String {
     opt.clone().unwrap_or_default()
 }
 
-fn parse_f64(opt: &Option<String>) -> f64 {
+pub(crate) fn parse_f64(opt: &Option<String>) -> f64 {
     opt.as_deref().and_then(|s| s.parse::<f64>().ok()).unwrap_or_default()
 }
 
-fn optional_f64(val: Option<f64>) -> Option<f64> {
+pub(crate) fn parse_i32(opt: &Option<String>) -> i32 {
+    opt.as_deref().and_then(|s| s.parse::<i32>().ok()).unwrap_or_default()
+}
+
+pub(crate) fn optional_f64(val: Option<f64>) -> Option<f64> {
     val.filter(|&v| v != f64::MAX)
 }
 
-fn optional_string_f64(opt: &Option<String>) -> Option<f64> {
+pub(crate) fn optional_string_f64(opt: &Option<String>) -> Option<f64> {
     opt.as_deref()
         .and_then(|s| s.parse::<f64>().ok())
         .and_then(|v| if v == f64::MAX { None } else { Some(v) })
+}
+
+pub(crate) fn ts(secs: i64) -> time::OffsetDateTime {
+    time::OffsetDateTime::from_unix_timestamp(secs).unwrap_or(time::OffsetDateTime::UNIX_EPOCH)
+}
+
+pub(crate) fn tag_values(map: &std::collections::HashMap<String, String>) -> Vec<TagValue> {
+    map.iter()
+        .map(|(k, v)| TagValue {
+            tag: k.clone(),
+            value: v.clone(),
+        })
+        .collect()
 }
 
 // === Shared converters ===
@@ -170,25 +187,11 @@ pub fn decode_order(proto: &proto::Order) -> Order {
 
     // algo orders
     order.algo_strategy = s(&proto.algo_strategy);
-    order.algo_params = proto
-        .algo_params
-        .iter()
-        .map(|(k, v)| TagValue {
-            tag: k.clone(),
-            value: v.clone(),
-        })
-        .collect();
+    order.algo_params = tag_values(&proto.algo_params);
     order.algo_id = s(&proto.algo_id);
 
     // combo orders
-    order.smart_combo_routing_params = proto
-        .smart_combo_routing_params
-        .iter()
-        .map(|(k, v)| TagValue {
-            tag: k.clone(),
-            value: v.clone(),
-        })
-        .collect();
+    order.smart_combo_routing_params = tag_values(&proto.smart_combo_routing_params);
 
     // processing control
     order.what_if = proto.what_if.unwrap_or_default();
@@ -222,14 +225,7 @@ pub fn decode_order(proto: &proto::Order) -> Order {
     order.not_held = proto.not_held.unwrap_or_default();
 
     // order misc options
-    order.order_misc_options = proto
-        .order_misc_options
-        .iter()
-        .map(|(k, v)| TagValue {
-            tag: k.clone(),
-            value: v.clone(),
-        })
-        .collect();
+    order.order_misc_options = tag_values(&proto.order_misc_options);
 
     // solicited / randomize
     order.solicited = proto.solicited.unwrap_or_default();
@@ -461,14 +457,7 @@ pub fn decode_contract_details(proto_contract: &proto::Contract, proto_details: 
         ev_rule: s(&proto_details.ev_rule),
         ev_multiplier: proto_details.ev_multiplier.unwrap_or_default(),
         agg_group: proto_details.agg_group.unwrap_or_default(),
-        sec_id_list: proto_details
-            .sec_id_list
-            .iter()
-            .map(|(k, v)| TagValue {
-                tag: k.clone(),
-                value: v.clone(),
-            })
-            .collect(),
+        sec_id_list: tag_values(&proto_details.sec_id_list),
         under_symbol: s(&proto_details.under_symbol),
         under_security_type: s(&proto_details.under_sec_type),
         market_rule_ids: proto_details

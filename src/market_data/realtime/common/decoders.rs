@@ -2,6 +2,7 @@ use prost::Message;
 
 use crate::contracts::decode_option_computation;
 use crate::contracts::OptionComputation;
+use crate::proto::decoders::optional_f64;
 use crate::subscriptions::DecoderContext;
 use crate::Error;
 use crate::{messages::ResponseMessage, server_versions};
@@ -320,21 +321,17 @@ pub(crate) fn decode_tick_generic_proto(bytes: &[u8]) -> Result<TickGeneric, Err
 pub(crate) fn decode_tick_option_computation_proto(bytes: &[u8]) -> Result<OptionComputation, Error> {
     let msg = crate::proto::TickOptionComputation::decode(bytes)?;
 
-    fn optional(val: Option<f64>) -> Option<f64> {
-        val.filter(|&v| v != f64::MAX)
-    }
-
     Ok(OptionComputation {
         field: TickType::from(msg.tick_type.unwrap_or_default()),
         tick_attribute: msg.tick_attrib,
-        implied_volatility: optional(msg.implied_vol),
-        delta: optional(msg.delta),
-        option_price: optional(msg.opt_price),
-        present_value_dividend: optional(msg.pv_dividend),
-        gamma: optional(msg.gamma),
-        vega: optional(msg.vega),
-        theta: optional(msg.theta),
-        underlying_price: optional(msg.und_price),
+        implied_volatility: optional_f64(msg.implied_vol),
+        delta: optional_f64(msg.delta),
+        option_price: optional_f64(msg.opt_price),
+        present_value_dividend: optional_f64(msg.pv_dividend),
+        gamma: optional_f64(msg.gamma),
+        vega: optional_f64(msg.vega),
+        theta: optional_f64(msg.theta),
+        underlying_price: optional_f64(msg.und_price),
     })
 }
 
