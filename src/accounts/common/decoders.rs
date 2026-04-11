@@ -139,20 +139,17 @@ pub(crate) fn decode_pnl_single(_server_version: i32, message: &mut ResponseMess
 }
 
 pub(crate) fn decode_account_summary(_server_version: i32, message: &mut ResponseMessage) -> Result<AccountSummary, Error> {
-    message.decode_proto_or_text(
-        decode_account_summary_proto,
-        |msg| {
-            msg.skip(); // message type
-            msg.skip(); // version
-            msg.skip(); // request id
-            Ok(AccountSummary {
-                account: msg.next_string()?,
-                tag: msg.next_string()?,
-                value: msg.next_string()?,
-                currency: msg.next_string()?,
-            })
-        },
-    )
+    message.decode_proto_or_text(decode_account_summary_proto, |msg| {
+        msg.skip(); // message type
+        msg.skip(); // version
+        msg.skip(); // request id
+        Ok(AccountSummary {
+            account: msg.next_string()?,
+            tag: msg.next_string()?,
+            value: msg.next_string()?,
+            currency: msg.next_string()?,
+        })
+    })
 }
 
 pub(crate) fn decode_account_value(message: &mut ResponseMessage) -> Result<AccountValue, Error> {
@@ -255,8 +252,7 @@ pub(crate) fn decode_server_time(message: &mut ResponseMessage) -> Result<Offset
 pub(crate) fn decode_server_time_millis(message: &mut ResponseMessage) -> Result<OffsetDateTime, Error> {
     message.decode_proto_or_text(
         |bytes| {
-            let proto = proto::CurrentTimeInMillis::decode(bytes)
-                .map_err(|e| Error::Simple(format!("failed to decode CurrentTimeInMillis: {e}")))?;
+            let proto = proto::CurrentTimeInMillis::decode(bytes).map_err(|e| Error::Simple(format!("failed to decode CurrentTimeInMillis: {e}")))?;
             let millis = proto.current_time_in_millis.unwrap_or(0);
             OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).map_err(|e| Error::Simple(format!("Error parsing date: {e}")))
         },
