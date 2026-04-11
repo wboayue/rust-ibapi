@@ -657,48 +657,45 @@ mod tests {
     #[cfg(test)]
     mod proto_tests {
         use super::*;
-        fn assert_msg_id(bytes: &[u8], expected: OutgoingMessages) {
-            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-            assert_eq!(msg_id, expected as i32 + 200);
-        }
+        use crate::common::test_utils::helpers::assert_proto_msg_id;
 
         #[test]
         fn test_encode_request_market_data_proto() {
             let contract = create_test_contract();
             let bytes = encode_request_market_data_proto(9000, &contract, &["100", "101"], false, false).unwrap();
-            assert_msg_id(&bytes, OutgoingMessages::RequestMarketData);
+            assert_proto_msg_id(&bytes, OutgoingMessages::RequestMarketData);
         }
 
         #[test]
         fn test_encode_cancel_market_data_proto() {
             let bytes = encode_cancel_market_data_proto(9000).unwrap();
-            assert_msg_id(&bytes, OutgoingMessages::CancelMarketData);
+            assert_proto_msg_id(&bytes, OutgoingMessages::CancelMarketData);
         }
 
         #[test]
         fn test_encode_tick_by_tick_proto() {
             let contract = create_test_contract();
             let bytes = encode_tick_by_tick_proto(9000, &contract, "AllLast", 1, true).unwrap();
-            assert_msg_id(&bytes, OutgoingMessages::RequestTickByTickData);
+            assert_proto_msg_id(&bytes, OutgoingMessages::RequestTickByTickData);
         }
 
         #[test]
         fn test_encode_cancel_tick_by_tick_proto() {
             let bytes = encode_cancel_tick_by_tick_proto(9000).unwrap();
-            assert_msg_id(&bytes, OutgoingMessages::CancelTickByTickData);
+            assert_proto_msg_id(&bytes, OutgoingMessages::CancelTickByTickData);
         }
 
         #[test]
         fn test_encode_request_realtime_bars_proto() {
             let contract = create_test_contract();
             let bytes = encode_request_realtime_bars_proto(9000, &contract, &WhatToShow::Trades, true, &[]).unwrap();
-            assert_msg_id(&bytes, OutgoingMessages::RequestRealTimeBars);
+            assert_proto_msg_id(&bytes, OutgoingMessages::RequestRealTimeBars);
         }
 
         #[test]
         fn test_encode_cancel_realtime_bars_proto() {
             let bytes = encode_cancel_realtime_bars_proto(9000).unwrap();
-            assert_msg_id(&bytes, OutgoingMessages::CancelRealTimeBars);
+            assert_proto_msg_id(&bytes, OutgoingMessages::CancelRealTimeBars);
         }
     }
 }

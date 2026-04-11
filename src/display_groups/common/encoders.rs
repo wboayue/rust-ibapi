@@ -139,34 +139,30 @@ mod tests {
     #[cfg(test)]
     mod proto_tests {
         use super::super::*;
-
-        fn assert_msg_id(bytes: &[u8], expected: OutgoingMessages) {
-            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-            assert_eq!(msg_id, expected as i32 + 200);
-        }
+        use crate::common::test_utils::helpers::assert_proto_msg_id;
 
         #[test]
         fn test_encode_query_display_groups_proto() {
             let bytes = encode_query_display_groups_proto(9000).unwrap();
-            assert_msg_id(&bytes, OutgoingMessages::QueryDisplayGroups);
+            assert_proto_msg_id(&bytes, OutgoingMessages::QueryDisplayGroups);
         }
 
         #[test]
         fn test_encode_subscribe_to_group_events_proto() {
             let bytes = encode_subscribe_to_group_events_proto(9000, 1).unwrap();
-            assert_msg_id(&bytes, OutgoingMessages::SubscribeToGroupEvents);
+            assert_proto_msg_id(&bytes, OutgoingMessages::SubscribeToGroupEvents);
         }
 
         #[test]
         fn test_encode_update_display_group_proto() {
             let bytes = encode_update_display_group_proto(9000, "265598@SMART").unwrap();
-            assert_msg_id(&bytes, OutgoingMessages::UpdateDisplayGroup);
+            assert_proto_msg_id(&bytes, OutgoingMessages::UpdateDisplayGroup);
         }
 
         #[test]
         fn test_encode_unsubscribe_from_group_events_proto() {
             let bytes = encode_unsubscribe_from_group_events_proto(9000).unwrap();
-            assert_msg_id(&bytes, OutgoingMessages::UnsubscribeFromGroupEvents);
+            assert_proto_msg_id(&bytes, OutgoingMessages::UnsubscribeFromGroupEvents);
         }
     }
 }

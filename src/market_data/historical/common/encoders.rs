@@ -535,50 +535,46 @@ mod tests {
     #[cfg(test)]
     mod proto_tests {
         use super::*;
+        use crate::common::test_utils::helpers::assert_proto_msg_id;
         use crate::market_data::historical::ToDuration;
-
-        fn assert_msg_id(bytes: &[u8], expected: crate::messages::OutgoingMessages) {
-            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-            assert_eq!(msg_id, expected as i32 + 200);
-        }
 
         #[test]
         fn test_encode_request_head_timestamp_proto() {
             let contract = Contract::stock("MSFT").build();
             let bytes = encode_request_head_timestamp_proto(9000, &contract, WhatToShow::Trades, false).unwrap();
-            assert_msg_id(&bytes, crate::messages::OutgoingMessages::RequestHeadTimestamp);
+            assert_proto_msg_id(&bytes, crate::messages::OutgoingMessages::RequestHeadTimestamp);
         }
 
         #[test]
         fn test_encode_request_historical_data_proto() {
             let contract = Contract::stock("MSFT").build();
             let bytes = encode_request_historical_data_proto(9000, &contract, None, 30.days(), BarSize::Day, None, false, true, &[]).unwrap();
-            assert_msg_id(&bytes, crate::messages::OutgoingMessages::RequestHistoricalData);
+            assert_proto_msg_id(&bytes, crate::messages::OutgoingMessages::RequestHistoricalData);
         }
 
         #[test]
         fn test_encode_cancel_historical_data_proto() {
             let bytes = encode_cancel_historical_data_proto(9001).unwrap();
-            assert_msg_id(&bytes, crate::messages::OutgoingMessages::CancelHistoricalData);
+            assert_proto_msg_id(&bytes, crate::messages::OutgoingMessages::CancelHistoricalData);
         }
 
         #[test]
         fn test_encode_request_histogram_data_proto() {
             let contract = Contract::stock("MSFT").build();
             let bytes = encode_request_histogram_data_proto(3000, &contract, true, BarSize::Week).unwrap();
-            assert_msg_id(&bytes, crate::messages::OutgoingMessages::RequestHistogramData);
+            assert_proto_msg_id(&bytes, crate::messages::OutgoingMessages::RequestHistogramData);
         }
 
         #[test]
         fn test_encode_cancel_head_timestamp_proto() {
             let bytes = encode_cancel_head_timestamp_proto(9000).unwrap();
-            assert_msg_id(&bytes, crate::messages::OutgoingMessages::CancelHeadTimestamp);
+            assert_proto_msg_id(&bytes, crate::messages::OutgoingMessages::CancelHeadTimestamp);
         }
 
         #[test]
         fn test_encode_cancel_histogram_data_proto() {
             let bytes = encode_cancel_histogram_data_proto(3000).unwrap();
-            assert_msg_id(&bytes, crate::messages::OutgoingMessages::CancelHistogramData);
+            assert_proto_msg_id(&bytes, crate::messages::OutgoingMessages::CancelHistogramData);
         }
     }
 }

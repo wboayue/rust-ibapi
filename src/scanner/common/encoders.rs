@@ -109,22 +109,18 @@ pub(in crate::scanner) fn encode_cancel_scanner_subscription_proto(request_id: i
 #[cfg(test)]
 mod proto_tests {
     use super::*;
-
-    fn assert_msg_id(bytes: &[u8], expected: OutgoingMessages) {
-        let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-        assert_eq!(msg_id, expected as i32 + 200);
-    }
+    use crate::common::test_utils::helpers::assert_proto_msg_id;
 
     #[test]
     fn test_encode_scanner_parameters_proto() {
         let bytes = encode_scanner_parameters_proto().unwrap();
-        assert_msg_id(&bytes, OutgoingMessages::RequestScannerParameters);
+        assert_proto_msg_id(&bytes, OutgoingMessages::RequestScannerParameters);
     }
 
     #[test]
     fn test_encode_cancel_scanner_subscription_proto() {
         let bytes = encode_cancel_scanner_subscription_proto(9000).unwrap();
-        assert_msg_id(&bytes, OutgoingMessages::CancelScannerSubscription);
+        assert_proto_msg_id(&bytes, OutgoingMessages::CancelScannerSubscription);
     }
 
     #[test]
@@ -138,6 +134,6 @@ mod proto_tests {
         };
         let filter = vec![];
         let bytes = encode_scanner_subscription_proto(9000, &subscription, &filter).unwrap();
-        assert_msg_id(&bytes, OutgoingMessages::RequestScannerSubscription);
+        assert_proto_msg_id(&bytes, OutgoingMessages::RequestScannerSubscription);
     }
 }

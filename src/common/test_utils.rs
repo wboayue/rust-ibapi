@@ -141,6 +141,12 @@ pub mod helpers {
 
     /// Re-export constants at module level for easier access
     pub use constants::*;
+
+    /// Asserts the first 4 bytes of a protobuf-encoded message match the expected OutgoingMessages variant + 200 offset.
+    pub fn assert_proto_msg_id(bytes: &[u8], expected: crate::messages::OutgoingMessages) {
+        let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        assert_eq!(msg_id, expected as i32 + 200);
+    }
 }
 
 #[cfg(test)]

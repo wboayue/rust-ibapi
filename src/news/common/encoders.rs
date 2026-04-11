@@ -151,35 +151,31 @@ pub(in crate::news) fn encode_request_news_article_proto(request_id: i32, provid
 
 #[cfg(test)]
 mod proto_tests {
+    use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::messages::OutgoingMessages;
-
-    fn assert_msg_id(bytes: &[u8], expected: OutgoingMessages) {
-        let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-        assert_eq!(msg_id, expected as i32 + 200);
-    }
 
     #[test]
     fn test_encode_request_news_providers_proto() {
         let bytes = super::encode_request_news_providers_proto().unwrap();
-        assert_msg_id(&bytes, OutgoingMessages::RequestNewsProviders);
+        assert_proto_msg_id(&bytes, OutgoingMessages::RequestNewsProviders);
     }
 
     #[test]
     fn test_encode_request_news_bulletins_proto() {
         let bytes = super::encode_request_news_bulletins_proto(true).unwrap();
-        assert_msg_id(&bytes, OutgoingMessages::RequestNewsBulletins);
+        assert_proto_msg_id(&bytes, OutgoingMessages::RequestNewsBulletins);
     }
 
     #[test]
     fn test_encode_cancel_news_bulletin_proto() {
         let bytes = super::encode_cancel_news_bulletin_proto().unwrap();
-        assert_msg_id(&bytes, OutgoingMessages::CancelNewsBulletin);
+        assert_proto_msg_id(&bytes, OutgoingMessages::CancelNewsBulletin);
     }
 
     #[test]
     fn test_encode_request_news_article_proto() {
         let bytes = super::encode_request_news_article_proto(1000, "BRFG", "BRFG$12345").unwrap();
-        assert_msg_id(&bytes, OutgoingMessages::RequestNewsArticle);
+        assert_proto_msg_id(&bytes, OutgoingMessages::RequestNewsArticle);
         use prost::Message;
         let req = crate::proto::NewsArticleRequest::decode(&bytes[4..]).unwrap();
         assert_eq!(req.req_id, Some(1000));

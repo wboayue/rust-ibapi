@@ -654,30 +654,26 @@ mod tests {
     mod proto_tests {
         use super::super::*;
         use crate::accounts::types::{AccountGroup, AccountId, ContractId};
-
-        fn assert_msg_id(bytes: &[u8], expected: OutgoingMessages) {
-            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-            assert_eq!(msg_id, expected as i32 + 200);
-        }
+        use crate::common::test_utils::helpers::assert_proto_msg_id;
 
         #[test]
         fn test_encode_request_positions_proto() {
             let bytes = encode_request_positions_proto().unwrap();
-            assert_msg_id(&bytes, OutgoingMessages::RequestPositions);
+            assert_proto_msg_id(&bytes, OutgoingMessages::RequestPositions);
         }
 
         #[test]
         fn test_encode_request_account_summary_proto() {
             let group = AccountGroup("All".to_string());
             let bytes = encode_request_account_summary_proto(3000, &group, &["AccountType"]).unwrap();
-            assert_msg_id(&bytes, OutgoingMessages::RequestAccountSummary);
+            assert_proto_msg_id(&bytes, OutgoingMessages::RequestAccountSummary);
         }
 
         #[test]
         fn test_encode_request_pnl_proto() {
             let account = AccountId("DU123".to_string());
             let bytes = encode_request_pnl_proto(3000, &account, None).unwrap();
-            assert_msg_id(&bytes, OutgoingMessages::RequestPnL);
+            assert_proto_msg_id(&bytes, OutgoingMessages::RequestPnL);
         }
 
         #[test]
@@ -685,14 +681,14 @@ mod tests {
             let account = AccountId("DU123".to_string());
             let cid = ContractId(1001);
             let bytes = encode_request_pnl_single_proto(3000, &account, cid, None).unwrap();
-            assert_msg_id(&bytes, OutgoingMessages::RequestPnLSingle);
+            assert_proto_msg_id(&bytes, OutgoingMessages::RequestPnLSingle);
         }
 
         #[test]
         fn test_encode_request_account_updates_proto() {
             let account = AccountId("DU123".to_string());
             let bytes = encode_request_account_updates_proto(true, &account).unwrap();
-            assert_msg_id(&bytes, OutgoingMessages::RequestAccountData);
+            assert_proto_msg_id(&bytes, OutgoingMessages::RequestAccountData);
         }
     }
 }
