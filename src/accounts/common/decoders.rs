@@ -232,12 +232,30 @@ pub(crate) fn decode_account_update_time(message: &mut ResponseMessage) -> Resul
     })
 }
 
+pub(crate) fn decode_server_time(message: &mut ResponseMessage) -> Result<OffsetDateTime, Error> {
+    if message.is_protobuf {
+        let bytes = message.raw_bytes().ok_or_else(|| Error::Simple("missing protobuf bytes".to_string()))?;
+        let proto = proto::CurrentTime::decode(bytes).map_err(|e| Error::Simple(format!("failed to decode CurrentTime: {e}")))?;
+        let timestamp = proto.current_time.unwrap_or(0);
+        OffsetDateTime::from_unix_timestamp(timestamp).map_err(|e| Error::Simple(format!("Error parsing date: {e}")))
+    } else {
+        message.skip(); // message type
+        message.skip(); // message version
+        let timestamp = message.next_long()?;
+        OffsetDateTime::from_unix_timestamp(timestamp).map_err(|e| Error::Simple(format!("Error parsing date: {e}")))
+    }
+}
+
 pub(crate) fn decode_server_time_millis(message: &mut ResponseMessage) -> Result<OffsetDateTime, Error> {
-    message.skip(); // message type
-    let millis = message.next_long()?;
-    match OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000) {
-        Ok(date) => Ok(date),
-        Err(e) => Err(Error::Simple(format!("Error parsing date: {e}"))),
+    if message.is_protobuf {
+        let bytes = message.raw_bytes().ok_or_else(|| Error::Simple("missing protobuf bytes".to_string()))?;
+        let proto = proto::CurrentTimeInMillis::decode(bytes).map_err(|e| Error::Simple(format!("failed to decode CurrentTimeInMillis: {e}")))?;
+        let millis = proto.current_time_in_millis.unwrap_or(0);
+        OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).map_err(|e| Error::Simple(format!("Error parsing date: {e}")))
+    } else {
+        message.skip(); // message type
+        let millis = message.next_long()?;
+        OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).map_err(|e| Error::Simple(format!("Error parsing date: {e}")))
     }
 }
 

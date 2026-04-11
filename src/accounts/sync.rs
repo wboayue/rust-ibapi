@@ -31,15 +31,7 @@ impl Client {
             self,
             OutgoingMessages::RequestCurrentTime,
             encoders::encode_request_server_time,
-            |message| {
-                message.skip(); // message type
-                message.skip(); // message version
-                let timestamp = message.next_long()?;
-                match OffsetDateTime::from_unix_timestamp(timestamp) {
-                    Ok(date) => Ok(date),
-                    Err(e) => Err(Error::Simple(format!("Error parsing date: {e}"))),
-                }
-            },
+            decoders::decode_server_time,
             || Err(Error::Simple("No response from server".to_string())),
         )
     }
