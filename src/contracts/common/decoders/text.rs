@@ -8,7 +8,7 @@ use crate::{
     server_versions, Error,
 };
 
-use super::super::{
+use crate::contracts::{
     Contract, ContractDescription, ContractDetails, FundAssetType, FundDistributionPolicyIndicator, IneligibilityReason, MarketRule, OptionChain,
     OptionComputation, PriceIncrement, TagValue,
 };

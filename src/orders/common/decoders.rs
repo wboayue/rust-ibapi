@@ -1128,6 +1128,83 @@ fn decode_percent_change_condition(message: &mut ResponseMessage, is_conjunction
     }))
 }
 
+// === Protobuf decoders ===
+
+#[allow(dead_code)]
+pub(crate) fn decode_open_order_proto(bytes: &[u8]) -> Result<OrderData, Error> {
+    let p = prost::Message::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p: crate::proto::OpenOrder = p;
+    let contract = p.contract.as_ref().map(crate::proto::decoders::decode_contract).unwrap_or_default();
+    let order = p.order.as_ref().map(crate::proto::decoders::decode_order).unwrap_or_default();
+    let order_state = p.order_state.as_ref().map(crate::proto::decoders::decode_order_state).unwrap_or_default();
+
+    Ok(OrderData {
+        order_id: p.order_id.unwrap_or_default(),
+        contract,
+        order,
+        order_state,
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_order_status_proto(bytes: &[u8]) -> Result<OrderStatus, Error> {
+    let p: crate::proto::OrderStatus = prost::Message::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+
+    Ok(OrderStatus {
+        order_id: p.order_id.unwrap_or_default(),
+        status: p.status.unwrap_or_default(),
+        filled: p.filled.as_deref().and_then(|s| s.parse().ok()).unwrap_or_default(),
+        remaining: p.remaining.as_deref().and_then(|s| s.parse().ok()).unwrap_or_default(),
+        average_fill_price: p.avg_fill_price.unwrap_or_default(),
+        perm_id: p.perm_id.unwrap_or_default() as i32,
+        parent_id: p.parent_id.unwrap_or_default(),
+        last_fill_price: p.last_fill_price.unwrap_or_default(),
+        client_id: p.client_id.unwrap_or_default(),
+        why_held: p.why_held.unwrap_or_default(),
+        market_cap_price: p.mkt_cap_price.unwrap_or_default(),
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_execution_data_proto(bytes: &[u8]) -> Result<ExecutionData, Error> {
+    let p: crate::proto::ExecutionDetails = prost::Message::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+
+    Ok(ExecutionData {
+        request_id: p.req_id.unwrap_or_default(),
+        contract: p.contract.as_ref().map(crate::proto::decoders::decode_contract).unwrap_or_default(),
+        execution: p.execution.as_ref().map(crate::proto::decoders::decode_execution).unwrap_or_default(),
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_completed_order_proto(bytes: &[u8]) -> Result<OrderData, Error> {
+    let p: crate::proto::CompletedOrder = prost::Message::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let contract = p.contract.as_ref().map(crate::proto::decoders::decode_contract).unwrap_or_default();
+    let order = p.order.as_ref().map(crate::proto::decoders::decode_order).unwrap_or_default();
+    let order_state = p.order_state.as_ref().map(crate::proto::decoders::decode_order_state).unwrap_or_default();
+
+    Ok(OrderData {
+        order_id: order.order_id,
+        contract,
+        order,
+        order_state,
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_commission_report_proto(bytes: &[u8]) -> Result<CommissionReport, Error> {
+    let p: crate::proto::CommissionAndFeesReport = prost::Message::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+
+    Ok(CommissionReport {
+        execution_id: p.exec_id.unwrap_or_default(),
+        commission: p.commission_and_fees.unwrap_or_default(),
+        currency: p.currency.unwrap_or_default(),
+        realized_pnl: p.realized_pnl.filter(|&v| v != f64::MAX),
+        yields: p.bond_yield.filter(|&v| v != f64::MAX),
+        yield_redemption_date: p.yield_redemption_date.unwrap_or_default(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2314,5 +2391,108 @@ mod tests {
         assert_eq!(result.order.customer_account, "");
         assert!(!result.order.professional_customer);
         assert_eq!(result.order.submitter, "");
+    }
+
+    #[test]
+    fn test_decode_open_order_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::OpenOrder {
+            order_id: Some(42),
+            contract: Some(crate::proto::Contract {
+                con_id: Some(265598),
+                symbol: Some("AAPL".into()),
+                sec_type: Some("STK".into()),
+                exchange: Some("SMART".into()),
+                currency: Some("USD".into()),
+                ..Default::default()
+            }),
+            order: Some(crate::proto::Order {
+                order_id: Some(42),
+                action: Some("BUY".into()),
+                total_quantity: Some("100".into()),
+                order_type: Some("LMT".into()),
+                lmt_price: Some(150.0),
+                ..Default::default()
+            }),
+            order_state: Some(crate::proto::OrderState {
+                status: Some("Submitted".into()),
+                ..Default::default()
+            }),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_open_order_proto(&bytes).unwrap();
+        assert_eq!(result.order_id, 42);
+        assert_eq!(result.contract.contract_id, 265598);
+        assert_eq!(result.contract.symbol.to_string(), "AAPL");
+        assert_eq!(result.order.order_id, 42);
+        assert_eq!(result.order.action, Action::Buy);
+        assert_eq!(result.order.total_quantity, 100.0);
+        assert_eq!(result.order.order_type, "LMT");
+        assert_eq!(result.order.limit_price, Some(150.0));
+        assert_eq!(result.order_state.status, "Submitted");
+    }
+
+    #[test]
+    fn test_decode_order_status_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::OrderStatus {
+            order_id: Some(99),
+            status: Some("Filled".into()),
+            filled: Some("50".into()),
+            remaining: Some("0".into()),
+            avg_fill_price: Some(152.5),
+            perm_id: Some(123456),
+            parent_id: Some(10),
+            last_fill_price: Some(152.75),
+            client_id: Some(7),
+            why_held: Some("locate".into()),
+            mkt_cap_price: Some(1.23),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_order_status_proto(&bytes).unwrap();
+        assert_eq!(result.order_id, 99);
+        assert_eq!(result.status, "Filled");
+        assert_eq!(result.filled, 50.0);
+        assert_eq!(result.remaining, 0.0);
+        assert_eq!(result.average_fill_price, 152.5);
+        assert_eq!(result.perm_id, 123456);
+        assert_eq!(result.parent_id, 10);
+        assert_eq!(result.last_fill_price, 152.75);
+        assert_eq!(result.client_id, 7);
+        assert_eq!(result.why_held, "locate");
+        assert_eq!(result.market_cap_price, 1.23);
+    }
+
+    #[test]
+    fn test_decode_commission_report_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::CommissionAndFeesReport {
+            exec_id: Some("exec123".into()),
+            commission_and_fees: Some(1.25),
+            currency: Some("USD".into()),
+            realized_pnl: Some(500.0),
+            bond_yield: Some(f64::MAX),
+            yield_redemption_date: Some("20260101".into()),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_commission_report_proto(&bytes).unwrap();
+        assert_eq!(result.execution_id, "exec123");
+        assert_eq!(result.commission, 1.25);
+        assert_eq!(result.currency, "USD");
+        assert_eq!(result.realized_pnl, Some(500.0));
+        assert_eq!(result.yields, None); // f64::MAX filtered out
+        assert_eq!(result.yield_redemption_date, "20260101");
     }
 }

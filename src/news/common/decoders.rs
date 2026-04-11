@@ -97,6 +97,55 @@ fn parse_unix_timestamp(time: &str) -> Result<OffsetDateTime, Error> {
     }
 }
 
+#[allow(dead_code)]
+pub(crate) fn decode_news_bulletin_proto(bytes: &[u8]) -> Result<NewsBulletin, Error> {
+    use prost::Message;
+    let p = crate::proto::NewsBulletin::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    Ok(NewsBulletin {
+        message_id: p.news_msg_id.unwrap_or_default(),
+        message_type: p.news_msg_type.unwrap_or_default(),
+        message: p.news_message.unwrap_or_default(),
+        exchange: p.originating_exch.unwrap_or_default(),
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_news_article_proto(bytes: &[u8]) -> Result<NewsArticleBody, Error> {
+    use prost::Message;
+    let p = crate::proto::NewsArticle::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    Ok(NewsArticleBody {
+        article_type: ArticleType::from(p.article_type.unwrap_or_default()),
+        article_text: p.article_text.unwrap_or_default(),
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_historical_news_proto(bytes: &[u8]) -> Result<NewsArticle, Error> {
+    use prost::Message;
+    let p = crate::proto::HistoricalNews::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+
+    let time = p
+        .time
+        .as_deref()
+        .and_then(|t| {
+            let format = format_description!("[year]-[month]-[day] [hour]:[minute]:[second].[subsecond]");
+            PrimitiveDateTime::parse(t, format).ok()
+        })
+        .and_then(|dt| match dt.assume_timezone(timezones::db::UTC) {
+            time_tz::OffsetResult::Some(v) => Some(v),
+            _ => None,
+        })
+        .unwrap_or(OffsetDateTime::UNIX_EPOCH);
+
+    Ok(NewsArticle {
+        time,
+        provider_code: p.provider_code.unwrap_or_default(),
+        article_id: p.article_id.unwrap_or_default(),
+        headline: p.headline.unwrap_or_default(),
+        extra_data: String::new(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -114,5 +163,26 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("not_a_number"), "error should include the bad value: {msg}");
         assert!(msg.contains("invalid digit"), "error should include parse reason: {msg}");
+    }
+
+    #[test]
+    fn test_decode_news_bulletin_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::NewsBulletin {
+            news_msg_id: Some(42),
+            news_msg_type: Some(1),
+            news_message: Some("Market closed early".into()),
+            originating_exch: Some("NYSE".into()),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_news_bulletin_proto(&bytes).unwrap();
+        assert_eq!(result.message_id, 42);
+        assert_eq!(result.message_type, 1);
+        assert_eq!(result.message, "Market closed early");
+        assert_eq!(result.exchange, "NYSE");
     }
 }

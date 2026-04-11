@@ -58,3 +58,28 @@ pub(in crate::scanner) fn decode_scanner_data(mut message: ResponseMessage) -> R
 
     Ok(matches)
 }
+
+#[allow(dead_code)]
+pub(crate) fn decode_scanner_data_proto(bytes: &[u8]) -> Result<Vec<ScannerData>, Error> {
+    use prost::Message;
+    let p = crate::proto::ScannerData::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+
+    let mut results = Vec::with_capacity(p.scanner_data_element.len());
+    for elem in &p.scanner_data_element {
+        let contract = elem.contract.as_ref().map(crate::proto::decoders::decode_contract).unwrap_or_default();
+
+        let mut contract_details = crate::contracts::ContractDetails {
+            contract,
+            ..Default::default()
+        };
+        contract_details.market_name = elem.market_name.clone().unwrap_or_default();
+
+        results.push(ScannerData {
+            rank: elem.rank.unwrap_or_default(),
+            contract_details,
+            leg: elem.combo_key.clone().unwrap_or_default(),
+        });
+    }
+
+    Ok(results)
+}
