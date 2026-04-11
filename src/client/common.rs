@@ -179,6 +179,13 @@ pub mod mocks {
             Ok(())
         }
 
+        pub fn read_raw_message(&mut self, stream: &mut TcpStream) -> Result<Vec<u8>, std::io::Error> {
+            let size = self.read_size(stream)?;
+            let mut buf = vec![0u8; size];
+            stream.read_exact(&mut buf)?;
+            Ok(buf)
+        }
+
         pub fn handle_startup(&mut self, stream: &mut TcpStream) -> Result<(), std::io::Error> {
             let magic_token = self.read_magic_token(stream)?;
             assert_eq!(magic_token, "API\0");
@@ -191,12 +198,20 @@ pub mod mocks {
             self.write_message(stream, self.handshake_response())?;
 
             // Start API
-            let message = self.read_message(stream)?;
-            // For server versions > 72 (OPTIONAL_CAPABILITIES), expect an extra empty field
-            if self.server_version > 72 {
-                assert_eq!(message, "71\02\0100\0\0");
+            if self.server_version >= crate::server_versions::PROTOBUF {
+                // Protobuf binary format
+                let raw = self.read_raw_message(stream)?;
+                assert!(raw.len() >= 4, "start_api message too short");
+                let msg_id = i32::from_be_bytes([raw[0], raw[1], raw[2], raw[3]]);
+                assert_eq!(msg_id, 271, "expected protobuf StartApi (71+200)");
             } else {
-                assert_eq!(message, "71\02\0100\0");
+                // Legacy text format
+                let message = self.read_message(stream)?;
+                if self.server_version > 72 {
+                    assert_eq!(message, "71\02\0100\0\0");
+                } else {
+                    assert_eq!(message, "71\02\0100\0");
+                }
             }
 
             // next valid order id

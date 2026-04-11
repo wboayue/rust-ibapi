@@ -229,6 +229,8 @@ mod tests {
                     i: 0,
                     fields: vec!["45".to_string()], // TickGeneric message type
                     server_version: 0,
+                    is_protobuf: false,
+                    raw_bytes: None,
                 }),
                 expected: true,
             },
@@ -298,6 +300,8 @@ mod tests {
                     i: 0,
                     fields: vec!["45".to_string()], // TickGeneric message type
                     server_version: 0,
+                    is_protobuf: false,
+                    raw_bytes: None,
                 }),
                 retry_count: 0,
                 expected: true,
@@ -556,6 +560,8 @@ mod tests {
                     i: 0,
                     fields: vec!["45".to_string()], // TickGeneric message type
                     server_version: 0,
+                    is_protobuf: false,
+                    raw_bytes: None,
                 }),
                 expected: ErrorCategory::Transient,
             },

@@ -103,6 +103,9 @@ mod from_str_tests {
     }
 }
 
+/// Offset added to outbound protobuf message IDs. Inbound IDs > this value are protobuf.
+pub const PROTOBUF_MSG_ID: i32 = 200;
+
 const INFINITY_STR: &str = "Infinity";
 const UNSET_DOUBLE: &str = "1.7976931348623157E308";
 const UNSET_INTEGER: &str = "2147483647";
@@ -748,12 +751,42 @@ impl FromStr for OutgoingMessages {
 
 /// Encode the outbound message length prefix using the IB wire format.
 pub fn encode_length(message: &str) -> Vec<u8> {
-    let data = message.as_bytes();
+    encode_raw_length(message.as_bytes())
+}
 
-    let mut packet: Vec<u8> = Vec::with_capacity(data.len() + 4);
+/// Encode a protobuf outbound message: 4-byte BE (msg_id + 200) + proto bytes.
+pub fn encode_protobuf_message(msg_id: i32, proto_bytes: &[u8]) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(4 + proto_bytes.len());
+    buf.write_i32::<BigEndian>(msg_id + PROTOBUF_MSG_ID).unwrap();
+    buf.extend_from_slice(proto_bytes);
+    buf
+}
 
+/// Encode a length-prefixed raw message (4-byte BE length + data).
+pub fn encode_raw_length(data: &[u8]) -> Vec<u8> {
+    let mut packet = Vec::with_capacity(data.len() + 4);
     packet.write_u32::<BigEndian>(data.len() as u32).unwrap();
     packet.write_all(data).unwrap();
+    packet
+}
+
+/// Encode a `RequestMessage` with binary message ID framing for server_version >= PROTOBUF.
+///
+/// Wire format: `[4-byte BE total_length][4-byte BE msg_id][NUL-delimited remaining fields]`
+///
+/// The first field of the `RequestMessage` is the message ID (extracted and written as binary).
+/// Remaining fields are NUL-delimited text.
+pub fn encode_request_binary(message: &RequestMessage) -> Vec<u8> {
+    let msg_id: i32 = message.fields[0].parse().unwrap_or(0);
+
+    // Build body: binary msg_id + remaining text fields
+    let remaining: String = message.fields[1..].iter().map(|f| format!("{f}\0")).collect();
+    let body_len = 4 + remaining.len();
+
+    let mut packet = Vec::with_capacity(4 + body_len);
+    packet.write_u32::<BigEndian>(body_len as u32).unwrap();
+    packet.write_i32::<BigEndian>(msg_id).unwrap();
+    packet.write_all(remaining.as_bytes()).unwrap();
     packet
 }
 
@@ -827,9 +860,43 @@ pub struct ResponseMessage {
     pub fields: Vec<String>,
     /// Server version for version-gated decoding (e.g. error message format).
     pub server_version: i32,
+    /// True when the message payload is protobuf-encoded.
+    pub is_protobuf: bool,
+    /// Raw protobuf payload bytes (everything after the 4-byte binary message ID).
+    pub raw_bytes: Option<Vec<u8>>,
 }
 
 impl ResponseMessage {
+    /// Build a protobuf response message from a binary message type and raw payload bytes.
+    pub fn from_protobuf(message_type: i32, raw_bytes: Vec<u8>, server_version: i32) -> Self {
+        Self {
+            i: 0,
+            fields: vec![message_type.to_string()],
+            server_version,
+            is_protobuf: true,
+            raw_bytes: Some(raw_bytes),
+        }
+    }
+
+    /// Build a text response message from a binary message ID and NUL-delimited text payload.
+    /// Used when server_version >= PROTOBUF but the message ID <= 200 (text message).
+    pub fn from_binary_text(msg_id: i32, text_payload: &str, server_version: i32) -> Self {
+        let mut fields = vec![msg_id.to_string()];
+        fields.extend(text_payload.split_terminator('\0').map(|s| s.to_string()));
+        Self {
+            i: 0,
+            fields,
+            server_version,
+            is_protobuf: false,
+            raw_bytes: None,
+        }
+    }
+
+    /// Raw protobuf payload bytes, if this is a protobuf message.
+    pub fn raw_bytes(&self) -> Option<&[u8]> {
+        self.raw_bytes.as_deref()
+    }
+
     /// Number of fields present in the message.
     pub fn len(&self) -> usize {
         self.fields.len()
@@ -1136,6 +1203,8 @@ impl ResponseMessage {
             i: 0,
             fields: fields.split_terminator('\x00').map(|x| x.to_string()).collect(),
             server_version: 0,
+            is_protobuf: false,
+            raw_bytes: None,
         }
     }
     #[cfg(test)]
@@ -1145,6 +1214,8 @@ impl ResponseMessage {
             i: 0,
             fields: fields.split_terminator('|').map(|x| x.to_string()).collect(),
             server_version: 0,
+            is_protobuf: false,
+            raw_bytes: None,
         }
     }
 

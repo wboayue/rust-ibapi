@@ -10,7 +10,7 @@ use time_tz::{OffsetResult, PrimitiveDateTimeExt, Tz};
 
 use crate::common::timezone::find_timezone;
 use crate::errors::Error;
-use crate::messages::{encode_length, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{encode_length, encode_protobuf_message, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage, PROTOBUF_MSG_ID};
 use crate::server_versions;
 
 /// Callback for handling unsolicited messages during connection setup.
@@ -98,8 +98,8 @@ pub trait ConnectionProtocol {
     /// Parse the handshake response from the server
     fn parse_handshake_response(&self, response: &mut ResponseMessage) -> Result<HandshakeData, Self::Error>;
 
-    /// Format the start API message
-    fn format_start_api(&self, client_id: i32, server_version: i32) -> RequestMessage;
+    /// Format the start API message as raw bytes (without length prefix).
+    fn format_start_api(&self, client_id: i32, server_version: i32) -> Vec<u8>;
 
     /// Parse account information from incoming messages
     ///
@@ -129,8 +129,8 @@ pub struct ConnectionHandler {
 impl Default for ConnectionHandler {
     fn default() -> Self {
         Self {
-            min_version: 100,
-            max_version: server_versions::PARAMETRIZED_DAYS_OF_EXECUTIONS,
+            min_version: server_versions::PROTOBUF,
+            max_version: server_versions::UPDATE_CONFIG,
         }
     }
 }
@@ -159,19 +159,27 @@ impl ConnectionProtocol for ConnectionHandler {
         })
     }
 
-    fn format_start_api(&self, client_id: i32, server_version: i32) -> RequestMessage {
-        const VERSION: i32 = 2;
+    fn format_start_api(&self, client_id: i32, server_version: i32) -> Vec<u8> {
+        if server_version >= server_versions::PROTOBUF {
+            use prost::Message;
 
-        let mut message = RequestMessage::default();
-        message.push_field(&OutgoingMessages::StartApi);
-        message.push_field(&VERSION);
-        message.push_field(&client_id);
+            let request = crate::proto::StartApiRequest {
+                client_id: Some(client_id),
+                optional_capabilities: None,
+            };
 
-        if server_version > server_versions::OPTIONAL_CAPABILITIES {
-            message.push_field(&"");
+            encode_protobuf_message(OutgoingMessages::StartApi as i32, &request.encode_to_vec())
+        } else {
+            // Legacy text format for older servers
+            let mut message = RequestMessage::default();
+            message.push_field(&OutgoingMessages::StartApi);
+            message.push_field(&2i32); // VERSION
+            message.push_field(&client_id);
+            if server_version > server_versions::OPTIONAL_CAPABILITIES {
+                message.push_field(&"");
+            }
+            message.encode().as_bytes().to_vec()
         }
-
-        message
     }
 
     fn parse_account_info(
@@ -179,25 +187,55 @@ impl ConnectionProtocol for ConnectionHandler {
         message: &mut ResponseMessage,
         callback: Option<&(dyn Fn(ResponseMessage) + Send + Sync)>,
     ) -> Result<AccountInfo, Self::Error> {
+        use prost::Message;
+
         let mut info = AccountInfo::default();
 
         match message.message_type() {
             IncomingMessages::NextValidId => {
-                message.skip(); // message type
-                message.skip(); // message version
-                info.next_order_id = Some(message.next_int()?);
+                if message.is_protobuf {
+                    if let Some(bytes) = message.raw_bytes() {
+                        let proto =
+                            crate::proto::NextValidId::decode(bytes).map_err(|e| Error::Simple(format!("failed to decode NextValidId: {e}")))?;
+                        info.next_order_id = proto.order_id;
+                    }
+                } else {
+                    message.skip(); // message type
+                    message.skip(); // message version
+                    info.next_order_id = Some(message.next_int()?);
+                }
             }
             IncomingMessages::ManagedAccounts => {
-                message.skip(); // message type
-                message.skip(); // message version
-                info.managed_accounts = Some(message.next_string()?);
+                if message.is_protobuf {
+                    if let Some(bytes) = message.raw_bytes() {
+                        let proto = crate::proto::ManagedAccounts::decode(bytes)
+                            .map_err(|e| Error::Simple(format!("failed to decode ManagedAccounts: {e}")))?;
+                        info.managed_accounts = proto.accounts_list;
+                    }
+                } else {
+                    message.skip(); // message type
+                    message.skip(); // message version
+                    info.managed_accounts = Some(message.next_string()?);
+                }
             }
             IncomingMessages::Error => {
-                let notice = crate::messages::Notice::from(message);
-                if notice.is_warning() || notice.is_system_message() {
-                    info!("{notice}");
+                let notice = if message.is_protobuf {
+                    message.raw_bytes().and_then(|bytes| {
+                        crate::proto::ErrorMessage::decode(bytes).ok().map(|proto| crate::messages::Notice {
+                            code: proto.error_code.unwrap_or(0),
+                            message: proto.error_msg.unwrap_or_default(),
+                            error_time: None,
+                        })
+                    })
                 } else {
-                    error!("Error during account info: {notice}");
+                    Some(crate::messages::Notice::from(message))
+                };
+                if let Some(notice) = notice {
+                    if notice.is_warning() || notice.is_system_message() {
+                        info!("{notice}");
+                    } else {
+                        error!("Error during account info: {notice}");
+                    }
                 }
             }
             _ => {
@@ -254,6 +292,34 @@ pub fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, 
             log::warn!("Could not parse connection time from {date_str}: {err}");
             (None, Some(timezone))
         }
+    }
+}
+
+/// Parse raw message bytes into a `ResponseMessage`, returning an optional debug string for tracing.
+///
+/// When `server_version >= PROTOBUF` and the 4-byte binary message ID exceeds 200,
+/// the payload is protobuf-encoded. Otherwise the payload is NUL-delimited text.
+pub fn parse_raw_message(data: &[u8], server_version: i32) -> (ResponseMessage, Option<String>) {
+    if server_version >= server_versions::PROTOBUF && data.len() >= 4 {
+        let msg_id = i32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+
+        if msg_id > PROTOBUF_MSG_ID {
+            let real_type = msg_id - PROTOBUF_MSG_ID;
+            debug!("<- protobuf msg_id={real_type}");
+            let message = ResponseMessage::from_protobuf(real_type, data[4..].to_vec(), server_version);
+            (message, None)
+        } else {
+            // Binary message ID but text payload
+            let raw_string = String::from_utf8_lossy(&data[4..]).into_owned();
+            debug!("<- {raw_string:?}");
+            let message = ResponseMessage::from_binary_text(msg_id, &raw_string, server_version);
+            (message, Some(raw_string))
+        }
+    } else {
+        let raw_string = String::from_utf8_lossy(data).into_owned();
+        debug!("<- {raw_string:?}");
+        let message = ResponseMessage::from(&raw_string).with_server_version(server_version);
+        (message, Some(raw_string))
     }
 }
 
@@ -471,12 +537,71 @@ mod tests {
 
     #[test]
     fn test_connection_handler_start_api() {
-        let handler = ConnectionHandler::default();
-        let message = handler.format_start_api(123, 150);
+        use crate::messages::PROTOBUF_MSG_ID;
 
-        let encoded = message.encode();
-        assert!(encoded.contains("71")); // StartApi message type
-        assert!(encoded.contains("123")); // client_id
+        let handler = ConnectionHandler::default();
+        let data = handler.format_start_api(123, server_versions::PROTOBUF);
+
+        // First 4 bytes: big-endian (StartApi=71 + 200)
+        let msg_id = i32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+        assert_eq!(msg_id, 71 + PROTOBUF_MSG_ID);
+
+        // Remaining bytes: protobuf-encoded StartApiRequest with client_id=123
+        let request: crate::proto::StartApiRequest = prost::Message::decode(&data[4..]).unwrap();
+        assert_eq!(request.client_id, Some(123));
+    }
+
+    #[test]
+    fn test_connection_handler_start_api_legacy() {
+        let handler = ConnectionHandler::default();
+        let data = handler.format_start_api(123, 150); // server < PROTOBUF
+
+        let text = String::from_utf8(data).unwrap();
+        assert!(text.contains("71")); // StartApi message type
+        assert!(text.contains("123")); // client_id
+    }
+
+    #[test]
+    fn test_parse_raw_message_protobuf() {
+        use crate::messages::PROTOBUF_MSG_ID;
+
+        // Simulate a protobuf message: msg_id = 5 + 200 = 205, then some payload
+        let msg_id: i32 = 5 + PROTOBUF_MSG_ID;
+        let payload = vec![0x08, 0x64]; // varint tag=1, value=100
+        let mut data = msg_id.to_be_bytes().to_vec();
+        data.extend_from_slice(&payload);
+
+        let (message, trace_str) = parse_raw_message(&data, server_versions::PROTOBUF);
+        assert!(message.is_protobuf);
+        assert_eq!(message.message_type(), IncomingMessages::OpenOrder);
+        assert_eq!(message.raw_bytes(), Some(payload.as_slice()));
+        assert!(trace_str.is_none()); // no trace string for protobuf
+    }
+
+    #[test]
+    fn test_parse_raw_message_binary_id_text_payload() {
+        // Simulate a text message at server >= 201: binary msg_id=9, then NUL-delimited text
+        let msg_id: i32 = 9; // NextValidId
+        let text_payload = b"1\01000\0";
+        let mut data = msg_id.to_be_bytes().to_vec();
+        data.extend_from_slice(text_payload);
+
+        let (message, trace_str) = parse_raw_message(&data, server_versions::PROTOBUF);
+        assert!(!message.is_protobuf);
+        assert_eq!(message.message_type(), IncomingMessages::NextValidId);
+        assert_eq!(message.peek_string(1), "1"); // version field
+        assert_eq!(message.peek_int(2).unwrap(), 1000); // next_order_id
+        assert!(trace_str.is_some());
+    }
+
+    #[test]
+    fn test_parse_raw_message_legacy_text() {
+        let data = b"9\01\01000\0";
+        let (message, trace_str) = parse_raw_message(data, 173); // server < PROTOBUF
+
+        assert!(!message.is_protobuf);
+        assert_eq!(message.message_type(), IncomingMessages::NextValidId);
+        assert!(trace_str.is_some());
     }
 
     /// Test handling of non-UTF8 encoded data from IB Gateway (issue #352)

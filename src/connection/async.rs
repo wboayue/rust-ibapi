@@ -9,10 +9,13 @@ use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
-use super::common::{parse_connection_time, AccountInfo, ConnectionHandler, ConnectionOptions, ConnectionProtocol, StartupMessageCallback};
+use super::common::{
+    parse_connection_time, parse_raw_message, AccountInfo, ConnectionHandler, ConnectionOptions, ConnectionProtocol, StartupMessageCallback,
+};
 use super::ConnectionMetadata;
 use crate::errors::Error;
-use crate::messages::{RequestMessage, ResponseMessage};
+use crate::messages::{encode_raw_length, encode_request_binary, RequestMessage, ResponseMessage};
+use crate::server_versions;
 use crate::trace;
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::recorder::MessageRecorder;
@@ -147,15 +150,18 @@ impl AsyncConnection {
         let encoded = message.encode();
         debug!("-> {encoded:?}");
 
-        // Record the request if debug logging is enabled
         if log::log_enabled!(log::Level::Debug) {
             trace::record_request(encoded.clone()).await;
         }
 
-        let length_encoded = crate::messages::encode_length(&encoded);
+        let packet = if self.server_version() >= server_versions::PROTOBUF {
+            encode_request_binary(message)
+        } else {
+            crate::messages::encode_length(&encoded)
+        };
 
         let mut writer = self.writer.lock().await;
-        writer.write_all(&length_encoded).await?;
+        writer.write_all(&packet).await?;
         writer.flush().await?;
         Ok(())
     }
@@ -182,19 +188,26 @@ impl AsyncConnection {
 
         drop(reader);
 
-        let raw_string = String::from_utf8_lossy(&data).into_owned();
-        debug!("<- {raw_string:?}");
+        let (message, trace_str) = parse_raw_message(&data, self.server_version());
 
-        // Record the response if debug logging is enabled
-        if log::log_enabled!(log::Level::Debug) {
-            trace::record_response(raw_string.clone()).await;
+        if let Some(raw_string) = trace_str {
+            if log::log_enabled!(log::Level::Debug) {
+                trace::record_response(raw_string).await;
+            }
         }
-
-        let message = ResponseMessage::from(&raw_string).with_server_version(self.server_version());
 
         self.recorder.record_response(&message);
 
         Ok(message)
+    }
+
+    /// Write raw bytes with a length prefix
+    pub(crate) async fn write_raw(&self, data: &[u8]) -> Result<(), Error> {
+        let packet = encode_raw_length(data);
+        let mut writer = self.writer.lock().await;
+        writer.write_all(&packet).await?;
+        writer.flush().await?;
+        Ok(())
     }
 
     // sends server handshake
@@ -233,8 +246,8 @@ impl AsyncConnection {
     // asks server to start processing messages
     pub(crate) async fn start_api(&self) -> Result<(), Error> {
         let server_version = self.server_version();
-        let message = self.connection_handler.format_start_api(self.client_id, server_version);
-        self.write_message(&message).await?;
+        let data = self.connection_handler.format_start_api(self.client_id, server_version);
+        self.write_raw(&data).await?;
         Ok(())
     }
 

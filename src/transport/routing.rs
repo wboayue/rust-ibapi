@@ -19,6 +19,42 @@ pub enum RoutingDecision {
     Shutdown,
 }
 
+/// Minimal protobuf envelope to extract the first int32 field (tag 1).
+#[derive(Clone, PartialEq, ::prost::Message)]
+struct RoutingEnvelope {
+    #[prost(int32, optional, tag = "1")]
+    pub id: Option<i32>,
+}
+
+/// Try to extract a request/order ID from protobuf raw bytes.
+/// Most protobuf messages encode `req_id` or `order_id` at tag 1 as an int32.
+/// Messages where tag 1 is not the routing ID (e.g. CommissionsReport) will need
+/// per-message-type handling when those messages migrate to protobuf.
+fn protobuf_first_int(raw_bytes: &[u8]) -> Option<i32> {
+    prost::Message::decode(raw_bytes).ok().and_then(|e: RoutingEnvelope| e.id)
+}
+
+fn is_order_message(message_type: IncomingMessages) -> bool {
+    matches!(
+        message_type,
+        IncomingMessages::OrderStatus
+            | IncomingMessages::OpenOrder
+            | IncomingMessages::OpenOrderEnd
+            | IncomingMessages::CompletedOrder
+            | IncomingMessages::CompletedOrdersEnd
+            | IncomingMessages::ExecutionData
+            | IncomingMessages::ExecutionDataEnd
+            | IncomingMessages::CommissionsReport
+    )
+}
+
+fn is_shared_message(message_type: IncomingMessages) -> bool {
+    matches!(
+        message_type,
+        IncomingMessages::ManagedAccounts | IncomingMessages::NextValidId | IncomingMessages::CurrentTime
+    )
+}
+
 /// Determine how to route an incoming message
 pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
     let message_type = message.message_type();
@@ -29,32 +65,41 @@ pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
 
     // Special handling for error messages
     if message_type == IncomingMessages::Error {
+        if message.is_protobuf {
+            // TODO: decode full protobuf Error message to extract error_code for
+            // downstream classification (e.g. is_warning_error). Currently hardcoded
+            // to 0 since no protobuf error messages are received yet.
+            let id = message.raw_bytes().and_then(protobuf_first_int).unwrap_or(-1);
+            return RoutingDecision::Error {
+                request_id: id,
+                error_code: 0,
+            };
+        }
         let request_id = message.error_request_id();
         let error_code = message.error_code();
         return RoutingDecision::Error { request_id, error_code };
     }
 
-    // Check if this is an order-related message type
-    // This matches the original implementation's explicit list
-    match message_type {
-        IncomingMessages::OrderStatus
-        | IncomingMessages::OpenOrder
-        | IncomingMessages::OpenOrderEnd
-        | IncomingMessages::CompletedOrder
-        | IncomingMessages::CompletedOrdersEnd
-        | IncomingMessages::ExecutionData
-        | IncomingMessages::ExecutionDataEnd
-        | IncomingMessages::CommissionsReport => {
-            // For order messages that have an order ID, route by order ID
-            // Otherwise, it will be handled by process_orders which checks other routing options
-            if let Some(order_id) = message.order_id() {
-                return RoutingDecision::ByOrderId(order_id);
-            } else {
-                // Even without order ID, these are still order messages
-                return RoutingDecision::ByOrderId(-1);
-            }
+    // Protobuf messages: extract routing ID from raw bytes
+    if message.is_protobuf {
+        if is_order_message(message_type) {
+            let id = message.raw_bytes().and_then(protobuf_first_int).unwrap_or(-1);
+            return RoutingDecision::ByOrderId(id);
         }
-        _ => {}
+        if is_shared_message(message_type) {
+            return RoutingDecision::SharedMessage(message_type);
+        }
+        let id = message.raw_bytes().and_then(protobuf_first_int).unwrap_or(-1);
+        if id >= 0 {
+            return RoutingDecision::ByRequestId(id);
+        }
+        return RoutingDecision::ByMessageType(message_type);
+    }
+
+    // Text messages: order routing
+    if is_order_message(message_type) {
+        let order_id = message.order_id().unwrap_or(-1);
+        return RoutingDecision::ByOrderId(order_id);
     }
 
     // Check if message has a request ID
@@ -62,12 +107,10 @@ pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
         return RoutingDecision::ByRequestId(request_id);
     }
 
-    // Certain messages are always shared
-    match message_type {
-        IncomingMessages::ManagedAccounts | IncomingMessages::NextValidId | IncomingMessages::CurrentTime => {
-            RoutingDecision::SharedMessage(message_type)
-        }
-        _ => RoutingDecision::ByMessageType(message_type),
+    if is_shared_message(message_type) {
+        RoutingDecision::SharedMessage(message_type)
+    } else {
+        RoutingDecision::ByMessageType(message_type)
     }
 }
 
