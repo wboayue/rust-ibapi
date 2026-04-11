@@ -282,15 +282,7 @@ pub fn parse_raw_message(data: &[u8], server_version: i32) -> (ResponseMessage, 
             // Binary message ID but text payload
             let raw_string = String::from_utf8_lossy(&data[4..]).into_owned();
             debug!("<- {raw_string:?}");
-            let mut fields = vec![msg_id.to_string()];
-            fields.extend(raw_string.split_terminator('\0').map(|s| s.to_string()));
-            let message = ResponseMessage {
-                i: 0,
-                fields,
-                server_version,
-                is_protobuf: false,
-                raw_bytes: None,
-            };
+            let message = ResponseMessage::from_binary_text(msg_id, &raw_string, server_version);
             (message, Some(raw_string))
         }
     } else {

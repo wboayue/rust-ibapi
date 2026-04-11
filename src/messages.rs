@@ -751,13 +751,7 @@ impl FromStr for OutgoingMessages {
 
 /// Encode the outbound message length prefix using the IB wire format.
 pub fn encode_length(message: &str) -> Vec<u8> {
-    let data = message.as_bytes();
-
-    let mut packet: Vec<u8> = Vec::with_capacity(data.len() + 4);
-
-    packet.write_u32::<BigEndian>(data.len() as u32).unwrap();
-    packet.write_all(data).unwrap();
-    packet
+    encode_raw_length(message.as_bytes())
 }
 
 /// Encode a protobuf outbound message: 4-byte BE (msg_id + 200) + proto bytes.
@@ -861,6 +855,20 @@ impl ResponseMessage {
             server_version,
             is_protobuf: true,
             raw_bytes: Some(raw_bytes),
+        }
+    }
+
+    /// Build a text response message from a binary message ID and NUL-delimited text payload.
+    /// Used when server_version >= PROTOBUF but the message ID <= 200 (text message).
+    pub fn from_binary_text(msg_id: i32, text_payload: &str, server_version: i32) -> Self {
+        let mut fields = vec![msg_id.to_string()];
+        fields.extend(text_payload.split_terminator('\0').map(|s| s.to_string()));
+        Self {
+            i: 0,
+            fields,
+            server_version,
+            is_protobuf: false,
+            raw_bytes: None,
         }
     }
 
