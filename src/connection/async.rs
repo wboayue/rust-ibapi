@@ -12,7 +12,8 @@ use tokio::time::sleep;
 use super::common::{parse_connection_time, AccountInfo, ConnectionHandler, ConnectionOptions, ConnectionProtocol, StartupMessageCallback};
 use super::ConnectionMetadata;
 use crate::errors::Error;
-use crate::messages::{RequestMessage, ResponseMessage};
+use crate::messages::{encode_raw_length, RequestMessage, ResponseMessage, PROTOBUF_MSG_ID};
+use crate::server_versions;
 use crate::trace;
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::recorder::MessageRecorder;
@@ -182,19 +183,53 @@ impl AsyncConnection {
 
         drop(reader);
 
-        let raw_string = String::from_utf8_lossy(&data).into_owned();
-        debug!("<- {raw_string:?}");
+        let server_version = self.server_version();
 
-        // Record the response if debug logging is enabled
-        if log::log_enabled!(log::Level::Debug) {
-            trace::record_response(raw_string.clone()).await;
-        }
+        let message = if server_version >= server_versions::PROTOBUF && data.len() >= 4 {
+            let msg_id = i32::from_be_bytes([data[0], data[1], data[2], data[3]]);
 
-        let message = ResponseMessage::from(&raw_string).with_server_version(self.server_version());
+            if msg_id > PROTOBUF_MSG_ID {
+                let real_type = msg_id - PROTOBUF_MSG_ID;
+                debug!("<- protobuf msg_id={real_type}");
+                ResponseMessage::from_protobuf(real_type, data[4..].to_vec(), server_version)
+            } else {
+                // Binary message ID but text payload
+                let raw_string = String::from_utf8_lossy(&data[4..]).into_owned();
+                debug!("<- {raw_string:?}");
+                if log::log_enabled!(log::Level::Debug) {
+                    trace::record_response(raw_string.clone()).await;
+                }
+                let mut fields = vec![msg_id.to_string()];
+                fields.extend(raw_string.split_terminator('\0').map(|s| s.to_string()));
+                ResponseMessage {
+                    i: 0,
+                    fields,
+                    server_version,
+                    is_protobuf: false,
+                    raw_bytes: None,
+                }
+            }
+        } else {
+            let raw_string = String::from_utf8_lossy(&data).into_owned();
+            debug!("<- {raw_string:?}");
+            if log::log_enabled!(log::Level::Debug) {
+                trace::record_response(raw_string.clone()).await;
+            }
+            ResponseMessage::from(&raw_string).with_server_version(server_version)
+        };
 
         self.recorder.record_response(&message);
 
         Ok(message)
+    }
+
+    /// Write raw bytes with a length prefix
+    pub(crate) async fn write_raw(&self, data: &[u8]) -> Result<(), Error> {
+        let packet = encode_raw_length(data);
+        let mut writer = self.writer.lock().await;
+        writer.write_all(&packet).await?;
+        writer.flush().await?;
+        Ok(())
     }
 
     // sends server handshake
@@ -233,8 +268,8 @@ impl AsyncConnection {
     // asks server to start processing messages
     pub(crate) async fn start_api(&self) -> Result<(), Error> {
         let server_version = self.server_version();
-        let message = self.connection_handler.format_start_api(self.client_id, server_version);
-        self.write_message(&message).await?;
+        let data = self.connection_handler.format_start_api(self.client_id, server_version);
+        self.write_raw(&data).await?;
         Ok(())
     }
 

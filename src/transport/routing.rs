@@ -19,6 +19,18 @@ pub enum RoutingDecision {
     Shutdown,
 }
 
+/// Try to extract a request/order ID from protobuf raw bytes.
+/// Most protobuf messages encode `req_id` or `order_id` at tag 1 as an int32.
+fn protobuf_first_int(raw_bytes: &[u8]) -> Option<i32> {
+    // Minimal prost decode: tag 1, varint wire type
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    struct Envelope {
+        #[prost(int32, optional, tag = "1")]
+        pub id: Option<i32>,
+    }
+    prost::Message::decode(raw_bytes).ok().and_then(|e: Envelope| e.id)
+}
+
 /// Determine how to route an incoming message
 pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
     let message_type = message.message_type();
@@ -29,9 +41,44 @@ pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
 
     // Special handling for error messages
     if message_type == IncomingMessages::Error {
+        if message.is_protobuf {
+            // Protobuf errors: extract fields via envelope decoding
+            let id = message.raw_bytes().and_then(protobuf_first_int).unwrap_or(-1);
+            return RoutingDecision::Error {
+                request_id: id,
+                error_code: 0,
+            };
+        }
         let request_id = message.error_request_id();
         let error_code = message.error_code();
         return RoutingDecision::Error { request_id, error_code };
+    }
+
+    // Protobuf messages: extract routing ID from raw bytes
+    if message.is_protobuf {
+        match message_type {
+            IncomingMessages::OrderStatus
+            | IncomingMessages::OpenOrder
+            | IncomingMessages::OpenOrderEnd
+            | IncomingMessages::CompletedOrder
+            | IncomingMessages::CompletedOrdersEnd
+            | IncomingMessages::ExecutionData
+            | IncomingMessages::ExecutionDataEnd
+            | IncomingMessages::CommissionsReport => {
+                let id = message.raw_bytes().and_then(protobuf_first_int).unwrap_or(-1);
+                return RoutingDecision::ByOrderId(id);
+            }
+            IncomingMessages::ManagedAccounts | IncomingMessages::NextValidId | IncomingMessages::CurrentTime => {
+                return RoutingDecision::SharedMessage(message_type);
+            }
+            _ => {
+                let id = message.raw_bytes().and_then(protobuf_first_int).unwrap_or(-1);
+                if id >= 0 {
+                    return RoutingDecision::ByRequestId(id);
+                }
+                return RoutingDecision::ByMessageType(message_type);
+            }
+        }
     }
 
     // Check if this is an order-related message type

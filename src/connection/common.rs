@@ -10,7 +10,7 @@ use time_tz::{OffsetResult, PrimitiveDateTimeExt, Tz};
 
 use crate::common::timezone::find_timezone;
 use crate::errors::Error;
-use crate::messages::{encode_length, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{encode_length, encode_protobuf_message, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
 use crate::server_versions;
 
 /// Callback for handling unsolicited messages during connection setup.
@@ -98,8 +98,8 @@ pub trait ConnectionProtocol {
     /// Parse the handshake response from the server
     fn parse_handshake_response(&self, response: &mut ResponseMessage) -> Result<HandshakeData, Self::Error>;
 
-    /// Format the start API message
-    fn format_start_api(&self, client_id: i32, server_version: i32) -> RequestMessage;
+    /// Format the start API message as raw bytes (without length prefix).
+    fn format_start_api(&self, client_id: i32, server_version: i32) -> Vec<u8>;
 
     /// Parse account information from incoming messages
     ///
@@ -129,8 +129,8 @@ pub struct ConnectionHandler {
 impl Default for ConnectionHandler {
     fn default() -> Self {
         Self {
-            min_version: 100,
-            max_version: server_versions::PARAMETRIZED_DAYS_OF_EXECUTIONS,
+            min_version: server_versions::PROTOBUF,
+            max_version: server_versions::UPDATE_CONFIG,
         }
     }
 }
@@ -159,19 +159,27 @@ impl ConnectionProtocol for ConnectionHandler {
         })
     }
 
-    fn format_start_api(&self, client_id: i32, server_version: i32) -> RequestMessage {
-        const VERSION: i32 = 2;
+    fn format_start_api(&self, client_id: i32, server_version: i32) -> Vec<u8> {
+        if server_version >= server_versions::PROTOBUF {
+            use prost::Message;
 
-        let mut message = RequestMessage::default();
-        message.push_field(&OutgoingMessages::StartApi);
-        message.push_field(&VERSION);
-        message.push_field(&client_id);
+            let request = crate::proto::StartApiRequest {
+                client_id: Some(client_id),
+                optional_capabilities: None,
+            };
 
-        if server_version > server_versions::OPTIONAL_CAPABILITIES {
-            message.push_field(&"");
+            encode_protobuf_message(OutgoingMessages::StartApi as i32, &request.encode_to_vec())
+        } else {
+            // Legacy text format for older servers
+            let mut message = RequestMessage::default();
+            message.push_field(&OutgoingMessages::StartApi);
+            message.push_field(&2i32); // VERSION
+            message.push_field(&client_id);
+            if server_version > server_versions::OPTIONAL_CAPABILITIES {
+                message.push_field(&"");
+            }
+            message.encode().as_bytes().to_vec()
         }
-
-        message
     }
 
     fn parse_account_info(
@@ -471,12 +479,18 @@ mod tests {
 
     #[test]
     fn test_connection_handler_start_api() {
-        let handler = ConnectionHandler::default();
-        let message = handler.format_start_api(123, 150);
+        use crate::messages::PROTOBUF_MSG_ID;
 
-        let encoded = message.encode();
-        assert!(encoded.contains("71")); // StartApi message type
-        assert!(encoded.contains("123")); // client_id
+        let handler = ConnectionHandler::default();
+        let data = handler.format_start_api(123, server_versions::PROTOBUF);
+
+        // First 4 bytes: big-endian (StartApi=71 + 200)
+        let msg_id = i32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+        assert_eq!(msg_id, 71 + PROTOBUF_MSG_ID);
+
+        // Remaining bytes: protobuf-encoded StartApiRequest with client_id=123
+        let request: crate::proto::StartApiRequest = prost::Message::decode(&data[4..]).unwrap();
+        assert_eq!(request.client_id, Some(123));
     }
 
     /// Test handling of non-UTF8 encoded data from IB Gateway (issue #352)

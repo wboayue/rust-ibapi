@@ -103,6 +103,9 @@ mod from_str_tests {
     }
 }
 
+/// Offset added to outbound protobuf message IDs. Inbound IDs > this value are protobuf.
+pub const PROTOBUF_MSG_ID: i32 = 200;
+
 const INFINITY_STR: &str = "Infinity";
 const UNSET_DOUBLE: &str = "1.7976931348623157E308";
 const UNSET_INTEGER: &str = "2147483647";
@@ -757,6 +760,22 @@ pub fn encode_length(message: &str) -> Vec<u8> {
     packet
 }
 
+/// Encode a protobuf outbound message: 4-byte BE (msg_id + 200) + proto bytes.
+pub fn encode_protobuf_message(msg_id: i32, proto_bytes: &[u8]) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(4 + proto_bytes.len());
+    buf.write_i32::<BigEndian>(msg_id + PROTOBUF_MSG_ID).unwrap();
+    buf.extend_from_slice(proto_bytes);
+    buf
+}
+
+/// Encode a length-prefixed raw message (4-byte BE length + data).
+pub fn encode_raw_length(data: &[u8]) -> Vec<u8> {
+    let mut packet = Vec::with_capacity(data.len() + 4);
+    packet.write_u32::<BigEndian>(data.len() as u32).unwrap();
+    packet.write_all(data).unwrap();
+    packet
+}
+
 /// Builder for outbound TWS/Gateway request messages.
 #[derive(Default, Debug, Clone)]
 pub struct RequestMessage {
@@ -827,9 +846,29 @@ pub struct ResponseMessage {
     pub fields: Vec<String>,
     /// Server version for version-gated decoding (e.g. error message format).
     pub server_version: i32,
+    /// True when the message payload is protobuf-encoded.
+    pub is_protobuf: bool,
+    /// Raw protobuf payload bytes (everything after the 4-byte binary message ID).
+    pub raw_bytes: Option<Vec<u8>>,
 }
 
 impl ResponseMessage {
+    /// Build a protobuf response message from a binary message type and raw payload bytes.
+    pub fn from_protobuf(message_type: i32, raw_bytes: Vec<u8>, server_version: i32) -> Self {
+        Self {
+            i: 0,
+            fields: vec![message_type.to_string()],
+            server_version,
+            is_protobuf: true,
+            raw_bytes: Some(raw_bytes),
+        }
+    }
+
+    /// Raw protobuf payload bytes, if this is a protobuf message.
+    pub fn raw_bytes(&self) -> Option<&[u8]> {
+        self.raw_bytes.as_deref()
+    }
+
     /// Number of fields present in the message.
     pub fn len(&self) -> usize {
         self.fields.len()
@@ -1136,6 +1175,8 @@ impl ResponseMessage {
             i: 0,
             fields: fields.split_terminator('\x00').map(|x| x.to_string()).collect(),
             server_version: 0,
+            is_protobuf: false,
+            raw_bytes: None,
         }
     }
     #[cfg(test)]
@@ -1145,6 +1186,8 @@ impl ResponseMessage {
             i: 0,
             fields: fields.split_terminator('|').map(|x| x.to_string()).collect(),
             server_version: 0,
+            is_protobuf: false,
+            raw_bytes: None,
         }
     }
 
