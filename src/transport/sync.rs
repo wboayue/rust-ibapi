@@ -282,6 +282,9 @@ impl<S: Stream> TcpMessageBus<S> {
                 // Order-related messages
                 self.process_orders(message);
             }
+            RoutingDecision::ByRequestId(id) => {
+                self.process_response_with_id(id, message, false);
+            }
             _ => {
                 // All other messages
                 self.process_response(message, false);

@@ -139,6 +139,11 @@ pub(crate) fn decode_pnl_single(_server_version: i32, message: &mut ResponseMess
 }
 
 pub(crate) fn decode_account_summary(_server_version: i32, message: &mut ResponseMessage) -> Result<AccountSummary, Error> {
+    if message.is_protobuf {
+        let bytes = message.raw_bytes().ok_or_else(|| Error::Simple("missing protobuf bytes".to_string()))?;
+        return decode_account_summary_proto(bytes);
+    }
+
     message.skip(); // message type
     message.skip(); // version
     message.skip(); // request id
