@@ -187,25 +187,62 @@ impl ConnectionProtocol for ConnectionHandler {
         message: &mut ResponseMessage,
         callback: Option<&(dyn Fn(ResponseMessage) + Send + Sync)>,
     ) -> Result<AccountInfo, Self::Error> {
+        use prost::Message;
+
         let mut info = AccountInfo::default();
 
         match message.message_type() {
             IncomingMessages::NextValidId => {
-                message.skip(); // message type
-                message.skip(); // message version
-                info.next_order_id = Some(message.next_int()?);
+                if message.is_protobuf {
+                    if let Some(bytes) = message.raw_bytes() {
+                        let proto =
+                            crate::proto::NextValidId::decode(bytes).map_err(|e| Error::Simple(format!("failed to decode NextValidId: {e}")))?;
+                        info.next_order_id = proto.order_id;
+                    }
+                } else {
+                    message.skip(); // message type
+                    message.skip(); // message version
+                    info.next_order_id = Some(message.next_int()?);
+                }
             }
             IncomingMessages::ManagedAccounts => {
-                message.skip(); // message type
-                message.skip(); // message version
-                info.managed_accounts = Some(message.next_string()?);
+                if message.is_protobuf {
+                    if let Some(bytes) = message.raw_bytes() {
+                        let proto = crate::proto::ManagedAccounts::decode(bytes)
+                            .map_err(|e| Error::Simple(format!("failed to decode ManagedAccounts: {e}")))?;
+                        info.managed_accounts = proto.accounts_list;
+                    }
+                } else {
+                    message.skip(); // message type
+                    message.skip(); // message version
+                    info.managed_accounts = Some(message.next_string()?);
+                }
             }
             IncomingMessages::Error => {
-                let notice = crate::messages::Notice::from(message);
-                if notice.is_warning() || notice.is_system_message() {
-                    info!("{notice}");
+                if message.is_protobuf {
+                    if let Some(bytes) = message.raw_bytes() {
+                        if let Ok(proto) = crate::proto::ErrorMessage::decode(bytes) {
+                            let code = proto.error_code.unwrap_or(0);
+                            let msg = proto.error_msg.unwrap_or_default();
+                            let notice = crate::messages::Notice {
+                                code,
+                                message: msg,
+                                error_time: None,
+                            };
+                            if notice.is_warning() || notice.is_system_message() {
+                                info!("{notice}");
+                            } else {
+                                error!("Error during account info: {notice}");
+                            }
+                        }
+                    }
                 } else {
-                    error!("Error during account info: {notice}");
+                    let notice = crate::messages::Notice::from(message);
+                    if notice.is_warning() || notice.is_system_message() {
+                        info!("{notice}");
+                    } else {
+                        error!("Error during account info: {notice}");
+                    }
                 }
             }
             _ => {
