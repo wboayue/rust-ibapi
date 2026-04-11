@@ -126,7 +126,6 @@ pub mod prelude;
 pub mod protocol;
 
 /// Generated protobuf message types for the TWS API wire protocol.
-#[cfg(feature = "proto")]
 pub mod proto;
 
 mod server_versions;
