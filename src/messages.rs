@@ -770,6 +770,26 @@ pub fn encode_raw_length(data: &[u8]) -> Vec<u8> {
     packet
 }
 
+/// Encode a `RequestMessage` with binary message ID framing for server_version >= PROTOBUF.
+///
+/// Wire format: `[4-byte BE total_length][4-byte BE msg_id][NUL-delimited remaining fields]`
+///
+/// The first field of the `RequestMessage` is the message ID (extracted and written as binary).
+/// Remaining fields are NUL-delimited text.
+pub fn encode_request_binary(message: &RequestMessage) -> Vec<u8> {
+    let msg_id: i32 = message.fields[0].parse().unwrap_or(0);
+
+    // Build body: binary msg_id + remaining text fields
+    let remaining: String = message.fields[1..].iter().map(|f| format!("{f}\0")).collect();
+    let body_len = 4 + remaining.len();
+
+    let mut packet = Vec::with_capacity(4 + body_len);
+    packet.write_u32::<BigEndian>(body_len as u32).unwrap();
+    packet.write_i32::<BigEndian>(msg_id).unwrap();
+    packet.write_all(remaining.as_bytes()).unwrap();
+    packet
+}
+
 /// Builder for outbound TWS/Gateway request messages.
 #[derive(Default, Debug, Clone)]
 pub struct RequestMessage {

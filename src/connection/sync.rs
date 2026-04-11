@@ -9,7 +9,8 @@ use super::common::{
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
-use crate::messages::{encode_raw_length, RequestMessage, ResponseMessage};
+use crate::messages::{encode_raw_length, encode_request_binary, RequestMessage, ResponseMessage};
+use crate::server_versions;
 use crate::trace;
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::recorder::MessageRecorder;
@@ -127,13 +128,16 @@ impl<S: Stream> Connection<S> {
         let encoded = message.encode();
         debug!("-> {encoded:?}");
 
-        // Record the request if debug logging is enabled
         if log::log_enabled!(log::Level::Debug) {
             trace::blocking::record_request(encoded.clone());
         }
 
-        let length_encoded = crate::messages::encode_length(&encoded);
-        self.socket.write_all(&length_encoded)?;
+        let packet = if self.server_version() >= server_versions::PROTOBUF {
+            encode_request_binary(message)
+        } else {
+            crate::messages::encode_length(&encoded)
+        };
+        self.socket.write_all(&packet)?;
         Ok(())
     }
 
