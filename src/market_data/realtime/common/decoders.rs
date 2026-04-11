@@ -1,12 +1,15 @@
+use prost::Message;
+
 use crate::contracts::decode_option_computation;
 use crate::contracts::OptionComputation;
+use crate::proto::decoders::optional_f64;
 use crate::subscriptions::DecoderContext;
 use crate::Error;
 use crate::{messages::ResponseMessage, server_versions};
 
 use crate::market_data::realtime::{
-    Bar, BidAsk, BidAskAttribute, DepthMarketDataDescription, MarketDepth, MarketDepthL2, MidPoint, TickEFP, TickGeneric, TickPrice, TickPriceSize,
-    TickRequestParameters, TickSize, TickString, TickType, TickTypes, Trade, TradeAttribute,
+    Bar, BidAsk, BidAskAttribute, DepthMarketDataDescription, MarketDepth, MarketDepthL2, MidPoint, TickAttribute, TickEFP, TickGeneric, TickPrice,
+    TickPriceSize, TickRequestParameters, TickSize, TickString, TickType, TickTypes, Trade, TradeAttribute,
 };
 
 pub(crate) fn decode_realtime_bar(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Bar, Error> {
@@ -237,6 +240,130 @@ pub(crate) fn decode_tick_request_parameters(message: &mut ResponseMessage) -> R
         min_tick: message.next_double()?,
         bbo_exchange: message.next_string()?,
         snapshot_permissions: message.next_int()?,
+    })
+}
+
+// === Protobuf decoders ===
+
+#[allow(dead_code)]
+pub(crate) fn decode_tick_price_proto(bytes: &[u8]) -> Result<TickTypes, Error> {
+    let msg = crate::proto::TickPrice::decode(bytes)?;
+
+    let tick_type = TickType::from(msg.tick_type.unwrap_or_default());
+    let price = msg.price.unwrap_or_default();
+    let size: f64 = msg.size.as_deref().and_then(|s| s.parse().ok()).unwrap_or(f64::MAX);
+    let attr_mask = msg.attr_mask.unwrap_or_default();
+
+    let attributes = TickAttribute {
+        can_auto_execute: attr_mask & 0x1 != 0,
+        past_limit: attr_mask & 0x2 != 0,
+        pre_open: attr_mask & 0x4 != 0,
+    };
+
+    let size_tick_type = match tick_type {
+        TickType::Bid => TickType::BidSize,
+        TickType::Ask => TickType::AskSize,
+        TickType::Last => TickType::LastSize,
+        TickType::DelayedBid => TickType::DelayedBidSize,
+        TickType::DelayedAsk => TickType::DelayedAskSize,
+        TickType::DelayedLast => TickType::DelayedLastSize,
+        _ => TickType::Unknown,
+    };
+
+    if size_tick_type == TickType::Unknown || size == f64::MAX {
+        Ok(TickTypes::Price(TickPrice {
+            tick_type,
+            price,
+            attributes,
+        }))
+    } else {
+        Ok(TickTypes::PriceSize(TickPriceSize {
+            price_tick_type: tick_type,
+            price,
+            attributes,
+            size_tick_type,
+            size,
+        }))
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_tick_size_proto(bytes: &[u8]) -> Result<TickSize, Error> {
+    let msg = crate::proto::TickSize::decode(bytes)?;
+
+    Ok(TickSize {
+        tick_type: TickType::from(msg.tick_type.unwrap_or_default()),
+        size: msg.size.as_deref().and_then(|s| s.parse().ok()).unwrap_or_default(),
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_tick_string_proto(bytes: &[u8]) -> Result<TickString, Error> {
+    let msg = crate::proto::TickString::decode(bytes)?;
+
+    Ok(TickString {
+        tick_type: TickType::from(msg.tick_type.unwrap_or_default()),
+        value: msg.value.unwrap_or_default(),
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_tick_generic_proto(bytes: &[u8]) -> Result<TickGeneric, Error> {
+    let msg = crate::proto::TickGeneric::decode(bytes)?;
+
+    Ok(TickGeneric {
+        tick_type: TickType::from(msg.tick_type.unwrap_or_default()),
+        value: msg.value.unwrap_or_default(),
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_tick_option_computation_proto(bytes: &[u8]) -> Result<OptionComputation, Error> {
+    let msg = crate::proto::TickOptionComputation::decode(bytes)?;
+
+    Ok(OptionComputation {
+        field: TickType::from(msg.tick_type.unwrap_or_default()),
+        tick_attribute: msg.tick_attrib,
+        implied_volatility: optional_f64(msg.implied_vol),
+        delta: optional_f64(msg.delta),
+        option_price: optional_f64(msg.opt_price),
+        present_value_dividend: optional_f64(msg.pv_dividend),
+        gamma: optional_f64(msg.gamma),
+        vega: optional_f64(msg.vega),
+        theta: optional_f64(msg.theta),
+        underlying_price: optional_f64(msg.und_price),
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_market_depth_proto(bytes: &[u8]) -> Result<MarketDepth, Error> {
+    let msg = crate::proto::MarketDepth::decode(bytes)?;
+
+    let data = msg.market_depth_data.ok_or_else(|| Error::Simple("missing market_depth_data".into()))?;
+
+    Ok(MarketDepth {
+        position: data.position.unwrap_or_default(),
+        operation: data.operation.unwrap_or_default(),
+        side: data.side.unwrap_or_default(),
+        price: data.price.unwrap_or_default(),
+        size: data.size.as_deref().and_then(|s| s.parse().ok()).unwrap_or_default(),
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_market_depth_l2_proto(bytes: &[u8]) -> Result<MarketDepthL2, Error> {
+    let msg = crate::proto::MarketDepthL2::decode(bytes)?;
+
+    let data = msg.market_depth_data.ok_or_else(|| Error::Simple("missing market_depth_data".into()))?;
+
+    Ok(MarketDepthL2 {
+        position: data.position.unwrap_or_default(),
+        market_maker: data.market_maker.unwrap_or_default(),
+        operation: data.operation.unwrap_or_default(),
+        side: data.side.unwrap_or_default(),
+        price: data.price.unwrap_or_default(),
+        size: data.size.as_deref().and_then(|s| s.parse().ok()).unwrap_or_default(),
+        smart_depth: data.is_smart_depth.unwrap_or_default(),
     })
 }
 
@@ -720,6 +847,213 @@ mod tests {
                 let tick = decode_tick_efp(&mut message).expect("Failed to decode tick EFP");
                 assert_eq!(tick.tick_type, expected_type, "Wrong tick type for type_id {}", type_id);
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod proto_tests {
+        use super::*;
+        use prost::Message;
+
+        #[test]
+        fn test_decode_tick_price_proto_with_size() {
+            // TickType::Bid = 1, should produce PriceSize with BidSize
+            let proto_msg = crate::proto::TickPrice {
+                req_id: Some(1),
+                tick_type: Some(1), // Bid
+                price: Some(150.25),
+                size: Some("100".into()),
+                attr_mask: Some(0x5), // can_auto_execute + pre_open
+            };
+
+            let mut bytes = Vec::new();
+            proto_msg.encode(&mut bytes).unwrap();
+
+            let result = decode_tick_price_proto(&bytes).unwrap();
+            match result {
+                TickTypes::PriceSize(ps) => {
+                    assert_eq!(ps.price_tick_type, TickType::Bid);
+                    assert_eq!(ps.price, 150.25);
+                    assert_eq!(ps.size, 100.0);
+                    assert_eq!(ps.size_tick_type, TickType::BidSize);
+                    assert!(ps.attributes.can_auto_execute);
+                    assert!(!ps.attributes.past_limit);
+                    assert!(ps.attributes.pre_open);
+                }
+                _ => panic!("expected PriceSize variant"),
+            }
+        }
+
+        #[test]
+        fn test_decode_tick_price_proto_unknown_type() {
+            // TickType 99 => Unknown size tick type => returns Price variant
+            let proto_msg = crate::proto::TickPrice {
+                req_id: Some(1),
+                tick_type: Some(99),
+                price: Some(42.0),
+                size: Some("10".into()),
+                attr_mask: Some(0x2), // past_limit
+            };
+
+            let mut bytes = Vec::new();
+            proto_msg.encode(&mut bytes).unwrap();
+
+            let result = decode_tick_price_proto(&bytes).unwrap();
+            match result {
+                TickTypes::Price(tp) => {
+                    assert_eq!(tp.price, 42.0);
+                    assert!(tp.attributes.past_limit);
+                }
+                _ => panic!("expected Price variant for unknown tick type"),
+            }
+        }
+
+        #[test]
+        fn test_decode_tick_size_proto() {
+            let proto_msg = crate::proto::TickSize {
+                req_id: Some(1),
+                tick_type: Some(0), // BidSize
+                size: Some("500".into()),
+            };
+
+            let mut bytes = Vec::new();
+            proto_msg.encode(&mut bytes).unwrap();
+
+            let result = decode_tick_size_proto(&bytes).unwrap();
+            assert_eq!(result.tick_type, TickType::BidSize);
+            assert_eq!(result.size, 500.0);
+        }
+
+        #[test]
+        fn test_decode_market_depth_proto() {
+            let proto_msg = crate::proto::MarketDepth {
+                req_id: Some(1),
+                market_depth_data: Some(crate::proto::MarketDepthData {
+                    position: Some(3),
+                    operation: Some(0),
+                    side: Some(1),
+                    price: Some(149.50),
+                    size: Some("200".into()),
+                    market_maker: None,
+                    is_smart_depth: None,
+                }),
+            };
+
+            let mut bytes = Vec::new();
+            proto_msg.encode(&mut bytes).unwrap();
+
+            let result = decode_market_depth_proto(&bytes).unwrap();
+            assert_eq!(result.position, 3);
+            assert_eq!(result.operation, 0);
+            assert_eq!(result.side, 1);
+            assert_eq!(result.price, 149.50);
+            assert_eq!(result.size, 200.0);
+        }
+
+        #[test]
+        fn test_decode_tick_string_proto() {
+            let proto_msg = crate::proto::TickString {
+                req_id: Some(1),
+                tick_type: Some(45), // LastTimestamp
+                value: Some("1681133400".into()),
+            };
+
+            let mut bytes = Vec::new();
+            proto_msg.encode(&mut bytes).unwrap();
+
+            let result = decode_tick_string_proto(&bytes).unwrap();
+            assert_eq!(result.tick_type, TickType::LastTimestamp);
+            assert_eq!(result.value, "1681133400");
+        }
+
+        #[test]
+        fn test_decode_tick_generic_proto() {
+            let proto_msg = crate::proto::TickGeneric {
+                req_id: Some(1),
+                tick_type: Some(49), // Halted
+                value: Some(0.0),
+            };
+
+            let mut bytes = Vec::new();
+            proto_msg.encode(&mut bytes).unwrap();
+
+            let result = decode_tick_generic_proto(&bytes).unwrap();
+            assert_eq!(result.tick_type, TickType::Halted);
+            assert_eq!(result.value, 0.0);
+        }
+
+        #[test]
+        fn test_decode_tick_option_computation_proto() {
+            let proto_msg = crate::proto::TickOptionComputation {
+                req_id: Some(1),
+                tick_type: Some(13), // ModelOption
+                tick_attrib: Some(1),
+                implied_vol: Some(0.25),
+                delta: Some(0.5),
+                opt_price: Some(5.0),
+                pv_dividend: Some(0.1),
+                gamma: Some(0.03),
+                vega: Some(0.15),
+                theta: Some(-0.05),
+                und_price: Some(150.0),
+            };
+
+            let mut bytes = Vec::new();
+            proto_msg.encode(&mut bytes).unwrap();
+
+            let result = decode_tick_option_computation_proto(&bytes).unwrap();
+            assert_eq!(result.field, TickType::ModelOption);
+            assert_eq!(result.tick_attribute, Some(1));
+            assert_eq!(result.implied_volatility, Some(0.25));
+            assert_eq!(result.delta, Some(0.5));
+            assert_eq!(result.option_price, Some(5.0));
+            assert_eq!(result.present_value_dividend, Some(0.1));
+            assert_eq!(result.gamma, Some(0.03));
+            assert_eq!(result.vega, Some(0.15));
+            assert_eq!(result.theta, Some(-0.05));
+            assert_eq!(result.underlying_price, Some(150.0));
+
+            // f64::MAX should become None
+            let proto_msg2 = crate::proto::TickOptionComputation {
+                req_id: Some(1),
+                tick_type: Some(13),
+                implied_vol: Some(f64::MAX),
+                ..Default::default()
+            };
+
+            let mut bytes2 = Vec::new();
+            proto_msg2.encode(&mut bytes2).unwrap();
+
+            let result2 = decode_tick_option_computation_proto(&bytes2).unwrap();
+            assert_eq!(result2.implied_volatility, None);
+        }
+
+        #[test]
+        fn test_decode_market_depth_l2_proto() {
+            let proto_msg = crate::proto::MarketDepthL2 {
+                req_id: Some(1),
+                market_depth_data: Some(crate::proto::MarketDepthData {
+                    position: Some(2),
+                    operation: Some(1),
+                    side: Some(0),
+                    price: Some(151.25),
+                    size: Some("300".into()),
+                    market_maker: Some("GSCO".into()),
+                    is_smart_depth: Some(true),
+                }),
+            };
+
+            let mut bytes = Vec::new();
+            proto_msg.encode(&mut bytes).unwrap();
+
+            let result = decode_market_depth_l2_proto(&bytes).unwrap();
+            assert_eq!(result.position, 2);
+            assert_eq!(result.operation, 1);
+            assert_eq!(result.side, 0);
+            assert_eq!(result.price, 151.25);
+            assert_eq!(result.size, 300.0);
+            assert_eq!(result.market_maker, "GSCO");
+            assert!(result.smart_depth);
         }
     }
 }

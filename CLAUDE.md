@@ -45,7 +45,7 @@ Changes to both branches should be made via pull requests.
 
 1. **Be explicit about feature coverage**: Default async, sync-only, and combined builds must compile when touched
 2. **Test each configuration**: Run tests for default, sync-only, and `--all-features`
-3. **Follow module structure**: Client methods live as `impl Client` blocks in domain modules (e.g., `accounts/sync.rs`), not in `client/sync.rs` or `client/async.rs`. Use `common/` for shared logic between sync/async
+3. **Follow module structure**: Client methods live as `impl Client` blocks in domain modules (e.g., `accounts/sync.rs`), not in `client/sync.rs` or `client/async.rs`. Use `common/` for shared logic between sync/async. Protobuf decoders live in each domain's `common/decoders.rs`; shared proto→domain converters live in `proto/decoders.rs`
 4. **Minimal comments**: Keep comments concise, avoid stating the obvious
 5. **Run quality checks**: Before committing, run `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `cargo clippy --all-targets --features sync -- -D warnings`, and `cargo clippy --all-features`
 6. **Fluent conditional orders**: Use helper functions (`price()`, `time()`, `margin()`, etc.) and method chaining (`.condition()`, `.and_condition()`, `.or_condition()`) for building conditional orders. See [docs/order-types.md](docs/order-types.md#conditional-orders-with-conditions) and [docs/api-patterns.md](docs/api-patterns.md#conditional-order-builder-pattern) for details
@@ -53,6 +53,7 @@ Changes to both branches should be made via pull requests.
 8. **Single responsibility**: One responsibility per function/module; split orchestration from business logic
 9. **Composition**: Single responsibility per struct; use builders for complex construction; max 3 params per function (use builder if 4+)
 10. **Never use `block_on` in async code**: Do not use `futures::executor::block_on()` inside async contexts — it blocks tokio worker threads and risks deadlocks. Use atomics (`AtomicI32`, etc.) for lock-free access to rarely-written values, or make the function `async` and `.await` the lock
+11. **Every new function needs a test**: Before opening a PR, verify every new `pub`/`pub(crate)` function has a corresponding unit test. Review test coverage as a final step — missing tests should block the PR
 
 See [docs/code-style.md](docs/code-style.md#design-principles) for detailed design guidelines.
 

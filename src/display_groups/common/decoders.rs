@@ -1,6 +1,7 @@
 //! Decoders for display group messages.
 
 use log::warn;
+use prost::Message;
 
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::Error;
@@ -23,6 +24,12 @@ pub(crate) fn decode_display_group_updated(message: &mut ResponseMessage) -> Res
     };
 
     Ok(DisplayGroupUpdate::new(contract_info))
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_display_group_updated_proto(bytes: &[u8]) -> Result<DisplayGroupUpdate, Error> {
+    let p = crate::proto::DisplayGroupUpdated::decode(bytes)?;
+    Ok(DisplayGroupUpdate::new(p.contract_info.unwrap_or_default()))
 }
 
 #[cfg(test)]
@@ -64,5 +71,21 @@ mod tests {
         assert!(result.is_err());
         let err_msg = format!("{:?}", result.unwrap_err());
         assert!(err_msg.contains("unexpected message type"));
+    }
+
+    #[test]
+    fn test_decode_display_group_updated_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::DisplayGroupUpdated {
+            req_id: Some(1),
+            contract_info: Some("265598@SMART".into()),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_display_group_updated_proto(&bytes).unwrap();
+        assert_eq!(result.contract_info, "265598@SMART");
     }
 }

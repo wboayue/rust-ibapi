@@ -335,6 +335,134 @@ fn parse_bar_date(text: &str, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
     }
 }
 
+// === Protobuf decoders ===
+
+use prost::Message;
+
+use crate::proto;
+use crate::proto::decoders::{parse_f64 as parse_str_f64, parse_i32 as parse_str_i32, ts};
+
+#[allow(dead_code)]
+pub(crate) fn decode_historical_data_proto(bytes: &[u8]) -> Result<Vec<Bar>, Error> {
+    let msg = proto::HistoricalData::decode(bytes)?;
+
+    let bars = msg
+        .historical_data_bars
+        .iter()
+        .map(|b| {
+            let date_str = b.date.as_deref().unwrap_or_default();
+            let date = date_str
+                .parse::<i64>()
+                .map(|ts_val| OffsetDateTime::from_unix_timestamp(ts_val).unwrap_or(OffsetDateTime::UNIX_EPOCH))
+                .unwrap_or(OffsetDateTime::UNIX_EPOCH);
+
+            Bar {
+                date,
+                open: b.open.unwrap_or_default(),
+                high: b.high.unwrap_or_default(),
+                low: b.low.unwrap_or_default(),
+                close: b.close.unwrap_or_default(),
+                volume: parse_str_f64(&b.volume),
+                wap: parse_str_f64(&b.wap),
+                count: b.bar_count.unwrap_or(-1),
+            }
+        })
+        .collect();
+
+    Ok(bars)
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_head_timestamp_proto(bytes: &[u8]) -> Result<String, Error> {
+    let msg = proto::HeadTimestamp::decode(bytes)?;
+    Ok(msg.head_timestamp.unwrap_or_default())
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_real_time_bar_proto(bytes: &[u8]) -> Result<crate::market_data::realtime::Bar, Error> {
+    let msg = proto::RealTimeBarTick::decode(bytes)?;
+
+    Ok(crate::market_data::realtime::Bar {
+        date: OffsetDateTime::from_unix_timestamp(msg.time.unwrap_or_default()).unwrap_or(OffsetDateTime::UNIX_EPOCH),
+        open: msg.open.unwrap_or_default(),
+        high: msg.high.unwrap_or_default(),
+        low: msg.low.unwrap_or_default(),
+        close: msg.close.unwrap_or_default(),
+        volume: parse_str_f64(&msg.volume),
+        wap: parse_str_f64(&msg.wap),
+        count: msg.count.unwrap_or_default(),
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_historical_ticks_proto(bytes: &[u8]) -> Result<(Vec<TickMidpoint>, bool), Error> {
+    let msg = proto::HistoricalTicks::decode(bytes)?;
+
+    let ticks = msg
+        .historical_ticks
+        .iter()
+        .map(|t| TickMidpoint {
+            timestamp: ts(t.time.unwrap_or_default()),
+            price: t.price.unwrap_or_default(),
+            size: parse_str_i32(&t.size),
+        })
+        .collect();
+
+    Ok((ticks, msg.is_done.unwrap_or_default()))
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_historical_ticks_last_proto(bytes: &[u8]) -> Result<(Vec<TickLast>, bool), Error> {
+    let msg = proto::HistoricalTicksLast::decode(bytes)?;
+
+    let ticks = msg
+        .historical_ticks_last
+        .iter()
+        .map(|t| {
+            let attr = t.tick_attrib_last.as_ref();
+            TickLast {
+                timestamp: ts(t.time.unwrap_or_default()),
+                tick_attribute_last: TickAttributeLast {
+                    past_limit: attr.and_then(|a| a.past_limit).unwrap_or_default(),
+                    unreported: attr.and_then(|a| a.unreported).unwrap_or_default(),
+                },
+                price: t.price.unwrap_or_default(),
+                size: parse_str_i32(&t.size),
+                exchange: t.exchange.clone().unwrap_or_default(),
+                special_conditions: t.special_conditions.clone().unwrap_or_default(),
+            }
+        })
+        .collect();
+
+    Ok((ticks, msg.is_done.unwrap_or_default()))
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_historical_ticks_bid_ask_proto(bytes: &[u8]) -> Result<(Vec<TickBidAsk>, bool), Error> {
+    let msg = proto::HistoricalTicksBidAsk::decode(bytes)?;
+
+    let ticks = msg
+        .historical_ticks_bid_ask
+        .iter()
+        .map(|t| {
+            let attr = t.tick_attrib_bid_ask.as_ref();
+            TickBidAsk {
+                timestamp: ts(t.time.unwrap_or_default()),
+                tick_attribute_bid_ask: TickAttributeBidAsk {
+                    ask_past_high: attr.and_then(|a| a.ask_past_high).unwrap_or_default(),
+                    bid_past_low: attr.and_then(|a| a.bid_past_low).unwrap_or_default(),
+                },
+                price_bid: t.price_bid.unwrap_or_default(),
+                price_ask: t.price_ask.unwrap_or_default(),
+                size_bid: parse_str_i32(&t.size_bid),
+                size_ask: parse_str_i32(&t.size_ask),
+            }
+        })
+        .collect();
+
+    Ok((ticks, msg.is_done.unwrap_or_default()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -576,5 +704,222 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("not_a_number"), "error should include the bad value: {msg}");
         assert!(msg.contains("invalid digit"), "error should include parse reason: {msg}");
+    }
+
+    #[test]
+    fn test_decode_historical_data_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::HistoricalData {
+            req_id: Some(1),
+            historical_data_bars: vec![
+                crate::proto::HistoricalDataBar {
+                    date: Some("1681133400".into()),
+                    open: Some(185.50),
+                    high: Some(186.00),
+                    low: Some(185.00),
+                    close: Some(185.75),
+                    volume: Some("1000".into()),
+                    wap: Some("185.625".into()),
+                    bar_count: Some(150),
+                },
+                crate::proto::HistoricalDataBar {
+                    date: Some("1681219800".into()),
+                    open: Some(186.00),
+                    high: Some(187.00),
+                    low: Some(185.50),
+                    close: Some(186.50),
+                    volume: Some("2000".into()),
+                    wap: Some("186.25".into()),
+                    bar_count: Some(300),
+                },
+            ],
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let bars = decode_historical_data_proto(&bytes).unwrap();
+        assert_eq!(bars.len(), 2);
+
+        assert_eq!(bars[0].date, datetime!(2023-04-10 13:30:00 UTC));
+        assert_eq!(bars[0].open, 185.50);
+        assert_eq!(bars[0].high, 186.00);
+        assert_eq!(bars[0].low, 185.00);
+        assert_eq!(bars[0].close, 185.75);
+        assert_eq!(bars[0].volume, 1000.0);
+        assert_eq!(bars[0].wap, 185.625);
+        assert_eq!(bars[0].count, 150);
+
+        assert_eq!(bars[1].open, 186.00);
+        assert_eq!(bars[1].count, 300);
+    }
+
+    #[test]
+    fn test_decode_historical_ticks_last_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::HistoricalTicksLast {
+            req_id: Some(1),
+            historical_ticks_last: vec![
+                crate::proto::HistoricalTickLast {
+                    time: Some(1681133400),
+                    tick_attrib_last: Some(crate::proto::TickAttribLast {
+                        past_limit: Some(true),
+                        unreported: Some(false),
+                    }),
+                    price: Some(11.63),
+                    size: Some("100".into()),
+                    exchange: Some("ISLAND".into()),
+                    special_conditions: Some("O X".into()),
+                },
+                crate::proto::HistoricalTickLast {
+                    time: Some(1681133401),
+                    tick_attrib_last: Some(crate::proto::TickAttribLast {
+                        past_limit: Some(false),
+                        unreported: Some(true),
+                    }),
+                    price: Some(11.73),
+                    size: Some("50".into()),
+                    exchange: Some("FINRA".into()),
+                    special_conditions: Some("I".into()),
+                },
+            ],
+            is_done: Some(true),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let (ticks, done) = decode_historical_ticks_last_proto(&bytes).unwrap();
+        assert!(done);
+        assert_eq!(ticks.len(), 2);
+
+        assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:30:00 UTC));
+        assert!(ticks[0].tick_attribute_last.past_limit);
+        assert!(!ticks[0].tick_attribute_last.unreported);
+        assert_eq!(ticks[0].price, 11.63);
+        assert_eq!(ticks[0].size, 100);
+        assert_eq!(ticks[0].exchange, "ISLAND");
+        assert_eq!(ticks[0].special_conditions, "O X");
+
+        assert_eq!(ticks[1].timestamp, datetime!(2023-04-10 13:30:01 UTC));
+        assert!(!ticks[1].tick_attribute_last.past_limit);
+        assert!(ticks[1].tick_attribute_last.unreported);
+        assert_eq!(ticks[1].size, 50);
+        assert_eq!(ticks[1].exchange, "FINRA");
+    }
+
+    #[test]
+    fn test_decode_head_timestamp_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::HeadTimestamp {
+            req_id: Some(1),
+            head_timestamp: Some("1609459200".into()),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_head_timestamp_proto(&bytes).unwrap();
+        assert_eq!(result, "1609459200");
+    }
+
+    #[test]
+    fn test_decode_real_time_bar_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::RealTimeBarTick {
+            req_id: Some(1),
+            time: Some(1681133400),
+            open: Some(185.5),
+            high: Some(186.0),
+            low: Some(185.0),
+            close: Some(185.75),
+            volume: Some("1000".into()),
+            wap: Some("185.625".into()),
+            count: Some(150),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_real_time_bar_proto(&bytes).unwrap();
+        assert_eq!(result.date, datetime!(2023-04-10 13:30:00 UTC));
+        assert_eq!(result.open, 185.5);
+        assert_eq!(result.high, 186.0);
+        assert_eq!(result.low, 185.0);
+        assert_eq!(result.close, 185.75);
+        assert_eq!(result.volume, 1000.0);
+        assert_eq!(result.wap, 185.625);
+        assert_eq!(result.count, 150);
+    }
+
+    #[test]
+    fn test_decode_historical_ticks_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::HistoricalTicks {
+            req_id: Some(1),
+            historical_ticks: vec![
+                crate::proto::HistoricalTick {
+                    time: Some(1681133400),
+                    price: Some(150.0),
+                    size: Some("100".into()),
+                },
+                crate::proto::HistoricalTick {
+                    time: Some(1681133401),
+                    price: Some(150.5),
+                    size: Some("200".into()),
+                },
+            ],
+            is_done: Some(false),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let (ticks, done) = decode_historical_ticks_proto(&bytes).unwrap();
+        assert_eq!(ticks.len(), 2);
+        assert!(!done);
+        assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:30:00 UTC));
+        assert_eq!(ticks[0].price, 150.0);
+        assert_eq!(ticks[0].size, 100);
+    }
+
+    #[test]
+    fn test_decode_historical_ticks_bid_ask_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::HistoricalTicksBidAsk {
+            req_id: Some(1),
+            historical_ticks_bid_ask: vec![crate::proto::HistoricalTickBidAsk {
+                time: Some(1681133400),
+                tick_attrib_bid_ask: Some(crate::proto::TickAttribBidAsk {
+                    bid_past_low: Some(true),
+                    ask_past_high: Some(false),
+                }),
+                price_bid: Some(149.0),
+                price_ask: Some(151.0),
+                size_bid: Some("100".into()),
+                size_ask: Some("200".into()),
+            }],
+            is_done: Some(true),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let (ticks, done) = decode_historical_ticks_bid_ask_proto(&bytes).unwrap();
+        assert_eq!(ticks.len(), 1);
+        assert!(done);
+        assert_eq!(ticks[0].timestamp, datetime!(2023-04-10 13:30:00 UTC));
+        assert!(ticks[0].tick_attribute_bid_ask.bid_past_low);
+        assert!(!ticks[0].tick_attribute_bid_ask.ask_past_high);
+        assert_eq!(ticks[0].price_bid, 149.0);
+        assert_eq!(ticks[0].price_ask, 151.0);
+        assert_eq!(ticks[0].size_bid, 100);
+        assert_eq!(ticks[0].size_ask, 200);
     }
 }

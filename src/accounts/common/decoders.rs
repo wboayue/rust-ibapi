@@ -1,8 +1,11 @@
 use time::OffsetDateTime;
 
+use prost::Message;
+
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::messages::ResponseMessage;
-use crate::{server_versions, Error};
+use crate::proto::decoders::parse_f64 as parse_str_f64;
+use crate::{proto, server_versions, Error};
 
 use super::super::{
     AccountMultiValue, AccountPortfolioValue, AccountSummary, AccountUpdateTime, AccountValue, FamilyCode, PnL, PnLSingle, Position, PositionMulti,
@@ -252,6 +255,105 @@ pub(crate) fn decode_account_multi_value(message: &mut ResponseMessage) -> Resul
     };
 
     Ok(value)
+}
+
+// === Protobuf decoders ===
+
+#[allow(dead_code)]
+pub(crate) fn decode_position_proto(bytes: &[u8]) -> Result<Position, Error> {
+    let p = proto::Position::decode(bytes)?;
+    let contract = p.contract.as_ref().map(proto::decoders::decode_contract).unwrap_or_default();
+    Ok(Position {
+        account: p.account.unwrap_or_default(),
+        contract,
+        position: parse_str_f64(&p.position),
+        average_cost: p.avg_cost.unwrap_or_default(),
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_account_value_proto(bytes: &[u8]) -> Result<AccountValue, Error> {
+    let p = proto::AccountValue::decode(bytes)?;
+    Ok(AccountValue {
+        key: p.key.unwrap_or_default(),
+        value: p.value.unwrap_or_default(),
+        currency: p.currency.unwrap_or_default(),
+        account: p.account_name,
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_account_portfolio_value_proto(bytes: &[u8]) -> Result<AccountPortfolioValue, Error> {
+    let p = proto::PortfolioValue::decode(bytes)?;
+    let contract = p.contract.as_ref().map(proto::decoders::decode_contract).unwrap_or_default();
+    Ok(AccountPortfolioValue {
+        contract,
+        position: parse_str_f64(&p.position),
+        market_price: p.market_price.unwrap_or_default(),
+        market_value: p.market_value.unwrap_or_default(),
+        average_cost: p.average_cost.unwrap_or_default(),
+        unrealized_pnl: p.unrealized_pnl.unwrap_or_default(),
+        realized_pnl: p.realized_pnl.unwrap_or_default(),
+        account: p.account_name,
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_pnl_proto(bytes: &[u8]) -> Result<PnL, Error> {
+    let p = proto::PnL::decode(bytes)?;
+    Ok(PnL {
+        daily_pnl: p.daily_pn_l.unwrap_or_default(),
+        unrealized_pnl: proto::decoders::optional_f64(p.unrealized_pn_l),
+        realized_pnl: proto::decoders::optional_f64(p.realized_pn_l),
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_pnl_single_proto(bytes: &[u8]) -> Result<PnLSingle, Error> {
+    let p = proto::PnLSingle::decode(bytes)?;
+    Ok(PnLSingle {
+        position: parse_str_f64(&p.position),
+        daily_pnl: p.daily_pn_l.unwrap_or_default(),
+        unrealized_pnl: p.unrealized_pn_l.unwrap_or_default(),
+        realized_pnl: p.realized_pn_l.unwrap_or_default(),
+        value: p.value.unwrap_or_default(),
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_account_summary_proto(bytes: &[u8]) -> Result<AccountSummary, Error> {
+    let p = proto::AccountSummary::decode(bytes)?;
+    Ok(AccountSummary {
+        account: p.account.unwrap_or_default(),
+        tag: p.tag.unwrap_or_default(),
+        value: p.value.unwrap_or_default(),
+        currency: p.currency.unwrap_or_default(),
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_position_multi_proto(bytes: &[u8]) -> Result<PositionMulti, Error> {
+    let p = proto::PositionMulti::decode(bytes)?;
+    let contract = p.contract.as_ref().map(proto::decoders::decode_contract).unwrap_or_default();
+    Ok(PositionMulti {
+        account: p.account.unwrap_or_default(),
+        contract,
+        position: parse_str_f64(&p.position),
+        average_cost: p.avg_cost.unwrap_or_default(),
+        model_code: p.model_code.unwrap_or_default(),
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn decode_account_multi_value_proto(bytes: &[u8]) -> Result<AccountMultiValue, Error> {
+    let p = proto::AccountUpdateMulti::decode(bytes)?;
+    Ok(AccountMultiValue {
+        account: p.account.unwrap_or_default(),
+        model_code: p.model_code.unwrap_or_default(),
+        key: p.key.unwrap_or_default(),
+        value: p.value.unwrap_or_default(),
+        currency: p.currency.unwrap_or_default(),
+    })
 }
 
 #[cfg(test)]
@@ -1125,5 +1227,202 @@ mod tests {
         // Assert
         assert!(result.is_ok(), "Decoding failed: {:?}", result.err());
         assert_eq!(result.unwrap().timestamp, "12:34:56", "Timestamp mismatch");
+    }
+
+    #[test]
+    fn test_decode_position_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::Position {
+            account: Some("DU1234".into()),
+            contract: Some(crate::proto::Contract {
+                con_id: Some(265598),
+                symbol: Some("AAPL".into()),
+                sec_type: Some("STK".into()),
+                exchange: Some("SMART".into()),
+                currency: Some("USD".into()),
+                ..Default::default()
+            }),
+            position: Some("100".into()),
+            avg_cost: Some(150.25),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = super::decode_position_proto(&bytes).unwrap();
+        assert_eq!(result.account, "DU1234");
+        assert_eq!(result.contract.contract_id, 265598);
+        assert_eq!(result.contract.symbol.to_string(), "AAPL");
+        assert_eq!(result.position, 100.0);
+        assert_eq!(result.average_cost, 150.25);
+    }
+
+    #[test]
+    fn test_decode_pnl_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::PnL {
+            req_id: Some(1),
+            daily_pn_l: Some(1234.56),
+            unrealized_pn_l: Some(500.0),
+            realized_pn_l: Some(f64::MAX),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = super::decode_pnl_proto(&bytes).unwrap();
+        assert_eq!(result.daily_pnl, 1234.56);
+        assert_eq!(result.unrealized_pnl, Some(500.0));
+        assert_eq!(result.realized_pnl, None); // f64::MAX filtered out
+    }
+
+    #[test]
+    fn test_decode_account_value_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::AccountValue {
+            key: Some("NetLiquidation".into()),
+            value: Some("100000".into()),
+            currency: Some("USD".into()),
+            account_name: Some("DU1234".into()),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = super::decode_account_value_proto(&bytes).unwrap();
+        assert_eq!(result.key, "NetLiquidation");
+        assert_eq!(result.value, "100000");
+        assert_eq!(result.currency, "USD");
+        assert_eq!(result.account, Some("DU1234".into()));
+    }
+
+    #[test]
+    fn test_decode_account_portfolio_value_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::PortfolioValue {
+            contract: Some(crate::proto::Contract {
+                con_id: Some(265598),
+                symbol: Some("AAPL".into()),
+                ..Default::default()
+            }),
+            position: Some("100".into()),
+            market_price: Some(150.0),
+            market_value: Some(15000.0),
+            average_cost: Some(145.0),
+            unrealized_pnl: Some(500.0),
+            realized_pnl: Some(0.0),
+            account_name: Some("DU1234".into()),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = super::decode_account_portfolio_value_proto(&bytes).unwrap();
+        assert_eq!(result.contract.contract_id, 265598);
+        assert_eq!(result.position, 100.0);
+        assert_eq!(result.market_price, 150.0);
+        assert_eq!(result.account, Some("DU1234".into()));
+    }
+
+    #[test]
+    fn test_decode_pnl_single_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::PnLSingle {
+            req_id: Some(1),
+            position: Some("500".into()),
+            daily_pn_l: Some(1000.0),
+            unrealized_pn_l: Some(2000.0),
+            realized_pn_l: Some(500.0),
+            value: Some(75000.0),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = super::decode_pnl_single_proto(&bytes).unwrap();
+        assert_eq!(result.position, 500.0);
+        assert_eq!(result.daily_pnl, 1000.0);
+        assert_eq!(result.unrealized_pnl, 2000.0);
+        assert_eq!(result.realized_pnl, 500.0);
+        assert_eq!(result.value, 75000.0);
+    }
+
+    #[test]
+    fn test_decode_account_summary_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::AccountSummary {
+            req_id: Some(1),
+            account: Some("DU1234".into()),
+            tag: Some("NetLiquidation".into()),
+            value: Some("100000".into()),
+            currency: Some("USD".into()),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = super::decode_account_summary_proto(&bytes).unwrap();
+        assert_eq!(result.account, "DU1234");
+        assert_eq!(result.tag, "NetLiquidation");
+        assert_eq!(result.value, "100000");
+        assert_eq!(result.currency, "USD");
+    }
+
+    #[test]
+    fn test_decode_position_multi_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::PositionMulti {
+            req_id: Some(1),
+            account: Some("DU1234".into()),
+            contract: Some(crate::proto::Contract {
+                con_id: Some(265598),
+                symbol: Some("AAPL".into()),
+                ..Default::default()
+            }),
+            position: Some("50".into()),
+            avg_cost: Some(148.5),
+            model_code: Some("Tech".into()),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = super::decode_position_multi_proto(&bytes).unwrap();
+        assert_eq!(result.account, "DU1234");
+        assert_eq!(result.contract.contract_id, 265598);
+        assert_eq!(result.position, 50.0);
+        assert_eq!(result.average_cost, 148.5);
+        assert_eq!(result.model_code, "Tech");
+    }
+
+    #[test]
+    fn test_decode_account_multi_value_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::AccountUpdateMulti {
+            req_id: Some(1),
+            account: Some("DU1234".into()),
+            model_code: Some("Tech".into()),
+            key: Some("NetLiquidation".into()),
+            value: Some("100000".into()),
+            currency: Some("USD".into()),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = super::decode_account_multi_value_proto(&bytes).unwrap();
+        assert_eq!(result.account, "DU1234");
+        assert_eq!(result.model_code, "Tech");
+        assert_eq!(result.key, "NetLiquidation");
+        assert_eq!(result.value, "100000");
+        assert_eq!(result.currency, "USD");
     }
 }

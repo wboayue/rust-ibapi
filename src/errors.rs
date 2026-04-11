@@ -101,6 +101,10 @@ pub enum Error {
     /// Wraps errors parsing historical data parameters.
     #[error("HistoricalParseError: {0}")]
     HistoricalParseError(HistoricalParseError),
+
+    /// Failed to decode a protobuf message.
+    #[error("protobuf decode error: {0}")]
+    ProtobufDecode(#[from] prost::DecodeError),
 }
 
 impl From<ResponseMessage> for Error {
@@ -228,6 +232,15 @@ mod tests {
         let poison_error = PoisonError::new(mutex);
         let error: Error = poison_error.into();
         assert!(matches!(error, Error::Poison(_)));
+    }
+
+    #[test]
+    fn test_from_protobuf_decode_error() {
+        let bad_bytes: &[u8] = &[0xff, 0xff];
+        let decode_err = prost::Message::decode(bad_bytes).map(|_: crate::proto::TickPrice| ()).unwrap_err();
+        let error: Error = decode_err.into();
+        assert!(matches!(error, Error::ProtobufDecode(_)));
+        assert!(error.to_string().contains("protobuf decode error"));
     }
 
     #[test]
