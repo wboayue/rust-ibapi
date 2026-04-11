@@ -949,5 +949,111 @@ mod tests {
             assert_eq!(result.price, 149.50);
             assert_eq!(result.size, 200.0);
         }
+
+        #[test]
+        fn test_decode_tick_string_proto() {
+            let proto_msg = crate::proto::TickString {
+                req_id: Some(1),
+                tick_type: Some(45), // LastTimestamp
+                value: Some("1681133400".into()),
+            };
+
+            let mut bytes = Vec::new();
+            proto_msg.encode(&mut bytes).unwrap();
+
+            let result = decode_tick_string_proto(&bytes).unwrap();
+            assert_eq!(result.tick_type, TickType::LastTimestamp);
+            assert_eq!(result.value, "1681133400");
+        }
+
+        #[test]
+        fn test_decode_tick_generic_proto() {
+            let proto_msg = crate::proto::TickGeneric {
+                req_id: Some(1),
+                tick_type: Some(49), // Halted
+                value: Some(0.0),
+            };
+
+            let mut bytes = Vec::new();
+            proto_msg.encode(&mut bytes).unwrap();
+
+            let result = decode_tick_generic_proto(&bytes).unwrap();
+            assert_eq!(result.tick_type, TickType::Halted);
+            assert_eq!(result.value, 0.0);
+        }
+
+        #[test]
+        fn test_decode_tick_option_computation_proto() {
+            let proto_msg = crate::proto::TickOptionComputation {
+                req_id: Some(1),
+                tick_type: Some(13), // ModelOption
+                tick_attrib: Some(1),
+                implied_vol: Some(0.25),
+                delta: Some(0.5),
+                opt_price: Some(5.0),
+                pv_dividend: Some(0.1),
+                gamma: Some(0.03),
+                vega: Some(0.15),
+                theta: Some(-0.05),
+                und_price: Some(150.0),
+            };
+
+            let mut bytes = Vec::new();
+            proto_msg.encode(&mut bytes).unwrap();
+
+            let result = decode_tick_option_computation_proto(&bytes).unwrap();
+            assert_eq!(result.field, TickType::ModelOption);
+            assert_eq!(result.tick_attribute, Some(1));
+            assert_eq!(result.implied_volatility, Some(0.25));
+            assert_eq!(result.delta, Some(0.5));
+            assert_eq!(result.option_price, Some(5.0));
+            assert_eq!(result.present_value_dividend, Some(0.1));
+            assert_eq!(result.gamma, Some(0.03));
+            assert_eq!(result.vega, Some(0.15));
+            assert_eq!(result.theta, Some(-0.05));
+            assert_eq!(result.underlying_price, Some(150.0));
+
+            // f64::MAX should become None
+            let proto_msg2 = crate::proto::TickOptionComputation {
+                req_id: Some(1),
+                tick_type: Some(13),
+                implied_vol: Some(f64::MAX),
+                ..Default::default()
+            };
+
+            let mut bytes2 = Vec::new();
+            proto_msg2.encode(&mut bytes2).unwrap();
+
+            let result2 = decode_tick_option_computation_proto(&bytes2).unwrap();
+            assert_eq!(result2.implied_volatility, None);
+        }
+
+        #[test]
+        fn test_decode_market_depth_l2_proto() {
+            let proto_msg = crate::proto::MarketDepthL2 {
+                req_id: Some(1),
+                market_depth_data: Some(crate::proto::MarketDepthData {
+                    position: Some(2),
+                    operation: Some(1),
+                    side: Some(0),
+                    price: Some(151.25),
+                    size: Some("300".into()),
+                    market_maker: Some("GSCO".into()),
+                    is_smart_depth: Some(true),
+                }),
+            };
+
+            let mut bytes = Vec::new();
+            proto_msg.encode(&mut bytes).unwrap();
+
+            let result = decode_market_depth_l2_proto(&bytes).unwrap();
+            assert_eq!(result.position, 2);
+            assert_eq!(result.operation, 1);
+            assert_eq!(result.side, 0);
+            assert_eq!(result.price, 151.25);
+            assert_eq!(result.size, 300.0);
+            assert_eq!(result.market_maker, "GSCO");
+            assert!(result.smart_depth);
+        }
     }
 }

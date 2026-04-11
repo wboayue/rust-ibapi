@@ -84,3 +84,56 @@ pub(crate) fn decode_scanner_data_proto(bytes: &[u8]) -> Result<Vec<ScannerData>
 
     Ok(results)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_decode_scanner_data_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::ScannerData {
+            req_id: Some(1),
+            scanner_data_element: vec![
+                crate::proto::ScannerDataElement {
+                    rank: Some(0),
+                    contract: Some(crate::proto::Contract {
+                        con_id: Some(265598),
+                        symbol: Some("AAPL".into()),
+                        sec_type: Some("STK".into()),
+                        ..Default::default()
+                    }),
+                    market_name: Some("NMS".into()),
+                    distance: Some("1.5".into()),
+                    benchmark: Some("".into()),
+                    projection: Some("".into()),
+                    combo_key: Some("".into()),
+                },
+                crate::proto::ScannerDataElement {
+                    rank: Some(1),
+                    contract: Some(crate::proto::Contract {
+                        con_id: Some(76792991),
+                        symbol: Some("TSLA".into()),
+                        sec_type: Some("STK".into()),
+                        ..Default::default()
+                    }),
+                    market_name: Some("NMS".into()),
+                    distance: None,
+                    benchmark: None,
+                    projection: None,
+                    combo_key: None,
+                },
+            ],
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let results = decode_scanner_data_proto(&bytes).unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].rank, 0);
+        assert_eq!(results[0].contract_details.contract.contract_id, 265598);
+        assert_eq!(results[0].contract_details.market_name, "NMS");
+    }
+}

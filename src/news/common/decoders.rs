@@ -183,4 +183,44 @@ mod tests {
         assert_eq!(result.message, "Market closed early");
         assert_eq!(result.exchange, "NYSE");
     }
+
+    #[test]
+    fn test_decode_news_article_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::NewsArticle {
+            req_id: Some(1),
+            article_type: Some(0),
+            article_text: Some("Full article text here".into()),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_news_article_proto(&bytes).unwrap();
+        assert_eq!(result.article_type, ArticleType::Text);
+        assert_eq!(result.article_text, "Full article text here");
+    }
+
+    #[test]
+    fn test_decode_historical_news_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::HistoricalNews {
+            req_id: Some(1),
+            time: Some("2023-04-10 13:30:00.000".into()),
+            provider_code: Some("BRFG".into()),
+            article_id: Some("BRFG$12345".into()),
+            headline: Some("Market Update".into()),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_historical_news_proto(&bytes).unwrap();
+        assert_eq!(result.provider_code, "BRFG");
+        assert_eq!(result.article_id, "BRFG$12345");
+        assert_eq!(result.headline, "Market Update");
+        assert_ne!(result.time, OffsetDateTime::UNIX_EPOCH);
+    }
 }

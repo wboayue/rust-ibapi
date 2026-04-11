@@ -72,4 +72,20 @@ mod tests {
         let err_msg = format!("{:?}", result.unwrap_err());
         assert!(err_msg.contains("unexpected message type"));
     }
+
+    #[test]
+    fn test_decode_display_group_updated_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::DisplayGroupUpdated {
+            req_id: Some(1),
+            contract_info: Some("265598@SMART".into()),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_display_group_updated_proto(&bytes).unwrap();
+        assert_eq!(result.contract_info, "265598@SMART");
+    }
 }

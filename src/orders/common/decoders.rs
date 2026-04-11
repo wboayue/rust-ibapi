@@ -2494,4 +2494,78 @@ mod tests {
         assert_eq!(result.yields, None); // f64::MAX filtered out
         assert_eq!(result.yield_redemption_date, "20260101");
     }
+
+    #[test]
+    fn test_decode_execution_data_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::ExecutionDetails {
+            req_id: Some(42),
+            contract: Some(crate::proto::Contract {
+                con_id: Some(265598),
+                symbol: Some("AAPL".into()),
+                sec_type: Some("STK".into()),
+                ..Default::default()
+            }),
+            execution: Some(crate::proto::Execution {
+                order_id: Some(100),
+                exec_id: Some("exec001".into()),
+                time: Some("20260101 12:00:00".into()),
+                acct_number: Some("DU1234".into()),
+                side: Some("BOT".into()),
+                shares: Some("50".into()),
+                price: Some(152.5),
+                perm_id: Some(99999),
+                ..Default::default()
+            }),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_execution_data_proto(&bytes).unwrap();
+        assert_eq!(result.request_id, 42);
+        assert_eq!(result.contract.contract_id, 265598);
+        assert_eq!(result.execution.execution_id, "exec001");
+        assert_eq!(result.execution.shares, 50.0);
+        assert_eq!(result.execution.price, 152.5);
+        assert_eq!(result.execution.perm_id, 99999);
+    }
+
+    #[test]
+    fn test_decode_completed_order_proto() {
+        use prost::Message;
+
+        let proto_msg = crate::proto::CompletedOrder {
+            contract: Some(crate::proto::Contract {
+                con_id: Some(265598),
+                symbol: Some("AAPL".into()),
+                sec_type: Some("STK".into()),
+                ..Default::default()
+            }),
+            order: Some(crate::proto::Order {
+                order_id: Some(200),
+                action: Some("SELL".into()),
+                total_quantity: Some("200".into()),
+                order_type: Some("MKT".into()),
+                ..Default::default()
+            }),
+            order_state: Some(crate::proto::OrderState {
+                status: Some("Filled".into()),
+                completed_time: Some("20260101 12:00:00".into()),
+                completed_status: Some("Filled".into()),
+                ..Default::default()
+            }),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_completed_order_proto(&bytes).unwrap();
+        assert_eq!(result.order_id, 200);
+        assert_eq!(result.contract.contract_id, 265598);
+        assert_eq!(result.contract.symbol, Symbol::from("AAPL"));
+        assert_eq!(result.order.action, Action::Sell);
+        assert_eq!(result.order_state.completed_time, "20260101 12:00:00");
+    }
 }

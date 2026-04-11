@@ -67,4 +67,18 @@ mod tests {
         let result = decode_wsh_metadata_proto(&bytes).unwrap();
         assert_eq!(result.data_json, r#"{"key":"value"}"#);
     }
+
+    #[test]
+    fn test_decode_wsh_event_data_proto() {
+        let proto_msg = crate::proto::WshEventData {
+            req_id: Some(1),
+            data_json: Some(r#"{"event":"earnings"}"#.into()),
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_wsh_event_data_proto(&bytes).unwrap();
+        assert_eq!(result.data_json, r#"{"event":"earnings"}"#);
+    }
 }
