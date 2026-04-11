@@ -219,25 +219,18 @@ impl ConnectionProtocol for ConnectionHandler {
                 }
             }
             IncomingMessages::Error => {
-                if message.is_protobuf {
-                    if let Some(bytes) = message.raw_bytes() {
-                        if let Ok(proto) = crate::proto::ErrorMessage::decode(bytes) {
-                            let code = proto.error_code.unwrap_or(0);
-                            let msg = proto.error_msg.unwrap_or_default();
-                            let notice = crate::messages::Notice {
-                                code,
-                                message: msg,
-                                error_time: None,
-                            };
-                            if notice.is_warning() || notice.is_system_message() {
-                                info!("{notice}");
-                            } else {
-                                error!("Error during account info: {notice}");
-                            }
-                        }
-                    }
+                let notice = if message.is_protobuf {
+                    message.raw_bytes().and_then(|bytes| {
+                        crate::proto::ErrorMessage::decode(bytes).ok().map(|proto| crate::messages::Notice {
+                            code: proto.error_code.unwrap_or(0),
+                            message: proto.error_msg.unwrap_or_default(),
+                            error_time: None,
+                        })
+                    })
                 } else {
-                    let notice = crate::messages::Notice::from(message);
+                    Some(crate::messages::Notice::from(message))
+                };
+                if let Some(notice) = notice {
                     if notice.is_warning() || notice.is_system_message() {
                         info!("{notice}");
                     } else {
