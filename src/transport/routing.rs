@@ -19,17 +19,21 @@ pub enum RoutingDecision {
     Shutdown,
 }
 
+/// Minimal protobuf envelope to extract the first int32 field (tag 1).
+#[derive(Clone, PartialEq, ::prost::Message)]
+struct RoutingEnvelope {
+    #[prost(int32, optional, tag = "1")]
+    pub id: Option<i32>,
+}
+
 /// Try to extract a request/order ID from protobuf raw bytes.
 /// Most protobuf messages encode `req_id` or `order_id` at tag 1 as an int32.
 /// Messages where tag 1 is not the routing ID (e.g. CommissionsReport) will need
 /// per-message-type handling when those messages migrate to protobuf.
 fn protobuf_first_int(raw_bytes: &[u8]) -> Option<i32> {
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    struct Envelope {
-        #[prost(int32, optional, tag = "1")]
-        pub id: Option<i32>,
-    }
-    prost::Message::decode(raw_bytes).ok().and_then(|e: Envelope| e.id)
+    prost::Message::decode(raw_bytes)
+        .ok()
+        .and_then(|e: RoutingEnvelope| e.id)
 }
 
 fn is_order_message(message_type: IncomingMessages) -> bool {
