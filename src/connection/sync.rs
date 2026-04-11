@@ -4,11 +4,12 @@ use std::sync::Mutex;
 
 use log::{debug, info};
 
-use super::common::{parse_connection_time, AccountInfo, ConnectionHandler, ConnectionOptions, ConnectionProtocol, StartupMessageCallback};
+use super::common::{
+    parse_connection_time, parse_raw_message, AccountInfo, ConnectionHandler, ConnectionOptions, ConnectionProtocol, StartupMessageCallback,
+};
 use super::ConnectionMetadata;
 use crate::errors::Error;
-use crate::messages::{encode_raw_length, RequestMessage, ResponseMessage, PROTOBUF_MSG_ID};
-use crate::server_versions;
+use crate::messages::{encode_raw_length, RequestMessage, ResponseMessage};
 use crate::trace;
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::recorder::MessageRecorder;
@@ -139,40 +140,13 @@ impl<S: Stream> Connection<S> {
     /// Read a message from the connection
     pub(crate) fn read_message(&self) -> Response {
         let data = self.socket.read_message()?;
-        let server_version = self.server_version();
+        let (message, trace_str) = parse_raw_message(&data, self.server_version());
 
-        let message = if server_version >= server_versions::PROTOBUF && data.len() >= 4 {
-            let msg_id = i32::from_be_bytes([data[0], data[1], data[2], data[3]]);
-
-            if msg_id > PROTOBUF_MSG_ID {
-                let real_type = msg_id - PROTOBUF_MSG_ID;
-                debug!("<- protobuf msg_id={real_type}");
-                ResponseMessage::from_protobuf(real_type, data[4..].to_vec(), server_version)
-            } else {
-                // Binary message ID but text payload
-                let raw_string = String::from_utf8_lossy(&data[4..]).into_owned();
-                debug!("<- {raw_string:?}");
-                if log::log_enabled!(log::Level::Debug) {
-                    trace::blocking::record_response(raw_string.clone());
-                }
-                let mut fields = vec![msg_id.to_string()];
-                fields.extend(raw_string.split_terminator('\0').map(|s| s.to_string()));
-                ResponseMessage {
-                    i: 0,
-                    fields,
-                    server_version,
-                    is_protobuf: false,
-                    raw_bytes: None,
-                }
-            }
-        } else {
-            let raw_string = String::from_utf8_lossy(&data).into_owned();
-            debug!("<- {raw_string:?}");
+        if let Some(raw_string) = trace_str {
             if log::log_enabled!(log::Level::Debug) {
-                trace::blocking::record_response(raw_string.clone());
+                trace::blocking::record_response(raw_string);
             }
-            ResponseMessage::from(&raw_string).with_server_version(server_version)
-        };
+        }
 
         self.recorder.record_response(&message);
 

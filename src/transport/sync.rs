@@ -1109,6 +1109,8 @@ mod tests {
 
     #[test]
     fn test_connection_establish_connection() -> Result<(), Error> {
+        // Client proposes v201..221; server responds with v173 — server picks the
+        // negotiated version, so these mocks exercise the legacy text path.
         let events = vec![
             Exchange::simple("v201..221", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
             Exchange::simple(

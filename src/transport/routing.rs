@@ -21,8 +21,9 @@ pub enum RoutingDecision {
 
 /// Try to extract a request/order ID from protobuf raw bytes.
 /// Most protobuf messages encode `req_id` or `order_id` at tag 1 as an int32.
+/// Messages where tag 1 is not the routing ID (e.g. CommissionsReport) will need
+/// per-message-type handling when those messages migrate to protobuf.
 fn protobuf_first_int(raw_bytes: &[u8]) -> Option<i32> {
-    // Minimal prost decode: tag 1, varint wire type
     #[derive(Clone, PartialEq, ::prost::Message)]
     struct Envelope {
         #[prost(int32, optional, tag = "1")]
@@ -42,7 +43,9 @@ pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
     // Special handling for error messages
     if message_type == IncomingMessages::Error {
         if message.is_protobuf {
-            // Protobuf errors: extract fields via envelope decoding
+            // TODO: decode full protobuf Error message to extract error_code for
+            // downstream classification (e.g. is_warning_error). Currently hardcoded
+            // to 0 since no protobuf error messages are received yet.
             let id = message.raw_bytes().and_then(protobuf_first_int).unwrap_or(-1);
             return RoutingDecision::Error {
                 request_id: id,
