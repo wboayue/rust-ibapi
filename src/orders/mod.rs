@@ -79,7 +79,7 @@ pub struct Order {
     /// The API client id which placed the order.
     pub client_id: i32,
     /// The Host order identifier.
-    pub perm_id: i32,
+    pub perm_id: i64,
     /// Identifies the side.
     /// Generally available values are BUY and SELL.
     /// Additionally, SSHORT and SLONG are available in some institutional-accounts only.
@@ -1381,7 +1381,7 @@ pub struct Execution {
     /// The order's execution price excluding commissions.
     pub price: f64,
     /// The TWS order identifier. The PermId can be 0 for trades originating outside IB.
-    pub perm_id: i32,
+    pub perm_id: i64,
     /// Identifies whether an execution occurred because of an IB-initiated liquidation.
     pub liquidation: i32,
     /// Cumulative quantity.
@@ -1479,7 +1479,7 @@ pub struct OrderStatus {
     /// Average filling price.
     pub average_fill_price: f64,
     /// The order's permId used by the TWS to identify orders.
-    pub perm_id: i32,
+    pub perm_id: i64,
     /// Parent's id. Used for bracket and auto trailing stop orders.
     pub parent_id: i32,
     /// Price at which the last positions were filled.

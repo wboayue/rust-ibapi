@@ -94,7 +94,7 @@ pub fn decode_order(proto: &proto::Order) -> Order {
 
     order.client_id = proto.client_id.unwrap_or_default();
     order.order_id = proto.order_id.unwrap_or_default();
-    order.perm_id = proto.perm_id.unwrap_or_default() as i32;
+    order.perm_id = proto.perm_id.unwrap_or_default();
     order.parent_id = proto.parent_id.unwrap_or_default();
 
     order.action = Action::from(proto.action.as_deref().unwrap_or("BUY"));
@@ -409,7 +409,7 @@ pub fn decode_execution(proto: &proto::Execution) -> Execution {
         side: s(&proto.side),
         shares: parse_f64(&proto.shares),
         price: proto.price.unwrap_or_default(),
-        perm_id: proto.perm_id.unwrap_or_default() as i32,
+        perm_id: proto.perm_id.unwrap_or_default(),
         liquidation: if proto.is_liquidation.unwrap_or_default() { 1 } else { 0 },
         cumulative_quantity: parse_f64(&proto.cum_qty),
         average_price: proto.avg_price.unwrap_or_default(),

@@ -127,7 +127,7 @@ impl OrderDecoder {
     }
 
     fn read_perm_id(&mut self) -> Result<(), Error> {
-        self.order.perm_id = self.message.next_int()?;
+        self.order.perm_id = self.message.next_long()?;
         Ok(())
     }
 
@@ -858,7 +858,7 @@ pub(crate) fn decode_order_status(server_version: i32, message: &mut ResponseMes
         filled: message.next_double()?,
         remaining: message.next_double()?,
         average_fill_price: message.next_double()?,
-        perm_id: message.next_int()?,
+        perm_id: message.next_long()?,
         parent_id: message.next_int()?,
         last_fill_price: message.next_double()?,
         client_id: message.next_int()?,
@@ -905,7 +905,7 @@ pub(crate) fn decode_execution_data(server_version: i32, message: &mut ResponseM
     execution.side = message.next_string()?;
     execution.shares = message.next_double()?;
     execution.price = message.next_double()?;
-    execution.perm_id = message.next_int()?;
+    execution.perm_id = message.next_long()?;
     execution.client_id = message.next_int()?;
     execution.liquidation = message.next_int()?;
     execution.cumulative_quantity = message.next_double()?;
@@ -1132,8 +1132,7 @@ fn decode_percent_change_condition(message: &mut ResponseMessage, is_conjunction
 
 #[allow(dead_code)]
 pub(crate) fn decode_open_order_proto(bytes: &[u8]) -> Result<OrderData, Error> {
-    let p = prost::Message::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
-    let p: crate::proto::OpenOrder = p;
+    let p: crate::proto::OpenOrder = prost::Message::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
     let contract = p.contract.as_ref().map(crate::proto::decoders::decode_contract).unwrap_or_default();
     let order = p.order.as_ref().map(crate::proto::decoders::decode_order).unwrap_or_default();
     let order_state = p.order_state.as_ref().map(crate::proto::decoders::decode_order_state).unwrap_or_default();
@@ -1156,7 +1155,7 @@ pub(crate) fn decode_order_status_proto(bytes: &[u8]) -> Result<OrderStatus, Err
         filled: p.filled.as_deref().and_then(|s| s.parse().ok()).unwrap_or_default(),
         remaining: p.remaining.as_deref().and_then(|s| s.parse().ok()).unwrap_or_default(),
         average_fill_price: p.avg_fill_price.unwrap_or_default(),
-        perm_id: p.perm_id.unwrap_or_default() as i32,
+        perm_id: p.perm_id.unwrap_or_default(),
         parent_id: p.parent_id.unwrap_or_default(),
         last_fill_price: p.last_fill_price.unwrap_or_default(),
         client_id: p.client_id.unwrap_or_default(),

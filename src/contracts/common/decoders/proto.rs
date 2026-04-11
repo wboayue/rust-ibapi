@@ -1,9 +1,11 @@
+use prost::Message;
+
 use crate::contracts::ContractDetails;
 use crate::Error;
 
 #[allow(dead_code)]
 pub(crate) fn decode_contract_data_proto(bytes: &[u8]) -> Result<ContractDetails, Error> {
-    let p: crate::proto::ContractData = prost::Message::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
+    let p: crate::proto::ContractData = Message::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
     let default_contract = crate::proto::Contract::default();
     let default_details = crate::proto::ContractDetails::default();
     let proto_contract = p.contract.as_ref().unwrap_or(&default_contract);

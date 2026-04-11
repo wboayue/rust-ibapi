@@ -1,6 +1,7 @@
 //! Decoders for display group messages.
 
 use log::warn;
+use prost::Message;
 
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::Error;
@@ -27,7 +28,6 @@ pub(crate) fn decode_display_group_updated(message: &mut ResponseMessage) -> Res
 
 #[allow(dead_code)]
 pub(crate) fn decode_display_group_updated_proto(bytes: &[u8]) -> Result<DisplayGroupUpdate, Error> {
-    use prost::Message;
     let p = crate::proto::DisplayGroupUpdated::decode(bytes).map_err(|e| Error::Simple(format!("protobuf decode error: {e}")))?;
     Ok(DisplayGroupUpdate::new(p.contract_info.unwrap_or_default()))
 }
