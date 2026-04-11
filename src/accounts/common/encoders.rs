@@ -161,6 +161,198 @@ fn encode_simple_with_request_id(message_type: OutgoingMessages, request_id: i32
     Ok(message)
 }
 
+// === Protobuf Encoders ===
+
+#[allow(dead_code)]
+pub(in crate::accounts) fn encode_request_account_updates_proto(subscribe: bool, account: &AccountId) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let acct: &str = account;
+    let request = crate::proto::AccountDataRequest {
+        subscribe: if subscribe { Some(true) } else { None },
+        acct_code: if acct.is_empty() { None } else { Some(acct.to_string()) },
+    };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::RequestAccountData as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(in crate::accounts) fn encode_cancel_account_updates_proto() -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::AccountDataRequest {
+        subscribe: None,
+        acct_code: None,
+    };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::RequestAccountData as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(in crate::accounts) fn encode_request_positions_proto() -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::PositionsRequest {};
+    Ok(encode_protobuf_message(
+        OutgoingMessages::RequestPositions as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(in crate::accounts) fn encode_cancel_positions_proto() -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::CancelPositions {};
+    Ok(encode_protobuf_message(
+        OutgoingMessages::CancelPositions as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(in crate::accounts) fn encode_request_account_summary_proto(request_id: i32, group: &AccountGroup, tags: &[&str]) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::AccountSummaryRequest {
+        req_id: Some(request_id),
+        group: Some(group.as_str().to_string()),
+        tags: Some(tags.join(",")),
+    };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::RequestAccountSummary as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(in crate::accounts) fn encode_cancel_account_summary_proto(request_id: i32) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::CancelAccountSummary { req_id: Some(request_id) };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::CancelAccountSummary as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(in crate::accounts) fn encode_request_pnl_proto(request_id: i32, account: &AccountId, model_code: Option<&ModelCode>) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::PnLRequest {
+        req_id: Some(request_id),
+        account: Some(account.to_string()),
+        model_code: model_code.map(|m| m.to_string()),
+    };
+    Ok(encode_protobuf_message(OutgoingMessages::RequestPnL as i32, &request.encode_to_vec()))
+}
+
+#[allow(dead_code)]
+pub(in crate::accounts) fn encode_cancel_pnl_proto(request_id: i32) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::CancelPnL { req_id: Some(request_id) };
+    Ok(encode_protobuf_message(OutgoingMessages::CancelPnL as i32, &request.encode_to_vec()))
+}
+
+#[allow(dead_code)]
+pub(in crate::accounts) fn encode_request_pnl_single_proto(
+    request_id: i32,
+    account: &AccountId,
+    contract_id: ContractId,
+    model_code: Option<&ModelCode>,
+) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::PnLSingleRequest {
+        req_id: Some(request_id),
+        account: Some(account.to_string()),
+        model_code: model_code.map(|m| m.to_string()),
+        con_id: Some(contract_id.value()),
+    };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::RequestPnLSingle as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(in crate::accounts) fn encode_cancel_pnl_single_proto(request_id: i32) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::CancelPnLSingle { req_id: Some(request_id) };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::CancelPnLSingle as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(in crate::accounts) fn encode_request_positions_multi_proto(
+    request_id: i32,
+    account: Option<&AccountId>,
+    model_code: Option<&ModelCode>,
+) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::PositionsMultiRequest {
+        req_id: Some(request_id),
+        account: account.map(|a| a.to_string()),
+        model_code: model_code.map(|m| m.to_string()),
+    };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::RequestPositionsMulti as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(in crate::accounts) fn encode_cancel_positions_multi_proto(request_id: i32) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::CancelPositionsMulti { req_id: Some(request_id) };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::CancelPositionsMulti as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(in crate::accounts) fn encode_request_account_updates_multi_proto(
+    request_id: i32,
+    account: Option<&AccountId>,
+    model_code: Option<&ModelCode>,
+) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::AccountUpdatesMultiRequest {
+        req_id: Some(request_id),
+        account: account.map(|a| a.to_string()),
+        model_code: model_code.map(|m| m.to_string()),
+        ledger_and_nlv: Some(true),
+    };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::RequestAccountUpdatesMulti as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(in crate::accounts) fn encode_cancel_account_updates_multi_proto(request_id: i32) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::CancelAccountUpdatesMulti { req_id: Some(request_id) };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::CancelAccountUpdatesMulti as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
@@ -494,6 +686,52 @@ mod tests {
             assert_eq!(message[3], tc.expected_account_field, "Case: {} - account", tc.name);
             assert_eq!(message[4], tc.expected_model_field, "Case: {} - model_code", tc.name);
             assert_eq!(message[5], subscribe.to_field(), "Case: {} - subscribe", tc.name);
+        }
+    }
+
+    #[cfg(test)]
+    mod proto_tests {
+        use super::super::*;
+        use crate::accounts::types::{AccountGroup, AccountId, ContractId};
+
+        fn assert_msg_id(bytes: &[u8], expected: OutgoingMessages) {
+            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+            assert_eq!(msg_id, expected as i32 + 200);
+        }
+
+        #[test]
+        fn test_encode_request_positions_proto() {
+            let bytes = encode_request_positions_proto().unwrap();
+            assert_msg_id(&bytes, OutgoingMessages::RequestPositions);
+        }
+
+        #[test]
+        fn test_encode_request_account_summary_proto() {
+            let group = AccountGroup("All".to_string());
+            let bytes = encode_request_account_summary_proto(3000, &group, &["AccountType"]).unwrap();
+            assert_msg_id(&bytes, OutgoingMessages::RequestAccountSummary);
+        }
+
+        #[test]
+        fn test_encode_request_pnl_proto() {
+            let account = AccountId("DU123".to_string());
+            let bytes = encode_request_pnl_proto(3000, &account, None).unwrap();
+            assert_msg_id(&bytes, OutgoingMessages::RequestPnL);
+        }
+
+        #[test]
+        fn test_encode_request_pnl_single_proto() {
+            let account = AccountId("DU123".to_string());
+            let cid = ContractId(1001);
+            let bytes = encode_request_pnl_single_proto(3000, &account, cid, None).unwrap();
+            assert_msg_id(&bytes, OutgoingMessages::RequestPnLSingle);
+        }
+
+        #[test]
+        fn test_encode_request_account_updates_proto() {
+            let account = AccountId("DU123".to_string());
+            let bytes = encode_request_account_updates_proto(true, &account).unwrap();
+            assert_msg_id(&bytes, OutgoingMessages::RequestAccountData);
         }
     }
 }

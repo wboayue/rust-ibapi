@@ -200,6 +200,149 @@ pub(crate) fn encode_cancel_market_data(request_id: i32) -> Result<RequestMessag
     Ok(message)
 }
 
+// === Protobuf Encoders ===
+
+#[allow(dead_code)]
+pub(crate) fn encode_request_market_data_proto(
+    request_id: i32,
+    contract: &Contract,
+    generic_ticks: &[&str],
+    snapshot: bool,
+    regulatory_snapshot: bool,
+) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let joined = generic_ticks.join(",");
+    let request = crate::proto::MarketDataRequest {
+        req_id: Some(request_id),
+        contract: Some(crate::proto::encoders::encode_contract(contract)),
+        generic_tick_list: if joined.is_empty() { None } else { Some(joined) },
+        snapshot: if snapshot { Some(true) } else { None },
+        regulatory_snapshot: if regulatory_snapshot { Some(true) } else { None },
+        market_data_options: Default::default(),
+    };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::RequestMarketData as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_cancel_market_data_proto(request_id: i32) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::CancelMarketData { req_id: Some(request_id) };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::CancelMarketData as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_request_market_depth_proto(
+    request_id: i32,
+    contract: &Contract,
+    number_of_rows: i32,
+    is_smart_depth: bool,
+) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::MarketDepthRequest {
+        req_id: Some(request_id),
+        contract: Some(crate::proto::encoders::encode_contract(contract)),
+        num_rows: Some(number_of_rows),
+        is_smart_depth: if is_smart_depth { Some(true) } else { None },
+        market_depth_options: Default::default(),
+    };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::RequestMarketDepth as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_cancel_market_depth_proto(request_id: i32, is_smart_depth: bool) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::CancelMarketDepth {
+        req_id: Some(request_id),
+        is_smart_depth: if is_smart_depth { Some(true) } else { None },
+    };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::CancelMarketDepth as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_tick_by_tick_proto(
+    request_id: i32,
+    contract: &Contract,
+    tick_type: &str,
+    number_of_ticks: i32,
+    ignore_size: bool,
+) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::TickByTickRequest {
+        req_id: Some(request_id),
+        contract: Some(crate::proto::encoders::encode_contract(contract)),
+        tick_type: if tick_type.is_empty() { None } else { Some(tick_type.to_string()) },
+        number_of_ticks: Some(number_of_ticks),
+        ignore_size: if ignore_size { Some(true) } else { None },
+    };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::RequestTickByTickData as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_cancel_tick_by_tick_proto(request_id: i32) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::CancelTickByTick { req_id: Some(request_id) };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::CancelTickByTickData as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_request_realtime_bars_proto(
+    request_id: i32,
+    contract: &Contract,
+    what_to_show: &WhatToShow,
+    use_rth: bool,
+    options: &[TagValue],
+) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::RealTimeBarsRequest {
+        req_id: Some(request_id),
+        contract: Some(crate::proto::encoders::encode_contract(contract)),
+        bar_size: Some(0),
+        what_to_show: Some(what_to_show.to_string()),
+        use_rth: if use_rth { Some(true) } else { None },
+        real_time_bars_options: crate::proto::encoders::tag_values_to_map(options),
+    };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::RequestRealTimeBars as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_cancel_realtime_bars_proto(request_id: i32) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::CancelRealTimeBars { req_id: Some(request_id) };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::CancelRealTimeBars as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
 #[cfg(test)]
 pub(crate) mod test_constants {
     // Market data request message field indexes for non-combo stock contracts
@@ -526,6 +669,54 @@ mod tests {
 
             assert_eq!(message[0], OutgoingMessages::RequestMktDepthExchanges.to_field());
             assert_eq!(message.len(), 1, "Unexpected message length");
+        }
+    }
+
+    #[cfg(test)]
+    mod proto_tests {
+        use super::*;
+        fn assert_msg_id(bytes: &[u8], expected: OutgoingMessages) {
+            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+            assert_eq!(msg_id, expected as i32 + 200);
+        }
+
+        #[test]
+        fn test_encode_request_market_data_proto() {
+            let contract = create_test_contract();
+            let bytes = encode_request_market_data_proto(9000, &contract, &["100", "101"], false, false).unwrap();
+            assert_msg_id(&bytes, OutgoingMessages::RequestMarketData);
+        }
+
+        #[test]
+        fn test_encode_cancel_market_data_proto() {
+            let bytes = encode_cancel_market_data_proto(9000).unwrap();
+            assert_msg_id(&bytes, OutgoingMessages::CancelMarketData);
+        }
+
+        #[test]
+        fn test_encode_tick_by_tick_proto() {
+            let contract = create_test_contract();
+            let bytes = encode_tick_by_tick_proto(9000, &contract, "AllLast", 1, true).unwrap();
+            assert_msg_id(&bytes, OutgoingMessages::RequestTickByTickData);
+        }
+
+        #[test]
+        fn test_encode_cancel_tick_by_tick_proto() {
+            let bytes = encode_cancel_tick_by_tick_proto(9000).unwrap();
+            assert_msg_id(&bytes, OutgoingMessages::CancelTickByTickData);
+        }
+
+        #[test]
+        fn test_encode_request_realtime_bars_proto() {
+            let contract = create_test_contract();
+            let bytes = encode_request_realtime_bars_proto(9000, &contract, &WhatToShow::Trades, true, &[]).unwrap();
+            assert_msg_id(&bytes, OutgoingMessages::RequestRealTimeBars);
+        }
+
+        #[test]
+        fn test_encode_cancel_realtime_bars_proto() {
+            let bytes = encode_cancel_realtime_bars_proto(9000).unwrap();
+            assert_msg_id(&bytes, OutgoingMessages::CancelRealTimeBars);
         }
     }
 }
