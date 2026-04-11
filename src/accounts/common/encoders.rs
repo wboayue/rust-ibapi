@@ -183,7 +183,7 @@ pub(in crate::accounts) fn encode_cancel_account_updates_proto() -> Result<Vec<u
     use crate::messages::encode_protobuf_message;
     use prost::Message;
     let request = crate::proto::AccountDataRequest {
-        subscribe: None,
+        subscribe: Some(false),
         acct_code: None,
     };
     Ok(encode_protobuf_message(

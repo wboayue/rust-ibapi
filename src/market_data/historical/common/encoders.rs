@@ -317,7 +317,7 @@ pub(crate) fn encode_cancel_histogram_data_proto(request_id: i32) -> Result<Vec<
     use prost::Message;
     let request = crate::proto::CancelHistogramData { req_id: Some(request_id) };
     Ok(encode_protobuf_message(
-        crate::messages::OutgoingMessages::RequestHistogramData as i32,
+        crate::messages::OutgoingMessages::CancelHistogramData as i32,
         &request.encode_to_vec(),
     ))
 }
@@ -328,7 +328,7 @@ pub(crate) fn encode_cancel_head_timestamp_proto(request_id: i32) -> Result<Vec<
     use prost::Message;
     let request = crate::proto::CancelHeadTimestamp { req_id: Some(request_id) };
     Ok(encode_protobuf_message(
-        crate::messages::OutgoingMessages::RequestHeadTimestamp as i32,
+        crate::messages::OutgoingMessages::CancelHeadTimestamp as i32,
         &request.encode_to_vec(),
     ))
 }
@@ -592,7 +592,13 @@ mod tests {
         #[test]
         fn test_encode_cancel_head_timestamp_proto() {
             let bytes = encode_cancel_head_timestamp_proto(9000).unwrap();
-            assert_msg_id(&bytes, crate::messages::OutgoingMessages::RequestHeadTimestamp);
+            assert_msg_id(&bytes, crate::messages::OutgoingMessages::CancelHeadTimestamp);
+        }
+
+        #[test]
+        fn test_encode_cancel_histogram_data_proto() {
+            let bytes = encode_cancel_histogram_data_proto(3000).unwrap();
+            assert_msg_id(&bytes, crate::messages::OutgoingMessages::CancelHistogramData);
         }
     }
 }
