@@ -3,3 +3,5 @@ include!("protobuf.rs");
 
 #[allow(clippy::all)]
 pub mod decoders;
+
+pub mod encoders;

@@ -178,6 +178,27 @@ pub(in crate::contracts) fn encode_request_option_chain(
     Ok(message)
 }
 
+// === Protobuf Encoders ===
+
+#[allow(dead_code)]
+pub(crate) fn encode_request_contract_data_proto(request_id: i32, contract: &Contract) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::ContractDataRequest {
+        req_id: Some(request_id),
+        contract: Some(crate::proto::encoders::encode_contract(contract)),
+    };
+    Ok(encode_protobuf_message(
+        OutgoingMessages::RequestContractData as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_cancel_contract_data_proto(request_id: i32) -> Result<Vec<u8>, Error> {
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelContractData, OutgoingMessages::CancelContractData)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
@@ -438,5 +459,37 @@ mod tests {
         assert_eq!(message[0], message_type.to_field(), "message.type");
         assert_eq!(message[1], message_version.to_field(), "message.message_version");
         assert_eq!(message[2], request_id.to_field(), "message.request_id");
+    }
+
+    #[cfg(test)]
+    mod proto_tests {
+        use super::super::*;
+        use crate::contracts::{Currency, Exchange, Symbol};
+
+        #[test]
+        fn test_encode_request_contract_data_proto() {
+            let contract = Contract {
+                contract_id: 265598,
+                symbol: Symbol::from("AAPL"),
+                security_type: SecurityType::Stock,
+                exchange: Exchange::from("SMART"),
+                currency: Currency::from("USD"),
+                ..Default::default()
+            };
+            let bytes = encode_request_contract_data_proto(1000, &contract).unwrap();
+            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+            assert_eq!(msg_id, OutgoingMessages::RequestContractData as i32 + 200);
+            use prost::Message;
+            let req = crate::proto::ContractDataRequest::decode(&bytes[4..]).unwrap();
+            assert_eq!(req.req_id, Some(1000));
+            assert_eq!(req.contract.unwrap().con_id, Some(265598));
+        }
+
+        #[test]
+        fn test_encode_cancel_contract_data_proto() {
+            let bytes = encode_cancel_contract_data_proto(5000).unwrap();
+            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+            assert_eq!(msg_id, OutgoingMessages::CancelContractData as i32 + 200);
+        }
     }
 }

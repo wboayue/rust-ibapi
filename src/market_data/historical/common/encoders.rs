@@ -181,6 +181,138 @@ pub(crate) fn encode_request_histogram_data(request_id: i32, contract: &Contract
     Ok(message)
 }
 
+// === Protobuf Encoders ===
+
+#[allow(dead_code)]
+pub(crate) fn encode_request_head_timestamp_proto(
+    request_id: i32,
+    contract: &Contract,
+    what_to_show: WhatToShow,
+    use_rth: bool,
+) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::HeadTimestampRequest {
+        req_id: Some(request_id),
+        contract: Some(crate::proto::encoders::encode_contract(contract)),
+        use_rth: if use_rth { Some(true) } else { None },
+        what_to_show: Some(what_to_show.to_field()),
+        format_date: Some(DATE_FORMAT),
+    };
+    Ok(encode_protobuf_message(
+        crate::messages::OutgoingMessages::RequestHeadTimestamp as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn encode_request_historical_data_proto(
+    request_id: i32,
+    contract: &Contract,
+    end_date: Option<OffsetDateTime>,
+    duration: Duration,
+    bar_size: BarSize,
+    what_to_show: Option<WhatToShow>,
+    use_rth: bool,
+    keep_up_to_date: bool,
+    chart_options: &[crate::contracts::TagValue],
+) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let end_str = end_date.to_field();
+    let wts_str = what_to_show.to_field();
+    let request = crate::proto::HistoricalDataRequest {
+        req_id: Some(request_id),
+        contract: Some(crate::proto::encoders::encode_contract(contract)),
+        end_date_time: if end_str.is_empty() { None } else { Some(end_str) },
+        duration: Some(duration.to_field()),
+        bar_size_setting: Some(bar_size.to_field()),
+        what_to_show: if wts_str.is_empty() { None } else { Some(wts_str) },
+        use_rth: if use_rth { Some(true) } else { None },
+        format_date: Some(DATE_FORMAT),
+        keep_up_to_date: if keep_up_to_date { Some(true) } else { None },
+        chart_options: crate::proto::encoders::tag_values_to_map(chart_options),
+    };
+    Ok(encode_protobuf_message(
+        crate::messages::OutgoingMessages::RequestHistoricalData as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_cancel_historical_data_proto(request_id: i32) -> Result<Vec<u8>, Error> {
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelHistoricalData, crate::messages::OutgoingMessages::CancelHistoricalData)
+}
+
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn encode_request_historical_ticks_proto(
+    request_id: i32,
+    contract: &Contract,
+    start: Option<OffsetDateTime>,
+    end: Option<OffsetDateTime>,
+    number_of_ticks: i32,
+    what_to_show: WhatToShow,
+    use_rth: bool,
+    ignore_size: bool,
+) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let start_str = start.to_field();
+    let end_str = end.to_field();
+    let request = crate::proto::HistoricalTicksRequest {
+        req_id: Some(request_id),
+        contract: Some(crate::proto::encoders::encode_contract(contract)),
+        start_date_time: if start_str.is_empty() { None } else { Some(start_str) },
+        end_date_time: if end_str.is_empty() { None } else { Some(end_str) },
+        number_of_ticks: Some(number_of_ticks),
+        what_to_show: Some(what_to_show.to_field()),
+        use_rth: if use_rth { Some(true) } else { None },
+        ignore_size: if ignore_size { Some(true) } else { None },
+        misc_options: Default::default(),
+    };
+    Ok(encode_protobuf_message(
+        crate::messages::OutgoingMessages::RequestHistoricalTicks as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_cancel_historical_ticks_proto(request_id: i32) -> Result<Vec<u8>, Error> {
+    crate::proto::encoders::encode_cancel_by_id!(
+        request_id,
+        CancelHistoricalTicks,
+        crate::messages::OutgoingMessages::CancelHistoricalTicks
+    )
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_request_histogram_data_proto(request_id: i32, contract: &Contract, use_rth: bool, period: BarSize) -> Result<Vec<u8>, Error> {
+    use crate::messages::encode_protobuf_message;
+    use prost::Message;
+    let request = crate::proto::HistogramDataRequest {
+        req_id: Some(request_id),
+        contract: Some(crate::proto::encoders::encode_contract(contract)),
+        use_rth: Some(use_rth),
+        time_period: Some(period.to_field()),
+    };
+    Ok(encode_protobuf_message(
+        crate::messages::OutgoingMessages::RequestHistogramData as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_cancel_histogram_data_proto(request_id: i32) -> Result<Vec<u8>, Error> {
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelHistogramData, crate::messages::OutgoingMessages::CancelHistogramData)
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_cancel_head_timestamp_proto(request_id: i32) -> Result<Vec<u8>, Error> {
+    crate::proto::encoders::encode_cancel_by_id!(request_id, CancelHeadTimestamp, crate::messages::OutgoingMessages::CancelHeadTimestamp)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -398,5 +530,66 @@ mod tests {
         assert_eq!(message[14], contract.include_expired.to_field(), "message.include_expired");
         assert_eq!(message[15], use_rth.to_field(), "message.use_rth");
         assert_eq!(message[16], period.to_field(), "message.duration");
+    }
+
+    #[cfg(test)]
+    mod proto_tests {
+        use super::*;
+        use crate::common::test_utils::helpers::assert_proto_msg_id;
+        use crate::market_data::historical::ToDuration;
+
+        #[test]
+        fn test_encode_request_head_timestamp_proto() {
+            let contract = Contract::stock("MSFT").build();
+            let bytes = encode_request_head_timestamp_proto(9000, &contract, WhatToShow::Trades, false).unwrap();
+            assert_proto_msg_id(&bytes, crate::messages::OutgoingMessages::RequestHeadTimestamp);
+
+            use prost::Message;
+            let req = crate::proto::HeadTimestampRequest::decode(&bytes[4..]).unwrap();
+            assert_eq!(req.req_id, Some(9000));
+            assert_eq!(req.what_to_show.as_deref(), Some("TRADES"));
+            assert_eq!(req.format_date, Some(2));
+            assert!(req.use_rth.is_none());
+        }
+
+        #[test]
+        fn test_encode_request_historical_data_proto() {
+            let contract = Contract::stock("MSFT").build();
+            let bytes = encode_request_historical_data_proto(9000, &contract, None, 30.days(), BarSize::Day, None, false, true, &[]).unwrap();
+            assert_proto_msg_id(&bytes, crate::messages::OutgoingMessages::RequestHistoricalData);
+
+            use prost::Message;
+            let req = crate::proto::HistoricalDataRequest::decode(&bytes[4..]).unwrap();
+            assert_eq!(req.req_id, Some(9000));
+            assert_eq!(req.contract.unwrap().symbol.as_deref(), Some("MSFT"));
+            assert_eq!(req.bar_size_setting.as_deref(), Some("1 day"));
+            assert!(req.end_date_time.is_none());
+            assert_eq!(req.keep_up_to_date, Some(true));
+        }
+
+        #[test]
+        fn test_encode_cancel_historical_data_proto() {
+            let bytes = encode_cancel_historical_data_proto(9001).unwrap();
+            assert_proto_msg_id(&bytes, crate::messages::OutgoingMessages::CancelHistoricalData);
+        }
+
+        #[test]
+        fn test_encode_request_histogram_data_proto() {
+            let contract = Contract::stock("MSFT").build();
+            let bytes = encode_request_histogram_data_proto(3000, &contract, true, BarSize::Week).unwrap();
+            assert_proto_msg_id(&bytes, crate::messages::OutgoingMessages::RequestHistogramData);
+        }
+
+        #[test]
+        fn test_encode_cancel_head_timestamp_proto() {
+            let bytes = encode_cancel_head_timestamp_proto(9000).unwrap();
+            assert_proto_msg_id(&bytes, crate::messages::OutgoingMessages::CancelHeadTimestamp);
+        }
+
+        #[test]
+        fn test_encode_cancel_histogram_data_proto() {
+            let bytes = encode_cancel_histogram_data_proto(3000).unwrap();
+            assert_proto_msg_id(&bytes, crate::messages::OutgoingMessages::CancelHistogramData);
+        }
     }
 }

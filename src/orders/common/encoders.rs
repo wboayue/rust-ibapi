@@ -544,6 +544,95 @@ pub(crate) fn encode_executions(server_version: i32, request_id: i32, filter: &E
     Ok(message)
 }
 
+// === Protobuf Encoders ===
+
+#[allow(dead_code)]
+pub(crate) fn encode_place_order_proto(order_id: i32, contract: &Contract, order: &Order) -> Result<Vec<u8>, Error> {
+    use prost::Message;
+    let request = crate::proto::PlaceOrderRequest {
+        order_id: Some(order_id),
+        contract: Some(crate::proto::encoders::encode_contract_with_order(contract, Some(order))),
+        order: Some(crate::proto::encoders::encode_order(order)),
+        attached_orders: None,
+    };
+    Ok(crate::messages::encode_protobuf_message(
+        OutgoingMessages::PlaceOrder as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_cancel_order_proto(order_id: i32, manual_order_cancel_time: &str) -> Result<Vec<u8>, Error> {
+    use prost::Message;
+    let request = crate::proto::CancelOrderRequest {
+        order_id: Some(order_id),
+        order_cancel: Some(crate::proto::encoders::encode_order_cancel(manual_order_cancel_time)),
+    };
+    Ok(crate::messages::encode_protobuf_message(
+        OutgoingMessages::CancelOrder as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_open_orders_proto() -> Result<Vec<u8>, Error> {
+    crate::proto::encoders::encode_empty_proto!(OpenOrdersRequest, OutgoingMessages::RequestOpenOrders)
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_all_open_orders_proto() -> Result<Vec<u8>, Error> {
+    crate::proto::encoders::encode_empty_proto!(AllOpenOrdersRequest, OutgoingMessages::RequestAllOpenOrders)
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_auto_open_orders_proto(auto_bind: bool) -> Result<Vec<u8>, Error> {
+    use prost::Message;
+    let request = crate::proto::AutoOpenOrdersRequest {
+        auto_bind: if auto_bind { Some(true) } else { None },
+    };
+    Ok(crate::messages::encode_protobuf_message(
+        OutgoingMessages::RequestAutoOpenOrders as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_completed_orders_proto(api_only: bool) -> Result<Vec<u8>, Error> {
+    use prost::Message;
+    let request = crate::proto::CompletedOrdersRequest {
+        api_only: if api_only { Some(true) } else { None },
+    };
+    Ok(crate::messages::encode_protobuf_message(
+        OutgoingMessages::RequestCompletedOrders as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_executions_proto(request_id: i32, filter: &ExecutionFilter) -> Result<Vec<u8>, Error> {
+    use prost::Message;
+    let request = crate::proto::ExecutionRequest {
+        req_id: Some(request_id),
+        execution_filter: Some(crate::proto::encoders::encode_execution_filter(filter)),
+    };
+    Ok(crate::messages::encode_protobuf_message(
+        OutgoingMessages::RequestExecutions as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
+#[allow(dead_code)]
+pub(crate) fn encode_global_cancel_proto() -> Result<Vec<u8>, Error> {
+    use prost::Message;
+    let request = crate::proto::GlobalCancelRequest {
+        order_cancel: Some(crate::proto::encoders::encode_order_cancel("")),
+    };
+    Ok(crate::messages::encode_protobuf_message(
+        OutgoingMessages::RequestGlobalCancel as i32,
+        &request.encode_to_vec(),
+    ))
+}
+
 fn f64_max_to_zero(num: Option<f64>) -> Option<f64> {
     if num == Some(f64::MAX) {
         Some(0.0)
@@ -1020,5 +1109,77 @@ pub(crate) mod tests {
         assert_eq!(field_vec[len - 2], "1", "include_overnight");
         assert_eq!(field_vec[len - 3], "1", "professional_customer");
         assert_eq!(field_vec[len - 4], "CUST001", "customer_account");
+    }
+
+    #[cfg(test)]
+    mod proto_tests {
+        use super::super::*;
+        use crate::contracts::Contract;
+        use crate::orders::{Action, ExecutionFilter, Order};
+
+        #[test]
+        fn test_encode_place_order_proto() {
+            let contract = Contract::stock("AAPL").build();
+            let order = Order {
+                action: Action::Buy,
+                total_quantity: 100.0,
+                order_type: "LMT".to_string(),
+                limit_price: Some(150.0),
+                ..Default::default()
+            };
+            let bytes = encode_place_order_proto(1001, &contract, &order).unwrap();
+            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+            assert_eq!(msg_id, crate::messages::OutgoingMessages::PlaceOrder as i32 + 200);
+        }
+
+        #[test]
+        fn test_encode_place_order_proto_roundtrip() {
+            use prost::Message;
+            let contract = Contract::stock("AAPL").build();
+            let order = Order {
+                action: Action::Buy,
+                total_quantity: 100.0,
+                order_type: "LMT".to_string(),
+                limit_price: Some(150.0),
+                transmit: true,
+                ..Default::default()
+            };
+            let bytes = encode_place_order_proto(1001, &contract, &order).unwrap();
+            let request = crate::proto::PlaceOrderRequest::decode(&bytes[4..]).unwrap();
+            assert_eq!(request.order_id, Some(1001));
+            assert_eq!(request.contract.unwrap().symbol.as_deref(), Some("AAPL"));
+            let proto_order = request.order.unwrap();
+            assert_eq!(proto_order.action.as_deref(), Some("BUY"));
+            assert_eq!(proto_order.lmt_price, Some(150.0));
+        }
+
+        #[test]
+        fn test_encode_cancel_order_proto() {
+            let bytes = encode_cancel_order_proto(1001, "").unwrap();
+            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+            assert_eq!(msg_id, crate::messages::OutgoingMessages::CancelOrder as i32 + 200);
+        }
+
+        #[test]
+        fn test_encode_open_orders_proto() {
+            let bytes = encode_open_orders_proto().unwrap();
+            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+            assert_eq!(msg_id, crate::messages::OutgoingMessages::RequestOpenOrders as i32 + 200);
+        }
+
+        #[test]
+        fn test_encode_global_cancel_proto() {
+            let bytes = encode_global_cancel_proto().unwrap();
+            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+            assert_eq!(msg_id, crate::messages::OutgoingMessages::RequestGlobalCancel as i32 + 200);
+        }
+
+        #[test]
+        fn test_encode_executions_proto() {
+            let filter = ExecutionFilter::default();
+            let bytes = encode_executions_proto(9000, &filter).unwrap();
+            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+            assert_eq!(msg_id, crate::messages::OutgoingMessages::RequestExecutions as i32 + 200);
+        }
     }
 }

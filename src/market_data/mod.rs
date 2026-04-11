@@ -67,4 +67,32 @@ pub(crate) mod encoders {
 
         Ok(message)
     }
+
+    #[allow(dead_code)]
+    pub(crate) fn encode_request_market_data_type_proto(market_data_type: MarketDataType) -> Result<Vec<u8>, Error> {
+        use prost::Message;
+        let request = crate::proto::MarketDataTypeRequest {
+            market_data_type: Some(market_data_type as i32),
+        };
+        Ok(crate::messages::encode_protobuf_message(
+            crate::messages::OutgoingMessages::RequestMarketDataType as i32,
+            &request.encode_to_vec(),
+        ))
+    }
+
+    #[cfg(test)]
+    mod proto_tests {
+        use super::*;
+
+        #[test]
+        fn test_encode_request_market_data_type_proto() {
+            let bytes = encode_request_market_data_type_proto(MarketDataType::Delayed).unwrap();
+            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+            assert_eq!(msg_id, OutgoingMessages::RequestMarketDataType as i32 + 200);
+
+            use prost::Message;
+            let req = crate::proto::MarketDataTypeRequest::decode(&bytes[4..]).unwrap();
+            assert_eq!(req.market_data_type, Some(3));
+        }
+    }
 }

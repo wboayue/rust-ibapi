@@ -897,6 +897,20 @@ impl ResponseMessage {
         self.raw_bytes.as_deref()
     }
 
+    /// Dispatch decoding based on whether the message is protobuf or text.
+    pub fn decode_proto_or_text<T>(
+        &mut self,
+        proto_decoder: impl FnOnce(&[u8]) -> Result<T, crate::Error>,
+        text_decoder: impl FnOnce(&mut Self) -> Result<T, crate::Error>,
+    ) -> Result<T, crate::Error> {
+        if self.is_protobuf {
+            let bytes = self.raw_bytes().ok_or_else(|| crate::Error::Simple("missing protobuf bytes".into()))?;
+            proto_decoder(bytes)
+        } else {
+            text_decoder(self)
+        }
+    }
+
     /// Number of fields present in the message.
     pub fn len(&self) -> usize {
         self.fields.len()
