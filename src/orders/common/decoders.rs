@@ -1152,8 +1152,8 @@ pub(crate) fn decode_order_status_proto(bytes: &[u8]) -> Result<OrderStatus, Err
     Ok(OrderStatus {
         order_id: p.order_id.unwrap_or_default(),
         status: p.status.unwrap_or_default(),
-        filled: p.filled.as_deref().and_then(|s| s.parse().ok()).unwrap_or_default(),
-        remaining: p.remaining.as_deref().and_then(|s| s.parse().ok()).unwrap_or_default(),
+        filled: crate::proto::decoders::parse_f64(&p.filled),
+        remaining: crate::proto::decoders::parse_f64(&p.remaining),
         average_fill_price: p.avg_fill_price.unwrap_or_default(),
         perm_id: p.perm_id.unwrap_or_default(),
         parent_id: p.parent_id.unwrap_or_default(),
@@ -1198,8 +1198,8 @@ pub(crate) fn decode_commission_report_proto(bytes: &[u8]) -> Result<CommissionR
         execution_id: p.exec_id.unwrap_or_default(),
         commission: p.commission_and_fees.unwrap_or_default(),
         currency: p.currency.unwrap_or_default(),
-        realized_pnl: p.realized_pnl.filter(|&v| v != f64::MAX),
-        yields: p.bond_yield.filter(|&v| v != f64::MAX),
+        realized_pnl: crate::proto::decoders::optional_f64(p.realized_pnl),
+        yields: crate::proto::decoders::optional_f64(p.bond_yield),
         yield_redemption_date: p.yield_redemption_date.unwrap_or_default(),
     })
 }
