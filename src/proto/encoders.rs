@@ -131,12 +131,16 @@ fn encode_combo_leg(leg: &contracts::ComboLeg, per_leg_price: Option<f64>) -> pr
 // === Order ===
 
 pub fn encode_order(order: &Order) -> proto::Order {
-    let mut proto_order = proto::Order {
+    let proto_order = proto::Order {
         client_id: some_i32_ne(order.client_id, 0),
         perm_id: some_i64_ne(order.perm_id, 0),
         parent_id: some_i32_ne(order.parent_id, 0),
         action: some_str(&order.action.to_string()),
-        total_quantity: some_str(&order.total_quantity.to_string()),
+        total_quantity: if order.total_quantity == 0.0 {
+            None
+        } else {
+            Some(order.total_quantity.to_string())
+        },
         display_size: order.display_size,
         order_type: some_str(&order.order_type),
         lmt_price: order.limit_price,
@@ -265,7 +269,11 @@ pub fn encode_order(order: &Order) -> proto::Order {
         // fields not directly mapped from our Order struct
         order_id: None,
         auto_cancel_date: some_str(&order.auto_cancel_date),
-        filled_quantity: some_str(&order.filled_quantity.to_string()),
+        filled_quantity: if order.filled_quantity == 0.0 {
+            None
+        } else {
+            Some(order.filled_quantity.to_string())
+        },
         ref_futures_con_id: order.ref_futures_con_id,
         shareholder: some_str(&order.shareholder),
         route_marketable_to_bbo: if order.route_marketable_to_bbo { Some(1) } else { None },
@@ -277,15 +285,6 @@ pub fn encode_order(order: &Order) -> proto::Order {
         seek_price_improvement: None,
         what_if_type: None,
     };
-
-    // filled_quantity default 0.0 → None
-    if order.filled_quantity == 0.0 {
-        proto_order.filled_quantity = None;
-    }
-    // total_quantity default 0.0 → None
-    if order.total_quantity == 0.0 {
-        proto_order.total_quantity = None;
-    }
 
     proto_order
 }

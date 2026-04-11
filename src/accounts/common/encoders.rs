@@ -665,15 +665,30 @@ mod tests {
         #[test]
         fn test_encode_request_account_summary_proto() {
             let group = AccountGroup("All".to_string());
-            let bytes = encode_request_account_summary_proto(3000, &group, &["AccountType"]).unwrap();
+            let bytes = encode_request_account_summary_proto(3000, &group, &["AccountType", "NetLiquidation"]).unwrap();
             assert_proto_msg_id(&bytes, OutgoingMessages::RequestAccountSummary);
+
+            use prost::Message;
+            let req = crate::proto::AccountSummaryRequest::decode(&bytes[4..]).unwrap();
+            assert_eq!(req.req_id, Some(3000));
+            assert_eq!(req.group.as_deref(), Some("All"));
+            assert_eq!(req.tags.as_deref(), Some("AccountType,NetLiquidation"));
         }
 
         #[test]
         fn test_encode_request_pnl_proto() {
+            use crate::accounts::types::ModelCode;
+
             let account = AccountId("DU123".to_string());
-            let bytes = encode_request_pnl_proto(3000, &account, None).unwrap();
+            let model = ModelCode("MyModel".to_string());
+            let bytes = encode_request_pnl_proto(3000, &account, Some(&model)).unwrap();
             assert_proto_msg_id(&bytes, OutgoingMessages::RequestPnL);
+
+            use prost::Message;
+            let req = crate::proto::PnLRequest::decode(&bytes[4..]).unwrap();
+            assert_eq!(req.req_id, Some(3000));
+            assert_eq!(req.account.as_deref(), Some("DU123"));
+            assert_eq!(req.model_code.as_deref(), Some("MyModel"));
         }
 
         #[test]
@@ -682,6 +697,13 @@ mod tests {
             let cid = ContractId(1001);
             let bytes = encode_request_pnl_single_proto(3000, &account, cid, None).unwrap();
             assert_proto_msg_id(&bytes, OutgoingMessages::RequestPnLSingle);
+
+            use prost::Message;
+            let req = crate::proto::PnLSingleRequest::decode(&bytes[4..]).unwrap();
+            assert_eq!(req.req_id, Some(3000));
+            assert_eq!(req.account.as_deref(), Some("DU123"));
+            assert_eq!(req.con_id, Some(1001));
+            assert!(req.model_code.is_none());
         }
 
         #[test]
@@ -689,6 +711,11 @@ mod tests {
             let account = AccountId("DU123".to_string());
             let bytes = encode_request_account_updates_proto(true, &account).unwrap();
             assert_proto_msg_id(&bytes, OutgoingMessages::RequestAccountData);
+
+            use prost::Message;
+            let req = crate::proto::AccountDataRequest::decode(&bytes[4..]).unwrap();
+            assert_eq!(req.subscribe, Some(true));
+            assert_eq!(req.acct_code.as_deref(), Some("DU123"));
         }
     }
 }

@@ -664,6 +664,14 @@ mod tests {
             let contract = create_test_contract();
             let bytes = encode_request_market_data_proto(9000, &contract, &["100", "101"], false, false).unwrap();
             assert_proto_msg_id(&bytes, OutgoingMessages::RequestMarketData);
+
+            use prost::Message;
+            let req = crate::proto::MarketDataRequest::decode(&bytes[4..]).unwrap();
+            assert_eq!(req.req_id, Some(9000));
+            assert_eq!(req.generic_tick_list.as_deref(), Some("100,101"));
+            assert_eq!(req.contract.unwrap().symbol.as_deref(), Some("AAPL"));
+            assert!(req.snapshot.is_none());
+            assert!(req.regulatory_snapshot.is_none());
         }
 
         #[test]
@@ -677,6 +685,13 @@ mod tests {
             let contract = create_test_contract();
             let bytes = encode_tick_by_tick_proto(9000, &contract, "AllLast", 1, true).unwrap();
             assert_proto_msg_id(&bytes, OutgoingMessages::RequestTickByTickData);
+
+            use prost::Message;
+            let req = crate::proto::TickByTickRequest::decode(&bytes[4..]).unwrap();
+            assert_eq!(req.req_id, Some(9000));
+            assert_eq!(req.tick_type.as_deref(), Some("AllLast"));
+            assert_eq!(req.number_of_ticks, Some(1));
+            assert_eq!(req.ignore_size, Some(true));
         }
 
         #[test]

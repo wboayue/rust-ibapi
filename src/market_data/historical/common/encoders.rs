@@ -543,6 +543,13 @@ mod tests {
             let contract = Contract::stock("MSFT").build();
             let bytes = encode_request_head_timestamp_proto(9000, &contract, WhatToShow::Trades, false).unwrap();
             assert_proto_msg_id(&bytes, crate::messages::OutgoingMessages::RequestHeadTimestamp);
+
+            use prost::Message;
+            let req = crate::proto::HeadTimestampRequest::decode(&bytes[4..]).unwrap();
+            assert_eq!(req.req_id, Some(9000));
+            assert_eq!(req.what_to_show.as_deref(), Some("TRADES"));
+            assert_eq!(req.format_date, Some(2));
+            assert!(req.use_rth.is_none());
         }
 
         #[test]
@@ -550,6 +557,14 @@ mod tests {
             let contract = Contract::stock("MSFT").build();
             let bytes = encode_request_historical_data_proto(9000, &contract, None, 30.days(), BarSize::Day, None, false, true, &[]).unwrap();
             assert_proto_msg_id(&bytes, crate::messages::OutgoingMessages::RequestHistoricalData);
+
+            use prost::Message;
+            let req = crate::proto::HistoricalDataRequest::decode(&bytes[4..]).unwrap();
+            assert_eq!(req.req_id, Some(9000));
+            assert_eq!(req.contract.unwrap().symbol.as_deref(), Some("MSFT"));
+            assert_eq!(req.bar_size_setting.as_deref(), Some("1 day"));
+            assert!(req.end_date_time.is_none());
+            assert_eq!(req.keep_up_to_date, Some(true));
         }
 
         #[test]
