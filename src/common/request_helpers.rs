@@ -6,7 +6,7 @@ mod sync_helpers {
     use crate::client::blocking::{ClientRequestBuilders, SharesChannel, Subscription, SubscriptionBuilderExt};
     use crate::client::sync::Client;
     use crate::client::StreamDecoder;
-    use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
+    use crate::messages::{OutgoingMessages, ResponseMessage};
     use crate::protocol::{check_version, ProtocolFeature};
     use crate::Error;
 
@@ -14,7 +14,7 @@ mod sync_helpers {
     pub fn request_with_id<T>(
         client: &Client,
         feature: ProtocolFeature,
-        encoder: impl FnOnce(i32) -> Result<RequestMessage, Error>,
+        encoder: impl FnOnce(i32) -> Result<Vec<u8>, Error>,
     ) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T>,
@@ -30,7 +30,7 @@ mod sync_helpers {
         client: &Client,
         feature: ProtocolFeature,
         message_type: OutgoingMessages,
-        encoder: impl FnOnce() -> Result<RequestMessage, Error>,
+        encoder: impl FnOnce() -> Result<Vec<u8>, Error>,
     ) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T>,
@@ -45,7 +45,7 @@ mod sync_helpers {
     pub fn shared_request<T>(
         client: &Client,
         message_type: OutgoingMessages,
-        encoder: impl FnOnce() -> Result<RequestMessage, Error>,
+        encoder: impl FnOnce() -> Result<Vec<u8>, Error>,
     ) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T>,
@@ -59,7 +59,7 @@ mod sync_helpers {
         client: &Client,
         feature: ProtocolFeature,
         message_type: OutgoingMessages,
-        encoder: impl FnOnce() -> Result<RequestMessage, Error>,
+        encoder: impl FnOnce() -> Result<Vec<u8>, Error>,
         processor: impl FnOnce(&mut ResponseMessage) -> Result<R, Error>,
         default: impl FnOnce() -> R,
     ) -> Result<R, Error> {
@@ -78,7 +78,7 @@ mod sync_helpers {
     pub fn one_shot_with_retry<R>(
         client: &Client,
         message_type: OutgoingMessages,
-        encoder: impl Fn() -> Result<RequestMessage, Error>,
+        encoder: impl Fn() -> Result<Vec<u8>, Error>,
         processor: impl Fn(&mut ResponseMessage) -> Result<R, Error>,
         on_none: impl Fn() -> Result<R, Error>,
     ) -> Result<R, Error> {
@@ -97,7 +97,7 @@ mod sync_helpers {
     /// Helper for one-shot requests with request ID and retry logic
     pub fn one_shot_request_with_retry<R>(
         client: &Client,
-        encoder: impl Fn(i32) -> Result<RequestMessage, Error>,
+        encoder: impl Fn(i32) -> Result<Vec<u8>, Error>,
         processor: impl Fn(&mut ResponseMessage) -> Result<R, Error>,
         on_none: impl Fn() -> Result<R, Error>,
     ) -> Result<R, Error> {
@@ -119,7 +119,7 @@ mod sync_helpers {
 #[cfg(feature = "async")]
 mod async_helpers {
     use crate::client::{Client, ClientRequestBuilders, SubscriptionBuilderExt};
-    use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
+    use crate::messages::{OutgoingMessages, ResponseMessage};
     use crate::protocol::{check_version, ProtocolFeature};
     use crate::subscriptions::{StreamDecoder, Subscription};
     use crate::Error;
@@ -130,7 +130,7 @@ mod async_helpers {
     pub async fn request_with_id<T>(
         client: &Client,
         feature: ProtocolFeature,
-        encoder: impl FnOnce(i32) -> Result<RequestMessage, Error>,
+        encoder: impl FnOnce(i32) -> Result<Vec<u8>, Error>,
     ) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T> + Send + 'static,
@@ -146,7 +146,7 @@ mod async_helpers {
         client: &Client,
         feature: ProtocolFeature,
         message_type: OutgoingMessages,
-        encoder: impl FnOnce() -> Result<RequestMessage, Error>,
+        encoder: impl FnOnce() -> Result<Vec<u8>, Error>,
     ) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T> + Send + 'static,
@@ -160,7 +160,7 @@ mod async_helpers {
     pub async fn shared_request<T>(
         client: &Client,
         message_type: OutgoingMessages,
-        encoder: impl FnOnce() -> Result<RequestMessage, Error>,
+        encoder: impl FnOnce() -> Result<Vec<u8>, Error>,
     ) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T> + Send + 'static,
@@ -174,7 +174,7 @@ mod async_helpers {
         client: &Client,
         feature: ProtocolFeature,
         message_type: OutgoingMessages,
-        encoder: impl FnOnce() -> Result<RequestMessage, Error>,
+        encoder: impl FnOnce() -> Result<Vec<u8>, Error>,
         processor: impl FnOnce(&mut ResponseMessage) -> Result<R, Error>,
         default: impl FnOnce() -> R,
     ) -> Result<R, Error> {
@@ -193,7 +193,7 @@ mod async_helpers {
     pub async fn one_shot_with_retry<R>(
         client: &Client,
         message_type: OutgoingMessages,
-        encoder: impl Fn() -> Result<RequestMessage, Error>,
+        encoder: impl Fn() -> Result<Vec<u8>, Error>,
         processor: impl Fn(&mut ResponseMessage) -> Result<R, Error>,
         on_none: impl Fn() -> Result<R, Error>,
     ) -> Result<R, Error> {
@@ -213,7 +213,7 @@ mod async_helpers {
     /// Async helper for one-shot requests with request ID and retry logic
     pub async fn one_shot_request_with_retry<R>(
         client: &Client,
-        encoder: impl Fn(i32) -> Result<RequestMessage, Error>,
+        encoder: impl Fn(i32) -> Result<Vec<u8>, Error>,
         processor: impl Fn(&mut ResponseMessage) -> Result<R, Error>,
         on_none: impl Fn() -> Result<R, Error>,
     ) -> Result<R, Error> {

@@ -69,6 +69,8 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::test_utils::helpers::assert_proto_msg_id;
+    use crate::messages::OutgoingMessages;
     use crate::stubs::MessageBusStub;
     use std::sync::{Arc, RwLock};
 
@@ -88,11 +90,7 @@ mod tests {
         {
             let requests = message_bus.request_messages.read().unwrap();
             assert_eq!(requests.len(), 1);
-
-            let req = &requests[0];
-            assert_eq!(req[0], "68"); // SubscribeToGroupEvents
-            assert_eq!(req[1], "1"); // Version
-            assert_eq!(req[3], "1"); // Group ID
+            assert_proto_msg_id(&requests[0], OutgoingMessages::SubscribeToGroupEvents);
         }
 
         // Verify response
@@ -135,11 +133,8 @@ mod tests {
         let requests = message_bus.request_messages.read().unwrap();
         // First request is subscribe, second is update
         assert_eq!(requests.len(), 2);
-
-        let req = &requests[1];
-        assert_eq!(req[0], "69"); // UpdateDisplayGroup
-        assert_eq!(req[1], "1"); // Version
-        assert_eq!(req[3], "265598@SMART"); // Contract info
+        assert_proto_msg_id(&requests[0], OutgoingMessages::SubscribeToGroupEvents);
+        assert_proto_msg_id(&requests[1], OutgoingMessages::UpdateDisplayGroup);
     }
 
     #[tokio::test]

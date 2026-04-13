@@ -14,8 +14,7 @@ use super::common::{
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
-use crate::messages::{encode_raw_length, encode_request_binary, RequestMessage, ResponseMessage};
-use crate::server_versions;
+use crate::messages::{encode_raw_length, ResponseMessage};
 use crate::trace;
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::recorder::MessageRecorder;
@@ -144,26 +143,12 @@ impl AsyncConnection {
         Ok(())
     }
 
-    /// Write a message to the connection
-    pub(crate) async fn write_message(&self, message: &RequestMessage) -> Result<(), Error> {
-        self.recorder.record_request(message);
-        let encoded = message.encode();
-        debug!("-> {encoded:?}");
+    /// Write a protobuf message to the connection
+    pub(crate) async fn write_message(&self, data: &[u8]) -> Result<(), Error> {
+        self.recorder.record_request(data);
+        debug!("-> {:?}", data);
 
-        if log::log_enabled!(log::Level::Debug) {
-            trace::record_request(encoded.clone()).await;
-        }
-
-        let packet = if self.server_version() >= server_versions::PROTOBUF {
-            encode_request_binary(message)
-        } else {
-            crate::messages::encode_length(&encoded)
-        };
-
-        let mut writer = self.writer.lock().await;
-        writer.write_all(&packet).await?;
-        writer.flush().await?;
-        Ok(())
+        self.write_raw(data).await
     }
 
     /// Read a message from the connection
@@ -220,7 +205,18 @@ impl AsyncConnection {
             writer.write_all(&handshake).await?;
         }
 
-        let ack = self.read_message().await;
+        // Read handshake response as raw text, bypassing parse_raw_message
+        // which would misinterpret it as binary when server_version >= PROTOBUF (on reconnect).
+        let ack: Result<ResponseMessage, Error> = {
+            let mut reader = self.reader.lock().await;
+            let mut length_bytes = [0u8; 4];
+            reader.read_exact(&mut length_bytes).await?;
+            let message_length = u32::from_be_bytes(length_bytes) as usize;
+            let mut data = vec![0u8; message_length];
+            reader.read_exact(&mut data).await?;
+            let raw_string = String::from_utf8_lossy(&data).into_owned();
+            Ok(ResponseMessage::from(&raw_string))
+        };
 
         let mut connection_metadata = self.connection_metadata.lock().await;
 

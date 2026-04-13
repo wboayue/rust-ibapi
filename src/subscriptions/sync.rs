@@ -483,7 +483,7 @@ pub trait SharesChannel {}
 #[cfg(all(test, feature = "sync"))]
 mod tests {
     use super::*;
-    use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
+    use crate::messages::{encode_protobuf_message, OutgoingMessages, ResponseMessage};
     use crate::stubs::MessageBusStub;
     use std::sync::Arc;
 
@@ -495,10 +495,8 @@ mod tests {
             Err(Error::EndOfStream)
         }
 
-        fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
-            let mut msg = RequestMessage::new();
-            msg.push_field(&OutgoingMessages::CancelMarketData);
-            Ok(msg)
+        fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+            Ok(encode_protobuf_message(OutgoingMessages::CancelMarketData as i32, &[]))
         }
     }
 
@@ -533,7 +531,7 @@ mod tests {
         let message_bus = Arc::new(stub);
 
         let sub: Subscription<SkipThenSuccess> = {
-            let internal = message_bus.send_request(1, &RequestMessage::new()).unwrap();
+            let internal = message_bus.send_request(1, &[]).unwrap();
             Subscription::new(message_bus.clone(), internal, DecoderContext::default())
         };
 
@@ -551,7 +549,7 @@ mod tests {
         let message_bus = Arc::new(stub);
 
         let sub: Subscription<EndOfStreamItem> = {
-            let internal = message_bus.send_request(1, &RequestMessage::new()).unwrap();
+            let internal = message_bus.send_request(1, &[]).unwrap();
             Subscription::new(message_bus.clone(), internal, DecoderContext::default())
         };
 

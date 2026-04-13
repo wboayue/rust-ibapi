@@ -9,8 +9,7 @@ use super::common::{
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
-use crate::messages::{encode_raw_length, encode_request_binary, RequestMessage, ResponseMessage};
-use crate::server_versions;
+use crate::messages::{encode_raw_length, ResponseMessage};
 use crate::trace;
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::recorder::MessageRecorder;
@@ -122,23 +121,12 @@ impl<S: Stream> Connection<S> {
         Ok(())
     }
 
-    /// Write a message to the connection
-    pub(crate) fn write_message(&self, message: &RequestMessage) -> Result<(), Error> {
-        self.recorder.record_request(message);
-        let encoded = message.encode();
-        debug!("-> {encoded:?}");
+    /// Write a protobuf message to the connection
+    pub(crate) fn write_message(&self, data: &[u8]) -> Result<(), Error> {
+        self.recorder.record_request(data);
+        debug!("-> {:?}", data);
 
-        if log::log_enabled!(log::Level::Debug) {
-            trace::blocking::record_request(encoded.clone());
-        }
-
-        let packet = if self.server_version() >= server_versions::PROTOBUF {
-            encode_request_binary(message)
-        } else {
-            crate::messages::encode_length(&encoded)
-        };
-        self.socket.write_all(&packet)?;
-        Ok(())
+        self.write_raw(data)
     }
 
     /// Read a message from the connection
@@ -171,7 +159,15 @@ impl<S: Stream> Connection<S> {
 
         self.socket.write_all(&handshake)?;
 
-        let ack = self.read_message();
+        // Read handshake response as raw text, bypassing parse_raw_message
+        // which would misinterpret it as binary when server_version >= PROTOBUF (on reconnect).
+        let ack: Result<ResponseMessage, Error> = match self.socket.read_message() {
+            Ok(data) => {
+                let raw_string = String::from_utf8_lossy(&data).into_owned();
+                Ok(ResponseMessage::from(&raw_string))
+            }
+            Err(e) => Err(e),
+        };
 
         let mut connection_metadata = self.connection_metadata.lock()?;
 

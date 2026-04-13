@@ -3,7 +3,7 @@
 use time_tz::Tz;
 
 use crate::errors::Error;
-use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
 
 /// Checks if an error indicates the end of a stream
 #[allow(dead_code)]
@@ -282,7 +282,7 @@ pub(crate) trait StreamDecoder<T> {
     fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<T, Error>;
 
     /// Generate a cancellation message for this stream
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         Err(Error::NotImplemented)
     }
 

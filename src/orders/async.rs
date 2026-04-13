@@ -26,7 +26,7 @@ impl Client {
         verify::verify_order(self, order, order_id)?;
         verify::verify_order_contract(self, contract, order_id)?;
 
-        let request = encoders::encode_place_order(self.server_version(), order_id, contract, order)?;
+        let request = encoders::encode_place_order(order_id, contract, order)?;
         self.send_message(request).await?;
 
         Ok(())
@@ -37,7 +37,7 @@ impl Client {
         verify::verify_order(self, order, order_id)?;
         verify::verify_order_contract(self, contract, order_id)?;
 
-        let request = encoders::encode_place_order(self.server_version(), order_id, contract, order)?;
+        let request = encoders::encode_place_order(order_id, contract, order)?;
         let internal_subscription = self.send_order(order_id, request).await?;
 
         Ok(Subscription::new_from_internal_simple::<PlaceOrder>(
@@ -53,7 +53,7 @@ impl Client {
             check_version(self.server_version(), Features::MANUAL_ORDER_TIME)?;
         }
 
-        let request = encoders::encode_cancel_order(self.server_version(), order_id, manual_order_cancel_time)?;
+        let request = encoders::encode_cancel_order(order_id, manual_order_cancel_time)?;
         let internal_subscription = self.send_order(order_id, request).await?;
 
         Ok(Subscription::new_from_internal_simple::<CancelOrder>(
@@ -67,7 +67,7 @@ impl Client {
     pub async fn global_cancel(&self) -> Result<(), Error> {
         check_version(self.server_version(), Features::REQ_GLOBAL_CANCEL)?;
 
-        let message = encoders::encode_global_cancel(self.server_version())?;
+        let message = encoders::encode_global_cancel()?;
         self.send_message(message).await?;
 
         Ok(())
@@ -146,7 +146,7 @@ impl Client {
     /// Requests current day's executions matching the filter.
     pub async fn executions(&self, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
         let request_id = self.next_request_id();
-        let request = encoders::encode_executions(self.server_version(), request_id, &filter)?;
+        let request = encoders::encode_executions(request_id, &filter)?;
         let internal_subscription = self.send_request(request_id, request).await?;
         Ok(Subscription::new_from_internal_simple::<Executions>(
             internal_subscription,
@@ -166,16 +166,7 @@ impl Client {
         manual_order_time: Option<OffsetDateTime>,
     ) -> Result<Subscription<ExerciseOptions>, Error> {
         let order_id = self.next_order_id();
-        let request = encoders::encode_exercise_options(
-            self.server_version(),
-            order_id,
-            contract,
-            exercise_action,
-            exercise_quantity,
-            account,
-            ovrd,
-            manual_order_time,
-        )?;
+        let request = encoders::encode_exercise_options(order_id, contract, exercise_action, exercise_quantity, account, ovrd, manual_order_time)?;
         let internal_subscription = self.send_order(order_id, request).await?;
         Ok(Subscription::new_from_internal_simple::<ExerciseOptions>(
             internal_subscription,
@@ -188,10 +179,11 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::contracts::{Contract, SecurityType};
     use crate::contracts::{Currency, Exchange, Symbol};
+    use crate::messages::OutgoingMessages;
     use crate::stubs::MessageBusStub;
-    // use crate::testdata::responses;  // No order responses defined yet
     use crate::{server_versions, Client};
     use std::sync::{Arc, RwLock};
     use tokio::time::Duration;
@@ -332,7 +324,7 @@ mod tests {
         // Check request message
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Expected one request message");
-        assert_eq!(request_messages[0].encode_simple(), "5|1|");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestOpenOrders);
     }
 
     #[tokio::test]
@@ -366,7 +358,7 @@ mod tests {
         // Check request message
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Expected one request message");
-        assert_eq!(request_messages[0].encode_simple(), "99|1|");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestCompletedOrders);
     }
 
     #[tokio::test]
@@ -504,7 +496,7 @@ mod tests {
         // Check request message
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Expected one request message");
-        assert_eq!(request_messages[0].encode_simple(), "8|1|0|");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestIds);
     }
 
     #[tokio::test]
@@ -589,6 +581,6 @@ mod tests {
         // Check request message
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Expected one request message");
-        assert_eq!(request_messages[0].encode_simple(), "58|1|");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestGlobalCancel);
     }
 }

@@ -126,8 +126,14 @@ pub mod mocks {
         }
 
         pub fn write_message(&mut self, stream: &mut TcpStream, message: String) -> Result<(), std::io::Error> {
-            let packet = encode_length(&message);
-            stream.write_all(&packet)?;
+            if self.server_version >= crate::server_versions::PROTOBUF {
+                // Binary format: extract msg_id from first field, encode as binary msg_id + remaining text
+                let packet = crate::messages::encode_request_binary_from_text(&message);
+                stream.write_all(&packet)?;
+            } else {
+                let packet = encode_length(&message);
+                stream.write_all(&packet)?;
+            }
             Ok(())
         }
 
@@ -142,13 +148,24 @@ pub mod mocks {
             // Set a read timeout so we don't wait forever for requests
             stream.set_read_timeout(Some(std::time::Duration::from_millis(500)))?;
 
-            while let Ok(request) = self.read_message(&mut stream) {
-                self.add_request(request.clone());
+            while let Ok(raw) = self.read_raw_message(&mut stream) {
+                // Extract msg_id from binary request
+                let request_msg_id = if raw.len() >= 4 {
+                    let id = i32::from_be_bytes([raw[0], raw[1], raw[2], raw[3]]);
+                    if id > 200 {
+                        id - 200
+                    } else {
+                        id
+                    }
+                } else {
+                    0
+                };
+                self.add_request(request_msg_id.to_string());
 
                 // Check if we have a matching interaction
                 if self.current_interaction < self.interactions.len() {
                     let interaction = self.interactions[self.current_interaction].clone();
-                    if request.starts_with(&format!("{}\0", interaction.request)) {
+                    if request_msg_id == interaction.request as i32 {
                         println!("MockGateway: Sending {} responses", interaction.responses.len());
                         for (i, response) in interaction.responses.iter().enumerate() {
                             let msg_type = response.split('\0').next().unwrap_or("unknown");
@@ -198,21 +215,11 @@ pub mod mocks {
             self.write_message(stream, self.handshake_response())?;
 
             // Start API
-            if self.server_version >= crate::server_versions::PROTOBUF {
-                // Protobuf binary format
-                let raw = self.read_raw_message(stream)?;
-                assert!(raw.len() >= 4, "start_api message too short");
-                let msg_id = i32::from_be_bytes([raw[0], raw[1], raw[2], raw[3]]);
-                assert_eq!(msg_id, 271, "expected protobuf StartApi (71+200)");
-            } else {
-                // Legacy text format
-                let message = self.read_message(stream)?;
-                if self.server_version > 72 {
-                    assert_eq!(message, "71\02\0100\0\0");
-                } else {
-                    assert_eq!(message, "71\02\0100\0");
-                }
-            }
+            // Protobuf binary format
+            let raw = self.read_raw_message(stream)?;
+            assert!(raw.len() >= 4, "start_api message too short");
+            let msg_id = i32::from_be_bytes([raw[0], raw[1], raw[2], raw[3]]);
+            assert_eq!(msg_id, 271, "expected protobuf StartApi (71+200)");
 
             // next valid order id
             self.write_message(stream, "9\01\090\0".to_string())?;
@@ -505,7 +512,7 @@ pub mod tests {
         let mut gateway = MockGateway::new(server_versions::PRICE_BASED_VOLATILITY);
 
         gateway.add_interaction(
-            OutgoingMessages::ReqCalcImpliedVolat,
+            OutgoingMessages::ReqCalcOptionPrice,
             vec![
                 // TickOptionComputation: type(21), request_id, tick_type, tick_attribute,
                 // implied_volatility, delta, option_price, pv_dividend, gamma, vega, theta, underlying_price

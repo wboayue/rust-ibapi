@@ -27,7 +27,7 @@ pub(crate) use encode_empty_proto;
 
 // === Helper: set Some only for non-empty strings ===
 
-fn some_str(s: &str) -> Option<String> {
+pub(crate) fn some_str(s: &str) -> Option<String> {
     if s.is_empty() {
         None
     } else {
@@ -51,7 +51,7 @@ fn some_f64_ne(v: f64, default: f64) -> Option<f64> {
     }
 }
 
-fn some_bool(v: bool) -> Option<bool> {
+pub(crate) fn some_bool(v: bool) -> Option<bool> {
     if v {
         Some(true)
     } else {

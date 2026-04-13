@@ -4,7 +4,7 @@
 //! between sync and async versions, avoiding code duplication.
 
 use crate::accounts::*;
-use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 
@@ -25,7 +25,7 @@ impl StreamDecoder<AccountSummaryResult> for AccountSummaryResult {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = error_helpers::require_request_id(request_id)?;
         encoders::encode_cancel_account_summary(request_id)
     }
@@ -38,7 +38,7 @@ impl StreamDecoder<PnL> for PnL {
         decoders::decode_pnl(context.server_version, message)
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = error_helpers::require_request_id(request_id)?;
         encoders::encode_cancel_pnl(request_id)
     }
@@ -51,7 +51,7 @@ impl StreamDecoder<PnLSingle> for PnLSingle {
         decoders::decode_pnl_single(context.server_version, message)
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = error_helpers::require_request_id(request_id)?;
         encoders::encode_cancel_pnl_single(request_id)
     }
@@ -68,7 +68,7 @@ impl StreamDecoder<PositionUpdate> for PositionUpdate {
         }
     }
 
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         encoders::encode_cancel_positions()
     }
 }
@@ -84,7 +84,7 @@ impl StreamDecoder<PositionUpdateMulti> for PositionUpdateMulti {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = error_helpers::require_request_id(request_id)?;
         encoders::encode_cancel_positions_multi(request_id)
     }
@@ -111,8 +111,8 @@ impl StreamDecoder<AccountUpdate> for AccountUpdate {
         }
     }
 
-    fn cancel_message(server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
-        encoders::encode_cancel_account_updates(server_version)
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+        encoders::encode_cancel_account_updates()
     }
 }
 
@@ -127,9 +127,9 @@ impl StreamDecoder<AccountUpdateMulti> for AccountUpdateMulti {
         }
     }
 
-    fn cancel_message(server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "encode cancel account updates multi")?;
-        encoders::encode_cancel_account_updates_multi(server_version, request_id)
+        encoders::encode_cancel_account_updates_multi(request_id)
     }
 }
 
@@ -190,11 +190,8 @@ mod tests {
 
         #[test]
         fn test_cancel_message() {
-            let request = AccountSummaryResult::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
-
-            assert_eq!(request[0], OutgoingMessages::CancelAccountSummary.to_string());
-            assert_eq!(request[1], "1"); // version
-            assert_eq!(request[2], TEST_REQUEST_ID.to_string());
+            let bytes = AccountSummaryResult::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
+            assert_proto_msg_id(&bytes, OutgoingMessages::CancelAccountSummary);
         }
 
         #[test]
@@ -231,10 +228,8 @@ mod tests {
 
         #[test]
         fn test_cancel_message() {
-            let request = PnL::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
-
-            assert_eq!(request[0], OutgoingMessages::CancelPnL.to_string());
-            assert_eq!(request[1], TEST_REQUEST_ID.to_string());
+            let bytes = PnL::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
+            assert_proto_msg_id(&bytes, OutgoingMessages::CancelPnL);
         }
 
         #[test]
@@ -269,10 +264,8 @@ mod tests {
 
         #[test]
         fn test_cancel_message() {
-            let request = PnLSingle::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
-
-            assert_eq!(request[0], OutgoingMessages::CancelPnLSingle.to_string());
-            assert_eq!(request[1], TEST_REQUEST_ID.to_string());
+            let bytes = PnLSingle::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
+            assert_proto_msg_id(&bytes, OutgoingMessages::CancelPnLSingle);
         }
 
         #[test]
@@ -314,10 +307,8 @@ mod tests {
 
         #[test]
         fn test_cancel_message() {
-            let request = PositionUpdate::cancel_message(TEST_SERVER_VERSION, None, None).unwrap();
-
-            assert_eq!(request[0], OutgoingMessages::CancelPositions.to_string());
-            assert_eq!(request[1], "1");
+            let bytes = PositionUpdate::cancel_message(TEST_SERVER_VERSION, None, None).unwrap();
+            assert_proto_msg_id(&bytes, OutgoingMessages::CancelPositions);
         }
 
         #[test]
@@ -364,11 +355,8 @@ mod tests {
 
         #[test]
         fn test_cancel_message() {
-            let request = PositionUpdateMulti::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
-
-            assert_eq!(request[0], OutgoingMessages::CancelPositionsMulti.to_string());
-            assert_eq!(request[1], "1"); // version
-            assert_eq!(request[2], TEST_REQUEST_ID.to_string());
+            let bytes = PositionUpdateMulti::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
+            assert_proto_msg_id(&bytes, OutgoingMessages::CancelPositionsMulti);
         }
 
         #[test]
@@ -456,9 +444,8 @@ mod tests {
 
         #[test]
         fn test_cancel_message() {
-            let request = AccountUpdate::cancel_message(TEST_SERVER_VERSION, None, None).unwrap();
-
-            assert_eq!(request[0], OutgoingMessages::RequestAccountData.to_string());
+            let bytes = AccountUpdate::cancel_message(TEST_SERVER_VERSION, None, None).unwrap();
+            assert_proto_msg_id(&bytes, OutgoingMessages::RequestAccountData);
         }
 
         #[test]
@@ -509,11 +496,8 @@ mod tests {
 
         #[test]
         fn test_cancel_message() {
-            let request = AccountUpdateMulti::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
-
-            assert_eq!(request[0], OutgoingMessages::CancelAccountUpdatesMulti.to_string());
-            assert_eq!(request[1], "1"); // version
-            assert_eq!(request[2], TEST_REQUEST_ID.to_string());
+            let bytes = AccountUpdateMulti::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), None).unwrap();
+            assert_proto_msg_id(&bytes, OutgoingMessages::CancelAccountUpdatesMulti);
         }
 
         #[test]
@@ -567,8 +551,7 @@ mod tests {
             let result2 = AccountSummaryResult::cancel_message(TEST_SERVER_VERSION, Some(TEST_REQUEST_ID), Some(&context)).unwrap();
 
             // Both should produce identical messages
-            assert_eq!(result1[0], result2[0]);
-            assert_eq!(result1[1], result2[1]);
+            assert_eq!(result1, result2);
         }
     }
 

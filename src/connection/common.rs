@@ -10,7 +10,7 @@ use time_tz::{OffsetResult, PrimitiveDateTimeExt, Tz};
 
 use crate::common::timezone::find_timezone;
 use crate::errors::Error;
-use crate::messages::{encode_length, encode_protobuf_message, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage, PROTOBUF_MSG_ID};
+use crate::messages::{encode_length, encode_protobuf_message, IncomingMessages, OutgoingMessages, ResponseMessage, PROTOBUF_MSG_ID};
 use crate::server_versions;
 
 /// Callback for handling unsolicited messages during connection setup.
@@ -159,27 +159,15 @@ impl ConnectionProtocol for ConnectionHandler {
         })
     }
 
-    fn format_start_api(&self, client_id: i32, server_version: i32) -> Vec<u8> {
-        if server_version >= server_versions::PROTOBUF {
-            use prost::Message;
+    fn format_start_api(&self, client_id: i32, _server_version: i32) -> Vec<u8> {
+        use prost::Message;
 
-            let request = crate::proto::StartApiRequest {
-                client_id: Some(client_id),
-                optional_capabilities: None,
-            };
+        let request = crate::proto::StartApiRequest {
+            client_id: Some(client_id),
+            optional_capabilities: None,
+        };
 
-            encode_protobuf_message(OutgoingMessages::StartApi as i32, &request.encode_to_vec())
-        } else {
-            // Legacy text format for older servers
-            let mut message = RequestMessage::default();
-            message.push_field(&OutgoingMessages::StartApi);
-            message.push_field(&2i32); // VERSION
-            message.push_field(&client_id);
-            if server_version > server_versions::OPTIONAL_CAPABILITIES {
-                message.push_field(&"");
-            }
-            message.encode().as_bytes().to_vec()
-        }
+        encode_protobuf_message(OutgoingMessages::StartApi as i32, &request.encode_to_vec())
     }
 
     fn parse_account_info(
@@ -552,13 +540,18 @@ mod tests {
     }
 
     #[test]
-    fn test_connection_handler_start_api_legacy() {
+    fn test_connection_handler_start_api_protobuf() {
         let handler = ConnectionHandler::default();
-        let data = handler.format_start_api(123, 150); // server < PROTOBUF
+        let data = handler.format_start_api(123, server_versions::PROTOBUF);
 
-        let text = String::from_utf8(data).unwrap();
-        assert!(text.contains("71")); // StartApi message type
-        assert!(text.contains("123")); // client_id
+        // First 4 bytes: msg_id (71 + 200 = 271)
+        let msg_id = i32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+        assert_eq!(msg_id, 271);
+
+        // Decode protobuf payload
+        use prost::Message;
+        let req = crate::proto::StartApiRequest::decode(&data[4..]).unwrap();
+        assert_eq!(req.client_id, Some(123));
     }
 
     #[test]

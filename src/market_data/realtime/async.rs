@@ -17,30 +17,20 @@ impl Client {
         self.check_server_version(server_versions::REQ_MARKET_DATA_TYPE, "It does not support market data type requests.")?;
 
         let message = crate::market_data::encoders::encode_request_market_data_type(market_data_type)?;
-        self.send_message(message).await?;
-
-        Ok(())
+        self.send_message(message).await
     }
 
     /// Requests realtime bars.
     pub async fn realtime_bars(
         &self,
         contract: &Contract,
-        bar_size: &BarSize,
+        _bar_size: &BarSize,
         what_to_show: &WhatToShow,
         trading_hours: TradingHours,
         options: Vec<TagValue>,
     ) -> Result<Subscription<Bar>, Error> {
         let builder = self.request();
-        let request = encoders::encode_request_realtime_bars(
-            self.server_version(),
-            builder.request_id(),
-            contract,
-            bar_size,
-            what_to_show,
-            trading_hours.use_rth(),
-            options,
-        )?;
+        let request = encoders::encode_request_realtime_bars(builder.request_id(), contract, what_to_show, trading_hours.use_rth(), &options)?;
 
         builder.send::<Bar>(request).await
     }
@@ -49,10 +39,9 @@ impl Client {
     pub async fn tick_by_tick_all_last(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<Trade>, Error> {
         validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
 
-        let server_version = self.server_version();
         let builder = self.request();
 
-        let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "AllLast", number_of_ticks, ignore_size)?;
+        let request = encoders::encode_tick_by_tick(builder.request_id(), contract, "AllLast", number_of_ticks, ignore_size)?;
 
         builder.send::<Trade>(request).await
     }
@@ -61,10 +50,9 @@ impl Client {
     pub async fn tick_by_tick_last(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<Trade>, Error> {
         validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
 
-        let server_version = self.server_version();
         let builder = self.request();
 
-        let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "Last", number_of_ticks, ignore_size)?;
+        let request = encoders::encode_tick_by_tick(builder.request_id(), contract, "Last", number_of_ticks, ignore_size)?;
 
         builder.send::<Trade>(request).await
     }
@@ -73,10 +61,9 @@ impl Client {
     pub async fn tick_by_tick_bid_ask(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<BidAsk>, Error> {
         validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
 
-        let server_version = self.server_version();
         let builder = self.request();
 
-        let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "BidAsk", number_of_ticks, ignore_size)?;
+        let request = encoders::encode_tick_by_tick(builder.request_id(), contract, "BidAsk", number_of_ticks, ignore_size)?;
 
         builder.send::<BidAsk>(request).await
     }
@@ -85,10 +72,9 @@ impl Client {
     pub async fn tick_by_tick_midpoint(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<MidPoint>, Error> {
         validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
 
-        let server_version = self.server_version();
         let builder = self.request();
 
-        let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "MidPoint", number_of_ticks, ignore_size)?;
+        let request = encoders::encode_tick_by_tick(builder.request_id(), contract, "MidPoint", number_of_ticks, ignore_size)?;
 
         builder.send::<MidPoint>(request).await
     }
@@ -103,7 +89,7 @@ impl Client {
         }
 
         let builder = self.request();
-        let request = encoders::encode_request_market_depth(self.server_version(), builder.request_id(), contract, number_of_rows, is_smart_depth)?;
+        let request = encoders::encode_request_market_depth(builder.request_id(), contract, number_of_rows, is_smart_depth)?;
 
         builder
             .send_with_context::<MarketDepths>(request, self.decoder_context().with_smart_depth(is_smart_depth))
@@ -139,14 +125,7 @@ impl Client {
         regulatory_snapshot: bool,
     ) -> Result<Subscription<TickTypes>, Error> {
         let builder = self.request();
-        let request = encoders::encode_request_market_data(
-            self.server_version(),
-            builder.request_id(),
-            contract,
-            generic_ticks,
-            snapshot,
-            regulatory_snapshot,
-        )?;
+        let request = encoders::encode_request_market_data(builder.request_id(), contract, generic_ticks, snapshot, regulatory_snapshot)?;
 
         builder.send::<TickTypes>(request).await
     }
@@ -166,12 +145,12 @@ pub(super) fn validate_tick_by_tick_request(client: &Client, _contract: &Contrac
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::contracts::tick_types::TickType;
     use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, SecurityType, Symbol};
     use crate::messages::OutgoingMessages;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
-    use crate::ToField;
     use std::sync::Arc;
     use std::sync::RwLock;
     use time::OffsetDateTime;
@@ -267,11 +246,7 @@ mod tests {
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(request.fields[0], OutgoingMessages::RequestRealTimeBars.to_field(), "Wrong message type");
-        assert_eq!(request.fields[1], "8", "Wrong version");
-        assert_eq!(request.fields[16], what_to_show.to_field(), "Wrong what to show value");
-        assert_eq!(request.fields[17], trading_hours.use_rth().to_field(), "Wrong use RTH flag");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestRealTimeBars);
     }
 
     #[tokio::test]
@@ -328,13 +303,7 @@ mod tests {
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(
-            request.fields[0],
-            OutgoingMessages::RequestTickByTickData.to_field(),
-            "Wrong message type"
-        );
-        assert_eq!(request.fields[14], "AllLast", "Wrong tick type");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestTickByTickData);
     }
 
     #[tokio::test]
@@ -376,10 +345,8 @@ mod tests {
         assert_eq!(trade.size, 7.0, "Wrong size");
         assert_eq!(trade.exchange, "NASDAQ", "Wrong exchange");
 
-        // Verify request message uses "Last" instead of "AllLast"
         let request_messages = message_bus.request_messages.read().unwrap();
-        let request = &request_messages[0];
-        assert_eq!(request.fields[14], "Last", "Wrong tick type");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestTickByTickData);
     }
 
     #[tokio::test]
@@ -422,10 +389,8 @@ mod tests {
         assert_eq!(tick.bid_size, 9.0, "Wrong bid size");
         assert_eq!(tick.ask_size, 11.0, "Wrong ask size");
 
-        // Verify request message
         let request_messages = message_bus.request_messages.read().unwrap();
-        let request = &request_messages[0];
-        assert_eq!(request.fields[14], "BidAsk", "Wrong tick type");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestTickByTickData);
     }
 
     #[tokio::test]
@@ -481,17 +446,9 @@ mod tests {
             "Wrong timestamp for second update"
         );
 
-        // Verify request message
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-        let request = &request_messages[0];
-        assert_eq!(
-            request.fields[0],
-            OutgoingMessages::RequestTickByTickData.to_field(),
-            "Wrong message type"
-        );
-        assert_eq!(request.fields[14], "MidPoint", "Wrong tick type");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestTickByTickData);
     }
 
     #[tokio::test]
@@ -555,11 +512,7 @@ mod tests {
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(request.fields[0], OutgoingMessages::RequestMarketDepth.to_field(), "Wrong message type");
-        assert_eq!(request.fields[1], "5", "Wrong version");
-        assert_eq!(request.fields[14], number_of_rows.to_field(), "Wrong number of rows");
-        assert_eq!(request.fields[15], is_smart_depth.to_field(), "Wrong smart depth flag");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketDepth);
     }
 
     #[tokio::test]
@@ -596,12 +549,7 @@ mod tests {
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(
-            request.fields[0],
-            OutgoingMessages::RequestMktDepthExchanges.to_field(),
-            "Wrong message type"
-        );
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMktDepthExchanges);
     }
 
     #[tokio::test]
@@ -705,8 +653,7 @@ mod tests {
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(request.fields[0], OutgoingMessages::RequestMarketData.to_field(), "Wrong message type");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
     }
 
     #[tokio::test]
@@ -737,8 +684,7 @@ mod tests {
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(request.fields[0], OutgoingMessages::RequestMarketData.to_field(), "Wrong message type");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
     }
 
     #[tokio::test]
@@ -771,9 +717,7 @@ mod tests {
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(request.fields[0], OutgoingMessages::RequestMarketData.to_field(), "Wrong message type");
-        assert_eq!(request.fields[17], regulatory_snapshot.to_field(), "Wrong regulatory snapshot flag");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
     }
 
     #[tokio::test]

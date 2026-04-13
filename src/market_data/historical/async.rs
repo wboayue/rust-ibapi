@@ -13,7 +13,7 @@ use crate::protocol::{check_version, Features};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 use crate::{Client, Error, MAX_RETRIES};
 
-use super::common::{decoders, encoders};
+use super::common::{self, decoders, encoders};
 use super::{
     BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, Schedule, TickBidAsk, TickDecoder, TickLast, TickMidpoint, WhatToShow,
 };
@@ -53,24 +53,11 @@ impl Client {
         what_to_show: Option<WhatToShow>,
         trading_hours: TradingHours,
     ) -> Result<HistoricalData, Error> {
-        if !contract.trading_class.is_empty() || contract.contract_id > 0 {
-            check_version(self.server_version(), Features::TRADING_CLASS)?;
-        }
-
-        if what_to_show == Some(WhatToShow::Schedule) {
-            check_version(self.server_version(), Features::HISTORICAL_SCHEDULE)?;
-        }
-
-        if end_date.is_some() && what_to_show == Some(WhatToShow::AdjustedLast) {
-            return Err(Error::InvalidArgument(
-                "end_date must be None when requesting WhatToShow::AdjustedLast.".into(),
-            ));
-        }
+        common::validate_historical_data(self.server_version(), contract, end_date, what_to_show)?;
 
         for _ in 0..MAX_RETRIES {
             let builder = self.request();
             let request = encoders::encode_request_historical_data(
-                self.server_version(),
                 builder.request_id(),
                 contract,
                 end_date,
@@ -79,7 +66,7 @@ impl Client {
                 what_to_show,
                 trading_hours.use_rth(),
                 false,
-                Vec::<crate::contracts::TagValue>::default(),
+                &Vec::<crate::contracts::TagValue>::default(),
             )?;
 
             let mut subscription = builder.send_raw(request).await?;
@@ -119,7 +106,6 @@ impl Client {
         loop {
             let builder = self.request();
             let request = encoders::encode_request_historical_data(
-                self.server_version(),
                 builder.request_id(),
                 contract,
                 end_date,
@@ -128,7 +114,7 @@ impl Client {
                 Some(WhatToShow::Schedule),
                 true,
                 false,
-                Vec::<crate::contracts::TagValue>::default(),
+                &Vec::<crate::contracts::TagValue>::default(),
             )?;
 
             let mut subscription = builder.send_raw(request).await?;
@@ -269,7 +255,6 @@ impl Client {
         // Note: end_date must be None when keepUpToDate=true (IBKR requirement)
         let builder = self.request();
         let request = encoders::encode_request_historical_data(
-            self.server_version(),
             builder.request_id(),
             contract,
             None, // end_date must be None for keepUpToDate
@@ -278,7 +263,7 @@ impl Client {
             what_to_show,
             trading_hours.use_rth(),
             keep_up_to_date,
-            Vec::<crate::contracts::TagValue>::default(),
+            &Vec::<crate::contracts::TagValue>::default(),
         )?;
 
         let request_id = builder.request_id();
@@ -519,11 +504,11 @@ impl Drop for HistoricalDataStreamingSubscription {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
     use crate::messages::OutgoingMessages;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
-    use crate::ToField;
     use std::sync::Arc;
     use std::sync::RwLock;
     use time::macros::datetime;
@@ -557,28 +542,7 @@ mod tests {
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(request.fields[0], OutgoingMessages::RequestHeadTimestamp.to_field(), "message.type");
-        assert_eq!(request.fields[1], "9000", "message.request_id");
-        assert_eq!(request.fields[2], contract.contract_id.to_field(), "message.contract_id");
-        assert_eq!(request.fields[3], contract.symbol.to_field(), "message.symbol");
-        assert_eq!(request.fields[4], contract.security_type.to_field(), "message.security_type");
-        assert_eq!(
-            request.fields[5], contract.last_trade_date_or_contract_month,
-            "message.last_trade_date_or_contract_month"
-        );
-        assert_eq!(request.fields[6], contract.strike.to_field(), "message.strike");
-        assert_eq!(request.fields[7], contract.right, "message.right");
-        assert_eq!(request.fields[8], contract.multiplier, "message.multiplier");
-        assert_eq!(request.fields[9], contract.exchange.to_field(), "message.exchange");
-        assert_eq!(request.fields[10], contract.primary_exchange.to_field(), "message.primary_exchange");
-        assert_eq!(request.fields[11], contract.currency.to_field(), "message.currency");
-        assert_eq!(request.fields[12], contract.local_symbol, "message.local_symbol");
-        assert_eq!(request.fields[13], contract.trading_class, "message.trading_class");
-        assert_eq!(request.fields[14], contract.include_expired.to_field(), "message.include_expired");
-        assert_eq!(request.fields[15], trading_hours.use_rth().to_field(), "message.use_rth");
-        assert_eq!(request.fields[16], what_to_show.to_field(), "message.what_to_show");
-        assert_eq!(request.fields[17], "2", "message.date_format");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHeadTimestamp);
     }
 
     #[tokio::test]
@@ -622,31 +586,7 @@ mod tests {
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(
-            request.fields[0],
-            OutgoingMessages::RequestHistogramData.to_field(),
-            "message.message_type"
-        );
-        assert_eq!(request.fields[1], "9000", "message.request_id");
-        assert_eq!(request.fields[2], contract.contract_id.to_field(), "message.contract_id");
-        assert_eq!(request.fields[3], contract.symbol.to_field(), "message.symbol");
-        assert_eq!(request.fields[4], contract.security_type.to_field(), "message.security_type");
-        assert_eq!(
-            request.fields[5], contract.last_trade_date_or_contract_month,
-            "message.last_trade_date_or_contract_month"
-        );
-        assert_eq!(request.fields[6], contract.strike.to_field(), "message.strike");
-        assert_eq!(request.fields[7], contract.right, "message.right");
-        assert_eq!(request.fields[8], contract.multiplier, "message.multiplier");
-        assert_eq!(request.fields[9], contract.exchange.to_field(), "message.exchange");
-        assert_eq!(request.fields[10], contract.primary_exchange.to_field(), "message.primary_exchange");
-        assert_eq!(request.fields[11], contract.currency.to_field(), "message.currency");
-        assert_eq!(request.fields[12], contract.local_symbol, "message.local_symbol");
-        assert_eq!(request.fields[13], contract.trading_class, "message.trading_class");
-        assert_eq!(request.fields[14], contract.include_expired.to_field(), "message.include_expired");
-        assert_eq!(request.fields[15], trading_hours.use_rth().to_field(), "message.use_rth");
-        assert_eq!(request.fields[16], period.to_field(), "message.duration");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistogramData);
     }
 
     #[tokio::test]
@@ -713,12 +653,7 @@ mod tests {
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(
-            request.fields[0],
-            OutgoingMessages::RequestHistoricalData.to_field(),
-            "Wrong message type"
-        );
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalData);
     }
 
     #[tokio::test]
@@ -852,10 +787,7 @@ mod tests {
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(request.fields[0], OutgoingMessages::RequestHistoricalData.to_field(), "message.type");
-        assert_eq!(request.fields[1], "9000", "message.request_id"); // request_id will be generated
-                                                                     // The rest of the fields follow the same pattern as historical data request
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalData);
     }
 
     #[tokio::test]
@@ -998,32 +930,7 @@ mod tests {
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(request.fields[0], OutgoingMessages::RequestHistoricalTicks.to_field(), "message.type");
-        assert_eq!(request.fields[1], "9000", "message.request_id");
-        assert_eq!(request.fields[2], contract.contract_id.to_field(), "message.contract_id");
-        assert_eq!(request.fields[3], contract.symbol.to_field(), "message.symbol");
-        assert_eq!(request.fields[4], contract.security_type.to_field(), "message.security_type");
-        assert_eq!(
-            request.fields[5], contract.last_trade_date_or_contract_month,
-            "message.last_trade_date_or_contract_month"
-        );
-        assert_eq!(request.fields[6], contract.strike.to_field(), "message.strike");
-        assert_eq!(request.fields[7], contract.right, "message.right");
-        assert_eq!(request.fields[8], contract.multiplier, "message.multiplier");
-        assert_eq!(request.fields[9], contract.exchange.to_field(), "message.exchange");
-        assert_eq!(request.fields[10], contract.primary_exchange.to_field(), "message.primary_exchange");
-        assert_eq!(request.fields[11], contract.currency.to_field(), "message.currency");
-        assert_eq!(request.fields[12], contract.local_symbol, "message.local_symbol");
-        assert_eq!(request.fields[13], contract.trading_class, "message.trading_class");
-        assert_eq!(request.fields[14], contract.include_expired.to_field(), "message.include_expired");
-        assert_eq!(request.fields[15], start.to_field(), "message.start");
-        assert_eq!(request.fields[16], end.to_field(), "message.end");
-        assert_eq!(request.fields[17], number_of_ticks.to_field(), "message.number_of_ticks");
-        assert_eq!(request.fields[18], "BID_ASK", "message.what_to_show");
-        assert_eq!(request.fields[19], trading_hours.use_rth().to_field(), "message.use_rth");
-        assert_eq!(request.fields[20], "0", "message.ignore_size"); // false = 0
-        assert_eq!(request.fields[21], "", "message.misc_options");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalTicks);
     }
 
     #[tokio::test]
@@ -1059,8 +966,8 @@ mod tests {
 
         // Verify request message
         let request_messages = message_bus.request_messages.read().unwrap();
-        let request = &request_messages[0];
-        assert_eq!(request.fields[18], "MIDPOINT", "message.what_to_show");
+        assert_eq!(request_messages.len(), 1, "Should send one request message");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalTicks);
     }
 
     #[tokio::test]
@@ -1100,8 +1007,8 @@ mod tests {
 
         // Verify request message
         let request_messages = message_bus.request_messages.read().unwrap();
-        let request = &request_messages[0];
-        assert_eq!(request.fields[18], "TRADES", "message.what_to_show");
+        assert_eq!(request_messages.len(), 1, "Should send one request message");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalTicks);
     }
 
     #[tokio::test]
@@ -1201,11 +1108,10 @@ mod tests {
             _ => panic!("Expected Update variant"),
         }
 
-        // Verify request message includes keepUpToDate=true
+        // Verify request message
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request");
-        // keepUpToDate is at field index 21 (for non-bag contracts)
-        assert_eq!(request_messages[0].fields[21], "1", "Request should have keepUpToDate=true at field[21]");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalData);
     }
 
     #[tokio::test]
@@ -1245,11 +1151,10 @@ mod tests {
             _ => panic!("Expected Historical variant"),
         }
 
-        // Verify request message includes keepUpToDate=false
+        // Verify request message
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request");
-        // keepUpToDate is at field index 21 (for non-bag contracts)
-        assert_eq!(request_messages[0].fields[21], "0", "Request should have keepUpToDate=false at field[21]");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalData);
     }
 
     #[tokio::test]
@@ -1319,12 +1224,7 @@ mod tests {
 
         let messages = message_bus.request_messages.read().unwrap();
         assert_eq!(messages.len(), 1, "should send cancel message on drop");
-        assert_eq!(
-            messages[0].fields[0],
-            OutgoingMessages::CancelHistoricalData.to_field(),
-            "message type should be CancelHistoricalData"
-        );
-        assert_eq!(messages[0].fields[2], request_id.to_field(), "request_id should match");
+        assert_proto_msg_id(&messages[0], OutgoingMessages::CancelHistoricalData);
     }
 
     #[tokio::test]

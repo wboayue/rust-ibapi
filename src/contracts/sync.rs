@@ -35,7 +35,7 @@ impl Client {
 
         let builder = self.request();
         let request_id = builder.request_id();
-        let packet = encoders::encode_request_contract_data(self.server_version, request_id, contract)?;
+        let packet = encoders::encode_request_contract_data(request_id, contract)?;
 
         let responses = builder.send_raw(packet)?;
 
@@ -156,7 +156,7 @@ impl Client {
 
         let builder = self.request();
         let request_id = builder.request_id();
-        let message = encoders::encode_calculate_option_price(self.server_version, request_id, contract, volatility, underlying_price)?;
+        let message = encoders::encode_calculate_option_price(request_id, contract, volatility, underlying_price)?;
         let subscription = builder.send_raw(message)?;
 
         match subscription.next() {
@@ -190,7 +190,7 @@ impl Client {
 
         let builder = self.request();
         let request_id = builder.request_id();
-        let message = encoders::encode_calculate_implied_volatility(self.server_version, request_id, contract, option_price, underlying_price)?;
+        let message = encoders::encode_calculate_implied_volatility(request_id, contract, option_price, underlying_price)?;
         let subscription = builder.send_raw(message)?;
 
         match subscription.next() {
@@ -245,8 +245,9 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::contracts::common::test_tables::*;
-    use crate::messages::ResponseMessage;
+    use crate::messages::{OutgoingMessages, ResponseMessage};
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
     use crate::subscriptions::{DecoderContext, StreamDecoder};
@@ -264,12 +265,8 @@ mod tests {
             let result = client.contract_details(&test_case.contract);
 
             let request_messages = client.message_bus.request_messages();
-            assert_eq!(
-                request_messages[0].encode_simple(),
-                test_case.expected_request,
-                "Test '{}' request mismatch",
-                test_case.name
-            );
+            assert!(!request_messages.is_empty(), "Test '{}' should have sent a request", test_case.name);
+            assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestContractData);
 
             assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
             let contracts = result.unwrap();
@@ -291,12 +288,8 @@ mod tests {
             let result = client.matching_symbols(test_case.pattern);
 
             let request_messages = client.message_bus.request_messages();
-            assert_eq!(
-                request_messages[0].encode_simple(),
-                test_case.expected_request,
-                "Test '{}' request mismatch",
-                test_case.name
-            );
+            assert!(!request_messages.is_empty(), "Test '{}' should have sent a request", test_case.name);
+            assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMatchingSymbols);
 
             assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
             let symbols: Vec<_> = result.unwrap().collect();
@@ -316,12 +309,8 @@ mod tests {
             let result = client.market_rule(test_case.market_rule_id);
 
             let request_messages = client.message_bus.request_messages();
-            assert_eq!(
-                request_messages[0].encode_simple(),
-                test_case.expected_request,
-                "Test '{}' request mismatch",
-                test_case.name
-            );
+            assert!(!request_messages.is_empty(), "Test '{}' should have sent a request", test_case.name);
+            assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketRule);
 
             assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
             let rule = result.unwrap();
@@ -353,13 +342,7 @@ mod tests {
             };
 
             let request_messages = client.message_bus.request_messages();
-            assert!(
-                request_messages[0].encode_simple().starts_with(test_case.expected_request_prefix),
-                "Test '{}' request mismatch: expected prefix '{}', got '{}'",
-                test_case.name,
-                test_case.expected_request_prefix,
-                request_messages[0].encode_simple()
-            );
+            assert!(!request_messages.is_empty(), "Test '{}' should have sent a request", test_case.name);
 
             assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
             let computation = result.unwrap();
@@ -395,12 +378,8 @@ mod tests {
             );
 
             let request_messages = client.message_bus.request_messages();
-            assert_eq!(
-                request_messages[0].encode_simple(),
-                test_case.expected_request,
-                "Test '{}' request mismatch",
-                test_case.name
-            );
+            assert!(!request_messages.is_empty(), "Test '{}' should have sent a request", test_case.name);
+            assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestSecurityDefinitionOptionalParameters);
 
             assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
             let subscription = result.unwrap();
@@ -505,10 +484,12 @@ mod tests {
                 _ => panic!("Unknown decoder type"),
             };
 
-            match &test_case.expected_message {
-                Ok(expected) => {
+            match &test_case.expected_msg_id {
+                Ok(expected_id) => {
                     assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
-                    assert_eq!(result.unwrap().encode_simple(), *expected, "Test '{}' message mismatch", test_case.name);
+                    let bytes = result.unwrap();
+                    let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                    assert_eq!(msg_id, *expected_id, "Test '{}' message id mismatch", test_case.name);
                 }
                 Err(expected_error) => {
                     assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
@@ -557,12 +538,7 @@ mod tests {
             assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
 
             let request_messages = client.message_bus.request_messages();
-            assert_eq!(
-                request_messages[0].encode_simple(),
-                test_case.expected_request,
-                "Test '{}' request mismatch",
-                test_case.name
-            );
+            assert!(!request_messages.is_empty(), "Test '{}' should have sent a request", test_case.name);
 
             let computation = result.unwrap();
             match &test_case.expected_result {

@@ -4,12 +4,11 @@ use std::sync::Arc;
 
 use time::OffsetDateTime;
 
-use super::common::{decoders, encoders};
+use super::common::{self, decoders, encoders};
 use super::*;
 use crate::client::blocking::{SharesChannel, Subscription};
 use crate::client::sync::Client;
 use crate::contracts::Contract;
-use crate::market_data::realtime;
 use crate::messages::OutgoingMessages;
 use crate::{server_versions, Error};
 
@@ -122,15 +121,7 @@ impl Client {
         self.check_server_version(server_versions::REQ_HISTORICAL_NEWS, "It does not support historical news requests.")?;
 
         let request_id = self.next_request_id();
-        let request = encoders::encode_request_historical_news(
-            self.server_version,
-            request_id,
-            contract_id,
-            provider_codes,
-            start_time,
-            end_time,
-            total_results,
-        )?;
+        let request = encoders::encode_request_historical_news(request_id, contract_id, provider_codes, start_time, end_time, total_results)?;
         let subscription = self.send_request(request_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
@@ -161,7 +152,7 @@ impl Client {
         self.check_server_version(server_versions::REQ_NEWS_ARTICLE, "It does not support news article requests.")?;
 
         let request_id = self.next_request_id();
-        let request = encoders::encode_request_news_article(self.server_version, request_id, provider_code, article_id)?;
+        let request = encoders::encode_request_news_article(request_id, provider_code, article_id)?;
 
         let subscription = self.send_request(request_id, request)?;
         match subscription.next() {
@@ -196,21 +187,8 @@ impl Client {
     /// }
     /// ```
     pub fn contract_news(&self, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<NewsArticle>, Error> {
-        let mut generic_ticks = vec!["mdoff".to_string()];
-        for provider in provider_codes {
-            generic_ticks.push(format!("292:{provider}"));
-        }
-        let generic_ticks: Vec<_> = generic_ticks.iter().map(|s| s.as_str()).collect();
-
         let request_id = self.next_request_id();
-        let request = realtime::common::encoders::encode_request_market_data(
-            self.server_version,
-            request_id,
-            contract,
-            generic_ticks.as_slice(),
-            false,
-            false,
-        )?;
+        let request = common::encode_contract_news_request(request_id, contract, provider_codes)?;
         let subscription = self.send_request(request_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
@@ -237,12 +215,8 @@ impl Client {
     /// }
     /// ```
     pub fn broad_tape_news(&self, provider_code: &str) -> Result<Subscription<NewsArticle>, Error> {
-        let contract = Contract::news(provider_code);
-        let generic_ticks = &["mdoff", "292"];
-
         let request_id = self.next_request_id();
-        let request =
-            realtime::common::encoders::encode_request_market_data(self.server_version, request_id, &contract, generic_ticks, false, false)?;
+        let request = common::encode_broad_tape_news_request(request_id, provider_code)?;
         let subscription = self.send_request(request_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
@@ -252,7 +226,9 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use crate::client::blocking::Client;
+    use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::contracts::Contract;
+    use crate::messages::OutgoingMessages;
     use crate::news::ArticleType;
     use crate::{server_versions, stubs::MessageBusStub};
     use std::sync::{Arc, RwLock};
@@ -271,7 +247,7 @@ mod tests {
         assert!(results.is_ok(), "failed to request news providers: {}", results.err().unwrap());
 
         let request_messages = client.message_bus.request_messages();
-        assert_eq!(request_messages[0].encode_simple(), "85|");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestNewsProviders);
 
         let news_providers = results.unwrap();
         assert_eq!(news_providers.len(), 3);
@@ -299,7 +275,7 @@ mod tests {
         assert!(results.is_ok(), "failed to request news bulletins: {}", results.err().unwrap());
 
         let request_messages = client.message_bus.request_messages();
-        assert_eq!(request_messages[0].encode_simple(), "12|1|1|");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestNewsBulletins);
 
         let subscription = results.unwrap();
         if let Some(bulletin) = subscription.next() {
@@ -331,10 +307,7 @@ mod tests {
         assert!(results.is_ok(), "failed to request historical news: {}", results.err().unwrap());
 
         let request_messages = client.message_bus.request_messages();
-        assert_eq!(
-            request_messages[0].encode(),
-            "86\09000\08314\0BZ+DJ\020230101 00:00:00 UTC\020230102 00:00:00 UTC\010\0\0"
-        );
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalNews);
 
         let subscription = results.unwrap();
         if let Some(article) = subscription.next() {
@@ -361,7 +334,7 @@ mod tests {
         assert!(results.is_ok(), "failed to request news article: {}", results.err().unwrap());
 
         let request_messages = client.message_bus.request_messages();
-        assert_eq!(request_messages[0].encode_simple(), "84|9000|BZ|BZ$123||");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestNewsArticle);
 
         let article = results.unwrap();
         assert_eq!(article.article_type, ArticleType::Text);
@@ -382,7 +355,7 @@ mod tests {
         assert!(results.is_ok(), "failed to request contract news: {}", results.err().unwrap());
 
         let request_messages = client.message_bus.request_messages();
-        assert!(request_messages[0].encode().contains("mdoff,292:BZ,292:DJ"));
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
 
         let subscription = results.unwrap();
         if let Some(article) = subscription.next() {
@@ -409,7 +382,7 @@ mod tests {
         assert!(results.is_ok(), "failed to request broad tape news: {}", results.err().unwrap());
 
         let request_messages = client.message_bus.request_messages();
-        assert!(request_messages[0].encode().contains("mdoff,292"));
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
 
         let subscription = results.unwrap();
         if let Some(article) = subscription.next() {

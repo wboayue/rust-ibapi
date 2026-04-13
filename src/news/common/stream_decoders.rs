@@ -1,5 +1,5 @@
 use crate::market_data::realtime;
-use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::news::common::decoders;
 use crate::news::common::encoders;
 use crate::news::{NewsArticle, NewsBulletin};
@@ -16,7 +16,7 @@ impl StreamDecoder<NewsBulletin> for NewsBulletin {
         }
     }
 
-    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, _request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         encoders::encode_cancel_news_bulletin()
     }
 }
@@ -37,7 +37,7 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         if context.and_then(|ctx| ctx.request_type) == Some(OutgoingMessages::RequestMarketData) {
             let request_id =
                 request_id.ok_or_else(|| Error::InvalidArgument("request id required to cancel market data subscription".to_string()))?;

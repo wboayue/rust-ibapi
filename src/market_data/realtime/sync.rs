@@ -48,19 +48,17 @@ impl Client {
     pub fn realtime_bars(
         &self,
         contract: &Contract,
-        bar_size: BarSize,
+        _bar_size: BarSize,
         what_to_show: WhatToShow,
         trading_hours: TradingHours,
     ) -> Result<Subscription<Bar>, Error> {
         let builder = self.request();
         let request = encoders::encode_request_realtime_bars(
-            self.server_version(),
             builder.request_id(),
             contract,
-            &bar_size,
             &what_to_show,
             trading_hours.use_rth(),
-            Vec::<TagValue>::default(),
+            &Vec::<TagValue>::default(),
         )?;
 
         builder.send(request)
@@ -95,10 +93,9 @@ impl Client {
     pub fn tick_by_tick_all_last(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<Trade>, Error> {
         validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
 
-        let server_version = self.server_version();
         let builder = self.request();
 
-        let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "AllLast", number_of_ticks, ignore_size)?;
+        let request = encoders::encode_tick_by_tick(builder.request_id(), contract, "AllLast", number_of_ticks, ignore_size)?;
 
         builder.send(request)
     }
@@ -132,10 +129,9 @@ impl Client {
     pub fn tick_by_tick_bid_ask(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<BidAsk>, Error> {
         validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
 
-        let server_version = self.server_version();
         let builder = self.request();
 
-        let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "BidAsk", number_of_ticks, ignore_size)?;
+        let request = encoders::encode_tick_by_tick(builder.request_id(), contract, "BidAsk", number_of_ticks, ignore_size)?;
 
         builder.send(request)
     }
@@ -169,10 +165,9 @@ impl Client {
     pub fn tick_by_tick_last(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<Trade>, Error> {
         validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
 
-        let server_version = self.server_version();
         let builder = self.request();
 
-        let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "Last", number_of_ticks, ignore_size)?;
+        let request = encoders::encode_tick_by_tick(builder.request_id(), contract, "Last", number_of_ticks, ignore_size)?;
 
         builder.send(request)
     }
@@ -206,10 +201,9 @@ impl Client {
     pub fn tick_by_tick_midpoint(&self, contract: &Contract, number_of_ticks: i32, ignore_size: bool) -> Result<Subscription<MidPoint>, Error> {
         validate_tick_by_tick_request(self, contract, number_of_ticks, ignore_size)?;
 
-        let server_version = self.server_version();
         let builder = self.request();
 
-        let request = encoders::encode_tick_by_tick(server_version, builder.request_id(), contract, "MidPoint", number_of_ticks, ignore_size)?;
+        let request = encoders::encode_tick_by_tick(builder.request_id(), contract, "MidPoint", number_of_ticks, ignore_size)?;
 
         builder.send(request)
     }
@@ -250,7 +244,7 @@ impl Client {
         }
 
         let builder = self.request();
-        let request = encoders::encode_request_market_depth(self.server_version(), builder.request_id(), contract, number_of_rows, is_smart_depth)?;
+        let request = encoders::encode_request_market_depth(builder.request_id(), contract, number_of_rows, is_smart_depth)?;
 
         builder.send_with_context(request, self.decoder_context().with_smart_depth(is_smart_depth))
     }
@@ -310,7 +304,6 @@ impl Client {
 
         let message = crate::market_data::encoders::encode_request_market_data_type(market_data_type)?;
         let _ = self.send_shared_request(OutgoingMessages::RequestMarketDataType, message)?;
-
         Ok(())
     }
 }
@@ -324,14 +317,7 @@ pub fn market_data(
     regulatory_snapshot: bool,
 ) -> Result<Subscription<TickTypes>, Error> {
     let builder = client.request();
-    let request = encoders::encode_request_market_data(
-        client.server_version(),
-        builder.request_id(),
-        contract,
-        generic_ticks,
-        snapshot,
-        regulatory_snapshot,
-    )?;
+    let request = encoders::encode_request_market_data(builder.request_id(), contract, generic_ticks, snapshot, regulatory_snapshot)?;
 
     builder.send(request)
 }
@@ -339,13 +325,13 @@ pub fn market_data(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::contracts::tick_types::TickType;
     use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, SecurityType, Symbol};
     use crate::market_data::TradingHours;
     use crate::messages::OutgoingMessages;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
-    use crate::ToField;
     use std::sync::Arc;
     use std::sync::RwLock;
     use time::OffsetDateTime;
@@ -434,11 +420,7 @@ mod tests {
         let request_messages = client.message_bus.request_messages();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(request[0], OutgoingMessages::RequestRealTimeBars.to_field(), "Wrong message type");
-        assert_eq!(request[1], "8", "Wrong version");
-        assert_eq!(request[16], what_to_show.to_field(), "Wrong what to show value");
-        assert_eq!(request[17], trading_hours.use_rth().to_field(), "Wrong use RTH flag");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestRealTimeBars);
     }
 
     #[test]
@@ -488,9 +470,7 @@ mod tests {
         let request_messages = client.message_bus.request_messages();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(request[0], OutgoingMessages::RequestTickByTickData.to_field(), "Wrong message type");
-        assert_eq!(request[14], "AllLast", "Wrong tick type");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestTickByTickData);
     }
 
     #[test]
@@ -547,11 +527,7 @@ mod tests {
         let request_messages = client.message_bus.request_messages();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(request[0], OutgoingMessages::RequestMarketDepth.to_field(), "Wrong message type");
-        assert_eq!(request[1], "5", "Wrong version");
-        assert_eq!(request[14], number_of_rows.to_field(), "Wrong number of rows");
-        assert_eq!(request[15], is_smart_depth.to_field(), "Wrong smart depth flag");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketDepth);
     }
 
     #[test]
@@ -588,8 +564,7 @@ mod tests {
         let request_messages = client.message_bus.request_messages();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(request[0], OutgoingMessages::RequestMktDepthExchanges.to_field(), "Wrong message type");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMktDepthExchanges);
     }
 
     #[test]
@@ -629,8 +604,7 @@ mod tests {
 
         // Verify request message
         let request_messages = client.message_bus.request_messages();
-        let request = &request_messages[0];
-        assert_eq!(request[14], "BidAsk", "Wrong tick type");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestTickByTickData);
     }
 
     #[test]
@@ -683,9 +657,7 @@ mod tests {
         let request_messages = client.message_bus.request_messages();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(request[0], OutgoingMessages::RequestTickByTickData.to_field(), "Wrong message type");
-        assert_eq!(request[14], "MidPoint", "Wrong tick type");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestTickByTickData);
     }
 
     #[test]
@@ -776,8 +748,7 @@ mod tests {
         let request_messages = client.message_bus.request_messages();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(request[0], OutgoingMessages::RequestMarketData.to_field(), "Wrong message type");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
     }
 
     #[test]
@@ -804,8 +775,7 @@ mod tests {
         let request_messages = client.message_bus.request_messages();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(request[0], OutgoingMessages::RequestMarketData.to_field(), "Wrong message type");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
     }
 
     #[test]
@@ -839,9 +809,7 @@ mod tests {
         let request_messages = client.message_bus.request_messages();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
 
-        let request = &request_messages[0];
-        assert_eq!(request[0], OutgoingMessages::RequestMarketData.to_field(), "Wrong message type");
-        assert_eq!(request[17], "1", "Wrong regulatory snapshot flag");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
     }
 
     #[test]
@@ -927,7 +895,6 @@ mod tests {
 
         // Verify request message uses "Last" instead of "AllLast"
         let request_messages = client.message_bus.request_messages();
-        let request = &request_messages[0];
-        assert_eq!(request[14], "Last", "Wrong tick type");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestTickByTickData);
     }
 }

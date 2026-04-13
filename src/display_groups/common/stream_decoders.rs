@@ -1,7 +1,7 @@
 //! StreamDecoder implementations for display group subscriptions
 
 use crate::common::error_helpers;
-use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 
@@ -35,7 +35,7 @@ impl StreamDecoder<DisplayGroupUpdate> for DisplayGroupUpdate {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = error_helpers::require_request_id_for(request_id, "unsubscribe from group events")?;
         encoders::encode_unsubscribe_from_group_events(request_id)
     }
@@ -83,11 +83,11 @@ mod tests {
 
     #[test]
     fn test_cancel_message() {
-        let message = DisplayGroupUpdate::cancel_message(176, Some(9000), None).expect("cancel message failed");
+        use crate::common::test_utils::helpers::assert_proto_msg_id;
+        use crate::messages::OutgoingMessages;
 
-        assert_eq!(message[0], "70"); // UnsubscribeFromGroupEvents
-        assert_eq!(message[1], "1"); // version
-        assert_eq!(message[2], "9000"); // request_id
+        let message = DisplayGroupUpdate::cancel_message(176, Some(9000), None).expect("cancel message failed");
+        assert_proto_msg_id(&message, OutgoingMessages::UnsubscribeFromGroupEvents);
     }
 
     #[test]

@@ -51,25 +51,11 @@ pub enum MarketDataType {
 }
 
 pub(crate) mod encoders {
-    use crate::messages::{OutgoingMessages, RequestMessage};
     use crate::Error;
 
     use super::MarketDataType;
 
-    pub(crate) fn encode_request_market_data_type(market_data_type: MarketDataType) -> Result<RequestMessage, Error> {
-        const VERSION: i32 = 1;
-
-        let mut message = RequestMessage::new();
-
-        message.push_field(&OutgoingMessages::RequestMarketDataType);
-        message.push_field(&VERSION);
-        message.push_field(&(market_data_type as i32));
-
-        Ok(message)
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn encode_request_market_data_type_proto(market_data_type: MarketDataType) -> Result<Vec<u8>, Error> {
+    pub(crate) fn encode_request_market_data_type(market_data_type: MarketDataType) -> Result<Vec<u8>, Error> {
         use prost::Message;
         let request = crate::proto::MarketDataTypeRequest {
             market_data_type: Some(market_data_type as i32),
@@ -81,12 +67,13 @@ pub(crate) mod encoders {
     }
 
     #[cfg(test)]
-    mod proto_tests {
+    mod tests {
         use super::*;
+        use crate::messages::OutgoingMessages;
 
         #[test]
-        fn test_encode_request_market_data_type_proto() {
-            let bytes = encode_request_market_data_type_proto(MarketDataType::Delayed).unwrap();
+        fn test_encode_request_market_data_type() {
+            let bytes = encode_request_market_data_type(MarketDataType::Delayed).unwrap();
             let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
             assert_eq!(msg_id, OutgoingMessages::RequestMarketDataType as i32 + 200);
 
