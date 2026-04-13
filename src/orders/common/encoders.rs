@@ -40,9 +40,10 @@ pub(crate) fn encode_all_open_orders() -> Result<Vec<u8>, Error> {
 }
 
 pub(crate) fn encode_auto_open_orders(auto_bind: bool) -> Result<Vec<u8>, Error> {
+    use crate::proto::encoders::some_bool;
     use prost::Message;
     let request = crate::proto::AutoOpenOrdersRequest {
-        auto_bind: if auto_bind { Some(true) } else { None },
+        auto_bind: some_bool(auto_bind),
     };
     Ok(crate::messages::encode_protobuf_message(
         OutgoingMessages::RequestAutoOpenOrders as i32,
@@ -51,9 +52,10 @@ pub(crate) fn encode_auto_open_orders(auto_bind: bool) -> Result<Vec<u8>, Error>
 }
 
 pub(crate) fn encode_completed_orders(api_only: bool) -> Result<Vec<u8>, Error> {
+    use crate::proto::encoders::some_bool;
     use prost::Message;
     let request = crate::proto::CompletedOrdersRequest {
-        api_only: if api_only { Some(true) } else { None },
+        api_only: some_bool(api_only),
     };
     Ok(crate::messages::encode_protobuf_message(
         OutgoingMessages::RequestCompletedOrders as i32,
@@ -102,6 +104,7 @@ pub(crate) fn encode_exercise_options(
     ovrd: bool,
     manual_order_time: Option<OffsetDateTime>,
 ) -> Result<Vec<u8>, Error> {
+    use crate::proto::encoders::{some_bool, some_str};
     use prost::Message;
     use time::macros::format_description;
     use time_tz::OffsetDateTimeExt;
@@ -117,8 +120,8 @@ pub(crate) fn encode_exercise_options(
         contract: Some(crate::proto::encoders::encode_contract(contract)),
         exercise_action: Some(exercise_action as i32),
         exercise_quantity: Some(exercise_quantity),
-        account: if account.is_empty() { None } else { Some(account.to_string()) },
-        r#override: if ovrd { Some(true) } else { None },
+        account: some_str(account),
+        r#override: some_bool(ovrd),
         manual_order_time: manual_order_time_str,
         customer_account: None,
         professional_customer: None,

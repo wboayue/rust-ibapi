@@ -14,7 +14,7 @@ use crate::{client::sync::Client, Error, MAX_RETRIES};
 
 use time_tz::Tz;
 
-use super::common::{decoders, encoders};
+use super::common::{self, decoders, encoders};
 use super::{
     BarSize, Duration, HistogramEntry, HistoricalBarUpdate, HistoricalData, Schedule, TickBidAsk, TickDecoder, TickLast, TickMidpoint, WhatToShow,
 };
@@ -100,19 +100,7 @@ impl Client {
         what_to_show: WhatToShow,
         trading_hours: TradingHours,
     ) -> Result<HistoricalData, Error> {
-        if !contract.trading_class.is_empty() || contract.contract_id > 0 {
-            check_version(self.server_version(), Features::TRADING_CLASS)?;
-        }
-
-        if what_to_show == WhatToShow::Schedule {
-            check_version(self.server_version(), Features::HISTORICAL_SCHEDULE)?;
-        }
-
-        if interval_end.is_some() && what_to_show == WhatToShow::AdjustedLast {
-            return Err(Error::InvalidArgument(
-                "end_date must be None when requesting WhatToShow::AdjustedLast.".into(),
-            ));
-        }
+        common::validate_historical_data(self.server_version(), contract, interval_end, Some(what_to_show))?;
 
         for _ in 0..MAX_RETRIES {
             let builder = self.request();

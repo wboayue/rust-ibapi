@@ -6,9 +6,10 @@ pub(in crate::news) fn encode_request_news_providers() -> Result<Vec<u8>, crate:
 
 pub(in crate::news) fn encode_request_news_bulletins(all_messages: bool) -> Result<Vec<u8>, crate::Error> {
     use crate::messages::{encode_protobuf_message, OutgoingMessages};
+    use crate::proto::encoders::some_bool;
     use prost::Message;
     let request = crate::proto::NewsBulletinsRequest {
-        all_messages: if all_messages { Some(true) } else { None },
+        all_messages: some_bool(all_messages),
     };
     Ok(encode_protobuf_message(
         OutgoingMessages::RequestNewsBulletins as i32,

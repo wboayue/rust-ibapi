@@ -91,11 +91,12 @@ pub(in crate::accounts) fn encode_cancel_positions_multi(request_id: i32) -> Res
 
 pub(in crate::accounts) fn encode_request_account_updates(subscribe: bool, account: &AccountId) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
+    use crate::proto::encoders::{some_bool, some_str};
     use prost::Message;
     let acct: &str = account;
     let request = crate::proto::AccountDataRequest {
-        subscribe: if subscribe { Some(true) } else { None },
-        acct_code: if acct.is_empty() { None } else { Some(acct.to_string()) },
+        subscribe: some_bool(subscribe),
+        acct_code: some_str(acct),
     };
     Ok(encode_protobuf_message(
         OutgoingMessages::RequestAccountData as i32,

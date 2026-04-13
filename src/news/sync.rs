@@ -4,12 +4,11 @@ use std::sync::Arc;
 
 use time::OffsetDateTime;
 
-use super::common::{decoders, encoders};
+use super::common::{self, decoders, encoders};
 use super::*;
 use crate::client::blocking::{SharesChannel, Subscription};
 use crate::client::sync::Client;
 use crate::contracts::Contract;
-use crate::market_data::realtime;
 use crate::messages::OutgoingMessages;
 use crate::{server_versions, Error};
 
@@ -188,14 +187,8 @@ impl Client {
     /// }
     /// ```
     pub fn contract_news(&self, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<NewsArticle>, Error> {
-        let mut generic_ticks = vec!["mdoff".to_string()];
-        for provider in provider_codes {
-            generic_ticks.push(format!("292:{provider}"));
-        }
-        let generic_ticks: Vec<_> = generic_ticks.iter().map(|s| s.as_str()).collect();
-
         let request_id = self.next_request_id();
-        let request = realtime::common::encoders::encode_request_market_data(request_id, contract, generic_ticks.as_slice(), false, false)?;
+        let request = common::encode_contract_news_request(request_id, contract, provider_codes)?;
         let subscription = self.send_request(request_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
@@ -222,11 +215,8 @@ impl Client {
     /// }
     /// ```
     pub fn broad_tape_news(&self, provider_code: &str) -> Result<Subscription<NewsArticle>, Error> {
-        let contract = Contract::news(provider_code);
-        let generic_ticks = &["mdoff", "292"];
-
         let request_id = self.next_request_id();
-        let request = realtime::common::encoders::encode_request_market_data(request_id, &contract, generic_ticks, false, false)?;
+        let request = common::encode_broad_tape_news_request(request_id, provider_code)?;
         let subscription = self.send_request(request_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))

@@ -114,6 +114,36 @@ pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
     }
 }
 
+/// Routing strategy for order-related messages.
+/// Describes which channel keys to try and in what order.
+#[derive(Debug, Clone, PartialEq)]
+pub enum OrderRoutingStrategy {
+    /// Try order_id channel, then request_id channel. Store execution_id mapping.
+    ExecutionData,
+    /// Try order_id channel, then request_id channel.
+    ExecutionDataEnd,
+    /// Try order_id channel, then shared channel.
+    OrderOrShared,
+    /// Route via execution_id only.
+    ByExecutionId,
+    /// Route to shared channel only.
+    SharedOnly,
+    /// Route by order_id only.
+    ByOrderId,
+}
+
+/// Determine the routing strategy for an order-related message type.
+pub fn order_routing_strategy(message_type: IncomingMessages) -> OrderRoutingStrategy {
+    match message_type {
+        IncomingMessages::ExecutionData => OrderRoutingStrategy::ExecutionData,
+        IncomingMessages::ExecutionDataEnd => OrderRoutingStrategy::ExecutionDataEnd,
+        IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => OrderRoutingStrategy::OrderOrShared,
+        IncomingMessages::CommissionsReport => OrderRoutingStrategy::ByExecutionId,
+        IncomingMessages::CompletedOrder | IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => OrderRoutingStrategy::SharedOnly,
+        _ => OrderRoutingStrategy::ByOrderId,
+    }
+}
+
 /// Check if an error code is a warning
 pub fn is_warning_error(error_code: i32) -> bool {
     WARNING_CODE_RANGE.contains(&error_code)

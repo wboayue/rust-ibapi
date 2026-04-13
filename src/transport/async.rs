@@ -28,7 +28,7 @@ use crate::connection::r#async::AsyncConnection;
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
-use super::routing::{determine_routing, is_warning_error, RoutingDecision, UNSPECIFIED_REQUEST_ID};
+use super::routing::{determine_routing, is_warning_error, order_routing_strategy, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID};
 
 /// Asynchronous message bus trait
 #[async_trait]
@@ -470,50 +470,71 @@ impl AsyncTcpMessageBus {
 
     /// Route message to order-specific channel
     async fn route_to_order_channel(&self, order_id: i32, message: ResponseMessage) -> Result<(), Error> {
-        // Send to order update stream if it exists
         let routed = self.send_order_update(&message).await;
-        let message_type = message.message_type();
+        let strategy = order_routing_strategy(message.message_type());
 
-        // Special handling for different order message types
-        match message_type {
-            IncomingMessages::ExecutionData => {
-                let order_id = message.order_id();
-                let request_id = message.request_id();
-
-                // First check matching orders channel
-                if let Some(actual_order_id) = order_id {
+        match strategy {
+            OrderRoutingStrategy::ExecutionData => {
+                // Try order_id channel first, then request_id, storing execution_id mapping
+                if let Some(actual_order_id) = message.order_id() {
                     let channels = self.order_channels.read().await;
                     if let Some(sender) = channels.get(&actual_order_id) {
-                        // Store execution_id -> sender mapping for commission reports
-                        if let Some(execution_id) = message.execution_id() {
-                            let mut exec_channels = self.execution_channels.write().await;
-                            exec_channels.insert(execution_id, sender.clone());
-                        }
+                        self.store_execution_mapping(&message, sender).await;
                         let _ = sender.send(message);
                         return Ok(());
                     }
                 }
-
-                // Then check request channel (for executions() API calls)
-                if let Some(req_id) = request_id {
+                if let Some(req_id) = message.request_id() {
                     let channels = self.request_channels.read().await;
                     if let Some(sender) = channels.get(&req_id) {
-                        // Store execution_id -> sender mapping for commission reports
-                        if let Some(execution_id) = message.execution_id() {
-                            let mut exec_channels = self.execution_channels.write().await;
-                            exec_channels.insert(execution_id, sender.clone());
-                        }
+                        self.store_execution_mapping(&message, sender).await;
                         let _ = sender.send(message);
                         return Ok(());
                     }
                 }
-
                 if !routed {
                     warn!("could not route ExecutionData message {:?}", message);
                 }
             }
-            IncomingMessages::CommissionsReport => {
-                // Route CommissionReport using execution_id
+            OrderRoutingStrategy::ExecutionDataEnd => {
+                if let Some(actual_order_id) = message.order_id() {
+                    let channels = self.order_channels.read().await;
+                    if let Some(sender) = channels.get(&actual_order_id) {
+                        let _ = sender.send(message);
+                        return Ok(());
+                    }
+                }
+                if let Some(req_id) = message.request_id() {
+                    let channels = self.request_channels.read().await;
+                    if let Some(sender) = channels.get(&req_id) {
+                        let _ = sender.send(message);
+                        return Ok(());
+                    }
+                }
+                warn!("could not route ExecutionDataEnd message {:?}", message);
+            }
+            OrderRoutingStrategy::OrderOrShared => {
+                if let Some(actual_order_id) = message.order_id() {
+                    let channels = self.order_channels.read().await;
+                    if let Some(sender) = channels.get(&actual_order_id) {
+                        let _ = sender.send(message);
+                        return Ok(());
+                    }
+                    drop(channels);
+
+                    let shared_channels = self.shared_channel_senders.read().await;
+                    if let Some(senders) = shared_channels.get(&message.message_type()) {
+                        for sender in senders {
+                            let _ = sender.send(message.clone());
+                        }
+                        return Ok(());
+                    }
+                }
+                if !routed {
+                    warn!("could not route message {:?}", message);
+                }
+            }
+            OrderRoutingStrategy::ByExecutionId => {
                 if let Some(execution_id) = message.execution_id() {
                     let exec_channels = self.execution_channels.read().await;
                     if let Some(sender) = exec_channels.get(&execution_id) {
@@ -521,75 +542,20 @@ impl AsyncTcpMessageBus {
                         return Ok(());
                     }
                 }
-                // Fall through to shared channel check
             }
-            IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => {
-                // For OpenOrder and OrderStatus, try order channel first
-                if let Some(actual_order_id) = message.order_id() {
-                    let channels = self.order_channels.read().await;
-                    if let Some(sender) = channels.get(&actual_order_id) {
-                        let _ = sender.send(message);
-                        return Ok(());
-                    }
-
-                    // If no order channel, check if there's a shared channel (like sync does)
-                    let shared_channels = self.shared_channel_senders.read().await;
-                    if let Some(senders) = shared_channels.get(&message_type) {
-                        for sender in senders {
-                            if let Err(e) = sender.send(message.clone()) {
-                                warn!("error sending to shared channel for {message_type:?}: {e}");
-                            }
-                        }
-                        return Ok(());
-                    }
-                }
-
-                if !routed {
-                    warn!("could not route message {:?}", message);
-                }
-            }
-            IncomingMessages::ExecutionDataEnd => {
-                let order_id = message.order_id();
-                let request_id = message.request_id();
-
-                // First check matching orders channel
-                if let Some(actual_order_id) = order_id {
-                    let channels = self.order_channels.read().await;
-                    if let Some(sender) = channels.get(&actual_order_id) {
-                        let _ = sender.send(message);
-                        return Ok(());
-                    }
-                }
-
-                // Then check request channel
-                if let Some(req_id) = request_id {
-                    let channels = self.request_channels.read().await;
-                    if let Some(sender) = channels.get(&req_id) {
-                        let _ = sender.send(message);
-                        return Ok(());
-                    }
-                }
-
-                warn!("could not route ExecutionDataEnd message {:?}", message);
-            }
-            IncomingMessages::CompletedOrder | IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => {
-                // These messages don't have order IDs, route to shared channel if available
+            OrderRoutingStrategy::SharedOnly => {
                 let shared_channels = self.shared_channel_senders.read().await;
-                if let Some(senders) = shared_channels.get(&message_type) {
+                if let Some(senders) = shared_channels.get(&message.message_type()) {
                     for sender in senders {
-                        if let Err(e) = sender.send(message.clone()) {
-                            warn!("error sending to shared channel for {message_type:?}: {e}");
-                        }
+                        let _ = sender.send(message.clone());
                     }
                     return Ok(());
                 }
-
                 if !routed {
                     warn!("could not route message {:?}", message);
                 }
             }
-            _ => {
-                // All other order messages route by order_id
+            OrderRoutingStrategy::ByOrderId => {
                 if order_id >= 0 {
                     let channels = self.order_channels.read().await;
                     if let Some(sender) = channels.get(&order_id) {
@@ -597,7 +563,6 @@ impl AsyncTcpMessageBus {
                         return Ok(());
                     }
                 }
-
                 if !routed {
                     warn!("could not route message {:?}", message);
                 }
@@ -605,6 +570,14 @@ impl AsyncTcpMessageBus {
         }
 
         Ok(())
+    }
+
+    /// Store execution_id -> sender mapping for commission report routing
+    async fn store_execution_mapping(&self, message: &ResponseMessage, sender: &BroadcastSender) {
+        if let Some(execution_id) = message.execution_id() {
+            let mut exec_channels = self.execution_channels.write().await;
+            exec_channels.insert(execution_id, sender.clone());
+        }
     }
 
     /// Route message to shared channel

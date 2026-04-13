@@ -11,13 +11,14 @@ pub(crate) fn encode_request_realtime_bars(
     options: &[TagValue],
 ) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
+    use crate::proto::encoders::some_bool;
     use prost::Message;
     let request = crate::proto::RealTimeBarsRequest {
         req_id: Some(request_id),
         contract: Some(crate::proto::encoders::encode_contract(contract)),
         bar_size: Some(0),
         what_to_show: Some(what_to_show.to_string()),
-        use_rth: if use_rth { Some(true) } else { None },
+        use_rth: some_bool(use_rth),
         real_time_bars_options: crate::proto::encoders::tag_values_to_map(options),
     };
     Ok(encode_protobuf_message(
@@ -38,13 +39,14 @@ pub(crate) fn encode_tick_by_tick(
     ignore_size: bool,
 ) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
+    use crate::proto::encoders::{some_bool, some_str};
     use prost::Message;
     let request = crate::proto::TickByTickRequest {
         req_id: Some(request_id),
         contract: Some(crate::proto::encoders::encode_contract(contract)),
-        tick_type: if tick_type.is_empty() { None } else { Some(tick_type.to_string()) },
+        tick_type: some_str(tick_type),
         number_of_ticks: Some(number_of_ticks),
-        ignore_size: if ignore_size { Some(true) } else { None },
+        ignore_size: some_bool(ignore_size),
     };
     Ok(encode_protobuf_message(
         OutgoingMessages::RequestTickByTickData as i32,
@@ -58,12 +60,13 @@ pub(crate) fn encode_cancel_tick_by_tick(request_id: i32) -> Result<Vec<u8>, Err
 
 pub(crate) fn encode_request_market_depth(request_id: i32, contract: &Contract, number_of_rows: i32, is_smart_depth: bool) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
+    use crate::proto::encoders::some_bool;
     use prost::Message;
     let request = crate::proto::MarketDepthRequest {
         req_id: Some(request_id),
         contract: Some(crate::proto::encoders::encode_contract(contract)),
         num_rows: Some(number_of_rows),
-        is_smart_depth: if is_smart_depth { Some(true) } else { None },
+        is_smart_depth: some_bool(is_smart_depth),
         market_depth_options: Default::default(),
     };
     Ok(encode_protobuf_message(
@@ -74,10 +77,11 @@ pub(crate) fn encode_request_market_depth(request_id: i32, contract: &Contract, 
 
 pub(crate) fn encode_cancel_market_depth(request_id: i32, is_smart_depth: bool) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
+    use crate::proto::encoders::some_bool;
     use prost::Message;
     let request = crate::proto::CancelMarketDepth {
         req_id: Some(request_id),
-        is_smart_depth: if is_smart_depth { Some(true) } else { None },
+        is_smart_depth: some_bool(is_smart_depth),
     };
     Ok(encode_protobuf_message(
         OutgoingMessages::CancelMarketDepth as i32,
@@ -103,14 +107,15 @@ pub(crate) fn encode_request_market_data(
     regulatory_snapshot: bool,
 ) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
+    use crate::proto::encoders::{some_bool, some_str};
     use prost::Message;
     let joined = generic_ticks.join(",");
     let request = crate::proto::MarketDataRequest {
         req_id: Some(request_id),
         contract: Some(crate::proto::encoders::encode_contract(contract)),
-        generic_tick_list: if joined.is_empty() { None } else { Some(joined) },
-        snapshot: if snapshot { Some(true) } else { None },
-        regulatory_snapshot: if regulatory_snapshot { Some(true) } else { None },
+        generic_tick_list: some_str(&joined),
+        snapshot: some_bool(snapshot),
+        regulatory_snapshot: some_bool(regulatory_snapshot),
         market_data_options: Default::default(),
     };
     Ok(encode_protobuf_message(

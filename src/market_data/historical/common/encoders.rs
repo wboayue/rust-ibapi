@@ -29,11 +29,12 @@ impl ToField for Option<OffsetDateTime> {
 
 pub(crate) fn encode_request_head_timestamp(request_id: i32, contract: &Contract, what_to_show: WhatToShow, use_rth: bool) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
+    use crate::proto::encoders::some_bool;
     use prost::Message;
     let request = crate::proto::HeadTimestampRequest {
         req_id: Some(request_id),
         contract: Some(crate::proto::encoders::encode_contract(contract)),
-        use_rth: if use_rth { Some(true) } else { None },
+        use_rth: some_bool(use_rth),
         what_to_show: Some(what_to_show.to_field()),
         format_date: Some(DATE_FORMAT),
     };
@@ -56,19 +57,20 @@ pub(crate) fn encode_request_historical_data(
     chart_options: &[crate::contracts::TagValue],
 ) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
+    use crate::proto::encoders::{some_bool, some_str};
     use prost::Message;
     let end_str = end_date.to_field();
     let wts_str = what_to_show.to_field();
     let request = crate::proto::HistoricalDataRequest {
         req_id: Some(request_id),
         contract: Some(crate::proto::encoders::encode_contract(contract)),
-        end_date_time: if end_str.is_empty() { None } else { Some(end_str) },
+        end_date_time: some_str(&end_str),
         duration: Some(duration.to_field()),
         bar_size_setting: Some(bar_size.to_field()),
-        what_to_show: if wts_str.is_empty() { None } else { Some(wts_str) },
-        use_rth: if use_rth { Some(true) } else { None },
+        what_to_show: some_str(&wts_str),
+        use_rth: some_bool(use_rth),
         format_date: Some(DATE_FORMAT),
-        keep_up_to_date: if keep_up_to_date { Some(true) } else { None },
+        keep_up_to_date: some_bool(keep_up_to_date),
         chart_options: crate::proto::encoders::tag_values_to_map(chart_options),
     };
     Ok(encode_protobuf_message(
@@ -89,18 +91,19 @@ pub(crate) fn encode_request_historical_ticks(
     ignore_size: bool,
 ) -> Result<Vec<u8>, Error> {
     use crate::messages::encode_protobuf_message;
+    use crate::proto::encoders::{some_bool, some_str};
     use prost::Message;
     let start_str = start.to_field();
     let end_str = end.to_field();
     let request = crate::proto::HistoricalTicksRequest {
         req_id: Some(request_id),
         contract: Some(crate::proto::encoders::encode_contract(contract)),
-        start_date_time: if start_str.is_empty() { None } else { Some(start_str) },
-        end_date_time: if end_str.is_empty() { None } else { Some(end_str) },
+        start_date_time: some_str(&start_str),
+        end_date_time: some_str(&end_str),
         number_of_ticks: Some(number_of_ticks),
         what_to_show: Some(what_to_show.to_field()),
-        use_rth: if use_rth { Some(true) } else { None },
-        ignore_size: if ignore_size { Some(true) } else { None },
+        use_rth: some_bool(use_rth),
+        ignore_size: some_bool(ignore_size),
         misc_options: Default::default(),
     };
     Ok(encode_protobuf_message(

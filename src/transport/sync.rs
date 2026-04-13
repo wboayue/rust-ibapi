@@ -17,7 +17,7 @@ use log::{debug, error, info, warn};
 
 use crate::connection::sync::Connection;
 
-use super::routing::{determine_routing, is_warning_error, RoutingDecision, UNSPECIFIED_REQUEST_ID};
+use super::routing::{determine_routing, is_warning_error, order_routing_strategy, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID};
 use super::{InternalSubscription, MessageBus, Response, Signal, SubscriptionBuilder};
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::{server_versions, Error};
@@ -310,70 +310,55 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     fn process_orders(&self, message: ResponseMessage) {
-        match message.message_type() {
-            IncomingMessages::ExecutionData => {
+        let strategy = order_routing_strategy(message.message_type());
+
+        match strategy {
+            OrderRoutingStrategy::ExecutionData => {
                 let sent_to_update_stream = self.send_order_update(&message);
-                let order_id = message.order_id();
-                let request_id = message.request_id();
-                debug!(
-                    "ExecutionData: order_id={:?}, request_id={:?}, orders.contains(order_id)={}, orders.len={}",
-                    order_id,
-                    request_id,
-                    order_id.is_some_and(|id| self.orders.contains(&id)),
-                    self.orders.len()
-                );
 
-                match (order_id, request_id) {
-                    // First check matching orders channel
-                    (Some(order_id), _) if self.orders.contains(&order_id) => {
-                        // Store execution-to-order mapping for commission reports
-                        if let Some(sender) = self.orders.copy_sender(order_id) {
-                            if let Some(execution_id) = message.execution_id() {
-                                self.executions.insert(execution_id, sender);
-                            }
-                        }
-
+                // Try order_id channel first, then request_id, storing execution_id mapping
+                if let Some(order_id) = message.order_id() {
+                    if self.orders.contains(&order_id) {
+                        self.store_execution_mapping_orders(&message, order_id);
                         if let Err(e) = self.orders.send(&order_id, Ok(message)) {
                             warn!("error routing message for order_id({order_id}): {e}");
                         }
+                        return;
                     }
-                    (_, Some(request_id)) if self.requests.contains(&request_id) => {
-                        if let Some(sender) = self.requests.copy_sender(request_id) {
-                            if let Some(execution_id) = message.execution_id() {
-                                self.executions.insert(execution_id, sender);
-                            }
-                        }
-
+                }
+                if let Some(request_id) = message.request_id() {
+                    if self.requests.contains(&request_id) {
+                        self.store_execution_mapping_requests(&message, request_id);
                         if let Err(e) = self.requests.send(&request_id, Ok(message)) {
                             warn!("error routing message for request_id({request_id}): {e}");
                         }
-                    }
-                    _ => {
-                        if !sent_to_update_stream {
-                            warn!("could not route message {message:?}");
-                        }
+                        return;
                     }
                 }
+                if !sent_to_update_stream {
+                    warn!("could not route message {message:?}");
+                }
             }
-            IncomingMessages::ExecutionDataEnd => {
-                match (message.order_id(), message.request_id()) {
-                    // First check matching orders channel
-                    (Some(order_id), _) if self.orders.contains(&order_id) => {
+            OrderRoutingStrategy::ExecutionDataEnd => {
+                if let Some(order_id) = message.order_id() {
+                    if self.orders.contains(&order_id) {
                         if let Err(e) = self.orders.send(&order_id, Ok(message)) {
                             warn!("error routing message for order_id({order_id}): {e}");
                         }
+                        return;
                     }
-                    (_, Some(request_id)) if self.requests.contains(&request_id) => {
+                }
+                if let Some(request_id) = message.request_id() {
+                    if self.requests.contains(&request_id) {
                         if let Err(e) = self.requests.send(&request_id, Ok(message)) {
                             warn!("error routing message for request_id({request_id}): {e}");
                         }
-                    }
-                    _ => {
-                        warn!("could not route message {message:?}");
+                        return;
                     }
                 }
+                warn!("could not route message {message:?}");
             }
-            IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => {
+            OrderRoutingStrategy::OrderOrShared => {
                 let sent_to_update_stream = self.send_order_update(&message);
 
                 if let Some(order_id) = message.order_id() {
@@ -381,26 +366,19 @@ impl<S: Stream> TcpMessageBus<S> {
                         if let Err(e) = self.orders.send(&order_id, Ok(message)) {
                             warn!("error routing message for order_id({order_id}): {e}");
                         }
-                    } else if self.shared_channels.contains_sender(IncomingMessages::OpenOrder) {
-                        self.shared_channels.send_message(message.message_type(), &message);
-                    } else if !sent_to_update_stream {
-                        warn!("could not route message {message:?}");
+                        return;
                     }
-                } else if !sent_to_update_stream {
+                    if self.shared_channels.contains_sender(IncomingMessages::OpenOrder) {
+                        self.shared_channels.send_message(message.message_type(), &message);
+                        return;
+                    }
+                }
+                if !sent_to_update_stream {
                     warn!("could not route message {message:?}");
                 }
             }
-            IncomingMessages::CompletedOrder | IncomingMessages::OpenOrderEnd | IncomingMessages::CompletedOrdersEnd => {
-                self.shared_channels.send_message(message.message_type(), &message);
-            }
-            IncomingMessages::CommissionsReport => {
+            OrderRoutingStrategy::ByExecutionId => {
                 let sent_to_update_stream = self.send_order_update(&message);
-                let exec_id = message.execution_id();
-                debug!(
-                    "CommissionReport: exec_id={:?}, executions.contains={}",
-                    exec_id,
-                    exec_id.as_ref().is_some_and(|id| self.executions.contains(id))
-                );
 
                 if let Some(execution_id) = message.execution_id() {
                     if let Err(e) = self.executions.send(&execution_id, Ok(message)) {
@@ -410,8 +388,27 @@ impl<S: Stream> TcpMessageBus<S> {
                     warn!("could not route commission report {message:?}");
                 }
             }
-            _ => {
+            OrderRoutingStrategy::SharedOnly => {
+                self.shared_channels.send_message(message.message_type(), &message);
+            }
+            OrderRoutingStrategy::ByOrderId => {
                 warn!("unhandled order message type: {message:?}");
+            }
+        }
+    }
+
+    fn store_execution_mapping_orders(&self, message: &ResponseMessage, order_id: i32) {
+        if let Some(sender) = self.orders.copy_sender(order_id) {
+            if let Some(execution_id) = message.execution_id() {
+                self.executions.insert(execution_id, sender);
+            }
+        }
+    }
+
+    fn store_execution_mapping_requests(&self, message: &ResponseMessage, request_id: i32) {
+        if let Some(sender) = self.requests.copy_sender(request_id) {
+            if let Some(execution_id) = message.execution_id() {
+                self.executions.insert(execution_id, sender);
             }
         }
     }

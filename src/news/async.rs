@@ -1,9 +1,8 @@
 //! Asynchronous implementation of news functionality
 
-use super::common::{decoders, encoders};
+use super::common::{self, decoders, encoders};
 use super::*;
 use crate::contracts::Contract;
-use crate::market_data::realtime;
 use crate::messages::OutgoingMessages;
 use crate::subscriptions::Subscription;
 use crate::{server_versions, Client, Error};
@@ -81,14 +80,8 @@ impl Client {
 
     /// Subscribe to news for a specific contract
     pub async fn contract_news(&self, contract: &Contract, provider_codes: &[&str]) -> Result<Subscription<NewsArticle>, Error> {
-        let mut generic_ticks = vec!["mdoff".to_string()];
-        for provider in provider_codes {
-            generic_ticks.push(format!("292:{provider}"));
-        }
-        let generic_ticks: Vec<_> = generic_ticks.iter().map(|s| s.as_str()).collect();
-
         let request_id = self.next_request_id();
-        let request = realtime::common::encoders::encode_request_market_data(request_id, contract, generic_ticks.as_slice(), false, false)?;
+        let request = common::encode_contract_news_request(request_id, contract, provider_codes)?;
         let internal_subscription = self.send_request(request_id, request).await?;
 
         Ok(Subscription::new_from_internal::<NewsArticle>(
@@ -103,11 +96,8 @@ impl Client {
 
     /// Subscribe to broad tape news
     pub async fn broad_tape_news(&self, provider_code: &str) -> Result<Subscription<NewsArticle>, Error> {
-        let contract = Contract::news(provider_code);
-        let generic_ticks = &["mdoff", "292"];
-
         let request_id = self.next_request_id();
-        let request = realtime::common::encoders::encode_request_market_data(request_id, &contract, generic_ticks, false, false)?;
+        let request = common::encode_broad_tape_news_request(request_id, provider_code)?;
         let internal_subscription = self.send_request(request_id, request).await?;
 
         Ok(Subscription::new_from_internal::<NewsArticle>(
