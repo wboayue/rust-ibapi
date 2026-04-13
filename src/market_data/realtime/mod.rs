@@ -1,11 +1,9 @@
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::ToField;
-
 use crate::contracts::OptionComputation;
 use crate::messages::Notice;
-use crate::messages::{IncomingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 
@@ -76,7 +74,7 @@ impl StreamDecoder<BidAsk> for BidAsk {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
         common::encoders::encode_cancel_tick_by_tick(request_id)
     }
@@ -113,7 +111,7 @@ impl StreamDecoder<MidPoint> for MidPoint {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel mid point ticks");
         common::encoders::encode_cancel_tick_by_tick(request_id)
     }
@@ -152,7 +150,7 @@ impl StreamDecoder<Bar> for Bar {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
         common::encoders::encode_cancel_realtime_bars(request_id)
     }
@@ -189,7 +187,7 @@ impl StreamDecoder<Trade> for Trade {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
         common::encoders::encode_cancel_tick_by_tick(request_id)
     }
@@ -227,12 +225,6 @@ impl std::fmt::Display for WhatToShow {
             Self::Bid => write!(f, "BID"),
             Self::Ask => write!(f, "ASK"),
         }
-    }
-}
-
-impl ToField for WhatToShow {
-    fn to_field(&self) -> String {
-        self.to_string()
     }
 }
 
@@ -306,9 +298,9 @@ impl StreamDecoder<MarketDepths> for MarketDepths {
         }
     }
 
-    fn cancel_message(server_version: i32, request_id: Option<i32>, context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
-        let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
-        common::encoders::encode_cancel_market_depth(server_version, request_id, context.map(|c| c.is_smart_depth).unwrap_or(false))
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+        let request_id = request_id.expect("Request ID required to encode cancel market depth");
+        common::encoders::encode_cancel_market_depth(request_id, context.map(|c| c.is_smart_depth).unwrap_or(false))
     }
 }
 
@@ -385,7 +377,7 @@ impl StreamDecoder<TickTypes> for TickTypes {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = request_id.expect("Request ID required to encode cancel realtime bars");
         common::encoders::encode_cancel_market_data(request_id)
     }

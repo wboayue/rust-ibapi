@@ -12,7 +12,7 @@ use std::time::Duration;
 use crossbeam::channel::{Receiver, Sender};
 
 use crate::errors::Error;
-use crate::messages::{RequestMessage, ResponseMessage};
+use crate::messages::ResponseMessage;
 
 #[cfg(feature = "sync")]
 use crate::messages::OutgoingMessages;
@@ -30,48 +30,28 @@ pub(crate) type Response = Result<ResponseMessage, Error>;
 // MessageBus trait - defines the interface for message handling
 #[cfg(feature = "sync")]
 pub(crate) trait MessageBus: Send + Sync {
-    // Sends formatted message to TWS and creates a reply channel by request id.
-    fn send_request(&self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
+    fn send_request(&self, request_id: i32, packet: &[u8]) -> Result<InternalSubscription, Error>;
 
-    // Sends formatted message to TWS and creates a reply channel by request id.
-    fn cancel_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error>;
+    fn cancel_subscription(&self, request_id: i32, packet: &[u8]) -> Result<(), Error>;
 
-    // Sends formatted message to TWS and creates a reply channel by message type.
-    fn send_shared_request(&self, message_id: OutgoingMessages, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
+    fn send_shared_request(&self, message_id: OutgoingMessages, packet: &[u8]) -> Result<InternalSubscription, Error>;
 
-    // Sends formatted message to TWS and creates a reply channel by message type.
-    fn cancel_shared_subscription(&self, message_id: OutgoingMessages, packet: &RequestMessage) -> Result<(), Error>;
+    fn cancel_shared_subscription(&self, message_id: OutgoingMessages, packet: &[u8]) -> Result<(), Error>;
 
-    // Sends formatted order specific message to TWS and creates a reply channel by order id.
-    fn send_order_request(&self, request_id: i32, packet: &RequestMessage) -> Result<InternalSubscription, Error>;
+    fn send_order_request(&self, request_id: i32, packet: &[u8]) -> Result<InternalSubscription, Error>;
 
-    /// Sends a message to TWS without creating a unique reply channel.
-    ///
-    /// This method is used for fire-and-forget messages that don't require
-    /// tracking responses by request ID. The message is sent directly to TWS
-    /// without establishing a dedicated response channel.
-    ///
-    /// # Arguments
-    /// * `packet` - The formatted request message to send
-    ///
-    /// # Returns
-    /// * `Ok(())` if the message was successfully sent
-    /// * `Err(Error)` if sending failed
-    fn send_message(&self, packet: &RequestMessage) -> Result<(), Error>;
+    fn send_message(&self, packet: &[u8]) -> Result<(), Error>;
 
-    /// Creates a subscription to the order update stream.
     fn create_order_update_subscription(&self) -> Result<InternalSubscription, Error>;
 
-    fn cancel_order_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error>;
+    fn cancel_order_subscription(&self, request_id: i32, packet: &[u8]) -> Result<(), Error>;
 
     fn ensure_shutdown(&self);
 
-    /// Returns true if the client is currently connected to TWS/IB Gateway
     fn is_connected(&self) -> bool;
 
-    // Testing interface. Tracks requests sent messages when Bus is stubbed.
     #[cfg(test)]
-    fn request_messages(&self) -> Vec<RequestMessage> {
+    fn request_messages(&self) -> Vec<Vec<u8>> {
         vec![]
     }
 }

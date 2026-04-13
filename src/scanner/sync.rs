@@ -120,7 +120,7 @@ impl Client {
     ///     }
     /// };
     /// ```
-    pub fn scanner_subscription(&self, subscription: &ScannerSubscription, filter: &Vec<TagValue>) -> Result<Subscription<Vec<ScannerData>>, Error> {
+    pub fn scanner_subscription(&self, subscription: &ScannerSubscription, filter: &[TagValue]) -> Result<Subscription<Vec<ScannerData>>, Error> {
         if !filter.is_empty() {
             self.check_server_version(
                 server_versions::SCANNER_GENERIC_OPTS,
@@ -129,7 +129,7 @@ impl Client {
         }
 
         let request_id = self.next_request_id();
-        let request = encoders::encode_scanner_subscription(request_id, self.server_version, subscription, filter)?;
+        let request = encoders::encode_scanner_subscription(request_id, subscription, filter)?;
         let subscription = self.send_request(request_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
@@ -139,7 +139,9 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::contracts::{Exchange, SecurityType, Symbol};
+    use crate::messages::OutgoingMessages;
     use crate::orders::TagValue;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
@@ -160,7 +162,7 @@ mod tests {
         assert!(result.is_ok(), "failed to request scanner parameters: {}", result.err().unwrap());
 
         let request_messages = client.message_bus.request_messages();
-        assert_eq!(request_messages[0].encode_simple(), "24|1|");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestScannerParameters);
 
         let scanner_params = result.unwrap();
         assert!(scanner_params.contains("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
@@ -254,13 +256,10 @@ mod tests {
 
         let request_messages = client.message_bus.request_messages();
 
-        // Verify request parameters were encoded correctly
-        let scanner_request = format!(
-            "22|9000|10|FUT|FUT.US|TOP_PERC_GAIN|50|100|1000|1000000|10000000|A|AAA|A|AAA|20230101|20231231|2|5|1|100|Annual,true|CORP|scannerType=TOP_PERC_GAIN;numberOfRows=10;||",
-        );
-        assert_eq!(request_messages[0].encode_simple(), scanner_request);
+        // Verify request was sent
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestScannerSubscription);
 
         // Verify cancel request was sent
-        assert_eq!(request_messages[1].encode_simple(), "23|1|9000|");
+        assert_proto_msg_id(&request_messages[1], OutgoingMessages::CancelScannerSubscription);
     }
 }

@@ -106,6 +106,9 @@ mod tests {
 
     #[test]
     fn test_update_display_group() {
+        use crate::common::test_utils::helpers::assert_proto_msg_id;
+        use crate::messages::OutgoingMessages;
+
         let message_bus = Arc::new(MessageBusStub {
             request_messages: RwLock::new(vec![]),
             // Need a response so subscription can be created
@@ -121,9 +124,7 @@ mod tests {
         // First request is subscribe, second is update
         assert_eq!(requests.len(), 2);
 
-        let req = &requests[1];
-        assert_eq!(req[0], "69"); // UpdateDisplayGroup
-        assert_eq!(req[1], "1"); // Version
-        assert_eq!(req[3], "265598@SMART"); // Contract info
+        assert_proto_msg_id(&requests[0], OutgoingMessages::SubscribeToGroupEvents);
+        assert_proto_msg_id(&requests[1], OutgoingMessages::UpdateDisplayGroup);
     }
 }

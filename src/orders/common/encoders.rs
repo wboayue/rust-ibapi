@@ -1,553 +1,11 @@
 use time::OffsetDateTime;
 
 use crate::contracts::Contract;
-use crate::messages::{OutgoingMessages, RequestMessage};
-use crate::orders::{ExecutionFilter, ExerciseAction, Order, OrderCondition, COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID};
-use crate::{server_versions, Error};
-
-pub(crate) fn encode_place_order(server_version: i32, order_id: i32, contract: &Contract, order: &Order) -> Result<RequestMessage, Error> {
-    let mut message = RequestMessage::default();
-    let message_version = message_version_for(server_version);
-
-    message.push_field(&OutgoingMessages::PlaceOrder);
-
-    if server_version < server_versions::ORDER_CONTAINER {
-        message.push_field(&message_version);
-    }
-
-    message.push_field(&order_id);
-
-    if server_version >= server_versions::PLACE_ORDER_CONID {
-        message.push_field(&contract.contract_id);
-    }
-    message.push_field(&contract.symbol);
-    message.push_field(&contract.security_type);
-    message.push_field(&contract.last_trade_date_or_contract_month);
-    message.push_field(&contract.strike);
-    message.push_field(&contract.right);
-    message.push_field(&contract.multiplier);
-    message.push_field(&contract.exchange);
-    message.push_field(&contract.primary_exchange);
-    message.push_field(&contract.currency);
-    message.push_field(&contract.local_symbol);
-    if server_version >= server_versions::TRADING_CLASS {
-        message.push_field(&contract.trading_class);
-    }
-    if server_version >= server_versions::SEC_ID_TYPE {
-        message.push_field(&contract.security_id_type);
-        message.push_field(&contract.security_id);
-    }
-
-    message.push_field(&order.action);
-
-    if server_version >= server_versions::FRACTIONAL_POSITIONS {
-        message.push_field(&order.total_quantity);
-    } else {
-        message.push_field(&(order.total_quantity as i32));
-    }
-
-    message.push_field(&order.order_type);
-    if server_version < server_versions::ORDER_COMBO_LEGS_PRICE {
-        message.push_field(&f64_max_to_zero(order.limit_price));
-    } else {
-        message.push_field(&order.limit_price);
-    }
-    if server_version < server_versions::TRAILING_PERCENT {
-        message.push_field(&f64_max_to_zero(order.aux_price));
-    } else {
-        message.push_field(&order.aux_price);
-    }
-
-    // extended order fields
-    message.push_field(&order.tif);
-    message.push_field(&order.oca_group);
-    message.push_field(&order.account);
-    message.push_field(&order.open_close);
-    message.push_field(&order.origin);
-    message.push_field(&order.order_ref);
-    message.push_field(&order.transmit);
-    message.push_field(&order.parent_id);
-
-    message.push_field(&order.block_order);
-    message.push_field(&order.sweep_to_fill);
-    message.push_field(&order.display_size);
-    message.push_field(&order.trigger_method);
-    message.push_field(&order.outside_rth);
-
-    message.push_field(&order.hidden);
-
-    // Contract combo legs for BAG requests
-    if contract.is_bag() {
-        message.push_field(&contract.combo_legs.len());
-
-        for combo_leg in &contract.combo_legs {
-            message.push_field(&combo_leg.contract_id);
-            message.push_field(&combo_leg.ratio);
-            message.push_field(&combo_leg.action);
-            message.push_field(&combo_leg.exchange);
-            message.push_field(&combo_leg.open_close);
-
-            if server_version >= server_versions::SSHORT_COMBO_LEGS {
-                message.push_field(&combo_leg.short_sale_slot);
-                message.push_field(&combo_leg.designated_location);
-            }
-            if server_version >= server_versions::SSHORTX_OLD {
-                message.push_field(&combo_leg.exempt_code);
-            }
-        }
-    }
-
-    // Order combo legs for BAG requests
-    if server_version >= server_versions::ORDER_COMBO_LEGS_PRICE && contract.is_bag() {
-        message.push_field(&order.order_combo_legs.len());
-
-        for combo_leg in &order.order_combo_legs {
-            message.push_field(&combo_leg.price);
-        }
-    }
-
-    if server_version >= server_versions::SMART_COMBO_ROUTING_PARAMS && contract.is_bag() {
-        message.push_field(&order.smart_combo_routing_params.len());
-
-        for tag_value in &order.smart_combo_routing_params {
-            message.push_field(&tag_value.tag);
-            message.push_field(&tag_value.value);
-        }
-    }
-
-    message.push_field(&""); // deprecated sharesAllocation field
-
-    message.push_field(&order.discretionary_amt);
-    message.push_field(&order.good_after_time);
-    message.push_field(&order.good_till_date);
-
-    message.push_field(&order.fa_group);
-    message.push_field(&order.fa_method);
-    message.push_field(&order.fa_percentage);
-    if server_version < server_versions::FA_PROFILE_DESUPPORT {
-        message.push_field(&order.fa_profile);
-    }
-
-    if server_version >= server_versions::MODELS_SUPPORT {
-        message.push_field(&order.model_code);
-    }
-
-    message.push_field(&order.short_sale_slot);
-    message.push_field(&order.designated_location);
-
-    if server_version >= server_versions::SSHORTX_OLD {
-        message.push_field(&order.exempt_code);
-    }
-
-    message.push_field(&order.oca_type);
-    message.push_field(&order.rule_80_a);
-    message.push_field(&order.settling_firm);
-    message.push_field(&order.all_or_none);
-    message.push_field(&order.min_qty);
-    message.push_field(&order.percent_offset);
-    message.push_field(&false);
-    message.push_field(&false);
-    message.push_field(&Option::<f64>::None);
-    message.push_field(&order.auction_strategy);
-    message.push_field(&order.starting_price);
-    message.push_field(&order.stock_ref_price);
-    message.push_field(&order.delta);
-    message.push_field(&order.stock_range_lower);
-    message.push_field(&order.stock_range_upper);
-
-    message.push_field(&order.override_percentage_constraints);
-
-    // Volitility orders
-    message.push_field(&order.volatility);
-    message.push_field(&order.volatility_type);
-    message.push_field(&order.delta_neutral_order_type);
-    message.push_field(&order.delta_neutral_aux_price);
-
-    if server_version >= server_versions::DELTA_NEUTRAL_CONID && order.is_delta_neutral() {
-        message.push_field(&order.delta_neutral_con_id);
-        message.push_field(&order.delta_neutral_settling_firm);
-        message.push_field(&order.delta_neutral_clearing_account);
-        message.push_field(&order.delta_neutral_clearing_intent);
-    }
-
-    if server_version >= server_versions::DELTA_NEUTRAL_OPEN_CLOSE && order.is_delta_neutral() {
-        message.push_field(&order.delta_neutral_open_close);
-        message.push_field(&order.delta_neutral_short_sale);
-        message.push_field(&order.delta_neutral_short_sale_slot);
-        message.push_field(&order.delta_neutral_designated_location);
-    }
-
-    message.push_field(&order.continuous_update);
-    message.push_field(&order.reference_price_type);
-
-    message.push_field(&order.trail_stop_price);
-    if server_version >= server_versions::TRAILING_PERCENT {
-        message.push_field(&order.trailing_percent);
-    }
-
-    if server_version >= server_versions::SCALE_ORDERS {
-        if server_version >= server_versions::SCALE_ORDERS2 {
-            message.push_field(&order.scale_init_level_size);
-            message.push_field(&order.scale_subs_level_size);
-        } else {
-            message.push_field(&"");
-            message.push_field(&order.scale_init_level_size);
-        }
-        message.push_field(&order.scale_price_increment);
-    }
-
-    if server_version >= server_versions::SCALE_ORDERS3 && order.is_scale_order() {
-        message.push_field(&order.scale_price_adjust_value);
-        message.push_field(&order.scale_price_adjust_interval);
-        message.push_field(&order.scale_profit_offset);
-        message.push_field(&order.scale_auto_reset);
-        message.push_field(&order.scale_init_position);
-        message.push_field(&order.scale_init_fill_qty);
-        message.push_field(&order.scale_random_percent);
-    }
-
-    if server_version >= server_versions::SCALE_TABLE {
-        message.push_field(&order.scale_table);
-        message.push_field(&order.active_start_time);
-        message.push_field(&order.active_stop_time);
-    }
-
-    if server_version >= server_versions::HEDGE_ORDERS {
-        message.push_field(&order.hedge_type);
-        if !order.hedge_type.is_empty() {
-            message.push_field(&order.hedge_param);
-        }
-    }
-
-    if server_version >= server_versions::OPT_OUT_SMART_ROUTING {
-        message.push_field(&order.opt_out_smart_routing);
-    }
-
-    if server_version >= server_versions::PTA_ORDERS {
-        message.push_field(&order.clearing_account);
-        message.push_field(&order.clearing_intent);
-    }
-
-    if server_version >= server_versions::NOT_HELD {
-        message.push_field(&order.not_held);
-    }
-
-    if server_version >= server_versions::DELTA_NEUTRAL {
-        if let Some(delta_neutral_contract) = &contract.delta_neutral_contract {
-            message.push_field(&true);
-            message.push_field(&delta_neutral_contract.contract_id);
-            message.push_field(&delta_neutral_contract.delta);
-            message.push_field(&delta_neutral_contract.price);
-        } else {
-            message.push_field(&false);
-        }
-    }
-
-    if server_version >= server_versions::ALGO_ORDERS {
-        message.push_field(&order.algo_strategy);
-        if !order.algo_strategy.is_empty() {
-            message.push_field(&order.algo_params.len());
-            for tag_value in &order.algo_params {
-                message.push_field(&tag_value.tag);
-                message.push_field(&tag_value.value);
-            }
-        }
-    }
-
-    if server_version >= server_versions::ALGO_ID {
-        message.push_field(&order.algo_id);
-    }
-
-    if server_version >= server_versions::WHAT_IF_ORDERS {
-        message.push_field(&order.what_if);
-    }
-
-    if server_version >= server_versions::LINKING {
-        message.push_field(&order.order_misc_options);
-    }
-
-    if server_version >= server_versions::ORDER_SOLICITED {
-        message.push_field(&order.solicited);
-    }
-
-    if server_version >= server_versions::RANDOMIZE_SIZE_AND_PRICE {
-        message.push_field(&order.randomize_size);
-        message.push_field(&order.randomize_price);
-    }
-
-    if server_version >= server_versions::PEGGED_TO_BENCHMARK {
-        if order.order_type == "PEG BENCH" {
-            message.push_field(&order.reference_contract_id);
-            message.push_field(&order.is_pegged_change_amount_decrease);
-            message.push_field(&order.pegged_change_amount);
-            message.push_field(&order.reference_change_amount);
-            message.push_field(&order.reference_exchange);
-        }
-
-        message.push_field(&order.conditions.len());
-
-        if !order.conditions.is_empty() {
-            for condition in &order.conditions {
-                encode_condition(&mut message, condition);
-            }
-
-            message.push_field(&order.conditions_ignore_rth);
-            message.push_field(&order.conditions_cancel_order);
-        }
-
-        message.push_field(&order.adjusted_order_type);
-        message.push_field(&order.trigger_price);
-        message.push_field(&order.limit_price_offset);
-        message.push_field(&order.adjusted_stop_price);
-        message.push_field(&order.adjusted_stop_limit_price);
-        message.push_field(&order.adjusted_trailing_amount);
-        message.push_field(&order.adjustable_trailing_unit);
-    }
-
-    if server_version >= server_versions::EXT_OPERATOR {
-        message.push_field(&order.ext_operator);
-    }
-
-    if server_version >= server_versions::SOFT_DOLLAR_TIER {
-        message.push_field(&order.soft_dollar_tier.name);
-        message.push_field(&order.soft_dollar_tier.value);
-    }
-
-    if server_version >= server_versions::CASH_QTY {
-        message.push_field(&order.cash_qty);
-    }
-
-    if server_version >= server_versions::DECISION_MAKER {
-        message.push_field(&order.mifid2_decision_maker);
-        message.push_field(&order.mifid2_decision_algo);
-    }
-
-    if server_version >= server_versions::MIFID_EXECUTION {
-        message.push_field(&order.mifid2_execution_trader);
-        message.push_field(&order.mifid2_execution_algo);
-    }
-
-    if server_version >= server_versions::AUTO_PRICE_FOR_HEDGE {
-        message.push_field(&order.dont_use_auto_price_for_hedge);
-    }
-
-    if server_version >= server_versions::ORDER_CONTAINER {
-        message.push_field(&order.is_oms_container);
-    }
-
-    if server_version >= server_versions::D_PEG_ORDERS {
-        message.push_field(&order.discretionary_up_to_limit_price);
-    }
-
-    if server_version >= server_versions::PRICE_MGMT_ALGO {
-        message.push_field(&order.use_price_mgmt_algo);
-    }
-
-    if server_version >= server_versions::DURATION {
-        message.push_field(&order.duration);
-    }
-
-    if server_version >= server_versions::POST_TO_ATS {
-        message.push_field(&order.post_to_ats);
-    }
-
-    if server_version >= server_versions::AUTO_CANCEL_PARENT {
-        message.push_field(&order.auto_cancel_parent);
-    }
-
-    if server_version >= server_versions::ADVANCED_ORDER_REJECT {
-        message.push_field(&order.advanced_error_override);
-    }
-
-    if server_version >= server_versions::MANUAL_ORDER_TIME {
-        message.push_field(&order.manual_order_time);
-    }
-
-    if server_version >= server_versions::PEGBEST_PEGMID_OFFSETS {
-        if contract.exchange.as_str() == "IBKRATS" {
-            message.push_field(&order.min_trade_qty);
-        }
-        let mut send_mid_offsets = false;
-        if order.order_type == "PEG BEST" {
-            message.push_field(&order.min_compete_size);
-            message.push_field(&order.compete_against_best_offset);
-            if order.compete_against_best_offset == COMPETE_AGAINST_BEST_OFFSET_UP_TO_MID {
-                send_mid_offsets = true;
-            }
-        } else if order.order_type == "PEG MID" {
-            send_mid_offsets = true;
-        }
-        if send_mid_offsets {
-            message.push_field(&order.mid_offset_at_whole);
-            message.push_field(&order.mid_offset_at_half);
-        }
-    }
-
-    if server_version >= server_versions::CUSTOMER_ACCOUNT {
-        message.push_field(&order.customer_account);
-    }
-
-    if server_version >= server_versions::PROFESSIONAL_CUSTOMER {
-        message.push_field(&order.professional_customer);
-    }
-
-    if (server_versions::RFQ_FIELDS..server_versions::UNDO_RFQ_FIELDS).contains(&server_version) {
-        message.push_field(&"");
-        message.push_field(&i32::MAX);
-    }
-
-    if server_version >= server_versions::INCLUDE_OVERNIGHT {
-        message.push_field(&order.include_overnight);
-    }
-
-    if server_version >= server_versions::CME_TAGGING_FIELDS {
-        message.push_field(&order.manual_order_indicator);
-    }
-
-    if server_version >= server_versions::IMBALANCE_ONLY {
-        message.push_field(&order.imbalance_only);
-    }
-
-    Ok(message)
-}
-
-pub(crate) fn encode_cancel_order(server_version: i32, order_id: i32, manual_order_cancel_time: &str) -> Result<RequestMessage, Error> {
-    const VERSION: i32 = 1;
-
-    let mut message = RequestMessage::default();
-
-    message.push_field(&OutgoingMessages::CancelOrder);
-    if server_version < server_versions::CME_TAGGING_FIELDS {
-        message.push_field(&VERSION);
-    }
-    message.push_field(&order_id);
-
-    if server_version >= server_versions::MANUAL_ORDER_TIME {
-        message.push_field(&manual_order_cancel_time);
-    }
-
-    if (server_versions::RFQ_FIELDS..server_versions::UNDO_RFQ_FIELDS).contains(&server_version) {
-        message.push_field(&"");
-        message.push_field(&"");
-        message.push_field(&i32::MAX);
-    }
-
-    if server_version >= server_versions::CME_TAGGING_FIELDS {
-        message.push_field(&""); // ext_operator
-        message.push_field(&i32::MAX); // manual_order_indicator
-    }
-
-    Ok(message)
-}
-
-pub(crate) fn encode_global_cancel(server_version: i32) -> Result<RequestMessage, Error> {
-    const VERSION: i32 = 1;
-
-    let mut message = RequestMessage::default();
-
-    message.push_field(&OutgoingMessages::RequestGlobalCancel);
-    if server_version < server_versions::CME_TAGGING_FIELDS {
-        message.push_field(&VERSION);
-    }
-
-    if server_version >= server_versions::CME_TAGGING_FIELDS {
-        message.push_field(&""); // ext_operator
-        message.push_field(&i32::MAX); // manual_order_indicator
-    }
-
-    Ok(message)
-}
-
-pub(crate) fn encode_next_valid_order_id() -> Result<RequestMessage, Error> {
-    const VERSION: i32 = 1;
-
-    let mut message = RequestMessage::default();
-
-    message.push_field(&OutgoingMessages::RequestIds);
-    message.push_field(&VERSION);
-    message.push_field(&0);
-
-    Ok(message)
-}
-
-pub(crate) fn encode_completed_orders(api_only: bool) -> Result<RequestMessage, Error> {
-    let mut message = RequestMessage::default();
-
-    message.push_field(&OutgoingMessages::RequestCompletedOrders);
-    message.push_field(&api_only);
-
-    Ok(message)
-}
-
-pub(crate) fn encode_open_orders() -> Result<RequestMessage, Error> {
-    const VERSION: i32 = 1;
-
-    let mut message = RequestMessage::default();
-
-    message.push_field(&OutgoingMessages::RequestOpenOrders);
-    message.push_field(&VERSION);
-
-    Ok(message)
-}
-
-pub(crate) fn encode_all_open_orders() -> Result<RequestMessage, Error> {
-    const VERSION: i32 = 1;
-
-    let mut message = RequestMessage::default();
-
-    message.push_field(&OutgoingMessages::RequestAllOpenOrders);
-    message.push_field(&VERSION);
-
-    Ok(message)
-}
-
-pub(crate) fn encode_auto_open_orders(auto_bind: bool) -> Result<RequestMessage, Error> {
-    const VERSION: i32 = 1;
-
-    let mut message = RequestMessage::default();
-
-    message.push_field(&OutgoingMessages::RequestAutoOpenOrders);
-    message.push_field(&VERSION);
-    message.push_field(&auto_bind);
-
-    Ok(message)
-}
-
-pub(crate) fn encode_executions(server_version: i32, request_id: i32, filter: &ExecutionFilter) -> Result<RequestMessage, Error> {
-    const VERSION: i32 = 3;
-
-    let mut message = RequestMessage::default();
-
-    message.push_field(&OutgoingMessages::RequestExecutions);
-    message.push_field(&VERSION);
-
-    if server_version >= server_versions::EXECUTION_DATA_CHAIN {
-        message.push_field(&request_id);
-    }
-
-    message.push_field(&filter.client_id);
-    message.push_field(&filter.account_code);
-    message.push_field(&filter.time); // "yyyyMMdd-HH:mm:ss" (UTC) or "yyyyMMdd HH:mm:ss timezone"
-    message.push_field(&filter.symbol);
-    message.push_field(&filter.security_type);
-    message.push_field(&filter.exchange);
-    message.push_field(&filter.side);
-
-    if server_version >= server_versions::PARAMETRIZED_DAYS_OF_EXECUTIONS {
-        message.push_field(&filter.last_n_days);
-        message.push_field(&(filter.specific_dates.len() as i32));
-        for date in &filter.specific_dates {
-            message.push_field(date);
-        }
-    }
-
-    Ok(message)
-}
-
-// === Protobuf Encoders ===
-
-#[allow(dead_code)]
-pub(crate) fn encode_place_order_proto(order_id: i32, contract: &Contract, order: &Order) -> Result<Vec<u8>, Error> {
+use crate::messages::OutgoingMessages;
+use crate::orders::{ExecutionFilter, ExerciseAction, Order};
+use crate::Error;
+
+pub(crate) fn encode_place_order(order_id: i32, contract: &Contract, order: &Order) -> Result<Vec<u8>, Error> {
     use prost::Message;
     let request = crate::proto::PlaceOrderRequest {
         order_id: Some(order_id),
@@ -561,8 +19,7 @@ pub(crate) fn encode_place_order_proto(order_id: i32, contract: &Contract, order
     ))
 }
 
-#[allow(dead_code)]
-pub(crate) fn encode_cancel_order_proto(order_id: i32, manual_order_cancel_time: &str) -> Result<Vec<u8>, Error> {
+pub(crate) fn encode_cancel_order(order_id: i32, manual_order_cancel_time: &str) -> Result<Vec<u8>, Error> {
     use prost::Message;
     let request = crate::proto::CancelOrderRequest {
         order_id: Some(order_id),
@@ -574,18 +31,15 @@ pub(crate) fn encode_cancel_order_proto(order_id: i32, manual_order_cancel_time:
     ))
 }
 
-#[allow(dead_code)]
-pub(crate) fn encode_open_orders_proto() -> Result<Vec<u8>, Error> {
+pub(crate) fn encode_open_orders() -> Result<Vec<u8>, Error> {
     crate::proto::encoders::encode_empty_proto!(OpenOrdersRequest, OutgoingMessages::RequestOpenOrders)
 }
 
-#[allow(dead_code)]
-pub(crate) fn encode_all_open_orders_proto() -> Result<Vec<u8>, Error> {
+pub(crate) fn encode_all_open_orders() -> Result<Vec<u8>, Error> {
     crate::proto::encoders::encode_empty_proto!(AllOpenOrdersRequest, OutgoingMessages::RequestAllOpenOrders)
 }
 
-#[allow(dead_code)]
-pub(crate) fn encode_auto_open_orders_proto(auto_bind: bool) -> Result<Vec<u8>, Error> {
+pub(crate) fn encode_auto_open_orders(auto_bind: bool) -> Result<Vec<u8>, Error> {
     use prost::Message;
     let request = crate::proto::AutoOpenOrdersRequest {
         auto_bind: if auto_bind { Some(true) } else { None },
@@ -596,8 +50,7 @@ pub(crate) fn encode_auto_open_orders_proto(auto_bind: bool) -> Result<Vec<u8>, 
     ))
 }
 
-#[allow(dead_code)]
-pub(crate) fn encode_completed_orders_proto(api_only: bool) -> Result<Vec<u8>, Error> {
+pub(crate) fn encode_completed_orders(api_only: bool) -> Result<Vec<u8>, Error> {
     use prost::Message;
     let request = crate::proto::CompletedOrdersRequest {
         api_only: if api_only { Some(true) } else { None },
@@ -608,8 +61,7 @@ pub(crate) fn encode_completed_orders_proto(api_only: bool) -> Result<Vec<u8>, E
     ))
 }
 
-#[allow(dead_code)]
-pub(crate) fn encode_executions_proto(request_id: i32, filter: &ExecutionFilter) -> Result<Vec<u8>, Error> {
+pub(crate) fn encode_executions(request_id: i32, filter: &ExecutionFilter) -> Result<Vec<u8>, Error> {
     use prost::Message;
     let request = crate::proto::ExecutionRequest {
         req_id: Some(request_id),
@@ -621,8 +73,7 @@ pub(crate) fn encode_executions_proto(request_id: i32, filter: &ExecutionFilter)
     ))
 }
 
-#[allow(dead_code)]
-pub(crate) fn encode_global_cancel_proto() -> Result<Vec<u8>, Error> {
+pub(crate) fn encode_global_cancel() -> Result<Vec<u8>, Error> {
     use prost::Message;
     let request = crate::proto::GlobalCancelRequest {
         order_cancel: Some(crate::proto::encoders::encode_order_cancel("")),
@@ -633,553 +84,155 @@ pub(crate) fn encode_global_cancel_proto() -> Result<Vec<u8>, Error> {
     ))
 }
 
-fn f64_max_to_zero(num: Option<f64>) -> Option<f64> {
-    if num == Some(f64::MAX) {
-        Some(0.0)
-    } else {
-        num
-    }
+pub(crate) fn encode_next_valid_order_id() -> Result<Vec<u8>, Error> {
+    use prost::Message;
+    let request = crate::proto::IdsRequest { num_ids: Some(0) };
+    Ok(crate::messages::encode_protobuf_message(
+        OutgoingMessages::RequestIds as i32,
+        &request.encode_to_vec(),
+    ))
 }
 
-fn message_version_for(server_version: i32) -> i32 {
-    if server_version < server_versions::NOT_HELD {
-        27
-    } else {
-        45
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn encode_exercise_options(
-    server_version: i32,
-    request_id: i32,
+    order_id: i32,
     contract: &Contract,
     exercise_action: ExerciseAction,
     exercise_quantity: i32,
     account: &str,
     ovrd: bool,
     manual_order_time: Option<OffsetDateTime>,
-) -> Result<RequestMessage, Error> {
-    const VERSION: i32 = 2;
+) -> Result<Vec<u8>, Error> {
+    use prost::Message;
+    use time::macros::format_description;
+    use time_tz::OffsetDateTimeExt;
 
-    let mut message = RequestMessage::default();
+    let manual_order_time_str = manual_order_time.map(|dt| {
+        let adjusted = dt.to_timezone(time_tz::timezones::db::UTC);
+        let fmt = format_description!("[year][month][day] [hour]:[minute]:[second]");
+        format!("{} UTC", adjusted.format(fmt).unwrap())
+    });
 
-    message.push_field(&OutgoingMessages::ExerciseOptions);
-    message.push_field(&VERSION);
-    message.push_field(&request_id);
-    message.push_field(&contract.contract_id);
-    message.push_field(&contract.symbol);
-    message.push_field(&contract.security_type);
-    message.push_field(&contract.last_trade_date_or_contract_month);
-    message.push_field(&contract.strike);
-    message.push_field(&contract.right);
-    message.push_field(&contract.multiplier);
-    message.push_field(&contract.exchange);
-    message.push_field(&contract.currency);
-    message.push_field(&contract.local_symbol);
-    message.push_field(&contract.trading_class);
-    message.push_field(&(exercise_action as i32));
-    message.push_field(&exercise_quantity);
-    message.push_field(&account);
-    message.push_field(&ovrd);
-
-    if server_version >= server_versions::MANUAL_ORDER_TIME {
-        message.push_field(&manual_order_time);
-    }
-
-    Ok(message)
-}
-
-/// Encodes a single order condition according to the TWS API protocol.
-///
-/// Each condition is encoded as:
-/// - condition_type (i32): Type discriminator (1=Price, 3=Time, etc.)
-/// - is_conjunction (bool): Whether this is an AND condition (true) or OR (false)
-/// - condition-specific fields...
-pub(crate) fn encode_condition(message: &mut RequestMessage, condition: &OrderCondition) {
-    message.push_field(&condition.condition_type());
-    message.push_field(&condition.is_conjunction());
-
-    match condition {
-        OrderCondition::Price(c) => encode_price_condition(message, c),
-        OrderCondition::Time(c) => encode_time_condition(message, c),
-        OrderCondition::Margin(c) => encode_margin_condition(message, c),
-        OrderCondition::Execution(c) => encode_execution_condition(message, c),
-        OrderCondition::Volume(c) => encode_volume_condition(message, c),
-        OrderCondition::PercentChange(c) => encode_percent_change_condition(message, c),
-    }
-}
-
-/// Encodes a PriceCondition according to the TWS API protocol.
-///
-/// Fields (in order):
-/// 1. contract_id (i32)
-/// 2. exchange (String)
-/// 3. is_more (bool)
-/// 4. price (f64)
-/// 5. trigger_method (i32)
-fn encode_price_condition(message: &mut RequestMessage, condition: &crate::orders::conditions::PriceCondition) {
-    message.push_field(&condition.contract_id);
-    message.push_field(&condition.exchange);
-    message.push_field(&condition.is_more);
-    message.push_field(&condition.price);
-    message.push_field(&condition.trigger_method);
-}
-
-/// Encodes a TimeCondition according to the TWS API protocol.
-///
-/// Fields (in order):
-/// 1. is_more (bool)
-/// 2. time (String in format "YYYYMMDD HH:MM:SS TZ")
-fn encode_time_condition(message: &mut RequestMessage, condition: &crate::orders::conditions::TimeCondition) {
-    message.push_field(&condition.is_more);
-    message.push_field(&condition.time);
-}
-
-/// Encodes a MarginCondition according to the TWS API protocol.
-///
-/// Fields (in order):
-/// 1. is_more (bool)
-/// 2. percent (i32)
-fn encode_margin_condition(message: &mut RequestMessage, condition: &crate::orders::conditions::MarginCondition) {
-    message.push_field(&condition.is_more);
-    message.push_field(&condition.percent);
-}
-
-/// Encodes an ExecutionCondition according to the TWS API protocol.
-///
-/// Fields (in order):
-/// 1. symbol (String)
-/// 2. security_type (String)
-/// 3. exchange (String)
-fn encode_execution_condition(message: &mut RequestMessage, condition: &crate::orders::conditions::ExecutionCondition) {
-    message.push_field(&condition.symbol);
-    message.push_field(&condition.security_type);
-    message.push_field(&condition.exchange);
-}
-
-/// Encodes a VolumeCondition according to the TWS API protocol.
-///
-/// Fields (in order):
-/// 1. contract_id (i32)
-/// 2. exchange (String)
-/// 3. is_more (bool)
-/// 4. volume (i32)
-fn encode_volume_condition(message: &mut RequestMessage, condition: &crate::orders::conditions::VolumeCondition) {
-    message.push_field(&condition.contract_id);
-    message.push_field(&condition.exchange);
-    message.push_field(&condition.is_more);
-    message.push_field(&condition.volume);
-}
-
-/// Encodes a PercentChangeCondition according to the TWS API protocol.
-///
-/// Fields (in order):
-/// 1. contract_id (i32)
-/// 2. exchange (String)
-/// 3. is_more (bool)
-/// 4. percent (f64)
-fn encode_percent_change_condition(message: &mut RequestMessage, condition: &crate::orders::conditions::PercentChangeCondition) {
-    message.push_field(&condition.contract_id);
-    message.push_field(&condition.exchange);
-    message.push_field(&condition.is_more);
-    message.push_field(&condition.percent);
+    let request = crate::proto::ExerciseOptionsRequest {
+        order_id: Some(order_id),
+        contract: Some(crate::proto::encoders::encode_contract(contract)),
+        exercise_action: Some(exercise_action as i32),
+        exercise_quantity: Some(exercise_quantity),
+        account: if account.is_empty() { None } else { Some(account.to_string()) },
+        r#override: if ovrd { Some(true) } else { None },
+        manual_order_time: manual_order_time_str,
+        customer_account: None,
+        professional_customer: None,
+    };
+    Ok(crate::messages::encode_protobuf_message(
+        OutgoingMessages::ExerciseOptions as i32,
+        &request.encode_to_vec(),
+    ))
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use pretty_assertions::assert_eq;
-
     use super::*;
+    use crate::contracts::Contract;
+    use crate::orders::{Action, ExecutionFilter, Order};
 
     #[test]
-    fn message_version_for() {
-        assert_eq!(super::message_version_for(server_versions::NOT_HELD), 45);
-        assert_eq!(super::message_version_for(server_versions::EXECUTION_DATA_CHAIN), 27);
-    }
-
-    #[test]
-    fn f64_max_to_zero() {
-        assert_eq!(super::f64_max_to_zero(Some(f64::MAX)), Some(0.0));
-        assert_eq!(super::f64_max_to_zero(Some(0.0)), Some(0.0));
-        assert_eq!(super::f64_max_to_zero(Some(50.0)), Some(50.0));
-    }
-
-    #[test]
-    fn test_encode_price_condition() {
-        use crate::orders::conditions::{PriceCondition, TriggerMethod};
-        use crate::orders::OrderCondition;
-
-        let condition = OrderCondition::Price(PriceCondition {
-            contract_id: 12345,
-            exchange: "NASDAQ".to_string(),
-            price: 150.0,
-            trigger_method: TriggerMethod::DoubleBidAsk,
-            is_more: true,
-            is_conjunction: false,
-        });
-
-        let mut message = RequestMessage::default();
-        encode_condition(&mut message, &condition);
-
-        // Verify the encoded fields match the TWS protocol
-        let fields = message.encode();
-        let field_vec: Vec<&str> = fields.split('\0').collect();
-
-        assert_eq!(field_vec[0], "1"); // condition_type (Price)
-        assert_eq!(field_vec[1], "0"); // is_conjunction (false)
-        assert_eq!(field_vec[2], "12345"); // contract_id
-        assert_eq!(field_vec[3], "NASDAQ"); // exchange
-        assert_eq!(field_vec[4], "1"); // is_more (true)
-        assert_eq!(field_vec[5], "150"); // price
-        assert_eq!(field_vec[6], "1"); // trigger_method
-    }
-
-    #[test]
-    fn test_encode_time_condition() {
-        use crate::orders::conditions::TimeCondition;
-        use crate::orders::OrderCondition;
-
-        let condition = OrderCondition::Time(TimeCondition {
-            time: "20251230 23:59:59 UTC".to_string(),
-            is_more: true,
-            is_conjunction: true,
-        });
-
-        let mut message = RequestMessage::default();
-        encode_condition(&mut message, &condition);
-
-        let fields = message.encode();
-        let field_vec: Vec<&str> = fields.split('\0').collect();
-
-        assert_eq!(field_vec[0], "3"); // condition_type (Time)
-        assert_eq!(field_vec[1], "1"); // is_conjunction (true)
-        assert_eq!(field_vec[2], "1"); // is_more (true)
-        assert_eq!(field_vec[3], "20251230 23:59:59 UTC"); // time
-    }
-
-    #[test]
-    fn test_encode_margin_condition() {
-        use crate::orders::conditions::MarginCondition;
-        use crate::orders::OrderCondition;
-
-        let condition = OrderCondition::Margin(MarginCondition {
-            percent: 30,
-            is_more: false,
-            is_conjunction: true,
-        });
-
-        let mut message = RequestMessage::default();
-        encode_condition(&mut message, &condition);
-
-        let fields = message.encode();
-        let field_vec: Vec<&str> = fields.split('\0').collect();
-
-        assert_eq!(field_vec[0], "4"); // condition_type (Margin)
-        assert_eq!(field_vec[1], "1"); // is_conjunction (true)
-        assert_eq!(field_vec[2], "0"); // is_more (false)
-        assert_eq!(field_vec[3], "30"); // percent
-    }
-
-    #[test]
-    fn test_encode_execution_condition() {
-        use crate::orders::conditions::ExecutionCondition;
-        use crate::orders::OrderCondition;
-
-        let condition = OrderCondition::Execution(ExecutionCondition {
-            symbol: "AAPL".to_string(),
-            security_type: "STK".to_string(),
-            exchange: "SMART".to_string(),
-            is_conjunction: false,
-        });
-
-        let mut message = RequestMessage::default();
-        encode_condition(&mut message, &condition);
-
-        let fields = message.encode();
-        let field_vec: Vec<&str> = fields.split('\0').collect();
-
-        assert_eq!(field_vec[0], "5"); // condition_type (Execution)
-        assert_eq!(field_vec[1], "0"); // is_conjunction (false)
-        assert_eq!(field_vec[2], "AAPL"); // symbol
-        assert_eq!(field_vec[3], "STK"); // security_type
-        assert_eq!(field_vec[4], "SMART"); // exchange
-    }
-
-    #[test]
-    fn test_encode_volume_condition() {
-        use crate::orders::conditions::VolumeCondition;
-        use crate::orders::OrderCondition;
-
-        let condition = OrderCondition::Volume(VolumeCondition {
-            contract_id: 54321,
-            exchange: "NYSE".to_string(),
-            volume: 1000000,
-            is_more: true,
-            is_conjunction: true,
-        });
-
-        let mut message = RequestMessage::default();
-        encode_condition(&mut message, &condition);
-
-        let fields = message.encode();
-        let field_vec: Vec<&str> = fields.split('\0').collect();
-
-        assert_eq!(field_vec[0], "6"); // condition_type (Volume)
-        assert_eq!(field_vec[1], "1"); // is_conjunction (true)
-        assert_eq!(field_vec[2], "54321"); // contract_id
-        assert_eq!(field_vec[3], "NYSE"); // exchange
-        assert_eq!(field_vec[4], "1"); // is_more (true)
-        assert_eq!(field_vec[5], "1000000"); // volume
-    }
-
-    #[test]
-    fn test_encode_percent_change_condition() {
-        use crate::orders::conditions::PercentChangeCondition;
-        use crate::orders::OrderCondition;
-
-        let condition = OrderCondition::PercentChange(PercentChangeCondition {
-            contract_id: 98765,
-            exchange: "NASDAQ".to_string(),
-            percent: 5.5,
-            is_more: false,
-            is_conjunction: false,
-        });
-
-        let mut message = RequestMessage::default();
-        encode_condition(&mut message, &condition);
-
-        let fields = message.encode();
-        let field_vec: Vec<&str> = fields.split('\0').collect();
-
-        assert_eq!(field_vec[0], "7"); // condition_type (PercentChange)
-        assert_eq!(field_vec[1], "0"); // is_conjunction (false)
-        assert_eq!(field_vec[2], "98765"); // contract_id
-        assert_eq!(field_vec[3], "NASDAQ"); // exchange
-        assert_eq!(field_vec[4], "0"); // is_more (false)
-        assert_eq!(field_vec[5], "5.5"); // percent
-    }
-
-    #[test]
-    fn test_encode_executions_without_date_filter() {
-        let filter = ExecutionFilter {
-            client_id: Some(1),
-            account_code: "DU123456".to_string(),
-            time: "20260101 09:30:00".to_string(),
-            symbol: "AAPL".to_string(),
-            security_type: "STK".to_string(),
-            exchange: "SMART".to_string(),
-            side: "BUY".to_string(),
-            ..Default::default()
-        };
-
-        // Version below PARAMETRIZED_DAYS_OF_EXECUTIONS should not include date fields
-        let result = encode_executions(server_versions::WSH_EVENT_DATA_FILTERS_DATE, 9000, &filter).unwrap();
-        let fields = result.encode();
-        let field_vec: Vec<&str> = fields.split('\0').collect();
-
-        assert_eq!(field_vec[0], "7"); // RequestExecutions
-        assert_eq!(field_vec[1], "3"); // VERSION
-        assert_eq!(field_vec[2], "9000"); // request_id
-        assert_eq!(field_vec[3], "1"); // client_id
-        assert_eq!(field_vec[4], "DU123456"); // account_code
-        assert_eq!(field_vec[5], "20260101 09:30:00"); // time
-        assert_eq!(field_vec[6], "AAPL"); // symbol
-        assert_eq!(field_vec[7], "STK"); // security_type
-        assert_eq!(field_vec[8], "SMART"); // exchange
-        assert_eq!(field_vec[9], "BUY"); // side
-        assert_eq!(field_vec.len(), 11); // 10 fields + trailing empty
-    }
-
-    #[test]
-    fn test_encode_executions_with_date_filter() {
-        let filter = ExecutionFilter {
-            client_id: Some(1),
-            account_code: "DU123456".to_string(),
-            time: "".to_string(),
-            symbol: "".to_string(),
-            security_type: "".to_string(),
-            exchange: "".to_string(),
-            side: "".to_string(),
-            last_n_days: 7,
-            specific_dates: vec!["20260125".to_string(), "20260126".to_string()],
-        };
-
-        // Version at PARAMETRIZED_DAYS_OF_EXECUTIONS should include date fields
-        let result = encode_executions(server_versions::PARAMETRIZED_DAYS_OF_EXECUTIONS, 9000, &filter).unwrap();
-        let fields = result.encode();
-        let field_vec: Vec<&str> = fields.split('\0').collect();
-
-        assert_eq!(field_vec[0], "7"); // RequestExecutions
-        assert_eq!(field_vec[1], "3"); // VERSION
-        assert_eq!(field_vec[2], "9000"); // request_id
-        assert_eq!(field_vec[3], "1"); // client_id
-        assert_eq!(field_vec[4], "DU123456"); // account_code
-        assert_eq!(field_vec[5], ""); // time
-        assert_eq!(field_vec[6], ""); // symbol
-        assert_eq!(field_vec[7], ""); // security_type
-        assert_eq!(field_vec[8], ""); // exchange
-        assert_eq!(field_vec[9], ""); // side
-        assert_eq!(field_vec[10], "7"); // last_n_days
-        assert_eq!(field_vec[11], "2"); // specific_dates count
-        assert_eq!(field_vec[12], "20260125"); // specific_dates[0]
-        assert_eq!(field_vec[13], "20260126"); // specific_dates[1]
-        assert_eq!(field_vec.len(), 15); // 14 fields + trailing empty
-    }
-
-    #[test]
-    fn test_encode_place_order_v200_new_fields() {
+    fn test_encode_place_order() {
         let contract = Contract::stock("AAPL").build();
         let order = Order {
-            action: crate::orders::Action::Buy,
+            action: Action::Buy,
             total_quantity: 100.0,
             order_type: "LMT".to_string(),
-            limit_price: Some(150.50),
-            customer_account: "CUST001".to_string(),
-            professional_customer: true,
-            include_overnight: true,
-            manual_order_indicator: Some(3),
-            imbalance_only: true,
+            limit_price: Some(150.0),
             ..Default::default()
         };
-
-        let result = encode_place_order(200, 42, &contract, &order).unwrap();
-        let fields = result.encode();
-        let field_vec: Vec<&str> = fields.split('\0').collect();
-
-        // Verify the last fields contain the new v183-v199 fields.
-        // Work backward from end: trailing empty, then imbalance_only, manual_order_indicator,
-        // include_overnight, (no RFQ at v200), professional_customer, customer_account
-        let len = field_vec.len();
-        assert_eq!(field_vec[len - 2], "1", "imbalance_only");
-        assert_eq!(field_vec[len - 3], "3", "manual_order_indicator");
-        assert_eq!(field_vec[len - 4], "1", "include_overnight");
-        // No RFQ fields at v200 (>= UNDO_RFQ_FIELDS=190)
-        assert_eq!(field_vec[len - 5], "1", "professional_customer");
-        assert_eq!(field_vec[len - 6], "CUST001", "customer_account");
+        let bytes = encode_place_order(1001, &contract, &order).unwrap();
+        let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        assert_eq!(msg_id, crate::messages::OutgoingMessages::PlaceOrder as i32 + 200);
     }
 
     #[test]
-    fn test_encode_place_order_v188_rfq_fields() {
+    fn test_encode_place_order_roundtrip() {
+        use prost::Message;
         let contract = Contract::stock("AAPL").build();
         let order = Order {
-            action: crate::orders::Action::Buy,
+            action: Action::Buy,
             total_quantity: 100.0,
             order_type: "LMT".to_string(),
-            customer_account: "CUST001".to_string(),
-            professional_customer: true,
+            limit_price: Some(150.0),
+            transmit: true,
             ..Default::default()
         };
-
-        // v188 is in range [RFQ_FIELDS=187, UNDO_RFQ_FIELDS=190)
-        let result = encode_place_order(188, 42, &contract, &order).unwrap();
-        let fields = result.encode();
-        let field_vec: Vec<&str> = fields.split('\0').collect();
-
-        // Last fields: customer_account, professional_customer, RFQ empty, RFQ max_int
-        // No include_overnight (v188 < 189), no manual_order_indicator (< 192), no imbalance_only (< 199)
-        let len = field_vec.len();
-        assert_eq!(field_vec[len - 2], "2147483647", "RFQ max int");
-        assert_eq!(field_vec[len - 3], "", "RFQ empty string");
-        assert_eq!(field_vec[len - 4], "1", "professional_customer");
-        assert_eq!(field_vec[len - 5], "CUST001", "customer_account");
+        let bytes = encode_place_order(1001, &contract, &order).unwrap();
+        let request = crate::proto::PlaceOrderRequest::decode(&bytes[4..]).unwrap();
+        assert_eq!(request.order_id, Some(1001));
+        assert_eq!(request.contract.unwrap().symbol.as_deref(), Some("AAPL"));
+        let proto_order = request.order.unwrap();
+        assert_eq!(proto_order.action.as_deref(), Some("BUY"));
+        assert_eq!(proto_order.lmt_price, Some(150.0));
     }
 
     #[test]
-    fn test_encode_place_order_v191_no_rfq_fields() {
-        let contract = Contract::stock("AAPL").build();
-        let order = Order {
-            action: crate::orders::Action::Buy,
-            total_quantity: 100.0,
-            order_type: "LMT".to_string(),
-            customer_account: "CUST001".to_string(),
-            professional_customer: true,
-            include_overnight: true,
-            ..Default::default()
-        };
-
-        // v191 >= UNDO_RFQ_FIELDS=190 (no RFQ), >= INCLUDE_OVERNIGHT=189, < CME_TAGGING_FIELDS=192
-        let result = encode_place_order(191, 42, &contract, &order).unwrap();
-        let fields = result.encode();
-        let field_vec: Vec<&str> = fields.split('\0').collect();
-
-        // Last fields: customer_account, professional_customer, include_overnight
-        // No RFQ (v191 >= 190), no manual_order_indicator (< 192), no imbalance_only (< 199)
-        let len = field_vec.len();
-        assert_eq!(field_vec[len - 2], "1", "include_overnight");
-        assert_eq!(field_vec[len - 3], "1", "professional_customer");
-        assert_eq!(field_vec[len - 4], "CUST001", "customer_account");
+    fn test_encode_cancel_order() {
+        let bytes = encode_cancel_order(1001, "").unwrap();
+        let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        assert_eq!(msg_id, crate::messages::OutgoingMessages::CancelOrder as i32 + 200);
     }
 
-    #[cfg(test)]
-    mod proto_tests {
-        use super::super::*;
-        use crate::contracts::Contract;
-        use crate::orders::{Action, ExecutionFilter, Order};
+    #[test]
+    fn test_encode_open_orders() {
+        let bytes = encode_open_orders().unwrap();
+        let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        assert_eq!(msg_id, crate::messages::OutgoingMessages::RequestOpenOrders as i32 + 200);
+    }
 
-        #[test]
-        fn test_encode_place_order_proto() {
-            let contract = Contract::stock("AAPL").build();
-            let order = Order {
-                action: Action::Buy,
-                total_quantity: 100.0,
-                order_type: "LMT".to_string(),
-                limit_price: Some(150.0),
-                ..Default::default()
-            };
-            let bytes = encode_place_order_proto(1001, &contract, &order).unwrap();
-            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-            assert_eq!(msg_id, crate::messages::OutgoingMessages::PlaceOrder as i32 + 200);
-        }
+    #[test]
+    fn test_encode_global_cancel() {
+        let bytes = encode_global_cancel().unwrap();
+        let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        assert_eq!(msg_id, crate::messages::OutgoingMessages::RequestGlobalCancel as i32 + 200);
+    }
 
-        #[test]
-        fn test_encode_place_order_proto_roundtrip() {
-            use prost::Message;
-            let contract = Contract::stock("AAPL").build();
-            let order = Order {
-                action: Action::Buy,
-                total_quantity: 100.0,
-                order_type: "LMT".to_string(),
-                limit_price: Some(150.0),
-                transmit: true,
-                ..Default::default()
-            };
-            let bytes = encode_place_order_proto(1001, &contract, &order).unwrap();
-            let request = crate::proto::PlaceOrderRequest::decode(&bytes[4..]).unwrap();
-            assert_eq!(request.order_id, Some(1001));
-            assert_eq!(request.contract.unwrap().symbol.as_deref(), Some("AAPL"));
-            let proto_order = request.order.unwrap();
-            assert_eq!(proto_order.action.as_deref(), Some("BUY"));
-            assert_eq!(proto_order.lmt_price, Some(150.0));
-        }
+    #[test]
+    fn test_encode_executions() {
+        let filter = ExecutionFilter::default();
+        let bytes = encode_executions(9000, &filter).unwrap();
+        let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        assert_eq!(msg_id, crate::messages::OutgoingMessages::RequestExecutions as i32 + 200);
+    }
 
-        #[test]
-        fn test_encode_cancel_order_proto() {
-            let bytes = encode_cancel_order_proto(1001, "").unwrap();
-            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-            assert_eq!(msg_id, crate::messages::OutgoingMessages::CancelOrder as i32 + 200);
-        }
+    #[test]
+    fn test_encode_next_valid_order_id() {
+        let bytes = encode_next_valid_order_id().unwrap();
+        let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        assert_eq!(msg_id, crate::messages::OutgoingMessages::RequestIds as i32 + 200);
+    }
 
-        #[test]
-        fn test_encode_open_orders_proto() {
-            let bytes = encode_open_orders_proto().unwrap();
-            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-            assert_eq!(msg_id, crate::messages::OutgoingMessages::RequestOpenOrders as i32 + 200);
-        }
+    #[test]
+    fn test_encode_exercise_options() {
+        let contract = Contract::stock("AAPL").build();
+        let bytes = encode_exercise_options(1001, &contract, ExerciseAction::Exercise, 1, "DU123456", false, None).unwrap();
+        let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        assert_eq!(msg_id, crate::messages::OutgoingMessages::ExerciseOptions as i32 + 200);
+    }
 
-        #[test]
-        fn test_encode_global_cancel_proto() {
-            let bytes = encode_global_cancel_proto().unwrap();
-            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-            assert_eq!(msg_id, crate::messages::OutgoingMessages::RequestGlobalCancel as i32 + 200);
-        }
+    #[test]
+    fn test_encode_completed_orders() {
+        let bytes = encode_completed_orders(true).unwrap();
+        let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        assert_eq!(msg_id, crate::messages::OutgoingMessages::RequestCompletedOrders as i32 + 200);
+    }
 
-        #[test]
-        fn test_encode_executions_proto() {
-            let filter = ExecutionFilter::default();
-            let bytes = encode_executions_proto(9000, &filter).unwrap();
-            let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-            assert_eq!(msg_id, crate::messages::OutgoingMessages::RequestExecutions as i32 + 200);
-        }
+    #[test]
+    fn test_encode_all_open_orders() {
+        let bytes = encode_all_open_orders().unwrap();
+        let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        assert_eq!(msg_id, crate::messages::OutgoingMessages::RequestAllOpenOrders as i32 + 200);
+    }
+
+    #[test]
+    fn test_encode_auto_open_orders() {
+        let bytes = encode_auto_open_orders(true).unwrap();
+        let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        assert_eq!(msg_id, crate::messages::OutgoingMessages::RequestAutoOpenOrders as i32 + 200);
     }
 }

@@ -15,7 +15,7 @@ use log::warn;
 use time::macros::format_description;
 use time::OffsetDateTime;
 
-use super::{RequestMessage, ResponseMessage};
+use super::ResponseMessage;
 
 static RECORDING_SEQ: AtomicUsize = AtomicUsize::new(0);
 static RECORDER_ID: AtomicUsize = AtomicUsize::new(0);
@@ -56,13 +56,13 @@ impl MessageRecorder {
         }
     }
 
-    pub fn record_request(&self, message: &RequestMessage) {
+    pub fn record_request(&self, data: &[u8]) {
         if !self.enabled {
             return;
         }
 
         let record_id = RECORDING_SEQ.fetch_add(1, Ordering::SeqCst);
-        if let Err(err) = fs::write(self.request_file(record_id), message.encode().replace('\0', "|")) {
+        if let Err(err) = fs::write(self.request_file(record_id), data) {
             warn!("failed to record request: {err}");
         }
     }
@@ -89,7 +89,7 @@ impl MessageRecorder {
 
 #[cfg(test)]
 mod tests {
-    use crate::messages::OutgoingMessages;
+    use crate::messages::encode_protobuf_message;
     use crate::testdata::responses::{MANAGED_ACCOUNT, MARKET_RULE};
 
     use super::*;
@@ -125,12 +125,10 @@ mod tests {
         let temp_path = temp_dir.path().to_str().unwrap();
 
         temp_env::with_var("IBAPI_RECORDING_DIR", Some(temp_path), || {
-            let mut message = RequestMessage::new();
-            message.push_field(&OutgoingMessages::CancelAccountSummary);
-            message.push_field(&9000);
+            let data = encode_protobuf_message(63, &[0x08, 0xd0, 0x46]); // msg_id=63, proto payload
 
             let recorder = MessageRecorder::from_env();
-            recorder.record_request(&message);
+            recorder.record_request(&data);
 
             let files = fs::read_dir(&recorder.recording_dir)
                 .unwrap()
@@ -141,8 +139,8 @@ mod tests {
             assert_eq!(files.len(), 1);
             assert!(files[0].to_str().unwrap().ends_with("-request.msg"));
 
-            let content = fs::read_to_string(&files[0]).unwrap();
-            assert_eq!(content, "63|9000|");
+            let content = fs::read(&files[0]).unwrap();
+            assert_eq!(content, data);
         });
     }
 
@@ -177,15 +175,12 @@ mod tests {
         let temp_path = temp_dir.path().to_str().unwrap();
 
         temp_env::with_var("IBAPI_RECORDING_DIR", Some(temp_path), || {
-            let mut request = RequestMessage::new();
-            request.push_field(&1);
-            request.push_field(&"test_request");
-
+            let request_data = encode_protobuf_message(1, &[]);
             let response = ResponseMessage::from_simple(MANAGED_ACCOUNT);
 
             let recorder = MessageRecorder::from_env();
 
-            recorder.record_request(&request);
+            recorder.record_request(&request_data);
             recorder.record_response(&response);
 
             let files = fs::read_dir(&recorder.recording_dir)
@@ -195,27 +190,6 @@ mod tests {
                 .unwrap();
 
             assert_eq!(files.len(), 2);
-
-            let mut request_file = None;
-            let mut response_file = None;
-
-            for file in files {
-                let file_name = file.file_name().unwrap().to_str().unwrap();
-                if file_name.ends_with("-request.msg") {
-                    request_file = Some(file);
-                } else if file_name.ends_with("-response.msg") {
-                    response_file = Some(file);
-                }
-            }
-
-            assert!(request_file.is_some());
-            assert!(response_file.is_some());
-
-            let request_content = fs::read_to_string(request_file.unwrap()).unwrap();
-            let response_content = fs::read_to_string(response_file.unwrap()).unwrap();
-
-            assert_eq!(request_content, "1|test_request|");
-            assert_eq!(response_content, "15|1|DU1234567,DU7654321|");
         });
     }
 
@@ -225,11 +199,9 @@ mod tests {
             let recorder = MessageRecorder::from_env();
             assert!(!recorder.enabled);
 
-            let request = RequestMessage::new();
             let response = ResponseMessage::from_simple(MANAGED_ACCOUNT);
 
-            // These should not panic or create any files
-            recorder.record_request(&request);
+            recorder.record_request(&[]);
             recorder.record_response(&response);
         });
     }

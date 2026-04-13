@@ -25,7 +25,7 @@ pub enum CleanupSignal {
 }
 
 use crate::connection::r#async::AsyncConnection;
-use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
 use super::routing::{determine_routing, is_warning_error, RoutingDecision, UNSPECIFIED_REQUEST_ID};
@@ -33,39 +33,30 @@ use super::routing::{determine_routing, is_warning_error, RoutingDecision, UNSPE
 /// Asynchronous message bus trait
 #[async_trait]
 pub trait AsyncMessageBus: Send + Sync {
-    /// Atomic subscribe + send for requests with IDs
-    async fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error>;
+    async fn send_request(&self, request_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
 
-    /// Atomic subscribe + send for orders
-    async fn send_order_request(&self, order_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error>;
+    async fn send_order_request(&self, order_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
 
-    /// Atomic subscribe + send for shared channels
-    async fn send_shared_request(&self, message_type: OutgoingMessages, message: RequestMessage) -> Result<AsyncInternalSubscription, Error>;
+    async fn send_shared_request(&self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error>;
 
-    /// Send without expecting response
-    async fn send_message(&self, message: RequestMessage) -> Result<(), Error>;
+    async fn send_message(&self, message: Vec<u8>) -> Result<(), Error>;
 
-    /// Cancel operations
     #[allow(dead_code)]
-    async fn cancel_subscription(&self, request_id: i32, message: RequestMessage) -> Result<(), Error>;
+    async fn cancel_subscription(&self, request_id: i32, message: Vec<u8>) -> Result<(), Error>;
     #[allow(dead_code)]
-    async fn cancel_order_subscription(&self, order_id: i32, message: RequestMessage) -> Result<(), Error>;
+    async fn cancel_order_subscription(&self, order_id: i32, message: Vec<u8>) -> Result<(), Error>;
 
-    /// Order update stream
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error>;
 
-    /// Ensure shutdown of the message bus
     #[allow(dead_code)]
     async fn ensure_shutdown(&self);
 
-    /// Request shutdown synchronously (for use in Drop)
     fn request_shutdown_sync(&self);
 
-    /// Returns true if the client is currently connected to TWS/IB Gateway
     fn is_connected(&self) -> bool;
 
     #[cfg(test)]
-    fn request_messages(&self) -> Vec<RequestMessage> {
+    fn request_messages(&self) -> Vec<Vec<u8>> {
         vec![]
     }
 }
@@ -660,20 +651,16 @@ impl AsyncTcpMessageBus {
 
 #[async_trait]
 impl AsyncMessageBus for AsyncTcpMessageBus {
-    async fn send_request(&self, request_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
-        // Create broadcast channel with reasonable buffer
+    async fn send_request(&self, request_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         let (sender, receiver) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
 
-        // Insert into map BEFORE sending
         {
             let mut channels = self.request_channels.write().await;
             channels.insert(request_id, sender);
         }
 
-        // Now send the request - any response will find the channel
         self.connection.write_message(&message).await?;
 
-        // Return subscription with cleanup
         Ok(AsyncInternalSubscription::with_cleanup(
             receiver,
             self.cleanup_sender.clone(),
@@ -681,8 +668,7 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
         ))
     }
 
-    async fn send_order_request(&self, order_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
-        // Same pattern for orders
+    async fn send_order_request(&self, order_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         let (sender, receiver) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
 
         {
@@ -699,8 +685,7 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
         ))
     }
 
-    async fn send_shared_request(&self, message_type: OutgoingMessages, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
-        // Get the pre-created broadcast receiver
+    async fn send_shared_request(&self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         let receiver = {
             let channels = self.shared_channel_receivers.read().await;
             if let Some(receiver) = channels.get(&message_type) {
@@ -713,10 +698,8 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
             }
         };
 
-        // Send the request - response will be routed to the broadcast channel
         self.connection.write_message(&message).await?;
 
-        // Return subscription directly - no relay needed!
         Ok(AsyncInternalSubscription::with_cleanup(
             receiver,
             self.cleanup_sender.clone(),
@@ -724,37 +707,32 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
         ))
     }
 
-    async fn send_message(&self, message: RequestMessage) -> Result<(), Error> {
-        // For fire-and-forget messages
+    async fn send_message(&self, message: Vec<u8>) -> Result<(), Error> {
         self.connection.write_message(&message).await
     }
 
-    async fn cancel_subscription(&self, request_id: i32, message: RequestMessage) -> Result<(), Error> {
+    async fn cancel_subscription(&self, request_id: i32, message: Vec<u8>) -> Result<(), Error> {
         self.connection.write_message(&message).await?;
 
         let channels = self.request_channels.read().await;
         if let Some(sender) = channels.get(&request_id) {
-            // Send cancellation error to the channel
             let _ = sender.send(ResponseMessage::from("Cancelled"));
         }
 
-        // Remove channel
         let mut channels = self.request_channels.write().await;
         channels.remove(&request_id);
 
         Ok(())
     }
 
-    async fn cancel_order_subscription(&self, order_id: i32, message: RequestMessage) -> Result<(), Error> {
+    async fn cancel_order_subscription(&self, order_id: i32, message: Vec<u8>) -> Result<(), Error> {
         self.connection.write_message(&message).await?;
 
         let channels = self.order_channels.read().await;
         if let Some(sender) = channels.get(&order_id) {
-            // Send cancellation error to the channel
             let _ = sender.send(ResponseMessage::from("Cancelled"));
         }
 
-        // Remove channel
         let mut channels = self.order_channels.write().await;
         channels.remove(&order_id);
 

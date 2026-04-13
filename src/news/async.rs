@@ -50,15 +50,7 @@ impl Client {
         self.check_server_version(server_versions::REQ_HISTORICAL_NEWS, "It does not support historical news requests.")?;
 
         let request_id = self.next_request_id();
-        let request = encoders::encode_request_historical_news(
-            self.server_version(),
-            request_id,
-            contract_id,
-            provider_codes,
-            start_time,
-            end_time,
-            total_results,
-        )?;
+        let request = encoders::encode_request_historical_news(request_id, contract_id, provider_codes, start_time, end_time, total_results)?;
         let internal_subscription = self.send_request(request_id, request).await?;
 
         Ok(Subscription::new_from_internal::<NewsArticle>(
@@ -76,7 +68,7 @@ impl Client {
         self.check_server_version(server_versions::REQ_NEWS_ARTICLE, "It does not support news article requests.")?;
 
         let request_id = self.next_request_id();
-        let request = encoders::encode_request_news_article(self.server_version(), request_id, provider_code, article_id)?;
+        let request = encoders::encode_request_news_article(request_id, provider_code, article_id)?;
 
         let mut subscription = self.send_request(request_id, request).await?;
 
@@ -96,14 +88,7 @@ impl Client {
         let generic_ticks: Vec<_> = generic_ticks.iter().map(|s| s.as_str()).collect();
 
         let request_id = self.next_request_id();
-        let request = realtime::common::encoders::encode_request_market_data(
-            self.server_version(),
-            request_id,
-            contract,
-            generic_ticks.as_slice(),
-            false,
-            false,
-        )?;
+        let request = realtime::common::encoders::encode_request_market_data(request_id, contract, generic_ticks.as_slice(), false, false)?;
         let internal_subscription = self.send_request(request_id, request).await?;
 
         Ok(Subscription::new_from_internal::<NewsArticle>(
@@ -122,8 +107,7 @@ impl Client {
         let generic_ticks = &["mdoff", "292"];
 
         let request_id = self.next_request_id();
-        let request =
-            realtime::common::encoders::encode_request_market_data(self.server_version(), request_id, &contract, generic_ticks, false, false)?;
+        let request = realtime::common::encoders::encode_request_market_data(request_id, &contract, generic_ticks, false, false)?;
         let internal_subscription = self.send_request(request_id, request).await?;
 
         Ok(Subscription::new_from_internal::<NewsArticle>(
@@ -139,7 +123,9 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
+    use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::contracts::Contract;
+    use crate::messages::OutgoingMessages;
     use crate::news::ArticleType;
     use crate::stubs::MessageBusStub;
     use crate::{server_versions, Client};
@@ -159,7 +145,8 @@ mod tests {
         assert!(results.is_ok(), "failed to request news providers: {}", results.err().unwrap());
 
         let request_messages = message_bus.request_messages.read().unwrap();
-        assert_eq!(request_messages[0].encode_simple(), "85|");
+        assert_eq!(request_messages.len(), 1);
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestNewsProviders);
 
         let news_providers = results.unwrap();
         assert_eq!(news_providers.len(), 3);
@@ -188,7 +175,8 @@ mod tests {
 
         {
             let request_messages = message_bus.request_messages.read().unwrap();
-            assert_eq!(request_messages[0].encode_simple(), "12|1|1|");
+            assert_eq!(request_messages.len(), 1);
+            assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestNewsBulletins);
         }
 
         let mut subscription = results.unwrap();
@@ -223,10 +211,8 @@ mod tests {
 
         {
             let request_messages = message_bus.request_messages.read().unwrap();
-            assert_eq!(
-                request_messages[0].encode(),
-                "86\09000\08314\0BZ+DJ\020230101 00:00:00 UTC\020230102 00:00:00 UTC\010\0\0"
-            );
+            assert_eq!(request_messages.len(), 1);
+            assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalNews);
         }
 
         let mut subscription = results.unwrap();
@@ -255,7 +241,8 @@ mod tests {
         assert!(results.is_ok(), "failed to request news article: {}", results.err().unwrap());
 
         let request_messages = message_bus.request_messages.read().unwrap();
-        assert_eq!(request_messages[0].encode_simple(), "84|9000|BZ|BZ$123||");
+        assert_eq!(request_messages.len(), 1);
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestNewsArticle);
 
         let article = results.unwrap();
         assert_eq!(article.article_type, ArticleType::Text);
@@ -277,7 +264,8 @@ mod tests {
 
         {
             let request_messages = message_bus.request_messages.read().unwrap();
-            assert!(request_messages[0].encode().contains("mdoff,292:BZ,292:DJ"));
+            assert_eq!(request_messages.len(), 1);
+            assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
         }
 
         let mut subscription = results.unwrap();
@@ -307,7 +295,8 @@ mod tests {
 
         {
             let request_messages = message_bus.request_messages.read().unwrap();
-            assert!(request_messages[0].encode().contains("mdoff,292"));
+            assert_eq!(request_messages.len(), 1);
+            assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
         }
 
         let mut subscription = results.unwrap();
@@ -341,7 +330,7 @@ mod tests {
         {
             let request_messages = message_bus.request_messages.read().unwrap();
             assert_eq!(request_messages.len(), 1, "Expected 1 request message");
-            assert_eq!(request_messages[0].encode_simple(), "12|1|1|");
+            assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestNewsBulletins);
         }
 
         // Explicitly cancel the subscription
@@ -350,7 +339,7 @@ mod tests {
         // Verify cancel request was sent
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 2, "Expected 2 messages (request + cancel)");
-        assert_eq!(request_messages[1].encode_simple(), "13|1|");
+        assert_proto_msg_id(&request_messages[1], OutgoingMessages::CancelNewsBulletin);
     }
 
     #[tokio::test]
@@ -380,6 +369,6 @@ mod tests {
         // Verify cancel request was sent (market data cancel)
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 2, "Expected 2 messages (request + cancel)");
-        assert_eq!(request_messages[1].encode_simple(), "2|1|9000|");
+        assert_proto_msg_id(&request_messages[1], OutgoingMessages::CancelMarketData);
     }
 }

@@ -7,7 +7,7 @@ use async_trait::async_trait;
 
 use crate::client::r#async::Client;
 use crate::errors::Error;
-use crate::messages::{OutgoingMessages, RequestMessage};
+use crate::messages::OutgoingMessages;
 use crate::subscriptions::{DecoderContext, StreamDecoder, Subscription};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 
@@ -45,7 +45,7 @@ impl<'a> RequestBuilder<'a> {
     }
 
     /// Send the request and create a subscription
-    pub async fn send<T>(self, message: RequestMessage) -> Result<Subscription<T>, Error>
+    pub async fn send<T>(self, message: Vec<u8>) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T> + Send + 'static,
     {
@@ -57,7 +57,7 @@ impl<'a> RequestBuilder<'a> {
     }
 
     /// Send the request and create a subscription with context
-    pub async fn send_with_context<T>(self, message: RequestMessage, context: DecoderContext) -> Result<Subscription<T>, Error>
+    pub async fn send_with_context<T>(self, message: Vec<u8>, context: DecoderContext) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T> + Send + 'static,
     {
@@ -68,7 +68,7 @@ impl<'a> RequestBuilder<'a> {
     }
 
     /// Send the request without creating a subscription
-    pub async fn send_raw(self, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
+    pub async fn send_raw(self, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         self.client.send_request(self.request_id, message).await
     }
 }
@@ -94,7 +94,7 @@ impl<'a> SharedRequestBuilder<'a> {
     }
 
     /// Send the request and create a subscription
-    pub async fn send<T>(self, message: RequestMessage) -> Result<Subscription<T>, Error>
+    pub async fn send<T>(self, message: Vec<u8>) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T> + Send + 'static,
     {
@@ -106,7 +106,7 @@ impl<'a> SharedRequestBuilder<'a> {
     }
 
     /// Send the request and create a subscription with context
-    pub async fn send_with_context<T>(self, message: RequestMessage, context: DecoderContext) -> Result<Subscription<T>, Error>
+    pub async fn send_with_context<T>(self, message: Vec<u8>, context: DecoderContext) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T> + Send + 'static,
     {
@@ -117,7 +117,7 @@ impl<'a> SharedRequestBuilder<'a> {
     }
 
     /// Send the request without creating a subscription
-    pub async fn send_raw(self, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
+    pub async fn send_raw(self, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         self.client.send_shared_request(self.message_type, message).await
     }
 }
@@ -156,7 +156,7 @@ impl<'a> OrderRequestBuilder<'a> {
     }
 
     /// Send the order request
-    pub async fn send(self, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
+    pub async fn send(self, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         self.client.send_order(self.order_id, message).await
     }
 }
@@ -181,7 +181,7 @@ impl<'a> MessageBuilder<'a> {
     }
 
     /// Send the message
-    pub async fn send(self, message: RequestMessage) -> Result<(), Error> {
+    pub async fn send(self, message: Vec<u8>) -> Result<(), Error> {
         self.client.send_message(message).await
     }
 }
@@ -221,7 +221,7 @@ where
     }
 
     /// Sends a request with a specific request ID and builds the subscription
-    pub async fn send_with_request_id<D>(self, request_id: i32, message: RequestMessage) -> Result<Subscription<T>, Error>
+    pub async fn send_with_request_id<D>(self, request_id: i32, message: Vec<u8>) -> Result<Subscription<T>, Error>
     where
         D: StreamDecoder<T> + 'static,
     {
@@ -238,7 +238,7 @@ where
     }
 
     /// Sends a shared request (no ID) and builds the subscription
-    pub async fn send_shared<D>(self, message_type: OutgoingMessages, message: RequestMessage) -> Result<Subscription<T>, Error>
+    pub async fn send_shared<D>(self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<Subscription<T>, Error>
     where
         D: StreamDecoder<T> + 'static,
     {
@@ -255,7 +255,7 @@ where
     }
 
     /// Sends an order request and builds the subscription
-    pub async fn send_order<D>(self, order_id: i32, message: RequestMessage) -> Result<Subscription<T>, Error>
+    pub async fn send_order<D>(self, order_id: i32, message: Vec<u8>) -> Result<Subscription<T>, Error>
     where
         D: StreamDecoder<T> + 'static,
     {
@@ -653,13 +653,9 @@ mod tests {
         let (client, _gateway) = create_test_client().await;
 
         let builder = client.request_with_id(123);
-        let mut message = RequestMessage::new();
-        message.push_field(&OutgoingMessages::RequestCurrentTime);
+        let message = crate::messages::encode_protobuf_message(OutgoingMessages::RequestCurrentTime as i32, &[]);
 
-        // This test verifies that send_raw is callable
         let result = builder.send_raw(message).await;
-
-        // The mock gateway will accept the message and return a subscription
         assert!(result.is_ok());
     }
 
@@ -668,12 +664,9 @@ mod tests {
         let (client, _gateway) = create_test_client().await;
 
         let builder = client.shared_request(OutgoingMessages::RequestManagedAccounts);
-        let mut message = RequestMessage::new();
-        message.push_field(&OutgoingMessages::RequestManagedAccounts);
+        let message = crate::messages::encode_protobuf_message(OutgoingMessages::RequestManagedAccounts as i32, &[]);
 
         let result = builder.send_raw(message).await;
-
-        // The mock gateway will accept the message and return a subscription
         assert!(result.is_ok());
     }
 
@@ -681,12 +674,10 @@ mod tests {
     async fn test_order_request_builder_check_version() {
         let (client, _gateway) = create_test_client().await;
 
-        // Test successful version check (client version is 100)
         let builder = client.order_request_with_id(456);
         let result = builder.check_version(90, "test_feature").await;
         assert!(result.is_ok());
 
-        // Test failed version check
         let builder = client.order_request_with_id(457);
         let result = builder.check_version(200, "future_feature").await;
         assert!(result.is_err());
@@ -697,13 +688,9 @@ mod tests {
         let (client, _gateway) = create_test_client().await;
 
         let builder = client.order_request_with_id(789);
-        let mut message = RequestMessage::new();
-        message.push_field(&OutgoingMessages::PlaceOrder);
+        let message = crate::messages::encode_protobuf_message(OutgoingMessages::PlaceOrder as i32, &[]);
 
-        // This tests the send method is callable
         let result = builder.send(message).await;
-
-        // The mock gateway will accept the order and return a subscription
         assert!(result.is_ok());
     }
 }

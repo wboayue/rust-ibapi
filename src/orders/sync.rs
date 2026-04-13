@@ -82,7 +82,7 @@ impl Client {
             )?
         }
 
-        let request = encoders::encode_cancel_order(self.server_version, order_id, manual_order_cancel_time)?;
+        let request = encoders::encode_cancel_order(order_id, manual_order_cancel_time)?;
         let subscription = self.send_order(order_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
@@ -144,7 +144,7 @@ impl Client {
     pub fn executions(&self, filter: ExecutionFilter) -> Result<Subscription<Executions>, Error> {
         let request_id = self.next_request_id();
 
-        let request = encoders::encode_executions(self.server_version, request_id, &filter)?;
+        let request = encoders::encode_executions(request_id, &filter)?;
         let subscription = self.send_request(request_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
@@ -164,7 +164,7 @@ impl Client {
     pub fn global_cancel(&self) -> Result<(), Error> {
         self.check_server_version(server_versions::REQ_GLOBAL_CANCEL, "It does not support global cancel requests.")?;
 
-        let message = encoders::encode_global_cancel(self.server_version)?;
+        let message = encoders::encode_global_cancel()?;
         self.send_message(message)?;
 
         Ok(())
@@ -273,7 +273,7 @@ impl Client {
         verify::verify_order(self, order, order_id)?;
         verify::verify_order_contract(self, contract, order_id)?;
 
-        let request = encoders::encode_place_order(self.server_version, order_id, contract, order)?;
+        let request = encoders::encode_place_order(order_id, contract, order)?;
         let subscription = self.send_order(order_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
@@ -334,7 +334,7 @@ impl Client {
         verify::verify_order(self, order, order_id)?;
         verify::verify_order_contract(self, contract, order_id)?;
 
-        let request = encoders::encode_place_order(self.server_version, order_id, contract, order)?;
+        let request = encoders::encode_place_order(order_id, contract, order)?;
         self.send_message(request)?;
 
         Ok(())
@@ -440,16 +440,7 @@ impl Client {
     ) -> Result<Subscription<ExerciseOptions>, Error> {
         let order_id = self.next_order_id();
 
-        let request = encoders::encode_exercise_options(
-            self.server_version,
-            order_id,
-            contract,
-            exercise_action,
-            exercise_quantity,
-            account,
-            ovrd,
-            manual_order_time,
-        )?;
+        let request = encoders::encode_exercise_options(order_id, contract, exercise_action, exercise_quantity, account, ovrd, manual_order_time)?;
         let subscription = self.send_order(order_id, request)?;
 
         Ok(Subscription::new(Arc::clone(&self.message_bus), subscription, self.decoder_context()))
@@ -460,7 +451,9 @@ impl Client {
 mod tests {
     use std::sync::{Arc, RwLock};
 
+    use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::contracts::{ComboLeg, Contract, Currency, Exchange, SecurityType, Symbol};
+    use crate::messages::OutgoingMessages;
     use crate::orders::conditions::TriggerMethod;
     use crate::orders::{Action, Liquidity, OcaType, OrderOrigin, ShortSaleSlot, TimeInForce};
     use crate::stubs::MessageBusStub;
@@ -496,11 +489,7 @@ mod tests {
         let result = client.place_order(order_id, &contract, &order);
 
         let request_messages = client.message_bus.request_messages();
-
-        assert_eq!(
-            request_messages[0].encode().replace('\0', "|"),
-            "3|13|0|TSLA|STK||0|||SMART||USD|||||BUY|100|MKT|||DAY||||0||1|0|0|0|0|0|0|0||0||||||||0||-1|0|||0|||0|0||||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
-        );
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::PlaceOrder);
 
         assert!(result.is_ok(), "failed to place order: {}", result.err().unwrap());
 
@@ -770,8 +759,7 @@ mod tests {
         let results = client.cancel_order(order_id, "");
 
         let request_messages = client.message_bus.request_messages();
-
-        assert_eq!(request_messages[0].encode(), "4\x001\x0041\x00");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::CancelOrder);
 
         assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
 
@@ -808,8 +796,7 @@ mod tests {
         let results = client.global_cancel();
 
         let request_messages = client.message_bus.request_messages();
-
-        assert_eq!(request_messages[0].encode(), "58\x001\x00");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestGlobalCancel);
         assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
     }
 
@@ -827,8 +814,7 @@ mod tests {
 
         let request_messages = client.message_bus.request_messages();
 
-        // No VERSION field, has empty ext_operator and i32::MAX manual_order_indicator
-        assert_eq!(request_messages[0].encode(), format!("4\x0041\x00\x00\x00{}\x00", i32::MAX));
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::CancelOrder);
 
         assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
     }
@@ -846,8 +832,7 @@ mod tests {
 
         let request_messages = client.message_bus.request_messages();
 
-        // No VERSION field, has empty ext_operator and i32::MAX manual_order_indicator
-        assert_eq!(request_messages[0].encode(), format!("58\x00\x00{}\x00", i32::MAX));
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestGlobalCancel);
         assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
     }
 
@@ -864,7 +849,7 @@ mod tests {
 
         let request_messages = client.message_bus.request_messages();
 
-        assert_eq!(request_messages[0].encode(), "8\x001\x000\x00");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestIds);
 
         assert!(results.is_ok(), "failed to request next order id: {}", results.err().unwrap());
         assert_eq!(43, results.unwrap(), "next order id");
@@ -887,7 +872,7 @@ mod tests {
 
         let request_messages = client.message_bus.request_messages();
 
-        assert_eq!(request_messages[0].encode(), "99\x001\x00");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestCompletedOrders);
 
         assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
 
@@ -1019,7 +1004,7 @@ mod tests {
 
         let request_messages = client.message_bus.request_messages();
 
-        assert_eq!(request_messages[0].encode_simple(), "5|1|");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestOpenOrders);
 
         assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
     }
@@ -1037,7 +1022,7 @@ mod tests {
 
         let request_messages = client.message_bus.request_messages();
 
-        assert_eq!(request_messages[0].encode_simple(), "16|1|");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestAllOpenOrders);
 
         assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
     }
@@ -1056,7 +1041,7 @@ mod tests {
 
         let request_messages = client.message_bus.request_messages();
 
-        assert_eq!(request_messages[0].encode_simple(), "15|1|1|");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestAutoOpenOrders);
 
         assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
     }
@@ -1084,10 +1069,7 @@ mod tests {
 
         let request_messages = client.message_bus.request_messages();
 
-        assert_eq!(
-            request_messages[0].encode_simple(),
-            "7|3|9000|100|xyz|yyyymmdd hh:mm:ss EST|TSLA|STK|ISLAND|BUY|"
-        );
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestExecutions);
 
         assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
         // assert_eq!(43, results.unwrap(), "next order id");
@@ -1117,10 +1099,7 @@ mod tests {
 
         let request_messages = client.message_bus.request_messages();
 
-        assert_eq!(
-            request_messages[0].encode_simple(),
-            "3|12|0||FUT|202303|0|||EUREX||EUR|FGBL MAR 23||||BUY|10|LMT|500||DAY||||0||1|0|0|0|0|0|0|0||0||||||||0||-1|0|||0|||0|0||||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
-        );
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::PlaceOrder);
 
         assert!(results.is_ok(), "failed to place order: {}", results.err().unwrap());
     }
@@ -1167,10 +1146,7 @@ mod tests {
 
         let request_messages = client.message_bus.request_messages();
 
-        assert_eq!(
-            request_messages[0].encode_simple(),
-            "3|12|0|WTI|BAG||0|||SMART||USD|||||SELL|150|MKT|||DAY||||0||1|0|0|0|0|0|0|0|2|55928698|1|BUY|IPE|0|0||0|55850663|1|SELL|IPE|0|0||0|0|1|NonGuaranteed|1||0||||||||0||-1|0|||0|||0|0||||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
-        );
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::PlaceOrder);
 
         assert!(results.is_ok(), "failed to place order: {}", results.err().unwrap());
     }
@@ -1199,10 +1175,7 @@ mod tests {
 
         let request_messages = client.message_bus.request_messages();
 
-        assert_eq!(
-            request_messages[0].encode().replace('\0', "|"),
-            "3|42|0|AAPL|STK||0|||SMART||USD|||||BUY|200|MKT|||DAY||||0||1|0|0|0|0|0|0|0||0||||||||0||-1|0|||0|||0|0||||||||0|||||0|||||||||||0|||0|0|||0||0|0|0|0|||||||0|||||||||0|0|0|0|||0|"
-        );
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::PlaceOrder);
 
         assert!(result.is_ok(), "failed to submit order: {}", result.err().unwrap());
     }

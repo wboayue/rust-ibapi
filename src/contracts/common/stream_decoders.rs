@@ -4,7 +4,7 @@
 //! between sync and async versions, avoiding code duplication.
 
 use crate::contracts::*;
-use crate::messages::{IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 
@@ -21,7 +21,7 @@ impl StreamDecoder<OptionComputation> for OptionComputation {
         }
     }
 
-    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
         let request_id = request_id.expect("request id required to cancel option calculations");
         match context.and_then(|c| c.request_type) {
             Some(OutgoingMessages::ReqCalcImpliedVolat) => {

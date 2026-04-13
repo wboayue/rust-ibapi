@@ -14,7 +14,6 @@ use serde::Serialize;
 use tick_types::TickType;
 
 use crate::encode_option_field;
-use crate::messages::RequestMessage;
 use crate::messages::ResponseMessage;
 use crate::{Error, ToField};
 
@@ -534,22 +533,6 @@ impl Contract {
     /// Returns true if this contract represents a bag/combo order.
     pub fn is_bag(&self) -> bool {
         self.security_type == SecurityType::Spread
-    }
-
-    pub(crate) fn push_fields(&self, message: &mut RequestMessage) {
-        message.push_field(&self.contract_id);
-        message.push_field(&self.symbol);
-        message.push_field(&self.security_type);
-        message.push_field(&self.last_trade_date_or_contract_month);
-        message.push_field(&self.strike);
-        message.push_field(&self.right);
-        message.push_field(&self.multiplier);
-        message.push_field(&self.exchange);
-        message.push_field(&self.primary_exchange);
-        message.push_field(&self.currency);
-        message.push_field(&self.local_symbol);
-        message.push_field(&self.trading_class);
-        message.push_field(&self.include_expired);
     }
 }
 

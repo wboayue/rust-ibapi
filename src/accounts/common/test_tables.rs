@@ -24,6 +24,7 @@ pub struct ManagedAccountsTestCase {
 
 /// Test case for server time scenarios
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ServerTimeTestCase {
     pub scenario: &'static str,
     pub responses: Vec<String>,
@@ -37,6 +38,7 @@ pub struct ServerTimeTestCase {
 pub struct ContractIdTestCase {
     pub description: &'static str,
     pub contract_id: ContractId,
+    #[allow(dead_code)]
     pub expected_pattern: String,
 }
 
@@ -46,6 +48,7 @@ pub struct ContractIdTestCase {
 pub struct PnLTestCase {
     pub description: &'static str,
     pub model_code: Option<String>,
+    #[allow(dead_code)]
     pub expected_pattern: &'static str,
 }
 
@@ -76,7 +79,9 @@ pub struct AccountSummaryTagTestCase {
 pub struct SubscriptionLifecycleTestCase {
     pub description: &'static str,
     pub subscription_type: SubscriptionType,
+    #[allow(dead_code)]
     pub expected_subscribe_pattern: &'static str,
+    #[allow(dead_code)]
     pub expected_cancel_pattern: &'static str,
 }
 

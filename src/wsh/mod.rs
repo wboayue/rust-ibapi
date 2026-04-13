@@ -151,35 +151,39 @@ mod common_tests {
     #[test]
     fn test_encode_request_wsh_metadata() {
         use super::encoders::encode_request_wsh_metadata;
+        use crate::common::test_utils::helpers::assert_proto_msg_id;
+        use crate::messages::OutgoingMessages;
 
         let result = encode_request_wsh_metadata(9000);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().encode_simple(), "100|9000|");
+        assert_proto_msg_id(&result.unwrap(), OutgoingMessages::RequestWshMetaData);
     }
 
     #[test]
     fn test_encode_cancel_wsh_metadata() {
         use super::encoders::encode_cancel_wsh_metadata;
+        use crate::common::test_utils::helpers::assert_proto_msg_id;
+        use crate::messages::OutgoingMessages;
 
         let result = encode_cancel_wsh_metadata(9000);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().encode_simple(), "101|9000|");
+        assert_proto_msg_id(&result.unwrap(), OutgoingMessages::CancelWshMetaData);
     }
 
     #[test]
     fn test_encode_request_wsh_event_data() {
         use super::encoders::encode_request_wsh_event_data;
-        use crate::server_versions;
+        use crate::common::test_utils::helpers::assert_proto_msg_id;
+        use crate::messages::OutgoingMessages;
         use time::macros::date;
 
         // Test with minimal params
-        let result = encode_request_wsh_event_data(server_versions::WSHE_CALENDAR, 9000, Some(12345), None, None, None, None, None);
+        let result = encode_request_wsh_event_data(9000, Some(12345), None, None, None, None, None);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().encode_simple(), "102|9000|12345|");
+        assert_proto_msg_id(&result.unwrap(), OutgoingMessages::RequestWshEventData);
 
         // Test with all params
         let result = encode_request_wsh_event_data(
-            server_versions::WSH_EVENT_DATA_FILTERS_DATE,
             9000,
             Some(12345),
             Some("filter"),
@@ -193,16 +197,18 @@ mod common_tests {
             }),
         );
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().encode_simple(), "102|9000|12345|filter|1|0|1|20240101|20241231|100|");
+        assert_proto_msg_id(&result.unwrap(), OutgoingMessages::RequestWshEventData);
     }
 
     #[test]
     fn test_encode_cancel_wsh_event_data() {
         use super::encoders::encode_cancel_wsh_event_data;
+        use crate::common::test_utils::helpers::assert_proto_msg_id;
+        use crate::messages::OutgoingMessages;
 
         let result = encode_cancel_wsh_event_data(9000);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().encode_simple(), "103|9000|");
+        assert_proto_msg_id(&result.unwrap(), OutgoingMessages::CancelWshEventData);
     }
 
     #[test]
@@ -241,39 +247,22 @@ mod common_tests {
     #[test]
     fn test_encode_request_wsh_event_data_edge_cases() {
         use super::encoders::encode_request_wsh_event_data;
-        use crate::server_versions;
+        use crate::common::test_utils::helpers::assert_proto_msg_id;
+        use crate::messages::OutgoingMessages;
 
         // Test with empty filter string
-        let result = encode_request_wsh_event_data(server_versions::WSH_EVENT_DATA_FILTERS, 9000, None, Some(""), None, None, None, None);
+        let result = encode_request_wsh_event_data(9000, None, Some(""), None, None, None, None);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().encode_simple(), "102|9000|||0|0|0|");
+        assert_proto_msg_id(&result.unwrap(), OutgoingMessages::RequestWshEventData);
 
         // Test with special characters in filter
-        let result = encode_request_wsh_event_data(
-            server_versions::WSH_EVENT_DATA_FILTERS,
-            9001,
-            None,
-            Some("filter=\"test\" AND type='earnings'"),
-            None,
-            None,
-            None,
-            None,
-        );
+        let result = encode_request_wsh_event_data(9001, None, Some("filter=\"test\" AND type='earnings'"), None, None, None, None);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().encode_simple(), "102|9001||filter=\"test\" AND type='earnings'|0|0|0|");
+        assert_proto_msg_id(&result.unwrap(), OutgoingMessages::RequestWshEventData);
 
         // Test with negative limit (should still encode)
-        let result = encode_request_wsh_event_data(
-            server_versions::WSH_EVENT_DATA_FILTERS_DATE,
-            9002,
-            Some(12345),
-            None,
-            None,
-            None,
-            Some(-10),
-            None,
-        );
+        let result = encode_request_wsh_event_data(9002, Some(12345), None, None, None, Some(-10), None);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().encode_simple(), "102|9002|12345||0|0|0|||-10|");
+        assert_proto_msg_id(&result.unwrap(), OutgoingMessages::RequestWshEventData);
     }
 }

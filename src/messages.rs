@@ -6,7 +6,6 @@
 
 use std::fmt::Display;
 use std::io::Write;
-use std::ops::Index;
 use std::str::{self, FromStr};
 
 use byteorder::{BigEndian, WriteBytesExt};
@@ -772,15 +771,14 @@ pub fn encode_raw_length(data: &[u8]) -> Vec<u8> {
 
 /// Encode a `RequestMessage` with binary message ID framing for server_version >= PROTOBUF.
 ///
-/// Wire format: `[4-byte BE total_length][4-byte BE msg_id][NUL-delimited remaining fields]`
+/// Encode a NUL-delimited text message with binary msg_id framing (for test mock gateway).
 ///
-/// The first field of the `RequestMessage` is the message ID (extracted and written as binary).
-/// Remaining fields are NUL-delimited text.
-pub fn encode_request_binary(message: &RequestMessage) -> Vec<u8> {
-    let msg_id: i32 = message.fields[0].parse().unwrap_or(0);
-
-    // Build body: binary msg_id + remaining text fields
-    let remaining: String = message.fields[1..].iter().map(|f| format!("{f}\0")).collect();
+/// Takes text like "9\01\090\0" and converts to binary: [4-byte len][4-byte msg_id][remaining text]
+#[cfg(test)]
+pub fn encode_request_binary_from_text(text: &str) -> Vec<u8> {
+    let fields: Vec<&str> = text.split_terminator('\0').collect();
+    let msg_id: i32 = fields.first().and_then(|f| f.parse().ok()).unwrap_or(0);
+    let remaining: String = fields[1..].iter().map(|f| format!("{f}\0")).collect();
     let body_len = 4 + remaining.len();
 
     let mut packet = Vec::with_capacity(4 + body_len);
@@ -790,24 +788,15 @@ pub fn encode_request_binary(message: &RequestMessage) -> Vec<u8> {
     packet
 }
 
-/// Builder for outbound TWS/Gateway request messages.
+/// Builder for outbound TWS/Gateway request messages (test-only).
+#[cfg(test)]
 #[derive(Default, Debug, Clone)]
 pub struct RequestMessage {
     pub(crate) fields: Vec<String>,
 }
 
+#[cfg(test)]
 impl RequestMessage {
-    /// Create a new empty request message.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub(crate) fn push_field<T: ToField>(&mut self, val: &T) -> &RequestMessage {
-        let field = val.to_field();
-        self.fields.push(field);
-        self
-    }
-
     /// Serialize all fields into the NUL-delimited wire format.
     pub fn encode(&self) -> String {
         let mut data = self.fields.join("\0");
@@ -815,26 +804,21 @@ impl RequestMessage {
         data
     }
 
-    #[cfg(test)]
-    pub(crate) fn len(&self) -> usize {
-        self.fields.len()
-    }
-
-    #[cfg(test)]
     /// Serialize the message as a pipe-delimited string (test helper).
+    #[allow(dead_code)]
     pub(crate) fn encode_simple(&self) -> String {
         let mut data = self.fields.join("|");
         data.push('|');
         data
     }
-    #[cfg(test)]
+
     /// Construct a request message from a NUL-delimited string (test helper).
     pub fn from(fields: &str) -> RequestMessage {
         RequestMessage {
             fields: fields.split_terminator('\x00').map(|x| x.to_string()).collect(),
         }
     }
-    #[cfg(test)]
+
     /// Construct a request message from a pipe-delimited string (test helper).
     pub fn from_simple(fields: &str) -> RequestMessage {
         RequestMessage {
@@ -843,7 +827,8 @@ impl RequestMessage {
     }
 }
 
-impl Index<usize> for RequestMessage {
+#[cfg(test)]
+impl std::ops::Index<usize> for RequestMessage {
     type Output = String;
 
     fn index(&self, i: usize) -> &Self::Output {

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crate::client::sync::Client;
 use crate::client::StreamDecoder;
 use crate::errors::Error;
-use crate::messages::{OutgoingMessages, RequestMessage};
+use crate::messages::OutgoingMessages;
 use crate::subscriptions::sync::Subscription;
 use crate::subscriptions::DecoderContext;
 use crate::transport::InternalSubscription;
@@ -45,7 +45,7 @@ impl<'a> RequestBuilder<'a> {
     }
 
     /// Send the request and create a subscription
-    pub fn send<T>(self, message: RequestMessage) -> Result<Subscription<T>, Error>
+    pub fn send<T>(self, message: Vec<u8>) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T>,
     {
@@ -53,7 +53,7 @@ impl<'a> RequestBuilder<'a> {
     }
 
     /// Send the request and create a subscription with context
-    pub fn send_with_context<T>(self, message: RequestMessage, context: DecoderContext) -> Result<Subscription<T>, Error>
+    pub fn send_with_context<T>(self, message: Vec<u8>, context: DecoderContext) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T>,
     {
@@ -63,7 +63,7 @@ impl<'a> RequestBuilder<'a> {
     }
 
     /// Send the request without creating a subscription
-    pub fn send_raw(self, message: RequestMessage) -> Result<InternalSubscription, Error> {
+    pub fn send_raw(self, message: Vec<u8>) -> Result<InternalSubscription, Error> {
         self.client.send_request(self.request_id, message)
     }
 }
@@ -89,7 +89,7 @@ impl<'a> SharedRequestBuilder<'a> {
     }
 
     /// Send the request and create a subscription
-    pub fn send<T>(self, message: RequestMessage) -> Result<Subscription<T>, Error>
+    pub fn send<T>(self, message: Vec<u8>) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T>,
     {
@@ -97,7 +97,7 @@ impl<'a> SharedRequestBuilder<'a> {
     }
 
     /// Send the request and create a subscription with context
-    pub fn send_with_context<T>(self, message: RequestMessage, context: DecoderContext) -> Result<Subscription<T>, Error>
+    pub fn send_with_context<T>(self, message: Vec<u8>, context: DecoderContext) -> Result<Subscription<T>, Error>
     where
         T: StreamDecoder<T>,
     {
@@ -107,7 +107,7 @@ impl<'a> SharedRequestBuilder<'a> {
     }
 
     /// Send the request without creating a subscription
-    pub fn send_raw(self, message: RequestMessage) -> Result<InternalSubscription, Error> {
+    pub fn send_raw(self, message: Vec<u8>) -> Result<InternalSubscription, Error> {
         self.client.send_shared_request(self.message_type, message)
     }
 }
@@ -146,7 +146,7 @@ impl<'a> OrderRequestBuilder<'a> {
     }
 
     /// Send the order request
-    pub fn send(self, message: RequestMessage) -> Result<InternalSubscription, Error> {
+    pub fn send(self, message: Vec<u8>) -> Result<InternalSubscription, Error> {
         self.client.send_order(self.order_id, message)
     }
 }
@@ -171,7 +171,7 @@ impl<'a> MessageBuilder<'a> {
     }
 
     /// Send the message
-    pub fn send(self, message: RequestMessage) -> Result<(), Error> {
+    pub fn send(self, message: Vec<u8>) -> Result<(), Error> {
         self.client.send_message(message)
     }
 }
@@ -216,19 +216,19 @@ where
     }
 
     /// Sends a request with a specific request ID and builds the subscription
-    pub fn send_with_request_id(self, request_id: i32, message: RequestMessage) -> Result<Subscription<T>, Error> {
+    pub fn send_with_request_id(self, request_id: i32, message: Vec<u8>) -> Result<Subscription<T>, Error> {
         let subscription = self.client.send_request(request_id, message)?;
         Ok(self.build(subscription))
     }
 
     /// Sends a shared request (no ID) and builds the subscription
-    pub fn send_shared(self, message_type: OutgoingMessages, message: RequestMessage) -> Result<Subscription<T>, Error> {
+    pub fn send_shared(self, message_type: OutgoingMessages, message: Vec<u8>) -> Result<Subscription<T>, Error> {
         let subscription = self.client.send_shared_request(message_type, message)?;
         Ok(self.build(subscription))
     }
 
     /// Sends an order request and builds the subscription
-    pub fn send_order(self, order_id: i32, message: RequestMessage) -> Result<Subscription<T>, Error> {
+    pub fn send_order(self, order_id: i32, message: Vec<u8>) -> Result<Subscription<T>, Error> {
         let subscription = self.client.send_order(order_id, message)?;
         Ok(self.build(subscription))
     }

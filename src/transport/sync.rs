@@ -19,7 +19,7 @@ use crate::connection::sync::Connection;
 
 use super::routing::{determine_routing, is_warning_error, RoutingDecision, UNSPECIFIED_REQUEST_ID};
 use super::{InternalSubscription, MessageBus, Response, Signal, SubscriptionBuilder};
-use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::{server_versions, Error};
 
 // pub(crate) const MIN_SERVER_VERSION: i32 = 100;
@@ -489,7 +489,7 @@ impl<S: Stream> TcpMessageBus<S> {
 }
 
 impl<S: Stream> MessageBus for TcpMessageBus<S> {
-    fn send_request(&self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
+    fn send_request(&self, request_id: i32, message: &[u8]) -> Result<InternalSubscription, Error> {
         let (sender, receiver) = channel::unbounded();
         let sender_copy = sender.clone();
 
@@ -507,7 +507,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         Ok(subscription)
     }
 
-    fn cancel_subscription(&self, request_id: i32, message: &RequestMessage) -> Result<(), Error> {
+    fn cancel_subscription(&self, request_id: i32, message: &[u8]) -> Result<(), Error> {
         self.connection.write_message(message)?;
 
         if let Err(e) = self.requests.send(&request_id, Err(Error::Cancelled)) {
@@ -519,7 +519,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         Ok(())
     }
 
-    fn send_order_request(&self, order_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
+    fn send_order_request(&self, order_id: i32, message: &[u8]) -> Result<InternalSubscription, Error> {
         let (sender, receiver) = channel::unbounded();
         let sender_copy = sender.clone();
 
@@ -538,7 +538,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         Ok(subscription)
     }
 
-    fn send_message(&self, message: &RequestMessage) -> Result<(), Error> {
+    fn send_message(&self, message: &[u8]) -> Result<(), Error> {
         self.connection.write_message(message)?;
         Ok(())
     }
@@ -559,7 +559,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         Ok(subscription)
     }
 
-    fn cancel_order_subscription(&self, request_id: i32, message: &RequestMessage) -> Result<(), Error> {
+    fn cancel_order_subscription(&self, request_id: i32, message: &[u8]) -> Result<(), Error> {
         self.connection.write_message(message)?;
 
         if let Err(e) = self.orders.send(&request_id, Err(Error::Cancelled)) {
@@ -571,7 +571,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         Ok(())
     }
 
-    fn send_shared_request(&self, message_type: OutgoingMessages, message: &RequestMessage) -> Result<InternalSubscription, Error> {
+    fn send_shared_request(&self, message_type: OutgoingMessages, message: &[u8]) -> Result<InternalSubscription, Error> {
         self.connection.write_message(message)?;
 
         let shared_receiver = self.shared_channels.get_receiver(message_type);
@@ -584,7 +584,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         Ok(subscription)
     }
 
-    fn cancel_shared_subscription(&self, _message_type: OutgoingMessages, message: &RequestMessage) -> Result<(), Error> {
+    fn cancel_shared_subscription(&self, _message_type: OutgoingMessages, message: &[u8]) -> Result<(), Error> {
         self.connection.write_message(message)?;
         // TODO send cancel
         Ok(())
@@ -808,6 +808,7 @@ pub(crate) trait Io {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::connection::common::{ConnectionHandler, ConnectionProtocol};
     use crate::connection::sync::Connection;
     use crate::tests::assert_send_and_sync;
     use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
@@ -815,7 +816,7 @@ mod tests {
     // Additional imports for connection tests
     use crate::client::sync::Client;
     use crate::contracts::Contract;
-    use crate::messages::{encode_length, OutgoingMessages, RequestMessage};
+    use crate::messages::{encode_length, RequestMessage};
     use crate::orders::common::encoders::encode_place_order;
     use crate::orders::{order_builder, Action};
     use log::{debug, trace};
@@ -824,38 +825,18 @@ mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Arc;
 
-    // Test helper function for encoding contract data requests
-    fn encode_request_contract_data(_server_version: i32, request_id: i32, contract: &Contract) -> Result<RequestMessage, Error> {
-        const VERSION: i32 = 8;
-
-        let mut packet = RequestMessage::default();
-        packet.push_field(&OutgoingMessages::RequestContractData);
-        packet.push_field(&VERSION);
-        packet.push_field(&request_id);
-        packet.push_field(&contract.contract_id);
-        packet.push_field(&contract.symbol);
-        packet.push_field(&contract.security_type);
-        packet.push_field(&contract.last_trade_date_or_contract_month);
-        packet.push_field(&contract.strike);
-        packet.push_field(&contract.right);
-        packet.push_field(&contract.multiplier);
-        packet.push_field(&contract.exchange);
-        packet.push_field(&contract.primary_exchange);
-        packet.push_field(&contract.currency);
-        packet.push_field(&contract.local_symbol);
-        packet.push_field(&contract.trading_class);
-        packet.push_field(&contract.include_expired);
-
-        // Server version 173 includes security_id fields (>= 45)
-        packet.push_field(&contract.security_id_type);
-        packet.push_field(&contract.security_id);
-
-        // Server version >= 176 includes issuer_id
-        if _server_version >= crate::server_versions::BOND_ISSUERID {
-            packet.push_field(&contract.issuer_id);
-        }
-
-        Ok(packet)
+    fn encode_request_contract_data(_server_version: i32, request_id: i32, contract: &Contract) -> Result<Vec<u8>, Error> {
+        // Build the protobuf-encoded contract data request directly
+        use crate::messages::{encode_protobuf_message, OutgoingMessages};
+        use prost::Message;
+        let request = crate::proto::ContractDataRequest {
+            req_id: Some(request_id),
+            contract: Some(crate::proto::encoders::encode_contract(contract)),
+        };
+        Ok(encode_protobuf_message(
+            OutgoingMessages::RequestContractData as i32,
+            &request.encode_to_vec(),
+        ))
     }
 
     #[test]
@@ -983,6 +964,8 @@ mod tests {
                 return Err(mock_socket_error(ErrorKind::ConnectionReset));
             }
 
+            let encoded = response.encode();
+
             // if there are no more remaining exchanges or responses
             // set keep_alive - so the client can gracefully disconnect
             if write_call_count >= self.exchanges.len() && read_call_count >= responses.len() - 1 {
@@ -991,12 +974,22 @@ mod tests {
 
             self.read_call_count.fetch_add(1, Ordering::SeqCst);
 
-            // process the declared response in the test with transport read_message()
-            // to force any errors
-            let encoded = response.encode();
             debug!("mock read {:?}", &encoded);
-            let expected = encode_length(&encoded);
-            read_message(&mut expected.as_slice())
+
+            // Handshake responses use pure text format.
+            // All other responses use binary-text format (4-byte BE msg_id + text payload).
+            if exchange.is_handshake {
+                let expected = encode_length(&encoded);
+                read_message(&mut expected.as_slice())
+            } else {
+                let fields: Vec<&str> = encoded.split_terminator('\0').collect();
+                let msg_id: i32 = fields[0].parse().unwrap_or(0);
+                let text_payload: String = fields[1..].iter().map(|f| format!("{f}\0")).collect();
+                let mut data = Vec::new();
+                data.extend_from_slice(&msg_id.to_be_bytes());
+                data.extend_from_slice(text_payload.as_bytes());
+                Ok(data)
+            }
         }
 
         fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
@@ -1016,25 +1009,14 @@ mod tests {
                 buf
             };
 
-            // the handshake does not include the trailing null byte
-            // Message encode() cannot be used to encode the handshake
-            let expected = if is_handshake {
-                assert_eq!(request.len(), 1);
-                &encode_length(&request.fields[0])
-            } else {
-                &encode_length(&request.encode())
-            };
+            // Length-prefix the expected request bytes
+            let expected = crate::messages::encode_raw_length(request);
+            let expected = &expected;
 
-            let raw_string = std::str::from_utf8(&buf[4..]).unwrap(); // strip length
-            debug!("mock write {:?}", raw_string);
+            debug!("mock write {:?}", &buf[4..]);
+            debug!("mock write: write_call_count={write_call_count}, is_handshake={is_handshake}");
 
-            assert_eq!(
-                expected,
-                buf,
-                "assertion left == right failed\nexpected: {:?}\nbuf: {:?}\n",
-                std::str::from_utf8(expected).unwrap(),
-                std::str::from_utf8(buf).unwrap()
-            );
+            assert_eq!(expected, buf, "mock write mismatch");
 
             self.read_call_count.store(0, Ordering::SeqCst);
             self.write_call_count.fetch_add(1, Ordering::SeqCst);
@@ -1046,15 +1028,18 @@ mod tests {
 
     #[derive(Debug)]
     struct Exchange {
-        request: RequestMessage,
+        request: Vec<u8>,
         responses: VecDeque<ResponseMessage>,
+        /// True for handshake exchanges where responses are pure text (no binary msg_id prefix).
+        is_handshake: bool,
     }
 
     impl Exchange {
-        fn new(request: RequestMessage, responses: Vec<ResponseMessage>) -> Self {
+        fn new(request: Vec<u8>, responses: Vec<ResponseMessage>) -> Self {
             Self {
                 request,
                 responses: VecDeque::from(responses),
+                is_handshake: false,
             }
         }
         fn simple(request: &str, responses: &[&str]) -> Self {
@@ -1062,9 +1047,13 @@ mod tests {
                 .iter()
                 .map(|s| ResponseMessage::from_simple(s))
                 .collect::<Vec<ResponseMessage>>();
-            Self::new(RequestMessage::from_simple(request), responses)
+            // Convert pipe-delimited text to NUL-delimited, then extract msg_id for binary encoding
+            let nul_delimited = request.replace('|', "\0");
+            let mut exchange = Self::new(nul_delimited.into_bytes(), responses);
+            exchange.is_handshake = true;
+            exchange
         }
-        fn request(request: RequestMessage, responses: &[&str]) -> Self {
+        fn request(request: Vec<u8>, responses: &[&str]) -> Self {
             let responses = responses
                 .iter()
                 .map(|s| ResponseMessage::from_simple(s))
@@ -1075,13 +1064,20 @@ mod tests {
 
     #[test]
     fn test_bus_send_order_request() -> Result<(), Error> {
+        let handler = ConnectionHandler::default();
+        let sv = handler.min_version;
+
+        let start_api_bytes = handler.format_start_api(28, sv);
         let order = order_builder::market_order(Action::Buy, 100.0);
         let contract = &Contract::stock("AAPL").build();
-        let request = encode_place_order(176, 5, contract, &order)?;
+        let request = encode_place_order(5, contract, &order)?;
 
         let events = vec![
-            Exchange::simple("v201..221", &["173|20250415 19:38:30 British Summer Time|"]),
-            Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|5|"]),
+            Exchange::simple("v201..221", &[&format!("{sv}|20250415 19:38:30 British Summer Time|")]),
+            Exchange::new(start_api_bytes, vec![
+                ResponseMessage::from_simple("15|1|DU1234567|"),
+                ResponseMessage::from_simple("9|1|5|"),
+            ]),
             Exchange::request(request.clone(),
                 &[
                     "5|5|265598|AAPL|STK||0|?||SMART|USD|AAPL|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|600745656|0|0|0||600745656.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||100|0.02|||",
@@ -1112,18 +1108,18 @@ mod tests {
 
     #[test]
     fn test_connection_establish_connection() -> Result<(), Error> {
-        // Client proposes v201..221; server responds with v173 — server picks the
-        // negotiated version, so these mocks exercise the legacy text path.
+        let handler = ConnectionHandler::default();
+        let sv = handler.min_version;
+
+        let start_api_bytes = handler.format_start_api(28, sv);
         let events = vec![
-            Exchange::simple("v201..221", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-            Exchange::simple(
-                "71|2|28||",
-                &[
-                    "15|1|DU1234567|",
-                    "9|1|1|",
-                    "4|2|-1|2104|Market data farm connection is OK:usfarm||",
-                    "4|2|-1|2107|HMDS data farm connection is inactive but should be available upon demand.ushmds||",
-                    "4|2|-1|2158|Sec-def data farm connection is OK:secdefil||",
+            Exchange::simple("v201..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+            Exchange::new(
+                start_api_bytes,
+                vec![
+                    ResponseMessage::from_simple("15|1|DU1234567|"),
+                    ResponseMessage::from_simple("9|1|1|"),
+                    ResponseMessage::from_simple("4|2|-1|2104|Market data farm connection is OK:usfarm||"),
                 ],
             ),
         ];
@@ -1136,16 +1132,26 @@ mod tests {
 
     #[test]
     fn test_reconnect_failed() -> Result<(), Error> {
+        let handler = ConnectionHandler::default();
+        let sv = handler.min_version;
+
+        let start_api_bytes = handler.format_start_api(28, sv);
         let events = vec![
-            Exchange::simple("v201..221", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-            Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
+            Exchange::simple("v201..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+            Exchange::new(
+                start_api_bytes,
+                vec![
+                    ResponseMessage::from_simple("15|1|DU1234567|"),
+                    ResponseMessage::from_simple("9|1|1|"),
+                    ResponseMessage::from_simple("\0"),
+                ],
+            ),
         ];
         let socket = MockSocket::new(events, MAX_RECONNECT_ATTEMPTS as usize + 1);
 
         let connection = Connection::stubbed(socket, 28);
         connection.establish_connection(None)?;
 
-        // simulated dispatcher thread read to trigger disconnection
         let _ = connection.read_message();
 
         match connection.reconnect() {
@@ -1156,18 +1162,31 @@ mod tests {
 
     #[test]
     fn test_reconnect_success() -> Result<(), Error> {
+        let handler = ConnectionHandler::default();
+        let sv = handler.min_version;
+
+        let start_api_bytes = handler.format_start_api(28, sv);
         let events = vec![
-            Exchange::simple("v201..221", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-            Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
-            Exchange::simple("v201..221", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-            Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
+            Exchange::simple("v201..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+            Exchange::new(
+                start_api_bytes.clone(),
+                vec![
+                    ResponseMessage::from_simple("15|1|DU1234567|"),
+                    ResponseMessage::from_simple("9|1|1|"),
+                    ResponseMessage::from_simple("\0"),
+                ],
+            ),
+            Exchange::simple("v201..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+            Exchange::new(
+                start_api_bytes,
+                vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
+            ),
         ];
         let socket = MockSocket::new(events, MAX_RECONNECT_ATTEMPTS as usize - 1);
 
         let connection = Connection::stubbed(socket, 28);
         connection.establish_connection(None)?;
 
-        // simulated dispatcher thread read to trigger disconnection
         let _ = connection.read_message();
 
         connection.reconnect()
@@ -1175,13 +1194,24 @@ mod tests {
 
     #[test]
     fn test_client_reconnect() -> Result<(), Error> {
+        let handler = ConnectionHandler::default();
+        let sv = handler.min_version;
+
+        let start_api_bytes = handler.format_start_api(28, sv);
+        let managed_req = crate::accounts::common::encoders::encode_request_managed_accounts().unwrap();
         let events = vec![
-            Exchange::simple("v201..221", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-            Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
-            Exchange::simple("17|1|", &["\0"]), // ManagedAccounts RESTART
-            Exchange::simple("v201..221", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-            Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
-            Exchange::simple("17|1|", &["15|1|DU1234567|"]), // ManagedAccounts
+            Exchange::simple("v201..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+            Exchange::new(
+                start_api_bytes.clone(),
+                vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
+            ),
+            Exchange::new(managed_req.clone(), vec![ResponseMessage::from_simple("\0")]),
+            Exchange::simple("v201..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+            Exchange::new(
+                start_api_bytes,
+                vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
+            ),
+            Exchange::new(managed_req, vec![ResponseMessage::from_simple("15|1|DU1234567|")]),
         ];
         let stream = MockSocket::new(events, 0);
         let connection = Connection::stubbed(stream, 28);
@@ -1200,15 +1230,29 @@ mod tests {
 
     #[test]
     fn test_send_request_after_disconnect() -> Result<(), Error> {
-        let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL").build())?;
+        let handler = ConnectionHandler::default();
+        let sv = handler.min_version;
+
+        let start_api_bytes = handler.format_start_api(28, sv);
+        let packet = encode_request_contract_data(sv, 9000, &Contract::stock("AAPL").build())?;
 
         let expected_response = &format!("10|9000|{AAPL_CONTRACT_RESPONSE}");
 
         let events = vec![
-            Exchange::simple("v201..221", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-            Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
-            Exchange::simple("v201..221", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-            Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
+            Exchange::simple("v201..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+            Exchange::new(
+                start_api_bytes.clone(),
+                vec![
+                    ResponseMessage::from_simple("15|1|DU1234567|"),
+                    ResponseMessage::from_simple("9|1|1|"),
+                    ResponseMessage::from_simple("\0"),
+                ],
+            ), // RESTART
+            Exchange::simple("v201..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+            Exchange::new(
+                start_api_bytes,
+                vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
+            ),
             Exchange::request(packet.clone(), &[expected_response, "52|1|9001|"]),
         ];
 
@@ -1227,7 +1271,7 @@ mod tests {
 
         let result = subscription.next().unwrap()?;
 
-        assert_eq!(&result.encode_simple(), expected_response);
+        assert_eq!(result.encode_simple(), *expected_response);
 
         Ok(())
     }
@@ -1236,14 +1280,24 @@ mod tests {
     // the waiter should receive Error::ConnectionReset
     #[test]
     fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
-        let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL").build())?;
+        let handler = ConnectionHandler::default();
+        let sv = handler.min_version;
+
+        let start_api_bytes = handler.format_start_api(28, sv);
+        let packet = encode_request_contract_data(sv, 9000, &Contract::stock("AAPL").build())?;
 
         let events = vec![
-            Exchange::simple("v201..221", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-            Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
+            Exchange::simple("v201..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+            Exchange::new(
+                start_api_bytes.clone(),
+                vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
+            ),
             Exchange::request(packet.clone(), &["\0"]), // RESTART
-            Exchange::simple("v201..221", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-            Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
+            Exchange::simple("v201..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+            Exchange::new(
+                start_api_bytes,
+                vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
+            ),
         ];
 
         let stream = MockSocket::new(events, 0);
@@ -1268,14 +1322,28 @@ mod tests {
     // the waiter should receive Error::ConnectionReset
     #[test]
     fn test_request_during_disconnect_raises_error() -> Result<(), Error> {
-        let packet = encode_request_contract_data(173, 9000, &Contract::stock("AAPL").build())?;
+        let handler = ConnectionHandler::default();
+        let sv = handler.min_version;
+
+        let start_api_bytes = handler.format_start_api(28, sv);
+        let packet = encode_request_contract_data(sv, 9000, &Contract::stock("AAPL").build())?;
 
         let events = vec![
-            Exchange::simple("v201..221", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-            Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|", "\0"]), // RESTART
-            Exchange::simple("v201..221", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
+            Exchange::simple("v201..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+            Exchange::new(
+                start_api_bytes.clone(),
+                vec![
+                    ResponseMessage::from_simple("15|1|DU1234567|"),
+                    ResponseMessage::from_simple("9|1|1|"),
+                    ResponseMessage::from_simple("\0"),
+                ],
+            ), // RESTART
+            Exchange::simple("v201..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
             Exchange::request(packet.clone(), &[]),
-            Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
+            Exchange::new(
+                start_api_bytes,
+                vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
+            ),
         ];
 
         let stream = MockSocket::new(events, 0);
@@ -1298,16 +1366,26 @@ mod tests {
 
     #[test]
     fn test_contract_details_disconnect_raises_error() -> Result<(), Error> {
+        let handler = ConnectionHandler::default();
+        let sv = handler.min_version;
+
+        let start_api_bytes = handler.format_start_api(28, sv);
         let contract = &Contract::stock("AAPL").build();
 
-        let packet = encode_request_contract_data(173, 9000, contract)?;
+        let packet = encode_request_contract_data(sv, 9000, contract)?;
 
         let events = vec![
-            Exchange::simple("v201..221", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-            Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
+            Exchange::simple("v201..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+            Exchange::new(
+                start_api_bytes.clone(),
+                vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
+            ),
             Exchange::request(packet.clone(), &["\0"]),
-            Exchange::simple("v201..221", &["173|20250323 22:21:01 Greenwich Mean Time|"]),
-            Exchange::simple("71|2|28||", &["15|1|DU1234567|", "9|1|1|"]),
+            Exchange::simple("v201..221", &[&format!("{sv}|20250323 22:21:01 Greenwich Mean Time|")]),
+            Exchange::new(
+                start_api_bytes,
+                vec![ResponseMessage::from_simple("15|1|DU1234567|"), ResponseMessage::from_simple("9|1|1|")],
+            ),
         ];
 
         let stream = MockSocket::new(events, 0);

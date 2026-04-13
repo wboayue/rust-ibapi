@@ -70,49 +70,27 @@ pub mod helpers {
         (client, message_bus)
     }
 
-    /// Asserts that the request messages match expected values
-    pub fn assert_request_messages(message_bus: &MessageBusStub, expected: &[&str]) {
+    /// Asserts that the nth request message has the expected protobuf message ID
+    pub fn assert_request_msg_id(message_bus: &MessageBusStub, index: usize, expected: crate::messages::OutgoingMessages) {
         let request_messages = message_bus.request_messages.read().unwrap();
-        assert_eq!(
-            request_messages.len(),
-            expected.len(),
-            "Expected {} request messages, got {}",
-            expected.len(),
-            request_messages.len()
-        );
-
-        for (i, expected_msg) in expected.iter().enumerate() {
-            assert_eq!(request_messages[i].encode_simple(), *expected_msg, "Request message {} mismatch", i);
-        }
-    }
-
-    /// Gets request messages from the message bus
-    pub fn get_request_messages(message_bus: &MessageBusStub) -> Vec<String> {
-        message_bus
-            .request_messages
-            .read()
-            .unwrap()
-            .iter()
-            .map(|msg| msg.encode_simple())
-            .collect()
-    }
-
-    /// Asserts that a request message contains a specific substring
-    pub fn assert_request_contains(message_bus: &MessageBusStub, index: usize, substring: &str) {
-        let request_messages = get_request_messages(message_bus);
         assert!(
             request_messages.len() > index,
             "Expected at least {} request messages, got {}",
             index + 1,
             request_messages.len()
         );
-        assert!(
-            request_messages[index].contains(substring),
-            "Request message {} does not contain '{}'. Actual: '{}'",
-            index,
-            substring,
-            request_messages[index]
-        );
+        assert_proto_msg_id(&request_messages[index], expected);
+    }
+
+    /// Gets request message count from the message bus
+    pub fn request_message_count(message_bus: &MessageBusStub) -> usize {
+        message_bus.request_messages.read().unwrap().len()
+    }
+
+    /// Decodes a protobuf request message (skips 4-byte msg_id header)
+    pub fn decode_request_proto<T: prost::Message + Default>(message_bus: &MessageBusStub, index: usize) -> T {
+        let request_messages = message_bus.request_messages.read().unwrap();
+        T::decode(&request_messages[index][4..]).unwrap()
     }
 
     /// Common test constants that can be used across modules
@@ -152,7 +130,7 @@ pub mod helpers {
 #[cfg(test)]
 mod tests {
     use super::helpers::*;
-    use crate::messages::RequestMessage;
+    use crate::messages::{encode_protobuf_message, OutgoingMessages};
     use crate::server_versions;
 
     #[test]
@@ -181,64 +159,34 @@ mod tests {
     }
 
     #[test]
-    fn test_assert_request_messages() {
+    fn test_assert_request_msg_id() {
         let (_client, message_bus) = create_test_client();
 
-        // Add some test messages
         {
             let mut request_messages = message_bus.request_messages.write().unwrap();
-            let mut msg1 = RequestMessage::new();
-            msg1.push_field(&1);
-            msg1.push_field(&"test1");
-            request_messages.push(msg1);
-
-            let mut msg2 = RequestMessage::new();
-            msg2.push_field(&2);
-            msg2.push_field(&"test2");
-            request_messages.push(msg2);
+            request_messages.push(encode_protobuf_message(OutgoingMessages::RequestAccountSummary as i32, &[]));
         }
 
-        assert_request_messages(&message_bus, &["1|test1|", "2|test2|"]);
+        assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestAccountSummary);
     }
 
     #[test]
-    fn test_get_request_messages() {
+    fn test_request_message_count() {
         let (_client, message_bus) = create_test_client();
+
+        assert_eq!(request_message_count(&message_bus), 0);
 
         {
             let mut request_messages = message_bus.request_messages.write().unwrap();
-            let mut msg1 = RequestMessage::new();
-            msg1.push_field(&10);
-            msg1.push_field(&"hello");
-            request_messages.push(msg1);
+            request_messages.push(encode_protobuf_message(1, &[]));
+            request_messages.push(encode_protobuf_message(2, &[]));
         }
 
-        let messages = get_request_messages(&message_bus);
-        assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0], "10|hello|");
-    }
-
-    #[test]
-    fn test_assert_request_contains() {
-        let (_client, message_bus) = create_test_client();
-
-        {
-            let mut request_messages = message_bus.request_messages.write().unwrap();
-            let mut msg = RequestMessage::new();
-            msg.push_field(&1);
-            msg.push_field(&"hello world");
-            msg.push_field(&42);
-            request_messages.push(msg);
-        }
-
-        assert_request_contains(&message_bus, 0, "hello");
-        assert_request_contains(&message_bus, 0, "world");
-        assert_request_contains(&message_bus, 0, "42");
+        assert_eq!(request_message_count(&message_bus), 2);
     }
 
     #[test]
     fn test_constants() {
-        // Test that constants are accessible and have expected values
         assert_eq!(TEST_ACCOUNT, "DU1234567");
         assert_eq!(TEST_CONTRACT_ID, 1001);
         assert_eq!(TEST_ORDER_ID, 5001);

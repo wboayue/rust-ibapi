@@ -1,10 +1,11 @@
 #[cfg(feature = "sync")]
 mod sync_tests {
     use crate::client::sync::Client;
+    use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::contracts::Contract;
-    use crate::market_data::realtime::common::encoders::test_constants::*;
+    use crate::messages::OutgoingMessages;
+    use crate::server_versions;
     use crate::stubs::MessageBusStub;
-    use crate::{server_versions, ToField};
     use std::sync::{Arc, RwLock};
 
     #[test]
@@ -20,18 +21,7 @@ mod sync_tests {
 
         let request_messages = message_bus.request_messages();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-        let request = &request_messages[0];
-        assert_eq!(
-            request[MARKET_DATA_MSG_TYPE_IDX],
-            crate::messages::OutgoingMessages::RequestMarketData.to_field()
-        );
-
-        // Check that generic_ticks is empty
-        assert_eq!(request[MARKET_DATA_GENERIC_TICKS_IDX], "", "Generic ticks should be empty by default");
-
-        // Check snapshot is false
-        assert_eq!(request[MARKET_DATA_SNAPSHOT_IDX], "0", "Snapshot should be false by default");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
     }
 
     #[test]
@@ -50,13 +40,8 @@ mod sync_tests {
             .expect("Failed to create subscription");
 
         let request_messages = message_bus.request_messages();
-        let request = &request_messages[0];
-
-        // Check that generic_ticks contains our values
-        assert_eq!(
-            request[MARKET_DATA_GENERIC_TICKS_IDX], "233,236",
-            "Generic ticks should contain specified values"
-        );
+        assert_eq!(request_messages.len(), 1, "Should send one request message");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
     }
 
     #[test]
@@ -75,10 +60,8 @@ mod sync_tests {
             .expect("Failed to create subscription");
 
         let request_messages = message_bus.request_messages();
-        let request = &request_messages[0];
-
-        // Check snapshot is true
-        assert_eq!(request[MARKET_DATA_SNAPSHOT_IDX], "1", "Snapshot should be true");
+        assert_eq!(request_messages.len(), 1, "Should send one request message");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
     }
 
     #[test]
@@ -97,10 +80,8 @@ mod sync_tests {
             .expect("Failed to create subscription");
 
         let request_messages = message_bus.request_messages();
-        let request = &request_messages[0];
-
-        // Check regulatory snapshot is true
-        assert_eq!(request[MARKET_DATA_REGULATORY_SNAPSHOT_IDX], "1", "Regulatory snapshot should be true");
+        assert_eq!(request_messages.len(), 1, "Should send one request message");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
     }
 
     #[test]
@@ -120,10 +101,8 @@ mod sync_tests {
             .expect("Failed to create subscription");
 
         let request_messages = message_bus.request_messages();
-        let request = &request_messages[0];
-
-        // Check snapshot is false (streaming mode)
-        assert_eq!(request[MARKET_DATA_SNAPSHOT_IDX], "0", "Should be in streaming mode");
+        assert_eq!(request_messages.len(), 1, "Should send one request message");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
     }
 
     #[test]
@@ -144,22 +123,19 @@ mod sync_tests {
             .expect("Failed to create subscription");
 
         let request_messages = message_bus.request_messages();
-        let request = &request_messages[0];
-
-        // Check all parameters
-        assert_eq!(request[MARKET_DATA_GENERIC_TICKS_IDX], "100,101,104,106", "Generic ticks should be set");
-        assert_eq!(request[MARKET_DATA_SNAPSHOT_IDX], "1", "Snapshot should be true");
-        assert_eq!(request[MARKET_DATA_REGULATORY_SNAPSHOT_IDX], "1", "Regulatory snapshot should be true");
+        assert_eq!(request_messages.len(), 1, "Should send one request message");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
     }
 }
 
 #[cfg(feature = "async")]
 mod async_tests {
     use crate::client::r#async::Client;
+    use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::contracts::Contract;
-    use crate::market_data::realtime::common::encoders::test_constants::*;
+    use crate::messages::OutgoingMessages;
+    use crate::server_versions;
     use crate::stubs::MessageBusStub;
-    use crate::{server_versions, ToField};
     use std::sync::{Arc, RwLock};
 
     #[tokio::test]
@@ -181,16 +157,7 @@ mod async_tests {
 
         let request_messages = message_bus.request_messages();
         assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-        let request = &request_messages[0];
-        assert_eq!(
-            request[MARKET_DATA_MSG_TYPE_IDX],
-            crate::messages::OutgoingMessages::RequestMarketData.to_field()
-        );
-
-        // Check parameters
-        assert_eq!(request[MARKET_DATA_GENERIC_TICKS_IDX], "233,236", "Generic ticks should be set");
-        assert_eq!(request[MARKET_DATA_SNAPSHOT_IDX], "1", "Snapshot should be true");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
     }
 
     #[tokio::test]
@@ -210,9 +177,7 @@ mod async_tests {
             .expect("Failed to create subscription");
 
         let request_messages = message_bus.request_messages();
-        let request = &request_messages[0];
-
-        // Check regulatory snapshot is true
-        assert_eq!(request[MARKET_DATA_REGULATORY_SNAPSHOT_IDX], "1", "Regulatory snapshot should be true");
+        assert_eq!(request_messages.len(), 1, "Should send one request message");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
     }
 }

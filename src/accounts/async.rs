@@ -258,7 +258,7 @@ impl Client {
     /// ```
     pub async fn account_updates(&self, account: &AccountId) -> Result<Subscription<AccountUpdate>, Error> {
         crate::common::request_helpers::shared_request(self, OutgoingMessages::RequestAccountData, || {
-            encoders::encode_request_account_updates(self.server_version(), account)
+            encoders::encode_request_account_updates(true, account)
         })
         .await
     }
@@ -387,6 +387,7 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::messages::OutgoingMessages;
     use crate::testdata::responses;
 
     use crate::common::test_utils::helpers::*;
@@ -419,13 +420,9 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
         // Check both subscribe and cancel messages
-        assert_request_messages(
-            &message_bus,
-            &[
-                "61|1|", // Subscribe
-                "64|1|", // CancelPositions
-            ],
-        );
+        assert_eq!(request_message_count(&message_bus), 2);
+        assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestPositions);
+        assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelPositions);
     }
 
     #[tokio::test]
@@ -460,10 +457,9 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
         // Check both subscribe and cancel messages
-        let request_messages = get_request_messages(&message_bus);
-        assert_eq!(request_messages.len(), 2, "Expected subscribe and cancel messages");
-        assert_eq!(request_messages[0], "74|1|9000|DU1234567|TARGET2024|");
-        assert_eq!(request_messages[1], "75|1|9000|"); // Cancel request
+        assert_eq!(request_message_count(&message_bus), 2);
+        assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestPositionsMulti);
+        assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelPositionsMulti);
     }
 
     #[tokio::test]
@@ -500,13 +496,9 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
         // Check both subscribe and cancel messages
-        assert_request_messages(
-            &message_bus,
-            &[
-                "62|1|9000|All|AccountType|",
-                "63|1|9000|", // CancelAccountSummary
-            ],
-        );
+        assert_eq!(request_message_count(&message_bus), 2);
+        assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestAccountSummary);
+        assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelAccountSummary);
     }
 
     #[tokio::test]
@@ -528,10 +520,11 @@ mod tests {
         // Allow time for async cancellation to complete
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-        assert_request_messages(
-            &message_bus,
-            &["92|9000|DU1234567|TARGET2024|", "93|9000|", "92|9001|DU1234567||", "93|9001|"],
-        );
+        assert_eq!(request_message_count(&message_bus), 4);
+        assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestPnL);
+        assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelPnL);
+        assert_request_msg_id(&message_bus, 2, OutgoingMessages::RequestPnL);
+        assert_request_msg_id(&message_bus, 3, OutgoingMessages::CancelPnL);
     }
 
     #[tokio::test]
@@ -557,10 +550,11 @@ mod tests {
         // Allow time for async cancellation to complete
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-        assert_request_messages(
-            &message_bus,
-            &["94|9000|DU1234567|TARGET2024|1001|", "95|9000|", "94|9001|DU1234567||1001|", "95|9001|"],
-        );
+        assert_eq!(request_message_count(&message_bus), 4);
+        assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestPnLSingle);
+        assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelPnLSingle);
+        assert_request_msg_id(&message_bus, 2, OutgoingMessages::RequestPnLSingle);
+        assert_request_msg_id(&message_bus, 3, OutgoingMessages::CancelPnLSingle);
     }
 
     #[tokio::test]
@@ -571,7 +565,8 @@ mod tests {
         assert_eq!(accounts, &[TEST_ACCOUNT, TEST_ACCOUNT_2], "Valid accounts list mismatch");
 
         // Check request message
-        assert_request_messages(&message_bus, &["17|1|"]);
+        assert_eq!(request_message_count(&message_bus), 1);
+        assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestManagedAccounts);
     }
 
     #[tokio::test]
@@ -584,7 +579,8 @@ mod tests {
         assert_eq!(accounts, &[TEST_ACCOUNT, TEST_ACCOUNT_2], "Accounts list mismatch");
 
         // Verify request was sent
-        assert_request_messages(&message_bus, &["17|1|"]);
+        assert_eq!(request_message_count(&message_bus), 1);
+        assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestManagedAccounts);
     }
 
     #[tokio::test]
@@ -601,7 +597,8 @@ mod tests {
         assert_eq!(result.unwrap(), expected_datetime, "DateTime mismatch");
 
         // Check request message
-        assert_request_messages(&message_bus, &["49|1|"]);
+        assert_eq!(request_message_count(&message_bus), 1);
+        assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestCurrentTime);
     }
 
     #[tokio::test]
@@ -629,14 +626,16 @@ mod tests {
                 family_code: "FC2".to_string()
             }
         );
-        assert_request_messages(&message_bus, &["80|1|"]);
+        assert_eq!(request_message_count(&message_bus), 1);
+        assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestFamilyCodes);
 
         // Scenario 2: No message received (returns empty vector)
         let (client_no_msg, message_bus_no_msg) = create_test_client();
         let result_no_msg = client_no_msg.family_codes().await;
         assert!(result_no_msg.is_ok(), "Expected Ok, got Err: {:?}", result_no_msg.err());
         assert!(result_no_msg.unwrap().is_empty(), "Expected empty vector");
-        assert_request_messages(&message_bus_no_msg, &["80|1|"]);
+        assert_eq!(request_message_count(&message_bus_no_msg), 1);
+        assert_request_msg_id(&message_bus_no_msg, 0, OutgoingMessages::RequestFamilyCodes);
 
         // Scenario 3: Empty family codes list
         let (client_empty, message_bus_empty) = create_test_client_with_responses(vec![
@@ -645,7 +644,8 @@ mod tests {
         let result_empty = client_empty.family_codes().await;
         assert!(result_empty.is_ok(), "Expected Ok for empty list");
         assert!(result_empty.unwrap().is_empty(), "Expected empty vector");
-        assert_request_messages(&message_bus_empty, &["80|1|"]);
+        assert_eq!(request_message_count(&message_bus_empty), 1);
+        assert_request_msg_id(&message_bus_empty, 0, OutgoingMessages::RequestFamilyCodes);
     }
 
     #[tokio::test]
@@ -688,15 +688,10 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
         // Verify request messages - subscribe and cancel
-        let request_messages = get_request_messages(&message_bus);
-        assert!(request_messages.len() >= 2, "Expected subscribe and cancel messages");
-
-        // First message should be subscribe (RequestAccountData = 6)
-        assert!(request_messages[0].starts_with("6|"), "First message should be RequestAccountData");
-
-        // Last message should be cancel
-        let last_msg = &request_messages[request_messages.len() - 1];
-        assert!(last_msg.starts_with("6|"), "Last message should be RequestAccountData (cancel)");
+        let count = request_message_count(&message_bus);
+        assert!(count >= 2, "Expected subscribe and cancel messages");
+        assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestAccountData);
+        assert_request_msg_id(&message_bus, count - 1, OutgoingMessages::RequestAccountData);
     }
 
     #[tokio::test]
@@ -734,13 +729,9 @@ mod tests {
         subscription.cancel().await;
 
         // Check both subscribe and cancel messages
-        assert_request_messages(
-            &message_bus,
-            &[
-                "76|1|9000|DU1234567||1|",
-                "77|1|9000|", // Cancel request
-            ],
-        );
+        assert_eq!(request_message_count(&message_bus), 2);
+        assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestAccountUpdatesMulti);
+        assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelAccountUpdatesMulti);
     }
 
     // Additional comprehensive tests
@@ -794,7 +785,8 @@ mod tests {
                 .await
                 .unwrap_or_else(|_| panic!("managed_accounts failed for {}", test_case.scenario));
             assert_eq!(accounts, test_case.expected, "{}: {}", test_case.scenario, test_case.description);
-            assert_request_messages(&message_bus, &["17|1|"]);
+            assert_eq!(request_message_count(&message_bus), 1);
+            assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestManagedAccounts);
         }
     }
 
@@ -834,7 +826,8 @@ mod tests {
                 }
             }
 
-            assert_request_messages(&message_bus, &[test_case.expected_request]);
+            assert_eq!(request_message_count(&message_bus), 1);
+            assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestCurrentTime);
         }
     }
 
@@ -865,8 +858,10 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         // Verify all requests were sent
-        let request_messages = get_request_messages(&message_bus);
-        assert!(request_messages.len() >= 6, "Expected at least 6 messages (3 subscribe + 3 cancel)");
+        assert!(
+            request_message_count(&message_bus) >= 6,
+            "Expected at least 6 messages (3 subscribe + 3 cancel)"
+        );
     }
 
     #[tokio::test]
@@ -907,20 +902,14 @@ mod tests {
                 drop(subscription);
                 tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
-                // Verify the encoded tags are sent correctly
-                if let Some(expected_encoding) = test_case.expected_tag_encoding {
-                    let request_messages = get_request_messages(&message_bus);
-                    assert!(!request_messages.is_empty(), "Expected request messages for {}", test_case.description);
-
-                    if !expected_encoding.is_empty() {
-                        assert!(
-                            request_messages[0].contains(expected_encoding),
-                            "Request should contain '{}' for {}, got: {}",
-                            expected_encoding,
-                            test_case.description,
-                            request_messages[0]
-                        );
-                    }
+                // Verify request was sent
+                if test_case.expected_tag_encoding.is_some() {
+                    assert!(
+                        request_message_count(&message_bus) > 0,
+                        "Expected request messages for {}",
+                        test_case.description
+                    );
+                    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestAccountSummary);
                 }
             } else {
                 // Create client without specific responses

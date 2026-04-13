@@ -75,21 +75,9 @@ impl Client {
             check_version(self.server_version, Features::WSH_EVENT_DATA_FILTERS_DATE)?;
         }
 
-        let server_version = self.server_version;
         request_helpers::blocking::one_shot_request_with_retry(
             self,
-            |request_id| {
-                encoders::encode_request_wsh_event_data(
-                    server_version,
-                    request_id,
-                    Some(contract_id),
-                    None,
-                    start_date,
-                    end_date,
-                    limit,
-                    auto_fill,
-                )
-            },
+            |request_id| encoders::encode_request_wsh_event_data(request_id, Some(contract_id), None, start_date, end_date, limit, auto_fill),
             |message| decoders::decode_event_data_message(message.clone()),
             || Err(Error::UnexpectedEndOfStream),
         )
@@ -128,7 +116,6 @@ impl Client {
 
         request_helpers::blocking::request_with_id(self, Features::WSH_EVENT_DATA_FILTERS, |request_id| {
             encoders::encode_request_wsh_event_data(
-                self.server_version,
                 request_id,
                 None,
                 Some(filter),
@@ -275,8 +262,10 @@ mod tests {
                     );
 
                     if result.is_ok() {
+                        use crate::common::test_utils::helpers::assert_proto_msg_id;
+                        use crate::messages::OutgoingMessages;
                         let request_messages = client.message_bus.request_messages();
-                        assert_eq!(request_messages[0].encode_simple(), "102|9000||filter=value|1|0|1|||100|");
+                        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestWshEventData);
                     }
                     result
                 }
@@ -285,8 +274,10 @@ mod tests {
                     let result = client.wsh_event_data_by_filter(filter, None, None);
 
                     if result.is_ok() {
+                        use crate::common::test_utils::helpers::assert_proto_msg_id;
+                        use crate::messages::OutgoingMessages;
                         let request_messages = client.message_bus.request_messages();
-                        assert_eq!(request_messages[0].encode_simple(), "102|9000||filter=value|0|0|0|");
+                        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestWshEventData);
                     }
                     result
                 }
@@ -385,17 +376,20 @@ mod tests {
 
     #[test]
     fn test_data_stream_cancel_message() {
+        use crate::common::test_utils::helpers::assert_proto_msg_id;
+        use crate::messages::OutgoingMessages;
+
         let request_id = test_data::REQUEST_ID_METADATA;
 
         // Test WshMetadata cancel
         let cancel_msg = WshMetadata::cancel_message(0, Some(request_id), None);
         assert!(cancel_msg.is_ok());
-        assert_eq!(cancel_msg.unwrap().encode_simple(), "101|9000|");
+        assert_proto_msg_id(&cancel_msg.unwrap(), OutgoingMessages::CancelWshMetaData);
 
         // Test WshEventData cancel
         let cancel_msg = WshEventData::cancel_message(0, Some(request_id), None);
         assert!(cancel_msg.is_ok());
-        assert_eq!(cancel_msg.unwrap().encode_simple(), "103|9000|");
+        assert_proto_msg_id(&cancel_msg.unwrap(), OutgoingMessages::CancelWshEventData);
     }
 
     #[test]

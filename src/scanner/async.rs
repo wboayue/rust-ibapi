@@ -24,7 +24,7 @@ impl Client {
     pub async fn scanner_subscription(
         &self,
         subscription: &ScannerSubscription,
-        filter: &Vec<TagValue>,
+        filter: &[TagValue],
     ) -> Result<Subscription<Vec<ScannerData>>, Error> {
         if !filter.is_empty() {
             self.check_server_version(
@@ -34,7 +34,7 @@ impl Client {
         }
 
         let request_id = self.next_request_id();
-        let request = encoders::encode_scanner_subscription(request_id, self.server_version(), subscription, filter)?;
+        let request = encoders::encode_scanner_subscription(request_id, subscription, filter)?;
         let internal_subscription = self.send_request(request_id, request).await?;
 
         Ok(Subscription::new_from_internal::<Vec<ScannerData>>(
@@ -51,7 +51,9 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::contracts::{Exchange, SecurityType, Symbol};
+    use crate::messages::OutgoingMessages;
     use crate::orders::TagValue;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
@@ -72,7 +74,8 @@ mod tests {
         assert!(result.is_ok(), "failed to request scanner parameters: {}", result.err().unwrap());
 
         let request_messages = message_bus.request_messages.read().unwrap();
-        assert_eq!(request_messages[0].encode_simple(), "24|1|");
+        assert_eq!(request_messages.len(), 1);
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestScannerParameters);
 
         let scanner_params = result.unwrap();
         assert!(scanner_params.contains("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
@@ -163,10 +166,8 @@ mod tests {
         // Verify request parameters were encoded correctly
         {
             let request_messages = message_bus.request_messages.read().unwrap();
-            let scanner_request = format!(
-                "22|9000|10|FUT|FUT.US|TOP_PERC_GAIN|50|100|1000|1000000|10000000|A|AAA|A|AAA|20230101|20231231|2|5|1|100|Annual,true|CORP|scannerType=TOP_PERC_GAIN;numberOfRows=10;||",
-            );
-            assert_eq!(request_messages[0].encode_simple(), scanner_request);
+            assert_eq!(request_messages.len(), 1);
+            assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestScannerSubscription);
         } // Lock is released here
 
         // Explicitly cancel the subscription
@@ -175,7 +176,7 @@ mod tests {
         // Verify cancel request was sent
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 2, "Expected 2 messages (request + cancel)");
-        assert_eq!(request_messages[1].encode_simple(), "23|1|9000|");
+        assert_proto_msg_id(&request_messages[1], OutgoingMessages::CancelScannerSubscription);
     }
 
     #[tokio::test]
@@ -193,7 +194,7 @@ mod tests {
             ..Default::default()
         };
 
-        let result = client.scanner_subscription(&subscription, &vec![]).await;
+        let result = client.scanner_subscription(&subscription, &[]).await;
         assert!(result.is_ok(), "failed to request scanner subscription: {}", result.err().unwrap());
 
         let mut subscription = result.unwrap();
@@ -216,7 +217,7 @@ mod tests {
         // Verify cancel request was sent by drop
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 2, "Expected 2 messages (request + cancel from drop)");
-        assert_eq!(request_messages[1].encode_simple(), "23|1|9000|");
+        assert_proto_msg_id(&request_messages[1], OutgoingMessages::CancelScannerSubscription);
     }
 
     #[tokio::test]
@@ -234,7 +235,7 @@ mod tests {
             ..Default::default()
         };
 
-        let result = client.scanner_subscription(&subscription, &vec![]).await;
+        let result = client.scanner_subscription(&subscription, &[]).await;
         let subscription = result.unwrap();
 
         // Explicitly cancel

@@ -5,7 +5,7 @@ use crate::messages::OutgoingMessages;
 use crate::server_versions;
 
 /// Test case for contract details tests
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, dead_code)]
 pub struct ContractDetailsTestCase {
     pub name: &'static str,
     pub contract: Contract,
@@ -16,6 +16,7 @@ pub struct ContractDetailsTestCase {
 }
 
 /// Test case for matching symbols tests
+#[allow(dead_code)]
 pub struct MatchingSymbolsTestCase {
     pub name: &'static str,
     pub pattern: &'static str,
@@ -25,6 +26,7 @@ pub struct MatchingSymbolsTestCase {
 }
 
 /// Test case for market rule tests
+#[allow(dead_code)]
 pub struct MarketRuleTestCase {
     pub name: &'static str,
     pub market_rule_id: i32,
@@ -34,6 +36,7 @@ pub struct MarketRuleTestCase {
 }
 
 /// Test case for option calculation tests
+#[allow(dead_code)]
 pub struct OptionCalculationTestCase {
     pub name: &'static str,
     pub contract: Contract,
@@ -47,6 +50,7 @@ pub struct OptionCalculationTestCase {
 }
 
 /// Test case for option chain tests
+#[allow(dead_code)]
 pub struct OptionChainTestCase {
     pub name: &'static str,
     pub symbol: &'static str,
@@ -86,7 +90,7 @@ pub struct CancelMessageTestCase {
     pub decoder_type: &'static str,
     pub request_id: Option<i32>,
     pub request_type: Option<OutgoingMessages>,
-    pub expected_message: Result<String, &'static str>,
+    pub expected_msg_id: Result<i32, &'static str>,
 }
 
 /// Test cases for contract details
@@ -437,21 +441,21 @@ pub fn cancel_message_test_cases() -> Vec<CancelMessageTestCase> {
             decoder_type: "OptionComputation",
             request_id: Some(9000),
             request_type: Some(OutgoingMessages::ReqCalcImpliedVolat),
-            expected_message: Ok("56|1|9000|".to_string()), // CancelImpliedVolatility
+            expected_msg_id: Ok(OutgoingMessages::CancelImpliedVolatility as i32 + 200),
         },
         CancelMessageTestCase {
             name: "cancel option price calculation",
             decoder_type: "OptionComputation",
             request_id: Some(9001),
             request_type: Some(OutgoingMessages::ReqCalcOptionPrice),
-            expected_message: Ok("57|1|9001|".to_string()), // CancelOptionPrice
+            expected_msg_id: Ok(OutgoingMessages::CancelOptionPrice as i32 + 200),
         },
         CancelMessageTestCase {
             name: "cancel option chain - not supported",
             decoder_type: "OptionChain",
             request_id: Some(9003),
             request_type: None,
-            expected_message: Err("cancel not implemented"),
+            expected_msg_id: Err("cancel not implemented"),
         },
     ]
 }
@@ -462,6 +466,7 @@ pub struct ClientMethodTestCase {
     pub name: &'static str,
     pub test_type: ClientMethodTest,
     pub response_messages: Vec<String>,
+    #[allow(dead_code)]
     pub expected_request: &'static str,
     pub expected_result: ClientMethodResult,
 }

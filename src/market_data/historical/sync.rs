@@ -117,7 +117,6 @@ impl Client {
         for _ in 0..MAX_RETRIES {
             let builder = self.request();
             let request = encoders::encode_request_historical_data(
-                self.server_version(),
                 builder.request_id(),
                 contract,
                 interval_end,
@@ -126,7 +125,7 @@ impl Client {
                 Some(what_to_show),
                 trading_hours.use_rth(),
                 false,
-                Vec::<crate::contracts::TagValue>::default(),
+                &Vec::<crate::contracts::TagValue>::default(),
             )?;
 
             let subscription = builder.send_raw(request)?;
@@ -213,7 +212,6 @@ impl Client {
         // Note: end_date must be None when keepUpToDate=true (IBKR requirement)
         let builder = self.request();
         let request = encoders::encode_request_historical_data(
-            self.server_version(),
             builder.request_id(),
             contract,
             None, // end_date must be None for keepUpToDate
@@ -222,7 +220,7 @@ impl Client {
             what_to_show,
             trading_hours.use_rth(),
             keep_up_to_date,
-            Vec::<crate::contracts::TagValue>::default(),
+            &Vec::<crate::contracts::TagValue>::default(),
         )?;
 
         let request_id = builder.request_id();
@@ -556,7 +554,6 @@ fn historical_schedule(client: &Client, contract: &Contract, end_date: Option<Of
     loop {
         let builder = client.request();
         let request = encoders::encode_request_historical_data(
-            client.server_version(),
             builder.request_id(),
             contract,
             end_date,
@@ -565,7 +562,7 @@ fn historical_schedule(client: &Client, contract: &Contract, end_date: Option<Of
             Some(WhatToShow::Schedule),
             true,
             false,
-            Vec::<crate::contracts::TagValue>::default(),
+            &Vec::<crate::contracts::TagValue>::default(),
         )?;
 
         let subscription = builder.send_raw(request)?;
@@ -919,13 +916,13 @@ impl<T: TickDecoder<T>> Iterator for TickSubscriptionTimeoutIter<'_, T> {
 mod tests {
     use super::*;
     use crate::client::blocking::Client;
+    use crate::common::test_utils::helpers::assert_proto_msg_id;
     use crate::contracts::Contract;
     use crate::market_data::historical::ToDuration;
     use crate::market_data::TradingHours;
-    use crate::messages::{OutgoingMessages, RequestMessage};
+    use crate::messages::OutgoingMessages;
     use crate::server_versions;
     use crate::stubs::MessageBusStub;
-    use crate::ToField;
     use std::sync::{Arc, RwLock};
     use time::macros::{date, datetime};
     use time::OffsetDateTime;
@@ -951,38 +948,8 @@ mod tests {
         assert_eq!(head_timestamp, OffsetDateTime::from_unix_timestamp(1678323335).unwrap(), "bar.date");
 
         let request_messages = client.message_bus.request_messages();
-
-        let head_timestamp_request = &request_messages[0];
-        assert_eq!(
-            head_timestamp_request[0],
-            OutgoingMessages::RequestHeadTimestamp.to_field(),
-            "message.message_type"
-        );
-        assert_eq!(head_timestamp_request[1], "9000", "message.request_id");
-        assert_eq!(head_timestamp_request[2], contract.contract_id.to_field(), "message.contract_id");
-        assert_eq!(head_timestamp_request[3], contract.symbol.to_field(), "message.symbol");
-        assert_eq!(head_timestamp_request[4], contract.security_type.to_field(), "message.security_type");
-        assert_eq!(
-            head_timestamp_request[5],
-            contract.last_trade_date_or_contract_month.to_field(),
-            "message.last_trade_date_or_contract_month"
-        );
-        assert_eq!(head_timestamp_request[6], contract.strike.to_field(), "message.strike");
-        assert_eq!(head_timestamp_request[7], contract.right.to_field(), "message.right");
-        assert_eq!(head_timestamp_request[8], contract.multiplier.to_field(), "message.multiplier");
-        assert_eq!(head_timestamp_request[9], contract.exchange.to_field(), "message.exchange");
-        assert_eq!(
-            head_timestamp_request[10],
-            contract.primary_exchange.to_field(),
-            "message.primary_exchange"
-        );
-        assert_eq!(head_timestamp_request[11], contract.currency.to_field(), "message.currency");
-        assert_eq!(head_timestamp_request[12], contract.local_symbol.to_field(), "message.local_symbol");
-        assert_eq!(head_timestamp_request[13], contract.trading_class.to_field(), "message.trading_class");
-        assert_eq!(head_timestamp_request[14], contract.include_expired.to_field(), "message.include_expired");
-        assert_eq!(head_timestamp_request[15], trading_hours.use_rth().to_field(), "message.use_rth");
-        assert_eq!(head_timestamp_request[16], what_to_show.to_field(), "message.what_to_show");
-        assert_eq!(head_timestamp_request[17], "2", "message.date_format");
+        assert_eq!(request_messages.len(), 1, "Should send one request message");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHeadTimestamp);
     }
 
     #[test]
@@ -1057,45 +1024,9 @@ mod tests {
         assert_eq!(historical_data.bars[0].count, 324891, "bar.count");
 
         // Assert Request
-
         let request_messages = client.message_bus.request_messages();
-
-        let head_timestamp_request = &request_messages[0];
-        assert_eq!(
-            head_timestamp_request[0],
-            OutgoingMessages::RequestHistoricalData.to_field(),
-            "message.message_type"
-        );
-        assert_eq!(head_timestamp_request[1], "9000", "message.request_id");
-        assert_eq!(head_timestamp_request[2], contract.contract_id.to_field(), "message.contract_id");
-        assert_eq!(head_timestamp_request[3], contract.symbol.to_field(), "message.symbol");
-        assert_eq!(head_timestamp_request[4], contract.security_type.to_field(), "message.security_type");
-        assert_eq!(
-            head_timestamp_request[5],
-            contract.last_trade_date_or_contract_month.to_field(),
-            "message.last_trade_date_or_contract_month"
-        );
-        assert_eq!(head_timestamp_request[6], contract.strike.to_field(), "message.strike");
-        assert_eq!(head_timestamp_request[7], contract.right.to_field(), "message.right");
-        assert_eq!(head_timestamp_request[8], contract.multiplier.to_field(), "message.multiplier");
-        assert_eq!(head_timestamp_request[9], contract.exchange.to_field(), "message.exchange");
-        assert_eq!(
-            head_timestamp_request[10],
-            contract.primary_exchange.to_field(),
-            "message.primary_exchange"
-        );
-        assert_eq!(head_timestamp_request[11], contract.currency.to_field(), "message.currency");
-        assert_eq!(head_timestamp_request[12], contract.local_symbol.to_field(), "message.local_symbol");
-        assert_eq!(head_timestamp_request[13], contract.trading_class.to_field(), "message.trading_class");
-        assert_eq!(head_timestamp_request[14], contract.include_expired.to_field(), "message.include_expired");
-        assert_eq!(head_timestamp_request[15], interval_end.to_field(), "message.interval_end");
-        assert_eq!(head_timestamp_request[16], bar_size.to_field(), "message.bar_size");
-        assert_eq!(head_timestamp_request[17], duration.to_field(), "message.duration");
-        assert_eq!(head_timestamp_request[18], trading_hours.use_rth().to_field(), "message.use_rth");
-        assert_eq!(head_timestamp_request[19], what_to_show.to_field(), "message.what_to_show");
-        assert_eq!(head_timestamp_request[20], "2", "message.date_format");
-        assert_eq!(head_timestamp_request[21], "0", "message.keep_up_to_data");
-        assert_eq!(head_timestamp_request[22], "", "message.chart_options");
+        assert_eq!(request_messages.len(), 1, "Should send one request message");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalData);
     }
 
     #[test]
@@ -1147,23 +1078,8 @@ mod tests {
 
         // Assert Request
         let request_messages = client.message_bus.request_messages();
-
-        let historical_schedule_request = &request_messages[0];
-        assert_eq!(
-            historical_schedule_request[0],
-            OutgoingMessages::RequestHistoricalData.to_field(),
-            "message.message_type"
-        );
-        assert_eq!(historical_schedule_request[1], "9000", "message.request_id");
-        assert_eq!(historical_schedule_request[15], end_date.to_field(), "message.end_date");
-        assert_eq!(historical_schedule_request[16], BarSize::Day.to_field(), "message.bar_size");
-        assert_eq!(historical_schedule_request[17], duration.to_field(), "message.duration");
-        assert_eq!(
-            historical_schedule_request[18],
-            TradingHours::Regular.use_rth().to_field(),
-            "message.use_rth"
-        );
-        assert_eq!(historical_schedule_request[19], WhatToShow::Schedule.to_field(), "message.what_to_show");
+        assert_eq!(request_messages.len(), 1, "Should send one request message");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalData);
     }
 
     #[test]
@@ -1622,11 +1538,10 @@ mod tests {
             _ => panic!("Expected Update variant"),
         }
 
-        // Verify request message includes keepUpToDate=true
+        // Verify request message was sent
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request");
-        // keepUpToDate is at field index 21 (for non-bag contracts)
-        assert_eq!(request_messages[0].fields[21], "1", "Request should have keepUpToDate=true at field[21]");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalData);
     }
 
     #[test]
@@ -1665,11 +1580,10 @@ mod tests {
             _ => panic!("Expected Historical variant"),
         }
 
-        // Verify request message includes keepUpToDate=false
+        // Verify request message was sent
         let request_messages = message_bus.request_messages.read().unwrap();
         assert_eq!(request_messages.len(), 1, "Should send one request");
-        // keepUpToDate is at field index 21 (for non-bag contracts)
-        assert_eq!(request_messages[0].fields[21], "0", "Request should have keepUpToDate=false at field[21]");
+        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalData);
     }
 
     #[test]
@@ -1718,7 +1632,7 @@ mod tests {
             response_messages: vec![],
         });
 
-        let internal = message_bus.send_request(9000, &RequestMessage::new()).unwrap();
+        let internal = message_bus.send_request(9000, &[]).unwrap();
 
         {
             let _subscription = HistoricalDataStreamingSubscription::new(
@@ -1734,12 +1648,7 @@ mod tests {
         let messages = message_bus.request_messages.read().unwrap();
         // First message is the send_request call, second is the cancel
         let cancel_msg = messages.last().expect("should have cancel message");
-        assert_eq!(
-            cancel_msg.fields[0],
-            OutgoingMessages::CancelHistoricalData.to_field(),
-            "message type should be CancelHistoricalData"
-        );
-        assert_eq!(cancel_msg.fields[2], 9000.to_field(), "request_id should match");
+        assert_proto_msg_id(cancel_msg, OutgoingMessages::CancelHistoricalData);
     }
 
     #[test]
@@ -1749,7 +1658,7 @@ mod tests {
             response_messages: vec![],
         });
 
-        let internal = message_bus.send_request(9001, &RequestMessage::new()).unwrap();
+        let internal = message_bus.send_request(9001, &[]).unwrap();
 
         {
             let subscription = HistoricalDataStreamingSubscription::new(
@@ -1769,7 +1678,14 @@ mod tests {
         let messages = message_bus.request_messages.read().unwrap();
         let cancel_count = messages
             .iter()
-            .filter(|m| m.fields.first().map(|f| f.as_str()) == Some(&OutgoingMessages::CancelHistoricalData.to_field()))
+            .filter(|m| {
+                if m.len() >= 4 {
+                    let msg_id = i32::from_be_bytes([m[0], m[1], m[2], m[3]]);
+                    msg_id == OutgoingMessages::CancelHistoricalData as i32 + 200
+                } else {
+                    false
+                }
+            })
             .count();
         assert_eq!(cancel_count, 1, "should send cancel only once");
     }

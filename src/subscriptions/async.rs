@@ -8,12 +8,12 @@ use tokio::sync::mpsc;
 
 use super::common::{process_decode_result, DecoderContext, ProcessingResult};
 use super::StreamDecoder;
-use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{OutgoingMessages, ResponseMessage};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 use crate::Error;
 
 // Type aliases to reduce complexity
-type CancelFn = Box<dyn Fn(i32, Option<i32>, Option<&DecoderContext>) -> Result<RequestMessage, Error> + Send + Sync>;
+type CancelFn = Box<dyn Fn(i32, Option<i32>, Option<&DecoderContext>) -> Result<Vec<u8>, Error> + Send + Sync>;
 type DecoderFn<T> = Arc<dyn Fn(&DecoderContext, &mut ResponseMessage) -> Result<T, Error> + Send + Sync>;
 
 /// Asynchronous subscription for streaming data
@@ -549,11 +549,8 @@ mod tests {
         let internal = AsyncInternalSubscription::new(rx);
 
         // Mock cancel function
-        let cancel_fn: CancelFn = Box::new(|_version, _id, _ctx| {
-            let mut msg = RequestMessage::new();
-            msg.push_field(&OutgoingMessages::CancelMarketData);
-            Ok(msg)
-        });
+        let cancel_fn: CancelFn =
+            Box::new(|_version, _id, _ctx| Ok(crate::messages::encode_protobuf_message(OutgoingMessages::CancelMarketData as i32, &[])));
 
         let mut subscription: Subscription<String> = Subscription::with_decoder(
             internal,
@@ -608,11 +605,8 @@ mod tests {
         let internal = AsyncInternalSubscription::new(rx);
 
         // Mock cancel function
-        let cancel_fn: CancelFn = Box::new(|_version, _id, _ctx| {
-            let mut msg = RequestMessage::new();
-            msg.push_field(&OutgoingMessages::CancelMarketData);
-            Ok(msg)
-        });
+        let cancel_fn: CancelFn =
+            Box::new(|_version, _id, _ctx| Ok(crate::messages::encode_protobuf_message(OutgoingMessages::CancelMarketData as i32, &[])));
 
         {
             let mut subscription: Subscription<String> = Subscription::with_decoder(
@@ -675,10 +669,8 @@ mod tests {
                 Ok("decoded".to_string())
             }
 
-            fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<RequestMessage, Error> {
-                let mut msg = RequestMessage::new();
-                msg.push_field(&OutgoingMessages::CancelMarketData);
-                Ok(msg)
+            fn cancel_message(_server_version: i32, _id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+                Ok(crate::messages::encode_protobuf_message(OutgoingMessages::CancelMarketData as i32, &[]))
             }
         }
 

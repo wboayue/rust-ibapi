@@ -10,7 +10,7 @@
 //!
 
 // Common implementation modules
-mod common;
+pub(crate) mod common;
 
 // Domain types
 pub mod types;

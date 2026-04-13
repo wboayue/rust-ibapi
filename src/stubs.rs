@@ -9,7 +9,7 @@ use std::sync::Arc;
 #[cfg(feature = "sync")]
 use crossbeam::channel;
 
-use crate::messages::{OutgoingMessages, RequestMessage, ResponseMessage};
+use crate::messages::{OutgoingMessages, ResponseMessage};
 use crate::Error;
 
 #[cfg(feature = "sync")]
@@ -29,7 +29,7 @@ use {
 const TEST_BROADCAST_CAPACITY: usize = 1024;
 
 pub(crate) struct MessageBusStub {
-    pub request_messages: RwLock<Vec<RequestMessage>>,
+    pub request_messages: RwLock<Vec<Vec<u8>>>,
     pub response_messages: Vec<String>,
     // pub next_request_id: i32,
     // pub server_version: i32,
@@ -65,32 +65,32 @@ impl MessageBusStub {
         }
     }
 
-    pub fn request_messages(&self) -> Vec<RequestMessage> {
+    pub fn request_messages(&self) -> Vec<Vec<u8>> {
         self.request_messages.read().unwrap().clone()
     }
 }
 
 #[cfg(feature = "sync")]
 impl MessageBus for MessageBusStub {
-    fn request_messages(&self) -> Vec<RequestMessage> {
+    fn request_messages(&self) -> Vec<Vec<u8>> {
         self.request_messages.read().unwrap().clone()
     }
 
-    fn send_request(&self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
+    fn send_request(&self, request_id: i32, message: &[u8]) -> Result<InternalSubscription, Error> {
         Ok(mock_request(self, Some(request_id), None, message))
     }
 
-    fn cancel_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
+    fn cancel_subscription(&self, request_id: i32, packet: &[u8]) -> Result<(), Error> {
         mock_request(self, Some(request_id), None, packet);
         Ok(())
     }
 
-    fn send_order_request(&self, request_id: i32, message: &RequestMessage) -> Result<InternalSubscription, Error> {
+    fn send_order_request(&self, request_id: i32, message: &[u8]) -> Result<InternalSubscription, Error> {
         Ok(mock_request(self, Some(request_id), None, message))
     }
 
-    fn send_message(&self, message: &RequestMessage) -> Result<(), Error> {
-        self.request_messages.write().unwrap().push(message.clone());
+    fn send_message(&self, message: &[u8]) -> Result<(), Error> {
+        self.request_messages.write().unwrap().push(message.to_vec());
         Ok(())
     }
 
@@ -118,7 +118,7 @@ impl MessageBus for MessageBusStub {
         Ok(subscription)
     }
 
-    fn cancel_order_subscription(&self, request_id: i32, packet: &RequestMessage) -> Result<(), Error> {
+    fn cancel_order_subscription(&self, request_id: i32, packet: &[u8]) -> Result<(), Error> {
         mock_request(self, Some(request_id), None, packet);
 
         let stub_id = self as *const _ as usize;
@@ -127,11 +127,11 @@ impl MessageBus for MessageBusStub {
         Ok(())
     }
 
-    fn send_shared_request(&self, message_type: OutgoingMessages, message: &RequestMessage) -> Result<InternalSubscription, Error> {
+    fn send_shared_request(&self, message_type: OutgoingMessages, message: &[u8]) -> Result<InternalSubscription, Error> {
         Ok(mock_request(self, None, Some(message_type), message))
     }
 
-    fn cancel_shared_subscription(&self, message_type: OutgoingMessages, packet: &RequestMessage) -> Result<(), Error> {
+    fn cancel_shared_subscription(&self, message_type: OutgoingMessages, packet: &[u8]) -> Result<(), Error> {
         mock_request(self, None, Some(message_type), packet);
         Ok(())
     }
@@ -148,13 +148,8 @@ impl MessageBus for MessageBusStub {
 }
 
 #[cfg(feature = "sync")]
-fn mock_request(
-    stub: &MessageBusStub,
-    request_id: Option<i32>,
-    message_type: Option<OutgoingMessages>,
-    message: &RequestMessage,
-) -> InternalSubscription {
-    stub.request_messages.write().unwrap().push(message.clone());
+fn mock_request(stub: &MessageBusStub, request_id: Option<i32>, message_type: Option<OutgoingMessages>, message: &[u8]) -> InternalSubscription {
+    stub.request_messages.write().unwrap().push(message.to_vec());
 
     let (sender, receiver) = channel::unbounded();
     let (s1, _r1) = channel::unbounded();
@@ -177,7 +172,7 @@ fn mock_request(
 #[cfg(feature = "async")]
 #[async_trait]
 impl AsyncMessageBus for MessageBusStub {
-    async fn send_request(&self, _request_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
+    async fn send_request(&self, _request_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         self.request_messages.write().unwrap().push(message);
 
         let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
@@ -190,7 +185,7 @@ impl AsyncMessageBus for MessageBusStub {
         Ok(AsyncInternalSubscription::new(receiver))
     }
 
-    async fn send_order_request(&self, _order_id: i32, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
+    async fn send_order_request(&self, _order_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         self.request_messages.write().unwrap().push(message);
 
         let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
@@ -203,7 +198,7 @@ impl AsyncMessageBus for MessageBusStub {
         Ok(AsyncInternalSubscription::new(receiver))
     }
 
-    async fn send_shared_request(&self, _message_type: OutgoingMessages, message: RequestMessage) -> Result<AsyncInternalSubscription, Error> {
+    async fn send_shared_request(&self, _message_type: OutgoingMessages, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         self.request_messages.write().unwrap().push(message);
 
         let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
@@ -216,17 +211,17 @@ impl AsyncMessageBus for MessageBusStub {
         Ok(AsyncInternalSubscription::new(receiver))
     }
 
-    async fn send_message(&self, message: RequestMessage) -> Result<(), Error> {
+    async fn send_message(&self, message: Vec<u8>) -> Result<(), Error> {
         self.request_messages.write().unwrap().push(message);
         Ok(())
     }
 
-    async fn cancel_subscription(&self, _request_id: i32, message: RequestMessage) -> Result<(), Error> {
+    async fn cancel_subscription(&self, _request_id: i32, message: Vec<u8>) -> Result<(), Error> {
         self.request_messages.write().unwrap().push(message);
         Ok(())
     }
 
-    async fn cancel_order_subscription(&self, _order_id: i32, _message: RequestMessage) -> Result<(), Error> {
+    async fn cancel_order_subscription(&self, _order_id: i32, _message: Vec<u8>) -> Result<(), Error> {
         Ok(())
     }
 
@@ -276,7 +271,7 @@ impl AsyncMessageBus for MessageBusStub {
     }
 
     #[cfg(test)]
-    fn request_messages(&self) -> Vec<RequestMessage> {
+    fn request_messages(&self) -> Vec<Vec<u8>> {
         self.request_messages.read().unwrap().clone()
     }
 }
