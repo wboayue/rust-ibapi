@@ -344,8 +344,8 @@ impl SubscriptionBuilderExt for Client {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::common::mocks::MockGateway;
-    use crate::client::common::tests::setup_connect;
+    use crate::client::test_support::mocks::MockGateway;
+    use crate::client::test_support::tests::setup_connect;
     use crate::market_data::realtime::Bar;
     use crate::messages::OutgoingMessages;
 
