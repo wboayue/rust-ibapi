@@ -1,5 +1,5 @@
 use super::Client;
-use crate::client::test_support::tests::*;
+use crate::client::test_support::scenarios::*;
 use crate::contracts::{Currency, Exchange, Symbol};
 use crate::market_data::TradingHours;
 
@@ -605,7 +605,7 @@ async fn test_option_chain() {
 
 #[tokio::test]
 async fn test_place_order() {
-    use crate::client::test_support::tests::setup_place_order;
+    use crate::client::test_support::scenarios::setup_place_order;
     use crate::contracts::Contract;
     use crate::orders::{order_builder, Action, PlaceOrder};
 
@@ -709,7 +709,7 @@ async fn test_place_order() {
 
 #[tokio::test]
 async fn test_submit_order_with_order_update_stream() {
-    use crate::client::test_support::tests::setup_place_order;
+    use crate::client::test_support::scenarios::setup_place_order;
     use crate::contracts::Contract;
     use crate::orders::{order_builder, Action, OrderUpdate};
 
@@ -822,7 +822,7 @@ async fn test_submit_order_with_order_update_stream() {
 
 #[tokio::test]
 async fn test_open_orders() {
-    use crate::client::test_support::tests::setup_open_orders;
+    use crate::client::test_support::scenarios::setup_open_orders;
     use crate::orders::{Action, Orders};
 
     // Initialize env_logger for debug output
@@ -884,7 +884,7 @@ async fn test_open_orders() {
 
 #[tokio::test]
 async fn test_all_open_orders() {
-    use crate::client::test_support::tests::setup_all_open_orders;
+    use crate::client::test_support::scenarios::setup_all_open_orders;
     use crate::orders::{Action, Orders};
 
     // Initialize env_logger for debug output
@@ -955,7 +955,7 @@ async fn test_all_open_orders() {
 
 #[tokio::test]
 async fn test_auto_open_orders() {
-    use crate::client::test_support::tests::setup_auto_open_orders;
+    use crate::client::test_support::scenarios::setup_auto_open_orders;
     use crate::orders::Orders;
 
     // Initialize env_logger for debug output
@@ -1022,7 +1022,7 @@ async fn test_auto_open_orders() {
 
 #[tokio::test]
 async fn test_completed_orders() {
-    use crate::client::test_support::tests::setup_completed_orders;
+    use crate::client::test_support::scenarios::setup_completed_orders;
     use crate::orders::{Action, Orders};
 
     // Initialize env_logger for debug output
@@ -1086,7 +1086,7 @@ async fn test_completed_orders() {
 
 #[tokio::test]
 async fn test_cancel_order() {
-    use crate::client::test_support::tests::setup_cancel_order;
+    use crate::client::test_support::scenarios::setup_cancel_order;
     use crate::messages::Notice;
     use crate::orders::CancelOrder;
 
@@ -1146,7 +1146,7 @@ async fn test_cancel_order() {
 
 #[tokio::test]
 async fn test_global_cancel() {
-    use crate::client::test_support::tests::setup_global_cancel;
+    use crate::client::test_support::scenarios::setup_global_cancel;
 
     // Initialize env_logger for debug output
     let _ = env_logger::try_init();
@@ -1176,7 +1176,7 @@ async fn test_global_cancel() {
 
 #[tokio::test]
 async fn test_executions() {
-    use crate::client::test_support::tests::setup_executions;
+    use crate::client::test_support::scenarios::setup_executions;
     use crate::contracts::SecurityType;
     use crate::orders::{ExecutionFilter, Executions};
 
@@ -1285,7 +1285,7 @@ async fn test_executions() {
 
 #[tokio::test]
 async fn test_exercise_options() {
-    use crate::client::test_support::tests::setup_exercise_options;
+    use crate::client::test_support::scenarios::setup_exercise_options;
     use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
     use crate::orders::{ExerciseAction, ExerciseOptions};
     use time::macros::datetime;
@@ -1373,7 +1373,7 @@ async fn test_exercise_options() {
 
 #[tokio::test]
 async fn test_market_data() {
-    use crate::client::test_support::tests::setup_market_data;
+    use crate::client::test_support::scenarios::setup_market_data;
     use crate::contracts::tick_types::TickType;
     use crate::contracts::Contract;
     use crate::market_data::realtime::TickTypes;
@@ -1475,7 +1475,7 @@ async fn test_market_data() {
 
 #[tokio::test]
 async fn test_realtime_bars() {
-    use crate::client::test_support::tests::setup_realtime_bars;
+    use crate::client::test_support::scenarios::setup_realtime_bars;
     use crate::contracts::Contract;
     use crate::market_data::realtime::{BarSize, WhatToShow};
 
@@ -1532,7 +1532,7 @@ async fn test_realtime_bars() {
 
 #[tokio::test]
 async fn test_tick_by_tick_last() {
-    use crate::client::test_support::tests::setup_tick_by_tick_last;
+    use crate::client::test_support::scenarios::setup_tick_by_tick_last;
     use crate::contracts::Contract;
 
     let gateway = setup_tick_by_tick_last();
@@ -1583,7 +1583,7 @@ async fn test_tick_by_tick_last() {
 
 #[tokio::test]
 async fn test_tick_by_tick_all_last() {
-    use crate::client::test_support::tests::setup_tick_by_tick_all_last;
+    use crate::client::test_support::scenarios::setup_tick_by_tick_all_last;
     use crate::contracts::Contract;
 
     let gateway = setup_tick_by_tick_all_last();
@@ -1631,7 +1631,7 @@ async fn test_tick_by_tick_all_last() {
 
 #[tokio::test]
 async fn test_tick_by_tick_bid_ask() {
-    use crate::client::test_support::tests::setup_tick_by_tick_bid_ask;
+    use crate::client::test_support::scenarios::setup_tick_by_tick_bid_ask;
     use crate::contracts::Contract;
 
     let gateway = setup_tick_by_tick_bid_ask();
@@ -1681,7 +1681,7 @@ async fn test_tick_by_tick_bid_ask() {
 
 #[tokio::test]
 async fn test_tick_by_tick_midpoint() {
-    use crate::client::test_support::tests::setup_tick_by_tick_midpoint;
+    use crate::client::test_support::scenarios::setup_tick_by_tick_midpoint;
     use crate::contracts::Contract;
 
     let gateway = setup_tick_by_tick_midpoint();
@@ -1715,7 +1715,7 @@ async fn test_tick_by_tick_midpoint() {
 
 #[tokio::test]
 async fn test_market_depth() {
-    use crate::client::test_support::tests::setup_market_depth;
+    use crate::client::test_support::scenarios::setup_market_depth;
     use crate::contracts::Contract;
     use crate::market_data::realtime::MarketDepths;
 
@@ -1774,7 +1774,7 @@ async fn test_market_depth() {
 
 #[tokio::test]
 async fn test_market_depth_exchanges() {
-    use crate::client::test_support::tests::setup_market_depth_exchanges;
+    use crate::client::test_support::scenarios::setup_market_depth_exchanges;
 
     let gateway = setup_market_depth_exchanges();
     let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
@@ -1809,7 +1809,7 @@ async fn test_market_depth_exchanges() {
 
 #[tokio::test]
 async fn test_switch_market_data_type() {
-    use crate::client::test_support::tests::setup_switch_market_data_type;
+    use crate::client::test_support::scenarios::setup_switch_market_data_type;
     use crate::market_data::MarketDataType;
 
     let gateway = setup_switch_market_data_type();
@@ -1834,7 +1834,7 @@ async fn test_switch_market_data_type() {
 
 #[tokio::test]
 async fn test_head_timestamp() {
-    use crate::client::test_support::tests::setup_head_timestamp;
+    use crate::client::test_support::scenarios::setup_head_timestamp;
     use crate::contracts::Contract;
     use crate::market_data::historical::WhatToShow;
 
@@ -1863,7 +1863,7 @@ async fn test_head_timestamp() {
 
 #[tokio::test]
 async fn test_historical_data() {
-    use crate::client::test_support::tests::setup_historical_data;
+    use crate::client::test_support::scenarios::setup_historical_data;
     use crate::contracts::Contract;
     use crate::market_data::historical::{BarSize, Duration, WhatToShow};
     use time::macros::datetime;
@@ -1916,7 +1916,7 @@ async fn test_historical_data() {
 
 #[tokio::test]
 async fn test_historical_schedule() {
-    use crate::client::test_support::tests::setup_historical_schedules;
+    use crate::client::test_support::scenarios::setup_historical_schedules;
     use crate::contracts::Contract;
     use crate::market_data::historical::Duration;
     use time::macros::datetime;
@@ -1943,7 +1943,7 @@ async fn test_historical_schedule() {
 
 #[tokio::test]
 async fn test_historical_ticks_bid_ask() {
-    use crate::client::test_support::tests::setup_historical_ticks_bid_ask;
+    use crate::client::test_support::scenarios::setup_historical_ticks_bid_ask;
     use crate::contracts::Contract;
     use time::macros::datetime;
 
@@ -1990,7 +1990,7 @@ async fn test_historical_ticks_bid_ask() {
 
 #[tokio::test]
 async fn test_historical_ticks_mid_point() {
-    use crate::client::test_support::tests::setup_historical_ticks_mid_point;
+    use crate::client::test_support::scenarios::setup_historical_ticks_mid_point;
     use crate::contracts::Contract;
     use time::macros::datetime;
 
@@ -2029,7 +2029,7 @@ async fn test_historical_ticks_mid_point() {
 
 #[tokio::test]
 async fn test_historical_ticks_trade() {
-    use crate::client::test_support::tests::setup_historical_ticks_trade;
+    use crate::client::test_support::scenarios::setup_historical_ticks_trade;
     use crate::contracts::Contract;
     use time::macros::datetime;
 
@@ -2073,7 +2073,7 @@ async fn test_historical_ticks_trade() {
 
 #[tokio::test]
 async fn test_histogram_data() {
-    use crate::client::test_support::tests::setup_histogram_data;
+    use crate::client::test_support::scenarios::setup_histogram_data;
     use crate::contracts::Contract;
     use crate::market_data::historical::BarSize;
 
@@ -2109,7 +2109,7 @@ async fn test_histogram_data() {
 
 #[tokio::test]
 async fn test_news_providers() {
-    use crate::client::test_support::tests::setup_news_providers;
+    use crate::client::test_support::scenarios::setup_news_providers;
 
     let gateway = setup_news_providers();
     let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
@@ -2138,7 +2138,7 @@ async fn test_news_providers() {
 
 #[tokio::test]
 async fn test_news_bulletins() {
-    use crate::client::test_support::tests::setup_news_bulletins;
+    use crate::client::test_support::scenarios::setup_news_bulletins;
 
     let gateway = setup_news_bulletins();
     let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
@@ -2179,7 +2179,7 @@ async fn test_news_bulletins() {
 
 #[tokio::test]
 async fn test_historical_news() {
-    use crate::client::test_support::tests::setup_historical_news;
+    use crate::client::test_support::scenarios::setup_historical_news;
     use time::macros::datetime;
 
     let gateway = setup_historical_news();
@@ -2230,7 +2230,7 @@ async fn test_historical_news() {
 
 #[tokio::test]
 async fn test_news_article() {
-    use crate::client::test_support::tests::setup_news_article;
+    use crate::client::test_support::scenarios::setup_news_article;
 
     let gateway = setup_news_article();
     let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
@@ -2258,7 +2258,7 @@ async fn test_news_article() {
 
 #[tokio::test]
 async fn test_scanner_parameters() {
-    use crate::client::test_support::tests::setup_scanner_parameters;
+    use crate::client::test_support::scenarios::setup_scanner_parameters;
 
     let gateway = setup_scanner_parameters();
     let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
@@ -2284,7 +2284,7 @@ async fn test_scanner_parameters() {
 
 #[tokio::test]
 async fn test_scanner_subscription() {
-    use crate::client::test_support::tests::setup_scanner_subscription;
+    use crate::client::test_support::scenarios::setup_scanner_subscription;
     use crate::scanner::ScannerSubscription;
 
     let gateway = setup_scanner_subscription();
@@ -2339,7 +2339,7 @@ async fn test_scanner_subscription() {
 
 #[tokio::test]
 async fn test_wsh_metadata() {
-    use crate::client::test_support::tests::setup_wsh_metadata;
+    use crate::client::test_support::scenarios::setup_wsh_metadata;
 
     let gateway = setup_wsh_metadata();
     let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
@@ -2357,7 +2357,7 @@ async fn test_wsh_metadata() {
 
 #[tokio::test]
 async fn test_wsh_event_data() {
-    use crate::client::test_support::tests::setup_wsh_event_data;
+    use crate::client::test_support::scenarios::setup_wsh_event_data;
 
     let gateway = setup_wsh_event_data();
     let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
@@ -2378,7 +2378,7 @@ async fn test_wsh_event_data() {
 
 #[tokio::test]
 async fn test_contract_news() {
-    use crate::client::test_support::tests::setup_contract_news;
+    use crate::client::test_support::scenarios::setup_contract_news;
     use crate::contracts::Contract;
 
     let gateway = setup_contract_news();
@@ -2427,7 +2427,7 @@ async fn test_contract_news() {
 
 #[tokio::test]
 async fn test_broad_tape_news() {
-    use crate::client::test_support::tests::setup_broad_tape_news;
+    use crate::client::test_support::scenarios::setup_broad_tape_news;
 
     let gateway = setup_broad_tape_news();
     let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
@@ -2468,7 +2468,7 @@ async fn test_broad_tape_news() {
 
 #[tokio::test]
 async fn test_wsh_event_data_by_filter() {
-    use crate::client::test_support::tests::setup_wsh_event_data_by_filter;
+    use crate::client::test_support::scenarios::setup_wsh_event_data_by_filter;
 
     let gateway = setup_wsh_event_data_by_filter();
     let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");

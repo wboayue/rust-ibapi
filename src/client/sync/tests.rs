@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::{Client, TradingHours};
-use crate::client::test_support::tests::*;
+use crate::client::test_support::scenarios::*;
 use crate::contracts::{Currency, Exchange, Symbol};
 use crate::{connection::ConnectionMetadata, stubs::MessageBusStub};
 
@@ -664,7 +664,7 @@ fn test_option_chain() {
 
 #[test]
 fn test_place_order() {
-    use crate::client::test_support::tests::setup_place_order;
+    use crate::client::test_support::scenarios::setup_place_order;
     use crate::contracts::Contract;
     use crate::orders::{order_builder, Action, PlaceOrder};
 
@@ -782,7 +782,7 @@ fn test_place_order() {
 
 #[test]
 fn test_submit_order_with_order_update_stream() {
-    use crate::client::test_support::tests::setup_place_order;
+    use crate::client::test_support::scenarios::setup_place_order;
     use crate::contracts::Contract;
     use crate::orders::{order_builder, Action, OrderUpdate};
 
@@ -893,7 +893,7 @@ fn test_submit_order_with_order_update_stream() {
 
 #[test]
 fn test_open_orders() {
-    use crate::client::test_support::tests::setup_open_orders;
+    use crate::client::test_support::scenarios::setup_open_orders;
     use crate::orders::{Action, Orders};
 
     // Initialize env_logger for debug output
@@ -953,7 +953,7 @@ fn test_open_orders() {
 
 #[test]
 fn test_all_open_orders() {
-    use crate::client::test_support::tests::setup_all_open_orders;
+    use crate::client::test_support::scenarios::setup_all_open_orders;
     use crate::orders::{Action, Orders};
 
     // Initialize env_logger for debug output
@@ -1022,7 +1022,7 @@ fn test_all_open_orders() {
 
 #[test]
 fn test_auto_open_orders() {
-    use crate::client::test_support::tests::setup_auto_open_orders;
+    use crate::client::test_support::scenarios::setup_auto_open_orders;
     use crate::orders::Orders;
 
     // Initialize env_logger for debug output
@@ -1087,7 +1087,7 @@ fn test_auto_open_orders() {
 
 #[test]
 fn test_completed_orders() {
-    use crate::client::test_support::tests::setup_completed_orders;
+    use crate::client::test_support::scenarios::setup_completed_orders;
     use crate::orders::{Action, Orders};
 
     // Initialize env_logger for debug output
@@ -1149,7 +1149,7 @@ fn test_completed_orders() {
 
 #[test]
 fn test_cancel_order() {
-    use crate::client::test_support::tests::setup_cancel_order;
+    use crate::client::test_support::scenarios::setup_cancel_order;
     use crate::messages::Notice;
     use crate::orders::CancelOrder;
 
@@ -1208,7 +1208,7 @@ fn test_cancel_order() {
 
 #[test]
 fn test_global_cancel() {
-    use crate::client::test_support::tests::setup_global_cancel;
+    use crate::client::test_support::scenarios::setup_global_cancel;
 
     // Initialize env_logger for debug output
     let _ = env_logger::try_init();
@@ -1238,7 +1238,7 @@ fn test_global_cancel() {
 
 #[test]
 fn test_executions() {
-    use crate::client::test_support::tests::setup_executions;
+    use crate::client::test_support::scenarios::setup_executions;
     use crate::contracts::SecurityType;
     use crate::orders::{ExecutionFilter, Executions};
 
@@ -1344,7 +1344,7 @@ fn test_executions() {
 
 #[test]
 fn test_exercise_options() {
-    use crate::client::test_support::tests::setup_exercise_options;
+    use crate::client::test_support::scenarios::setup_exercise_options;
     use crate::contracts::{Contract, SecurityType};
     use crate::orders::{ExerciseAction, ExerciseOptions};
     use time::macros::datetime;
@@ -1429,7 +1429,7 @@ fn test_exercise_options() {
 
 #[test]
 fn test_market_data() {
-    use crate::client::test_support::tests::setup_market_data;
+    use crate::client::test_support::scenarios::setup_market_data;
     use crate::contracts::tick_types::TickType;
     use crate::contracts::Contract;
     use crate::market_data::realtime::TickTypes;
@@ -1532,7 +1532,7 @@ fn test_market_data() {
 
 #[test]
 fn test_realtime_bars() {
-    use crate::client::test_support::tests::setup_realtime_bars;
+    use crate::client::test_support::scenarios::setup_realtime_bars;
     use crate::contracts::Contract;
     use crate::market_data::realtime::{BarSize, WhatToShow};
 
@@ -1589,7 +1589,7 @@ fn test_realtime_bars() {
 
 #[test]
 fn test_tick_by_tick_last() {
-    use crate::client::test_support::tests::setup_tick_by_tick_last;
+    use crate::client::test_support::scenarios::setup_tick_by_tick_last;
     use crate::contracts::Contract;
 
     // Initialize env_logger for debug output
@@ -1640,7 +1640,7 @@ fn test_tick_by_tick_last() {
 
 #[test]
 fn test_tick_by_tick_all_last() {
-    use crate::client::test_support::tests::setup_tick_by_tick_all_last;
+    use crate::client::test_support::scenarios::setup_tick_by_tick_all_last;
     use crate::contracts::Contract;
 
     // Initialize env_logger for debug output
@@ -1688,7 +1688,7 @@ fn test_tick_by_tick_all_last() {
 
 #[test]
 fn test_tick_by_tick_bid_ask() {
-    use crate::client::test_support::tests::setup_tick_by_tick_bid_ask;
+    use crate::client::test_support::scenarios::setup_tick_by_tick_bid_ask;
     use crate::contracts::Contract;
 
     // Initialize env_logger for debug output
@@ -1738,7 +1738,7 @@ fn test_tick_by_tick_bid_ask() {
 
 #[test]
 fn test_tick_by_tick_midpoint() {
-    use crate::client::test_support::tests::setup_tick_by_tick_midpoint;
+    use crate::client::test_support::scenarios::setup_tick_by_tick_midpoint;
     use crate::contracts::Contract;
 
     // Initialize env_logger for debug output
@@ -1772,7 +1772,7 @@ fn test_tick_by_tick_midpoint() {
 
 #[test]
 fn test_market_depth() {
-    use crate::client::test_support::tests::setup_market_depth;
+    use crate::client::test_support::scenarios::setup_market_depth;
     use crate::contracts::Contract;
     use crate::market_data::realtime::MarketDepths;
 
@@ -1830,7 +1830,7 @@ fn test_market_depth() {
 
 #[test]
 fn test_market_depth_exchanges() {
-    use crate::client::test_support::tests::setup_market_depth_exchanges;
+    use crate::client::test_support::scenarios::setup_market_depth_exchanges;
 
     // Initialize env_logger for debug output
     let _ = env_logger::try_init();
@@ -1868,7 +1868,7 @@ fn test_market_depth_exchanges() {
 
 #[test]
 fn test_switch_market_data_type() {
-    use crate::client::test_support::tests::setup_switch_market_data_type;
+    use crate::client::test_support::scenarios::setup_switch_market_data_type;
     use crate::market_data::MarketDataType;
 
     // Initialize env_logger for debug output
@@ -1894,7 +1894,7 @@ fn test_switch_market_data_type() {
 
 #[test]
 fn test_head_timestamp() {
-    use crate::client::test_support::tests::setup_head_timestamp;
+    use crate::client::test_support::scenarios::setup_head_timestamp;
     use crate::contracts::Contract;
     use crate::market_data::historical::WhatToShow;
 
@@ -1922,7 +1922,7 @@ fn test_head_timestamp() {
 
 #[test]
 fn test_historical_data() {
-    use crate::client::test_support::tests::setup_historical_data;
+    use crate::client::test_support::scenarios::setup_historical_data;
     use crate::contracts::Contract;
     use crate::market_data::historical::{BarSize, Duration, WhatToShow};
     use time::macros::datetime;
@@ -1973,7 +1973,7 @@ fn test_historical_data() {
 
 #[test]
 fn test_historical_schedules() {
-    use crate::client::test_support::tests::setup_historical_schedules;
+    use crate::client::test_support::scenarios::setup_historical_schedules;
     use crate::contracts::Contract;
     use crate::market_data::historical::Duration;
     use time::macros::datetime;
@@ -1999,7 +1999,7 @@ fn test_historical_schedules() {
 
 #[test]
 fn test_historical_ticks_bid_ask() {
-    use crate::client::test_support::tests::setup_historical_ticks_bid_ask;
+    use crate::client::test_support::scenarios::setup_historical_ticks_bid_ask;
     use crate::contracts::Contract;
     use time::macros::datetime;
 
@@ -2042,7 +2042,7 @@ fn test_historical_ticks_bid_ask() {
 
 #[test]
 fn test_historical_ticks_mid_point() {
-    use crate::client::test_support::tests::setup_historical_ticks_mid_point;
+    use crate::client::test_support::scenarios::setup_historical_ticks_mid_point;
     use crate::contracts::Contract;
     use time::macros::datetime;
 
@@ -2077,7 +2077,7 @@ fn test_historical_ticks_mid_point() {
 
 #[test]
 fn test_historical_ticks_trade() {
-    use crate::client::test_support::tests::setup_historical_ticks_trade;
+    use crate::client::test_support::scenarios::setup_historical_ticks_trade;
     use crate::contracts::Contract;
     use time::macros::datetime;
 
@@ -2117,7 +2117,7 @@ fn test_historical_ticks_trade() {
 
 #[test]
 fn test_histogram_data() {
-    use crate::client::test_support::tests::setup_histogram_data;
+    use crate::client::test_support::scenarios::setup_histogram_data;
     use crate::contracts::Contract;
     use crate::market_data::historical::BarSize;
 
@@ -2152,7 +2152,7 @@ fn test_histogram_data() {
 
 #[test]
 fn test_news_providers() {
-    use crate::client::test_support::tests::setup_news_providers;
+    use crate::client::test_support::scenarios::setup_news_providers;
 
     let _ = env_logger::try_init();
 
@@ -2183,7 +2183,7 @@ fn test_news_providers() {
 
 #[test]
 fn test_news_bulletins() {
-    use crate::client::test_support::tests::setup_news_bulletins;
+    use crate::client::test_support::scenarios::setup_news_bulletins;
 
     let _ = env_logger::try_init();
 
@@ -2223,7 +2223,7 @@ fn test_news_bulletins() {
 
 #[test]
 fn test_historical_news() {
-    use crate::client::test_support::tests::setup_historical_news;
+    use crate::client::test_support::scenarios::setup_historical_news;
     use time::macros::datetime;
 
     let _ = env_logger::try_init();
@@ -2272,7 +2272,7 @@ fn test_historical_news() {
 
 #[test]
 fn test_news_article() {
-    use crate::client::test_support::tests::setup_news_article;
+    use crate::client::test_support::scenarios::setup_news_article;
 
     let _ = env_logger::try_init();
 
@@ -2301,7 +2301,7 @@ fn test_news_article() {
 
 #[test]
 fn test_scanner_parameters() {
-    use crate::client::test_support::tests::setup_scanner_parameters;
+    use crate::client::test_support::scenarios::setup_scanner_parameters;
 
     let _ = env_logger::try_init();
 
@@ -2329,7 +2329,7 @@ fn test_scanner_parameters() {
 
 #[test]
 fn test_scanner_subscription() {
-    use crate::client::test_support::tests::setup_scanner_subscription;
+    use crate::client::test_support::scenarios::setup_scanner_subscription;
     use crate::scanner::ScannerSubscription;
 
     let _ = env_logger::try_init();
@@ -2376,7 +2376,7 @@ fn test_scanner_subscription() {
 
 #[test]
 fn test_wsh_metadata() {
-    use crate::client::test_support::tests::setup_wsh_metadata;
+    use crate::client::test_support::scenarios::setup_wsh_metadata;
 
     let _ = env_logger::try_init();
 
@@ -2396,7 +2396,7 @@ fn test_wsh_metadata() {
 
 #[test]
 fn test_wsh_event_data() {
-    use crate::client::test_support::tests::setup_wsh_event_data;
+    use crate::client::test_support::scenarios::setup_wsh_event_data;
 
     let _ = env_logger::try_init();
 
@@ -2418,7 +2418,7 @@ fn test_wsh_event_data() {
 
 #[test]
 fn test_contract_news() {
-    use crate::client::test_support::tests::setup_contract_news;
+    use crate::client::test_support::scenarios::setup_contract_news;
     use crate::contracts::Contract;
 
     let _ = env_logger::try_init();
@@ -2463,7 +2463,7 @@ fn test_contract_news() {
 
 #[test]
 fn test_broad_tape_news() {
-    use crate::client::test_support::tests::setup_broad_tape_news;
+    use crate::client::test_support::scenarios::setup_broad_tape_news;
 
     let _ = env_logger::try_init();
 
@@ -2503,7 +2503,7 @@ fn test_broad_tape_news() {
 
 #[test]
 fn test_wsh_event_data_by_filter() {
-    use crate::client::test_support::tests::setup_wsh_event_data_by_filter;
+    use crate::client::test_support::scenarios::setup_wsh_event_data_by_filter;
 
     let _ = env_logger::try_init();
 
