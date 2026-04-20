@@ -12,6 +12,16 @@ const TIMEZONE_ALIASES: &[(&str, &str)] = &[
     ("Greenwich Mean Time", "Europe/London"),
     ("GMT Standard Time", "Europe/London"),
     ("British Summer Time", "Europe/London"),
+    // European continental (Windows names sent by IB Gateway on non-English Windows)
+    ("E. Europe Standard Time", "Europe/Bucharest"),
+    ("Eastern European Standard Time", "Europe/Athens"),
+    ("Eastern European Summer Time", "Europe/Athens"),
+    ("FLE Standard Time", "Europe/Helsinki"),
+    ("GTB Standard Time", "Europe/Athens"),
+    ("Central European Standard Time", "Europe/Warsaw"),
+    ("Central European Summer Time", "Europe/Warsaw"),
+    ("W. Europe Standard Time", "Europe/Berlin"),
+    ("Romance Standard Time", "Europe/Paris"),
 ];
 
 /// Find timezone by name, handling non-standard names from IB Gateway.
@@ -95,6 +105,26 @@ mod tests {
         let zones = find_timezone(mojibake);
         assert!(!zones.is_empty());
         assert_eq!(zones[0].name(), "Asia/Shanghai");
+    }
+
+    #[test]
+    fn test_find_timezone_european_continental() {
+        let cases = [
+            ("E. Europe Standard Time", "Europe/Bucharest"),
+            ("Eastern European Standard Time", "Europe/Athens"),
+            ("Eastern European Summer Time", "Europe/Athens"),
+            ("FLE Standard Time", "Europe/Helsinki"),
+            ("GTB Standard Time", "Europe/Athens"),
+            ("Central European Standard Time", "Europe/Warsaw"),
+            ("Central European Summer Time", "Europe/Warsaw"),
+            ("W. Europe Standard Time", "Europe/Berlin"),
+            ("Romance Standard Time", "Europe/Paris"),
+        ];
+        for (windows_name, expected_iana) in cases {
+            let zones = find_timezone(windows_name);
+            assert!(!zones.is_empty(), "no match for {windows_name}");
+            assert_eq!(zones[0].name(), expected_iana, "wrong mapping for {windows_name}");
+        }
     }
 
     #[test]
