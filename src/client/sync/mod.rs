@@ -253,6 +253,31 @@ impl Client {
         self.message_bus.is_connected()
     }
 
+    /// Cleanly shuts down the message bus.
+    ///
+    /// All outstanding [`Subscription`](crate::subscriptions::Subscription)s see their channels
+    /// close and their `next()` calls return `None`. Background worker threads are joined
+    /// before this returns.
+    ///
+    /// Call this before dropping the final `Arc<Client>` if any spawned
+    /// threads hold that `Arc` — otherwise `Drop` never runs and those
+    /// threads block forever in `subscription.next()`.
+    ///
+    /// Safe to call multiple times.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// // ... use client, spawn threads holding Arc<Client> ...
+    /// client.disconnect();
+    /// ```
+    pub fn disconnect(&self) {
+        self.message_bus.ensure_shutdown();
+    }
+
     /// Requests real time market data.
     ///
     /// Creates a market data subscription builder with a fluent interface.
