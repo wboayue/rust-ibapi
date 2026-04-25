@@ -218,6 +218,35 @@ impl Client {
         self.message_bus.is_connected()
     }
 
+    /// Cleanly shuts down the message bus.
+    ///
+    /// All outstanding [`Subscription`]s see their channels close and their
+    /// `next()` calls return `None`. The background dispatch task is awaited
+    /// to completion before this returns.
+    ///
+    /// **Call this before dropping the final `Arc<Client>` if any spawned
+    /// tasks hold that `Arc`.** Otherwise the tokio runtime will hang on
+    /// shutdown — `Drop` cannot perform the full async shutdown because it
+    /// is not async.
+    ///
+    /// Safe to call multiple times.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     // ... use client, spawn tasks holding Arc<Client> ...
+    ///     client.disconnect().await;
+    /// }
+    /// ```
+    pub async fn disconnect(&self) {
+        self.message_bus.ensure_shutdown().await;
+    }
+
     /// Returns the ID assigned to the [Client].
     pub fn client_id(&self) -> i32 {
         self.client_id
@@ -4722,5 +4751,30 @@ mod tests {
         let requests = gateway.requests();
         assert!(requests[0].starts_with("102\0"), "Request should be RequestWshEventData");
         assert!(requests[0].contains(filter), "Request should contain the filter");
+    }
+
+    #[tokio::test]
+    async fn test_disconnect_completes() {
+        let gateway = setup_connect();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        tokio::time::timeout(std::time::Duration::from_secs(2), client.disconnect())
+            .await
+            .expect("disconnect did not complete in time");
+
+        assert!(!client.is_connected());
+    }
+
+    #[tokio::test]
+    async fn test_disconnect_is_idempotent() {
+        let gateway = setup_connect();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            client.disconnect().await;
+            client.disconnect().await;
+        })
+        .await
+        .expect("repeated disconnect did not complete in time");
     }
 }
