@@ -284,6 +284,31 @@ impl Client {
         self.message_bus.is_connected()
     }
 
+    /// Cleanly shuts down the message bus.
+    ///
+    /// All outstanding [`Subscription`]s see their channels close and their
+    /// `next()` calls return `None`. Background worker threads are joined
+    /// before this returns.
+    ///
+    /// Call this before dropping the final `Arc<Client>` if any spawned
+    /// threads hold that `Arc` — otherwise `Drop` never runs and those
+    /// threads block forever in `subscription.next()`.
+    ///
+    /// Safe to call multiple times.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::client::blocking::Client;
+    ///
+    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    /// // ... use client, spawn threads holding Arc<Client> ...
+    /// client.disconnect();
+    /// ```
+    pub fn disconnect(&self) {
+        self.message_bus.ensure_shutdown();
+    }
+
     // === Accounts ===
 
     /// TWS's current time. TWS is synchronized with the server (not local computer) using NTP and this function will receive the current time in TWS.
@@ -4829,5 +4854,31 @@ mod tests {
         let requests = gateway.requests();
         assert!(requests[0].starts_with("102\0"), "Request should be RequestWshEventData");
         assert!(requests[0].contains(filter), "Request should contain the filter");
+    }
+
+    #[test]
+    fn test_disconnect_completes() {
+        let gateway = setup_connect();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        let start = std::time::Instant::now();
+        client.disconnect();
+        assert!(start.elapsed() < std::time::Duration::from_secs(2), "disconnect did not complete in time");
+
+        assert!(!client.is_connected());
+    }
+
+    #[test]
+    fn test_disconnect_is_idempotent() {
+        let gateway = setup_connect();
+        let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+        let start = std::time::Instant::now();
+        client.disconnect();
+        client.disconnect();
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(2),
+            "repeated disconnect did not complete in time"
+        );
     }
 }
