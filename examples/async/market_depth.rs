@@ -84,34 +84,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if depth.side == 1 {
                     // Bid
                     match depth.operation {
-                        0 | 1 => {
-                            // Insert or Update
-                            if depth.position < bid_book.len() as i32 {
-                                bid_book[depth.position as usize] = Some((depth.price, depth.size));
-                            }
+                        0 | 1 if depth.position < bid_book.len() as i32 => {
+                            bid_book[depth.position as usize] = Some((depth.price, depth.size));
                         }
-                        2 => {
-                            // Delete
-                            if depth.position < bid_book.len() as i32 {
-                                bid_book[depth.position as usize] = None;
-                            }
+                        2 if depth.position < bid_book.len() as i32 => {
+                            bid_book[depth.position as usize] = None;
                         }
                         _ => {}
                     }
                 } else {
                     // Ask
                     match depth.operation {
-                        0 | 1 => {
-                            // Insert or Update
-                            if depth.position < ask_book.len() as i32 {
-                                ask_book[depth.position as usize] = Some((depth.price, depth.size));
-                            }
+                        0 | 1 if depth.position < ask_book.len() as i32 => {
+                            ask_book[depth.position as usize] = Some((depth.price, depth.size));
                         }
-                        2 => {
-                            // Delete
-                            if depth.position < ask_book.len() as i32 {
-                                ask_book[depth.position as usize] = None;
-                            }
+                        2 if depth.position < ask_book.len() as i32 => {
+                            ask_book[depth.position as usize] = None;
                         }
                         _ => {}
                     }

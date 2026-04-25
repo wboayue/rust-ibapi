@@ -176,7 +176,7 @@ impl<S: Stream> Connection<S> {
                 let handshake_data = self.connection_handler.parse_handshake_response(&mut response)?;
                 connection_metadata.server_version = handshake_data.server_version;
 
-                let (time, tz) = parse_connection_time(&handshake_data.server_time);
+                let (time, tz) = parse_connection_time(&handshake_data.server_time)?;
                 connection_metadata.connection_time = time;
                 connection_metadata.time_zone = tz;
             }

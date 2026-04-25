@@ -45,16 +45,8 @@ pub fn validate_bracket_prices(action: Option<&Action>, entry: f64, take_profit:
 pub fn validate_stop_price(action: &Action, stop_price: f64, current_price: Option<f64>) -> Result<(), ValidationError> {
     if let Some(current) = current_price {
         match action {
-            Action::Buy => {
-                if stop_price <= current {
-                    return Err(ValidationError::InvalidStopPrice { stop: stop_price, current });
-                }
-            }
-            Action::Sell | Action::SellShort => {
-                if stop_price >= current {
-                    return Err(ValidationError::InvalidStopPrice { stop: stop_price, current });
-                }
-            }
+            Action::Buy if stop_price <= current => return Err(ValidationError::InvalidStopPrice { stop: stop_price, current }),
+            Action::Sell | Action::SellShort if stop_price >= current => return Err(ValidationError::InvalidStopPrice { stop: stop_price, current }),
             _ => {}
         }
     }
