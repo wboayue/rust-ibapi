@@ -1439,12 +1439,11 @@ async fn test_market_data() {
                 }
                 _ => {}
             },
-            TickTypes::Generic(generic_tick) => {
-                if generic_tick.tick_type == TickType::Volume {
-                    assert_eq!(generic_tick.value, 1500000.0);
-                    has_volume = true;
-                }
+            TickTypes::Generic(generic_tick) if generic_tick.tick_type == TickType::Volume => {
+                assert_eq!(generic_tick.value, 1500000.0);
+                has_volume = true;
             }
+            TickTypes::Generic(_) => {}
             TickTypes::String(_) => {
                 // Ignore string ticks like LastTimestamp
             }

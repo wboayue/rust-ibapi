@@ -354,37 +354,17 @@ impl ContractMonth {
         // Find next quarterly month
         let next_quarter_month = match current_month {
             1 | 2 => 3,
-            3 => {
-                if current_day > 15 {
-                    6
-                } else {
-                    3
-                }
-            }
+            3 if current_day > 15 => 6,
+            3 => 3,
             4 | 5 => 6,
-            6 => {
-                if current_day > 15 {
-                    9
-                } else {
-                    6
-                }
-            }
+            6 if current_day > 15 => 9,
+            6 => 6,
             7 | 8 => 9,
-            9 => {
-                if current_day > 15 {
-                    12
-                } else {
-                    9
-                }
-            }
+            9 if current_day > 15 => 12,
+            9 => 9,
             10 | 11 => 12,
-            12 => {
-                if current_day > 15 {
-                    3
-                } else {
-                    12
-                }
-            }
+            12 if current_day > 15 => 3,
+            12 => 12,
             _ => 3,
         };
 
