@@ -12,6 +12,8 @@ const TIMEZONE_ALIASES: &[(&str, &str)] = &[
     ("Greenwich Mean Time", "Europe/London"),
     ("GMT Standard Time", "Europe/London"),
     ("British Summer Time", "Europe/London"),
+    // Southeast Asia
+    ("SGT", "Asia/Singapore"),
     // European continental (Windows names sent by IB Gateway on non-English Windows)
     ("E. Europe Standard Time", "Europe/Bucharest"),
     ("Eastern European Standard Time", "Europe/Athens"),
@@ -125,6 +127,13 @@ mod tests {
             assert!(!zones.is_empty(), "no match for {windows_name}");
             assert_eq!(zones[0].name(), expected_iana, "wrong mapping for {windows_name}");
         }
+    }
+
+    #[test]
+    fn test_find_timezone_singapore() {
+        let zones = find_timezone("SGT");
+        assert!(!zones.is_empty());
+        assert_eq!(zones[0].name(), "Asia/Singapore");
     }
 
     #[test]
