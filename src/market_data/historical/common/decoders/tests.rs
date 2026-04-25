@@ -47,6 +47,24 @@ fn test_decode_historical_schedule() {
 }
 
 #[test]
+fn test_decode_historical_schedule_unknown_timezone_errors() {
+    // Gateway sent an unmappable timezone — must surface as Error, not panic.
+    let mut message = ResponseMessage::from(
+        "106\09000\020230414-09:30:00\020230414-16:00:00\0Bogus Standard Time\01\020230414-09:30:00\020230414-16:00:00\020230414\0",
+    );
+
+    let err = decode_historical_schedule(&mut message).expect_err("unknown tz must error");
+    assert!(matches!(err, Error::UnsupportedTimeZone(ref name) if name == "Bogus Standard Time"));
+    let rendered = err.to_string();
+    assert!(rendered.contains("Bogus Standard Time"), "missing tz name: {rendered}");
+    assert!(
+        rendered.contains("register_timezone_alias"),
+        "missing programmatic-fix pointer: {rendered}"
+    );
+    assert!(rendered.contains("IBAPI_TIMEZONE_ALIASES"), "missing env-var pointer: {rendered}");
+}
+
+#[test]
 fn test_decode_historical_data() {
     let mut message = ResponseMessage::from("17\09000\020230413  16:31:22\020230415  16:31:22\02\020230413\0182.9400\0186.5000\0180.9400\0185.9000\0948837.22\0184.869\0324891\020230414\0183.8800\0186.2800\0182.0100\0185.0000\0810998.27\0183.9865\0277547\0");
 
