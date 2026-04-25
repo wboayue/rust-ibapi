@@ -211,6 +211,35 @@ impl Client {
         self.message_bus.is_connected()
     }
 
+    /// Cleanly shuts down the message bus.
+    ///
+    /// All outstanding [`Subscription`](crate::subscriptions::Subscription)s see their channels
+    /// close and their `next()` calls return `None`. The background dispatch task is awaited
+    /// to completion before this returns.
+    ///
+    /// **Call this before dropping the final `Arc<Client>` if any spawned
+    /// tasks hold that `Arc`.** Otherwise the tokio runtime will hang on
+    /// shutdown — `Drop` cannot perform the full async shutdown because it
+    /// is not async.
+    ///
+    /// Safe to call multiple times.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     // ... use client, spawn tasks holding Arc<Client> ...
+    ///     client.disconnect().await;
+    /// }
+    /// ```
+    pub async fn disconnect(&self) {
+        self.message_bus.ensure_shutdown().await;
+    }
+
     /// Returns the ID assigned to the [Client].
     pub fn client_id(&self) -> i32 {
         self.client_id

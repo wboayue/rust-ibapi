@@ -2500,3 +2500,28 @@ async fn test_wsh_event_data_by_filter() {
     let requests = gateway.requests();
     assert_eq!(requests[0], "102", "Request should be RequestWshEventData");
 }
+
+#[tokio::test]
+async fn test_disconnect_completes() {
+    let gateway = setup_connect();
+    let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+    tokio::time::timeout(std::time::Duration::from_secs(2), client.disconnect())
+        .await
+        .expect("disconnect did not complete in time");
+
+    assert!(!client.is_connected());
+}
+
+#[tokio::test]
+async fn test_disconnect_is_idempotent() {
+    let gateway = setup_connect();
+    let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
+
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        client.disconnect().await;
+        client.disconnect().await;
+    })
+    .await
+    .expect("repeated disconnect did not complete in time");
+}

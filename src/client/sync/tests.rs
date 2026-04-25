@@ -2527,3 +2527,29 @@ fn test_wsh_event_data_by_filter() {
     let requests = gateway.requests();
     assert_eq!(requests[0], "102");
 }
+
+#[test]
+fn test_disconnect_completes() {
+    let gateway = setup_connect();
+    let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+    let start = std::time::Instant::now();
+    client.disconnect();
+    assert!(start.elapsed() < std::time::Duration::from_secs(2), "disconnect did not complete in time");
+
+    assert!(!client.is_connected());
+}
+
+#[test]
+fn test_disconnect_is_idempotent() {
+    let gateway = setup_connect();
+    let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
+
+    let start = std::time::Instant::now();
+    client.disconnect();
+    client.disconnect();
+    assert!(
+        start.elapsed() < std::time::Duration::from_secs(2),
+        "repeated disconnect did not complete in time"
+    );
+}
