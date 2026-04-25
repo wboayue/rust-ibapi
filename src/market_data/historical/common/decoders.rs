@@ -103,7 +103,7 @@ pub(crate) fn decode_historical_schedule(message: &mut ResponseMessage) -> Resul
     let end = message.next_string()?;
     let time_zone_name = message.next_string()?;
 
-    let time_zone = parse_time_zone(&time_zone_name);
+    let time_zone = parse_time_zone(&time_zone_name)?;
 
     let sessions_count = message.next_int()?;
     let mut sessions = Vec::<Session>::with_capacity(sessions_count as usize);
@@ -281,12 +281,14 @@ pub(crate) fn decode_historical_data_update(time_zone: &Tz, message: &mut Respon
     })
 }
 
-fn parse_time_zone(name: &str) -> &Tz {
+fn parse_time_zone(name: &str) -> Result<&'static Tz, Error> {
     let zones = find_timezone(name);
     if zones.is_empty() {
-        panic!("timezone not found for: {name}")
+        return Err(Error::Simple(format!(
+            "unrecognized IB Gateway timezone {name:?}; register a mapping with `ibapi::register_timezone_alias({name:?}, \"<IANA-name>\")` before connecting, or set `IBAPI_TIMEZONE_ALIASES={name}=<IANA-name>` in the environment. To request it as a built-in, file an issue at https://github.com/wboayue/rust-ibapi/issues"
+        )));
     }
-    zones[0]
+    Ok(zones[0])
 }
 
 fn parse_schedule_date_time(text: &str, time_zone: &Tz) -> Result<OffsetDateTime, Error> {
@@ -314,7 +316,7 @@ fn parse_date_with_tz(text: &str) -> Result<OffsetDateTime, Error> {
     let (datetime_part, tz_name) = text
         .rsplit_once(' ')
         .ok_or_else(|| Error::Simple(format!("expected 'YYYYMMDD HH:MM:SS TZ', got: {text}")))?;
-    let tz = parse_time_zone(tz_name.trim());
+    let tz = parse_time_zone(tz_name.trim())?;
     let dt = PrimitiveDateTime::parse(datetime_part, fmt)?;
     Ok(dt.assume_timezone(tz).unwrap())
 }
@@ -383,6 +385,23 @@ mod tests {
             datetime!(2023-04-14 16:00:00.0).assume_timezone(time_zone).unwrap(),
             "schedule.sessions[0].end"
         );
+    }
+
+    #[test]
+    fn test_decode_historical_schedule_unknown_timezone_errors() {
+        // Gateway sent an unmappable timezone — must surface as Error, not panic.
+        let mut message = ResponseMessage::from(
+            "106\09000\020230414-09:30:00\020230414-16:00:00\0Bogus Standard Time\01\020230414-09:30:00\020230414-16:00:00\020230414\0",
+        );
+
+        let err = decode_historical_schedule(&mut message).expect_err("unknown tz must error");
+        let rendered = err.to_string();
+        assert!(rendered.contains("Bogus Standard Time"), "missing tz name: {rendered}");
+        assert!(
+            rendered.contains("register_timezone_alias"),
+            "missing programmatic-fix pointer: {rendered}"
+        );
+        assert!(rendered.contains("IBAPI_TIMEZONE_ALIASES"), "missing env-var pointer: {rendered}");
     }
 
     #[test]
