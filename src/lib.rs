@@ -92,6 +92,8 @@ pub use connection::StartupMessageCallback;
 /// Common utilities shared across modules
 pub(crate) mod common;
 
+pub use common::timezone::register_timezone_alias;
+
 /// Display groups subscription support
 pub mod display_groups;
 

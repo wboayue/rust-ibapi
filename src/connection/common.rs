@@ -238,7 +238,7 @@ pub fn parse_connection_time(connection_time: &str) -> Result<(Option<OffsetDate
 
     if zones.is_empty() {
         return Err(Error::Simple(format!(
-            "unrecognized IB Gateway timezone {tz_name:?}; please add it to TIMEZONE_ALIASES in src/common/timezone.rs or file an issue at https://github.com/wboayue/rust-ibapi/issues"
+            "unrecognized IB Gateway timezone {tz_name:?}; register a mapping with `ibapi::register_timezone_alias({tz_name:?}, \"<IANA-name>\")` before connecting, or set `IBAPI_TIMEZONE_ALIASES={tz_name}=<IANA-name>` in the environment. To request it as a built-in, file an issue at https://github.com/wboayue/rust-ibapi/issues"
         )));
     }
 
@@ -469,7 +469,11 @@ mod tests {
 
         let rendered = err.to_string();
         assert!(rendered.contains("Bogus Standard Time"), "missing tz name: {rendered}");
-        assert!(rendered.contains("TIMEZONE_ALIASES"), "missing alias-table pointer: {rendered}");
+        assert!(
+            rendered.contains("register_timezone_alias"),
+            "missing programmatic-fix pointer: {rendered}"
+        );
+        assert!(rendered.contains("IBAPI_TIMEZONE_ALIASES"), "missing env-var pointer: {rendered}");
         assert!(
             rendered.contains("github.com/wboayue/rust-ibapi"),
             "missing issue-tracker pointer: {rendered}"
