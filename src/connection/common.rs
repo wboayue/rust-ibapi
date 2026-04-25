@@ -219,12 +219,17 @@ impl ConnectionProtocol for ConnectionHandler {
 
 /// Parse connection time from TWS format
 /// Format: "20230405 22:20:39 PST"
-pub fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, Option<&'static Tz>) {
+///
+/// Returns `Err` when the gateway includes a timezone name that is not in
+/// `TIMEZONE_ALIASES` and not a recognised IANA zone. Other failure modes
+/// (truncated string, unparseable date) remain tolerant and yield `Ok` with
+/// `None` for the affected component.
+pub fn parse_connection_time(connection_time: &str) -> Result<(Option<OffsetDateTime>, Option<&'static Tz>), Error> {
     let parts: Vec<&str> = connection_time.split(' ').collect();
 
     if parts.len() < 3 {
         error!("Invalid connection time format: {connection_time}");
-        return (None, None);
+        return Ok((None, None));
     }
 
     // Combine timezone parts if more than 3 parts (e.g., "China Standard Time")
@@ -232,8 +237,9 @@ pub fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, 
     let zones = find_timezone(&tz_name);
 
     if zones.is_empty() {
-        error!("Time zone not found for {}", tz_name);
-        return (None, None);
+        return Err(Error::Simple(format!(
+            "unrecognized IB Gateway timezone {tz_name:?}; please add it to TIMEZONE_ALIASES in src/common/timezone.rs or file an issue at https://github.com/wboayue/rust-ibapi/issues"
+        )));
     }
 
     let timezone = zones[0];
@@ -244,15 +250,15 @@ pub fn parse_connection_time(connection_time: &str) -> (Option<OffsetDateTime>, 
 
     match date {
         Ok(connected_at) => match connected_at.assume_timezone(timezone) {
-            OffsetResult::Some(date) => (Some(date), Some(timezone)),
+            OffsetResult::Some(date) => Ok((Some(date), Some(timezone))),
             _ => {
                 log::warn!("Error setting timezone");
-                (None, Some(timezone))
+                Ok((None, Some(timezone)))
             }
         },
         Err(err) => {
             log::warn!("Could not parse connection time from {date_str}: {err}");
-            (None, Some(timezone))
+            Ok((None, Some(timezone)))
         }
     }
 }
@@ -417,7 +423,7 @@ mod tests {
     #[test]
     fn test_parse_connection_time() {
         let example = "20230405 22:20:39 PST";
-        let (connection_time, _) = parse_connection_time(example);
+        let (connection_time, _) = parse_connection_time(example).unwrap();
 
         let la = timezones::db::america::LOS_ANGELES;
         if let OffsetResult::Some(other) = datetime!(2023-04-05 22:20:39).assume_timezone(la) {
@@ -428,7 +434,7 @@ mod tests {
     #[test]
     fn test_parse_connection_time_china_standard_time() {
         let example = "20230405 22:20:39 China Standard Time";
-        let (connection_time, timezone) = parse_connection_time(example);
+        let (connection_time, timezone) = parse_connection_time(example).unwrap();
 
         assert!(connection_time.is_some());
         assert!(timezone.is_some());
@@ -438,7 +444,7 @@ mod tests {
     #[test]
     fn test_parse_connection_time_chinese_utf8() {
         let example = "20230405 22:20:39 中国标准时间";
-        let (connection_time, timezone) = parse_connection_time(example);
+        let (connection_time, timezone) = parse_connection_time(example).unwrap();
 
         assert!(connection_time.is_some());
         assert!(timezone.is_some());
@@ -449,11 +455,41 @@ mod tests {
     fn test_parse_connection_time_mojibake() {
         // Simulate GB2312 timezone decoded as UTF-8 lossy
         let example = "20230405 22:20:39 \u{FFFD}\u{FFFD}\u{FFFD}";
-        let (connection_time, timezone) = parse_connection_time(example);
+        let (connection_time, timezone) = parse_connection_time(example).unwrap();
 
         assert!(connection_time.is_some());
         assert!(timezone.is_some());
         assert_eq!(timezone.unwrap().name(), "Asia/Shanghai");
+    }
+
+    #[test]
+    fn test_parse_connection_time_unknown_timezone_errors() {
+        let example = "20230405 22:20:39 Bogus Standard Time";
+        let err = parse_connection_time(example).expect_err("unknown tz must error");
+
+        let rendered = err.to_string();
+        assert!(rendered.contains("Bogus Standard Time"), "missing tz name: {rendered}");
+        assert!(rendered.contains("TIMEZONE_ALIASES"), "missing alias-table pointer: {rendered}");
+        assert!(
+            rendered.contains("github.com/wboayue/rust-ibapi"),
+            "missing issue-tracker pointer: {rendered}"
+        );
+    }
+
+    #[test]
+    fn test_parse_connection_time_short_input_still_ok() {
+        // Truncated wire data — preserve current tolerance, no error.
+        let (time, tz) = parse_connection_time("20230405").unwrap();
+        assert!(time.is_none());
+        assert!(tz.is_none());
+    }
+
+    #[test]
+    fn test_parse_connection_time_unparseable_date_still_ok() {
+        // Timezone resolves; only the wall-clock fails. Preserve tolerance.
+        let (time, tz) = parse_connection_time("BADDATE 99:99:99 PST").unwrap();
+        assert!(time.is_none());
+        assert!(tz.is_some());
     }
 
     #[test]
