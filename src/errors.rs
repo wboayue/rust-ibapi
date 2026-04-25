@@ -65,6 +65,10 @@ pub enum Error {
     #[error("ConnectionFailed")]
     ConnectionFailed,
 
+    /// IB Gateway sent a timezone name that could not be mapped to an IANA zone.
+    #[error("unrecognized IB Gateway timezone {0:?}; please add it to TIMEZONE_ALIASES in src/common/timezone.rs or file an issue at https://github.com/wboayue/rust-ibapi/issues")]
+    UnsupportedTimeZone(String),
+
     /// Connection was reset by TWS/Gateway.
     #[error("ConnectionReset")]
     ConnectionReset,
