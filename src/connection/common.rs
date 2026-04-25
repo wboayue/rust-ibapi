@@ -522,7 +522,11 @@ mod tests {
         assert!(matches!(err, Error::UnsupportedTimeZone(ref name) if name == "Bogus Standard Time"));
         let rendered = err.to_string();
         assert!(rendered.contains("Bogus Standard Time"), "missing tz name: {rendered}");
-        assert!(rendered.contains("TIMEZONE_ALIASES"), "missing alias-table pointer: {rendered}");
+        assert!(
+            rendered.contains("register_timezone_alias"),
+            "missing programmatic-fix pointer: {rendered}"
+        );
+        assert!(rendered.contains("IBAPI_TIMEZONE_ALIASES"), "missing env-var pointer: {rendered}");
         assert!(
             rendered.contains("github.com/wboayue/rust-ibapi"),
             "missing issue-tracker pointer: {rendered}"

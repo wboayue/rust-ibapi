@@ -78,6 +78,47 @@ Error: Connection timeout
 3. Ensure correct IP address (usually 127.0.0.1 for local)
 4. Try increasing connection timeout in code
 
+### Unrecognized Timezone From IB Gateway
+
+**Error:**
+```
+unrecognized IB Gateway timezone "Some Standard Time"; register a mapping with
+`ibapi::register_timezone_alias("Some Standard Time", "<IANA-name>")` ...
+```
+
+IB Gateway sends a free-form timezone string from the host machine's OS locale.
+On non-English Windows installations the string may be a Windows TZ name we
+don't recognize, mojibake from a non-UTF-8 locale, or any other label produced
+by the gateway's environment. The crate ships with a built-in mapping table,
+but you can extend it at runtime without rebuilding.
+
+**Option 1 — programmatic (one mapping at a time):**
+```rust
+ibapi::register_timezone_alias("Some Standard Time", "America/New_York");
+let client = Client::connect("127.0.0.1:4002", 100).await?;
+```
+
+Call `register_timezone_alias` before `Client::connect`. User-registered
+aliases override the built-ins, so you can correct a default you disagree
+with as well as add new ones.
+
+**Option 2 — environment variable (multiple mappings, no code change):**
+```bash
+export IBAPI_TIMEZONE_ALIASES="Some Standard Time=America/New_York;Other=Europe/Berlin"
+cargo run --example connect
+```
+
+The format is `name=iana` pairs separated by `;`. Whitespace around tokens is
+trimmed. Malformed entries are logged at warn level and skipped.
+
+To verify a mapping is being applied, run with `RUST_LOG=ibapi::common::timezone=debug`
+and look for `timezone alias matched (registry): ...`.
+
+If you find a label that should be a built-in (a common Windows locale name
+not yet in our table), please file an issue at
+<https://github.com/wboayue/rust-ibapi/issues> with the exact string the
+gateway is sending.
+
 ## Market Data Issues
 
 ### No Market Data Permissions
