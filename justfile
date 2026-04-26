@@ -3,10 +3,9 @@
 proto:
     cargo run -p proto-gen
 
-# Generate and save coverage report using tarpaulin
+# Generate and open coverage report using cargo-llvm-cov
 cover:
-    cargo tarpaulin -o html
-    echo "coverage report saved to tarpaulin-report.html"
+    cargo llvm-cov --all-features --html --open
 
 # Tags repo with specified version
 tag VERSION:
