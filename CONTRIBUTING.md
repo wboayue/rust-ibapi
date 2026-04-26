@@ -103,7 +103,7 @@ Bug fixes and security patches for older releases should target the appropriate 
 1. [Install Rust](https://www.rust-lang.org/tools/install)
 2. Install development tools:
    ```bash
-   cargo install cargo-tarpaulin  # For code coverage
+   cargo install cargo-llvm-cov   # For code coverage
    cargo install cargo-audit       # For security audits
    ```
 3. Fork and clone the repository
@@ -170,8 +170,8 @@ cargo test test_name --features async
 # Run with output
 cargo test --features sync -- --nocapture
 
-# Generate coverage report
-cargo tarpaulin -o html --features sync
+# Generate coverage report (covers sync + async in one run)
+cargo llvm-cov --all-features --html --open
 ```
 
 ### Writing Tests
