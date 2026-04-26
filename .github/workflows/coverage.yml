@@ -13,20 +13,24 @@ jobs:
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.95.0
         with:
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-      - name: Generate coverage
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: Generate coverage (sync + async, merged)
         run: |
-          mkdir -p coverage
-          cargo llvm-cov --all-features --lcov --output-path coverage/lcov.info
+          cargo llvm-cov clean --workspace
+          cargo llvm-cov --no-report --no-default-features --features sync
+          cargo llvm-cov --no-report --no-default-features --features async
+          cargo llvm-cov report --lcov --output-path coverage/lcov.info
       - name: Upload to Coveralls
         uses: coverallsapp/github-action@v2
         with:
           file: coverage/lcov.info
+          allow-empty: true
