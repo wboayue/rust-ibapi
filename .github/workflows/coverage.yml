@@ -25,6 +25,7 @@ jobs:
           tool: cargo-llvm-cov
       - name: Generate coverage (sync + async, merged)
         run: |
+          mkdir -p coverage
           cargo llvm-cov clean --workspace
           cargo llvm-cov --no-report --no-default-features --features sync
           cargo llvm-cov --no-report --no-default-features --features async
