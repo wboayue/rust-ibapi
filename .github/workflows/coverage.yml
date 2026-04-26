@@ -1,106 +1,32 @@
 name: Coverage
 
 on:
-  # Run on main branch pushes and completed CI runs
   push:
     branches:
       - main
-  workflow_run:
-    workflows:
-      - CI
-    branches:
-      - main
-    types:
-      - completed
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # Optimize coverage builds
-  CARGO_INCREMENTAL: 0
-  RUSTFLAGS: "-C instrument-coverage"
 
 jobs:
   coverage:
-    runs-on: ubuntu-latest
-    # Only run if CI passed or on direct push to main
-    if: >
-      github.event_name == 'push' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
-    
     name: Coverage
-    
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      # Use optimized Rust caching
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          key: coverage-combined
-          cache-on-failure: true
-
-      # Install tarpaulin with caching
-      - name: Install tarpaulin
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-tarpaulin
-
-      # Run sync coverage
-      - name: Generate sync coverage
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Generate coverage
         run: |
-          cargo tarpaulin \
-            --engine llvm \
-            --timeout 300 \
-            --features sync \
-            --out lcov \
-            --output-dir target/coverage-sync/ \
-            --skip-clean \
-            -- --test-threads 1
-
-      # Run async coverage
-      - name: Generate async coverage
-        run: |
-          cargo tarpaulin \
-            --engine llvm \
-            --timeout 300 \
-            --features async \
-            --out lcov \
-            --output-dir target/coverage-async/ \
-            --skip-clean \
-            -- --test-threads 1
-
-      # Merge coverage reports
-      - name: Merge coverage reports
-        run: |
-          # Install lcov for merging
-          sudo apt-get update
-          sudo apt-get install -y lcov
-          
-          # Create output directory
-          mkdir -p target/coverage
-          
-          # Merge the coverage files
-          lcov --add-tracefile target/coverage-sync/lcov.info \
-               --add-tracefile target/coverage-async/lcov.info \
-               --output-file target/coverage/lcov.info
-          
-          # Convert to XML for Coveralls
-          cargo tarpaulin \
-            --ignore-tests \
-            --ignore-panics \
-            --out xml \
-            --output-dir target/coverage/ \
-            --input-files target/coverage/lcov.info || true
-
-      # Upload combined coverage to Coveralls
+          mkdir -p coverage
+          cargo llvm-cov --all-features --lcov --output-path coverage/lcov.info
       - name: Upload to Coveralls
         uses: coverallsapp/github-action@v2
         with:
-          file: target/coverage/lcov.info
-          format: lcov
-          allow-empty: true
+          file: coverage/lcov.info
