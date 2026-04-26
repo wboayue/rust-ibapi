@@ -55,6 +55,7 @@ Changes to both branches should be made via pull requests.
 10. **Never use `block_on` in async code**: Do not use `futures::executor::block_on()` inside async contexts — it blocks tokio worker threads and risks deadlocks. Use atomics (`AtomicI32`, etc.) for lock-free access to rarely-written values, or make the function `async` and `.await` the lock
 11. **Every new function needs a test**: Before opening a PR, verify every new `pub`/`pub(crate)` function has a corresponding unit test. Review test coverage as a final step — missing tests should block the PR
 12. **Pinned Rust toolchain**: `rust-toolchain.toml` pins this branch to a specific Rust version (1.95.0 on `main`, 1.93.0 on `v2-stable`); `.github/workflows/ci.yml` pins `dtolnay/rust-toolchain@<same-version>`. CI and local must agree on the version so clippy lints don't surprise anyone. To upgrade: bump both files in the same PR, fix any new lints, verify CI green
+13. **Separate test files**: Always keep tests in their own files, not inline `#[cfg(test)] mod tests` blocks. Prefer flat sibling files (`foo.rs` + `foo_tests.rs`) over a nested module (`foo/mod.rs` + `foo/tests.rs`). The test file declares `use super::*;` and lives next to the implementation. Wire it in with `#[cfg(test)] #[path = "foo_tests.rs"] mod tests;` from the implementation file (or from the parent `mod.rs` for domain submodules)
 
 See [docs/code-style.md](docs/code-style.md#design-principles) for detailed design guidelines.
 

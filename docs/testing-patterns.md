@@ -205,8 +205,16 @@ RUST_LOG=debug cargo test --features sync
 
 ### Test Organization
 
-- Unit tests are placed in `#[cfg(test)]` modules within the same file as the code being tested
-- Integration tests using MockGateway are in `src/client/sync.rs` and `src/client/async.rs`
+- Always keep tests in their own files — never use inline `#[cfg(test)] mod tests { ... }` blocks alongside implementation
+- Prefer flat sibling files (`foo.rs` + `foo_tests.rs`) over a nested module directory (`foo/mod.rs` + `foo/tests.rs`). The test file uses `use super::*;` and is wired in from the implementation file with:
+  ```rust
+  #[cfg(test)]
+  #[path = "foo_tests.rs"]
+  mod tests;
+  ```
+  For domain submodules, the `#[path = "..."] mod tests;` declaration can live in the parent `mod.rs` instead
+- Older modules still use the `foo/mod.rs` + `foo/tests.rs` layout; migrate opportunistically when touching them, but don't churn unrelated code
+- Integration tests using MockGateway live next to the client implementations (e.g. `src/client/sync_tests.rs`)
 - Common test utilities are in `src/client/common.rs`
 
 ## Coverage
