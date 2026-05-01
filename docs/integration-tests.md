@@ -117,7 +117,47 @@ Common groups:
 
 Only serialize when necessary. Read-only operations (market data, contract details, server time) should remain parallel.
 
-### 4. Keep `ClientId` alive for the duration of the connection
+### 4. Verifying TWS accepts a wire format: drain events and assert no error Notice
+
+When the test's purpose is "TWS accepted this encoding" (new fields, version-gated payloads, conditional orders, etc.), do not stop at `subscription.next_timeout(...).is_some()`. TWS sends an early `OrderStatus` (e.g. `PendingSubmit`) **before** parse failures, so a single-event check passes even when the order is rejected 1-2 seconds later with a Notice (commonly code 320, "Unable to parse field..."). Likewise, do not use `submit_order` for these tests — it's fire-and-forget and never observes responses.
+
+Use `place_order`, drain the subscription for ~3s, and fail if any non-warning `PlaceOrder::Message(Notice)` arrives:
+
+```rust
+use std::time::Duration;
+use ibapi::messages::{Notice, ORDER_CANCELLED_CODE, WARNING_CODE_RANGE};
+use ibapi::orders::PlaceOrder;
+
+fn is_warning(code: i32) -> bool {
+    WARNING_CODE_RANGE.contains(&code) || code == ORDER_CANCELLED_CODE
+}
+
+let subscription = client.place_order(order_id, &contract, &order)?;
+
+let mut errors: Vec<Notice> = Vec::new();
+let mut saw_status = false;
+let budget = Duration::from_secs(3);
+let start = std::time::Instant::now();
+while let Some(remaining) = budget.checked_sub(start.elapsed()) {
+    if remaining.is_zero() { break; }
+    match subscription.next_timeout(remaining) {
+        Some(PlaceOrder::Message(n)) if !is_warning(n.code) => errors.push(n),
+        Some(PlaceOrder::OrderStatus(_)) | Some(PlaceOrder::OpenOrder(_)) => saw_status = true,
+        Some(_) => {}
+        None => break,
+    }
+}
+
+rate_limit();
+let _ = client.cancel_order(order_id, "");
+
+assert!(errors.is_empty(), "TWS rejected the request: {:?}", errors);
+assert!(saw_status, "expected at least one OrderStatus or OpenOrder event");
+```
+
+The async equivalent uses `tokio::time::timeout_at(deadline, subscription.next())` with the same drain loop. Canonical example: `place_conditional` in `integration/sync/tests/orders.rs` and `integration/async/tests/orders.rs`.
+
+### 5. Keep `ClientId` alive for the duration of the connection
 
 The `ClientId` guard returns its ID to the pool on drop. Ensure it outlives the client.
 
