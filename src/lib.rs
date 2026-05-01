@@ -213,6 +213,9 @@ impl ToField for Option<i32> {
 
 impl ToField for f64 {
     fn to_field(&self) -> String {
+        if *self == f64::MAX {
+            return "1.7976931348623157E308".to_string();
+        }
         self.to_string()
     }
 }
