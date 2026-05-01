@@ -603,13 +603,13 @@ pub(crate) fn encode_exercise_options(
 
 /// Encodes a single order condition according to the TWS API protocol.
 ///
-/// Each condition is encoded as:
+/// Each condition is encoded as the Python IB API encodes it:
 /// - condition_type (i32): Type discriminator (1=Price, 3=Time, etc.)
-/// - is_conjunction (bool): Whether this is an AND condition (true) or OR (false)
+/// - conjunction (String): "a" for AND, "o" for OR
 /// - condition-specific fields...
 pub(crate) fn encode_condition(message: &mut RequestMessage, condition: &OrderCondition) {
     message.push_field(&condition.condition_type());
-    message.push_field(&condition.is_conjunction());
+    message.push_field(&conjunction_field(condition.is_conjunction()));
 
     match condition {
         OrderCondition::Price(c) => encode_price_condition(message, c),
@@ -621,19 +621,27 @@ pub(crate) fn encode_condition(message: &mut RequestMessage, condition: &OrderCo
     }
 }
 
+fn conjunction_field(is_conjunction: bool) -> &'static str {
+    if is_conjunction {
+        "a"
+    } else {
+        "o"
+    }
+}
+
 /// Encodes a PriceCondition according to the TWS API protocol.
 ///
 /// Fields (in order):
-/// 1. contract_id (i32)
-/// 2. exchange (String)
-/// 3. is_more (bool)
-/// 4. price (f64)
+/// 1. is_more (bool)
+/// 2. price (f64)
+/// 3. contract_id (i32)
+/// 4. exchange (String)
 /// 5. trigger_method (i32)
 fn encode_price_condition(message: &mut RequestMessage, condition: &crate::orders::conditions::PriceCondition) {
-    message.push_field(&condition.contract_id);
-    message.push_field(&condition.exchange);
     message.push_field(&condition.is_more);
     message.push_field(&condition.price);
+    message.push_field(&condition.contract_id);
+    message.push_field(&condition.exchange);
     message.push_field(&condition.trigger_method);
 }
 
@@ -660,41 +668,41 @@ fn encode_margin_condition(message: &mut RequestMessage, condition: &crate::orde
 /// Encodes an ExecutionCondition according to the TWS API protocol.
 ///
 /// Fields (in order):
-/// 1. symbol (String)
-/// 2. security_type (String)
-/// 3. exchange (String)
+/// 1. security_type (String)
+/// 2. exchange (String)
+/// 3. symbol (String)
 fn encode_execution_condition(message: &mut RequestMessage, condition: &crate::orders::conditions::ExecutionCondition) {
-    message.push_field(&condition.symbol);
     message.push_field(&condition.security_type);
     message.push_field(&condition.exchange);
+    message.push_field(&condition.symbol);
 }
 
 /// Encodes a VolumeCondition according to the TWS API protocol.
 ///
 /// Fields (in order):
-/// 1. contract_id (i32)
-/// 2. exchange (String)
-/// 3. is_more (bool)
-/// 4. volume (i32)
+/// 1. is_more (bool)
+/// 2. volume (i32)
+/// 3. contract_id (i32)
+/// 4. exchange (String)
 fn encode_volume_condition(message: &mut RequestMessage, condition: &crate::orders::conditions::VolumeCondition) {
-    message.push_field(&condition.contract_id);
-    message.push_field(&condition.exchange);
     message.push_field(&condition.is_more);
     message.push_field(&condition.volume);
+    message.push_field(&condition.contract_id);
+    message.push_field(&condition.exchange);
 }
 
 /// Encodes a PercentChangeCondition according to the TWS API protocol.
 ///
 /// Fields (in order):
-/// 1. contract_id (i32)
-/// 2. exchange (String)
-/// 3. is_more (bool)
-/// 4. percent (f64)
+/// 1. is_more (bool)
+/// 2. percent (f64)
+/// 3. contract_id (i32)
+/// 4. exchange (String)
 fn encode_percent_change_condition(message: &mut RequestMessage, condition: &crate::orders::conditions::PercentChangeCondition) {
-    message.push_field(&condition.contract_id);
-    message.push_field(&condition.exchange);
     message.push_field(&condition.is_more);
     message.push_field(&condition.percent);
+    message.push_field(&condition.contract_id);
+    message.push_field(&condition.exchange);
 }
 
 #[cfg(test)]
@@ -738,11 +746,11 @@ pub(crate) mod tests {
         let field_vec: Vec<&str> = fields.split('\0').collect();
 
         assert_eq!(field_vec[0], "1"); // condition_type (Price)
-        assert_eq!(field_vec[1], "0"); // is_conjunction (false)
-        assert_eq!(field_vec[2], "12345"); // contract_id
-        assert_eq!(field_vec[3], "NASDAQ"); // exchange
-        assert_eq!(field_vec[4], "1"); // is_more (true)
-        assert_eq!(field_vec[5], "150"); // price
+        assert_eq!(field_vec[1], "o"); // conjunction (OR)
+        assert_eq!(field_vec[2], "1"); // is_more (true)
+        assert_eq!(field_vec[3], "150"); // price
+        assert_eq!(field_vec[4], "12345"); // contract_id
+        assert_eq!(field_vec[5], "NASDAQ"); // exchange
         assert_eq!(field_vec[6], "1"); // trigger_method
     }
 
@@ -764,7 +772,7 @@ pub(crate) mod tests {
         let field_vec: Vec<&str> = fields.split('\0').collect();
 
         assert_eq!(field_vec[0], "3"); // condition_type (Time)
-        assert_eq!(field_vec[1], "1"); // is_conjunction (true)
+        assert_eq!(field_vec[1], "a"); // conjunction (AND)
         assert_eq!(field_vec[2], "1"); // is_more (true)
         assert_eq!(field_vec[3], "20251230 23:59:59 UTC"); // time
     }
@@ -787,7 +795,7 @@ pub(crate) mod tests {
         let field_vec: Vec<&str> = fields.split('\0').collect();
 
         assert_eq!(field_vec[0], "4"); // condition_type (Margin)
-        assert_eq!(field_vec[1], "1"); // is_conjunction (true)
+        assert_eq!(field_vec[1], "a"); // conjunction (AND)
         assert_eq!(field_vec[2], "0"); // is_more (false)
         assert_eq!(field_vec[3], "30"); // percent
     }
@@ -811,10 +819,10 @@ pub(crate) mod tests {
         let field_vec: Vec<&str> = fields.split('\0').collect();
 
         assert_eq!(field_vec[0], "5"); // condition_type (Execution)
-        assert_eq!(field_vec[1], "0"); // is_conjunction (false)
-        assert_eq!(field_vec[2], "AAPL"); // symbol
-        assert_eq!(field_vec[3], "STK"); // security_type
-        assert_eq!(field_vec[4], "SMART"); // exchange
+        assert_eq!(field_vec[1], "o"); // conjunction (OR)
+        assert_eq!(field_vec[2], "STK"); // security_type
+        assert_eq!(field_vec[3], "SMART"); // exchange
+        assert_eq!(field_vec[4], "AAPL"); // symbol
     }
 
     #[test]
@@ -837,11 +845,11 @@ pub(crate) mod tests {
         let field_vec: Vec<&str> = fields.split('\0').collect();
 
         assert_eq!(field_vec[0], "6"); // condition_type (Volume)
-        assert_eq!(field_vec[1], "1"); // is_conjunction (true)
-        assert_eq!(field_vec[2], "54321"); // contract_id
-        assert_eq!(field_vec[3], "NYSE"); // exchange
-        assert_eq!(field_vec[4], "1"); // is_more (true)
-        assert_eq!(field_vec[5], "1000000"); // volume
+        assert_eq!(field_vec[1], "a"); // conjunction (AND)
+        assert_eq!(field_vec[2], "1"); // is_more (true)
+        assert_eq!(field_vec[3], "1000000"); // volume
+        assert_eq!(field_vec[4], "54321"); // contract_id
+        assert_eq!(field_vec[5], "NYSE"); // exchange
     }
 
     #[test]
@@ -864,11 +872,11 @@ pub(crate) mod tests {
         let field_vec: Vec<&str> = fields.split('\0').collect();
 
         assert_eq!(field_vec[0], "7"); // condition_type (PercentChange)
-        assert_eq!(field_vec[1], "0"); // is_conjunction (false)
-        assert_eq!(field_vec[2], "98765"); // contract_id
-        assert_eq!(field_vec[3], "NASDAQ"); // exchange
-        assert_eq!(field_vec[4], "0"); // is_more (false)
-        assert_eq!(field_vec[5], "5.5"); // percent
+        assert_eq!(field_vec[1], "o"); // conjunction (OR)
+        assert_eq!(field_vec[2], "0"); // is_more (false)
+        assert_eq!(field_vec[3], "5.5"); // percent
+        assert_eq!(field_vec[4], "98765"); // contract_id
+        assert_eq!(field_vec[5], "NASDAQ"); // exchange
     }
 
     #[test]
