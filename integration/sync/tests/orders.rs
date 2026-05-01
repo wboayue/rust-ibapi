@@ -2,7 +2,9 @@ use std::time::Duration;
 
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
-use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId};
+use ibapi::messages::{Notice, ORDER_CANCELLED_CODE, WARNING_CODE_RANGE};
+use ibapi::orders::builder::{execution, margin, percent_change, price, time, volume};
+use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderCondition, OrderId, PlaceOrder};
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
 
@@ -244,4 +246,114 @@ fn executions_returns_subscription() {
     rate_limit();
     let subscription = client.executions(ExecutionFilter::default()).expect("executions failed");
     let _item = subscription.next_timeout(Duration::from_secs(5));
+}
+
+// Conditional orders (issue #325). Each test attaches a condition that won't
+// trigger and uses a far-off limit so even an unexpected trigger can't fill,
+// then cancels for cleanup.
+//
+// Drains the place_order subscription and asserts TWS returns no error
+// notices (regression coverage for #469: parse failures from miswritten
+// condition wire format).
+
+fn is_warning(code: i32) -> bool {
+    WARNING_CODE_RANGE.contains(&code) || code == ORDER_CANCELLED_CODE
+}
+
+fn place_conditional(client: &Client, contract: &Contract, conditions: Vec<OrderCondition>) {
+    let mut order = limit_order(Action::Buy, 1.0, 1.0);
+    order.conditions = conditions;
+
+    rate_limit();
+    let order_id = client.next_order_id();
+    let subscription = client.place_order(order_id, contract, &order).expect("place_order failed");
+
+    let mut errors: Vec<Notice> = Vec::new();
+    let mut saw_status = false;
+    let budget = Duration::from_secs(3);
+    let start = std::time::Instant::now();
+    while let Some(remaining) = budget.checked_sub(start.elapsed()) {
+        if remaining.is_zero() {
+            break;
+        }
+        match subscription.next_timeout(remaining) {
+            Some(PlaceOrder::Message(n)) if !is_warning(n.code) => errors.push(n),
+            Some(PlaceOrder::OrderStatus(_)) | Some(PlaceOrder::OpenOrder(_)) => saw_status = true,
+            Some(_) => {}
+            None => break,
+        }
+    }
+
+    rate_limit();
+    let _ = client.cancel_order(order_id, "");
+
+    assert!(
+        errors.is_empty(),
+        "TWS returned error notices for conditional order (likely #469 wire-format bug): {:?}",
+        errors,
+    );
+    assert!(saw_status, "expected at least one OrderStatus or OpenOrder event");
+}
+
+#[test]
+#[serial(orders)]
+fn place_order_with_price_condition() {
+    let (client, _client_id) = connect();
+    let contract = Contract::stock("AAPL").build();
+    let condition = OrderCondition::Price(price(265598, "SMART").greater_than(99_999.0).build());
+    place_conditional(&client, &contract, vec![condition]);
+}
+
+#[test]
+#[serial(orders)]
+fn place_order_with_time_condition() {
+    let (client, _client_id) = connect();
+    let contract = Contract::stock("AAPL").build();
+    let condition = OrderCondition::Time(time().greater_than("20991231 23:59:59 US/Eastern").build());
+    place_conditional(&client, &contract, vec![condition]);
+}
+
+#[test]
+#[serial(orders)]
+fn place_order_with_margin_condition() {
+    let (client, _client_id) = connect();
+    let contract = Contract::stock("AAPL").build();
+    let condition = OrderCondition::Margin(margin().less_than(1).build());
+    place_conditional(&client, &contract, vec![condition]);
+}
+
+#[test]
+#[serial(orders)]
+fn place_order_with_execution_condition() {
+    let (client, _client_id) = connect();
+    let contract = Contract::stock("AAPL").build();
+    place_conditional(&client, &contract, vec![execution("MSFT", "STK", "SMART")]);
+}
+
+#[test]
+#[serial(orders)]
+fn place_order_with_volume_condition() {
+    let (client, _client_id) = connect();
+    let contract = Contract::stock("AAPL").build();
+    let condition = OrderCondition::Volume(volume(76792991, "SMART").greater_than(2_000_000_000).build());
+    place_conditional(&client, &contract, vec![condition]);
+}
+
+#[test]
+#[serial(orders)]
+fn place_order_with_percent_change_condition() {
+    let (client, _client_id) = connect();
+    let contract = Contract::stock("AAPL").build();
+    let condition = OrderCondition::PercentChange(percent_change(756733, "SMART").greater_than(9_999.0).build());
+    place_conditional(&client, &contract, vec![condition]);
+}
+
+#[test]
+#[serial(orders)]
+fn place_order_with_multiple_and_conditions() {
+    let (client, _client_id) = connect();
+    let contract = Contract::stock("AAPL").build();
+    let price_cond = OrderCondition::Price(price(265598, "SMART").greater_than(99_999.0).conjunction(true).build());
+    let time_cond = OrderCondition::Time(time().greater_than("20991231 23:59:59 US/Eastern").conjunction(true).build());
+    place_conditional(&client, &contract, vec![price_cond, time_cond]);
 }
