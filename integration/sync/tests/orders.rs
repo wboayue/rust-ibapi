@@ -260,6 +260,15 @@ fn is_warning(code: i32) -> bool {
     WARNING_CODE_RANGE.contains(&code) || code == ORDER_CANCELLED_CODE
 }
 
+// TWS rejects time-condition values too far in the future (year 2099 fails
+// with "Invalid value in field # 6223"). Compute a date a few years out so
+// the test is robust as time passes. Use Jan 1 to side-step leap-day edge
+// cases. Leading `::time` bypasses the local `time` builder import.
+fn future_time_str(years_ahead: i32) -> String {
+    let target_year = ::time::OffsetDateTime::now_utc().year() + years_ahead;
+    format!("{target_year}0101 23:59:59 US/Eastern")
+}
+
 fn place_conditional(client: &Client, contract: &Contract, conditions: Vec<OrderCondition>) {
     let mut order = limit_order(Action::Buy, 1.0, 1.0);
     order.conditions = conditions;
@@ -309,7 +318,7 @@ fn place_order_with_price_condition() {
 fn place_order_with_time_condition() {
     let (client, _client_id) = connect();
     let contract = Contract::stock("AAPL").build();
-    let condition = OrderCondition::Time(time().greater_than("20991231 23:59:59 US/Eastern").build());
+    let condition = OrderCondition::Time(time().greater_than(future_time_str(2)).build());
     place_conditional(&client, &contract, vec![condition]);
 }
 
@@ -354,6 +363,6 @@ fn place_order_with_multiple_and_conditions() {
     let (client, _client_id) = connect();
     let contract = Contract::stock("AAPL").build();
     let price_cond = OrderCondition::Price(price(265598, "SMART").greater_than(99_999.0).conjunction(true).build());
-    let time_cond = OrderCondition::Time(time().greater_than("20991231 23:59:59 US/Eastern").conjunction(true).build());
+    let time_cond = OrderCondition::Time(time().greater_than(future_time_str(2)).conjunction(true).build());
     place_conditional(&client, &contract, vec![price_cond, time_cond]);
 }
