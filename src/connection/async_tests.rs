@@ -32,11 +32,6 @@ fn binary_text(msg_id: i32, payload: &str) -> Vec<u8> {
     data
 }
 
-#[test]
-fn connection_with_memory_stream_compiles() {
-    let _conn = AsyncConnection::stubbed(MemoryStream::default(), CLIENT_ID);
-}
-
 /// Handshake smoke: with scripted version + account-info responses,
 /// `establish_connection` populates `server_version`, `time_zone`, and the
 /// next-order-id / managed-accounts fields on `ConnectionMetadata`.
@@ -89,13 +84,12 @@ async fn disconnect_is_idempotent() {
     assert!(!client.is_connected());
 }
 
-/// Build a `Client` over `MemoryStream`: handshake responses are pre-pushed,
-/// the dispatcher task is running, and the stream is dropped (held only
-/// inside the connection — tests that need to close it should hold a clone).
+/// Build a `Client` over `MemoryStream`: handshake responses are pre-pushed
+/// and the dispatcher task is running.
 async fn make_client() -> Client {
     let stream = MemoryStream::default();
-    let connection = AsyncConnection::stubbed(stream, CLIENT_ID);
-    push_handshake_via_socket(&connection);
+    let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
+    push_handshake(&stream);
     connection.establish_connection(None).await.expect("establish_connection failed");
     let server_version = connection.server_version();
 
@@ -105,10 +99,4 @@ async fn make_client() -> Client {
         .expect("process_messages");
 
     Client::stubbed(bus, server_version)
-}
-
-/// `AsyncConnection<S>` owns the socket, so push handshake responses through
-/// the socket reference inside the connection rather than a separate clone.
-fn push_handshake_via_socket(connection: &AsyncConnection<MemoryStream>) {
-    push_handshake(&connection.socket);
 }

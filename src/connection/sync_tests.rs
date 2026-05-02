@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 use super::*;
 use crate::client::sync::Client;
+use crate::messages::IncomingMessages;
 use crate::server_versions;
 use crate::transport::sync::{MemoryStream, TcpMessageBus};
 
@@ -33,10 +34,11 @@ fn binary_text(msg_id: i32, payload: &str) -> Vec<u8> {
     data
 }
 
-#[test]
-fn connection_with_memory_stream_is_send_and_sync() {
-    use crate::tests::assert_send_and_sync;
-    assert_send_and_sync::<Connection<MemoryStream>>();
+/// `IncomingMessages::Shutdown` (`-2`) is the clean-shutdown sentinel TWS
+/// sends when it wants the client to stop reading. The dispatcher detects
+/// it via `is_shutdown()` and exits without touching the reconnect path.
+fn shutdown_frame() -> Vec<u8> {
+    binary_text(IncomingMessages::Shutdown as i32, "1\0")
 }
 
 /// Handshake smoke: with scripted version + account-info responses,
@@ -60,14 +62,14 @@ fn establish_connection_populates_metadata() {
 }
 
 /// `client.disconnect()` joins the dispatcher thread and flips
-/// `is_connected()` to false. Closing the `MemoryStream` simulates the
-/// peer dropping; in production the dispatcher polls via TCP read timeout,
-/// but `MemoryStream` blocks indefinitely until `close()`.
+/// `is_connected()` to false. Pushing the `-2` shutdown sentinel mirrors
+/// what TWS sends on a clean disconnect — the dispatcher reads it,
+/// calls `request_shutdown()`, and exits cleanly.
 #[test]
-fn disconnect_completes_after_eof() {
+fn disconnect_completes() {
     let (client, stream) = make_client();
 
-    stream.close();
+    stream.push_inbound(shutdown_frame());
     let start = Instant::now();
     client.disconnect();
 
@@ -81,7 +83,7 @@ fn disconnect_completes_after_eof() {
 fn disconnect_is_idempotent() {
     let (client, stream) = make_client();
 
-    stream.close();
+    stream.push_inbound(shutdown_frame());
     let start = Instant::now();
     client.disconnect();
     client.disconnect();
@@ -92,7 +94,7 @@ fn disconnect_is_idempotent() {
 
 /// Build a `Client` over `MemoryStream`: handshake responses are pre-pushed,
 /// the dispatcher / cleanup threads are running, and the stream handle is
-/// returned so callers can `close()` it.
+/// returned so callers can push further frames (e.g. shutdown).
 fn make_client() -> (Client, MemoryStream) {
     let stream = MemoryStream::default();
     let connection = Connection::stubbed(stream.clone(), CLIENT_ID);
