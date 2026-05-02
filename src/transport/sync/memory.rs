@@ -40,7 +40,8 @@ impl MemoryStream {
 
     /// Snapshot of every byte the consumer has written.
     pub fn captured(&self) -> Vec<u8> {
-        self.inner.0.lock().unwrap().outbound.clone()
+        let (mutex, _) = &*self.inner;
+        mutex.lock().unwrap().outbound.clone()
     }
 
     /// Signal EOF. Subsequent `read_message` calls return `Error::Io(UnexpectedEof)`,
@@ -55,7 +56,7 @@ impl MemoryStream {
 impl Io for MemoryStream {
     fn read_message(&self) -> Result<Vec<u8>, Error> {
         let (mutex, cv) = &*self.inner;
-        let mut guard = mutex.lock().map_err(|e| Error::Poison(e.to_string()))?;
+        let mut guard = mutex.lock()?;
         loop {
             if let Some(body) = guard.inbound.pop_front() {
                 return Ok(body);
@@ -63,17 +64,13 @@ impl Io for MemoryStream {
             if guard.closed {
                 return Err(Error::Io(io::Error::new(io::ErrorKind::UnexpectedEof, "MemoryStream closed")));
             }
-            guard = cv.wait(guard).map_err(|e| Error::Poison(e.to_string()))?;
+            guard = cv.wait(guard)?;
         }
     }
 
     fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
-        self.inner
-            .0
-            .lock()
-            .map_err(|e| Error::Poison(e.to_string()))?
-            .outbound
-            .extend_from_slice(buf);
+        let (mutex, _) = &*self.inner;
+        mutex.lock()?.outbound.extend_from_slice(buf);
         Ok(())
     }
 }
