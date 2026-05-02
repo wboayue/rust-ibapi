@@ -91,7 +91,7 @@ async fn realtime_bars_trades() {
     rate_limit();
     let contract = Contract::stock("AAPL").build();
     let mut subscription = client
-        .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended)
+        .realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, TradingHours::Extended, Vec::new())
         .await
         .expect("realtime_bars failed");
 
