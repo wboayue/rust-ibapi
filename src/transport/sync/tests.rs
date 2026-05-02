@@ -612,3 +612,125 @@ fn test_request_encoding_roundtrip() {
     let encoded = req.encode();
     assert_eq!(encoded, expected);
 }
+
+// ---- routing tests using MemoryStream ----
+//
+// MockSocket pairs each write with a scripted response and asserts on the
+// request bytes. That setup can't easily express scenarios like "two
+// outstanding requests, responses arrive interleaved". `MemoryStream` is the
+// lower-level fixture that lets tests push response frames freely and
+// drive `bus.dispatch()` directly. With `Connection::stubbed` (server_version
+// defaults to 0), `parse_raw_message` takes the text path, so frame bodies
+// are NUL-delimited strings starting with the message id.
+
+use std::time::Duration;
+
+use crate::messages::OutgoingMessages;
+use crate::transport::sync::MemoryStream;
+use crate::transport::MessageBus;
+
+/// Build a text-format response body: `"msg_id|f1|f2|..."` → `b"msg_id\0f1\0f2\0..."`.
+/// Pipes are stand-ins for NULs so test inputs stay readable.
+fn body(text: &str) -> Vec<u8> {
+    text.replace('|', "\0").into_bytes()
+}
+
+/// Wrap a fresh `MemoryStream` in a stubbed `TcpMessageBus`. server_version=0
+/// keeps `parse_raw_message` on the text path.
+fn make_bus() -> (MemoryStream, Arc<TcpMessageBus<MemoryStream>>) {
+    let stream = MemoryStream::default();
+    let connection = Connection::stubbed(stream.clone(), 28);
+    let bus = Arc::new(TcpMessageBus::new(connection).unwrap());
+    (stream, bus)
+}
+
+const TICK: Duration = Duration::from_millis(100);
+
+/// Two in-flight `send_request` subscriptions: responses arrive in reverse order
+/// and each subscription receives only its own message. Validates `requests`
+/// `SenderHash` lookup by request_id.
+#[test]
+fn test_request_id_correlation_with_interleaved_responses() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    let sub_a = bus.send_request(100, &[])?;
+    let sub_b = bus.send_request(200, &[])?;
+
+    // HistogramData (msg_id 89): request_id at field index 1.
+    stream.push_inbound(body("89|200|payload-b|"));
+    stream.push_inbound(body("89|100|payload-a|"));
+
+    bus.dispatch(0)?;
+    bus.dispatch(0)?;
+
+    let msg_a = sub_a.next_timeout(TICK).expect("sub_a got no message")?;
+    let msg_b = sub_b.next_timeout(TICK).expect("sub_b got no message")?;
+    assert_eq!(msg_a.peek_int(1)?, 100);
+    assert_eq!(msg_b.peek_int(1)?, 200);
+
+    // No cross-talk.
+    assert!(sub_a.try_next().is_none(), "sub_a received an extra message");
+    assert!(sub_b.try_next().is_none(), "sub_b received an extra message");
+    Ok(())
+}
+
+/// Same shape as the request_id test but on the orders channel: two in-flight
+/// `send_order_request` subscriptions, OrderStatus responses interleaved.
+#[test]
+fn test_order_id_correlation_with_interleaved_responses() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    let sub_a = bus.send_order_request(11, &[])?;
+    let sub_b = bus.send_order_request(22, &[])?;
+
+    // OrderStatus (msg_id 3): order_id at field index 1.
+    stream.push_inbound(body("3|22|Filled|0|100|0|0|0|0|0||0|"));
+    stream.push_inbound(body("3|11|Submitted|0|0|0|0|0|0|0||0|"));
+
+    bus.dispatch(0)?;
+    bus.dispatch(0)?;
+
+    let msg_a = sub_a.next_timeout(TICK).expect("sub_a got no message")?;
+    let msg_b = sub_b.next_timeout(TICK).expect("sub_b got no message")?;
+    assert_eq!(msg_a.peek_int(1)?, 11);
+    assert_eq!(msg_b.peek_int(1)?, 22);
+    Ok(())
+}
+
+/// Shared-channel routing: `send_shared_request` for `RequestCurrentTime` should
+/// receive the `CurrentTime` response via the channel mapping in
+/// `shared_channel_configuration::CHANNEL_MAPPINGS`.
+#[test]
+fn test_shared_channel_routing_current_time() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    let sub = bus.send_shared_request(OutgoingMessages::RequestCurrentTime, &[])?;
+
+    // CurrentTime (msg_id 49): "49|version|epoch_seconds|"
+    stream.push_inbound(body("49|1|1700000000|"));
+    bus.dispatch(0)?;
+
+    let msg = sub.next_timeout(TICK).expect("shared subscription got no message")?;
+    assert_eq!(msg.peek_int(0)?, 49);
+    assert_eq!(msg.peek_int(2)?, 1_700_000_000);
+    Ok(())
+}
+
+/// EOF on the stream classifies as a connection error in `dispatch`, which
+/// triggers reconnect; the stub's reconnect "succeeds" but the subsequent
+/// handshake also reads EOF, so `dispatch` ultimately returns `ConnectionFailed`
+/// rather than hanging or silently dropping the error. In-flight subscriptions
+/// are notified of `Error::Shutdown`.
+#[test]
+fn test_dispatch_surfaces_connection_failure_after_eof() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let sub = bus.send_request(100, &[])?;
+
+    stream.close();
+    let err = bus.dispatch(0).expect_err("dispatch should surface an error");
+    assert!(matches!(err, Error::ConnectionFailed), "unexpected error: {err:?}");
+
+    let resp = sub.next_timeout(TICK).expect("subscription got no notification");
+    assert!(matches!(resp, Err(Error::Shutdown)), "got: {resp:?}");
+    Ok(())
+}
