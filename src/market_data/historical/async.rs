@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use log::{debug, warn};
+use log::{debug, error, warn};
 use time::OffsetDateTime;
 use time_tz::Tz;
 
@@ -153,9 +153,10 @@ impl Client {
             trading_hours.use_rth(),
             ignore_size,
         )?;
+        let request_id = builder.request_id();
         let subscription = builder.send_raw(request).await?;
 
-        Ok(TickSubscription::new(subscription))
+        Ok(TickSubscription::new(subscription, request_id, Arc::clone(&self.message_bus)))
     }
 
     /// Requests historical midpoint tick data.
@@ -180,9 +181,10 @@ impl Client {
             trading_hours.use_rth(),
             false,
         )?;
+        let request_id = builder.request_id();
         let subscription = builder.send_raw(request).await?;
 
-        Ok(TickSubscription::new(subscription))
+        Ok(TickSubscription::new(subscription, request_id, Arc::clone(&self.message_bus)))
     }
 
     /// Requests historical trade tick data.
@@ -207,9 +209,10 @@ impl Client {
             trading_hours.use_rth(),
             false,
         )?;
+        let request_id = builder.request_id();
         let subscription = builder.send_raw(request).await?;
 
-        Ok(TickSubscription::new(subscription))
+        Ok(TickSubscription::new(subscription, request_id, Arc::clone(&self.message_bus)))
     }
 
     /// Cancels an in-flight historical ticks request.
@@ -301,15 +304,38 @@ pub struct TickSubscription<T: TickDecoder<T> + Send> {
     messages: AsyncInternalSubscription,
     buffer: VecDeque<T>,
     error: Option<Error>,
+    request_id: i32,
+    message_bus: Arc<dyn AsyncMessageBus>,
+    cancelled: AtomicBool,
 }
 
 impl<T: TickDecoder<T> + Send> TickSubscription<T> {
-    fn new(messages: AsyncInternalSubscription) -> Self {
+    fn new(messages: AsyncInternalSubscription, request_id: i32, message_bus: Arc<dyn AsyncMessageBus>) -> Self {
         Self {
             done: false,
             messages,
             buffer: VecDeque::new(),
             error: None,
+            request_id,
+            message_bus,
+            cancelled: AtomicBool::new(false),
+        }
+    }
+
+    /// Cancel the historical-ticks request. Safe to call after completion (no-op).
+    /// Also fired automatically on `Drop` for unfinished subscriptions; explicit calls are idempotent.
+    pub async fn cancel(&self) {
+        if self.cancelled.swap(true, Ordering::Relaxed) {
+            return;
+        }
+
+        match encoders::encode_cancel_historical_ticks(self.request_id) {
+            Ok(message) => {
+                if let Err(e) = self.message_bus.cancel_subscription(self.request_id, message).await {
+                    warn!("error cancelling historical ticks subscription: {e}");
+                }
+            }
+            Err(e) => error!("error encoding cancel historical ticks: {e}"),
         }
     }
 
@@ -361,6 +387,23 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
 
     fn clear_error(&mut self) {
         self.error = None;
+    }
+}
+
+impl<T: TickDecoder<T> + Send> Drop for TickSubscription<T> {
+    fn drop(&mut self) {
+        if self.done || self.cancelled.swap(true, Ordering::Relaxed) {
+            return;
+        }
+        let request_id = self.request_id;
+        let message_bus = self.message_bus.clone();
+        if let Ok(message) = encoders::encode_cancel_historical_ticks(request_id) {
+            tokio::spawn(async move {
+                if let Err(e) = message_bus.cancel_subscription(request_id, message).await {
+                    warn!("error sending cancel historical ticks in drop: {e}");
+                }
+            });
+        }
     }
 }
 
@@ -502,4 +545,5 @@ impl Drop for HistoricalDataStreamingSubscription {
 }
 
 #[cfg(test)]
+#[path = "async_tests.rs"]
 mod tests;

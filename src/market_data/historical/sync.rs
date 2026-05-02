@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use log::{debug, warn};
+use log::{debug, error, warn};
 use time::OffsetDateTime;
 
 use crate::client::blocking::ClientRequestBuilders;
@@ -347,9 +347,10 @@ impl Client {
             trading_hours.use_rth(),
             ignore_size,
         )?;
+        let request_id = builder.request_id();
         let subscription = builder.send_raw(request)?;
 
-        Ok(TickSubscription::new(subscription))
+        Ok(TickSubscription::new(subscription, request_id, Arc::clone(&self.message_bus)))
     }
 
     /// Requests historical time & sales data (Midpoint) for an instrument.
@@ -403,9 +404,10 @@ impl Client {
             trading_hours.use_rth(),
             false,
         )?;
+        let request_id = builder.request_id();
         let subscription = builder.send_raw(request)?;
 
-        Ok(TickSubscription::new(subscription))
+        Ok(TickSubscription::new(subscription, request_id, Arc::clone(&self.message_bus)))
     }
 
     /// Requests historical time & sales data (Trades) for an instrument.
@@ -459,9 +461,10 @@ impl Client {
             trading_hours.use_rth(),
             false,
         )?;
+        let request_id = builder.request_id();
         let subscription = builder.send_raw(request)?;
 
-        Ok(TickSubscription::new(subscription))
+        Ok(TickSubscription::new(subscription, request_id, Arc::clone(&self.message_bus)))
     }
 
     /// Cancels an in-flight historical ticks request.
@@ -722,15 +725,39 @@ pub struct TickSubscription<T: TickDecoder<T>> {
     messages: InternalSubscription,
     buffer: Mutex<VecDeque<T>>,
     error: Mutex<Option<Error>>,
+    request_id: i32,
+    message_bus: Arc<dyn MessageBus>,
+    cancelled: AtomicBool,
 }
 
 impl<T: TickDecoder<T>> TickSubscription<T> {
-    fn new(messages: InternalSubscription) -> Self {
+    fn new(messages: InternalSubscription, request_id: i32, message_bus: Arc<dyn MessageBus>) -> Self {
         Self {
             done: false.into(),
             messages,
             buffer: Mutex::new(VecDeque::new()),
             error: Mutex::new(None),
+            request_id,
+            message_bus,
+            cancelled: AtomicBool::new(false),
+        }
+    }
+
+    /// Cancel the historical-ticks request. Safe to call after completion (no-op).
+    /// Also fired automatically on `Drop` for unfinished subscriptions; explicit calls are idempotent.
+    pub fn cancel(&self) {
+        if self.cancelled.swap(true, Ordering::Relaxed) {
+            return;
+        }
+
+        match encoders::encode_cancel_historical_ticks(self.request_id) {
+            Ok(message) => {
+                if let Err(e) = self.message_bus.cancel_subscription(self.request_id, &message) {
+                    warn!("error cancelling historical ticks subscription: {e}");
+                }
+                self.messages.cancel();
+            }
+            Err(e) => error!("error encoding cancel historical ticks: {e}"),
         }
     }
 
@@ -829,6 +856,14 @@ impl<T: TickDecoder<T>> TickSubscription<T> {
     }
 }
 
+impl<T: TickDecoder<T>> Drop for TickSubscription<T> {
+    fn drop(&mut self) {
+        if !self.done.load(Ordering::Relaxed) {
+            self.cancel();
+        }
+    }
+}
+
 /// An iterator that yields items as they become available, blocking if necessary.
 pub struct TickSubscriptionIter<'a, T: TickDecoder<T>> {
     subscription: &'a TickSubscription<T>,
@@ -901,4 +936,5 @@ impl<T: TickDecoder<T>> Iterator for TickSubscriptionTimeoutIter<'_, T> {
 }
 
 #[cfg(test)]
+#[path = "sync_tests.rs"]
 mod tests;
