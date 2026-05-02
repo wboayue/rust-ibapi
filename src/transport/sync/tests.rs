@@ -694,6 +694,37 @@ fn test_order_id_correlation_with_interleaved_responses() -> Result<(), Error> {
     let msg_b = sub_b.next_timeout(TICK).expect("sub_b got no message")?;
     assert_eq!(msg_a.peek_int(1)?, 11);
     assert_eq!(msg_b.peek_int(1)?, 22);
+
+    // No cross-talk.
+    assert!(sub_a.try_next().is_none(), "sub_a received an extra message");
+    assert!(sub_b.try_next().is_none(), "sub_b received an extra message");
+    Ok(())
+}
+
+/// Shared-channel fan-out: `RequestOpenOrders`, `RequestAllOpenOrders`, and
+/// `RequestAutoOpenOrders` all map to `[OpenOrder, OrderStatus, OpenOrderEnd]`
+/// in `CHANNEL_MAPPINGS`. With no `send_order_request` subscriber for the
+/// incoming order_id, the `OrderOrShared` strategy in `process_orders` fans
+/// the message out to every shared subscriber registered for `OpenOrder`.
+#[test]
+fn test_shared_channel_fan_out_for_open_orders() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    let sub_open = bus.send_shared_request(OutgoingMessages::RequestOpenOrders, &[])?;
+    let sub_all = bus.send_shared_request(OutgoingMessages::RequestAllOpenOrders, &[])?;
+    let sub_auto = bus.send_shared_request(OutgoingMessages::RequestAutoOpenOrders, &[])?;
+
+    // OpenOrder (msg_id 5): order_id at index 1. No matching order subscription,
+    // so the OrderOrShared strategy falls back to fan-out.
+    stream.push_inbound(body("5|42|265598|AAPL|STK||0|||SMART|USD|AAPL|NMS|"));
+    bus.dispatch(0)?;
+
+    for (name, sub) in [("open", &sub_open), ("all", &sub_all), ("auto", &sub_auto)] {
+        let msg = sub.next_timeout(TICK).unwrap_or_else(|| panic!("sub_{name} got no message"));
+        let msg = msg?;
+        assert_eq!(msg.peek_int(0)?, 5);
+        assert_eq!(msg.peek_int(1)?, 42);
+    }
     Ok(())
 }
 
