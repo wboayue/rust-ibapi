@@ -195,12 +195,11 @@ impl Client {
             check_version(self.server_version(), Features::TRADING_CLASS)?;
         }
 
-        // Note: end_date must be None when keepUpToDate=true (IBKR requirement)
         let builder = self.request();
         let request = encoders::encode_request_historical_data(
             builder.request_id(),
             contract,
-            None,
+            None, // end_date must be None when keepUpToDate=true (IBKR requirement)
             duration,
             bar_size,
             what_to_show,
