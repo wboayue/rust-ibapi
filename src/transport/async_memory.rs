@@ -13,6 +13,8 @@ use std::task::{Context, Poll, Waker};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
+use crate::messages::encode_raw_length;
+
 #[derive(Default)]
 struct Inner {
     inbound: VecDeque<u8>,
@@ -28,10 +30,6 @@ pub(crate) struct MemoryStream {
 }
 
 impl MemoryStream {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Append bytes that the consumer (production code) will read.
     pub fn push_inbound(&self, bytes: &[u8]) {
         let waker = {
@@ -46,10 +44,7 @@ impl MemoryStream {
 
     /// Append a length-prefixed frame: 4-byte BE length + payload.
     pub fn push_frame(&self, payload: &[u8]) {
-        let mut buf = Vec::with_capacity(4 + payload.len());
-        buf.extend_from_slice(&(payload.len() as u32).to_be_bytes());
-        buf.extend_from_slice(payload);
-        self.push_inbound(&buf);
+        self.push_inbound(&encode_raw_length(payload));
     }
 
     /// Snapshot of every byte the consumer has written.

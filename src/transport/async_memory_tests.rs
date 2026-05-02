@@ -10,7 +10,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 /// consumer parks — that ordering is what exercises the waker registration.
 #[tokio::test(flavor = "current_thread")]
 async fn round_trip_length_prefixed_frame() {
-    let stream = MemoryStream::new();
+    let stream = MemoryStream::default();
 
     let frame: &[u8] = b"abc\x00def\x00\x01";
 
