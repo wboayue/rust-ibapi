@@ -795,7 +795,6 @@ fn test_streaming_subscription_sends_cancel_on_drop() {
                 true,
             )
             .expect("streaming request should succeed");
-        // subscription dropped here
     }
 
     let messages = message_bus.request_messages.read().unwrap();
@@ -829,7 +828,6 @@ fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
             )
             .expect("streaming request should succeed");
 
-        // Explicit cancel; drop should not fire a second cancel.
         subscription.cancel();
     }
 

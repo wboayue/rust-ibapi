@@ -768,10 +768,8 @@ async fn test_streaming_subscription_sends_cancel_on_drop() {
             )
             .await
             .expect("streaming request should succeed");
-        // subscription dropped here
     }
 
-    // Give tokio::spawn time to execute
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
     let messages = message_bus.request_messages.read().unwrap();
@@ -806,7 +804,6 @@ async fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
             .await
             .expect("streaming request should succeed");
 
-        // Explicit cancel; drop should not fire a second cancel.
         subscription.cancel().await;
     }
 

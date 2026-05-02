@@ -9,6 +9,7 @@ use crate::client::blocking::ClientRequestBuilders;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::protocol::{check_version, Features};
+use crate::subscriptions::sync::Subscription;
 use crate::transport::{InternalSubscription, MessageBus, Response};
 use crate::{client::sync::Client, Error, MAX_RETRIES};
 
@@ -190,7 +191,7 @@ impl Client {
         what_to_show: Option<WhatToShow>,
         trading_hours: TradingHours,
         keep_up_to_date: bool,
-    ) -> Result<crate::subscriptions::sync::Subscription<HistoricalBarUpdate>, Error> {
+    ) -> Result<Subscription<HistoricalBarUpdate>, Error> {
         if !contract.trading_class.is_empty() || contract.contract_id > 0 {
             check_version(self.server_version(), Features::TRADING_CLASS)?;
         }
