@@ -23,9 +23,6 @@ pub mod sync;
 #[cfg(feature = "async")]
 pub mod r#async;
 
-#[cfg(all(test, feature = "async"))]
-mod async_memory;
-
 // Common types
 #[allow(dead_code)]
 pub(crate) type Response = Result<ResponseMessage, Error>;

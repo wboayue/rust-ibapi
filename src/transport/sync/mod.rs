@@ -803,4 +803,9 @@ pub(crate) trait Io {
 }
 
 #[cfg(test)]
+mod memory;
+#[cfg(test)]
+pub(crate) use memory::MemoryStream;
+
+#[cfg(test)]
 mod tests;

@@ -761,3 +761,11 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
         self.connected.load(Ordering::Relaxed) && !self.shutdown_requested.load(Ordering::Relaxed)
     }
 }
+
+#[cfg(test)]
+#[path = "async_memory.rs"]
+mod memory;
+
+#[cfg(test)]
+#[path = "async_tests.rs"]
+mod tests;

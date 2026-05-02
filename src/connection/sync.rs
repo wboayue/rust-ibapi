@@ -249,3 +249,7 @@ impl<S: Stream> Connection<S> {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "sync_tests.rs"]
+mod tests;
