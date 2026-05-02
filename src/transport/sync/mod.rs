@@ -808,4 +808,7 @@ mod memory;
 pub(crate) use memory::MemoryStream;
 
 #[cfg(test)]
+pub(crate) mod test_listener;
+
+#[cfg(test)]
 mod tests;

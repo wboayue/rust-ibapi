@@ -758,3 +758,81 @@ fn test_dispatch_surfaces_connection_failure_after_eof() -> Result<(), Error> {
     assert!(matches!(resp, Err(Error::Shutdown)), "got: {resp:?}");
     Ok(())
 }
+
+/// `MessageBus::cancel_subscription` writes the cancel bytes to the stream and
+/// notifies the in-flight subscription with `Error::Cancelled`.
+#[test]
+fn test_cancel_subscription_notifies_in_flight() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let mb: &dyn MessageBus = bus.as_ref();
+    let sub = mb.send_request(100, b"req-bytes")?;
+
+    mb.cancel_subscription(100, b"cancel-bytes")?;
+
+    let resp = sub.next_timeout(TICK).expect("subscription got no notification");
+    assert!(matches!(resp, Err(Error::Cancelled)), "got: {resp:?}");
+
+    let captured = stream.captured();
+    assert!(captured.windows(b"req-bytes".len()).any(|w| w == b"req-bytes"), "request not written");
+    assert!(
+        captured.windows(b"cancel-bytes".len()).any(|w| w == b"cancel-bytes"),
+        "cancel not written"
+    );
+    Ok(())
+}
+
+/// `MessageBus::cancel_order_subscription` mirrors cancel_subscription but on
+/// the orders channel.
+#[test]
+fn test_cancel_order_subscription_notifies_in_flight() -> Result<(), Error> {
+    let (_, bus) = make_bus();
+    let mb: &dyn MessageBus = bus.as_ref();
+    let sub = mb.send_order_request(42, b"order-bytes")?;
+
+    mb.cancel_order_subscription(42, b"cancel-bytes")?;
+
+    let resp = sub.next_timeout(TICK).expect("subscription got no notification");
+    assert!(matches!(resp, Err(Error::Cancelled)), "got: {resp:?}");
+    Ok(())
+}
+
+/// `MessageBus::cancel_shared_subscription` writes the cancel bytes through
+/// to the connection. (No notify path — shared channels are persistent.)
+#[test]
+fn test_cancel_shared_subscription_writes_through() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let mb: &dyn MessageBus = bus.as_ref();
+
+    mb.cancel_shared_subscription(OutgoingMessages::RequestCurrentTime, b"cancel-bytes")?;
+
+    let captured = stream.captured();
+    assert!(captured.windows(b"cancel-bytes".len()).any(|w| w == b"cancel-bytes"));
+    Ok(())
+}
+
+/// `MessageBus::send_message` writes through to the connection.
+#[test]
+fn test_send_message_writes_through() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let mb: &dyn MessageBus = bus.as_ref();
+
+    mb.send_message(b"global-cancel-bytes")?;
+
+    let captured = stream.captured();
+    assert!(captured.windows(b"global-cancel-bytes".len()).any(|w| w == b"global-cancel-bytes"));
+    Ok(())
+}
+
+/// `MessageBus::create_order_update_subscription` returns `AlreadySubscribed`
+/// on duplicate calls; explicit drop of the first subscription releases the
+/// slot via the cleanup thread, but here we just assert duplicate-rejection.
+#[test]
+fn test_create_order_update_subscription_is_unique() -> Result<(), Error> {
+    let (_, bus) = make_bus();
+    let mb: &dyn MessageBus = bus.as_ref();
+
+    let _first = mb.create_order_update_subscription()?;
+    let err = mb.create_order_update_subscription().expect_err("duplicate fails");
+    assert!(matches!(err, Error::AlreadySubscribed), "got: {err:?}");
+    Ok(())
+}

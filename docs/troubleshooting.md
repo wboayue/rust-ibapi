@@ -269,15 +269,6 @@ cargo clippy --features sync
 cargo clippy --features async
 ```
 
-### MockGateway Tests Failing
-
-**Solution:**
-Ensure test data matches expected format:
-```rust
-// Use exact message format from TWS
-let response = "1|2|9000|AAPL|STK||0.0|||||NASDAQ|USD|AAPL|NMS|...|";
-```
-
 ## Platform-Specific Issues
 
 ### macOS: Security Warnings

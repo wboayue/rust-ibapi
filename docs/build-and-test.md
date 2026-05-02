@@ -62,28 +62,20 @@ just cover
 
 ## Testing Patterns
 
-### Integration Test Pattern
+See [docs/testing-patterns.md](testing-patterns.md) for the full fixture stratification (`MessageBusStub` for domain logic, `MemoryStream` for transport/connection, `spawn_handshake_listener` for `Client::connect*`). The short version: pick the lightest fixture that exercises the seam.
 
-The codebase uses a MockGateway pattern for integration testing:
+### Domain test pattern (`MessageBusStub`)
 
 ```rust
-// Setup test server
-let (gateway, address, expected_data) = setup_test();
-
-// Test with real TCP connection
-let client = Client::connect(&address, 100)?;
+let message_bus = Arc::new(MessageBusStub {
+    request_messages: RwLock::new(vec![]),
+    response_messages: vec!["<scripted-response>".to_owned()],
+});
+let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 let result = client.some_method()?;
-
-// Verify results
-assert_eq!(result, expected_data);
-assert_eq!(gateway.requests()[0], "expected_request_format");
+// assert request_messages records the encoded request
+// assert result decoded the scripted response
 ```
-
-Benefits:
-- Tests real network stack
-- Verifies complete protocol flow
-- Records all requests for verification
-- Ensures sync/async parity
 
 ### Table-Driven Tests
 

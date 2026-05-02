@@ -348,3 +348,7 @@ impl Client {
         &self.message_bus
     }
 }
+
+#[cfg(test)]
+#[path = "async_tests.rs"]
+mod tests;
