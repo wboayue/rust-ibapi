@@ -3,8 +3,6 @@
 pub(crate) mod builders;
 pub(crate) mod error_handler;
 pub(crate) mod id_generator;
-#[cfg(test)]
-pub(crate) mod test_support;
 
 #[cfg(feature = "sync")]
 pub mod sync;

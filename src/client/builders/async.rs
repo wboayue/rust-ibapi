@@ -343,29 +343,28 @@ impl SubscriptionBuilderExt for Client {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
-    use crate::client::test_support::mocks::MockGateway;
-    use crate::client::test_support::scenarios::setup_connect;
     use crate::market_data::realtime::Bar;
     use crate::messages::OutgoingMessages;
+    use crate::server_versions;
+    use crate::stubs::MessageBusStub;
 
-    async fn create_test_client() -> (Client, MockGateway) {
-        let gateway = setup_connect();
-        let address = gateway.address();
-        let client = Client::connect(&address, 100).await.expect("Client connection should succeed");
-        (client, gateway)
+    fn create_test_client() -> Client {
+        Client::stubbed(Arc::new(MessageBusStub::default()), server_versions::PROTOBUF)
     }
 
     #[tokio::test]
     async fn test_request_builder_new() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
         let builder = RequestBuilder::new(&client);
         assert!(builder.request_id > 0);
     }
 
     #[tokio::test]
     async fn test_request_builder_with_id() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
         let request_id = 42;
         let builder = RequestBuilder::with_id(&client, request_id);
         assert_eq!(builder.request_id(), request_id);
@@ -373,7 +372,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_request_builder_check_version_success() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
         let builder = RequestBuilder::new(&client);
         let result = builder.check_version(100, "test_feature").await;
         assert!(result.is_ok());
@@ -381,7 +380,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_request_builder_check_version_failure() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
         let builder = RequestBuilder::new(&client);
         let result = builder.check_version(999999, "future_feature").await;
         assert!(result.is_err());
@@ -389,14 +388,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_shared_request_builder_new() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
         let builder = SharedRequestBuilder::new(&client, OutgoingMessages::RequestMarketData);
         assert_eq!(builder.message_type, OutgoingMessages::RequestMarketData);
     }
 
     #[tokio::test]
     async fn test_shared_request_builder_check_version() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
         let builder = SharedRequestBuilder::new(&client, OutgoingMessages::RequestMarketData);
         let result = builder.check_version(100, "test_feature").await;
         assert!(result.is_ok());
@@ -404,14 +403,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_order_request_builder_new() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
         let builder = OrderRequestBuilder::new(&client);
         assert!(builder.order_id > 0);
     }
 
     #[tokio::test]
     async fn test_order_request_builder_with_id() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
         let order_id = 12345;
         let builder = OrderRequestBuilder::with_id(&client, order_id);
         assert_eq!(builder.order_id(), order_id);
@@ -419,7 +418,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_message_builder_new() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
         let builder = MessageBuilder::new(&client);
         // MessageBuilder doesn't have public fields to test, just ensure it creates
         let _ = builder;
@@ -427,7 +426,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_message_builder_check_version() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
         let builder = MessageBuilder::new(&client);
         let result = builder.check_version(100, "test_feature").await;
         assert!(result.is_ok());
@@ -435,7 +434,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_subscription_builder_new() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
         let context = client.decoder_context();
         let message_bus = client.message_bus.clone();
         let builder: SubscriptionBuilder<Bar> = SubscriptionBuilder::new_with_components(context, message_bus);
@@ -445,7 +444,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_subscription_builder_with_context() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
         let context = client
             .decoder_context()
             .with_smart_depth(true)
@@ -458,7 +457,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_subscription_builder_with_smart_depth() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
         let context = client.decoder_context();
         let message_bus = client.message_bus.clone();
         let builder: SubscriptionBuilder<Bar> = SubscriptionBuilder::new_with_components(context, message_bus).with_smart_depth(true);
@@ -467,7 +466,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_client_request_builders_trait() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
 
         // Test request()
         let request_builder = client.request();
@@ -495,7 +494,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_subscription_builder_ext_trait() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
         let builder: SubscriptionBuilder<Bar> = client.subscription();
         // Builder created successfully through trait
         let _ = builder;
@@ -543,7 +542,7 @@ mod tests {
         ];
 
         for tc in test_cases {
-            let (client, _gateway) = create_test_client().await;
+            let client = create_test_client();
 
             if let Some(request_id) = tc.request_id {
                 let builder = client.request_with_id(request_id);
@@ -613,7 +612,7 @@ mod tests {
         ];
 
         for tc in test_cases {
-            let (client, _gateway) = create_test_client().await;
+            let client = create_test_client();
             let context = client.decoder_context();
             let message_bus = client.message_bus.clone();
             let mut builder: SubscriptionBuilder<Bar> = SubscriptionBuilder::new_with_components(context, message_bus);
@@ -650,7 +649,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_request_builder_send_raw() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
 
         let builder = client.request_with_id(123);
         let message = crate::messages::encode_protobuf_message(OutgoingMessages::RequestCurrentTime as i32, &[]);
@@ -661,7 +660,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_shared_request_builder_send_raw() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
 
         let builder = client.shared_request(OutgoingMessages::RequestManagedAccounts);
         let message = crate::messages::encode_protobuf_message(OutgoingMessages::RequestManagedAccounts as i32, &[]);
@@ -672,20 +671,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_order_request_builder_check_version() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
 
         let builder = client.order_request_with_id(456);
         let result = builder.check_version(90, "test_feature").await;
         assert!(result.is_ok());
 
         let builder = client.order_request_with_id(457);
-        let result = builder.check_version(200, "future_feature").await;
+        let result = builder.check_version(999999, "future_feature").await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_order_request_builder_send() {
-        let (client, _gateway) = create_test_client().await;
+        let client = create_test_client();
 
         let builder = client.order_request_with_id(789);
         let message = crate::messages::encode_protobuf_message(OutgoingMessages::PlaceOrder as i32, &[]);

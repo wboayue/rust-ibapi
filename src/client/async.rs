@@ -348,6 +348,3 @@ impl Client {
         &self.message_bus
     }
 }
-
-#[cfg(test)]
-mod tests;

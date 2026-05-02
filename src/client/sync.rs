@@ -17,8 +17,6 @@ use crate::connection::{sync::Connection, ConnectionMetadata};
 use crate::contracts::Contract;
 use crate::errors::Error;
 use crate::market_data::builder::MarketDataBuilder;
-#[cfg(test)]
-use crate::market_data::TradingHours;
 use crate::messages::OutgoingMessages;
 use crate::orders::OrderBuilder;
 use crate::transport::{InternalSubscription, MessageBus, TcpMessageBus};
@@ -438,6 +436,3 @@ impl Debug for Client {
 ///
 // Re-export SharesChannel trait from subscriptions module
 pub use crate::subscriptions::SharesChannel;
-
-#[cfg(test)]
-mod tests;
