@@ -1,10 +1,12 @@
 use std::sync::Arc;
+use std::sync::Mutex;
 
 use super::*;
 use crate::contracts::Contract;
-use crate::messages::OutgoingMessages;
+use crate::messages::{IncomingMessages, OutgoingMessages};
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
+use crate::transport::sync::test_listener::spawn_handshake_listener;
 
 const SERVER_VERSION: i32 = server_versions::PROTOBUF;
 
@@ -84,4 +86,72 @@ fn create_order_update_subscription_is_unique() {
     client.create_order_update_subscription().expect("first subscription");
     let err = client.create_order_update_subscription().expect_err("duplicate fails");
     matches!(err, Error::AlreadySubscribed);
+}
+
+fn handshake_frames() -> Vec<Vec<u8>> {
+    vec![
+        // Handshake response (raw text): "<sv>\0<connection-time>\0".
+        format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes(),
+        // NextValidId in binary-text format (4-byte BE msg_id + text).
+        binary_text(IncomingMessages::NextValidId as i32, "1\09000\0"),
+        // ManagedAccounts in binary-text format.
+        binary_text(IncomingMessages::ManagedAccounts as i32, "1\0DU1234567\0"),
+    ]
+}
+
+fn binary_text(msg_id: i32, payload: &str) -> Vec<u8> {
+    let mut data = Vec::with_capacity(4 + payload.len());
+    data.extend_from_slice(&msg_id.to_be_bytes());
+    data.extend_from_slice(payload.as_bytes());
+    data
+}
+
+#[test]
+fn connect_handshakes_against_real_socket() {
+    let (addr, _h) = spawn_handshake_listener(handshake_frames());
+
+    let client = Client::connect(&addr.to_string(), 100).expect("Client::connect");
+
+    assert_eq!(client.client_id(), 100);
+    assert_eq!(client.server_version(), SERVER_VERSION);
+    assert!(client.time_zone().is_some());
+    assert_eq!(client.next_order_id(), 9000);
+}
+
+#[test]
+fn connect_with_callback_receives_unsolicited_messages() {
+    // Inject an OpenOrder frame between NextValidId and ManagedAccounts. The
+    // handshake parser routes anything that isn't NextValidId/ManagedAccounts/
+    // Error to the startup callback.
+    let mut frames = Vec::new();
+    frames.push(format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes());
+    frames.push(binary_text(IncomingMessages::NextValidId as i32, "1\09000\0"));
+    frames.push(binary_text(IncomingMessages::OpenOrder as i32, "1\0\0"));
+    frames.push(binary_text(IncomingMessages::ManagedAccounts as i32, "1\0DU1234567\0"));
+
+    let (addr, _h) = spawn_handshake_listener(frames);
+    let captured = Arc::new(Mutex::new(Vec::<i32>::new()));
+    let captured_clone = Arc::clone(&captured);
+    let callback: StartupMessageCallback = Box::new(move |msg| {
+        captured_clone.lock().unwrap().push(msg.message_type() as i32);
+    });
+
+    let _client = Client::connect_with_callback(&addr.to_string(), 100, Some(callback)).expect("connect_with_callback");
+
+    let seen = captured.lock().unwrap();
+    assert!(
+        seen.contains(&(IncomingMessages::OpenOrder as i32)),
+        "callback did not see OpenOrder; saw: {seen:?}"
+    );
+}
+
+#[test]
+fn connect_with_options_applies_tcp_no_delay() {
+    let (addr, _h) = spawn_handshake_listener(handshake_frames());
+
+    let options = ConnectionOptions::default().tcp_no_delay(true);
+    let client = Client::connect_with_options(&addr.to_string(), 100, options).expect("connect_with_options");
+
+    assert_eq!(client.client_id(), 100);
+    assert_eq!(client.server_version(), SERVER_VERSION);
 }

@@ -771,5 +771,9 @@ mod memory;
 pub(crate) use memory::MemoryStream;
 
 #[cfg(test)]
+#[path = "async_test_listener.rs"]
+pub(crate) mod test_listener;
+
+#[cfg(test)]
 #[path = "async_tests.rs"]
 mod tests;
