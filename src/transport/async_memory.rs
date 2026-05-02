@@ -1,18 +1,15 @@
 //! In-memory frame-level `AsyncStream` for transport tests.
 //!
 //! Mirrors `transport/sync/memory.rs` for the async transport. Operates at the
-//! frame level: `read_message` returns one queued body per call. The earlier
-//! byte-level `AsyncRead`/`AsyncWrite` design from PR 1 was replaced once the
-//! `AsyncIo` / `AsyncReconnect` traits landed (PR 2c-prep) — `AsyncTcpSocket`
-//! handles framing internally so the fixture no longer needs raw byte plumbing.
+//! frame level: `read_message` returns one queued body per call.
 
 use std::collections::VecDeque;
 use std::io;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Notify;
 
 use super::io::{AsyncIo, AsyncReconnect, AsyncStream};
 use crate::errors::Error;
@@ -33,20 +30,20 @@ pub(crate) struct MemoryStream {
 
 impl MemoryStream {
     /// Append a single message body to the inbound queue. Wakes any blocked reader.
-    pub async fn push_inbound(&self, body: Vec<u8>) {
-        self.inner.lock().await.inbound.push_back(body);
+    pub fn push_inbound(&self, body: Vec<u8>) {
+        self.inner.lock().unwrap().inbound.push_back(body);
         self.notify.notify_one();
     }
 
     /// Snapshot of every byte the consumer has written.
-    pub async fn captured(&self) -> Vec<u8> {
-        self.inner.lock().await.outbound.clone()
+    pub fn captured(&self) -> Vec<u8> {
+        self.inner.lock().unwrap().outbound.clone()
     }
 
     /// Signal EOF. Subsequent `read_message` calls return `Error::Io(UnexpectedEof)`,
     /// matching `AsyncTcpSocket::read_message`'s behavior on a closed peer.
-    pub async fn close(&self) {
-        self.inner.lock().await.closed = true;
+    pub fn close(&self) {
+        self.inner.lock().unwrap().closed = true;
         self.notify.notify_waiters();
     }
 }
@@ -68,7 +65,7 @@ impl AsyncIo for MemoryStream {
             notified.as_mut().enable();
 
             {
-                let mut inner = self.inner.lock().await;
+                let mut inner = self.inner.lock().unwrap();
                 if let Some(body) = inner.inbound.pop_front() {
                     return Ok(body);
                 }
@@ -82,7 +79,7 @@ impl AsyncIo for MemoryStream {
     }
 
     async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
-        self.inner.lock().await.outbound.extend_from_slice(buf);
+        self.inner.lock().unwrap().outbound.extend_from_slice(buf);
         Ok(())
     }
 }

@@ -15,7 +15,7 @@ async fn round_trip_frame() {
     let producer = stream.clone();
     let push = tokio::spawn(async move {
         tokio::task::yield_now().await;
-        producer.push_inbound(b"hello".to_vec()).await;
+        producer.push_inbound(b"hello".to_vec());
     });
 
     let body = stream.read_message().await.unwrap();
@@ -23,9 +23,9 @@ async fn round_trip_frame() {
     push.await.unwrap();
 
     stream.write_all(b"out").await.unwrap();
-    assert_eq!(stream.captured().await, b"out");
+    assert_eq!(stream.captured(), b"out");
 
-    stream.close().await;
+    stream.close();
     let err = stream.read_message().await.unwrap_err();
     assert!(
         matches!(err, Error::Io(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof),
