@@ -1,222 +1,135 @@
 # Testing Patterns
 
-This document describes the testing patterns and infrastructure used in the rust-ibapi crate, with a focus on the MockGateway pattern for integration testing.
+This document describes the test-fixture strategy for the rust-ibapi crate. Tests are stratified by which seam they exercise — pick the lightest fixture that does the job.
 
-## Testing Strategy
+## Three fixtures, three scopes
 
-```mermaid
-graph LR
-    Change[Code Change]
-    
-    subgraph "Test Both Modes"
-        TestSync[cargo test<br/>--features sync]
-        TestAsync[cargo test<br/>--features async]
-    end
-    
-    subgraph "Quality Checks"
-        ClippySync[cargo clippy<br/>--features sync]
-        ClippyAsync[cargo clippy<br/>--features async]
-        Format[cargo fmt]
-    end
-    
-    subgraph "Test Types"
-        Unit[Unit Tests<br/>Individual functions]
-        Integration[Integration Tests<br/>API workflows]
-        Mock[MockGateway Tests<br/>Protocol verification]
-    end
-    
-    Change --> TestSync
-    Change --> TestAsync
-    TestSync --> ClippySync
-    TestAsync --> ClippyAsync
-    ClippySync --> Format
-    ClippyAsync --> Format
-    
-    TestSync --> Unit
-    TestSync --> Integration
-    TestSync --> Mock
-    
-    TestAsync --> Unit
-    TestAsync --> Integration
-    TestAsync --> Mock
-    
-    Format --> PR[Pull Request ✓]
-    
-    style Change fill:#ffd54f
-    style PR fill:#aed581
-```
+| Fixture | Scope | Where it lives | Use when |
+| --- | --- | --- | --- |
+| `MessageBusStub` | Domain logic | `src/stubs.rs` | Testing methods on `Client` (e.g. `realtime_bars`, `place_order`) — verify request encoding and response decoding through the `MessageBus` / `AsyncMessageBus` trait. Skips the dispatcher and framing entirely. |
+| `MemoryStream` | Transport / connection | `src/transport/sync/memory.rs`, `src/transport/async_memory.rs` | Testing the dispatcher (routing, cancel coalescing, EOF handling) or the handshake (`establish_connection`, disconnect, reconnect). Implements the `Stream` / `AsyncStream` trait so it slots into `Connection<S>` / `AsyncConnection<S>` directly. |
+| `spawn_handshake_listener` | Production TCP entry points | `src/transport/sync/test_listener.rs`, `src/transport/async_test_listener.rs` | Testing `Client::connect*` and `AsyncTcpSocket::*` — the production-only seam that does `TcpStream::connect(addr)`. One-shot listener bound to `127.0.0.1:0`. |
 
-## MockGateway Integration Testing Pattern
+## Pattern 1: `MessageBusStub` for domain tests
 
-The MockGateway pattern provides a robust framework for testing Client methods without requiring a real IB Gateway/TWS connection. This pattern is implemented in `src/client/common.rs` and ensures consistent, reliable testing across both sync and async implementations.
+Most per-domain tests use this. The stub records outbound `request_messages` and replays scripted `response_messages` through whatever channel kind the request expects (request/order/shared).
 
-### Architecture Overview
-
-```mermaid
-graph LR
-    subgraph "Test Environment"
-        Client[Client<br/>Under Test]
-        MockGateway[MockGateway<br/>Simulated Server]
-        TestData[Test Data<br/>Fixtures]
-    end
-    
-    subgraph "Verification"
-        Requests[Captured<br/>Requests]
-        Responses[Expected<br/>Responses]
-        Assertions[Test<br/>Assertions]
-    end
-    
-    Client <-->|TCP Socket| MockGateway
-    TestData -->|Provides| MockGateway
-    MockGateway -->|Records| Requests
-    MockGateway -->|Sends| Responses
-    Requests --> Assertions
-    Responses --> Assertions
-    
-    style Client fill:#bbdefb
-    style MockGateway fill:#c5e1a5
-    style Assertions fill:#ffccbc
-```
-
-### Key Components
-
-1. **MockGateway** (`src/client/common.rs::mocks::MockGateway`)
-   - Simulates IB Gateway/TWS server behavior
-   - Binds to a random TCP port for real network testing
-   - Handles the complete handshake protocol including magic token exchange
-   - Records all incoming requests for verification
-   - Sends pre-configured responses based on defined interactions
-
-2. **ConnectionHandler** (internal to MockGateway)
-   - Manages the TCP connection lifecycle
-   - Performs protocol handshake (version exchange, client ID validation)
-   - Routes requests to appropriate response handlers
-   - Maintains request/response interaction mappings
-
-3. **Setup Functions** (`src/client/common.rs::tests`)
-   - Provide pre-configured MockGateway instances for specific test scenarios
-   - Define expected request/response interactions
-   - Examples: `setup_connect()`, `setup_server_time()`, `setup_contract_details()`
-
-### Test Pattern Structure
-
-#### 1. Create Setup Function
 ```rust
-pub fn setup_contract_details() -> MockGateway {
-    let mut gateway = MockGateway::new(server_versions::IPO_PRICES);
-    
-    gateway.add_interaction(
-        OutgoingMessages::RequestContractData,
-        vec![
-            // Response messages in TWS protocol format
-            "10\09000\0AAPL\0STK\0...", // ContractData message
-            "52\01\09000\0",             // ContractDataEnd message
-        ],
-    );
-    
-    gateway.start().expect("Failed to start mock gateway");
-    gateway
-}
-```
-
-#### 2. Write Test (Sync)
-```rust
+// src/orders/sync/tests.rs
 #[test]
-fn test_contract_details() {
-    let gateway = setup_contract_details();
-    let client = Client::connect(&gateway.address(), CLIENT_ID).expect("Failed to connect");
-    
-    // Execute the method under test
-    let details = client.contract_details(&contract).expect("Failed to get details");
-    
-    // Verify response parsing
-    assert_eq!(details[0].contract.symbol, "AAPL");
-    
-    // Verify request format
-    let requests = gateway.requests();
-    assert_eq!(requests[0], "9\08\09000\0...");
+fn place_order() {
+    let message_bus = Arc::new(MessageBusStub {
+        request_messages: RwLock::new(vec![]),
+        response_messages: vec![
+            "5|2|637533641|ES|FUT|...".to_owned(),  // OpenOrder
+            "3|1|Submitted|0|1|0|...".to_owned(),    // OrderStatus
+        ],
+    });
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+    let mut subscription = client.place_order(1, &contract, &order).expect("...");
+    // assert subscription yields decoded responses
+    // assert message_bus.request_messages records the encoded request
 }
 ```
 
-#### 3. Write Test (Async)
+Counterpart `MessageBusStub::default()` exists for tests that just need a `Client` (accessor tests, builder smoke tests).
+
+## Pattern 2: `MemoryStream` for transport / connection tests
+
+`MemoryStream` is a frame-level in-memory implementation of the `Stream` / `AsyncStream` trait. Tests `push_inbound(body)` to script response frames, and call `captured()` to read back what the consumer wrote. `close()` signals EOF.
+
 ```rust
-#[tokio::test]
-async fn test_contract_details() {
-    let gateway = setup_contract_details();
-    let client = Client::connect(&gateway.address(), CLIENT_ID).await.expect("Failed to connect");
-    
-    // Execute the method under test
-    let details = client.contract_details(&contract).await.expect("Failed to get details");
-    
-    // Verify response parsing (identical assertions as sync)
-    assert_eq!(details[0].contract.symbol, "AAPL");
-    
-    // Verify request format
-    let requests = gateway.requests();
-    assert_eq!(requests[0], "9\08\09000\0...");
+// src/connection/sync_tests.rs
+#[test]
+fn establish_connection_populates_metadata() {
+    let stream = MemoryStream::default();
+    let connection = Connection::stubbed(stream.clone(), CLIENT_ID);
+    push_handshake(&stream);  // pre-pushes 3 frames
+
+    connection.establish_connection(None).expect("...");
+    assert_eq!(connection.server_version(), server_versions::PROTOBUF);
 }
 ```
 
-### Message Format
+Use it for:
+- Handshake (handshake response, NextValidId, ManagedAccounts, version-error, unknown-timezone)
+- Dispatcher routing (request_id correlation, order_id correlation, shared-channel fan-out, cancel coalescing)
+- Disconnect / reconnect lifecycle (push the `-2` shutdown sentinel for clean disconnect; close the stream for EOF/reconnect-fail paths)
 
-Messages follow the IB TWS protocol format using null-terminated strings:
-- Format: `field1\0field2\0field3\0...`
-- First field is typically the message type ID
-- Subsequent fields depend on the specific message type
-- Example: `"10\09000\0AAPL\0STK\0"` represents ContractData with request_id=9000, symbol=AAPL, security_type=STK
+## Pattern 3: `spawn_handshake_listener` for `Client::connect*`
 
-### Benefits of This Pattern
+Real TCP listener that binds `127.0.0.1:0`, accepts once, replays scripted handshake frames, and drains further writes until the client closes. Used only at the production-TCP entry-point seam.
 
-1. **Real Network Testing**: Uses actual TCP connections, testing the full network stack
-2. **Protocol Verification**: Tests the complete handshake and message exchange
-3. **Request Recording**: All requests are captured for detailed verification
-4. **Deterministic Responses**: Pre-configured responses ensure consistent test results
-5. **Shared Test Logic**: Common setup functions ensure sync/async tests are identical
-6. **No External Dependencies**: Tests run without requiring IB Gateway/TWS installation
-
-### Best Practices
-
-1. **Reuse Setup Functions**: Create shared setup functions for common scenarios
-2. **Test Both Directions**: Verify both request format (what client sends) and response parsing (what client receives)
-3. **Use Meaningful Request IDs**: Use consistent IDs like 9000 for easier debugging
-4. **Document Message Formats**: Add comments explaining the structure of request/response messages
-5. **Keep Tests Identical**: Sync and async tests should have identical assertions
-6. **Record Real Messages**: When implementing new tests, you can run against a real IB Gateway/TWS server with `IBAPI_RECORDING_DIR=/tmp/tws-messages` to capture actual protocol messages for use in MockGateway setup functions
-
-## Unit Testing
-
-The crate uses standard Rust unit testing patterns with `#[test]` for sync code and `#[tokio::test]` for async code.
-
-### Running Tests
-
-```bash
-# Run all sync tests
-cargo test --features sync
-
-# Run all async tests  
-cargo test --features async
-
-# Run specific test module
-cargo test --features sync client::sync::tests
-
-# Run with logging
-RUST_LOG=debug cargo test --features sync
+```rust
+// src/client/sync_tests.rs
+#[test]
+fn connect_handshakes_against_real_socket() {
+    let (addr, _h) = spawn_handshake_listener(handshake_frames());
+    let client = Client::connect(&addr.to_string(), 100).expect("Client::connect");
+    assert_eq!(client.client_id(), 100);
+}
 ```
 
-### Test Organization
+This is *not* a re-implementation of MockGateway — it has no per-API-call interaction surface. It exists only because `Client::connect`, `connect_with_callback`, `connect_with_options`, and the underlying `TcpSocket::connect` / `AsyncTcpSocket::connect` cannot otherwise be exercised without a real socket.
 
-- Always keep tests in their own files — never use inline `#[cfg(test)] mod tests { ... }` blocks alongside implementation
-- Prefer flat sibling files (`foo.rs` + `foo_tests.rs`) over a nested module directory (`foo/mod.rs` + `foo/tests.rs`). The test file uses `use super::*;` and is wired in from the implementation file with:
+## Picking the right fixture
+
+When in doubt, default to the lightest:
+
+1. **Are you testing a `Client` method that talks to TWS via the bus?** → `MessageBusStub`.
+2. **Are you testing the dispatcher, handshake, or disconnect?** → `MemoryStream`.
+3. **Are you testing `Client::connect*` itself or `AsyncTcpSocket`?** → `spawn_handshake_listener`.
+
+Going heavier than necessary adds threads, ports, or framing that doesn't earn its keep.
+
+## Test file layout
+
+- Tests live in their own files — never inline `#[cfg(test)] mod tests { ... }` blocks alongside implementation.
+- Prefer flat sibling files (`foo.rs` + `foo_tests.rs`) over a nested module directory (`foo/mod.rs` + `foo/tests.rs`). Wire from the implementation file:
   ```rust
   #[cfg(test)]
   #[path = "foo_tests.rs"]
   mod tests;
   ```
-  For domain submodules, the `#[path = "..."] mod tests;` declaration can live in the parent `mod.rs` instead
-- Older modules still use the `foo/mod.rs` + `foo/tests.rs` layout; migrate opportunistically when touching them, but don't churn unrelated code
-- Integration tests using MockGateway live next to the client implementations (e.g. `src/client/sync_tests.rs`)
-- Common test utilities are in `src/client/common.rs`
+- For domain submodules, the `#[path = "..."] mod tests;` declaration can live in the parent `mod.rs`.
 
-## Coverage
+## Table-driven tests
 
-The crate achieves 100% test coverage for all public Client methods using the MockGateway pattern. Every method has both sync and async tests to ensure feature parity.
+Shared test tables in `<domain>/common/test_tables.rs` are exercised from both `<domain>/sync/tests.rs` and `<domain>/async/tests.rs` to enforce sync/async parity:
+
+```rust
+// common/test_tables.rs
+pub const TEST_CASES: &[TestCase] = &[
+    TestCase { name: "...", input: ..., expected: ... },
+    // ...
+];
+
+// sync/tests.rs and async/tests.rs both iterate TEST_CASES with the same assertions.
+```
+
+## Running tests
+
+```bash
+# Default (async)
+cargo test
+
+# Sync only
+cargo test --no-default-features --features sync
+
+# Both
+cargo test --all-features
+
+# Coverage
+cargo llvm-cov --all-features --summary-only      # text summary
+just cover                                         # HTML report, opens browser
+
+# Specific module
+cargo test --features sync client::sync::tests
+```
+
+Per CLAUDE.md item 5, every PR should pass `cargo clippy` in all three configurations: default, `--features sync`, `--all-features`.
+
+## Recording real messages
+
+When implementing tests for a new feature, capture real protocol bytes against a paper IB Gateway with `IBAPI_RECORDING_DIR=/tmp/tws-messages`, then use those captured frames in `MessageBusStub::response_messages` or `MemoryStream::push_inbound` calls.
