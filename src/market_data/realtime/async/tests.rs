@@ -623,9 +623,6 @@ async fn test_market_data_error_handling() {
     }
 }
 
-/// Calling `cancel()` multiple times only sends one cancel message.
-/// Mirrors the sync `subscription_cancel_only_sends_once` test (issue #258):
-/// explicit `cancel()` followed by `Drop` should not send duplicates.
 #[tokio::test]
 async fn subscription_cancel_only_sends_once() {
     let message_bus = Arc::new(MessageBusStub {
