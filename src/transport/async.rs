@@ -731,14 +731,12 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
     async fn cancel_subscription(&self, request_id: i32, message: RequestMessage) -> Result<(), Error> {
         self.connection.write_message(&message).await?;
 
-        let channels = self.request_channels.read().await;
+        // Single write lock: the previous version held a read guard while
+        // awaiting the write upgrade and self-deadlocked on the same task.
+        let mut channels = self.request_channels.write().await;
         if let Some(sender) = channels.get(&request_id) {
-            // Send cancellation error to the channel
             let _ = sender.send(ResponseMessage::from("Cancelled"));
         }
-
-        // Remove channel
-        let mut channels = self.request_channels.write().await;
         channels.remove(&request_id);
 
         Ok(())
@@ -747,14 +745,10 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
     async fn cancel_order_subscription(&self, order_id: i32, message: RequestMessage) -> Result<(), Error> {
         self.connection.write_message(&message).await?;
 
-        let channels = self.order_channels.read().await;
+        let mut channels = self.order_channels.write().await;
         if let Some(sender) = channels.get(&order_id) {
-            // Send cancellation error to the channel
             let _ = sender.send(ResponseMessage::from("Cancelled"));
         }
-
-        // Remove channel
-        let mut channels = self.order_channels.write().await;
         channels.remove(&order_id);
 
         Ok(())
