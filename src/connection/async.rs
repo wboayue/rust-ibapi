@@ -283,3 +283,7 @@ impl AsyncConnection {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "async_tests.rs"]
+mod tests;
