@@ -1,5 +1,5 @@
 use super::*;
-use crate::common::test_utils::helpers::assert_proto_msg_id;
+use crate::common::test_utils::helpers::{assert_proto_msg_id, count_proto_msgs};
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::messages::OutgoingMessages;
 use crate::server_versions;
@@ -579,9 +579,8 @@ async fn test_historical_data_streaming_with_updates() {
         .expect("streaming request should succeed");
 
     // First: receive initial historical data
-    let update1 = subscription.next().await;
-    assert!(update1.is_some(), "Should receive initial historical data");
-    match update1.unwrap() {
+    let update1 = subscription.next().await.expect("Should receive initial historical data");
+    match update1.expect("decode should succeed") {
         HistoricalBarUpdate::Historical(data) => {
             assert_eq!(data.bars.len(), 1, "Should have 1 initial bar");
             assert_eq!(data.bars[0].open, 185.50, "Wrong open price");
@@ -590,9 +589,8 @@ async fn test_historical_data_streaming_with_updates() {
     }
 
     // Second: receive streaming update
-    let update2 = subscription.next().await;
-    assert!(update2.is_some(), "Should receive streaming update");
-    match update2.unwrap() {
+    let update2 = subscription.next().await.expect("Should receive streaming update");
+    match update2.expect("decode should succeed") {
         HistoricalBarUpdate::Update(bar) => {
             assert_eq!(bar.open, 185.80, "Wrong open price in update");
             assert_eq!(bar.high, 186.10, "Wrong high price in update");
@@ -635,9 +633,8 @@ async fn test_historical_data_streaming_keep_up_to_date_false() {
         .expect("streaming request should succeed");
 
     // Receive initial historical data
-    let update1 = subscription.next().await;
-    assert!(update1.is_some(), "Should receive initial historical data");
-    match update1.unwrap() {
+    let update1 = subscription.next().await.expect("Should receive initial historical data");
+    match update1.expect("decode should succeed") {
         HistoricalBarUpdate::Historical(data) => {
             assert_eq!(data.bars.len(), 1, "Should have 1 initial bar");
         }
@@ -677,17 +674,10 @@ async fn test_historical_data_streaming_error_response() {
         .await
         .expect("streaming request should succeed");
 
-    // Should return None due to error
-    let update = subscription.next().await;
-    assert!(update.is_none(), "Should return None on error");
-
-    // Error should be accessible
-    let error = subscription.error();
-    assert!(error.is_some(), "Error should be stored");
-    assert!(
-        error.unwrap().to_string().contains("No market data permissions"),
-        "Error should contain the message"
-    );
+    // Should yield Some(Err(_)) — Subscription<T> surfaces errors through next().
+    let update = subscription.next().await.expect("error should arrive as Some(Err(_))");
+    let err = update.expect_err("Should yield error result");
+    assert!(err.to_string().contains("No market data permissions"), "Error should contain the message");
 }
 
 #[tokio::test]
@@ -762,18 +752,22 @@ async fn test_streaming_subscription_sends_cancel_on_drop() {
         response_messages: vec![],
     });
 
-    let (_tx, rx) = tokio::sync::broadcast::channel(16);
-    let internal = AsyncInternalSubscription::new(rx);
-    let request_id = 9000;
+    let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    client.time_zone = Some(time_tz::timezones::db::UTC);
+    let contract = Contract::stock("SPY").build();
 
     {
-        let _subscription = HistoricalDataStreamingSubscription::new(
-            internal,
-            server_versions::SIZE_RULES,
-            time_tz::timezones::db::UTC,
-            request_id,
-            message_bus.clone(),
-        );
+        let _subscription = client
+            .historical_data_streaming(
+                &contract,
+                Duration::days(1),
+                BarSize::Hour,
+                Some(WhatToShow::Trades),
+                TradingHours::Regular,
+                true,
+            )
+            .await
+            .expect("streaming request should succeed");
         // subscription dropped here
     }
 
@@ -781,8 +775,11 @@ async fn test_streaming_subscription_sends_cancel_on_drop() {
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
     let messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(messages.len(), 1, "should send cancel message on drop");
-    assert_proto_msg_id(&messages[0], OutgoingMessages::CancelHistoricalData);
+    assert_eq!(
+        count_proto_msgs(&messages, OutgoingMessages::CancelHistoricalData),
+        1,
+        "should send exactly one cancel message on drop"
+    );
 }
 
 #[tokio::test]
@@ -792,27 +789,33 @@ async fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
         response_messages: vec![],
     });
 
-    let (_tx, rx) = tokio::sync::broadcast::channel(16);
-    let internal = AsyncInternalSubscription::new(rx);
-    let request_id = 9001;
+    let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    client.time_zone = Some(time_tz::timezones::db::UTC);
+    let contract = Contract::stock("SPY").build();
 
     {
-        let subscription = HistoricalDataStreamingSubscription::new(
-            internal,
-            server_versions::SIZE_RULES,
-            time_tz::timezones::db::UTC,
-            request_id,
-            message_bus.clone(),
-        );
+        let subscription = client
+            .historical_data_streaming(
+                &contract,
+                Duration::days(1),
+                BarSize::Hour,
+                Some(WhatToShow::Trades),
+                TradingHours::Regular,
+                true,
+            )
+            .await
+            .expect("streaming request should succeed");
 
-        // Explicit cancel
+        // Explicit cancel; drop should not fire a second cancel.
         subscription.cancel().await;
-
-        // Drop should not send a second cancel
     }
 
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
     let messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(messages.len(), 1, "should send cancel only once");
+    assert_eq!(
+        count_proto_msgs(&messages, OutgoingMessages::CancelHistoricalData),
+        1,
+        "should send cancel only once"
+    );
 }

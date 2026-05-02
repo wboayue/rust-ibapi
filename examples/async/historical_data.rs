@@ -263,7 +263,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     while let Some(update) = subscription.next().await {
         match update {
-            HistoricalBarUpdate::Historical(data) => {
+            Ok(HistoricalBarUpdate::Historical(data)) => {
                 println!("Received {} initial historical bars", data.bars.len());
                 if let Some(bar) = data.bars.last() {
                     println!(
@@ -277,7 +277,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 println!("Now streaming updates...");
             }
-            HistoricalBarUpdate::Update(bar) => {
+            Ok(HistoricalBarUpdate::Update(bar)) => {
                 println!(
                     "UPDATE: {} - O: ${:.2}, H: ${:.2}, L: ${:.2}, C: ${:.2}, V: {:.0}",
                     format!("{:02}:{:02}:{:02}", bar.date.hour(), bar.date.minute(), bar.date.second()),
@@ -288,8 +288,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     bar.volume
                 );
             }
-            HistoricalBarUpdate::End { start, end } => {
+            Ok(HistoricalBarUpdate::End { start, end }) => {
                 println!("Stream ended: {} - {}", start, end);
+                break;
+            }
+            Err(e) => {
+                eprintln!("Stream error: {e}");
                 break;
             }
         }

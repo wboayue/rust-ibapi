@@ -780,23 +780,30 @@ fn test_streaming_subscription_sends_cancel_on_drop() {
         response_messages: vec![],
     });
 
-    let internal = message_bus.send_request(9000, &[]).unwrap();
+    let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    client.time_zone = Some(time_tz::timezones::db::UTC);
+    let contract = Contract::stock("SPY").build();
 
     {
-        let _subscription = HistoricalDataStreamingSubscription::new(
-            internal,
-            server_versions::SIZE_RULES,
-            time_tz::timezones::db::UTC,
-            9000,
-            message_bus.clone(),
-        );
+        let _subscription = client
+            .historical_data_streaming(
+                &contract,
+                Duration::days(1),
+                BarSize::Hour,
+                Some(WhatToShow::Trades),
+                TradingHours::Regular,
+                true,
+            )
+            .expect("streaming request should succeed");
         // subscription dropped here
     }
 
     let messages = message_bus.request_messages.read().unwrap();
-    // First message is the send_request call, second is the cancel
-    let cancel_msg = messages.last().expect("should have cancel message");
-    assert_proto_msg_id(cancel_msg, OutgoingMessages::CancelHistoricalData);
+    assert_eq!(
+        count_proto_msgs(&messages, OutgoingMessages::CancelHistoricalData),
+        1,
+        "should send exactly one cancel message on drop"
+    );
 }
 
 #[test]
@@ -806,21 +813,24 @@ fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
         response_messages: vec![],
     });
 
-    let internal = message_bus.send_request(9001, &[]).unwrap();
+    let mut client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+    client.time_zone = Some(time_tz::timezones::db::UTC);
+    let contract = Contract::stock("SPY").build();
 
     {
-        let subscription = HistoricalDataStreamingSubscription::new(
-            internal,
-            server_versions::SIZE_RULES,
-            time_tz::timezones::db::UTC,
-            9001,
-            message_bus.clone(),
-        );
+        let subscription = client
+            .historical_data_streaming(
+                &contract,
+                Duration::days(1),
+                BarSize::Hour,
+                Some(WhatToShow::Trades),
+                TradingHours::Regular,
+                true,
+            )
+            .expect("streaming request should succeed");
 
-        // Explicit cancel
+        // Explicit cancel; drop should not fire a second cancel.
         subscription.cancel();
-
-        // Drop should not send a second cancel
     }
 
     let messages = message_bus.request_messages.read().unwrap();
