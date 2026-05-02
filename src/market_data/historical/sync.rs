@@ -935,4 +935,5 @@ impl<T: TickDecoder<T>> Iterator for TickSubscriptionTimeoutIter<'_, T> {
 }
 
 #[cfg(test)]
+#[path = "sync_tests.rs"]
 mod tests;

@@ -544,4 +544,5 @@ impl Drop for HistoricalDataStreamingSubscription {
 }
 
 #[cfg(test)]
+#[path = "async_tests.rs"]
 mod tests;
