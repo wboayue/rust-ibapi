@@ -1,5 +1,9 @@
 //! Asynchronous transport implementation
 
+#[path = "async_io.rs"]
+mod io;
+pub(crate) use io::{AsyncStream, AsyncTcpSocket};
+
 use std::collections::HashMap;
 use std::mem;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -10,6 +14,12 @@ use log::{debug, error, info, warn};
 use tokio::sync::{broadcast, mpsc, Notify, RwLock};
 use tokio::task;
 use tokio::time::Duration;
+
+use crate::connection::r#async::AsyncConnection;
+use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
+use crate::Error;
+
+use super::routing::{determine_routing, is_warning_error, order_routing_strategy, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID};
 
 /// Default capacity for broadcast channels
 /// This should be large enough to handle bursts of messages without lagging
@@ -23,16 +33,6 @@ pub enum CleanupSignal {
     Shared(OutgoingMessages),
     OrderUpdateStream,
 }
-
-#[path = "async_io.rs"]
-mod io;
-pub(crate) use io::{AsyncStream, AsyncTcpSocket};
-
-use crate::connection::r#async::AsyncConnection;
-use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
-use crate::Error;
-
-use super::routing::{determine_routing, is_warning_error, order_routing_strategy, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID};
 
 /// Asynchronous message bus trait
 #[async_trait]
