@@ -1,6 +1,6 @@
 use super::*;
 use crate::client::blocking::Client;
-use crate::common::test_utils::helpers::assert_proto_msg_id;
+use crate::common::test_utils::helpers::{assert_proto_msg_id, count_proto_msgs};
 use crate::contracts::Contract;
 use crate::market_data::historical::ToDuration;
 use crate::market_data::TradingHours;
@@ -743,18 +743,11 @@ fn test_tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
     }
 
     let messages = message_bus.request_messages.read().unwrap();
-    let cancel_count = messages
-        .iter()
-        .filter(|m| {
-            if m.len() >= 4 {
-                let msg_id = i32::from_be_bytes([m[0], m[1], m[2], m[3]]);
-                msg_id == OutgoingMessages::CancelHistoricalTicks as i32 + 200
-            } else {
-                false
-            }
-        })
-        .count();
-    assert_eq!(cancel_count, 1, "should send cancel only once");
+    assert_eq!(
+        count_proto_msgs(&messages, OutgoingMessages::CancelHistoricalTicks),
+        1,
+        "should send cancel only once"
+    );
 }
 
 #[test]
@@ -773,18 +766,11 @@ fn test_tick_subscription_drop_after_done_does_not_cancel() {
     }
 
     let messages = message_bus.request_messages.read().unwrap();
-    let cancel_count = messages
-        .iter()
-        .filter(|m| {
-            if m.len() >= 4 {
-                let msg_id = i32::from_be_bytes([m[0], m[1], m[2], m[3]]);
-                msg_id == OutgoingMessages::CancelHistoricalTicks as i32 + 200
-            } else {
-                false
-            }
-        })
-        .count();
-    assert_eq!(cancel_count, 0, "completed subscription should not send cancel on drop");
+    assert_eq!(
+        count_proto_msgs(&messages, OutgoingMessages::CancelHistoricalTicks),
+        0,
+        "completed subscription should not send cancel on drop"
+    );
 }
 
 #[test]
@@ -838,16 +824,9 @@ fn test_streaming_subscription_cancel_prevents_duplicate_on_drop() {
     }
 
     let messages = message_bus.request_messages.read().unwrap();
-    let cancel_count = messages
-        .iter()
-        .filter(|m| {
-            if m.len() >= 4 {
-                let msg_id = i32::from_be_bytes([m[0], m[1], m[2], m[3]]);
-                msg_id == OutgoingMessages::CancelHistoricalData as i32 + 200
-            } else {
-                false
-            }
-        })
-        .count();
-    assert_eq!(cancel_count, 1, "should send cancel only once");
+    assert_eq!(
+        count_proto_msgs(&messages, OutgoingMessages::CancelHistoricalData),
+        1,
+        "should send cancel only once"
+    );
 }

@@ -125,6 +125,15 @@ pub mod helpers {
         let msg_id = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
         assert_eq!(msg_id, expected as i32 + 200);
     }
+
+    /// Counts how many messages in `messages` carry the given protobuf message id (variant + 200 offset).
+    pub fn count_proto_msgs(messages: &[Vec<u8>], expected: crate::messages::OutgoingMessages) -> usize {
+        let target = expected as i32 + 200;
+        messages
+            .iter()
+            .filter(|m| m.len() >= 4 && i32::from_be_bytes([m[0], m[1], m[2], m[3]]) == target)
+            .count()
+    }
 }
 
 #[cfg(test)]
