@@ -6,13 +6,14 @@
 //! (server_version defaults to 0), `parse_raw_message` takes the text path,
 //! so frame bodies are NUL-delimited strings starting with the message id.
 
+use std::sync::Arc;
+use std::time::Duration;
+
+use tokio::sync::broadcast::error::TryRecvError;
+
 use super::*;
 use crate::connection::r#async::AsyncConnection;
 use crate::messages::OutgoingMessages;
-
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::broadcast::error::TryRecvError;
 
 /// Build a text-format response body: `"msg_id|f1|f2|..."` → `b"msg_id\0f1\0f2\0..."`.
 /// Pipes are stand-ins for NULs so test inputs stay readable.
@@ -43,7 +44,7 @@ async fn next_message(sub: &mut AsyncInternalSubscription) -> ResponseMessage {
 
 /// Two in-flight `send_request` subscriptions: responses arrive in reverse order
 /// and each subscription receives only its own message.
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test]
 async fn test_request_id_correlation_with_interleaved_responses() {
     let (stream, bus) = make_bus();
 
@@ -75,7 +76,7 @@ async fn test_request_id_correlation_with_interleaved_responses() {
 
 /// Same shape as the request_id test but on the orders channel: two in-flight
 /// `send_order_request` subscriptions, OrderStatus responses interleaved.
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test]
 async fn test_order_id_correlation_with_interleaved_responses() {
     let (stream, bus) = make_bus();
 
@@ -108,7 +109,7 @@ async fn test_order_id_correlation_with_interleaved_responses() {
 /// `RequestAutoOpenOrders` all map to `[OpenOrder, OrderStatus, OpenOrderEnd]`
 /// in `CHANNEL_MAPPINGS`. With no order subscriber for the incoming order_id,
 /// the OrderOrShared strategy fans the message out to every shared subscriber.
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test]
 async fn test_shared_channel_fan_out_for_open_orders() {
     let (stream, bus) = make_bus();
 
@@ -131,7 +132,7 @@ async fn test_shared_channel_fan_out_for_open_orders() {
 /// Shared-channel routing: `send_shared_request` for `RequestCurrentTime`
 /// receives the `CurrentTime` response via the channel mapping in
 /// `shared_channel_configuration::CHANNEL_MAPPINGS`.
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test]
 async fn test_shared_channel_routing_current_time() {
     let (stream, bus) = make_bus();
 
@@ -150,7 +151,7 @@ async fn test_shared_channel_routing_current_time() {
 /// `process_messages` loop catches this error and triggers reconnect; here we
 /// drive `read_and_route_message` once to verify the error is surfaced rather
 /// than swallowed.)
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test]
 async fn test_read_and_route_surfaces_eof() {
     let (stream, bus) = make_bus();
 
