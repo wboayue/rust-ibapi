@@ -1,6 +1,6 @@
 # PR 3 — Coverage Audit for `client/{sync,async}/tests.rs`
 
-Per `todos/eliminate-mock-gateway.md` §3, this is the gating artifact for PR 4 (port + parity-fix) and PR 5 (delete + collapse). One row per `#[test]` / `#[tokio::test]` in `src/client/sync/tests.rs` (60 tests, 2,555 LOC) and `src/client/async/tests.rs` (57 tests, 2,527 LOC).
+Per `todos/eliminate-mock-gateway.md` §3, this is the gating artifact for PR 4 (port + parity-fix) and PR 5 (delete + collapse). One row per `#[test]` / `#[tokio::test]` in `src/client/sync/tests.rs` (59 tests, 2,555 LOC) and `src/client/async/tests.rs` (57 tests, 2,527 LOC).
 
 ## Disposition legend
 
@@ -13,7 +13,7 @@ Per `todos/eliminate-mock-gateway.md` §3, this is the gating artifact for PR 4 
 
 Every test in `client/{sync,async}/tests.rs` falls into one of two patterns:
 
-1. **MockGateway-driven** (the majority, ~55/60 sync, ~54/57 async). Spins up the TCP `MockGateway`, runs scenarios from `client/test_support/scenarios.rs`, calls a `Client::*` method, asserts. Equivalent per-domain tests use `MessageBusStub` (skips network, scripts responses through the bus directly) and live in `<domain>/{sync,async}/tests.rs`. These are duplicates.
+1. **MockGateway-driven** (the majority, ~54/59 sync, ~54/57 async). Spins up the TCP `MockGateway`, runs scenarios from `client/test_support/scenarios.rs`, calls a `Client::*` method, asserts. Equivalent per-domain tests use `MessageBusStub` (skips network, scripts responses through the bus directly) and live in `<domain>/{sync,async}/tests.rs`. These are duplicates.
 2. **`MessageBusStub`-driven** (the minority — `test_client_id`, `test_subscription_cancel_only_sends_once`). Already use the per-domain pattern; they're "in the wrong file" rather than coupled to MockGateway. Move them to a sibling `client/{sync,async}_tests.rs` (after PR 5's directory collapse) or into the most relevant per-domain file.
 3. **Connection-level** — `test_connect`, `test_disconnect_completes`, `test_disconnect_is_idempotent`. These exercise handshake / dispatcher-shutdown specifically; they belong in `connection/{sync,async}_tests.rs` and need to be written using `MemoryStream` + `Connection::stubbed` (sync) / `AsyncConnection::stubbed` (async).
 
@@ -25,12 +25,12 @@ For the bulk MockGateway-duplicate cases I confirmed:
 
 |                          | sync | async |
 | ------------------------ | ---- | ----- |
-| Tests total              |  60  |  57   |
-| `[duplicate]`            |  55  |  54   |
+| Tests total              |  59  |  57   |
+| `[duplicate]`            |  54  |  54   |
 | `[migrate]`              |   3  |   3   |
 | `[parity-fix]`           |   2  |   1   |
 
-Net to migrate in PR 4: **6 unique tests** (handshake × 2, disconnect × 4) + **3 parity-fix items** (exercise_options sync, client_id async, subscription_cancel_only_sends_once async). Net deletions in PR 5: ~109 duplicate test bodies plus the `client/test_support/{mocks,scenarios}.rs` infrastructure.
+Net to migrate in PR 4: **6 unique tests** (handshake × 2, disconnect × 4) + **3 parity-fix items** (exercise_options sync, client_id async, subscription_cancel_only_sends_once async). Net deletions in PR 5: ~108 duplicate test bodies plus the `client/test_support/{mocks,scenarios}.rs` infrastructure.
 
 ## Sync — `src/client/sync/tests.rs`
 
