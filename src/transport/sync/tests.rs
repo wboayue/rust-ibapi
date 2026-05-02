@@ -7,14 +7,17 @@ use crate::transport::common::MAX_RECONNECT_ATTEMPTS;
 // Additional imports for connection tests
 use crate::client::sync::Client;
 use crate::contracts::Contract;
-use crate::messages::{encode_length, RequestMessage};
+use crate::messages::{encode_length, OutgoingMessages, RequestMessage};
 use crate::orders::common::encoders::encode_place_order;
 use crate::orders::{order_builder, Action};
+use crate::transport::sync::MemoryStream;
+use crate::transport::MessageBus;
 use log::{debug, trace};
 use std::collections::VecDeque;
 use std::io::ErrorKind;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 fn encode_request_contract_data(_server_version: i32, request_id: i32, contract: &Contract) -> Result<Vec<u8>, Error> {
     // Build the protobuf-encoded contract data request directly
@@ -615,19 +618,10 @@ fn test_request_encoding_roundtrip() {
 
 // ---- routing tests using MemoryStream ----
 //
-// MockSocket pairs each write with a scripted response and asserts on the
-// request bytes. That setup can't easily express scenarios like "two
-// outstanding requests, responses arrive interleaved". `MemoryStream` is the
-// lower-level fixture that lets tests push response frames freely and
-// drive `bus.dispatch()` directly. With `Connection::stubbed` (server_version
-// defaults to 0), `parse_raw_message` takes the text path, so frame bodies
-// are NUL-delimited strings starting with the message id.
-
-use std::time::Duration;
-
-use crate::messages::OutgoingMessages;
-use crate::transport::sync::MemoryStream;
-use crate::transport::MessageBus;
+// `MockSocket` pairs each write with a scripted response and can't easily
+// express scenarios like interleaved responses or shared-channel fan-out.
+// `MemoryStream` lets tests push response frames freely and drive
+// `bus.dispatch()` directly.
 
 /// Build a text-format response body: `"msg_id|f1|f2|..."` → `b"msg_id\0f1\0f2\0..."`.
 /// Pipes are stand-ins for NULs so test inputs stay readable.
@@ -720,8 +714,7 @@ fn test_shared_channel_fan_out_for_open_orders() -> Result<(), Error> {
     bus.dispatch(0)?;
 
     for (name, sub) in [("open", &sub_open), ("all", &sub_all), ("auto", &sub_auto)] {
-        let msg = sub.next_timeout(TICK).unwrap_or_else(|| panic!("sub_{name} got no message"));
-        let msg = msg?;
+        let msg = sub.next_timeout(TICK).unwrap_or_else(|| panic!("sub_{name} got no message"))?;
         assert_eq!(msg.peek_int(0)?, 5);
         assert_eq!(msg.peek_int(1)?, 42);
     }
