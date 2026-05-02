@@ -622,3 +622,29 @@ async fn test_market_data_error_handling() {
         other => panic!("Expected Notice for error, got {other:?}"),
     }
 }
+
+#[tokio::test]
+async fn subscription_cancel_only_sends_once() {
+    let message_bus = Arc::new(MessageBusStub {
+        request_messages: RwLock::new(vec![]),
+        response_messages: vec![],
+    });
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+    let contract = Contract::stock("AAPL").build();
+    let subscription = client
+        .realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, TradingHours::Extended, vec![])
+        .await
+        .expect("Failed to create subscription");
+
+    assert_eq!(message_bus.request_messages.read().unwrap().len(), 1, "one request for realtime bars");
+
+    subscription.cancel().await;
+    assert_eq!(message_bus.request_messages.read().unwrap().len(), 2, "cancel adds one message");
+
+    subscription.cancel().await;
+    assert_eq!(message_bus.request_messages.read().unwrap().len(), 2, "second cancel is a no-op");
+
+    drop(subscription);
+    assert_eq!(message_bus.request_messages.read().unwrap().len(), 2, "drop after cancel is a no-op");
+}

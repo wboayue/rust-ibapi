@@ -701,6 +701,44 @@ fn encode_combo_market_order() {
 }
 
 #[test]
+fn exercise_options() {
+    let message_bus = Arc::new(MessageBusStub {
+        request_messages: RwLock::new(vec![]),
+        response_messages: vec![
+            // Mock OpenOrder response for an exercised ES option
+            "5|2|637533642|ES|FOP|20250919|5800|C|50|CME|USD|ESU5C5800|ES|BUY|1|MKT|0.0|0.0|DAY||DU1234567||0||100|2126726144|0|0|0||2126726144.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Submitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|0.0|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||||||".to_owned(),
+        ],
+    });
+
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
+
+    let contract = Contract {
+        symbol: Symbol::from("ES"),
+        security_type: SecurityType::FuturesOption,
+        exchange: Exchange::from("CME"),
+        currency: Currency::from("USD"),
+        last_trade_date_or_contract_month: "20250919".to_string(),
+        strike: 5800.0,
+        right: "C".to_string(),
+        ..Default::default()
+    };
+
+    let subscription = client
+        .exercise_options(&contract, ExerciseAction::Exercise, 1, "", false, None)
+        .expect("failed to exercise options");
+
+    let exercise_response = subscription.next();
+    assert!(
+        matches!(exercise_response, Some(ExerciseOptions::OpenOrder(_))),
+        "Expected ExerciseOptions::OpenOrder, got {:?}",
+        exercise_response
+    );
+
+    let request_messages = message_bus.request_messages.read().unwrap();
+    assert_eq!(request_messages.len(), 1, "Expected one request message");
+}
+
+#[test]
 fn submit_order() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
