@@ -436,3 +436,7 @@ impl Debug for Client {
 ///
 // Re-export SharesChannel trait from subscriptions module
 pub use crate::subscriptions::SharesChannel;
+
+#[cfg(test)]
+#[path = "sync_tests.rs"]
+mod tests;

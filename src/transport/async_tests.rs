@@ -162,3 +162,67 @@ async fn test_read_and_route_surfaces_eof() {
         "unexpected error: {err:?}"
     );
 }
+
+/// `AsyncMessageBus::cancel_subscription` writes the cancel bytes through and
+/// drops the in-flight request channel so it stops accepting routes.
+#[tokio::test]
+async fn test_cancel_subscription_writes_and_clears_channel() {
+    let (stream, bus) = make_bus();
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+
+    let _sub = mb.send_request(100, b"req-bytes".to_vec()).await.unwrap();
+    mb.cancel_subscription(100, b"cancel-bytes".to_vec()).await.unwrap();
+
+    let captured = stream.captured();
+    assert!(captured.windows(b"cancel-bytes".len()).any(|w| w == b"cancel-bytes"));
+}
+
+/// `AsyncMessageBus::cancel_order_subscription` mirrors cancel_subscription on
+/// the orders channel.
+#[tokio::test]
+async fn test_cancel_order_subscription_writes_through() {
+    let (stream, bus) = make_bus();
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+
+    let _sub = mb.send_order_request(42, b"order-bytes".to_vec()).await.unwrap();
+    mb.cancel_order_subscription(42, b"cancel-bytes".to_vec()).await.unwrap();
+
+    let captured = stream.captured();
+    assert!(captured.windows(b"cancel-bytes".len()).any(|w| w == b"cancel-bytes"));
+}
+
+/// `AsyncMessageBus::send_message` writes through to the connection.
+#[tokio::test]
+async fn test_send_message_writes_through() {
+    let (stream, bus) = make_bus();
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+
+    mb.send_message(b"global-cancel-bytes".to_vec()).await.unwrap();
+
+    let captured = stream.captured();
+    assert!(captured.windows(b"global-cancel-bytes".len()).any(|w| w == b"global-cancel-bytes"));
+}
+
+/// `AsyncMessageBus::create_order_update_subscription` returns
+/// `AlreadySubscribed` on duplicate calls.
+#[tokio::test]
+async fn test_create_order_update_subscription_is_unique() {
+    let (_, bus) = make_bus();
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+
+    let _first = mb.create_order_update_subscription().await.unwrap();
+    let err = mb.create_order_update_subscription().await.err().expect("duplicate fails");
+    assert!(matches!(err, Error::AlreadySubscribed), "got: {err:?}");
+}
+
+/// `AsyncMessageBus::is_connected` reflects the bus state — true initially,
+/// false after `request_shutdown_sync` flips the flag.
+#[tokio::test]
+async fn test_is_connected_reflects_shutdown_flag() {
+    let (_, bus) = make_bus();
+    let mb: &dyn AsyncMessageBus = bus.as_ref();
+
+    assert!(mb.is_connected());
+    mb.request_shutdown_sync();
+    assert!(!mb.is_connected());
+}
