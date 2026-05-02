@@ -323,6 +323,7 @@ impl<T: TickDecoder<T> + Send> TickSubscription<T> {
     }
 
     /// Cancel the historical-ticks request. Safe to call after completion (no-op).
+    /// Also fired automatically on `Drop` for unfinished subscriptions; explicit calls are idempotent.
     pub async fn cancel(&self) {
         if self.cancelled.swap(true, Ordering::Relaxed) {
             return;
