@@ -4,12 +4,12 @@ use std::sync::Arc;
 
 use log::{debug, error, warn};
 use time::OffsetDateTime;
-use time_tz::Tz;
 
 use crate::client::ClientRequestBuilders;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::protocol::{check_version, Features};
+use crate::subscriptions::r#async::Subscription;
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
 use crate::{Client, Error, MAX_RETRIES};
 
@@ -250,17 +250,16 @@ impl Client {
         what_to_show: Option<WhatToShow>,
         trading_hours: TradingHours,
         keep_up_to_date: bool,
-    ) -> Result<HistoricalDataStreamingSubscription, Error> {
+    ) -> Result<Subscription<HistoricalBarUpdate>, Error> {
         if !contract.trading_class.is_empty() || contract.contract_id > 0 {
             check_version(self.server_version(), Features::TRADING_CLASS)?;
         }
 
-        // Note: end_date must be None when keepUpToDate=true (IBKR requirement)
         let builder = self.request();
         let request = encoders::encode_request_historical_data(
             builder.request_id(),
             contract,
-            None, // end_date must be None for keepUpToDate
+            None, // end_date must be None when keepUpToDate=true (IBKR requirement)
             duration,
             bar_size,
             what_to_show,
@@ -269,21 +268,7 @@ impl Client {
             &Vec::<crate::contracts::TagValue>::default(),
         )?;
 
-        let request_id = builder.request_id();
-        let subscription = builder.send_raw(request).await?;
-
-        let tz: &'static Tz = self.time_zone.unwrap_or_else(|| {
-            warn!("server timezone unknown. assuming UTC, but that may be incorrect!");
-            time_tz::timezones::db::UTC
-        });
-
-        Ok(HistoricalDataStreamingSubscription::new(
-            subscription,
-            self.server_version(),
-            tz,
-            request_id,
-            self.message_bus.clone(),
-        ))
+        builder.send::<HistoricalBarUpdate>(request).await
     }
 }
 
@@ -401,143 +386,6 @@ impl<T: TickDecoder<T> + Send> Drop for TickSubscription<T> {
             tokio::spawn(async move {
                 if let Err(e) = message_bus.cancel_subscription(request_id, message).await {
                     warn!("error sending cancel historical ticks in drop: {e}");
-                }
-            });
-        }
-    }
-}
-
-// === Historical Data Streaming with keepUpToDate ===
-
-/// Async subscription for streaming historical data with keepUpToDate=true.
-///
-/// This subscription first yields the initial historical bars as a `Historical` variant,
-/// then continues to yield streaming updates for the current bar as `Update` variants.
-pub struct HistoricalDataStreamingSubscription {
-    messages: AsyncInternalSubscription,
-    server_version: i32,
-    time_zone: &'static Tz,
-    error: Option<Error>,
-    request_id: i32,
-    message_bus: Arc<dyn AsyncMessageBus>,
-    cancelled: AtomicBool,
-}
-
-impl HistoricalDataStreamingSubscription {
-    fn new(
-        messages: AsyncInternalSubscription,
-        server_version: i32,
-        time_zone: &'static Tz,
-        request_id: i32,
-        message_bus: Arc<dyn AsyncMessageBus>,
-    ) -> Self {
-        Self {
-            messages,
-            server_version,
-            time_zone,
-            error: None,
-            request_id,
-            message_bus,
-            cancelled: AtomicBool::new(false),
-        }
-    }
-
-    /// Cancel the streaming subscription, sending CancelHistoricalData to the server.
-    pub async fn cancel(&self) {
-        if self.cancelled.swap(true, Ordering::Relaxed) {
-            return;
-        }
-        if let Ok(message) = encoders::encode_cancel_historical_data(self.request_id) {
-            if let Err(e) = self.message_bus.cancel_subscription(self.request_id, message).await {
-                warn!("error sending cancel historical data: {e}");
-            }
-        }
-    }
-
-    /// Get the next update from the streaming subscription.
-    ///
-    /// Returns:
-    /// - `Some(HistoricalBarUpdate::Historical(data))` - Initial batch of historical bars (always first)
-    /// - `Some(HistoricalBarUpdate::Update(bar))` - Streaming bar update
-    /// - `None` - Subscription ended (connection closed or error)
-    pub async fn next(&mut self) -> Option<HistoricalBarUpdate> {
-        loop {
-            match self.messages.next().await {
-                Some(Ok(mut message)) => {
-                    match message.message_type() {
-                        IncomingMessages::HistoricalData => {
-                            // Initial historical data batch
-                            match decoders::decode_historical_data(self.server_version, self.time_zone, &mut message) {
-                                Ok(data) => {
-                                    return Some(HistoricalBarUpdate::Historical(data));
-                                }
-                                Err(e) => {
-                                    self.error = Some(e);
-                                    return None;
-                                }
-                            }
-                        }
-                        IncomingMessages::HistoricalDataUpdate => {
-                            // Streaming bar update
-                            match decoders::decode_historical_data_update(self.time_zone, &mut message) {
-                                Ok(bar) => {
-                                    return Some(HistoricalBarUpdate::Update(bar));
-                                }
-                                Err(e) => {
-                                    self.error = Some(e);
-                                    return None;
-                                }
-                            }
-                        }
-                        IncomingMessages::HistoricalDataEnd => {
-                            match decoders::decode_historical_data_end(self.server_version, self.time_zone, &mut message) {
-                                Ok((start, end)) => return Some(HistoricalBarUpdate::End { start, end }),
-                                Err(e) => {
-                                    self.error = Some(e);
-                                    return None;
-                                }
-                            }
-                        }
-                        IncomingMessages::Error => {
-                            self.error = Some(Error::from(message));
-                            return None;
-                        }
-                        _ => {
-                            // Skip unexpected messages
-                            debug!("unexpected message in streaming subscription: {:?}", message.message_type());
-                            continue;
-                        }
-                    }
-                }
-                Some(Err(e)) => {
-                    self.error = Some(e);
-                    return None;
-                }
-                None => {
-                    // Channel closed
-                    return None;
-                }
-            }
-        }
-    }
-
-    /// Returns the last error that occurred, if any.
-    pub fn error(&self) -> Option<&Error> {
-        self.error.as_ref()
-    }
-}
-
-impl Drop for HistoricalDataStreamingSubscription {
-    fn drop(&mut self) {
-        if self.cancelled.swap(true, Ordering::Relaxed) {
-            return;
-        }
-        let request_id = self.request_id;
-        let message_bus = self.message_bus.clone();
-        if let Ok(message) = encoders::encode_cancel_historical_data(request_id) {
-            tokio::spawn(async move {
-                if let Err(e) = message_bus.cancel_subscription(request_id, message).await {
-                    warn!("error sending cancel historical data in drop: {e}");
                 }
             });
         }

@@ -9,10 +9,9 @@ use crate::client::blocking::ClientRequestBuilders;
 use crate::contracts::Contract;
 use crate::messages::IncomingMessages;
 use crate::protocol::{check_version, Features};
+use crate::subscriptions::sync::Subscription;
 use crate::transport::{InternalSubscription, MessageBus, Response};
 use crate::{client::sync::Client, Error, MAX_RETRIES};
-
-use time_tz::Tz;
 
 use super::common::{self, decoders, encoders};
 use super::{
@@ -192,17 +191,16 @@ impl Client {
         what_to_show: Option<WhatToShow>,
         trading_hours: TradingHours,
         keep_up_to_date: bool,
-    ) -> Result<HistoricalDataStreamingSubscription, Error> {
+    ) -> Result<Subscription<HistoricalBarUpdate>, Error> {
         if !contract.trading_class.is_empty() || contract.contract_id > 0 {
             check_version(self.server_version(), Features::TRADING_CLASS)?;
         }
 
-        // Note: end_date must be None when keepUpToDate=true (IBKR requirement)
         let builder = self.request();
         let request = encoders::encode_request_historical_data(
             builder.request_id(),
             contract,
-            None, // end_date must be None for keepUpToDate
+            None, // end_date must be None when keepUpToDate=true (IBKR requirement)
             duration,
             bar_size,
             what_to_show,
@@ -211,22 +209,7 @@ impl Client {
             &Vec::<crate::contracts::TagValue>::default(),
         )?;
 
-        let request_id = builder.request_id();
-        let subscription = builder.send_raw(request)?;
-
-        // Get the timezone directly
-        let tz: &'static Tz = self.time_zone.unwrap_or_else(|| {
-            warn!("server timezone unknown. assuming UTC, but that may be incorrect!");
-            time_tz::timezones::db::UTC
-        });
-
-        Ok(HistoricalDataStreamingSubscription::new(
-            subscription,
-            self.server_version,
-            tz,
-            request_id,
-            self.message_bus.clone(),
-        ))
+        builder.send::<HistoricalBarUpdate>(request)
     }
 
     /// Requests [Schedule] for an interval of given duration
@@ -567,153 +550,6 @@ fn historical_schedule(client: &Client, contract: &Contract, end_date: Option<Of
             Some(Err(e)) => return Err(e),
             None => return Err(Error::UnexpectedEndOfStream),
         }
-    }
-}
-
-// === Historical Data Streaming with keepUpToDate ===
-
-/// Blocking subscription for streaming historical data with keepUpToDate=true.
-///
-/// This subscription first yields the initial historical bars as a `Historical` variant,
-/// then continues to yield streaming updates for the current bar as `Update` variants.
-pub struct HistoricalDataStreamingSubscription {
-    messages: InternalSubscription,
-    server_version: i32,
-    time_zone: &'static Tz,
-    error: Mutex<Option<Error>>,
-    request_id: i32,
-    message_bus: Arc<dyn MessageBus>,
-    cancelled: AtomicBool,
-}
-
-impl HistoricalDataStreamingSubscription {
-    fn new(messages: InternalSubscription, server_version: i32, time_zone: &'static Tz, request_id: i32, message_bus: Arc<dyn MessageBus>) -> Self {
-        Self {
-            messages,
-            server_version,
-            time_zone,
-            error: Mutex::new(None),
-            request_id,
-            message_bus,
-            cancelled: AtomicBool::new(false),
-        }
-    }
-
-    /// Block until the next update is available.
-    ///
-    /// Returns:
-    /// - `Some(HistoricalBarUpdate::Historical(data))` - Initial batch of historical bars (always first)
-    /// - `Some(HistoricalBarUpdate::Update(bar))` - Streaming bar update
-    /// - `None` - Subscription ended (connection closed or error)
-    pub fn next(&self) -> Option<HistoricalBarUpdate> {
-        self.next_helper(|| self.messages.next())
-    }
-
-    /// Attempt to fetch the next update without blocking.
-    pub fn try_next(&self) -> Option<HistoricalBarUpdate> {
-        self.next_helper(|| self.messages.try_next())
-    }
-
-    /// Wait up to `duration` for the next update to arrive.
-    pub fn next_timeout(&self, duration: std::time::Duration) -> Option<HistoricalBarUpdate> {
-        self.next_helper(|| self.messages.next_timeout(duration))
-    }
-
-    fn next_helper<F>(&self, next_response: F) -> Option<HistoricalBarUpdate>
-    where
-        F: Fn() -> Option<Response>,
-    {
-        self.clear_error();
-
-        loop {
-            match next_response() {
-                Some(Ok(mut message)) => {
-                    match message.message_type() {
-                        IncomingMessages::HistoricalData => {
-                            // Initial historical data batch
-                            match decoders::decode_historical_data(self.server_version, self.time_zone, &mut message) {
-                                Ok(data) => {
-                                    return Some(HistoricalBarUpdate::Historical(data));
-                                }
-                                Err(e) => {
-                                    self.set_error(e);
-                                    return None;
-                                }
-                            }
-                        }
-                        IncomingMessages::HistoricalDataUpdate => {
-                            // Streaming bar update
-                            match decoders::decode_historical_data_update(self.time_zone, &mut message) {
-                                Ok(bar) => {
-                                    return Some(HistoricalBarUpdate::Update(bar));
-                                }
-                                Err(e) => {
-                                    self.set_error(e);
-                                    return None;
-                                }
-                            }
-                        }
-                        IncomingMessages::HistoricalDataEnd => {
-                            match decoders::decode_historical_data_end(self.server_version, self.time_zone, &mut message) {
-                                Ok((start, end)) => return Some(HistoricalBarUpdate::End { start, end }),
-                                Err(e) => {
-                                    self.set_error(e);
-                                    return None;
-                                }
-                            }
-                        }
-                        IncomingMessages::Error => {
-                            self.set_error(Error::from(message));
-                            return None;
-                        }
-                        _ => {
-                            // Skip unexpected messages
-                            debug!("unexpected message in streaming subscription: {:?}", message.message_type());
-                            continue;
-                        }
-                    }
-                }
-                Some(Err(e)) => {
-                    self.set_error(e);
-                    return None;
-                }
-                None => {
-                    return None;
-                }
-            }
-        }
-    }
-
-    /// Returns and clears the last error that occurred, if any.
-    pub fn error(&self) -> Option<Error> {
-        self.error.lock().unwrap().take()
-    }
-
-    fn set_error(&self, e: Error) {
-        *self.error.lock().unwrap() = Some(e);
-    }
-
-    fn clear_error(&self) {
-        *self.error.lock().unwrap() = None;
-    }
-
-    /// Cancel the subscription, sending CancelHistoricalData to the server.
-    pub fn cancel(&self) {
-        if self.cancelled.swap(true, Ordering::Relaxed) {
-            return;
-        }
-        if let Ok(message) = encoders::encode_cancel_historical_data(self.request_id) {
-            if let Err(e) = self.message_bus.cancel_subscription(self.request_id, &message) {
-                warn!("error sending cancel historical data: {e}");
-            }
-        }
-        self.messages.cancel();
-    }
-}
-
-impl Drop for HistoricalDataStreamingSubscription {
-    fn drop(&mut self) {
-        self.cancel();
     }
 }
 

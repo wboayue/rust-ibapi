@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use time::{Date, OffsetDateTime};
 
 use crate::messages::{IncomingMessages, ResponseMessage};
+use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::{Error, ToField};
 
 pub(crate) mod common;
@@ -359,6 +360,38 @@ pub enum HistoricalBarUpdate {
     },
 }
 
+impl StreamDecoder<HistoricalBarUpdate> for HistoricalBarUpdate {
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[
+        IncomingMessages::HistoricalData,
+        IncomingMessages::HistoricalDataUpdate,
+        IncomingMessages::HistoricalDataEnd,
+        IncomingMessages::Error,
+    ];
+
+    fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
+        let tz = context.time_zone.unwrap_or(time_tz::timezones::db::UTC);
+        match message.message_type() {
+            IncomingMessages::HistoricalData => Ok(Self::Historical(common::decoders::decode_historical_data(
+                context.server_version,
+                tz,
+                message,
+            )?)),
+            IncomingMessages::HistoricalDataUpdate => Ok(Self::Update(common::decoders::decode_historical_data_update(tz, message)?)),
+            IncomingMessages::HistoricalDataEnd => {
+                let (start, end) = common::decoders::decode_historical_data_end(context.server_version, tz, message)?;
+                Ok(Self::End { start, end })
+            }
+            IncomingMessages::Error => Err(Error::from(message.clone())),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
+        }
+    }
+
+    fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
+        let request_id = request_id.expect("Request ID required to encode cancel historical data");
+        common::encoders::encode_cancel_historical_data(request_id)
+    }
+}
+
 /// Trading schedule describing sessions for a contract.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
@@ -560,7 +593,7 @@ pub use sync::*;
 // Async API methods are now on Client directly via historical/async.rs
 // Re-export non-function items
 #[cfg(feature = "async")]
-pub use r#async::{HistoricalDataStreamingSubscription, TickSubscription};
+pub use r#async::TickSubscription;
 
 /// Trait implemented by historical tick types that can decode IB messages.
 pub trait TickDecoder<T> {
@@ -596,12 +629,7 @@ impl TickDecoder<TickMidpoint> for TickMidpoint {
 
 // Re-export TickSubscription and iterator types based on active feature
 #[cfg(all(feature = "sync", not(feature = "async")))]
-pub use sync::{
-    HistoricalDataStreamingSubscription, TickSubscription, TickSubscriptionIter, TickSubscriptionOwnedIter, TickSubscriptionTimeoutIter,
-    TickSubscriptionTryIter,
-};
-
-// (TickSubscription and HistoricalDataStreamingSubscription already re-exported above)
+pub use sync::{TickSubscription, TickSubscriptionIter, TickSubscriptionOwnedIter, TickSubscriptionTimeoutIter, TickSubscriptionTryIter};
 
 #[cfg(test)]
 mod tests {
