@@ -1,15 +1,16 @@
 use super::*;
 
-/// Round-trip a frame through the sync `MemoryStream`. A producer thread
-/// blocks on `Condvar::wait` first; a consumer thread pushes a frame, the
-/// reader unblocks, EOF surfaces as `Io(UnexpectedEof)` after `close`.
+/// Round-trip a frame through the sync `MemoryStream`. Either ordering is
+/// correct — if the consumer reaches `pop_front` first it parks on the
+/// `Condvar` and the producer's `notify_one` wakes it; if the producer pushes
+/// first the consumer returns immediately. EOF surfaces as `Io(UnexpectedEof)`
+/// after `close`.
 #[test]
 fn round_trip_frame() {
     let stream = MemoryStream::default();
 
     let producer = stream.clone();
     let push = std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(20));
         producer.push_inbound(b"hello".to_vec());
     });
 
