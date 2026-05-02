@@ -151,11 +151,39 @@ Net delta: drop ~6,400 LOC of test infrastructure; add ~300–500 LOC of `Memory
 
 Do **not** ship as a single PR. The diff (≈ −6,400 / +500 LOC) hides regressions inside the noise. Stage it:
 
-1. **PR 1 — async `MemoryStream` spike.** Add only `src/transport/async_memory.rs` plus a single throwaway test that round-trips a length-prefixed message. Confirms the `AsyncRead`/`AsyncWrite` + waker design works before any larger commitment. Land or discard before continuing.
-2. **PR 2 — add new test homes.** Add `src/transport/sync/memory.rs` (inside the existing directory module), `src/connection/{sync,async}_tests.rs` (flat siblings), `src/transport/async_tests.rs` (flat sibling), and the new transport-routing tests listed in Section 2. Old `MockGateway` infrastructure stays in place; both sets of tests run side-by-side. CI green + per-file coverage ≥ baseline (see Verification #7) gates merge.
-3. **PR 3 — coverage audit.** Land `todos/eliminate-mock-gateway-audit.md` (or a comment in this plan) with the per-test disposition table from Section 3. No code change. Reviewable as a docs PR.
-4. **PR 4 — port unique tests and close parity gaps.** Add `exercise_options` to `orders/sync/tests.rs`, port `test_subscription_cancel_only_sends_once` and `test_disconnect_*` to their new homes, plus any other items the audit flagged `[migrate]` or `[parity-fix]`. Every parity gap surfaced by the audit (sync-only or async-only behavior) must be closed in this PR, not deferred.
-5. **PR 5 — delete `MockGateway` infrastructure and collapse empty directory modules.** All 6,400 LOC of removals plus the `client/{sync,async}/` directory → flat-file collapse from Section 4(a). Reviewer can verify "everything deleted here is either duplicated elsewhere or already migrated by PRs 2/4," and the directory collapse is mechanical once `tests.rs` is gone.
+1. ✅ **PR 1 — async `MemoryStream` spike** (#473, merged). Validated `AsyncRead`/`AsyncWrite` + waker design via `src/transport/async_memory.rs`. Note: the byte-level design from this PR was later replaced with a frame-level `AsyncIo` impl in PR 2c-prep when the trait abstraction landed; the spike still served its purpose by gating the design choice.
+2. PR 2 was split into four parts because the original scope conflated scaffolding, refactor work, and routing tests:
+   - ✅ **PR 2a — scaffold MemoryStream test homes** (#474, merged). Added `src/transport/sync/memory.rs` plus three scaffold test files (`connection/{sync,async}_tests.rs`, `transport/async_tests.rs`).
+   - ✅ **PR 2b — sync routing tests** (#475, merged). Five tests in `src/transport/sync/tests.rs`: request_id correlation under interleaving, order_id correlation, shared-channel fan-out for OpenOrder, shared-channel routing for CurrentTime, EOF surfacing.
+   - ✅ **PR 2c-prep — generic `AsyncConnection` / `AsyncTcpMessageBus`** (#476, merged). Refactored async transport to be generic over a new `AsyncStream` trait (`src/transport/async_io.rs`), unblocking `AsyncConnection<MemoryStream>` and `AsyncTcpMessageBus<MemoryStream>` for tests. Rewrote `MemoryStream` to frame-level (`std::sync::Mutex` + `tokio::sync::Notify`).
+   - ✅ **PR 2c — async routing tests** (#477, merged). Mirror of PR 2b's five tests in `src/transport/async_tests.rs`. One pub(crate) widening: `AsyncTcpMessageBus::read_and_route_message` (analog of sync's `dispatch`).
+3. ✅ **PR 3 — coverage audit** (#478, in review). `todos/eliminate-mock-gateway-audit.md` lists every test in `client/{sync,async}/tests.rs` with disposition. Findings: 109/117 are duplicates of per-domain tests (delete in PR 5); 6 unique tests need migration (handshake × 2, disconnect × 4); 3 parity gaps need new tests.
+4. **PR 4 — port unique tests and close parity gaps.** Concrete scope from the audit (`todos/eliminate-mock-gateway-audit.md`):
+
+   **Migrate to `connection/sync_tests.rs`** (using `Connection::stubbed(MemoryStream, ...)` + scripted handshake responses — script bytes via `messages::encode_length` for the version exchange and account-info phases):
+   - `test_connect` — handshake smoke (sync, line 11)
+   - `test_disconnect_completes` — dispatcher-thread shutdown (sync, line 2532)
+   - `test_disconnect_is_idempotent` — repeated `disconnect()` calls (sync, line 2544)
+
+   **Migrate to `connection/async_tests.rs`** (using `AsyncConnection::stubbed(MemoryStream, ...)`; the async `MemoryStream` already supports the same scripted-frame API):
+   - `test_connect` — handshake smoke (async, line 9)
+   - `test_disconnect_completes` — async dispatcher shutdown via `process_messages` task (async, line 2505)
+   - `test_disconnect_is_idempotent` — same fixture as above (async, line 2517)
+
+   **Parity-fix new tests** (no migration; write fresh per-domain test):
+   - `exercise_options` test in `orders/sync/tests.rs` — async has `test_exercise_options` at `orders/async/tests.rs:257`; sync per-domain file lacks it.
+   - `subscription_cancel_only_sends_once` in `market_data/realtime/async/tests.rs` — sync test at `client/sync/tests.rs:401` is already `MessageBusStub`-based; port verbatim to async.
+   - `client_id` field-accessor in `client/async_tests.rs` (or drop both — trivial; defer to reviewer).
+
+   Every parity gap surfaced by the audit must be closed in this PR, not deferred.
+
+5. **PR 5 — delete `MockGateway` infrastructure and collapse empty directory modules.** All 6,400 LOC of removals plus the `client/{sync,async}/` directory → flat-file collapse from Section 4(a). Specific deletions:
+   - `src/client/sync/tests.rs` (2,555 LOC, then the empty `client/sync/` directory)
+   - `src/client/async/tests.rs` (2,527 LOC, then the empty `client/async/` directory)
+   - `src/client/test_support/{mocks,scenarios,mod}.rs` (~1,300 LOC)
+   - The two `#[cfg(test)] mod tests` blocks in `src/client/builders/{sync,async}.rs:306,347` that import `MockGateway`. Per the audit, port their `setup_connect`-based tests to use `Connection<MemoryStream>` if not already redundant; otherwise delete.
+   - `client/{sync,async}/mod.rs` → flat `client/{sync,async}.rs`, update `src/client/mod.rs` declarations.
+   Reviewer verifies "everything deleted here is either duplicated elsewhere or migrated by PR 4" against the audit table.
 
 ## Files to modify
 
@@ -197,8 +225,8 @@ Do **not** ship as a single PR. The diff (≈ −6,400 / +500 LOC) hides regress
 
 ## Key design constraints
 
-- **No new trait surface.** Reuse existing `Stream` / `Io` / `Reconnect`. Per the user's choice, this keeps the production API untouched.
-- **Sync and async parity.** Both `MemoryStream` variants must compile under default-features (async), `--features sync`, and `--all-features` (per CLAUDE.md item 5). Both must be `#[cfg(test)] pub(crate)` so they don't leak.
+- **Async needed a new trait surface; sync did not.** The original plan called for "no new trait surface" but async previously had no analog of sync's `Stream: Io + Reconnect`. PR 2c-prep added `AsyncIo` / `AsyncReconnect` / `AsyncStream` in `src/transport/async_io.rs`, mirroring sync. `pub(crate)` only — production `Client` API untouched.
+- **Sync and async parity.** Both `MemoryStream` variants must compile under default-features (async), `--features sync`, and `--all-features` (per CLAUDE.md item 5). Both are `#[cfg(test)] pub(crate)` so they don't leak.
 - **No real I/O in tests.** No `TcpListener::bind`, no `thread::sleep`, no port allocation. `MemoryStream` is fully deterministic.
 - **Coverage parity, not test-count parity.** Before deletion, verify each unique behavior in `client/{sync,async}/tests.rs` is either (a) covered by a per-domain test today, or (b) reproduced in the new connection/transport tests. Items only in `client/tests.rs` and not duplicated elsewhere migrate; items duplicated elsewhere just get deleted.
 
