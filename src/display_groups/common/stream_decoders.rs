@@ -26,11 +26,12 @@ impl DisplayGroupUpdate {
 }
 
 impl StreamDecoder<DisplayGroupUpdate> for DisplayGroupUpdate {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::DisplayGroupUpdated];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::DisplayGroupUpdated, IncomingMessages::Error];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::DisplayGroupUpdated => decoders::decode_display_group_updated(message),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -79,6 +80,23 @@ mod tests {
         let result = DisplayGroupUpdate::decode(&test_context(), &mut message);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_error_message_surfaces_tws_error() {
+        // Issue #434: error message arriving on a subscription's request_id channel
+        // must surface as Error::Message(code, text), not be silently skipped.
+        let mut message = make_response(&["4", "2", "9000", "10089", "Requested market data is not subscribed"]);
+
+        let err = DisplayGroupUpdate::decode(&test_context(), &mut message).unwrap_err();
+
+        match err {
+            Error::Message(code, msg) => {
+                assert_eq!(code, 10089);
+                assert!(msg.contains("not subscribed"));
+            }
+            other => panic!("expected Error::Message, got {other:?}"),
+        }
     }
 
     #[test]

@@ -12,12 +12,13 @@ use super::decoders;
 use super::encoders;
 
 impl StreamDecoder<OptionComputation> for OptionComputation {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickOptionComputation];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::TickOptionComputation, IncomingMessages::Error];
 
     fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::TickOptionComputation => Ok(decoders::decode_option_computation(context.server_version, message)?),
-            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 
@@ -37,11 +38,58 @@ impl StreamDecoder<OptionComputation> for OptionComputation {
 }
 
 impl StreamDecoder<OptionChain> for OptionChain {
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
+        IncomingMessages::SecurityDefinitionOptionParameter,
+        IncomingMessages::SecurityDefinitionOptionParameterEnd,
+        IncomingMessages::Error,
+    ];
+
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<OptionChain, Error> {
         match message.message_type() {
             IncomingMessages::SecurityDefinitionOptionParameter => Ok(decoders::decode_option_chain(message)?),
             IncomingMessages::SecurityDefinitionOptionParameterEnd => Err(Error::EndOfStream),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_context() -> DecoderContext {
+        DecoderContext::new(176, None)
+    }
+
+    fn error_message() -> ResponseMessage {
+        ResponseMessage::from_simple("4|2|9000|10089|Requested market data is not subscribed|")
+    }
+
+    #[test]
+    fn test_option_computation_decode_error_message() {
+        // Issue #434: error message arriving on a subscription's request_id channel
+        // must surface as Error::Message(code, text), not as a parse failure or
+        // generic "unexpected message" error.
+        let mut message = error_message();
+        match OptionComputation::decode(&test_context(), &mut message).unwrap_err() {
+            Error::Message(code, msg) => {
+                assert_eq!(code, 10089);
+                assert!(msg.contains("not subscribed"));
+            }
+            other => panic!("expected Error::Message, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_option_chain_decode_error_message() {
+        let mut message = error_message();
+        match OptionChain::decode(&test_context(), &mut message).unwrap_err() {
+            Error::Message(code, msg) => {
+                assert_eq!(code, 10089);
+                assert!(msg.contains("not subscribed"));
+            }
+            other => panic!("expected Error::Message, got {other:?}"),
         }
     }
 }

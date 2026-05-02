@@ -7,11 +7,12 @@ use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
 
 impl StreamDecoder<NewsBulletin> for NewsBulletin {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::NewsBulletins];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::NewsBulletins, IncomingMessages::Error];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<NewsBulletin, Error> {
         match message.message_type() {
             IncomingMessages::NewsBulletins => Ok(decoders::decode_news_bulletin(message.clone())?),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -26,6 +27,7 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
         IncomingMessages::HistoricalNews,
         IncomingMessages::HistoricalNewsEnd,
         IncomingMessages::TickNews,
+        IncomingMessages::Error,
     ];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<NewsArticle, Error> {
@@ -33,6 +35,7 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
             IncomingMessages::HistoricalNews => Ok(decoders::decode_historical_news(None, message.clone())?),
             IncomingMessages::HistoricalNewsEnd => Err(Error::EndOfStream),
             IncomingMessages::TickNews => Ok(decoders::decode_tick_news(message.clone())?),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -44,6 +47,45 @@ impl StreamDecoder<NewsArticle> for NewsArticle {
             realtime::common::encoders::encode_cancel_market_data(request_id)
         } else {
             Err(Error::NotImplemented)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_context() -> DecoderContext {
+        DecoderContext::new(176, None)
+    }
+
+    fn error_message() -> ResponseMessage {
+        ResponseMessage::from_simple("4|2|9000|10089|Requested market data is not subscribed|")
+    }
+
+    #[test]
+    fn test_news_bulletin_decode_error_message() {
+        // Issue #434: error on the request_id channel surfaces as Error::Message,
+        // not silently skipped via UnexpectedResponse.
+        let mut message = error_message();
+        match NewsBulletin::decode(&test_context(), &mut message).unwrap_err() {
+            Error::Message(code, msg) => {
+                assert_eq!(code, 10089);
+                assert!(msg.contains("not subscribed"));
+            }
+            other => panic!("expected Error::Message, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_news_article_decode_error_message() {
+        let mut message = error_message();
+        match NewsArticle::decode(&test_context(), &mut message).unwrap_err() {
+            Error::Message(code, msg) => {
+                assert_eq!(code, 10089);
+                assert!(msg.contains("not subscribed"));
+            }
+            other => panic!("expected Error::Message, got {other:?}"),
         }
     }
 }

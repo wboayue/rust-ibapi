@@ -186,7 +186,10 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                     NextAction::Return(None)
                 }
                 ProcessingResult::Error(err) => {
-                    error!("error decoding message: {err}");
+                    match &err {
+                        Error::Message(code, msg) => warn!("subscription terminated by TWS error [{code}] {msg}"),
+                        _ => error!("error decoding message: {err}"),
+                    }
                     let mut error = self.error.lock().unwrap();
                     *error = Some(err);
                     NextAction::Return(None)

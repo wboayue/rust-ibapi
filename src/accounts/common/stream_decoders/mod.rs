@@ -12,7 +12,11 @@ use super::{decoders, encoders};
 use crate::common::error_helpers;
 
 impl StreamDecoder<AccountSummaryResult> for AccountSummaryResult {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::AccountSummary, IncomingMessages::AccountSummaryEnd];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
+        IncomingMessages::AccountSummary,
+        IncomingMessages::AccountSummaryEnd,
+        IncomingMessages::Error,
+    ];
 
     fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
@@ -21,7 +25,8 @@ impl StreamDecoder<AccountSummaryResult> for AccountSummaryResult {
                 message,
             )?)),
             IncomingMessages::AccountSummaryEnd => Ok(AccountSummaryResult::End),
-            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 
@@ -32,10 +37,14 @@ impl StreamDecoder<AccountSummaryResult> for AccountSummaryResult {
 }
 
 impl StreamDecoder<PnL> for PnL {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::PnL];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::PnL, IncomingMessages::Error];
 
     fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
-        decoders::decode_pnl(context.server_version, message)
+        match message.message_type() {
+            IncomingMessages::PnL => decoders::decode_pnl(context.server_version, message),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
+        }
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
@@ -45,10 +54,14 @@ impl StreamDecoder<PnL> for PnL {
 }
 
 impl StreamDecoder<PnLSingle> for PnLSingle {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::PnLSingle];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::PnLSingle, IncomingMessages::Error];
 
     fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
-        decoders::decode_pnl_single(context.server_version, message)
+        match message.message_type() {
+            IncomingMessages::PnLSingle => decoders::decode_pnl_single(context.server_version, message),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
+        }
     }
 
     fn cancel_message(_server_version: i32, request_id: Option<i32>, _context: Option<&DecoderContext>) -> Result<Vec<u8>, Error> {
@@ -58,13 +71,14 @@ impl StreamDecoder<PnLSingle> for PnLSingle {
 }
 
 impl StreamDecoder<PositionUpdate> for PositionUpdate {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::Position, IncomingMessages::PositionEnd, IncomingMessages::Error];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::Position => Ok(PositionUpdate::Position(decoders::decode_position(message)?)),
             IncomingMessages::PositionEnd => Ok(PositionUpdate::PositionEnd),
-            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 
@@ -74,13 +88,18 @@ impl StreamDecoder<PositionUpdate> for PositionUpdate {
 }
 
 impl StreamDecoder<PositionUpdateMulti> for PositionUpdateMulti {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::PositionMulti, IncomingMessages::PositionMultiEnd];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
+        IncomingMessages::PositionMulti,
+        IncomingMessages::PositionMultiEnd,
+        IncomingMessages::Error,
+    ];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::PositionMulti => Ok(PositionUpdateMulti::Position(decoders::decode_position_multi(message)?)),
             IncomingMessages::PositionMultiEnd => Ok(PositionUpdateMulti::PositionEnd),
-            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 
@@ -96,6 +115,7 @@ impl StreamDecoder<AccountUpdate> for AccountUpdate {
         IncomingMessages::PortfolioValue,
         IncomingMessages::AccountUpdateTime,
         IncomingMessages::AccountDownloadEnd,
+        IncomingMessages::Error,
     ];
 
     fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
@@ -107,7 +127,8 @@ impl StreamDecoder<AccountUpdate> for AccountUpdate {
             )?)),
             IncomingMessages::AccountUpdateTime => Ok(AccountUpdate::UpdateTime(decoders::decode_account_update_time(message)?)),
             IncomingMessages::AccountDownloadEnd => Ok(AccountUpdate::End),
-            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 
@@ -117,13 +138,18 @@ impl StreamDecoder<AccountUpdate> for AccountUpdate {
 }
 
 impl StreamDecoder<AccountUpdateMulti> for AccountUpdateMulti {
-    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[IncomingMessages::AccountUpdateMulti, IncomingMessages::AccountUpdateMultiEnd];
+    const RESPONSE_MESSAGE_IDS: &'static [IncomingMessages] = &[
+        IncomingMessages::AccountUpdateMulti,
+        IncomingMessages::AccountUpdateMultiEnd,
+        IncomingMessages::Error,
+    ];
 
     fn decode(_context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::AccountUpdateMulti => Ok(AccountUpdateMulti::AccountMultiValue(decoders::decode_account_multi_value(message)?)),
             IncomingMessages::AccountUpdateMultiEnd => Ok(AccountUpdateMulti::End),
-            message => Err(Error::Simple(format!("unexpected message: {message:?}"))),
+            IncomingMessages::Error => Err(Error::from(message.clone())),
+            _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
 
