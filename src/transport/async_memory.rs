@@ -1,25 +1,23 @@
-//! In-memory `AsyncRead` + `AsyncWrite` stream for transport tests.
+//! In-memory frame-level `AsyncStream` for transport tests.
 //!
-//! Spike for the eliminate-mock-gateway plan (PR 1). Validates that a custom
-//! `AsyncRead`/`AsyncWrite` impl with explicit waker registration round-trips
-//! length-prefixed frames without busy-spinning. Not yet wired into
-//! `AsyncConnection`; PR 2 does that.
+//! Mirrors `transport/sync/memory.rs` for the async transport. Operates at the
+//! frame level: `read_message` returns one queued body per call.
 
 use std::collections::VecDeque;
 use std::io;
-use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll, Waker};
+use std::time::Duration;
 
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use async_trait::async_trait;
+use tokio::sync::Notify;
 
-use crate::messages::encode_raw_length;
+use super::io::{AsyncIo, AsyncReconnect, AsyncStream};
+use crate::errors::Error;
 
 #[derive(Default)]
 struct Inner {
-    inbound: VecDeque<u8>,
+    inbound: VecDeque<Vec<u8>>,
     outbound: Vec<u8>,
-    read_waker: Option<Waker>,
     closed: bool,
 }
 
@@ -27,24 +25,14 @@ struct Inner {
 #[derive(Clone, Default)]
 pub(crate) struct MemoryStream {
     inner: Arc<Mutex<Inner>>,
+    notify: Arc<Notify>,
 }
 
 impl MemoryStream {
-    /// Append bytes that the consumer (production code) will read.
-    pub fn push_inbound(&self, bytes: &[u8]) {
-        let waker = {
-            let mut inner = self.inner.lock().unwrap();
-            inner.inbound.extend(bytes);
-            inner.read_waker.take()
-        };
-        if let Some(w) = waker {
-            w.wake();
-        }
-    }
-
-    /// Append a length-prefixed frame: 4-byte BE length + payload.
-    pub fn push_frame(&self, payload: &[u8]) {
-        self.push_inbound(&encode_raw_length(payload));
+    /// Append a single message body to the inbound queue. Wakes any blocked reader.
+    pub fn push_inbound(&self, body: Vec<u8>) {
+        self.inner.lock().unwrap().inbound.push_back(body);
+        self.notify.notify_one();
     }
 
     /// Snapshot of every byte the consumer has written.
@@ -52,58 +40,59 @@ impl MemoryStream {
         self.inner.lock().unwrap().outbound.clone()
     }
 
-    /// Signal EOF. Subsequent `poll_read` calls return `Ok(())` with no bytes filled.
+    /// Signal EOF. Subsequent `read_message` calls return `Error::Io(UnexpectedEof)`,
+    /// matching `AsyncTcpSocket::read_message`'s behavior on a closed peer.
     pub fn close(&self) {
-        let waker = {
-            let mut inner = self.inner.lock().unwrap();
-            inner.closed = true;
-            inner.read_waker.take()
-        };
-        if let Some(w) = waker {
-            w.wake();
-        }
+        self.inner.lock().unwrap().closed = true;
+        self.notify.notify_waiters();
     }
 }
 
-impl AsyncRead for MemoryStream {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        let mut inner = self.inner.lock().unwrap();
-        if inner.inbound.is_empty() {
-            if inner.closed {
-                return Poll::Ready(Ok(()));
+impl std::fmt::Debug for MemoryStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MemoryStream").finish_non_exhaustive()
+    }
+}
+
+#[async_trait]
+impl AsyncIo for MemoryStream {
+    async fn read_message(&self) -> Result<Vec<u8>, Error> {
+        loop {
+            // Arm the notification BEFORE checking state, so a `notify_one`
+            // racing with the check can't be lost.
+            let notified = self.notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+
+            {
+                let mut inner = self.inner.lock().unwrap();
+                if let Some(body) = inner.inbound.pop_front() {
+                    return Ok(body);
+                }
+                if inner.closed {
+                    return Err(Error::Io(io::Error::new(io::ErrorKind::UnexpectedEof, "MemoryStream closed")));
+                }
             }
-            inner.read_waker = Some(cx.waker().clone());
-            return Poll::Pending;
-        }
-        let want = buf.remaining();
-        let (a, b) = inner.inbound.as_slices();
-        let from_a = a.len().min(want);
-        buf.put_slice(&a[..from_a]);
-        let mut consumed = from_a;
-        if from_a < want {
-            let from_b = b.len().min(want - from_a);
-            buf.put_slice(&b[..from_b]);
-            consumed += from_b;
-        }
-        inner.inbound.drain(..consumed);
-        Poll::Ready(Ok(()))
-    }
-}
 
-impl AsyncWrite for MemoryStream {
-    fn poll_write(self: Pin<&mut Self>, _cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+            notified.await;
+        }
+    }
+
+    async fn write_all(&self, buf: &[u8]) -> Result<(), Error> {
         self.inner.lock().unwrap().outbound.extend_from_slice(buf);
-        Poll::Ready(Ok(buf.len()))
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Poll::Ready(Ok(()))
+        Ok(())
     }
 }
+
+#[async_trait]
+impl AsyncReconnect for MemoryStream {
+    async fn reconnect(&self) -> Result<(), Error> {
+        Ok(())
+    }
+    async fn sleep(&self, _duration: Duration) {}
+}
+
+impl AsyncStream for MemoryStream {}
 
 #[cfg(test)]
 #[path = "async_memory_tests.rs"]
