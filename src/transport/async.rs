@@ -328,7 +328,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     }
 
     /// Read a message and route it to the appropriate channel
-    async fn read_and_route_message(&self) -> Result<(), Error> {
+    pub(crate) async fn read_and_route_message(&self) -> Result<(), Error> {
         let message = self.connection.read_message().await?;
 
         // Use common routing logic
