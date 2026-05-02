@@ -3,11 +3,6 @@
 use std::sync::atomic::{AtomicI32, Ordering};
 
 use log::{debug, info};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
-use tokio::net::TcpStream;
-use tokio::sync::Mutex;
-use tokio::time::sleep;
 
 use super::common::{
     parse_connection_time, parse_raw_message, AccountInfo, ConnectionHandler, ConnectionOptions, ConnectionProtocol, StartupMessageCallback,
@@ -17,25 +12,26 @@ use crate::errors::Error;
 use crate::messages::{encode_raw_length, ResponseMessage};
 use crate::trace;
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
+use crate::transport::r#async::{AsyncStream, AsyncTcpSocket};
 use crate::transport::recorder::MessageRecorder;
+use tokio::sync::Mutex;
 
 type Response = Result<ResponseMessage, Error>;
 
-/// Asynchronous connection to TWS
+/// Asynchronous connection to TWS, generic over the underlying `AsyncStream`.
+/// The default `AsyncTcpSocket` is the production wiring; tests can substitute
+/// an in-memory stream to drive the bus deterministically.
 #[derive(Debug)]
-pub struct AsyncConnection {
+pub struct AsyncConnection<S: AsyncStream = AsyncTcpSocket> {
     pub(crate) client_id: i32,
-    pub(crate) reader: Mutex<OwnedReadHalf>,
-    pub(crate) writer: Mutex<OwnedWriteHalf>,
+    pub(crate) socket: S,
     pub(crate) connection_metadata: Mutex<ConnectionMetadata>,
     pub(crate) server_version_cache: AtomicI32,
     pub(crate) recorder: MessageRecorder,
     pub(crate) connection_handler: ConnectionHandler,
-    pub(crate) connection_url: String,
-    pub(crate) options: ConnectionOptions,
 }
 
-impl AsyncConnection {
+impl AsyncConnection<AsyncTcpSocket> {
     /// Create a new async connection
     #[allow(dead_code)]
     pub async fn connect(address: &str, client_id: i32) -> Result<Self, Error> {
@@ -55,13 +51,22 @@ impl AsyncConnection {
     /// Applies settings from [`ConnectionOptions`] (e.g. `TCP_NODELAY`, startup callback)
     /// before performing the TWS handshake.
     pub async fn connect_with_options(address: &str, client_id: i32, options: ConnectionOptions) -> Result<Self, Error> {
-        let socket = Self::connect_socket(address, &options).await?;
-        let (read_half, write_half) = socket.into_split();
+        let socket = AsyncTcpSocket::connect(address, options.tcp_no_delay).await?;
+        let connection = Self::stubbed(socket, client_id);
+        let cb_ref = options.startup_callback.as_deref();
+        connection.establish_connection(cb_ref).await?;
+        Ok(connection)
+    }
+}
 
-        let connection = Self {
+impl<S: AsyncStream> AsyncConnection<S> {
+    /// Build a connection over an arbitrary `AsyncStream` without performing
+    /// the handshake. For tests; the production path uses `connect_*` which
+    /// runs `establish_connection` immediately after construction.
+    pub(crate) fn stubbed(socket: S, client_id: i32) -> Self {
+        Self {
             client_id,
-            reader: Mutex::new(read_half),
-            writer: Mutex::new(write_half),
+            socket,
             connection_metadata: Mutex::new(ConnectionMetadata {
                 client_id,
                 ..Default::default()
@@ -69,20 +74,7 @@ impl AsyncConnection {
             server_version_cache: AtomicI32::new(0),
             recorder: MessageRecorder::from_env(),
             connection_handler: ConnectionHandler::default(),
-            connection_url: address.to_string(),
-            options,
-        };
-
-        let cb_ref = connection.options.startup_callback.as_deref();
-        connection.establish_connection(cb_ref).await?;
-
-        Ok(connection)
-    }
-
-    async fn connect_socket(address: &str, options: &ConnectionOptions) -> Result<TcpStream, Error> {
-        let socket = TcpStream::connect(address).await?;
-        socket.set_nodelay(options.tcp_no_delay)?;
-        Ok(socket)
+        }
     }
 
     /// Get a copy of the connection metadata
@@ -105,25 +97,13 @@ impl AsyncConnection {
             let next_delay = backoff.next_delay();
             info!("next reconnection attempt in {next_delay:#?}");
 
-            sleep(next_delay).await;
+            self.socket.sleep(next_delay).await;
 
-            match Self::connect_socket(&self.connection_url, &self.options).await {
-                Ok(new_socket) => {
+            match self.socket.reconnect().await {
+                Ok(_) => {
                     info!("reconnected !!!");
-
-                    let (new_reader, new_writer) = new_socket.into_split();
-                    {
-                        let mut reader = self.reader.lock().await;
-                        *reader = new_reader;
-                    }
-                    {
-                        let mut writer = self.writer.lock().await;
-                        *writer = new_writer;
-                    }
-
                     // Reconnection doesn't use startup callback
                     self.establish_connection(None).await?;
-
                     return Ok(());
                 }
                 Err(e) => {
@@ -153,25 +133,7 @@ impl AsyncConnection {
 
     /// Read a message from the connection
     pub(crate) async fn read_message(&self) -> Response {
-        let mut reader = self.reader.lock().await;
-
-        // Read message length
-        let mut length_bytes = [0u8; 4];
-        match reader.read_exact(&mut length_bytes).await {
-            Ok(_) => {}
-            Err(e) => {
-                debug!("Error reading message length: {:?}", e);
-                return Err(Error::Io(e));
-            }
-        }
-
-        let message_length = u32::from_be_bytes(length_bytes) as usize;
-
-        // Read message data
-        let mut data = vec![0u8; message_length];
-        reader.read_exact(&mut data).await?;
-
-        drop(reader);
+        let data = self.socket.read_message().await?;
 
         let (message, trace_str) = parse_raw_message(&data, self.server_version());
 
@@ -189,9 +151,7 @@ impl AsyncConnection {
     /// Write raw bytes with a length prefix
     pub(crate) async fn write_raw(&self, data: &[u8]) -> Result<(), Error> {
         let packet = encode_raw_length(data);
-        let mut writer = self.writer.lock().await;
-        writer.write_all(&packet).await?;
-        writer.flush().await?;
+        self.socket.write_all(&packet).await?;
         Ok(())
     }
 
@@ -200,22 +160,16 @@ impl AsyncConnection {
         let handshake = self.connection_handler.format_handshake();
         debug!("-> handshake: {handshake:?}");
 
-        {
-            let mut writer = self.writer.lock().await;
-            writer.write_all(&handshake).await?;
-        }
+        self.socket.write_all(&handshake).await?;
 
         // Read handshake response as raw text, bypassing parse_raw_message
         // which would misinterpret it as binary when server_version >= PROTOBUF (on reconnect).
-        let ack: Result<ResponseMessage, Error> = {
-            let mut reader = self.reader.lock().await;
-            let mut length_bytes = [0u8; 4];
-            reader.read_exact(&mut length_bytes).await?;
-            let message_length = u32::from_be_bytes(length_bytes) as usize;
-            let mut data = vec![0u8; message_length];
-            reader.read_exact(&mut data).await?;
-            let raw_string = String::from_utf8_lossy(&data).into_owned();
-            Ok(ResponseMessage::from(&raw_string))
+        let ack: Result<ResponseMessage, Error> = match self.socket.read_message().await {
+            Ok(data) => {
+                let raw_string = String::from_utf8_lossy(&data).into_owned();
+                Ok(ResponseMessage::from(&raw_string))
+            }
+            Err(err) => Err(err),
         };
 
         let mut connection_metadata = self.connection_metadata.lock().await;

@@ -24,6 +24,10 @@ pub enum CleanupSignal {
     OrderUpdateStream,
 }
 
+#[path = "async_io.rs"]
+mod io;
+pub(crate) use io::{AsyncStream, AsyncTcpSocket};
+
 use crate::connection::r#async::AsyncConnection;
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::Error;
@@ -149,8 +153,8 @@ impl Drop for AsyncInternalSubscription {
 type BroadcastSender = broadcast::Sender<ResponseMessage>;
 
 /// Asynchronous TCP message bus implementation
-pub struct AsyncTcpMessageBus {
-    connection: Arc<AsyncConnection>,
+pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
+    connection: Arc<AsyncConnection<S>>,
     /// Maps request IDs to their response channels
     request_channels: Arc<RwLock<HashMap<i32, BroadcastSender>>>,
     /// Maps IncomingMessages to broadcast senders (like sync does)
@@ -174,7 +178,7 @@ pub struct AsyncTcpMessageBus {
     connected: Arc<AtomicBool>,
 }
 
-impl Drop for AsyncTcpMessageBus {
+impl<S: AsyncStream> Drop for AsyncTcpMessageBus<S> {
     fn drop(&mut self) {
         debug!("dropping async tcp message bus");
         // Set the shutdown flag and notify the message loop to exit
@@ -183,9 +187,9 @@ impl Drop for AsyncTcpMessageBus {
     }
 }
 
-impl AsyncTcpMessageBus {
+impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     /// Create a new async TCP message bus
-    pub fn new(connection: AsyncConnection) -> Result<Self, Error> {
+    pub fn new(connection: AsyncConnection<S>) -> Result<Self, Error> {
         let (cleanup_sender, cleanup_receiver) = mpsc::unbounded_channel();
 
         // Pre-create broadcast channels for all shared channels (like sync does)
@@ -622,7 +626,7 @@ impl AsyncTcpMessageBus {
 }
 
 #[async_trait]
-impl AsyncMessageBus for AsyncTcpMessageBus {
+impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
     async fn send_request(&self, request_id: i32, message: Vec<u8>) -> Result<AsyncInternalSubscription, Error> {
         let (sender, receiver) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
 
@@ -765,6 +769,8 @@ impl AsyncMessageBus for AsyncTcpMessageBus {
 #[cfg(test)]
 #[path = "async_memory.rs"]
 mod memory;
+#[cfg(test)]
+pub(crate) use memory::MemoryStream;
 
 #[cfg(test)]
 #[path = "async_tests.rs"]
