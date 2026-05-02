@@ -691,6 +691,71 @@ async fn test_historical_data_streaming_error_response() {
 }
 
 #[tokio::test]
+async fn test_tick_subscription_sends_cancel_on_drop() {
+    let message_bus = Arc::new(MessageBusStub {
+        request_messages: RwLock::new(vec![]),
+        response_messages: vec![],
+    });
+
+    let (_tx, rx) = tokio::sync::broadcast::channel(16);
+    let internal = AsyncInternalSubscription::new(rx);
+
+    {
+        let _subscription: TickSubscription<TickLast> = TickSubscription::new(internal, 9100, message_bus.clone());
+        // dropped here, !done so cancel should fire
+    }
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let messages = message_bus.request_messages.read().unwrap();
+    assert_eq!(messages.len(), 1, "should send cancel message on drop");
+    assert_proto_msg_id(&messages[0], OutgoingMessages::CancelHistoricalTicks);
+}
+
+#[tokio::test]
+async fn test_tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
+    let message_bus = Arc::new(MessageBusStub {
+        request_messages: RwLock::new(vec![]),
+        response_messages: vec![],
+    });
+
+    let (_tx, rx) = tokio::sync::broadcast::channel(16);
+    let internal = AsyncInternalSubscription::new(rx);
+
+    {
+        let subscription: TickSubscription<TickLast> = TickSubscription::new(internal, 9101, message_bus.clone());
+        subscription.cancel().await;
+    }
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let messages = message_bus.request_messages.read().unwrap();
+    assert_eq!(messages.len(), 1, "should send cancel only once");
+}
+
+#[tokio::test]
+async fn test_tick_subscription_drop_after_done_does_not_cancel() {
+    let message_bus = Arc::new(MessageBusStub {
+        request_messages: RwLock::new(vec![]),
+        response_messages: vec![],
+    });
+
+    let (_tx, rx) = tokio::sync::broadcast::channel(16);
+    let internal = AsyncInternalSubscription::new(rx);
+
+    {
+        let mut subscription: TickSubscription<TickLast> = TickSubscription::new(internal, 9102, message_bus.clone());
+        subscription.done = true;
+        // drop with done=true → no cancel
+    }
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let messages = message_bus.request_messages.read().unwrap();
+    assert_eq!(messages.len(), 0, "completed subscription should not send cancel on drop");
+}
+
+#[tokio::test]
 async fn test_streaming_subscription_sends_cancel_on_drop() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),

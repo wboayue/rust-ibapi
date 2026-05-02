@@ -225,7 +225,6 @@ fn historical_ticks_mid_point() {
 
 #[test]
 #[serial(historical)]
-#[ignore] // requires server version >= 215
 fn cancel_historical_ticks_succeeds() {
     let client_id = ClientId::get();
     rate_limit();

@@ -710,6 +710,84 @@ fn test_historical_data_streaming_error_response() {
 }
 
 #[test]
+fn test_tick_subscription_sends_cancel_on_drop() {
+    let message_bus = Arc::new(MessageBusStub {
+        request_messages: RwLock::new(vec![]),
+        response_messages: vec![],
+    });
+
+    let internal = message_bus.send_request(9100, &[]).unwrap();
+
+    {
+        let _subscription: TickSubscription<TickLast> = TickSubscription::new(internal, 9100, message_bus.clone());
+        // subscription dropped here, !done so cancel should fire
+    }
+
+    let messages = message_bus.request_messages.read().unwrap();
+    let cancel_msg = messages.last().expect("should have cancel message");
+    assert_proto_msg_id(cancel_msg, OutgoingMessages::CancelHistoricalTicks);
+}
+
+#[test]
+fn test_tick_subscription_explicit_cancel_prevents_duplicate_on_drop() {
+    let message_bus = Arc::new(MessageBusStub {
+        request_messages: RwLock::new(vec![]),
+        response_messages: vec![],
+    });
+
+    let internal = message_bus.send_request(9101, &[]).unwrap();
+
+    {
+        let subscription: TickSubscription<TickLast> = TickSubscription::new(internal, 9101, message_bus.clone());
+        subscription.cancel();
+    }
+
+    let messages = message_bus.request_messages.read().unwrap();
+    let cancel_count = messages
+        .iter()
+        .filter(|m| {
+            if m.len() >= 4 {
+                let msg_id = i32::from_be_bytes([m[0], m[1], m[2], m[3]]);
+                msg_id == OutgoingMessages::CancelHistoricalTicks as i32 + 200
+            } else {
+                false
+            }
+        })
+        .count();
+    assert_eq!(cancel_count, 1, "should send cancel only once");
+}
+
+#[test]
+fn test_tick_subscription_drop_after_done_does_not_cancel() {
+    let message_bus = Arc::new(MessageBusStub {
+        request_messages: RwLock::new(vec![]),
+        response_messages: vec![],
+    });
+
+    let internal = message_bus.send_request(9102, &[]).unwrap();
+
+    {
+        let subscription: TickSubscription<TickLast> = TickSubscription::new(internal, 9102, message_bus.clone());
+        subscription.done.store(true, std::sync::atomic::Ordering::Relaxed);
+        // drop with done=true → no cancel
+    }
+
+    let messages = message_bus.request_messages.read().unwrap();
+    let cancel_count = messages
+        .iter()
+        .filter(|m| {
+            if m.len() >= 4 {
+                let msg_id = i32::from_be_bytes([m[0], m[1], m[2], m[3]]);
+                msg_id == OutgoingMessages::CancelHistoricalTicks as i32 + 200
+            } else {
+                false
+            }
+        })
+        .count();
+    assert_eq!(cancel_count, 0, "completed subscription should not send cancel on drop");
+}
+
+#[test]
 fn test_streaming_subscription_sends_cancel_on_drop() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),

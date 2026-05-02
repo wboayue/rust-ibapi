@@ -234,7 +234,6 @@ async fn historical_ticks_mid_point() {
 
 #[tokio::test]
 #[serial(historical)]
-#[ignore] // requires server version >= 215
 async fn cancel_historical_ticks_succeeds() {
     let client_id = ClientId::get();
     rate_limit();

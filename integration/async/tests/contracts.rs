@@ -99,7 +99,6 @@ async fn market_rule_returns_increments() {
 }
 
 #[tokio::test]
-#[ignore] // requires server version >= 215
 async fn cancel_contract_details_succeeds() {
     let client_id = ClientId::get();
     rate_limit();
