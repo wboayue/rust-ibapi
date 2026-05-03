@@ -93,6 +93,23 @@ pub mod helpers {
         T::decode(&request_messages[index][4..]).unwrap()
     }
 
+    /// Asserts that the nth request matches the expected message id AND decodes to `expected`.
+    /// Strict counterpart to `assert_request_msg_id`, which only checks the 4-byte header.
+    pub fn assert_request_proto<T>(message_bus: &MessageBusStub, index: usize, expected_msg_id: crate::messages::OutgoingMessages, expected: &T)
+    where
+        T: prost::Message + Default + PartialEq + std::fmt::Debug,
+    {
+        assert_request_msg_id(message_bus, index, expected_msg_id);
+        let actual: T = decode_request_proto(message_bus, index);
+        assert_eq!(&actual, expected, "request {index} body mismatch");
+    }
+
+    /// Builder-aware variant of [`assert_request_proto`]: pulls the expected message id and
+    /// proto body from the builder's `RequestEncoder` impl, so tests don't repeat the msg id.
+    pub fn assert_request<B: crate::testdata::builders::RequestEncoder>(message_bus: &MessageBusStub, index: usize, expected: &B) {
+        assert_request_proto(message_bus, index, B::MSG_ID, &expected.to_proto());
+    }
+
     /// Common test constants that can be used across modules
     pub mod constants {
         /// Test account identifiers
@@ -151,68 +168,5 @@ pub mod helpers {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::helpers::*;
-    use crate::messages::{encode_protobuf_message, OutgoingMessages};
-    use crate::server_versions;
-
-    #[test]
-    fn test_create_test_client() {
-        let (client, message_bus) = create_test_client();
-        assert_eq!(client.server_version(), server_versions::SIZE_RULES);
-        assert!(message_bus.request_messages.read().unwrap().is_empty());
-        assert!(message_bus.response_messages.is_empty());
-    }
-
-    #[test]
-    fn test_create_test_client_with_version() {
-        let custom_version = 150;
-        let (client, message_bus) = create_test_client_with_version(custom_version);
-        assert_eq!(client.server_version(), custom_version);
-        assert!(message_bus.request_messages.read().unwrap().is_empty());
-        assert!(message_bus.response_messages.is_empty());
-    }
-
-    #[test]
-    fn test_create_test_client_with_responses() {
-        let responses = vec!["1|2|123|".to_string(), "2|2|456|".to_string()];
-        let (client, message_bus) = create_test_client_with_responses(responses.clone());
-        assert_eq!(client.server_version(), server_versions::SIZE_RULES);
-        assert_eq!(message_bus.response_messages, responses);
-    }
-
-    #[test]
-    fn test_assert_request_msg_id() {
-        let (_client, message_bus) = create_test_client();
-
-        {
-            let mut request_messages = message_bus.request_messages.write().unwrap();
-            request_messages.push(encode_protobuf_message(OutgoingMessages::RequestAccountSummary as i32, &[]));
-        }
-
-        assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestAccountSummary);
-    }
-
-    #[test]
-    fn test_request_message_count() {
-        let (_client, message_bus) = create_test_client();
-
-        assert_eq!(request_message_count(&message_bus), 0);
-
-        {
-            let mut request_messages = message_bus.request_messages.write().unwrap();
-            request_messages.push(encode_protobuf_message(1, &[]));
-            request_messages.push(encode_protobuf_message(2, &[]));
-        }
-
-        assert_eq!(request_message_count(&message_bus), 2);
-    }
-
-    #[test]
-    fn test_constants() {
-        assert_eq!(TEST_ACCOUNT, "DU1234567");
-        assert_eq!(TEST_CONTRACT_ID, 1001);
-        assert_eq!(TEST_ORDER_ID, 5001);
-        assert_eq!(TEST_TICKER_ID, 100);
-    }
-}
+#[path = "test_utils_tests.rs"]
+mod tests;

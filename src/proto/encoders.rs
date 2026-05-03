@@ -35,7 +35,7 @@ pub(crate) fn some_str(s: &str) -> Option<String> {
     }
 }
 
-fn some_i32_ne(v: i32, default: i32) -> Option<i32> {
+pub(crate) fn some_i32_ne(v: i32, default: i32) -> Option<i32> {
     if v == default {
         None
     } else {
@@ -43,7 +43,7 @@ fn some_i32_ne(v: i32, default: i32) -> Option<i32> {
     }
 }
 
-fn some_f64_ne(v: f64, default: f64) -> Option<f64> {
+pub(crate) fn some_f64_ne(v: f64, default: f64) -> Option<f64> {
     if (v - default).abs() < f64::EPSILON {
         None
     } else {

@@ -898,6 +898,29 @@ fn test_decode_position_proto() {
 }
 
 #[test]
+fn test_decode_position_proto_round_trips_via_builder() {
+    use crate::testdata::builders::positions::position;
+
+    let bytes = position()
+        .account("DU1234")
+        .contract_id(265598)
+        .symbol("AAPL")
+        .exchange("SMART")
+        .position(100.0)
+        .average_cost(150.25)
+        .encode_proto();
+
+    let result = super::decode_position_proto(&bytes).unwrap();
+
+    assert_eq!(result.account, "DU1234");
+    assert_eq!(result.contract.contract_id, 265598);
+    assert_eq!(result.contract.symbol.to_string(), "AAPL");
+    assert_eq!(result.contract.exchange.to_string(), "SMART");
+    assert_eq!(result.position, 100.0);
+    assert_eq!(result.average_cost, 150.25);
+}
+
+#[test]
 fn test_decode_pnl_proto() {
     use prost::Message;
 

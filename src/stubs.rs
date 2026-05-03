@@ -68,6 +68,15 @@ impl MessageBusStub {
     pub fn request_messages(&self) -> Vec<Vec<u8>> {
         self.request_messages.read().unwrap().clone()
     }
+
+    /// Materialise configured response strings as `ResponseMessage` instances.
+    /// Accepts both pipe- and NUL-delimited literals; pipes are normalized to NULs.
+    pub(crate) fn response_messages_decoded(&self) -> Vec<ResponseMessage> {
+        self.response_messages
+            .iter()
+            .map(|m| ResponseMessage::from(&m.replace('|', "\0")))
+            .collect()
+    }
 }
 
 #[cfg(feature = "sync")]
@@ -108,8 +117,7 @@ impl MessageBus for MessageBusStub {
         let (signaler, _) = channel::unbounded();
 
         // Send any pre-configured response messages
-        for message in &self.response_messages {
-            let message = ResponseMessage::from(&message.replace('|', "\0"));
+        for message in self.response_messages_decoded() {
             sender.send(Ok(message)).unwrap();
         }
 
@@ -154,8 +162,7 @@ fn mock_request(stub: &MessageBusStub, request_id: Option<i32>, message_type: Op
     let (sender, receiver) = channel::unbounded();
     let (s1, _r1) = channel::unbounded();
 
-    for message in &stub.response_messages {
-        let message = ResponseMessage::from(&message.replace('|', "\0"));
+    for message in stub.response_messages_decoded() {
         sender.send(Ok(message)).unwrap();
     }
 
@@ -177,8 +184,7 @@ impl AsyncMessageBus for MessageBusStub {
 
         let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
         // Send pre-configured response messages
-        for message in &self.response_messages {
-            let message = ResponseMessage::from(&message.replace('|', "\0"));
+        for message in self.response_messages_decoded() {
             sender.send(message).unwrap();
         }
 
@@ -190,8 +196,7 @@ impl AsyncMessageBus for MessageBusStub {
 
         let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
         // Send pre-configured response messages
-        for message in &self.response_messages {
-            let message = ResponseMessage::from(&message.replace('|', "\0"));
+        for message in self.response_messages_decoded() {
             sender.send(message).unwrap();
         }
 
@@ -203,8 +208,7 @@ impl AsyncMessageBus for MessageBusStub {
 
         let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
         // Send pre-configured response messages
-        for message in &self.response_messages {
-            let message = ResponseMessage::from(&message.replace('|', "\0"));
+        for message in self.response_messages_decoded() {
             sender.send(message).unwrap();
         }
 
@@ -236,8 +240,7 @@ impl AsyncMessageBus for MessageBusStub {
         let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
 
         // Send pre-configured response messages
-        for message in &self.response_messages {
-            let message = ResponseMessage::from(&message.replace('|', "\0"));
+        for message in self.response_messages_decoded() {
             sender.send(message).unwrap();
         }
 
