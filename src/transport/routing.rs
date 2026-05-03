@@ -34,6 +34,14 @@ fn protobuf_first_int(raw_bytes: &[u8]) -> Option<i32> {
     prost::Message::decode(raw_bytes).ok().and_then(|e: RoutingEnvelope| e.id)
 }
 
+/// Decode the protobuf Error envelope to extract the request/order id and error code.
+/// Defaults: missing id → `UNSPECIFIED_REQUEST_ID`, missing error_code → 0
+/// (matching the text-path defaults in `ResponseMessage::error_request_id`/`error_code`).
+fn decode_error_envelope(raw_bytes: &[u8]) -> Option<(i32, i32)> {
+    let envelope: crate::proto::ErrorMessage = prost::Message::decode(raw_bytes).ok()?;
+    Some((envelope.id.unwrap_or(UNSPECIFIED_REQUEST_ID), envelope.error_code.unwrap_or(0)))
+}
+
 fn is_order_message(message_type: IncomingMessages) -> bool {
     matches!(
         message_type,
@@ -66,14 +74,8 @@ pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
     // Special handling for error messages
     if message_type == IncomingMessages::Error {
         if message.is_protobuf {
-            // TODO: decode full protobuf Error message to extract error_code for
-            // downstream classification (e.g. is_warning_error). Currently hardcoded
-            // to 0 since no protobuf error messages are received yet.
-            let id = message.raw_bytes().and_then(protobuf_first_int).unwrap_or(-1);
-            return RoutingDecision::Error {
-                request_id: id,
-                error_code: 0,
-            };
+            let (request_id, error_code) = message.raw_bytes().and_then(decode_error_envelope).unwrap_or((UNSPECIFIED_REQUEST_ID, 0));
+            return RoutingDecision::Error { request_id, error_code };
         }
         let request_id = message.error_request_id();
         let error_code = message.error_code();
@@ -153,115 +155,5 @@ pub fn is_warning_error(error_code: i32) -> bool {
 pub const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::messages::ResponseMessage;
-
-    #[test]
-    fn test_determine_routing_by_request_id() {
-        // Create a mock message with request ID (AccountSummary = 63)
-        let message_str = "63\01\0123\0DU123456\0AccountType\0ADVISOR\0USD\0";
-        let message = ResponseMessage::from(message_str);
-
-        match determine_routing(&message) {
-            RoutingDecision::ByRequestId(id) => assert_eq!(id, 123),
-            routing => panic!("Expected ByRequestId routing, got {routing:?}"),
-        }
-    }
-
-    #[test]
-    fn test_determine_routing_error_old_format() {
-        // Old format (server_version < ERROR_TIME): message_type|version|request_id|error_code|error_msg
-        let message_str = "4\02\0123\0200\0No security definition found\0";
-        let message = ResponseMessage::from(message_str);
-
-        match determine_routing(&message) {
-            RoutingDecision::Error { request_id, error_code } => {
-                assert_eq!(request_id, 123);
-                assert_eq!(error_code, 200);
-            }
-            routing => panic!("Expected Error routing, got {routing:?}"),
-        }
-    }
-
-    #[test]
-    fn test_determine_routing_error_new_format() {
-        // New format (server_version >= ERROR_TIME): message_type|request_id|error_code|error_msg
-        let message_str = "4\0123\0200\0No security definition found\0\0";
-        let message = ResponseMessage::from(message_str).with_server_version(crate::server_versions::ERROR_TIME);
-
-        match determine_routing(&message) {
-            RoutingDecision::Error { request_id, error_code } => {
-                assert_eq!(request_id, 123);
-                assert_eq!(error_code, 200);
-            }
-            routing => panic!("Expected Error routing, got {routing:?}"),
-        }
-    }
-
-    #[test]
-    fn test_determine_routing_shared_message() {
-        // ManagedAccounts message (type 15)
-        let message_str = "15\01\0DU123456,DU234567\0";
-        let message = ResponseMessage::from(message_str);
-
-        match determine_routing(&message) {
-            RoutingDecision::SharedMessage(msg_type) => {
-                assert_eq!(msg_type, IncomingMessages::ManagedAccounts);
-            }
-            routing => panic!("Expected SharedMessage routing, got {routing:?}"),
-        }
-    }
-
-    #[test]
-    fn test_is_warning_error() {
-        // Test range boundaries
-        assert!(is_warning_error(2100));
-        assert!(is_warning_error(2169));
-
-        // Test some values in the middle
-        assert!(is_warning_error(2119));
-        assert!(is_warning_error(2150));
-
-        // Test values outside the range
-        assert!(!is_warning_error(2099));
-        assert!(!is_warning_error(2170));
-        assert!(!is_warning_error(200));
-        assert!(!is_warning_error(2200));
-    }
-
-    #[test]
-    fn test_order_message_routing() {
-        // Test OpenOrder with order ID at position 1
-        let message_str = "5\0123\0AAPL\0STK\0"; // OpenOrder with order_id=123
-        let message = ResponseMessage::from(message_str);
-        match determine_routing(&message) {
-            RoutingDecision::ByOrderId(id) => assert_eq!(id, 123),
-            routing => panic!("Expected ByOrderId routing, got {routing:?}"),
-        }
-
-        // Test CompletedOrdersEnd (no order ID)
-        let message_str = "102\01\0"; // CompletedOrdersEnd
-        let message = ResponseMessage::from(message_str);
-        match determine_routing(&message) {
-            RoutingDecision::ByOrderId(id) => assert_eq!(id, -1),
-            routing => panic!("Expected ByOrderId(-1) routing, got {routing:?}"),
-        }
-
-        // Test ExecutionData with order ID at position 2
-        let message_str = "11\01\0123\0456\0"; // ExecutionData with request_id=1, order_id=123
-        let message = ResponseMessage::from(message_str);
-        match determine_routing(&message) {
-            RoutingDecision::ByOrderId(id) => assert_eq!(id, 123),
-            routing => panic!("Expected ByOrderId routing, got {routing:?}"),
-        }
-
-        // Test CommissionsReport (no order ID but still an order message)
-        let message_str = "59\01\0exec123\0100.0\0USD\0"; // CommissionsReport
-        let message = ResponseMessage::from(message_str);
-        match determine_routing(&message) {
-            RoutingDecision::ByOrderId(id) => assert_eq!(id, -1),
-            routing => panic!("Expected ByOrderId(-1) routing, got {routing:?}"),
-        }
-    }
-}
+#[path = "routing_tests.rs"]
+mod tests;
