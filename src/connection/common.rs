@@ -243,6 +243,23 @@ impl ConnectionProtocol for ConnectionHandler {
     }
 }
 
+/// Reject connections to TWS/IB Gateway builds older than the protobuf transport.
+///
+/// rust-ibapi 3.x is protobuf-only; `start_api` and every request encoder emit
+/// protobuf, so a server below `server_versions::PROTOBUF` (201) cannot interpret
+/// what we send. Fail fast after the handshake with a descriptive error rather
+/// than letting the gateway silently drop our messages.
+pub fn require_protobuf_support(server_version: i32) -> Result<(), Error> {
+    if server_version < server_versions::PROTOBUF {
+        return Err(Error::ServerVersion(
+            server_versions::PROTOBUF,
+            server_version,
+            "protobuf transport — rust-ibapi 3.x requires TWS or IB Gateway with server version 201 or later; please upgrade".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// Parse connection time from TWS format
 /// Format: "20230405 22:20:39 PST"
 ///
@@ -470,6 +487,36 @@ mod tests {
         handler.parse_account_info(&mut msg3, Some(&callback)).unwrap();
 
         assert_eq!(*received_count.lock().unwrap(), 2, "callback should be invoked exactly twice");
+    }
+
+    #[test]
+    fn test_require_protobuf_support_accepts_minimum() {
+        require_protobuf_support(server_versions::PROTOBUF).expect("PROTOBUF version must be accepted");
+    }
+
+    #[test]
+    fn test_require_protobuf_support_accepts_newer() {
+        require_protobuf_support(server_versions::PROTOBUF + 5).expect("newer versions must be accepted");
+    }
+
+    #[test]
+    fn test_require_protobuf_support_rejects_older() {
+        let actual = server_versions::PROTOBUF - 1;
+        let err = require_protobuf_support(actual).expect_err("older versions must be rejected");
+
+        match err {
+            Error::ServerVersion(required, got, ref msg) => {
+                assert_eq!(required, server_versions::PROTOBUF);
+                assert_eq!(got, actual);
+                assert!(msg.contains("protobuf"), "message should mention protobuf: {msg}");
+                assert!(msg.contains("upgrade"), "message should tell user to upgrade: {msg}");
+            }
+            other => panic!("expected Error::ServerVersion, got {other:?}"),
+        }
+
+        let rendered = require_protobuf_support(actual).unwrap_err().to_string();
+        assert!(rendered.contains("server version 201 required"), "rendered: {rendered}");
+        assert!(rendered.contains(&actual.to_string()), "rendered: {rendered}");
     }
 
     #[test]

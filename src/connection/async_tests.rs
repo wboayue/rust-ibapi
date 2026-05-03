@@ -27,6 +27,37 @@ fn binary_text(msg_id: i32, payload: &str) -> Vec<u8> {
 }
 
 #[tokio::test]
+async fn establish_connection_rejects_pre_protobuf_server() {
+    let stream = MemoryStream::default();
+    let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
+
+    let too_old = server_versions::PROTOBUF - 1;
+    let handshake = format!("{}\020240120 12:00:00 EST\0", too_old);
+    stream.push_inbound(handshake.into_bytes());
+
+    let err = connection.establish_connection(None).await.expect_err("must reject old server");
+    match err {
+        crate::errors::Error::ServerVersion(required, got, ref msg) => {
+            assert_eq!(required, server_versions::PROTOBUF);
+            assert_eq!(got, too_old);
+            assert!(msg.contains("protobuf"), "message should mention protobuf: {msg}");
+        }
+        other => panic!("expected Error::ServerVersion, got {other:?}"),
+    }
+
+    // We must not have sent the StartApi request: only the handshake bytes (API\0...) reach the wire.
+    let captured = stream.captured();
+    assert!(captured.starts_with(b"API\0"), "first write must be the handshake");
+    let after_handshake = &captured[4..];
+    let len = u32::from_be_bytes([after_handshake[0], after_handshake[1], after_handshake[2], after_handshake[3]]) as usize;
+    assert_eq!(
+        captured.len(),
+        4 + 4 + len,
+        "no bytes should follow the handshake when version check fails"
+    );
+}
+
+#[tokio::test]
 async fn establish_connection_populates_metadata() {
     let stream = MemoryStream::default();
     let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);

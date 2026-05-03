@@ -5,7 +5,8 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use log::{debug, info};
 
 use super::common::{
-    parse_connection_time, parse_raw_message, AccountInfo, ConnectionHandler, ConnectionOptions, ConnectionProtocol, StartupMessageCallback,
+    parse_connection_time, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionHandler, ConnectionOptions, ConnectionProtocol,
+    StartupMessageCallback,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
@@ -118,6 +119,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
     /// Establish connection to TWS
     pub(crate) async fn establish_connection(&self, startup_callback: Option<&(dyn Fn(ResponseMessage) + Send + Sync)>) -> Result<(), Error> {
         self.handshake().await?;
+        require_protobuf_support(self.server_version())?;
         self.start_api().await?;
         self.receive_account_info(startup_callback).await?;
         Ok(())
