@@ -1221,7 +1221,6 @@ fn test_decode_order_status_text_unset_double() {
 
 #[test]
 fn test_decode_order_status_text_empty_double() {
-    // Empty fields should also decode to None for the optional double slots.
     let raw = "3\013\0PreSubmitted\00\0100\0\01376327563\00\0\0100\0\0\0";
     let mut message = ResponseMessage::from(raw);
 
@@ -1234,7 +1233,7 @@ fn test_decode_order_status_text_empty_double() {
 
 #[test]
 fn test_decode_order_status_proto_missing_doubles() {
-    // Missing optional protobuf fields should decode to None, not Some(0.0).
+    // Regression: previously decoded to Some(0.0) via unwrap_or_default().
     use prost::Message;
 
     let proto_msg = crate::proto::OrderStatus {

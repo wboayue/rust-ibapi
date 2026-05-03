@@ -362,7 +362,7 @@ async fn test_async_order_update_stream() {
             last_fill_price: Some(50.00),
             client_id: 0,
             why_held: String::new(),
-            market_cap_price: None,
+            market_cap_price: Some(0.0),
         }),
     ]);
 
