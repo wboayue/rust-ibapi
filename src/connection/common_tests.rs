@@ -168,18 +168,19 @@ fn test_require_protobuf_support_rejects_older() {
     let actual = server_versions::PROTOBUF - 1;
     let err = require_protobuf_support(actual).expect_err("older versions must be rejected");
 
-    match err {
-        Error::ServerVersion(required, got, ref msg) => {
-            assert_eq!(required, server_versions::PROTOBUF);
-            assert_eq!(got, actual);
+    match &err {
+        Error::ServerVersion(required, got, msg) => {
+            assert_eq!(*required, server_versions::PROTOBUF);
+            assert_eq!(*got, actual);
             assert!(msg.contains("protobuf"), "message should mention protobuf: {msg}");
             assert!(msg.contains("upgrade"), "message should tell user to upgrade: {msg}");
         }
         other => panic!("expected Error::ServerVersion, got {other:?}"),
     }
 
-    let rendered = require_protobuf_support(actual).unwrap_err().to_string();
-    assert!(rendered.contains("server version 201 required"), "rendered: {rendered}");
+    let rendered = err.to_string();
+    let expected_required = format!("server version {} required", server_versions::PROTOBUF);
+    assert!(rendered.contains(&expected_required), "rendered: {rendered}");
     assert!(rendered.contains(&actual.to_string()), "rendered: {rendered}");
 }
 

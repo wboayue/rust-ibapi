@@ -246,15 +246,18 @@ impl ConnectionProtocol for ConnectionHandler {
 /// Reject connections to TWS/IB Gateway builds older than the protobuf transport.
 ///
 /// rust-ibapi 3.x is protobuf-only; `start_api` and every request encoder emit
-/// protobuf, so a server below `server_versions::PROTOBUF` (201) cannot interpret
+/// protobuf, so a server below `server_versions::PROTOBUF` cannot interpret
 /// what we send. Fail fast after the handshake with a descriptive error rather
 /// than letting the gateway silently drop our messages.
-pub fn require_protobuf_support(server_version: i32) -> Result<(), Error> {
+pub(crate) fn require_protobuf_support(server_version: i32) -> Result<(), Error> {
     if server_version < server_versions::PROTOBUF {
         return Err(Error::ServerVersion(
             server_versions::PROTOBUF,
             server_version,
-            "protobuf transport — rust-ibapi 3.x requires TWS or IB Gateway with server version 201 or later; please upgrade".to_string(),
+            format!(
+                "protobuf transport — rust-ibapi 3.x requires TWS or IB Gateway with server version {} or later; please upgrade",
+                server_versions::PROTOBUF
+            ),
         ));
     }
     Ok(())

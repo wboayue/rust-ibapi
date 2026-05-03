@@ -52,16 +52,10 @@ fn establish_connection_rejects_pre_protobuf_server() {
         other => panic!("expected Error::ServerVersion, got {other:?}"),
     }
 
-    // We must not have sent the StartApi request: only the handshake bytes (API\0...) reach the wire.
+    // We must not have sent the StartApi request: only the handshake bytes reach the wire.
     let captured = stream.captured();
-    assert!(captured.starts_with(b"API\0"), "first write must be the handshake");
-    let after_handshake = &captured[4..];
-    let len = u32::from_be_bytes([after_handshake[0], after_handshake[1], after_handshake[2], after_handshake[3]]) as usize;
-    assert_eq!(
-        captured.len(),
-        4 + 4 + len,
-        "no bytes should follow the handshake when version check fails"
-    );
+    let expected = connection.connection_handler.format_handshake();
+    assert_eq!(captured, expected, "no bytes should follow the handshake when version check fails");
 }
 
 #[test]
