@@ -1,9 +1,15 @@
+//! Builder tests focused on text wire-format invariants.
+//!
+//! Standalone proto round-trip tests are intentionally absent: they amount to
+//! `builder → prost → assert` and don't exercise production code. End-to-end
+//! coverage of `builder → production decoder → domain object` lives in
+//! `crate::accounts::common::decoders::tests`. End-to-end request coverage
+//! (client API → captured bytes → `assert_request<B>`) lives in
+//! `crate::accounts::{sync,async}::tests`.
+
 use super::*;
 use crate::common::test_utils::helpers::constants::{TEST_ACCOUNT, TEST_CONTRACT_ID, TEST_TICKER_ID};
-use crate::messages::OutgoingMessages;
-use crate::proto;
-use crate::testdata::builders::{RequestEncoder, ResponseEncoder};
-use prost::Message;
+use crate::testdata::builders::ResponseEncoder;
 
 fn split_pipe(s: &str) -> Vec<&str> {
     s.split_terminator('|').collect()
@@ -108,180 +114,4 @@ fn position_multi_end_default_uses_test_ticker_id() {
 #[test]
 fn position_multi_end_request_id_setter() {
     assert_eq!(position_multi_end().request_id(7).encode_pipe(), "72|1|7|");
-}
-
-// === Protobuf encode/decode round-trips ===
-
-#[test]
-fn position_proto_round_trips_default_fields() {
-    let bytes = position().encode_proto();
-
-    let decoded = proto::Position::decode(&bytes[..]).unwrap();
-
-    assert_eq!(decoded.account.as_deref(), Some(TEST_ACCOUNT));
-    assert_eq!(decoded.position.as_deref(), Some("500"));
-    assert_eq!(decoded.avg_cost, Some(196.77));
-
-    let contract = decoded.contract.as_ref().unwrap();
-    assert_eq!(contract.con_id, Some(TEST_CONTRACT_ID));
-    assert_eq!(contract.symbol.as_deref(), Some("TSLA"));
-    assert_eq!(contract.sec_type.as_deref(), Some("STK"));
-    assert_eq!(contract.exchange.as_deref(), Some("NASDAQ"));
-    assert_eq!(contract.currency.as_deref(), Some("USD"));
-    assert_eq!(contract.local_symbol.as_deref(), Some("TSLA"));
-    assert_eq!(contract.trading_class.as_deref(), Some("NMS"));
-    assert_eq!(contract.last_trade_date_or_contract_month, None);
-    assert_eq!(contract.strike, None);
-    assert_eq!(contract.right, None);
-    assert_eq!(contract.multiplier, None);
-}
-
-#[test]
-fn position_proto_round_trips_setter_overrides() {
-    let bytes = position()
-        .symbol("AAPL")
-        .contract_id(265598)
-        .position(150.0)
-        .average_cost(99.5)
-        .encode_proto();
-
-    let decoded = proto::Position::decode(&bytes[..]).unwrap();
-
-    let contract = decoded.contract.as_ref().unwrap();
-    assert_eq!(contract.con_id, Some(265598));
-    assert_eq!(contract.symbol.as_deref(), Some("AAPL"));
-    assert_eq!(decoded.position.as_deref(), Some("150"));
-    assert_eq!(decoded.avg_cost, Some(99.5));
-}
-
-#[test]
-fn position_to_proto_matches_encode_proto_bytes() {
-    let builder = position().symbol("MSFT").position(42.0);
-
-    let direct = {
-        let mut bytes = Vec::new();
-        builder.to_proto().encode(&mut bytes).unwrap();
-        bytes
-    };
-
-    assert_eq!(direct, builder.encode_proto());
-}
-
-#[test]
-fn position_end_proto_is_empty() {
-    let bytes = position_end().encode_proto();
-    assert!(bytes.is_empty(), "PositionEnd has no fields, so encoded form is zero-length");
-
-    let decoded = proto::PositionEnd::decode(&bytes[..]).unwrap();
-    assert_eq!(decoded, proto::PositionEnd {});
-}
-
-#[test]
-fn position_multi_proto_round_trips_default_fields() {
-    let bytes = position_multi().encode_proto();
-
-    let decoded = proto::PositionMulti::decode(&bytes[..]).unwrap();
-
-    assert_eq!(decoded.req_id, Some(TEST_TICKER_ID));
-    assert_eq!(decoded.account.as_deref(), Some(TEST_ACCOUNT));
-    assert_eq!(decoded.position.as_deref(), Some("500"));
-    assert_eq!(decoded.avg_cost, Some(196.77));
-    assert_eq!(decoded.model_code, None);
-
-    let contract = decoded.contract.as_ref().unwrap();
-    assert_eq!(contract.con_id, Some(TEST_CONTRACT_ID));
-    assert_eq!(contract.symbol.as_deref(), Some("TSLA"));
-    assert_eq!(contract.trading_class.as_deref(), Some("NMS"));
-}
-
-#[test]
-fn position_multi_proto_round_trips_setter_overrides() {
-    let bytes = position_multi().request_id(42).symbol("MSFT").model_code("TARGET2024").encode_proto();
-
-    let decoded = proto::PositionMulti::decode(&bytes[..]).unwrap();
-
-    assert_eq!(decoded.req_id, Some(42));
-    assert_eq!(decoded.model_code.as_deref(), Some("TARGET2024"));
-    assert_eq!(decoded.contract.as_ref().unwrap().symbol.as_deref(), Some("MSFT"));
-}
-
-#[test]
-fn position_multi_end_proto_round_trips_request_id() {
-    let bytes = position_multi_end().request_id(7).encode_proto();
-
-    let decoded = proto::PositionMultiEnd::decode(&bytes[..]).unwrap();
-    assert_eq!(decoded.req_id, Some(7));
-}
-
-// === Request builders ===
-
-fn split_msg_header(bytes: &[u8]) -> (i32, &[u8]) {
-    const PROTOBUF_MSG_ID_OFFSET: i32 = 200;
-    let raw = i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-    (raw - PROTOBUF_MSG_ID_OFFSET, &bytes[4..])
-}
-
-#[test]
-fn request_positions_encodes_correct_msg_id_and_empty_body() {
-    let bytes = request_positions().encode_request();
-
-    let (msg_id, body) = split_msg_header(&bytes);
-    assert_eq!(msg_id, OutgoingMessages::RequestPositions as i32);
-    assert!(body.is_empty(), "RequestPositions has no fields");
-}
-
-#[test]
-fn cancel_positions_encodes_correct_msg_id_and_empty_body() {
-    let bytes = cancel_positions().encode_request();
-
-    let (msg_id, body) = split_msg_header(&bytes);
-    assert_eq!(msg_id, OutgoingMessages::CancelPositions as i32);
-    assert!(body.is_empty());
-}
-
-#[test]
-fn request_positions_multi_round_trips_default_fields() {
-    let bytes = request_positions_multi().encode_request();
-    let (msg_id, body) = split_msg_header(&bytes);
-    assert_eq!(msg_id, OutgoingMessages::RequestPositionsMulti as i32);
-
-    let decoded = proto::PositionsMultiRequest::decode(body).unwrap();
-    assert_eq!(decoded.req_id, Some(TEST_TICKER_ID));
-    assert_eq!(decoded.account.as_deref(), Some(TEST_ACCOUNT));
-    assert_eq!(decoded.model_code, None);
-}
-
-#[test]
-fn request_positions_multi_setters_override_defaults() {
-    let bytes = request_positions_multi()
-        .request_id(42)
-        .account("DU7654321")
-        .model_code("TARGET2024")
-        .encode_request();
-    let (_, body) = split_msg_header(&bytes);
-
-    let decoded = proto::PositionsMultiRequest::decode(body).unwrap();
-    assert_eq!(decoded.req_id, Some(42));
-    assert_eq!(decoded.account.as_deref(), Some("DU7654321"));
-    assert_eq!(decoded.model_code.as_deref(), Some("TARGET2024"));
-}
-
-#[test]
-fn cancel_positions_multi_round_trips_request_id() {
-    let bytes = cancel_positions_multi().request_id(99).encode_request();
-    let (msg_id, body) = split_msg_header(&bytes);
-    assert_eq!(msg_id, OutgoingMessages::CancelPositionsMulti as i32);
-
-    let decoded = proto::CancelPositionsMulti::decode(body).unwrap();
-    assert_eq!(decoded.req_id, Some(99));
-}
-
-#[test]
-fn request_encoder_encode_proto_omits_msg_id_header() {
-    let builder = request_positions_multi().account("X");
-    let proto_only = builder.encode_proto();
-    let with_header = builder.encode_request();
-
-    assert_eq!(with_header.len(), proto_only.len() + 4);
-    assert_eq!(&with_header[4..], &proto_only[..]);
 }

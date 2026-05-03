@@ -132,6 +132,11 @@ pub mod helpers {
         /// Test ticker IDs
         pub const TEST_TICKER_ID: i32 = 100;
         pub const TEST_TICKER_ID_2: i32 = 200;
+
+        /// First request_id assigned by `Client::next_request_id()`. Mirrors
+        /// `client::id_generator::INITIAL_REQUEST_ID` for assertions in tests
+        /// that don't have direct access to that private constant.
+        pub const TEST_REQ_ID_FIRST: i32 = 9000;
     }
 
     /// Re-export constants at module level for easier access

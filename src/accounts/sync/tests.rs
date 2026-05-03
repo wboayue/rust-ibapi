@@ -1,12 +1,19 @@
 use crate::accounts::types::{AccountGroup, AccountId, ContractId, ModelCode};
 use crate::accounts::{AccountSummaryTags, AccountUpdateMulti};
-use crate::common::test_utils::helpers::assert_proto_msg_id;
+use crate::common::test_utils::helpers::*;
 use crate::messages::OutgoingMessages;
-use crate::testdata::responses;
+use crate::testdata::builders::accounts::{
+    account_download_end, account_summary, account_summary_end, account_update_multi, account_update_multi_end, account_value,
+    cancel_account_summary, cancel_account_updates, cancel_account_updates_multi, cancel_pnl, cancel_pnl_single, current_time, family_codes,
+    managed_accounts, request_account_summary, request_account_updates, request_account_updates_multi, request_current_time, request_family_codes,
+    request_managed_accounts, request_pnl, request_pnl_single,
+};
+use crate::testdata::builders::positions::{
+    cancel_positions, cancel_positions_multi, position, position_end, position_multi, position_multi_end, request_positions, request_positions_multi,
+};
+use crate::testdata::builders::ResponseEncoder;
 use crate::{client::blocking::Client, server_versions, stubs::MessageBusStub, Error};
 use std::sync::{Arc, RwLock};
-
-use crate::common::test_utils::helpers::*;
 
 #[test]
 fn test_pnl() {
@@ -18,10 +25,10 @@ fn test_pnl() {
     let _ = client.pnl(&account, None).expect("request pnl failed");
 
     assert_eq!(request_message_count(&message_bus), 4);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestPnL);
-    assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelPnL);
-    assert_request_msg_id(&message_bus, 2, OutgoingMessages::RequestPnL);
-    assert_request_msg_id(&message_bus, 3, OutgoingMessages::CancelPnL);
+    assert_request(&message_bus, 0, &request_pnl().request_id(TEST_REQ_ID_FIRST));
+    assert_request(&message_bus, 1, &cancel_pnl().request_id(TEST_REQ_ID_FIRST));
+    assert_request(&message_bus, 2, &request_pnl().request_id(TEST_REQ_ID_FIRST + 1).no_model_code());
+    assert_request(&message_bus, 3, &cancel_pnl().request_id(TEST_REQ_ID_FIRST + 1));
 }
 
 #[test]
@@ -35,17 +42,17 @@ fn test_pnl_single() {
     let _ = client.pnl_single(&account, contract_id, None).expect("request pnl failed");
 
     assert_eq!(request_message_count(&message_bus), 4);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestPnLSingle);
-    assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelPnLSingle);
-    assert_request_msg_id(&message_bus, 2, OutgoingMessages::RequestPnLSingle);
-    assert_request_msg_id(&message_bus, 3, OutgoingMessages::CancelPnLSingle);
+    assert_request(&message_bus, 0, &request_pnl_single().request_id(TEST_REQ_ID_FIRST));
+    assert_request(&message_bus, 1, &cancel_pnl_single().request_id(TEST_REQ_ID_FIRST));
+    assert_request(&message_bus, 2, &request_pnl_single().request_id(TEST_REQ_ID_FIRST + 1).no_model_code());
+    assert_request(&message_bus, 3, &cancel_pnl_single().request_id(TEST_REQ_ID_FIRST + 1));
 }
 
 #[test]
 fn test_positions() {
     use crate::accounts::PositionUpdate;
 
-    let (client, message_bus) = create_blocking_test_client_with_responses(vec![responses::POSITION.into(), responses::POSITION_END.into()]);
+    let (client, message_bus) = create_blocking_test_client_with_responses(vec![position().encode_pipe(), position_end().encode_pipe()]);
 
     let subscription = client.positions().expect("request positions failed");
 
@@ -66,8 +73,8 @@ fn test_positions() {
     drop(subscription); // Trigger cancellation
 
     assert_eq!(request_message_count(&message_bus), 2);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestPositions);
-    assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelPositions);
+    assert_request(&message_bus, 0, &request_positions());
+    assert_request(&message_bus, 1, &cancel_positions());
 }
 
 #[test]
@@ -76,12 +83,12 @@ fn test_positions_multi() {
 
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec![responses::POSITION_MULTI.into(), responses::POSITION_MULTI_END.into()],
+        response_messages: vec![position_multi().encode_pipe(), position_multi_end().encode_pipe()],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-    let account = Some(AccountId("DU1234567".to_string()));
+    let account = Some(AccountId(TEST_ACCOUNT.to_string()));
     let model_code = Some(ModelCode("TARGET2024".to_string()));
 
     let subscription = client
@@ -102,10 +109,16 @@ fn test_positions_multi() {
 
     drop(subscription); // Trigger cancellation
 
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 2, "Expected subscribe and cancel messages for positions_multi");
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestPositionsMulti);
-    assert_proto_msg_id(&request_messages[1], OutgoingMessages::CancelPositionsMulti);
+    assert_eq!(request_message_count(&message_bus), 2);
+    assert_request(
+        &message_bus,
+        0,
+        &request_positions_multi()
+            .request_id(TEST_REQ_ID_FIRST)
+            .account(TEST_ACCOUNT)
+            .model_code("TARGET2024"),
+    );
+    assert_request(&message_bus, 1, &cancel_positions_multi().request_id(TEST_REQ_ID_FIRST));
 }
 
 #[test]
@@ -113,7 +126,7 @@ fn test_account_summary() {
     use crate::accounts::AccountSummaryResult;
 
     let (client, message_bus) =
-        create_blocking_test_client_with_responses(vec![responses::ACCOUNT_SUMMARY.into(), responses::ACCOUNT_SUMMARY_END.into()]);
+        create_blocking_test_client_with_responses(vec![account_summary().encode_pipe(), account_summary_end().encode_pipe()]);
 
     let group = AccountGroup("All".to_string());
     let tags = &[AccountSummaryTags::ACCOUNT_TYPE];
@@ -123,7 +136,7 @@ fn test_account_summary() {
     let first_update = subscription.next();
     match first_update {
         Some(AccountSummaryResult::Summary(summary_data)) => {
-            assert_eq!(summary_data.account, TEST_ACCOUNT); // From responses::ACCOUNT_SUMMARY
+            assert_eq!(summary_data.account, TEST_ACCOUNT);
             assert_eq!(summary_data.tag, AccountSummaryTags::ACCOUNT_TYPE);
             assert_eq!(summary_data.value, "FA");
         }
@@ -140,19 +153,28 @@ fn test_account_summary() {
     drop(subscription); // Trigger cancellation
 
     assert_eq!(request_message_count(&message_bus), 2);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestAccountSummary);
-    assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelAccountSummary);
+    assert_request(
+        &message_bus,
+        0,
+        &request_account_summary()
+            .request_id(TEST_REQ_ID_FIRST)
+            .group("All")
+            .tags([AccountSummaryTags::ACCOUNT_TYPE]),
+    );
+    assert_request(&message_bus, 1, &cancel_account_summary().request_id(TEST_REQ_ID_FIRST));
 }
 
 #[test]
 fn test_managed_accounts() {
     // Scenario: Valid response
-    let (client, _) = create_blocking_test_client_with_responses(vec![responses::MANAGED_ACCOUNT.into()]);
+    let (client, message_bus) =
+        create_blocking_test_client_with_responses(vec![managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_pipe()]);
     let accounts = client.managed_accounts().expect("request managed accounts failed for valid response");
     assert_eq!(accounts, &[TEST_ACCOUNT, TEST_ACCOUNT_2], "Valid accounts list mismatch");
+    assert_request(&message_bus, 0, &request_managed_accounts());
 
     // Scenario: Empty response string
-    let (client_empty, _) = create_blocking_test_client_with_responses(vec!["17|1||".to_string()]); // Empty accounts string
+    let (client_empty, _) = create_blocking_test_client_with_responses(vec![managed_accounts().accounts(Vec::<String>::new()).encode_pipe()]);
     let accounts_empty = client_empty
         .managed_accounts()
         .expect("request managed accounts failed for empty response");
@@ -166,18 +188,16 @@ fn test_managed_accounts() {
 
 #[test]
 fn test_managed_accounts_retry() {
-    // Test that managed_accounts retries on connection reset
-    // Since our stub doesn't simulate actual connection resets, we'll test with valid responses
-    let (client, message_bus) = create_blocking_test_client_with_responses(vec![
-        responses::MANAGED_ACCOUNT.into(), // Successful response
-    ]);
+    // Test that managed_accounts retries on connection reset.
+    // Since our stub doesn't simulate actual connection resets, we exercise the happy path.
+    let (client, message_bus) =
+        create_blocking_test_client_with_responses(vec![managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_pipe()]);
 
     let accounts = client.managed_accounts().expect("managed_accounts failed");
     assert_eq!(accounts, &[TEST_ACCOUNT, TEST_ACCOUNT_2], "Accounts list mismatch");
 
-    // Verify request was sent
     assert_eq!(request_message_count(&message_bus), 1);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestManagedAccounts);
+    assert_request(&message_bus, 0, &request_managed_accounts());
 }
 
 #[test]
@@ -185,17 +205,14 @@ fn test_server_time() {
     use time::macros::datetime;
 
     // Scenario 1: Success
-    let valid_timestamp_str = "1678890000"; // 2023-03-15 14:20:00 UTC
     let expected_datetime = datetime!(2023-03-15 14:20:00 UTC);
-    let (client, message_bus) = create_blocking_test_client_with_responses(vec![
-        format!("49|1|{}|", valid_timestamp_str), // IncomingMessages::CurrentTime
-    ]);
+    let (client, message_bus) = create_blocking_test_client_with_responses(vec![current_time().encode_pipe()]);
 
     let result = client.server_time();
     assert!(result.is_ok(), "Expected Ok, got Err: {:?}", result.err());
     assert_eq!(result.unwrap(), expected_datetime, "DateTime mismatch");
     assert_eq!(request_message_count(&message_bus), 1);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestCurrentTime);
+    assert_request(&message_bus, 0, &request_current_time());
 
     // Scenario 2: No response (returns default)
     let (client_no_resp, message_bus_no_resp) = create_blocking_test_client();
@@ -206,14 +223,14 @@ fn test_server_time() {
         other => panic!("Unexpected error type: {other:?}"),
     }
     assert_eq!(request_message_count(&message_bus_no_resp), 1);
-    assert_request_msg_id(&message_bus_no_resp, 0, OutgoingMessages::RequestCurrentTime);
+    assert_request(&message_bus_no_resp, 0, &request_current_time());
 
     // Scenario 3: Invalid timestamp format
     let (client_invalid, message_bus_invalid) = create_blocking_test_client_with_responses(vec!["49|1|not_a_timestamp|".into()]);
     let result_invalid = client_invalid.server_time();
     assert!(result_invalid.is_err(), "Expected Err for invalid timestamp");
     assert_eq!(request_message_count(&message_bus_invalid), 1);
-    assert_request_msg_id(&message_bus_invalid, 0, OutgoingMessages::RequestCurrentTime);
+    assert_request(&message_bus_invalid, 0, &request_current_time());
 }
 
 #[test]
@@ -222,16 +239,10 @@ fn test_account_updates() {
 
     let account_name = AccountId(TEST_ACCOUNT.to_string());
 
-    // Create client with account update responses
-    let (client, message_bus) = create_blocking_test_client_with_responses(vec![
-        format!("{}|", responses::ACCOUNT_VALUE), // AccountValue with trailing delimiter
-        format!("54|1|{}|", TEST_ACCOUNT),        // AccountDownloadEnd
-    ]);
+    let (client, message_bus) = create_blocking_test_client_with_responses(vec![account_value().encode_pipe(), account_download_end().encode_pipe()]);
 
-    // Subscribe to account updates
     let subscription = client.account_updates(&account_name).expect("subscribe failed");
 
-    // First update should be AccountValue
     let first_update = subscription.next();
     match first_update {
         Some(AccountUpdate::AccountValue(av)) => {
@@ -242,7 +253,6 @@ fn test_account_updates() {
         other => panic!("First update was not AccountValue: {other:?}"),
     }
 
-    // Second update should be End
     let second_update = subscription.next();
     assert!(
         matches!(second_update, Some(AccountUpdate::End)),
@@ -252,10 +262,9 @@ fn test_account_updates() {
 
     drop(subscription); // Trigger cancellation
 
-    // Verify request messages - subscribe and cancel
-    let request_messages = message_bus.request_messages();
-    assert!(request_messages.len() >= 2, "Expected subscribe and cancel messages");
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestAccountData);
+    assert!(request_message_count(&message_bus) >= 2, "Expected subscribe and cancel messages");
+    assert_request(&message_bus, 0, &request_account_updates().account(TEST_ACCOUNT));
+    assert_request(&message_bus, 1, &cancel_account_updates());
 }
 
 #[test]
@@ -263,7 +272,8 @@ fn test_family_codes() {
     use crate::accounts::FamilyCode;
 
     // Scenario 1: Success with multiple codes
-    let (client, message_bus) = create_blocking_test_client_with_responses(vec!["78|2|ACC1|FC1|ACC2|FC2|".into()]);
+    let (client, message_bus) =
+        create_blocking_test_client_with_responses(vec![family_codes().push("ACC1", "FC1").push("ACC2", "FC2").encode_pipe()]);
 
     let result = client.family_codes();
     assert!(result.is_ok(), "Expected Ok, got Err: {:?}", result.err());
@@ -284,7 +294,7 @@ fn test_family_codes() {
         }
     );
     assert_eq!(request_message_count(&message_bus), 1);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestFamilyCodes);
+    assert_request(&message_bus, 0, &request_family_codes());
 
     // Scenario 2: No message received (returns empty vector)
     let (client_no_msg, message_bus_no_msg) = create_blocking_test_client();
@@ -292,17 +302,15 @@ fn test_family_codes() {
     assert!(result_no_msg.is_ok(), "Expected Ok, got Err: {:?}", result_no_msg.err());
     assert!(result_no_msg.unwrap().is_empty(), "Expected empty vector");
     assert_eq!(request_message_count(&message_bus_no_msg), 1);
-    assert_request_msg_id(&message_bus_no_msg, 0, OutgoingMessages::RequestFamilyCodes);
+    assert_request(&message_bus_no_msg, 0, &request_family_codes());
 
     // Scenario 3: Empty family codes list
-    let (client_empty, message_bus_empty) = create_blocking_test_client_with_responses(vec![
-        "78|0|".into(), // Zero family codes
-    ]);
+    let (client_empty, message_bus_empty) = create_blocking_test_client_with_responses(vec![family_codes().encode_pipe()]);
     let result_empty = client_empty.family_codes();
     assert!(result_empty.is_ok(), "Expected Ok for empty list");
     assert!(result_empty.unwrap().is_empty(), "Expected empty vector");
     assert_eq!(request_message_count(&message_bus_empty), 1);
-    assert_request_msg_id(&message_bus_empty, 0, OutgoingMessages::RequestFamilyCodes);
+    assert_request(&message_bus_empty, 0, &request_family_codes());
 }
 
 #[test]
@@ -310,19 +318,23 @@ fn test_account_updates_multi() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
         response_messages: vec![
-            responses::ACCOUNT_UPDATE_MULTI_CASH_BALANCE.into(),
-            responses::ACCOUNT_UPDATE_MULTI_CURRENCY.into(),
-            responses::ACCOUNT_UPDATE_MULTI_STOCK_MARKET_VALUE.into(),
-            responses::ACCOUNT_UPDATE_MULTI_END.into(),
+            account_update_multi().key("CashBalance").value("94629.71").currency("USD").encode_pipe(),
+            account_update_multi().key("Currency").value("USD").currency("USD").encode_pipe(),
+            account_update_multi()
+                .key("StockMarketValue")
+                .value("0.00")
+                .currency("BASE")
+                .encode_pipe(),
+            account_update_multi_end().encode_pipe(),
         ],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
-    let account = Some(AccountId("DU1234567".to_string()));
+    let account = Some(AccountId(TEST_ACCOUNT.to_string()));
     let subscription = client
         .account_updates_multi(account.as_ref(), None)
-        .expect("request managed accounts failed");
+        .expect("request account updates multi failed");
 
     let expected_keys = &["CashBalance", "Currency", "StockMarketValue"];
 
@@ -343,10 +355,16 @@ fn test_account_updates_multi() {
 
     subscription.cancel();
 
-    let request_messages = client.message_bus.request_messages();
-    assert_eq!(request_messages.len(), 2);
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestAccountUpdatesMulti);
-    assert_proto_msg_id(&request_messages[1], OutgoingMessages::CancelAccountUpdatesMulti);
+    assert_eq!(request_message_count(&message_bus), 2);
+    assert_request(
+        &message_bus,
+        0,
+        &request_account_updates_multi()
+            .request_id(TEST_REQ_ID_FIRST)
+            .account(TEST_ACCOUNT)
+            .ledger_and_nlv(true),
+    );
+    assert_request(&message_bus, 1, &cancel_account_updates_multi().request_id(TEST_REQ_ID_FIRST));
 }
 
 // Additional comprehensive tests for sync module
@@ -456,15 +474,13 @@ fn test_account_summary_comprehensive() {
         let group = AccountGroup(test_case.group.clone());
 
         if test_case.expect_responses {
-            // Create client with mock responses for tests that expect data
             let (client, message_bus) =
-                create_blocking_test_client_with_responses(vec![responses::ACCOUNT_SUMMARY.into(), responses::ACCOUNT_SUMMARY_END.into()]);
+                create_blocking_test_client_with_responses(vec![account_summary().encode_pipe(), account_summary_end().encode_pipe()]);
 
             let subscription = client
                 .account_summary(&group, &test_case.tags)
                 .unwrap_or_else(|_| panic!("account_summary failed for {}", test_case.description));
 
-            // Should get at least one summary
             let first_update = subscription.next();
             assert!(
                 matches!(first_update, Some(AccountSummaryResult::Summary(_))),
@@ -472,7 +488,6 @@ fn test_account_summary_comprehensive() {
                 test_case.description
             );
 
-            // Should get end marker
             let second_update = subscription.next();
             assert!(
                 matches!(second_update, Some(AccountSummaryResult::End)),
@@ -482,13 +497,19 @@ fn test_account_summary_comprehensive() {
 
             drop(subscription);
 
-            // Verify the request was sent
             assert!(
                 request_message_count(&message_bus) >= 1,
                 "Expected request messages for {}",
                 test_case.description
             );
-            assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestAccountSummary);
+            assert_request(
+                &message_bus,
+                0,
+                &request_account_summary()
+                    .request_id(TEST_REQ_ID_FIRST)
+                    .group(test_case.group.clone())
+                    .tags(test_case.tags.clone()),
+            );
         } else {
             // For tests that don't expect responses (like empty tags)
             let (client, _) = create_blocking_test_client();
@@ -566,8 +587,7 @@ fn test_positions_multi_parameter_combinations() {
     use super::common::test_tables::positions_multi_parameter_test_cases;
 
     let test_cases = positions_multi_parameter_test_cases();
-    let (client, message_bus) =
-        create_blocking_test_client_with_responses(vec![responses::POSITION_MULTI.into(), responses::POSITION_MULTI_END.into()]);
+    let (client, message_bus) = create_blocking_test_client_with_responses(vec![position_multi().encode_pipe(), position_multi_end().encode_pipe()]);
     let mut subscriptions = Vec::new();
 
     // Create all subscriptions
@@ -661,12 +681,11 @@ fn test_subscription_lifecycle() {
 fn test_account_updates_stream_handling() {
     use crate::accounts::AccountUpdate;
 
-    // Test continuous account updates stream
     let (client, message_bus) = create_blocking_test_client_with_responses(vec![
-        format!("{}|", responses::ACCOUNT_VALUE),
-        format!("{}|", responses::ACCOUNT_VALUE),
-        format!("{}|", responses::ACCOUNT_VALUE),
-        format!("54|1|{}|", TEST_ACCOUNT), // End marker
+        account_value().encode_pipe(),
+        account_value().encode_pipe(),
+        account_value().encode_pipe(),
+        account_download_end().encode_pipe(),
     ]);
 
     let account = AccountId(TEST_ACCOUNT.to_string());
@@ -687,10 +706,8 @@ fn test_account_updates_stream_handling() {
 
     assert_eq!(update_count, 3, "Expected 3 account value updates");
 
-    // In sync mode, account_updates sends subscribe and unsubscribe messages
-    let request_messages = message_bus.request_messages();
-    assert!(!request_messages.is_empty(), "Expected at least subscribe message");
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestAccountData);
+    assert!(request_message_count(&message_bus) >= 1, "Expected at least subscribe message");
+    assert_request(&message_bus, 0, &request_account_updates().account(TEST_ACCOUNT));
 }
 
 #[test]
