@@ -8,12 +8,12 @@
 
 use super::RequestEncoder;
 use crate::common::test_utils::helpers::constants::TEST_REQ_ID_FIRST;
-use crate::contracts::{Contract, TagValue};
+use crate::contracts::Contract;
 use crate::market_data::historical::{BarSize, Duration, WhatToShow as HistoricalWhatToShow};
 use crate::market_data::realtime::WhatToShow as RealtimeWhatToShow;
 use crate::messages::OutgoingMessages;
 use crate::proto;
-use crate::proto::encoders::{encode_contract, some_bool, some_str, tag_values_to_map};
+use crate::proto::encoders::{encode_contract, some_bool, some_str};
 use crate::ToField;
 use time::OffsetDateTime;
 
@@ -86,7 +86,6 @@ pub struct HistoricalDataRequestBuilder {
     pub what_to_show: Option<HistoricalWhatToShow>,
     pub use_rth: bool,
     pub keep_up_to_date: bool,
-    pub chart_options: Vec<TagValue>,
 }
 
 impl Default for HistoricalDataRequestBuilder {
@@ -100,7 +99,6 @@ impl Default for HistoricalDataRequestBuilder {
             what_to_show: None,
             use_rth: false,
             keep_up_to_date: false,
-            chart_options: Vec::new(),
         }
     }
 }
@@ -157,7 +155,7 @@ impl RequestEncoder for HistoricalDataRequestBuilder {
             use_rth: some_bool(self.use_rth),
             format_date: Some(DATE_FORMAT),
             keep_up_to_date: some_bool(self.keep_up_to_date),
-            chart_options: tag_values_to_map(&self.chart_options),
+            chart_options: Default::default(),
         }
     }
 }
@@ -297,26 +295,10 @@ impl RequestEncoder for HistogramDataRequestBuilder {
     }
 }
 
-cancel_by_request_id_builder!(
-    CancelHistoricalDataRequestBuilder,
-    CancelHistoricalData,
-    OutgoingMessages::CancelHistoricalData
-);
-cancel_by_request_id_builder!(
-    CancelHistoricalTicksRequestBuilder,
-    CancelHistoricalTicks,
-    OutgoingMessages::CancelHistoricalTicks
-);
-cancel_by_request_id_builder!(
-    CancelHistogramDataRequestBuilder,
-    CancelHistogramData,
-    OutgoingMessages::CancelHistogramData
-);
-cancel_by_request_id_builder!(
-    CancelHeadTimestampRequestBuilder,
-    CancelHeadTimestamp,
-    OutgoingMessages::CancelHeadTimestamp
-);
+// Cancel builders (cancel_historical_data, cancel_historical_ticks,
+// cancel_histogram_data, cancel_head_timestamp) intentionally omitted: the
+// production cancel paths fire from subscription drop handlers and have no
+// per-test consumer that needs body verification.
 
 // =============================================================================
 // Realtime request builders
@@ -328,7 +310,6 @@ pub struct RealtimeBarsRequestBuilder {
     pub contract: Contract,
     pub what_to_show: RealtimeWhatToShow,
     pub use_rth: bool,
-    pub options: Vec<TagValue>,
 }
 
 impl Default for RealtimeBarsRequestBuilder {
@@ -338,7 +319,6 @@ impl Default for RealtimeBarsRequestBuilder {
             contract: Contract::default(),
             what_to_show: RealtimeWhatToShow::Trades,
             use_rth: false,
-            options: Vec::new(),
         }
     }
 }
@@ -373,12 +353,10 @@ impl RequestEncoder for RealtimeBarsRequestBuilder {
             bar_size: Some(0),
             what_to_show: Some(self.what_to_show.to_string()),
             use_rth: some_bool(self.use_rth),
-            real_time_bars_options: tag_values_to_map(&self.options),
+            real_time_bars_options: Default::default(),
         }
     }
 }
-
-cancel_by_request_id_builder!(CancelRealtimeBarsRequestBuilder, CancelRealTimeBars, OutgoingMessages::CancelRealTimeBars);
 
 #[derive(Clone, Debug)]
 pub struct TickByTickRequestBuilder {
@@ -439,8 +417,6 @@ impl RequestEncoder for TickByTickRequestBuilder {
     }
 }
 
-cancel_by_request_id_builder!(CancelTickByTickRequestBuilder, CancelTickByTick, OutgoingMessages::CancelTickByTickData);
-
 #[derive(Clone, Debug)]
 pub struct MarketDepthRequestBuilder {
     pub request_id: i32,
@@ -490,44 +466,6 @@ impl RequestEncoder for MarketDepthRequestBuilder {
             num_rows: Some(self.number_of_rows),
             is_smart_depth: some_bool(self.is_smart_depth),
             market_depth_options: Default::default(),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct CancelMarketDepthRequestBuilder {
-    pub request_id: i32,
-    pub is_smart_depth: bool,
-}
-
-impl Default for CancelMarketDepthRequestBuilder {
-    fn default() -> Self {
-        Self {
-            request_id: TEST_REQ_ID_FIRST,
-            is_smart_depth: false,
-        }
-    }
-}
-
-impl CancelMarketDepthRequestBuilder {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
-    pub fn smart_depth(mut self, v: bool) -> Self {
-        self.is_smart_depth = v;
-        self
-    }
-}
-
-impl RequestEncoder for CancelMarketDepthRequestBuilder {
-    type Proto = proto::CancelMarketDepth;
-    const MSG_ID: OutgoingMessages = OutgoingMessages::CancelMarketDepth;
-
-    fn to_proto(&self) -> Self::Proto {
-        proto::CancelMarketDepth {
-            req_id: Some(self.request_id),
-            is_smart_depth: some_bool(self.is_smart_depth),
         }
     }
 }
@@ -599,7 +537,9 @@ impl RequestEncoder for MarketDataRequestBuilder {
     }
 }
 
-cancel_by_request_id_builder!(CancelMarketDataRequestBuilder, CancelMarketData, OutgoingMessages::CancelMarketData);
+// Cancel builders (cancel_realtime_bars, cancel_tick_by_tick,
+// cancel_market_depth, cancel_market_data) intentionally omitted: same
+// rationale as the historical cancels above.
 
 // =============================================================================
 // Entry-point functions
@@ -621,44 +561,16 @@ pub fn histogram_data_request() -> HistogramDataRequestBuilder {
     HistogramDataRequestBuilder::default()
 }
 
-pub fn cancel_historical_data_request() -> CancelHistoricalDataRequestBuilder {
-    CancelHistoricalDataRequestBuilder::default()
-}
-
-pub fn cancel_historical_ticks_request() -> CancelHistoricalTicksRequestBuilder {
-    CancelHistoricalTicksRequestBuilder::default()
-}
-
-pub fn cancel_histogram_data_request() -> CancelHistogramDataRequestBuilder {
-    CancelHistogramDataRequestBuilder::default()
-}
-
-pub fn cancel_head_timestamp_request() -> CancelHeadTimestampRequestBuilder {
-    CancelHeadTimestampRequestBuilder::default()
-}
-
 pub fn realtime_bars_request() -> RealtimeBarsRequestBuilder {
     RealtimeBarsRequestBuilder::default()
-}
-
-pub fn cancel_realtime_bars_request() -> CancelRealtimeBarsRequestBuilder {
-    CancelRealtimeBarsRequestBuilder::default()
 }
 
 pub fn tick_by_tick_request() -> TickByTickRequestBuilder {
     TickByTickRequestBuilder::default()
 }
 
-pub fn cancel_tick_by_tick_request() -> CancelTickByTickRequestBuilder {
-    CancelTickByTickRequestBuilder::default()
-}
-
 pub fn market_depth_request() -> MarketDepthRequestBuilder {
     MarketDepthRequestBuilder::default()
-}
-
-pub fn cancel_market_depth_request() -> CancelMarketDepthRequestBuilder {
-    CancelMarketDepthRequestBuilder::default()
 }
 
 pub fn market_depth_exchanges_request() -> MarketDepthExchangesRequestBuilder {
@@ -667,8 +579,4 @@ pub fn market_depth_exchanges_request() -> MarketDepthExchangesRequestBuilder {
 
 pub fn market_data_request() -> MarketDataRequestBuilder {
     MarketDataRequestBuilder::default()
-}
-
-pub fn cancel_market_data_request() -> CancelMarketDataRequestBuilder {
-    CancelMarketDataRequestBuilder::default()
 }
