@@ -35,7 +35,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     println!("  Status: {}", status.status);
                     println!("  Filled: {}", status.filled);
                     println!("  Remaining: {}", status.remaining);
-                    println!("  Avg Fill Price: {}", status.average_fill_price);
+                    match status.average_fill_price {
+                        Some(price) => println!("  Avg Fill Price: {price}"),
+                        None => println!("  Avg Fill Price: -"),
+                    }
                 }
                 Ok(OrderUpdate::OpenOrder(order_data)) => {
                     println!("Open Order Update:");

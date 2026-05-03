@@ -195,13 +195,13 @@ fn place_order() {
         assert_eq!(order_status.status, "PreSubmitted", "order_status.status");
         assert_eq!(order_status.filled, 0.0, "order_status.filled");
         assert_eq!(order_status.remaining, 100.0, "order_status.remaining");
-        assert_eq!(order_status.average_fill_price, 0.0, "order_status.average_fill_price");
+        assert_eq!(order_status.average_fill_price, Some(0.0), "order_status.average_fill_price");
         assert_eq!(order_status.perm_id, 1376327563, "order_status.perm_id");
         assert_eq!(order_status.parent_id, 0, "order_status.parent_id");
-        assert_eq!(order_status.last_fill_price, 0.0, "order_status.last_fill_price");
+        assert_eq!(order_status.last_fill_price, Some(0.0), "order_status.last_fill_price");
         assert_eq!(order_status.client_id, 100, "order_status.client_id");
         assert_eq!(order_status.why_held, "", "order_status.why_held");
-        assert_eq!(order_status.market_cap_price, 0.0, "order_status.market_cap_price");
+        assert_eq!(order_status.market_cap_price, Some(0.0), "order_status.market_cap_price");
     } else {
         assert!(false, "message[1] expected order status notification");
     }
@@ -261,8 +261,8 @@ fn place_order() {
         assert_eq!(order_status.status, "Filled", "order_status.status");
         assert_eq!(order_status.filled, 100.0, "order_status.filled");
         assert_eq!(order_status.remaining, 0.0, "order_status.remaining");
-        assert_eq!(order_status.average_fill_price, 196.52, "order_status.average_fill_price");
-        assert_eq!(order_status.last_fill_price, 196.52, "order_status.last_fill_price");
+        assert_eq!(order_status.average_fill_price, Some(196.52), "order_status.average_fill_price");
+        assert_eq!(order_status.last_fill_price, Some(196.52), "order_status.last_fill_price");
     } else {
         assert!(false, "message[4] expected order status notification");
     }
@@ -319,13 +319,13 @@ fn cancel_order() {
         assert_eq!(order_status.status, "Cancelled", "order_status.status");
         assert_eq!(order_status.filled, 0.0, "order_status.filled");
         assert_eq!(order_status.remaining, 100.0, "order_status.remaining");
-        assert_eq!(order_status.average_fill_price, 0.0, "order_status.average_fill_price");
+        assert_eq!(order_status.average_fill_price, Some(0.0), "order_status.average_fill_price");
         assert_eq!(order_status.perm_id, 71270927, "order_status.perm_id");
         assert_eq!(order_status.parent_id, 0, "order_status.parent_id");
-        assert_eq!(order_status.last_fill_price, 0.0, "order_status.last_fill_price");
+        assert_eq!(order_status.last_fill_price, Some(0.0), "order_status.last_fill_price");
         assert_eq!(order_status.client_id, 100, "order_status.client_id");
         assert_eq!(order_status.why_held, "", "order_status.why_held");
-        assert_eq!(order_status.market_cap_price, 0.0, "order_status.market_cap_price");
+        assert_eq!(order_status.market_cap_price, Some(0.0), "order_status.market_cap_price");
     }
 
     if let Some(CancelOrder::Notice(notice)) = results.next() {

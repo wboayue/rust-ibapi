@@ -1476,20 +1476,20 @@ pub struct OrderStatus {
     pub filled: f64,
     /// The remnant positions.
     pub remaining: f64,
-    /// Average filling price.
-    pub average_fill_price: f64,
+    /// Average filling price. `None` when IBKR did not send a value (UNSET_DOUBLE on text protocol; missing optional field on protobuf).
+    pub average_fill_price: Option<f64>,
     /// The order's permId used by the TWS to identify orders.
     pub perm_id: i64,
     /// Parent's id. Used for bracket and auto trailing stop orders.
     pub parent_id: i32,
-    /// Price at which the last positions were filled.
-    pub last_fill_price: f64,
+    /// Price at which the last positions were filled. `None` when IBKR did not send a value.
+    pub last_fill_price: Option<f64>,
     /// API client which submitted the order.
     pub client_id: i32,
     /// This field is used to identify an order held when TWS is trying to locate shares for a short sell. The value used to indicate this is 'locate'.
     pub why_held: String,
-    /// If an order has been capped, this indicates the current capped price. Requires TWS 967+ and API v973.04+. Python API specifically requires API v973.06+.
-    pub market_cap_price: f64,
+    /// If an order has been capped, this indicates the current capped price. Requires TWS 967+ and API v973.04+. Python API specifically requires API v973.06+. `None` when IBKR did not send a value.
+    pub market_cap_price: Option<f64>,
 }
 
 /// Enumerates possible results from cancelling an order.
