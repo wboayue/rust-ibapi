@@ -1357,3 +1357,88 @@ fn test_decode_completed_order_proto() {
     assert_eq!(result.order.action, Action::Sell);
     assert_eq!(result.order_state.completed_time, "20260101 12:00:00");
 }
+
+// =============================================================================
+// Builder → production-decoder integration tests
+// =============================================================================
+//
+// These exercise the production `decode_*_proto` decoders by routing the
+// testdata builders' `encode_proto()` output through them. The builders give
+// named, defaulted construction; the decoder is what we're verifying.
+
+#[test]
+fn test_decode_order_status_proto_round_trips_via_builder() {
+    use crate::testdata::builders::orders::order_status;
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let bytes = order_status()
+        .order_id(99)
+        .status("Filled")
+        .filled(50.0)
+        .remaining(0.0)
+        .average_fill_price(Some(152.5))
+        .perm_id(123456)
+        .last_fill_price(Some(152.75))
+        .client_id(7)
+        .market_cap_price(Some(1.23))
+        .encode_proto();
+
+    let result = super::decode_order_status_proto(&bytes).unwrap();
+    assert_eq!(result.order_id, 99);
+    assert_eq!(result.status, "Filled");
+    assert_eq!(result.filled, 50.0);
+    assert_eq!(result.remaining, 0.0);
+    assert_eq!(result.average_fill_price, Some(152.5));
+    assert_eq!(result.perm_id, 123456);
+    assert_eq!(result.last_fill_price, Some(152.75));
+    assert_eq!(result.client_id, 7);
+    assert_eq!(result.market_cap_price, Some(1.23));
+}
+
+#[test]
+fn test_decode_commission_report_proto_round_trips_via_builder() {
+    use crate::testdata::builders::orders::commission_report;
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let bytes = commission_report()
+        .execution_id("exec123")
+        .commission(1.25)
+        .currency("USD")
+        .realized_pnl(Some(500.0))
+        .yields(Some(f64::MAX))
+        .encode_proto();
+
+    let result = super::decode_commission_report_proto(&bytes).unwrap();
+    assert_eq!(result.execution_id, "exec123");
+    assert_eq!(result.commission, 1.25);
+    assert_eq!(result.currency, "USD");
+    assert_eq!(result.realized_pnl, Some(500.0));
+    assert_eq!(result.yields, None); // f64::MAX is the IBKR sentinel for "unset"
+}
+
+#[test]
+fn test_decode_execution_data_proto_round_trips_via_builder() {
+    use crate::testdata::builders::orders::execution_data;
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let bytes = execution_data()
+        .request_id(42)
+        .order_id(100)
+        .contract_id(265598)
+        .symbol("AAPL")
+        .security_type("STK")
+        .execution_id("exec001")
+        .side("BOT")
+        .shares(50.0)
+        .price(152.5)
+        .perm_id(99999)
+        .encode_proto();
+
+    let result = super::decode_execution_data_proto(&bytes).unwrap();
+    assert_eq!(result.request_id, 42);
+    assert_eq!(result.contract.contract_id, 265598);
+    assert_eq!(result.execution.execution_id, "exec001");
+    assert_eq!(result.execution.shares, 50.0);
+    assert_eq!(result.execution.price, 152.5);
+    assert_eq!(result.execution.perm_id, 99999);
+}

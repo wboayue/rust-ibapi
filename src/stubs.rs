@@ -57,7 +57,6 @@ impl Drop for MessageBusStub {
 }
 
 impl MessageBusStub {
-    #[cfg(feature = "sync")]
     pub fn with_responses(response_messages: Vec<String>) -> Self {
         Self {
             request_messages: RwLock::new(vec![]),

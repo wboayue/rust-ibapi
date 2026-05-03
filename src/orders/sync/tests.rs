@@ -1,28 +1,43 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
-use crate::common::test_utils::helpers::assert_proto_msg_id;
+use crate::common::test_utils::helpers::{assert_request, request_message_count};
 use crate::contracts::{ComboLeg, Contract, Currency, Exchange, SecurityType, Symbol};
-use crate::messages::OutgoingMessages;
 use crate::orders::conditions::TriggerMethod;
 use crate::orders::{Action, Liquidity, OcaType, OrderOrigin, ShortSaleSlot, TimeInForce};
 use crate::stubs::MessageBusStub;
+use crate::testdata::builders::orders::{
+    all_open_orders_request, auto_open_orders_request, cancel_order_request, commission_report, completed_orders_request, execution_data,
+    executions_request, global_cancel_request, next_valid_order_id_request, open_orders_request, order_status, place_order_request,
+};
+use crate::testdata::builders::ResponseEncoder;
 
 use super::*;
 use crate::orders::common::order_builder;
 
 #[test]
 fn place_order() {
+    // OpenOrder text literals (96+ fields) are kept inline — no testdata builder yet for those.
+    let open_order_presubmitted = "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|1376327563|0|0|0||1376327563.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||";
+    let open_order_filled = "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|1376327563|0|0|0||1376327563.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Filled|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||";
+    let open_order_filled_with_commission = "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|1376327563|0|0|0||1376327563.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Filled|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.0|||USD||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||";
+
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|1376327563|0|0|0||1376327563.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
-        "3|13|PreSubmitted|0|100|0|1376327563|0|0|100||0||".to_owned(),
-        "11|-1|13|76792991|TSLA|STK||0.0|||ISLAND|USD|TSLA|NMS|00025b46.63f8f39c.01.01|20230224  12:04:56|DU1234567|ISLAND|BOT|100|196.52|1376327563|100|0|100|196.52|||||2||".to_owned(),
-        "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|1376327563|0|0|0||1376327563.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Filled|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
-        "3|13|Filled|100|0|196.52|1376327563|0|196.52|100||0||".to_owned(),
-        "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|1376327563|0|0|0||1376327563.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Filled|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.0|||USD||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
-        "59|1|00025b46.63f8f39c.01.01|1.0|USD|1.7976931348623157E308|1.7976931348623157E308|||".to_owned(),
+        open_order_presubmitted.to_owned(),
+        order_status().status("PreSubmitted").remaining(100.0).encode_pipe(),
+        execution_data().encode_pipe(),
+        open_order_filled.to_owned(),
+        order_status()
+            .status("Filled")
+            .filled(100.0)
+            .remaining(0.0)
+            .average_fill_price(Some(196.52))
+            .last_fill_price(Some(196.52))
+            .encode_pipe(),
+        open_order_filled_with_commission.to_owned(),
+        commission_report().encode_pipe(),
     ]));
 
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let contract = Contract {
         symbol: Symbol::from("TSLA"),
@@ -37,8 +52,12 @@ fn place_order() {
 
     let result = client.place_order(order_id, &contract, &order);
 
-    let request_messages = client.message_bus.request_messages();
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::PlaceOrder);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &place_order_request().order_id(order_id).contract(contract.clone()).order(order.clone()),
+    );
 
     assert!(result.is_ok(), "failed to place order: {}", result.err().unwrap());
 
@@ -294,21 +313,23 @@ fn place_order() {
 
 #[test]
 fn cancel_order() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            "3|41|Cancelled|0|100|0|71270927|0|0|100||0||".to_owned(),
-            "4|2|41|202|Order Canceled - reason:||".to_owned(),
-        ],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
+        order_status()
+            .order_id(41)
+            .status("Cancelled")
+            .remaining(100.0)
+            .perm_id(71270927)
+            .encode_pipe(),
+        "4|2|41|202|Order Canceled - reason:||".to_owned(),
+    ]));
 
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let order_id = 41;
     let results = client.cancel_order(order_id, "");
 
-    let request_messages = client.message_bus.request_messages();
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::CancelOrder);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &cancel_order_request().order_id(order_id));
 
     assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
 
@@ -335,70 +356,53 @@ fn cancel_order() {
 
 #[test]
 fn global_cancel() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![],
-    });
-
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let results = client.global_cancel();
 
-    let request_messages = client.message_bus.request_messages();
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestGlobalCancel);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &global_cancel_request());
     assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
 }
 
 #[test]
 fn cancel_order_cme_tagging() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["3|41|Cancelled|0|100|0|71270927|0|0|100||0||".to_owned()],
-    });
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![order_status()
+        .order_id(41)
+        .status("Cancelled")
+        .remaining(100.0)
+        .perm_id(71270927)
+        .encode_pipe()]));
 
-    let client = Client::stubbed(message_bus, server_versions::CME_TAGGING_FIELDS);
+    let client = Client::stubbed(message_bus.clone(), server_versions::CME_TAGGING_FIELDS);
 
     let order_id = 41;
     let results = client.cancel_order(order_id, "");
 
-    let request_messages = client.message_bus.request_messages();
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::CancelOrder);
-
+    assert_request(&message_bus, 0, &cancel_order_request().order_id(order_id));
     assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
 }
 
 #[test]
 fn global_cancel_cme_tagging() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![],
-    });
-
-    let client = Client::stubbed(message_bus, server_versions::CME_TAGGING_FIELDS);
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::CME_TAGGING_FIELDS);
 
     let results = client.global_cancel();
 
-    let request_messages = client.message_bus.request_messages();
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestGlobalCancel);
+    assert_request(&message_bus, 0, &global_cancel_request());
     assert!(results.is_ok(), "failed to cancel order: {}", results.err().unwrap());
 }
 
 #[test]
 fn next_valid_order_id() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["9|1|43||".to_owned()],
-    });
-
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec!["9|1|43||".to_owned()]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let results = client.next_valid_order_id();
 
-    let request_messages = client.message_bus.request_messages();
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestIds);
+    assert_request(&message_bus, 0, &next_valid_order_id_request());
 
     assert!(results.is_ok(), "failed to request next order id: {}", results.err().unwrap());
     assert_eq!(43, results.unwrap(), "next order id");
@@ -408,20 +412,20 @@ fn next_valid_order_id() {
 fn completed_orders() {
     let _ = env_logger::try_init();
 
+    // CompletedOrder text literal kept inline — no testdata builder yet for that message.
+    let completed_order = "101|265598|AAPL|STK||0|||SMART|USD|AAPL|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||1377295418|0|0|0|||||||||||0||-1||||||2147483647|0|0||3|0||0|None||0|0|0||0|0||||0|0|0|2147483647|2147483647||||IB|0|0||0|Filled|100|0|0|150.25|1.7976931348623157E308|0|1|0||0|2147483647|0|Not an insider or substantial shareholder|0|0|9223372036854775807|20231122 10:30:00 America/Los_Angeles|Filled||||||";
+
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        // Copy exact format from integration test, just changing account to DU1234567
-        "101|265598|AAPL|STK||0|||SMART|USD|AAPL|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||1377295418|0|0|0|||||||||||0||-1||||||2147483647|0|0||3|0||0|None||0|0|0||0|0||||0|0|0|2147483647|2147483647||||IB|0|0||0|Filled|100|0|0|150.25|1.7976931348623157E308|0|1|0||0|2147483647|0|Not an insider or substantial shareholder|0|0|9223372036854775807|20231122 10:30:00 America/Los_Angeles|Filled||||||".to_owned(),
-        "102|".to_owned(),
+        completed_order.to_owned(),
+        crate::testdata::builders::orders::completed_orders_end().encode_pipe(),
     ]));
 
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let api_only = true;
     let results = client.completed_orders(api_only);
 
-    let request_messages = client.message_bus.request_messages();
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestCompletedOrders);
+    assert_request(&message_bus, 0, &completed_orders_request().api_only(api_only));
 
     assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
 
@@ -542,67 +546,50 @@ fn completed_orders() {
 
 #[test]
 fn open_orders() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["9|1|43||".to_owned()],
-    });
-
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
+        crate::testdata::builders::orders::open_order_end().encode_pipe()
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let results = client.open_orders();
 
-    let request_messages = client.message_bus.request_messages();
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestOpenOrders);
-
-    assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
+    assert_request(&message_bus, 0, &open_orders_request());
+    assert!(results.is_ok(), "failed to request open orders: {}", results.err().unwrap());
 }
 
 #[test]
 fn all_open_orders() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["9|1|43||".to_owned()],
-    });
-
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
+        crate::testdata::builders::orders::open_order_end().encode_pipe()
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let results = client.all_open_orders();
 
-    let request_messages = client.message_bus.request_messages();
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestAllOpenOrders);
-
-    assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
+    assert_request(&message_bus, 0, &all_open_orders_request());
+    assert!(results.is_ok(), "failed to request all open orders: {}", results.err().unwrap());
 }
 
 #[test]
 fn auto_open_orders() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["9|1|43||".to_owned()],
-    });
-
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
+        crate::testdata::builders::orders::open_order_end().encode_pipe()
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let api_only = true;
     let results = client.auto_open_orders(api_only);
 
-    let request_messages = client.message_bus.request_messages();
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestAutoOpenOrders);
-
-    assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
+    assert_request(&message_bus, 0, &auto_open_orders_request().auto_bind(api_only));
+    assert!(results.is_ok(), "failed to request auto open orders: {}", results.err().unwrap());
 }
 
 #[test]
 fn executions() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["9|1|43||".to_owned()],
-    });
-
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
+        crate::testdata::builders::orders::execution_data_end().encode_pipe(),
+    ]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let filter = ExecutionFilter {
         client_id: Some(100),
@@ -614,24 +601,33 @@ fn executions() {
         side: "BUY".to_owned(),
         ..Default::default()
     };
+    let expected_filter = ExecutionFilter {
+        client_id: Some(100),
+        account_code: "xyz".to_owned(),
+        time: "yyyymmdd hh:mm:ss EST".to_owned(),
+        symbol: "TSLA".to_owned(),
+        security_type: "STK".to_owned(),
+        exchange: "ISLAND".to_owned(),
+        side: "BUY".to_owned(),
+        ..Default::default()
+    };
     let results = client.executions(filter);
 
-    let request_messages = client.message_bus.request_messages();
+    assert_request(
+        &message_bus,
+        0,
+        &executions_request()
+            .request_id(crate::common::test_utils::helpers::TEST_REQ_ID_FIRST)
+            .filter(expected_filter),
+    );
 
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestExecutions);
-
-    assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
-    // assert_eq!(43, results.unwrap(), "next order id");
+    assert!(results.is_ok(), "failed to request executions: {}", results.err().unwrap());
 }
 
 #[test]
 fn encode_limit_order() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![],
-    });
-
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let order_id = 12;
     let contract = Contract {
@@ -646,21 +642,19 @@ fn encode_limit_order() {
 
     let results = client.place_order(order_id, &contract, &order);
 
-    let request_messages = client.message_bus.request_messages();
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::PlaceOrder);
+    assert_request(
+        &message_bus,
+        0,
+        &place_order_request().order_id(order_id).contract(contract.clone()).order(order.clone()),
+    );
 
     assert!(results.is_ok(), "failed to place order: {}", results.err().unwrap());
 }
 
 #[test]
 fn encode_combo_market_order() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![],
-    });
-
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let order_id = 12; // get next order id
     let contract = {
@@ -693,22 +687,21 @@ fn encode_combo_market_order() {
 
     let results = client.place_order(order_id, &contract, &order);
 
-    let request_messages = client.message_bus.request_messages();
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::PlaceOrder);
+    assert_request(
+        &message_bus,
+        0,
+        &place_order_request().order_id(order_id).contract(contract.clone()).order(order.clone()),
+    );
 
     assert!(results.is_ok(), "failed to place order: {}", results.err().unwrap());
 }
 
 #[test]
 fn exercise_options() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            // Mock OpenOrder response for an exercised ES option
-            "5|2|637533642|ES|FOP|20250919|5800|C|50|CME|USD|ESU5C5800|ES|BUY|1|MKT|0.0|0.0|DAY||DU1234567||0||100|2126726144|0|0|0||2126726144.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Submitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|0.0|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||||||".to_owned(),
-        ],
-    });
+    // OpenOrder text literal kept inline — no testdata builder for that message yet.
+    let exercise_open_order = "5|2|637533642|ES|FOP|20250919|5800|C|50|CME|USD|ESU5C5800|ES|BUY|1|MKT|0.0|0.0|DAY||DU1234567||0||100|2126726144|0|0|0||2126726144.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Submitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|0.0|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||||||";
+
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![exercise_open_order.to_owned()]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -734,18 +727,13 @@ fn exercise_options() {
         exercise_response
     );
 
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Expected one request message");
+    assert_eq!(request_message_count(&message_bus), 1);
 }
 
 #[test]
 fn submit_order() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![],
-    });
-
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let contract = Contract {
         symbol: Symbol::from("AAPL"),
@@ -760,24 +748,25 @@ fn submit_order() {
 
     let result = client.submit_order(order_id, &contract, &order);
 
-    let request_messages = client.message_bus.request_messages();
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::PlaceOrder);
+    assert_request(
+        &message_bus,
+        0,
+        &place_order_request().order_id(order_id).contract(contract.clone()).order(order.clone()),
+    );
 
     assert!(result.is_ok(), "failed to submit order: {}", result.err().unwrap());
 }
 
 #[test]
 fn order_update_stream() {
-    let message_bus = Arc::new(MessageBusStub{
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|1376327563|0|0|0||1376327563.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||".to_owned(),
-            "3|13|PreSubmitted|0|100|0|1376327563|0|0|100||0||".to_owned(),
-            "11|-1|13|76792991|TSLA|STK||0.0|||ISLAND|USD|TSLA|NMS|00025b46.63f8f39c.01.01|20230224  12:04:56|DU1234567|ISLAND|BOT|100|196.52|1376327563|100|0|100|196.52|||||2||".to_owned(),
-            "59|1|00025b46.63f8f39c.01.01|1.0|USD|1.7976931348623157E308|1.7976931348623157E308|||".to_owned(),
-        ]
-    });
+    let open_order_presubmitted = "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|1376327563|0|0|0||1376327563.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||";
+
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
+        open_order_presubmitted.to_owned(),
+        order_status().status("PreSubmitted").remaining(100.0).encode_pipe(),
+        execution_data().encode_pipe(),
+        commission_report().encode_pipe(),
+    ]));
 
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
@@ -829,11 +818,7 @@ fn order_update_stream() {
 
 #[test]
 fn order_update_stream_already_subscribed() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![],
-    });
-
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
     let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
 
     // Create first subscription
