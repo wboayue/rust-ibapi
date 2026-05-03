@@ -1,11 +1,13 @@
 use super::*;
-use crate::common::test_utils::helpers::assert_proto_msg_id;
+use crate::common::test_utils::helpers::{assert_request, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, SecurityType, Symbol};
 use crate::market_data::TradingHours;
-use crate::messages::OutgoingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
+use crate::testdata::builders::market_data::{
+    market_data_request, market_depth_exchanges_request, market_depth_request, realtime_bars_request, tick_by_tick_request,
+};
 use std::sync::Arc;
 use std::sync::RwLock;
 use time::OffsetDateTime;
@@ -50,7 +52,7 @@ fn test_realtime_bars() {
         ],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
     let contract = Contract {
         security_type: SecurityType::Future,
         exchange: Exchange::from("EUREX"),
@@ -90,11 +92,16 @@ fn test_realtime_bars() {
     assert_eq!(received_bars[1].open, 4028.80, "Wrong open price for second bar");
     assert_eq!(received_bars[1].volume, 3.0, "Wrong volume for second bar");
 
-    // Verify request messages
-    let request_messages = client.message_bus.request_messages();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestRealTimeBars);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &realtime_bars_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .what_to_show(what_to_show)
+            .use_rth(trading_hours.use_rth()),
+    );
 }
 
 #[test]
@@ -137,7 +144,7 @@ fn test_tick_by_tick_all_last() {
         ],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::TICK_BY_TICK_IGNORE_SIZE);
+    let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK_IGNORE_SIZE);
     let contract = Contract {
         symbol: Symbol::from("GBL"),
         security_type: SecurityType::Future,
@@ -170,11 +177,17 @@ fn test_tick_by_tick_all_last() {
     assert_eq!(trade.size, 5.0, "Wrong size for second trade");
     assert_eq!(trade.exchange, "NYSE", "Wrong exchange for second trade");
 
-    // Verify request message
-    let request_messages = client.message_bus.request_messages();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestTickByTickData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &tick_by_tick_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .tick_type("AllLast")
+            .number_of_ticks(number_of_ticks)
+            .ignore_size(ignore_size),
+    );
 }
 
 #[test]
@@ -184,7 +197,7 @@ fn test_market_depth() {
         response_messages: vec!["12|1|9001|0|0|0|4028.75|100|".to_owned(), "12|1|9001|1|1|1|4028.50|200|".to_owned()],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::SMART_DEPTH);
+    let client = Client::stubbed(message_bus.clone(), server_versions::SMART_DEPTH);
     let contract = Contract {
         symbol: Symbol::from("GBL"),
         security_type: SecurityType::Future,
@@ -227,11 +240,16 @@ fn test_market_depth() {
         panic!("Expected MarketDepth, got {:?}", received_depth[1]);
     }
 
-    // Verify request message
-    let request_messages = client.message_bus.request_messages();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketDepth);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &market_depth_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .number_of_rows(number_of_rows)
+            .smart_depth(is_smart_depth),
+    );
 }
 
 #[test]
@@ -241,7 +259,7 @@ fn test_market_depth_exchanges() {
         response_messages: vec!["71|2|ISLAND|STK|NASDAQ|DEEP2|1|NYSE|STK|NYSE|DEEP|1|".to_owned()],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::SERVICE_DATA_TYPE);
+    let client = Client::stubbed(message_bus.clone(), server_versions::SERVICE_DATA_TYPE);
 
     // Test request execution
     let exchanges = client.market_depth_exchanges().expect("Failed to request market depth exchanges");
@@ -264,11 +282,8 @@ fn test_market_depth_exchanges() {
     assert_eq!(second.service_data_type, "DEEP", "Wrong service data type");
     assert_eq!(second.aggregated_group, Some("1".to_string()), "Wrong aggregated group");
 
-    // Verify request message
-    let request_messages = client.message_bus.request_messages();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMktDepthExchanges);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &market_depth_exchanges_request());
 }
 
 #[test]
@@ -278,7 +293,7 @@ fn test_tick_by_tick_bid_ask() {
         response_messages: vec!["99|9001|3|1678745793|3895.50|3896.00|9|11|3|".to_owned()],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::TICK_BY_TICK_IGNORE_SIZE);
+    let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK_IGNORE_SIZE);
     let contract = Contract {
         symbol: Symbol::from("GBL"),
         security_type: SecurityType::Future,
@@ -306,9 +321,16 @@ fn test_tick_by_tick_bid_ask() {
     assert_eq!(tick.bid_size, 9.0, "Wrong bid size");
     assert_eq!(tick.ask_size, 11.0, "Wrong ask size");
 
-    // Verify request message
-    let request_messages = client.message_bus.request_messages();
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestTickByTickData);
+    assert_request(
+        &message_bus,
+        0,
+        &tick_by_tick_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .tick_type("BidAsk")
+            .number_of_ticks(number_of_ticks)
+            .ignore_size(ignore_size),
+    );
 }
 
 #[test]
@@ -318,7 +340,7 @@ fn test_tick_by_tick_midpoint() {
         response_messages: vec!["99|9001|4|1678740829|3895.375|".to_owned(), "99|9001|4|1678740830|3895.425|".to_owned()],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::TICK_BY_TICK);
+    let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK);
     let contract = Contract {
         symbol: Symbol::from("GBL"),
         security_type: SecurityType::Future,
@@ -357,11 +379,17 @@ fn test_tick_by_tick_midpoint() {
         "Wrong timestamp for second update"
     );
 
-    // Verify request message
-    let request_messages = client.message_bus.request_messages();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestTickByTickData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &tick_by_tick_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .tick_type("MidPoint")
+            .number_of_ticks(number_of_ticks)
+            .ignore_size(ignore_size),
+    );
 }
 
 #[test]
@@ -380,7 +408,7 @@ fn test_basic_market_data() {
         ],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
     let contract = Contract::stock("AAPL").build();
     let generic_ticks = &["100", "101", "104", "106"]; // Option Volume, OI, Historical Vol, Implied Vol
 
@@ -423,6 +451,15 @@ fn test_basic_market_data() {
             _ => panic!("Unexpected tick type received: {tick:?}"),
         }
     }
+
+    assert_request(
+        &message_bus,
+        0,
+        &market_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .generic_ticks(generic_ticks),
+    );
 }
 
 #[test]
@@ -432,7 +469,7 @@ fn test_market_data_with_combo_legs() {
         response_messages: vec![],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::PRICE_BASED_VOLATILITY);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PRICE_BASED_VOLATILITY);
     let mut contract = Contract::stock("AAPL").build();
     contract.security_type = SecurityType::Spread;
     contract.combo_legs = vec![ComboLeg {
@@ -448,11 +485,15 @@ fn test_market_data_with_combo_legs() {
     let result = client.market_data(&contract).generic_ticks(&generic_ticks).subscribe();
     assert!(result.is_ok(), "Failed to create market data subscription with combo legs");
 
-    // Verify request message was sent
-    let request_messages = client.message_bus.request_messages();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &market_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .generic_ticks(&generic_ticks),
+    );
 }
 
 #[test]
@@ -462,7 +503,7 @@ fn test_market_data_with_delta_neutral() {
         response_messages: vec![],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::PRICE_BASED_VOLATILITY);
+    let client = Client::stubbed(message_bus.clone(), server_versions::PRICE_BASED_VOLATILITY);
     let mut contract = Contract::stock("AAPL").build();
     contract.delta_neutral_contract = Some(DeltaNeutralContract {
         contract_id: 12345,
@@ -475,11 +516,15 @@ fn test_market_data_with_delta_neutral() {
     let result = client.market_data(&contract).generic_ticks(&generic_ticks).subscribe();
     assert!(result.is_ok(), "Failed to create market data subscription with delta neutral");
 
-    // Verify request message was sent
-    let request_messages = client.message_bus.request_messages();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &market_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .generic_ticks(&generic_ticks),
+    );
 }
 
 #[test]
@@ -489,7 +534,7 @@ fn test_market_data_regulatory_snapshot() {
         response_messages: vec![],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::REQ_SMART_COMPONENTS);
+    let client = Client::stubbed(message_bus.clone(), server_versions::REQ_SMART_COMPONENTS);
     let contract = Contract {
         symbol: Symbol::from("GBL"),
         security_type: SecurityType::Future,
@@ -509,11 +554,17 @@ fn test_market_data_regulatory_snapshot() {
         .subscribe();
     assert!(result.is_ok(), "Failed to create regulatory snapshot market data subscription");
 
-    // Verify request message
-    let request_messages = client.message_bus.request_messages();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &market_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .generic_ticks(&generic_ticks)
+            .snapshot(true)
+            .regulatory_snapshot(true),
+    );
 }
 
 #[test]
@@ -570,7 +621,7 @@ fn test_tick_by_tick_last() {
         response_messages: vec!["99|9001|1|1678740829|3895.25|7|2|NASDAQ|Regular|".to_owned()],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::TICK_BY_TICK_IGNORE_SIZE);
+    let client = Client::stubbed(message_bus.clone(), server_versions::TICK_BY_TICK_IGNORE_SIZE);
     let contract = Contract {
         symbol: Symbol::from("GBL"),
         security_type: SecurityType::Future,
@@ -597,7 +648,15 @@ fn test_tick_by_tick_last() {
     assert_eq!(trade.size, 7.0, "Wrong size");
     assert_eq!(trade.exchange, "NASDAQ", "Wrong exchange");
 
-    // Verify request message uses "Last" instead of "AllLast"
-    let request_messages = client.message_bus.request_messages();
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestTickByTickData);
+    // Builder verifies tick_type "Last" (not "AllLast").
+    assert_request(
+        &message_bus,
+        0,
+        &tick_by_tick_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .tick_type("Last")
+            .number_of_ticks(number_of_ticks)
+            .ignore_size(ignore_size),
+    );
 }

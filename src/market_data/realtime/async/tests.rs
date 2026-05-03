@@ -1,10 +1,12 @@
 use super::*;
-use crate::common::test_utils::helpers::assert_proto_msg_id;
+use crate::common::test_utils::helpers::{assert_request, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::tick_types::TickType;
 use crate::contracts::{ComboLeg, Contract, Currency, DeltaNeutralContract, Exchange, SecurityType, Symbol};
-use crate::messages::OutgoingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
+use crate::testdata::builders::market_data::{
+    market_data_request, market_depth_exchanges_request, market_depth_request, realtime_bars_request, tick_by_tick_request,
+};
 use std::sync::Arc;
 use std::sync::RwLock;
 use time::OffsetDateTime;
@@ -96,11 +98,16 @@ async fn test_realtime_bars() {
     assert_eq!(received_bars[1].open, 4028.80, "Wrong open price for second bar");
     assert_eq!(received_bars[1].volume, 3.0, "Wrong volume for second bar");
 
-    // Verify request messages
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestRealTimeBars);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &realtime_bars_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .what_to_show(what_to_show)
+            .use_rth(trading_hours.use_rth()),
+    );
 }
 
 #[tokio::test]
@@ -181,11 +188,17 @@ async fn test_tick_by_tick_all_last() {
     assert_eq!(trade.size, 5.0, "Wrong size for second trade");
     assert_eq!(trade.exchange, "NYSE", "Wrong exchange for second trade");
 
-    // Verify request message
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestTickByTickData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &tick_by_tick_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .tick_type("AllLast")
+            .number_of_ticks(number_of_ticks)
+            .ignore_size(ignore_size),
+    );
 }
 
 #[tokio::test]
@@ -227,8 +240,16 @@ async fn test_tick_by_tick_last() {
     assert_eq!(trade.size, 7.0, "Wrong size");
     assert_eq!(trade.exchange, "NASDAQ", "Wrong exchange");
 
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestTickByTickData);
+    assert_request(
+        &message_bus,
+        0,
+        &tick_by_tick_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .tick_type("Last")
+            .number_of_ticks(number_of_ticks)
+            .ignore_size(ignore_size),
+    );
 }
 
 #[tokio::test]
@@ -271,8 +292,16 @@ async fn test_tick_by_tick_bid_ask() {
     assert_eq!(tick.bid_size, 9.0, "Wrong bid size");
     assert_eq!(tick.ask_size, 11.0, "Wrong ask size");
 
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestTickByTickData);
+    assert_request(
+        &message_bus,
+        0,
+        &tick_by_tick_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .tick_type("BidAsk")
+            .number_of_ticks(number_of_ticks)
+            .ignore_size(ignore_size),
+    );
 }
 
 #[tokio::test]
@@ -328,9 +357,17 @@ async fn test_tick_by_tick_midpoint() {
         "Wrong timestamp for second update"
     );
 
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestTickByTickData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &tick_by_tick_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .tick_type("MidPoint")
+            .number_of_ticks(number_of_ticks)
+            .ignore_size(ignore_size),
+    );
 }
 
 #[tokio::test]
@@ -390,11 +427,16 @@ async fn test_market_depth() {
         panic!("Expected MarketDepth, got {:?}", received_depth[1]);
     }
 
-    // Verify request message
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketDepth);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &market_depth_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .number_of_rows(number_of_rows)
+            .smart_depth(is_smart_depth),
+    );
 }
 
 #[tokio::test]
@@ -427,11 +469,8 @@ async fn test_market_depth_exchanges() {
     assert_eq!(second.service_data_type, "DEEP", "Wrong service data type");
     assert_eq!(second.aggregated_group, Some("1".to_string()), "Wrong aggregated group");
 
-    // Verify request message
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMktDepthExchanges);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &market_depth_exchanges_request());
 }
 
 #[tokio::test]
@@ -502,6 +541,17 @@ async fn test_basic_market_data() {
             _ => panic!("Unexpected tick type received: {tick:?}"),
         }
     }
+
+    assert_request(
+        &message_bus,
+        0,
+        &market_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .generic_ticks(generic_ticks)
+            .snapshot(snapshot)
+            .regulatory_snapshot(regulatory_snapshot),
+    );
 }
 
 #[tokio::test]
@@ -531,11 +581,17 @@ async fn test_market_data_with_combo_legs() {
         .await;
     assert!(result.is_ok(), "Failed to create market data subscription with combo legs");
 
-    // Verify request message was sent
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &market_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .generic_ticks(&generic_ticks)
+            .snapshot(snapshot)
+            .regulatory_snapshot(regulatory_snapshot),
+    );
 }
 
 #[tokio::test]
@@ -562,11 +618,17 @@ async fn test_market_data_with_delta_neutral() {
         .await;
     assert!(result.is_ok(), "Failed to create market data subscription with delta neutral");
 
-    // Verify request message was sent
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &market_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .generic_ticks(&generic_ticks)
+            .snapshot(snapshot)
+            .regulatory_snapshot(regulatory_snapshot),
+    );
 }
 
 #[tokio::test]
@@ -595,11 +657,17 @@ async fn test_market_data_regulatory_snapshot() {
         .await;
     assert!(result.is_ok(), "Failed to create regulatory snapshot market data subscription");
 
-    // Verify request message
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &market_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .generic_ticks(&generic_ticks)
+            .snapshot(snapshot)
+            .regulatory_snapshot(regulatory_snapshot),
+    );
 }
 
 #[tokio::test]
