@@ -1,10 +1,14 @@
 use super::*;
-use crate::common::test_utils::helpers::assert_proto_msg_id;
+use crate::common::test_utils::helpers::{assert_request, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::common::test_tables::*;
-use crate::messages::{OutgoingMessages, ResponseMessage};
+use crate::messages::ResponseMessage;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::{DecoderContext, StreamDecoder};
+use crate::testdata::builders::contracts::{
+    calculate_implied_volatility_request, calculate_option_price_request, cancel_contract_data_request, contract_data_request, market_rule_request,
+    matching_symbols_request, option_chain_request,
+};
 use std::sync::{Arc, RwLock};
 
 #[test]
@@ -15,12 +19,15 @@ fn test_contract_details() {
             response_messages: test_case.response_messages.clone(),
         });
 
-        let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let result = client.contract_details(&test_case.contract);
 
-        let request_messages = client.message_bus.request_messages();
-        assert!(!request_messages.is_empty(), "Test '{}' should have sent a request", test_case.name);
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestContractData);
+        assert_eq!(request_message_count(&message_bus), 1, "Test '{}' request count", test_case.name);
+        assert_request(
+            &message_bus,
+            0,
+            &contract_data_request().request_id(TEST_REQ_ID_FIRST).contract(&test_case.contract),
+        );
 
         assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
         let contracts = result.unwrap();
@@ -38,12 +45,15 @@ fn test_matching_symbols() {
             response_messages: vec![test_case.response_message.clone()],
         });
 
-        let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
+        let client = Client::stubbed(message_bus.clone(), server_versions::BOND_ISSUERID);
         let result = client.matching_symbols(test_case.pattern);
 
-        let request_messages = client.message_bus.request_messages();
-        assert!(!request_messages.is_empty(), "Test '{}' should have sent a request", test_case.name);
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMatchingSymbols);
+        assert_eq!(request_message_count(&message_bus), 1, "Test '{}' request count", test_case.name);
+        assert_request(
+            &message_bus,
+            0,
+            &matching_symbols_request().request_id(TEST_REQ_ID_FIRST).pattern(test_case.pattern),
+        );
 
         assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
         let symbols: Vec<_> = result.unwrap().collect();
@@ -59,12 +69,11 @@ fn test_market_rule() {
             response_messages: vec![test_case.response_message.clone()],
         });
 
-        let client = Client::stubbed(message_bus, server_versions::MARKET_RULES);
+        let client = Client::stubbed(message_bus.clone(), server_versions::MARKET_RULES);
         let result = client.market_rule(test_case.market_rule_id);
 
-        let request_messages = client.message_bus.request_messages();
-        assert!(!request_messages.is_empty(), "Test '{}' should have sent a request", test_case.name);
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketRule);
+        assert_eq!(request_message_count(&message_bus), 1, "Test '{}' request count", test_case.name);
+        assert_request(&message_bus, 0, &market_rule_request().market_rule_id(test_case.market_rule_id));
 
         assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
         let rule = result.unwrap();
@@ -85,18 +94,37 @@ fn test_option_calculations() {
             response_messages: vec![test_case.response_message.clone()],
         });
 
-        let client = Client::stubbed(message_bus, server_versions::REQ_CALC_OPTION_PRICE);
+        let client = Client::stubbed(message_bus.clone(), server_versions::REQ_CALC_OPTION_PRICE);
 
         let result = if let Some(volatility) = test_case.volatility {
-            client.calculate_option_price(&test_case.contract, volatility, test_case.underlying_price)
+            let res = client.calculate_option_price(&test_case.contract, volatility, test_case.underlying_price);
+            assert_request(
+                &message_bus,
+                0,
+                &calculate_option_price_request()
+                    .request_id(TEST_REQ_ID_FIRST)
+                    .contract(&test_case.contract)
+                    .volatility(volatility)
+                    .underlying_price(test_case.underlying_price),
+            );
+            res
         } else if let Some(option_price) = test_case.option_price {
-            client.calculate_implied_volatility(&test_case.contract, option_price, test_case.underlying_price)
+            let res = client.calculate_implied_volatility(&test_case.contract, option_price, test_case.underlying_price);
+            assert_request(
+                &message_bus,
+                0,
+                &calculate_implied_volatility_request()
+                    .request_id(TEST_REQ_ID_FIRST)
+                    .contract(&test_case.contract)
+                    .option_price(option_price)
+                    .underlying_price(test_case.underlying_price),
+            );
+            res
         } else {
             panic!("Test case must have either volatility or option_price");
         };
 
-        let request_messages = client.message_bus.request_messages();
-        assert!(!request_messages.is_empty(), "Test '{}' should have sent a request", test_case.name);
+        assert_eq!(request_message_count(&message_bus), 1, "Test '{}' request count", test_case.name);
 
         assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
         let computation = result.unwrap();
@@ -123,7 +151,7 @@ fn test_option_chain() {
             response_messages: test_case.response_messages.clone(),
         });
 
-        let client = Client::stubbed(message_bus, server_versions::SEC_DEF_OPT_PARAMS_REQ);
+        let client = Client::stubbed(message_bus.clone(), server_versions::SEC_DEF_OPT_PARAMS_REQ);
         let result = client.option_chain(
             test_case.symbol,
             test_case.exchange,
@@ -131,9 +159,17 @@ fn test_option_chain() {
             test_case.contract_id,
         );
 
-        let request_messages = client.message_bus.request_messages();
-        assert!(!request_messages.is_empty(), "Test '{}' should have sent a request", test_case.name);
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestSecurityDefinitionOptionalParameters);
+        assert_eq!(request_message_count(&message_bus), 1, "Test '{}' request count", test_case.name);
+        assert_request(
+            &message_bus,
+            0,
+            &option_chain_request()
+                .request_id(TEST_REQ_ID_FIRST)
+                .symbol(test_case.symbol)
+                .exchange(test_case.exchange)
+                .security_type(test_case.security_type.clone())
+                .contract_id(test_case.contract_id),
+        );
 
         assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
         let subscription = result.unwrap();
@@ -269,7 +305,7 @@ fn test_client_methods() {
         });
 
         let client = Client::stubbed(
-            message_bus,
+            message_bus.clone(),
             match &test_case.test_type {
                 ClientMethodTest::CalculateOptionPrice { .. } => server_versions::REQ_CALC_OPTION_PRICE,
                 ClientMethodTest::CalculateImpliedVolatility { .. } => server_versions::REQ_CALC_IMPLIED_VOLAT,
@@ -281,18 +317,41 @@ fn test_client_methods() {
                 contract,
                 volatility,
                 underlying_price,
-            } => client.calculate_option_price(contract, *volatility, *underlying_price),
+            } => {
+                let res = client.calculate_option_price(contract, *volatility, *underlying_price);
+                assert_request(
+                    &message_bus,
+                    0,
+                    &calculate_option_price_request()
+                        .request_id(TEST_REQ_ID_FIRST)
+                        .contract(contract)
+                        .volatility(*volatility)
+                        .underlying_price(*underlying_price),
+                );
+                res
+            }
             ClientMethodTest::CalculateImpliedVolatility {
                 contract,
                 option_price,
                 underlying_price,
-            } => client.calculate_implied_volatility(contract, *option_price, *underlying_price),
+            } => {
+                let res = client.calculate_implied_volatility(contract, *option_price, *underlying_price);
+                assert_request(
+                    &message_bus,
+                    0,
+                    &calculate_implied_volatility_request()
+                        .request_id(TEST_REQ_ID_FIRST)
+                        .contract(contract)
+                        .option_price(*option_price)
+                        .underlying_price(*underlying_price),
+                );
+                res
+            }
         };
 
         assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
 
-        let request_messages = client.message_bus.request_messages();
-        assert!(!request_messages.is_empty(), "Test '{}' should have sent a request", test_case.name);
+        assert_eq!(request_message_count(&message_bus), 1, "Test '{}' request count", test_case.name);
 
         let computation = result.unwrap();
         match &test_case.expected_result {
@@ -319,8 +378,15 @@ fn test_contract_details_errors() {
             response_messages: test_case.response_messages.clone(),
         });
 
-        let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let result = client.contract_details(&test_case.contract);
+
+        assert_eq!(request_message_count(&message_bus), 1, "Test '{}' request count", test_case.name);
+        assert_request(
+            &message_bus,
+            0,
+            &contract_data_request().request_id(TEST_REQ_ID_FIRST).contract(&test_case.contract),
+        );
 
         if test_case.should_error {
             assert!(result.is_err(), "Test '{}' should have failed", test_case.name);
@@ -340,4 +406,16 @@ fn test_contract_details_errors() {
             assert_eq!(contracts.len(), test_case.expected_count, "Test '{}' count mismatch", test_case.name);
         }
     }
+}
+
+#[test]
+fn test_cancel_contract_details() {
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::CANCEL_CONTRACT_DATA);
+
+    let result = client.cancel_contract_details(42);
+    assert!(result.is_ok(), "cancel_contract_details failed: {:?}", result.err());
+
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &cancel_contract_data_request().request_id(42));
 }

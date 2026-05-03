@@ -1,11 +1,15 @@
 use super::*;
-use crate::common::test_utils::helpers::assert_proto_msg_id;
+use crate::common::test_utils::helpers::{assert_request, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::common::test_tables::*;
 use crate::contracts::{Currency, Exchange, Symbol};
-use crate::messages::{OutgoingMessages, ResponseMessage};
+use crate::messages::ResponseMessage;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::{DecoderContext, StreamDecoder};
+use crate::testdata::builders::contracts::{
+    calculate_implied_volatility_request, calculate_option_price_request, cancel_contract_data_request, contract_data_request, market_rule_request,
+    matching_symbols_request, option_chain_request,
+};
 use std::sync::{Arc, RwLock};
 
 #[tokio::test]
@@ -16,12 +20,15 @@ async fn test_contract_details() {
             response_messages: test_case.response_messages.clone(),
         });
 
-        let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+        let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
         let result = client.contract_details(&test_case.contract).await;
 
-        let request_messages = client.message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1);
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestContractData);
+        assert_eq!(request_message_count(&message_bus), 1);
+        assert_request(
+            &message_bus,
+            0,
+            &contract_data_request().request_id(TEST_REQ_ID_FIRST).contract(&test_case.contract),
+        );
 
         assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
         let contracts = result.unwrap();
@@ -39,12 +46,15 @@ async fn test_matching_symbols() {
             response_messages: vec![test_case.response_message.clone()],
         });
 
-        let client = Client::stubbed(message_bus, server_versions::BOND_ISSUERID);
+        let client = Client::stubbed(message_bus.clone(), server_versions::BOND_ISSUERID);
         let result = client.matching_symbols(test_case.pattern).await;
 
-        let request_messages = client.message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1);
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMatchingSymbols);
+        assert_eq!(request_message_count(&message_bus), 1);
+        assert_request(
+            &message_bus,
+            0,
+            &matching_symbols_request().request_id(TEST_REQ_ID_FIRST).pattern(test_case.pattern),
+        );
 
         assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
         let symbols = result.unwrap();
@@ -60,12 +70,11 @@ async fn test_market_rule() {
             response_messages: vec![test_case.response_message.clone()],
         });
 
-        let client = Client::stubbed(message_bus, server_versions::MARKET_RULES);
+        let client = Client::stubbed(message_bus.clone(), server_versions::MARKET_RULES);
         let result = client.market_rule(test_case.market_rule_id).await;
 
-        let request_messages = client.message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1);
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestMarketRule);
+        assert_eq!(request_message_count(&message_bus), 1);
+        assert_request(&message_bus, 0, &market_rule_request().market_rule_id(test_case.market_rule_id));
 
         assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
         let rule = result.unwrap();
@@ -86,28 +95,41 @@ async fn test_option_calculations() {
             response_messages: vec![test_case.response_message.clone()],
         });
 
-        let client = Client::stubbed(message_bus, server_versions::REQ_CALC_OPTION_PRICE);
+        let client = Client::stubbed(message_bus.clone(), server_versions::REQ_CALC_OPTION_PRICE);
 
         let result = if let Some(volatility) = test_case.volatility {
-            client
+            let res = client
                 .calculate_option_price(&test_case.contract, volatility, test_case.underlying_price)
-                .await
+                .await;
+            assert_request(
+                &message_bus,
+                0,
+                &calculate_option_price_request()
+                    .request_id(TEST_REQ_ID_FIRST)
+                    .contract(&test_case.contract)
+                    .volatility(volatility)
+                    .underlying_price(test_case.underlying_price),
+            );
+            res
         } else if let Some(option_price) = test_case.option_price {
-            client
+            let res = client
                 .calculate_implied_volatility(&test_case.contract, option_price, test_case.underlying_price)
-                .await
+                .await;
+            assert_request(
+                &message_bus,
+                0,
+                &calculate_implied_volatility_request()
+                    .request_id(TEST_REQ_ID_FIRST)
+                    .contract(&test_case.contract)
+                    .option_price(option_price)
+                    .underlying_price(test_case.underlying_price),
+            );
+            res
         } else {
             panic!("Test case must have either volatility or option_price");
         };
 
-        let request_messages = client.message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1);
-        let expected_msg = if test_case.volatility.is_some() {
-            OutgoingMessages::ReqCalcOptionPrice
-        } else {
-            OutgoingMessages::ReqCalcImpliedVolat
-        };
-        assert_proto_msg_id(&request_messages[0], expected_msg);
+        assert_eq!(request_message_count(&message_bus), 1);
 
         assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
         let computation = result.unwrap();
@@ -134,7 +156,7 @@ async fn test_option_chain() {
             response_messages: test_case.response_messages.clone(),
         });
 
-        let client = Client::stubbed(message_bus, server_versions::SEC_DEF_OPT_PARAMS_REQ);
+        let client = Client::stubbed(message_bus.clone(), server_versions::SEC_DEF_OPT_PARAMS_REQ);
         let result = client
             .option_chain(
                 test_case.symbol,
@@ -144,9 +166,17 @@ async fn test_option_chain() {
             )
             .await;
 
-        let request_messages = client.message_bus.request_messages();
-        assert_eq!(request_messages.len(), 1);
-        assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestSecurityDefinitionOptionalParameters);
+        assert_eq!(request_message_count(&message_bus), 1);
+        assert_request(
+            &message_bus,
+            0,
+            &option_chain_request()
+                .request_id(TEST_REQ_ID_FIRST)
+                .symbol(test_case.symbol)
+                .exchange(test_case.exchange)
+                .security_type(test_case.security_type.clone())
+                .contract_id(test_case.contract_id),
+        );
 
         assert!(result.is_ok(), "Test '{}' failed: {:?}", test_case.name, result.err());
         let mut subscription = result.unwrap();
@@ -287,16 +317,18 @@ async fn request_stock_contract_details() {
     ]
 });
 
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let contract = Contract::stock("TSLA").build();
 
     let results = client.contract_details(&contract).await;
 
-    let request_messages = client.message_bus.request_messages();
-
-    assert_eq!(request_messages.len(), 1);
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestContractData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &contract_data_request().request_id(TEST_REQ_ID_FIRST).contract(&contract),
+    );
 
     assert!(results.is_ok(), "failed to encode request: {:?}", results.err());
 
@@ -330,7 +362,7 @@ async fn request_bond_contract_details() {
     ]
 });
 
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     // Create a bond contract
     let contract = Contract {
@@ -343,10 +375,12 @@ async fn request_bond_contract_details() {
 
     let results = client.contract_details(&contract).await;
 
-    let request_messages = client.message_bus.request_messages();
-
-    assert_eq!(request_messages.len(), 1);
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestContractData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &contract_data_request().request_id(TEST_REQ_ID_FIRST).contract(&contract),
+    );
 
     assert!(results.is_ok(), "failed to encode request: {:?}", results.err());
 
@@ -381,7 +415,7 @@ async fn request_future_contract_details() {
     ]
 });
 
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     // Create a future contract
     let contract = Contract {
@@ -396,6 +430,13 @@ async fn request_future_contract_details() {
     let results = client.contract_details(&contract).await;
     assert!(results.is_ok(), "failed to encode request: {:?}", results.err());
 
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &contract_data_request().request_id(TEST_REQ_ID_FIRST).contract(&contract),
+    );
+
     let contracts: Vec<ContractDetails> = results.unwrap();
     assert_eq!(1, contracts.len());
 
@@ -408,4 +449,16 @@ async fn request_future_contract_details() {
     assert_eq!(contracts[0].long_name, "E-mini S&P 500");
     assert_eq!(contracts[0].contract.multiplier, "50");
     assert_eq!(contracts[0].min_tick, 0.25);
+}
+
+#[tokio::test]
+async fn test_cancel_contract_details() {
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![]));
+    let client = Client::stubbed(message_bus.clone(), server_versions::CANCEL_CONTRACT_DATA);
+
+    let result = client.cancel_contract_details(42).await;
+    assert!(result.is_ok(), "cancel_contract_details failed: {:?}", result.err());
+
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(&message_bus, 0, &cancel_contract_data_request().request_id(42));
 }
