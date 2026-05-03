@@ -164,7 +164,7 @@ impl Features {
 /// ```
 pub fn check_version(server_version: i32, feature: ProtocolFeature) -> Result<(), Error> {
     if server_version < feature.min_version {
-        Err(Error::ServerVersion(server_version, feature.min_version, feature.name.to_string()))
+        Err(Error::ServerVersion(feature.min_version, server_version, feature.name.to_string()))
     } else {
         Ok(())
     }
@@ -229,13 +229,17 @@ mod tests {
         let result = check_version(50, Features::TICK_BY_TICK);
         assert!(result.is_err());
         match result {
-            Err(Error::ServerVersion(server, required, feature)) => {
-                assert_eq!(server, 50);
+            Err(Error::ServerVersion(required, actual, feature)) => {
                 assert_eq!(required, 137);
+                assert_eq!(actual, 50);
                 assert_eq!(feature, "tick-by-tick data");
             }
             _ => panic!("Expected ServerVersion error"),
         }
+
+        // Display formatting must match the variant convention (errors.rs).
+        let rendered = check_version(50, Features::TICK_BY_TICK).unwrap_err().to_string();
+        assert_eq!(rendered, "server version 137 required, got 50: tick-by-tick data");
     }
 
     #[test]
