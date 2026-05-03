@@ -1,12 +1,13 @@
 use super::*;
 use crate::client::blocking::Client;
-use crate::common::test_utils::helpers::{assert_proto_msg_id, count_proto_msgs};
+use crate::common::test_utils::helpers::{assert_proto_msg_id, assert_request, count_proto_msgs, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::Contract;
 use crate::market_data::historical::ToDuration;
 use crate::market_data::TradingHours;
 use crate::messages::OutgoingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
+use crate::testdata::builders::market_data::{head_timestamp_request, histogram_data_request, historical_data_request, historical_ticks_request};
 use std::sync::{Arc, RwLock};
 use time::macros::{date, datetime};
 use time::OffsetDateTime;
@@ -19,7 +20,7 @@ fn test_head_timestamp() {
         response_messages: vec!["88|9000|1678323335|".to_owned()],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let contract = Contract::stock("MSFT").build();
     let what_to_show = WhatToShow::Trades;
@@ -31,9 +32,16 @@ fn test_head_timestamp() {
 
     assert_eq!(head_timestamp, OffsetDateTime::from_unix_timestamp(1678323335).unwrap(), "bar.date");
 
-    let request_messages = client.message_bus.request_messages();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHeadTimestamp);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &head_timestamp_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .what_to_show(what_to_show)
+            .use_rth(trading_hours.use_rth()),
+    );
 }
 
 #[test]
@@ -43,7 +51,7 @@ fn test_histogram_data() {
         response_messages: vec!["19|9000|3|125.50|1000|126.00|2000|126.50|3000|".to_owned()],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let contract = Contract::stock("MSFT").build();
     let trading_hours = TradingHours::Regular;
@@ -66,8 +74,16 @@ fn test_histogram_data() {
     assert_eq!(histogram_data[2].size, 3000, "histogram_data[2].size");
 
     // Assert Request
-    let request_messages = client.message_bus.request_messages();
-    assert!(!request_messages.is_empty(), "Should have sent a request message");
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &histogram_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .use_rth(trading_hours.use_rth())
+            .period(period),
+    );
 }
 
 #[test]
@@ -79,7 +95,7 @@ fn test_historical_data() {
         ],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
+    let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let contract = Contract::stock("MSFT").build();
     let interval_end = datetime!(2023-04-15 16:31:22 UTC);
@@ -108,9 +124,19 @@ fn test_historical_data() {
     assert_eq!(historical_data.bars[0].count, 324891, "bar.count");
 
     // Assert Request
-    let request_messages = client.message_bus.request_messages();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &historical_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .end_date(Some(interval_end))
+            .duration(duration)
+            .bar_size(bar_size)
+            .what_to_show(Some(what_to_show))
+            .use_rth(trading_hours.use_rth()),
+    );
 }
 
 #[test]
@@ -122,7 +148,7 @@ fn test_historical_schedule() {
         ],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_SCHEDULE);
+    let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_SCHEDULE);
 
     let contract = Contract::stock("MSFT").build();
     let end_date = datetime!(2023-04-15 16:31:22 UTC);
@@ -161,9 +187,19 @@ fn test_historical_schedule() {
     );
 
     // Assert Request
-    let request_messages = client.message_bus.request_messages();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &historical_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .end_date(Some(end_date))
+            .duration(duration)
+            .bar_size(BarSize::Day)
+            .what_to_show(Some(WhatToShow::Schedule))
+            .use_rth(true),
+    );
 }
 
 #[test]
@@ -173,7 +209,7 @@ fn test_historical_ticks_bid_ask() {
         response_messages: vec![],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
+    let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
 
     let contract = Contract::stock("MSFT").build();
     let start = Some(datetime!(2023-04-01 09:30:00 UTC));
@@ -182,14 +218,24 @@ fn test_historical_ticks_bid_ask() {
     let trading_hours = TradingHours::Regular;
     let ignore_size = true;
 
-    // Just test that the function doesn't panic and returns a subscription
     let _tick_subscription = client
         .historical_ticks_bid_ask(&contract, start, end, number_of_ticks, trading_hours, ignore_size)
         .expect("historical ticks bid ask request failed");
 
-    // Assert Request
-    let request_messages = client.message_bus.request_messages();
-    assert!(!request_messages.is_empty(), "Should have sent a request message");
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &historical_ticks_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .start(start)
+            .end(end)
+            .number_of_ticks(number_of_ticks)
+            .what_to_show(WhatToShow::BidAsk)
+            .use_rth(trading_hours.use_rth())
+            .ignore_size(ignore_size),
+    );
 }
 
 #[test]
@@ -199,7 +245,7 @@ fn test_historical_ticks_mid_point() {
         response_messages: vec![],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
+    let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
 
     let contract = Contract::stock("MSFT").build();
     let start = Some(datetime!(2023-04-01 09:30:00 UTC));
@@ -207,14 +253,23 @@ fn test_historical_ticks_mid_point() {
     let number_of_ticks = 10;
     let trading_hours = TradingHours::Regular;
 
-    // Just test that the function doesn't panic and returns a subscription
     let _tick_subscription = client
         .historical_ticks_mid_point(&contract, start, end, number_of_ticks, trading_hours)
         .expect("historical ticks mid point request failed");
 
-    // Assert Request
-    let request_messages = client.message_bus.request_messages();
-    assert!(!request_messages.is_empty(), "Should have sent a request message");
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &historical_ticks_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .start(start)
+            .end(end)
+            .number_of_ticks(number_of_ticks)
+            .what_to_show(WhatToShow::MidPoint)
+            .use_rth(trading_hours.use_rth()),
+    );
 }
 
 #[test]
@@ -224,7 +279,7 @@ fn test_historical_ticks_trade() {
         response_messages: vec![],
     });
 
-    let client = Client::stubbed(message_bus, server_versions::HISTORICAL_TICKS);
+    let client = Client::stubbed(message_bus.clone(), server_versions::HISTORICAL_TICKS);
 
     let contract = Contract::stock("MSFT").build();
     let start = Some(datetime!(2023-04-01 09:30:00 UTC));
@@ -232,14 +287,23 @@ fn test_historical_ticks_trade() {
     let number_of_ticks = 10;
     let trading_hours = TradingHours::Regular;
 
-    // Just test that the function doesn't panic and returns a subscription
     let _tick_subscription = client
         .historical_ticks_trade(&contract, start, end, number_of_ticks, trading_hours)
         .expect("historical ticks trade request failed");
 
-    // Assert Request
-    let request_messages = client.message_bus.request_messages();
-    assert!(!request_messages.is_empty(), "Should have sent a request message");
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &historical_ticks_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .start(start)
+            .end(end)
+            .number_of_ticks(number_of_ticks)
+            .what_to_show(WhatToShow::Trades)
+            .use_rth(trading_hours.use_rth()),
+    );
 }
 
 #[test]
@@ -623,9 +687,19 @@ fn test_historical_data_streaming_with_updates() {
     }
 
     // Verify request message was sent
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request");
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &historical_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .duration(Duration::days(1))
+            .bar_size(BarSize::Hour)
+            .what_to_show(Some(WhatToShow::Trades))
+            .use_rth(true)
+            .keep_up_to_date(true),
+    );
 }
 
 #[test]
@@ -665,9 +739,19 @@ fn test_historical_data_streaming_keep_up_to_date_false() {
     }
 
     // Verify request message was sent
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request");
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &historical_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .duration(Duration::days(1))
+            .bar_size(BarSize::Hour)
+            .what_to_show(Some(WhatToShow::Trades))
+            .use_rth(true)
+            .keep_up_to_date(false),
+    );
 }
 
 #[test]

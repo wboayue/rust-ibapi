@@ -1,9 +1,10 @@
 use super::*;
-use crate::common::test_utils::helpers::{assert_proto_msg_id, count_proto_msgs};
+use crate::common::test_utils::helpers::{assert_proto_msg_id, assert_request, count_proto_msgs, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::{Contract, Currency, Exchange, SecurityType, Symbol};
 use crate::messages::OutgoingMessages;
 use crate::server_versions;
 use crate::stubs::MessageBusStub;
+use crate::testdata::builders::market_data::{head_timestamp_request, histogram_data_request, historical_data_request, historical_ticks_request};
 use std::sync::Arc;
 use std::sync::RwLock;
 use time::macros::datetime;
@@ -33,11 +34,16 @@ async fn test_head_timestamp() {
     let timestamp = result.unwrap();
     assert_eq!(timestamp, datetime!(2023-03-15 00:00:00 UTC), "Wrong timestamp");
 
-    // Verify request message
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHeadTimestamp);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &head_timestamp_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .what_to_show(what_to_show)
+            .use_rth(trading_hours.use_rth()),
+    );
 }
 
 #[tokio::test]
@@ -77,11 +83,16 @@ async fn test_histogram_data() {
     assert_eq!(entries[2].price, 186.00, "Wrong price for third entry");
     assert_eq!(entries[2].size, 200, "Wrong size for third entry");
 
-    // Verify request message
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistogramData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &histogram_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .use_rth(trading_hours.use_rth())
+            .period(period),
+    );
 }
 
 #[tokio::test]
@@ -144,11 +155,19 @@ async fn test_historical_data() {
     assert_eq!(bar.wap, 185.85, "Wrong WAP for second bar");
     assert_eq!(bar.count, 150, "Wrong count for second bar");
 
-    // Verify request message
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &historical_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .end_date(end_date)
+            .duration(duration)
+            .bar_size(bar_size)
+            .what_to_show(what_to_show)
+            .use_rth(trading_hours.use_rth()),
+    );
 }
 
 #[tokio::test]
@@ -278,11 +297,19 @@ async fn test_historical_schedule() {
     // Check that we have sessions
     assert!(!schedule.sessions.is_empty(), "Should have at least 1 session");
 
-    // Verify request message
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &historical_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .end_date(end_date)
+            .duration(duration)
+            .bar_size(BarSize::Day)
+            .what_to_show(Some(WhatToShow::Schedule))
+            .use_rth(true),
+    );
 }
 
 #[tokio::test]
@@ -421,11 +448,20 @@ async fn test_tick_subscription_bid_ask() {
     assert!(tick.tick_attribute_bid_ask.bid_past_low, "Wrong bid past low");
     assert!(!tick.tick_attribute_bid_ask.ask_past_high, "Wrong ask past high");
 
-    // Verify request message
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalTicks);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &historical_ticks_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .start(start)
+            .end(end)
+            .number_of_ticks(number_of_ticks)
+            .what_to_show(WhatToShow::BidAsk)
+            .use_rth(trading_hours.use_rth())
+            .ignore_size(ignore_size),
+    );
 }
 
 #[tokio::test]
@@ -459,10 +495,17 @@ async fn test_tick_subscription_midpoint() {
     assert_eq!(tick.price, 185.75, "Wrong midpoint price");
     assert_eq!(tick.size, 100, "Wrong size");
 
-    // Verify request message
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalTicks);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &historical_ticks_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .number_of_ticks(1)
+            .what_to_show(WhatToShow::MidPoint)
+            .use_rth(true),
+    );
 }
 
 #[tokio::test]
@@ -500,10 +543,17 @@ async fn test_historical_ticks_trade() {
     assert!(!tick.tick_attribute_last.past_limit, "Wrong past limit");
     assert!(!tick.tick_attribute_last.unreported, "Wrong unreported");
 
-    // Verify request message
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request message");
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalTicks);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &historical_ticks_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .number_of_ticks(1)
+            .what_to_show(WhatToShow::Trades)
+            .use_rth(true),
+    );
 }
 
 #[tokio::test]
@@ -599,10 +649,19 @@ async fn test_historical_data_streaming_with_updates() {
         _ => panic!("Expected Update variant"),
     }
 
-    // Verify request message
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request");
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &historical_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .duration(Duration::days(1))
+            .bar_size(BarSize::Hour)
+            .what_to_show(Some(WhatToShow::Trades))
+            .use_rth(true)
+            .keep_up_to_date(true),
+    );
 }
 
 #[tokio::test]
@@ -641,10 +700,19 @@ async fn test_historical_data_streaming_keep_up_to_date_false() {
         _ => panic!("Expected Historical variant"),
     }
 
-    // Verify request message
-    let request_messages = message_bus.request_messages.read().unwrap();
-    assert_eq!(request_messages.len(), 1, "Should send one request");
-    assert_proto_msg_id(&request_messages[0], OutgoingMessages::RequestHistoricalData);
+    assert_eq!(request_message_count(&message_bus), 1);
+    assert_request(
+        &message_bus,
+        0,
+        &historical_data_request()
+            .request_id(TEST_REQ_ID_FIRST)
+            .contract(&contract)
+            .duration(Duration::days(1))
+            .bar_size(BarSize::Hour)
+            .what_to_show(Some(WhatToShow::Trades))
+            .use_rth(true)
+            .keep_up_to_date(false),
+    );
 }
 
 #[tokio::test]
