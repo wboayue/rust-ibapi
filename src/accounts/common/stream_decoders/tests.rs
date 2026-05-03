@@ -41,14 +41,12 @@ mod account_summary_tests {
     }
 
     #[test]
-    fn test_decode_unexpected_message() {
-        // Using Error message type which is not expected for AccountSummaryResult
-        let mut message = ResponseMessage::from("4\02\0123\0Some error\0");
-
-        let result = AccountSummaryResult::decode(&test_context(), &mut message);
-
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("unexpected message"));
+    fn test_decode_error_message() {
+        // Error on the same request_id channel surfaces as Error::Message, not a
+        // parse failure or "unexpected message" error (#434).
+        let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
+        let err = AccountSummaryResult::decode(&test_context(), &mut message).unwrap_err();
+        assert_tws_error_message(err, 10089, "not subscribed");
     }
 
     #[test]
@@ -69,7 +67,11 @@ mod account_summary_tests {
     fn test_response_message_ids() {
         assert_eq!(
             AccountSummaryResult::RESPONSE_MESSAGE_IDS,
-            &[IncomingMessages::AccountSummary, IncomingMessages::AccountSummaryEnd]
+            &[
+                IncomingMessages::AccountSummary,
+                IncomingMessages::AccountSummaryEnd,
+                IncomingMessages::Error
+            ]
         );
     }
 }
@@ -104,7 +106,14 @@ mod pnl_tests {
 
     #[test]
     fn test_response_message_ids() {
-        assert_eq!(PnL::RESPONSE_MESSAGE_IDS, &[IncomingMessages::PnL]);
+        assert_eq!(PnL::RESPONSE_MESSAGE_IDS, &[IncomingMessages::PnL, IncomingMessages::Error]);
+    }
+
+    #[test]
+    fn test_decode_error_message() {
+        let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
+        let err = PnL::decode(&test_context(), &mut message).unwrap_err();
+        assert_tws_error_message(err, 10089, "not subscribed");
     }
 }
 
@@ -133,7 +142,14 @@ mod pnl_single_tests {
 
     #[test]
     fn test_response_message_ids() {
-        assert_eq!(PnLSingle::RESPONSE_MESSAGE_IDS, &[IncomingMessages::PnLSingle]);
+        assert_eq!(PnLSingle::RESPONSE_MESSAGE_IDS, &[IncomingMessages::PnLSingle, IncomingMessages::Error]);
+    }
+
+    #[test]
+    fn test_decode_error_message() {
+        let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
+        let err = PnLSingle::decode(&test_context(), &mut message).unwrap_err();
+        assert_tws_error_message(err, 10089, "not subscribed");
     }
 }
 
@@ -178,8 +194,15 @@ mod position_update_tests {
     fn test_response_message_ids() {
         assert_eq!(
             PositionUpdate::RESPONSE_MESSAGE_IDS,
-            &[IncomingMessages::Position, IncomingMessages::PositionEnd]
+            &[IncomingMessages::Position, IncomingMessages::PositionEnd, IncomingMessages::Error]
         );
+    }
+
+    #[test]
+    fn test_decode_error_message() {
+        let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
+        let err = PositionUpdate::decode(&test_context(), &mut message).unwrap_err();
+        assert_tws_error_message(err, 10089, "not subscribed");
     }
 }
 
@@ -233,8 +256,19 @@ mod position_update_multi_tests {
     fn test_response_message_ids() {
         assert_eq!(
             PositionUpdateMulti::RESPONSE_MESSAGE_IDS,
-            &[IncomingMessages::PositionMulti, IncomingMessages::PositionMultiEnd]
+            &[
+                IncomingMessages::PositionMulti,
+                IncomingMessages::PositionMultiEnd,
+                IncomingMessages::Error
+            ]
         );
+    }
+
+    #[test]
+    fn test_decode_error_message() {
+        let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
+        let err = PositionUpdateMulti::decode(&test_context(), &mut message).unwrap_err();
+        assert_tws_error_message(err, 10089, "not subscribed");
     }
 }
 
@@ -319,9 +353,17 @@ mod account_update_tests {
                 IncomingMessages::AccountValue,
                 IncomingMessages::PortfolioValue,
                 IncomingMessages::AccountUpdateTime,
-                IncomingMessages::AccountDownloadEnd
+                IncomingMessages::AccountDownloadEnd,
+                IncomingMessages::Error,
             ]
         );
+    }
+
+    #[test]
+    fn test_decode_error_message() {
+        let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
+        let err = AccountUpdate::decode(&test_context(), &mut message).unwrap_err();
+        assert_tws_error_message(err, 10089, "not subscribed");
     }
 }
 
@@ -375,8 +417,19 @@ mod account_update_multi_tests {
     fn test_response_message_ids() {
         assert_eq!(
             AccountUpdateMulti::RESPONSE_MESSAGE_IDS,
-            &[IncomingMessages::AccountUpdateMulti, IncomingMessages::AccountUpdateMultiEnd]
+            &[
+                IncomingMessages::AccountUpdateMulti,
+                IncomingMessages::AccountUpdateMultiEnd,
+                IncomingMessages::Error
+            ]
         );
+    }
+
+    #[test]
+    fn test_decode_error_message() {
+        let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
+        let err = AccountUpdateMulti::decode(&test_context(), &mut message).unwrap_err();
+        assert_tws_error_message(err, 10089, "not subscribed");
     }
 }
 
