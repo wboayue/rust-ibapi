@@ -80,10 +80,6 @@ impl MessageBusStub {
 
 #[cfg(feature = "sync")]
 impl MessageBus for MessageBusStub {
-    fn request_messages(&self) -> Vec<Vec<u8>> {
-        self.request_messages.read().unwrap().clone()
-    }
-
     fn send_request(&self, request_id: i32, message: &[u8]) -> Result<InternalSubscription, Error> {
         Ok(mock_request(self, Some(request_id), None, message))
     }
@@ -270,10 +266,5 @@ impl AsyncMessageBus for MessageBusStub {
 
     fn is_connected(&self) -> bool {
         true // Stub always returns connected
-    }
-
-    #[cfg(test)]
-    fn request_messages(&self) -> Vec<Vec<u8>> {
-        self.request_messages.read().unwrap().clone()
     }
 }

@@ -207,10 +207,19 @@ pub(crate) mod contracts;
 pub(crate) mod market_data;
 
 #[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
+pub(crate) mod news;
+
+#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
 pub(crate) mod orders;
 
 #[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
 pub(crate) mod positions;
+
+#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
+pub(crate) mod scanner;
+
+#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
+pub(crate) mod wsh;
 
 #[cfg(test)]
 #[path = "tests.rs"]

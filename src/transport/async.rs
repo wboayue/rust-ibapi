@@ -57,11 +57,6 @@ pub trait AsyncMessageBus: Send + Sync {
     fn request_shutdown_sync(&self);
 
     fn is_connected(&self) -> bool;
-
-    #[cfg(test)]
-    fn request_messages(&self) -> Vec<Vec<u8>> {
-        vec![]
-    }
 }
 
 /// Internal subscription for async implementation

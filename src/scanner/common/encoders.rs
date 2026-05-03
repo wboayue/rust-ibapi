@@ -29,34 +29,5 @@ pub(in crate::scanner) fn encode_cancel_scanner_subscription(request_id: i32) ->
     crate::proto::encoders::encode_cancel_by_id!(request_id, CancelScannerSubscription, OutgoingMessages::CancelScannerSubscription)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::common::test_utils::helpers::assert_proto_msg_id;
-
-    #[test]
-    fn test_encode_scanner_parameters() {
-        let bytes = encode_scanner_parameters().unwrap();
-        assert_proto_msg_id(&bytes, OutgoingMessages::RequestScannerParameters);
-    }
-
-    #[test]
-    fn test_encode_cancel_scanner_subscription() {
-        let bytes = encode_cancel_scanner_subscription(9000).unwrap();
-        assert_proto_msg_id(&bytes, OutgoingMessages::CancelScannerSubscription);
-    }
-
-    #[test]
-    fn test_encode_scanner_subscription() {
-        let subscription = ScannerSubscription {
-            number_of_rows: 10,
-            instrument: Some("STK".to_string()),
-            location_code: Some("STK.US".to_string()),
-            scan_code: Some("TOP_PERC_GAIN".to_string()),
-            ..Default::default()
-        };
-        let filter = vec![];
-        let bytes = encode_scanner_subscription(9000, &subscription, &filter).unwrap();
-        assert_proto_msg_id(&bytes, OutgoingMessages::RequestScannerSubscription);
-    }
-}
+// Encoder body assertions live in the migrated sync/async tests via
+// `assert_request<B>(builder)`.
