@@ -62,36 +62,5 @@ pub(in crate::news) fn encode_request_news_article(request_id: i32, provider_cod
     ))
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::common::test_utils::helpers::assert_proto_msg_id;
-    use crate::messages::OutgoingMessages;
-
-    #[test]
-    fn test_encode_request_news_providers() {
-        let bytes = super::encode_request_news_providers().unwrap();
-        assert_proto_msg_id(&bytes, OutgoingMessages::RequestNewsProviders);
-    }
-
-    #[test]
-    fn test_encode_request_news_bulletins() {
-        let bytes = super::encode_request_news_bulletins(true).unwrap();
-        assert_proto_msg_id(&bytes, OutgoingMessages::RequestNewsBulletins);
-    }
-
-    #[test]
-    fn test_encode_cancel_news_bulletin() {
-        let bytes = super::encode_cancel_news_bulletin().unwrap();
-        assert_proto_msg_id(&bytes, OutgoingMessages::CancelNewsBulletin);
-    }
-
-    #[test]
-    fn test_encode_request_news_article() {
-        let bytes = super::encode_request_news_article(1000, "BRFG", "BRFG$12345").unwrap();
-        assert_proto_msg_id(&bytes, OutgoingMessages::RequestNewsArticle);
-        use prost::Message;
-        let req = crate::proto::NewsArticleRequest::decode(&bytes[4..]).unwrap();
-        assert_eq!(req.req_id, Some(1000));
-        assert_eq!(req.provider_code.as_deref(), Some("BRFG"));
-    }
-}
+// Encoder body assertions live in the migrated sync/async tests via
+// `assert_request<B>(builder)`.

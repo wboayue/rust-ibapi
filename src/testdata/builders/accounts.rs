@@ -627,7 +627,7 @@ impl RequestEncoder for AccountSummaryRequestBuilder {
     }
 }
 
-cancel_by_request_id_builder!(CancelAccountSummaryBuilder, CancelAccountSummary, OutgoingMessages::CancelAccountSummary);
+single_req_id_request_builder!(CancelAccountSummaryBuilder, CancelAccountSummary, OutgoingMessages::CancelAccountSummary);
 
 #[derive(Clone, Debug)]
 pub struct AccountUpdatesRequestBuilder {
@@ -727,7 +727,7 @@ impl RequestEncoder for AccountUpdatesMultiRequestBuilder {
     }
 }
 
-cancel_by_request_id_builder!(
+single_req_id_request_builder!(
     CancelAccountUpdatesMultiBuilder,
     CancelAccountUpdatesMulti,
     OutgoingMessages::CancelAccountUpdatesMulti
@@ -782,7 +782,7 @@ impl RequestEncoder for PnLRequestBuilder {
     }
 }
 
-cancel_by_request_id_builder!(CancelPnLBuilder, CancelPnL, OutgoingMessages::CancelPnL);
+single_req_id_request_builder!(CancelPnLBuilder, CancelPnL, OutgoingMessages::CancelPnL);
 
 #[derive(Clone, Debug)]
 pub struct PnLSingleRequestBuilder {
@@ -840,7 +840,7 @@ impl RequestEncoder for PnLSingleRequestBuilder {
     }
 }
 
-cancel_by_request_id_builder!(CancelPnLSingleBuilder, CancelPnLSingle, OutgoingMessages::CancelPnLSingle);
+single_req_id_request_builder!(CancelPnLSingleBuilder, CancelPnLSingle, OutgoingMessages::CancelPnLSingle);
 
 empty_request_builder!(FamilyCodesRequestBuilder, FamilyCodesRequest, OutgoingMessages::RequestFamilyCodes);
 empty_request_builder!(CurrentTimeRequestBuilder, CurrentTimeRequest, OutgoingMessages::RequestCurrentTime);

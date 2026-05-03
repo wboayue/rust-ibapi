@@ -70,12 +70,14 @@ pub(crate) trait ResponseProtoEncoder {
     }
 }
 
-/// Generates a typed builder for cancel-by-request-id protobuf messages.
+/// Generates a typed builder for single-`req_id` protobuf request messages.
 ///
-/// Mirrors `proto::encoders::encode_cancel_by_id!` on the production side.
-/// The generated type owns a single `request_id: i32` and emits
-/// `proto::$proto_type { req_id: Some(self.request_id) }`.
-macro_rules! cancel_by_request_id_builder {
+/// Covers both cancel messages and request messages whose proto body is just
+/// a `req_id` (e.g. `WshMetaDataRequest`). Production-side counterpart is
+/// `proto::encoders::encode_cancel_by_id!`, which is similarly reused for
+/// non-cancel requests with the same shape. The generated type owns a single
+/// `request_id: i32` and emits `proto::$proto_type { req_id: Some(self.request_id) }`.
+macro_rules! single_req_id_request_builder {
     ($builder:ident, $proto_type:ident, $msg_id:expr) => {
         #[derive(Clone, Copy, Debug)]
         pub struct $builder {
@@ -207,10 +209,19 @@ pub(crate) mod contracts;
 pub(crate) mod market_data;
 
 #[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
+pub(crate) mod news;
+
+#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
 pub(crate) mod orders;
 
 #[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
 pub(crate) mod positions;
+
+#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
+pub(crate) mod scanner;
+
+#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
+pub(crate) mod wsh;
 
 #[cfg(test)]
 #[path = "tests.rs"]

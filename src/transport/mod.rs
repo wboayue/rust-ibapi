@@ -49,11 +49,6 @@ pub(crate) trait MessageBus: Send + Sync {
     fn ensure_shutdown(&self);
 
     fn is_connected(&self) -> bool;
-
-    #[cfg(test)]
-    fn request_messages(&self) -> Vec<Vec<u8>> {
-        vec![]
-    }
 }
 
 // InternalSubscription - handles receiving messages for sync subscriptions

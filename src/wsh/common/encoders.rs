@@ -47,50 +47,5 @@ pub(in crate::wsh) fn encode_cancel_wsh_event_data(request_id: i32) -> Result<Ve
     crate::proto::encoders::encode_cancel_by_id!(request_id, CancelWshEventData, OutgoingMessages::CancelWshEventData)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::common::test_utils::helpers::assert_proto_msg_id;
-
-    #[test]
-    fn test_encode_request_wsh_metadata() {
-        let bytes = encode_request_wsh_metadata(9000).unwrap();
-        assert_proto_msg_id(&bytes, OutgoingMessages::RequestWshMetaData);
-    }
-
-    #[test]
-    fn test_encode_cancel_wsh_metadata() {
-        let bytes = encode_cancel_wsh_metadata(9000).unwrap();
-        assert_proto_msg_id(&bytes, OutgoingMessages::CancelWshMetaData);
-    }
-
-    #[test]
-    fn test_encode_request_wsh_event_data() {
-        let bytes = encode_request_wsh_event_data(
-            9000,
-            Some(12345),
-            Some("earnings"),
-            None,
-            None,
-            Some(10),
-            Some(AutoFill {
-                watchlist: true,
-                portfolio: false,
-                competitors: true,
-            }),
-        )
-        .unwrap();
-        assert_proto_msg_id(&bytes, OutgoingMessages::RequestWshEventData);
-        use prost::Message;
-        let req = crate::proto::WshEventDataRequest::decode(&bytes[4..]).unwrap();
-        assert_eq!(req.con_id, Some(12345));
-        assert_eq!(req.filter.as_deref(), Some("earnings"));
-        assert_eq!(req.fill_watchlist, Some(true));
-    }
-
-    #[test]
-    fn test_encode_cancel_wsh_event_data() {
-        let bytes = encode_cancel_wsh_event_data(9000).unwrap();
-        assert_proto_msg_id(&bytes, OutgoingMessages::CancelWshEventData);
-    }
-}
+// Encoder body assertions live in the migrated sync/async tests via
+// `assert_request<B>(builder)`.
