@@ -1,4 +1,4 @@
-use crate::common::test_utils::helpers::{assert_request, assert_request_msg_id, request_message_count, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{assert_request, assert_request_msg_id, request_message_count, TEST_CONTRACT_ID, TEST_REQ_ID_FIRST};
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::news::ArticleType;
@@ -10,6 +10,8 @@ use crate::testdata::builders::news::{
 use crate::{server_versions, Client};
 use std::sync::{Arc, RwLock};
 use time::macros::datetime;
+
+const NEWS_ARTICLE_RESPONSE: &str = "84|9000|1672531200|BZ|BZ$123|Breaking news headline|TSLA:123|";
 
 #[tokio::test]
 async fn test_news_providers() {
@@ -69,7 +71,7 @@ async fn test_historical_news() {
     let end_time = datetime!(2023-01-02 0:00 UTC);
 
     let mut subscription = client
-        .historical_news(8314, &["BZ", "DJ"], start_time, end_time, 10)
+        .historical_news(TEST_CONTRACT_ID, &["BZ", "DJ"], start_time, end_time, 10)
         .await
         .expect("request historical news failed");
 
@@ -78,7 +80,6 @@ async fn test_historical_news() {
         0,
         &historical_news_request()
             .request_id(TEST_REQ_ID_FIRST)
-            .contract_id(8314)
             .provider_codes(&["BZ", "DJ"])
             .start_time(start_time)
             .end_time(end_time)
@@ -121,7 +122,7 @@ async fn test_news_article() {
 async fn test_contract_news() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec!["84|9000|1672531200|BZ|BZ$123|Breaking news headline|TSLA:123|".to_owned()],
+        response_messages: vec![NEWS_ARTICLE_RESPONSE.to_owned()],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -153,7 +154,7 @@ async fn test_contract_news() {
 async fn test_broad_tape_news() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec!["84|9000|1672531200|BZ|BZ$123|Breaking news headline|TSLA:123|".to_owned()],
+        response_messages: vec![NEWS_ARTICLE_RESPONSE.to_owned()],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -202,7 +203,7 @@ async fn test_news_bulletin_cancellation() {
 async fn test_contract_news_cancellation() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec!["84|9000|1672531200|BZ|BZ$123|Breaking news headline|TSLA:123|".to_owned()],
+        response_messages: vec![NEWS_ARTICLE_RESPONSE.to_owned()],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);

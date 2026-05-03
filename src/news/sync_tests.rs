@@ -1,5 +1,5 @@
 use crate::client::blocking::Client;
-use crate::common::test_utils::helpers::{assert_request, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{assert_request, TEST_CONTRACT_ID, TEST_REQ_ID_FIRST};
 use crate::contracts::Contract;
 use crate::news::ArticleType;
 use crate::server_versions;
@@ -8,6 +8,8 @@ use crate::testdata::builders::market_data::market_data_request;
 use crate::testdata::builders::news::{historical_news_request, news_article_request, news_bulletins_request, news_providers_request};
 use std::sync::{Arc, RwLock};
 use time::macros::datetime;
+
+const NEWS_ARTICLE_RESPONSE: &str = "84|9000|1672531200|BZ|BZ$123|Breaking news headline|TSLA:123|";
 
 #[test]
 fn test_news_providers() {
@@ -67,7 +69,7 @@ fn test_historical_news() {
     let end_time = datetime!(2023-01-02 0:00 UTC);
 
     let subscription = client
-        .historical_news(8314, &["BZ", "DJ"], start_time, end_time, 10)
+        .historical_news(TEST_CONTRACT_ID, &["BZ", "DJ"], start_time, end_time, 10)
         .expect("request historical news failed");
 
     assert_request(
@@ -75,7 +77,6 @@ fn test_historical_news() {
         0,
         &historical_news_request()
             .request_id(TEST_REQ_ID_FIRST)
-            .contract_id(8314)
             .provider_codes(&["BZ", "DJ"])
             .start_time(start_time)
             .end_time(end_time)
@@ -118,7 +119,7 @@ fn test_news_article() {
 fn test_contract_news() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec!["84|9000|1672531200|BZ|BZ$123|Breaking news headline|TSLA:123|".to_owned()],
+        response_messages: vec![NEWS_ARTICLE_RESPONSE.to_owned()],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
@@ -147,7 +148,7 @@ fn test_contract_news() {
 fn test_broad_tape_news() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
-        response_messages: vec!["84|9000|1672531200|BZ|BZ$123|Breaking news headline|TSLA:123|".to_owned()],
+        response_messages: vec![NEWS_ARTICLE_RESPONSE.to_owned()],
     });
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
