@@ -1,5 +1,5 @@
 use super::*;
-use crate::common::test_utils::helpers::{assert_request, request_message_count, TEST_REQ_ID_FIRST};
+use crate::common::test_utils::helpers::{assert_request, TEST_REQ_ID_FIRST};
 use crate::messages::ResponseMessage;
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::StreamDecoder;
@@ -335,9 +335,4 @@ fn test_wsh_event_data_decode_table() {
             );
         }
     }
-}
-
-#[allow(dead_code)]
-fn _silence(_b: &MessageBusStub) -> usize {
-    request_message_count(_b)
 }

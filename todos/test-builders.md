@@ -15,7 +15,7 @@ Foundations that grew beyond the original plan (added during PR 1/PR 2):
 - `ResponseProtoEncoder` trait — symmetric to `RequestEncoder` for the proto path on response builders. Implementors define `Proto` + `to_proto`; trait provides `encode_proto`.
 - `assert_request<B: RequestEncoder>` helper — builder-aware variant of `assert_request_proto<T>` that pulls `MSG_ID` from the trait so tests don't repeat it.
 - `response_messages(&[&dyn ResponseEncoder]) -> Vec<String>` helper — feed heterogeneous response builders into `MessageBusStub::response_messages`.
-- `cancel_by_request_id_builder!` / `empty_request_builder!` / `request_id_response_builder!` macros — collapse single-field builder boilerplate. Mirror the production-side `encode_cancel_by_id!` / `encode_empty_proto!` macros.
+- `single_req_id_request_builder!` / `empty_request_builder!` / `request_id_response_builder!` macros — collapse single-field builder boilerplate. Mirror the production-side `encode_cancel_by_id!` / `encode_empty_proto!` macros.
 
 ## Context
 
@@ -177,7 +177,7 @@ For each PR:
 When adding new tests for a builder, ask "what production code does this traverse?" — if the answer is "none, only my builder and prost", drop or replace it.
 
 **Mirror production-side macros on the test side.** Test macros should follow production naming so reviewers recognize the pattern. Established pairs:
-- `proto::encoders::encode_cancel_by_id!` ↔ `testdata::builders::cancel_by_request_id_builder!`
+- `proto::encoders::encode_cancel_by_id!` ↔ `testdata::builders::single_req_id_request_builder!`
 - `proto::encoders::encode_empty_proto!` ↔ `testdata::builders::empty_request_builder!`
 - (no production counterpart) `request_id_response_builder!` for response sentinels
 

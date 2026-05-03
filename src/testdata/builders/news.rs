@@ -9,7 +9,7 @@
 //! since they ultimately fan out through `encode_request_market_data`.
 
 use super::RequestEncoder;
-use crate::common::test_utils::helpers::constants::TEST_REQ_ID_FIRST;
+use crate::common::test_utils::helpers::constants::{TEST_CONTRACT_ID, TEST_REQ_ID_FIRST};
 use crate::messages::OutgoingMessages;
 use crate::proto;
 use crate::proto::encoders::some_bool;
@@ -61,7 +61,7 @@ impl Default for HistoricalNewsRequestBuilder {
     fn default() -> Self {
         Self {
             request_id: TEST_REQ_ID_FIRST,
-            contract_id: 0,
+            contract_id: TEST_CONTRACT_ID,
             provider_codes: Vec::new(),
             start_time: OffsetDateTime::UNIX_EPOCH,
             end_time: OffsetDateTime::UNIX_EPOCH,

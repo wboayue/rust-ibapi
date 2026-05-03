@@ -17,7 +17,7 @@ empty_request_builder!(
     OutgoingMessages::RequestScannerParameters
 );
 
-cancel_by_request_id_builder!(
+single_req_id_request_builder!(
     CancelScannerSubscriptionRequestBuilder,
     CancelScannerSubscription,
     OutgoingMessages::CancelScannerSubscription

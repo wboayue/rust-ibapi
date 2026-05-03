@@ -12,11 +12,11 @@ use time::Date;
 
 const DATE_FORMAT: &[time::format_description::FormatItem<'static>] = time::macros::format_description!("[year][month][day]");
 
-cancel_by_request_id_builder!(WshMetadataRequestBuilder, WshMetaDataRequest, OutgoingMessages::RequestWshMetaData);
+single_req_id_request_builder!(WshMetadataRequestBuilder, WshMetaDataRequest, OutgoingMessages::RequestWshMetaData);
 
-cancel_by_request_id_builder!(CancelWshMetadataRequestBuilder, CancelWshMetaData, OutgoingMessages::CancelWshMetaData);
+single_req_id_request_builder!(CancelWshMetadataRequestBuilder, CancelWshMetaData, OutgoingMessages::CancelWshMetaData);
 
-cancel_by_request_id_builder!(CancelWshEventDataRequestBuilder, CancelWshEventData, OutgoingMessages::CancelWshEventData);
+single_req_id_request_builder!(CancelWshEventDataRequestBuilder, CancelWshEventData, OutgoingMessages::CancelWshEventData);
 
 #[derive(Clone, Debug)]
 pub struct WshEventDataRequestBuilder {

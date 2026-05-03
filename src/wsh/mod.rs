@@ -62,5 +62,4 @@ impl AutoFill {
 // Async API methods are now on Client directly via wsh/async.rs
 
 #[cfg(test)]
-#[path = "common_tests.rs"]
 mod common_tests;
