@@ -6,6 +6,9 @@ use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
 use crate::orders::{ExecutionFilter, ExerciseAction, Order};
 use crate::proto;
+use crate::proto::encoders::{
+    encode_contract, encode_contract_with_order, encode_execution_filter, encode_order, encode_order_cancel, some_bool, some_str,
+};
 
 const TEST_PERM_ID: i64 = 1376327563;
 const TEST_EXEC_ID: &str = "00025b46.63f8f39c.01.01";
@@ -92,10 +95,6 @@ impl OrderStatusResponse {
     }
 }
 
-fn double_str(v: f64) -> String {
-    v.to_string()
-}
-
 fn opt_double_str(v: Option<f64>) -> String {
     v.map(|x| x.to_string()).unwrap_or_default()
 }
@@ -106,8 +105,8 @@ impl ResponseEncoder for OrderStatusResponse {
             "3".to_string(),
             self.order_id.to_string(),
             self.status.clone(),
-            double_str(self.filled),
-            double_str(self.remaining),
+            self.filled.to_string(),
+            self.remaining.to_string(),
             opt_double_str(self.average_fill_price),
             self.perm_id.to_string(),
             self.parent_id.to_string(),
@@ -126,8 +125,8 @@ impl ResponseProtoEncoder for OrderStatusResponse {
         proto::OrderStatus {
             order_id: Some(self.order_id),
             status: Some(self.status.clone()),
-            filled: Some(double_str(self.filled)),
-            remaining: Some(double_str(self.remaining)),
+            filled: Some(self.filled.to_string()),
+            remaining: Some(self.remaining.to_string()),
             avg_fill_price: self.average_fill_price,
             perm_id: Some(self.perm_id),
             parent_id: Some(self.parent_id),
@@ -193,7 +192,7 @@ impl ResponseEncoder for CommissionReportResponse {
             "59".to_string(),
             "1".to_string(),
             self.execution_id.clone(),
-            double_str(self.commission),
+            self.commission.to_string(),
             self.currency.clone(),
             opt_double_str(self.realized_pnl),
             opt_double_str(self.yields),
@@ -358,7 +357,7 @@ impl ResponseEncoder for ExecutionDataResponse {
             self.symbol.clone(),
             self.security_type.clone(),
             self.last_trade_date_or_contract_month.clone(),
-            double_str(self.strike),
+            self.strike.to_string(),
             self.right.clone(),
             self.multiplier.clone(),
             self.exchange.clone(),
@@ -370,13 +369,13 @@ impl ResponseEncoder for ExecutionDataResponse {
             self.account.clone(),
             self.exec_exchange.clone(),
             self.side.clone(),
-            double_str(self.shares),
-            double_str(self.price),
+            self.shares.to_string(),
+            self.price.to_string(),
             self.perm_id.to_string(),
             self.client_id.to_string(),
             self.liquidation.to_string(),
-            double_str(self.cumulative_quantity),
-            double_str(self.average_price),
+            self.cumulative_quantity.to_string(),
+            self.average_price.to_string(),
             self.order_reference.clone(),
             self.ev_rule.clone(),
             opt_double_str(self.ev_multiplier),
@@ -390,13 +389,6 @@ impl ResponseProtoEncoder for ExecutionDataResponse {
     type Proto = proto::ExecutionDetails;
 
     fn to_proto(&self) -> Self::Proto {
-        let opt_str = |s: &str| {
-            if s.is_empty() {
-                None
-            } else {
-                Some(s.to_string())
-            }
-        };
         proto::ExecutionDetails {
             req_id: Some(self.request_id),
             contract: Some(proto::Contract {
@@ -416,17 +408,17 @@ impl ResponseProtoEncoder for ExecutionDataResponse {
                 acct_number: Some(self.account.clone()),
                 exchange: Some(self.exec_exchange.clone()),
                 side: Some(self.side.clone()),
-                shares: Some(double_str(self.shares)),
+                shares: Some(self.shares.to_string()),
                 price: Some(self.price),
                 perm_id: Some(self.perm_id),
                 client_id: Some(self.client_id),
                 is_liquidation: Some(self.liquidation != 0),
-                cum_qty: Some(double_str(self.cumulative_quantity)),
+                cum_qty: Some(self.cumulative_quantity.to_string()),
                 avg_price: Some(self.average_price),
-                order_ref: opt_str(&self.order_reference),
-                ev_rule: opt_str(&self.ev_rule),
+                order_ref: some_str(&self.order_reference),
+                ev_rule: some_str(&self.ev_rule),
                 ev_multiplier: self.ev_multiplier,
-                model_code: opt_str(&self.model_code),
+                model_code: some_str(&self.model_code),
                 last_liquidity: Some(self.last_liquidity),
                 ..Default::default()
             }),
@@ -536,12 +528,12 @@ impl PlaceOrderRequestBuilder {
         self.order_id = v;
         self
     }
-    pub fn contract(mut self, contract: Contract) -> Self {
-        self.contract = contract;
+    pub fn contract(mut self, contract: &Contract) -> Self {
+        self.contract = contract.clone();
         self
     }
-    pub fn order(mut self, order: Order) -> Self {
-        self.order = order;
+    pub fn order(mut self, order: &Order) -> Self {
+        self.order = order.clone();
         self
     }
 }
@@ -553,8 +545,8 @@ impl RequestEncoder for PlaceOrderRequestBuilder {
     fn to_proto(&self) -> Self::Proto {
         proto::PlaceOrderRequest {
             order_id: Some(self.order_id),
-            contract: Some(crate::proto::encoders::encode_contract_with_order(&self.contract, Some(&self.order))),
-            order: Some(crate::proto::encoders::encode_order(&self.order)),
+            contract: Some(encode_contract_with_order(&self.contract, Some(&self.order))),
+            order: Some(encode_order(&self.order)),
             attached_orders: None,
         }
     }
@@ -593,7 +585,7 @@ impl RequestEncoder for CancelOrderRequestBuilder {
     fn to_proto(&self) -> Self::Proto {
         proto::CancelOrderRequest {
             order_id: Some(self.order_id),
-            order_cancel: Some(crate::proto::encoders::encode_order_cancel(&self.manual_order_cancel_time)),
+            order_cancel: Some(encode_order_cancel(&self.manual_order_cancel_time)),
         }
     }
 }
@@ -625,7 +617,7 @@ impl RequestEncoder for AutoOpenOrdersRequestBuilder {
 
     fn to_proto(&self) -> Self::Proto {
         proto::AutoOpenOrdersRequest {
-            auto_bind: crate::proto::encoders::some_bool(self.auto_bind),
+            auto_bind: some_bool(self.auto_bind),
         }
     }
 }
@@ -654,7 +646,7 @@ impl RequestEncoder for CompletedOrdersRequestBuilder {
 
     fn to_proto(&self) -> Self::Proto {
         proto::CompletedOrdersRequest {
-            api_only: crate::proto::encoders::some_bool(self.api_only),
+            api_only: some_bool(self.api_only),
         }
     }
 }
@@ -692,7 +684,7 @@ impl RequestEncoder for ExecutionsRequestBuilder {
     fn to_proto(&self) -> Self::Proto {
         proto::ExecutionRequest {
             req_id: Some(self.request_id),
-            execution_filter: Some(crate::proto::encoders::encode_execution_filter(&self.filter)),
+            execution_filter: Some(encode_execution_filter(&self.filter)),
         }
     }
 }
@@ -715,7 +707,7 @@ impl RequestEncoder for GlobalCancelRequestBuilder {
 
     fn to_proto(&self) -> Self::Proto {
         proto::GlobalCancelRequest {
-            order_cancel: Some(crate::proto::encoders::encode_order_cancel(&self.manual_order_cancel_time)),
+            order_cancel: Some(encode_order_cancel(&self.manual_order_cancel_time)),
         }
     }
 }
@@ -762,8 +754,8 @@ impl ExerciseOptionsRequestBuilder {
         self.order_id = v;
         self
     }
-    pub fn contract(mut self, contract: Contract) -> Self {
-        self.contract = contract;
+    pub fn contract(mut self, contract: &Contract) -> Self {
+        self.contract = contract.clone();
         self
     }
     pub fn exercise_action(mut self, v: ExerciseAction) -> Self {
@@ -791,11 +783,11 @@ impl RequestEncoder for ExerciseOptionsRequestBuilder {
     fn to_proto(&self) -> Self::Proto {
         proto::ExerciseOptionsRequest {
             order_id: Some(self.order_id),
-            contract: Some(crate::proto::encoders::encode_contract(&self.contract)),
+            contract: Some(encode_contract(&self.contract)),
             exercise_action: Some(self.exercise_action as i32),
             exercise_quantity: Some(self.exercise_quantity),
-            account: crate::proto::encoders::some_str(&self.account),
-            r#override: crate::proto::encoders::some_bool(self.r#override),
+            account: some_str(&self.account),
+            r#override: some_bool(self.r#override),
             manual_order_time: self.manual_order_time.clone(),
             customer_account: None,
             professional_customer: None,
