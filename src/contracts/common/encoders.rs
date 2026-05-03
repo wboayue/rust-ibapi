@@ -127,11 +127,6 @@ pub(in crate::contracts) fn encode_request_option_chain(
     ))
 }
 
-// Tests intentionally omitted: encoder coverage is provided end-to-end via
-// `assert_request<B>` in `src/contracts/{sync,async}/tests.rs` and via
-// `test_cancel_messages` exercising `OptionComputation::cancel_message` in
-// `stream_decoders`. The unsupported-message-type branch in
-// `encode_cancel_option_computation` is unreachable from production callers
-// (the `match` in `cancel_message` only dispatches to the two supported
-// variants), so an explicit error-path test would only verify hypothetical
-// callers.
+// Encoder coverage lives end-to-end in `contracts/{sync,async}/tests.rs`
+// (via `assert_request<B>`) and in `stream_decoders::test_cancel_messages`
+// (option-computation cancel dispatch).

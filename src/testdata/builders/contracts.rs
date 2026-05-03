@@ -1,10 +1,10 @@
 //! Builders for contracts-domain request messages.
 //!
-//! No response builders here: the migrated sync/async tests reuse the inline
-//! pipe literals in `contracts/common/test_tables.rs`, and the *End sentinels
-//! contain only a request_id (no domain payload), so a typed builder would
-//! only re-test prost — see PR 3 §"Lessons learned". Add a response builder
-//! when a real test needs to construct a non-trivial body.
+//! Response builders are intentionally absent: the sync/async tests reuse
+//! the inline pipe literals in `contracts/common/test_tables.rs`, and the
+//! `*End` sentinels carry only a `request_id` — a typed builder for those
+//! would exercise no production path beyond prost itself. Add a response
+//! builder only when a test needs to construct a non-trivial body.
 
 use super::RequestEncoder;
 use crate::common::test_utils::helpers::constants::TEST_REQ_ID_FIRST;
@@ -93,15 +93,9 @@ impl RequestEncoder for MatchingSymbolsRequestBuilder {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct MarketRuleRequestBuilder {
     pub market_rule_id: i32,
-}
-
-impl Default for MarketRuleRequestBuilder {
-    fn default() -> Self {
-        Self { market_rule_id: 26 }
-    }
 }
 
 impl MarketRuleRequestBuilder {
