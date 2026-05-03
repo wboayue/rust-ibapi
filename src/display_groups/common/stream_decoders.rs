@@ -84,19 +84,12 @@ mod tests {
 
     #[test]
     fn test_decode_error_message_surfaces_tws_error() {
-        // Issue #434: error message arriving on a subscription's request_id channel
-        // must surface as Error::Message(code, text), not be silently skipped.
+        // Error on the request_id channel surfaces as Error::Message, not silently
+        // skipped via UnexpectedResponse (#434).
+        use crate::common::test_utils::helpers::assert_tws_error_message;
         let mut message = make_response(&["4", "2", "9000", "10089", "Requested market data is not subscribed"]);
-
         let err = DisplayGroupUpdate::decode(&test_context(), &mut message).unwrap_err();
-
-        match err {
-            Error::Message(code, msg) => {
-                assert_eq!(code, 10089);
-                assert!(msg.contains("not subscribed"));
-            }
-            other => panic!("expected Error::Message, got {other:?}"),
-        }
+        assert_tws_error_message(err, 10089, "not subscribed");
     }
 
     #[test]

@@ -134,6 +134,20 @@ pub mod helpers {
             .filter(|m| m.len() >= 4 && i32::from_be_bytes([m[0], m[1], m[2], m[3]]) == target)
             .count()
     }
+
+    /// Asserts that `err` is `Error::Message(expected_code, msg)` and that `msg` contains `expected_substring`.
+    pub fn assert_tws_error_message(err: crate::Error, expected_code: i32, expected_substring: &str) {
+        match err {
+            crate::Error::Message(code, msg) => {
+                assert_eq!(code, expected_code, "wrong error code");
+                assert!(
+                    msg.contains(expected_substring),
+                    "error message {msg:?} does not contain {expected_substring:?}"
+                );
+            }
+            other => panic!("expected Error::Message({expected_code}, _), got {other:?}"),
+        }
+    }
 }
 
 #[cfg(test)]

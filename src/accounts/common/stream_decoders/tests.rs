@@ -42,19 +42,11 @@ mod account_summary_tests {
 
     #[test]
     fn test_decode_error_message() {
-        // Error message arriving on the same request_id channel surfaces as Error::Message,
-        // not a parse failure or generic "unexpected message" error (#434).
+        // Error on the same request_id channel surfaces as Error::Message, not a
+        // parse failure or "unexpected message" error (#434).
         let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
-
-        let result = AccountSummaryResult::decode(&test_context(), &mut message);
-
-        match result.unwrap_err() {
-            Error::Message(code, msg) => {
-                assert_eq!(code, 10089);
-                assert!(msg.contains("not subscribed"));
-            }
-            other => panic!("expected Error::Message, got {other:?}"),
-        }
+        let err = AccountSummaryResult::decode(&test_context(), &mut message).unwrap_err();
+        assert_tws_error_message(err, 10089, "not subscribed");
     }
 
     #[test]
@@ -120,13 +112,8 @@ mod pnl_tests {
     #[test]
     fn test_decode_error_message() {
         let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
-        match PnL::decode(&test_context(), &mut message).unwrap_err() {
-            Error::Message(code, msg) => {
-                assert_eq!(code, 10089);
-                assert!(msg.contains("not subscribed"));
-            }
-            other => panic!("expected Error::Message, got {other:?}"),
-        }
+        let err = PnL::decode(&test_context(), &mut message).unwrap_err();
+        assert_tws_error_message(err, 10089, "not subscribed");
     }
 }
 
@@ -161,13 +148,8 @@ mod pnl_single_tests {
     #[test]
     fn test_decode_error_message() {
         let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
-        match PnLSingle::decode(&test_context(), &mut message).unwrap_err() {
-            Error::Message(code, msg) => {
-                assert_eq!(code, 10089);
-                assert!(msg.contains("not subscribed"));
-            }
-            other => panic!("expected Error::Message, got {other:?}"),
-        }
+        let err = PnLSingle::decode(&test_context(), &mut message).unwrap_err();
+        assert_tws_error_message(err, 10089, "not subscribed");
     }
 }
 
@@ -219,13 +201,8 @@ mod position_update_tests {
     #[test]
     fn test_decode_error_message() {
         let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
-        match PositionUpdate::decode(&test_context(), &mut message).unwrap_err() {
-            Error::Message(code, msg) => {
-                assert_eq!(code, 10089);
-                assert!(msg.contains("not subscribed"));
-            }
-            other => panic!("expected Error::Message, got {other:?}"),
-        }
+        let err = PositionUpdate::decode(&test_context(), &mut message).unwrap_err();
+        assert_tws_error_message(err, 10089, "not subscribed");
     }
 }
 
@@ -290,13 +267,8 @@ mod position_update_multi_tests {
     #[test]
     fn test_decode_error_message() {
         let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
-        match PositionUpdateMulti::decode(&test_context(), &mut message).unwrap_err() {
-            Error::Message(code, msg) => {
-                assert_eq!(code, 10089);
-                assert!(msg.contains("not subscribed"));
-            }
-            other => panic!("expected Error::Message, got {other:?}"),
-        }
+        let err = PositionUpdateMulti::decode(&test_context(), &mut message).unwrap_err();
+        assert_tws_error_message(err, 10089, "not subscribed");
     }
 }
 
@@ -390,13 +362,8 @@ mod account_update_tests {
     #[test]
     fn test_decode_error_message() {
         let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
-        match AccountUpdate::decode(&test_context(), &mut message).unwrap_err() {
-            Error::Message(code, msg) => {
-                assert_eq!(code, 10089);
-                assert!(msg.contains("not subscribed"));
-            }
-            other => panic!("expected Error::Message, got {other:?}"),
-        }
+        let err = AccountUpdate::decode(&test_context(), &mut message).unwrap_err();
+        assert_tws_error_message(err, 10089, "not subscribed");
     }
 }
 
@@ -461,13 +428,8 @@ mod account_update_multi_tests {
     #[test]
     fn test_decode_error_message() {
         let mut message = ResponseMessage::from("4\02\0123\010089\0Requested market data is not subscribed\0");
-        match AccountUpdateMulti::decode(&test_context(), &mut message).unwrap_err() {
-            Error::Message(code, msg) => {
-                assert_eq!(code, 10089);
-                assert!(msg.contains("not subscribed"));
-            }
-            other => panic!("expected Error::Message, got {other:?}"),
-        }
+        let err = AccountUpdateMulti::decode(&test_context(), &mut message).unwrap_err();
+        assert_tws_error_message(err, 10089, "not subscribed");
     }
 }
 
