@@ -1,5 +1,22 @@
 # Plan: Test Input/Output Builders
 
+## Status
+
+| PR | Scope | State |
+|----|-------|-------|
+| #495 | Foundation (`ResponseEncoder`/`RequestEncoder` traits, positions pilot, `MessageBusStub` consolidation, `assert_request_proto<T>` + `assert_request<B>`) | Merged |
+| #496 | Accounts (response + request builders, sync/async test migration, production-decoder integration tests) | Open |
+| PR 3 | Orders | Pending |
+| PR 4 | Contracts | Pending |
+| PR 5 | Market data | Pending |
+| PR 6 | News, scanner, WSH | Pending |
+
+Foundations that grew beyond the original plan (added during PR 1/PR 2):
+- `ResponseProtoEncoder` trait — symmetric to `RequestEncoder` for the proto path on response builders. Implementors define `Proto` + `to_proto`; trait provides `encode_proto`.
+- `assert_request<B: RequestEncoder>` helper — builder-aware variant of `assert_request_proto<T>` that pulls `MSG_ID` from the trait so tests don't repeat it.
+- `response_messages(&[&dyn ResponseEncoder]) -> Vec<String>` helper — feed heterogeneous response builders into `MessageBusStub::response_messages`.
+- `cancel_by_request_id_builder!` / `empty_request_builder!` / `request_id_response_builder!` macros — collapse single-field builder boilerplate. Mirror the production-side `encode_cancel_by_id!` / `encode_empty_proto!` macros.
+
 ## Context
 
 Tests across the crate build inputs (scripted responses) and verify outputs (captured requests) with raw, untyped primitives that scale poorly:
@@ -124,8 +141,8 @@ Option A is the smaller change; Option B is cleaner but moves more code. Default
 
 Per user direction: foundation lands first as a separate PR, then domain-by-domain migration.
 
-1. **PR 1 — Foundation.** Builder ergonomics, pilot positions builder, `MessageBusStub` consolidation, `assert_request_proto`. No existing test migrated. Confirms the API shape is acceptable before scaling.
-2. **PR 2 — Accounts.** Builders for managed accounts, account summary, account updates, PnL, positions (already piloted in PR 1), positions multi. Migrate `src/accounts/{sync,async}/tests.rs` to use builders + `accounts/common/test_tables.rs`.
+1. ✅ **PR 1 — Foundation** ([#495](https://github.com/wboayue/rust-ibapi/pull/495), merged). Builder ergonomics, pilot positions builders, `MessageBusStub` consolidation, `assert_request_proto<T>` + `assert_request<B>`. Trait set ended up larger than originally specified (`ResponseEncoder` + `ResponseProtoEncoder` + `RequestEncoder`).
+2. ✅ **PR 2 — Accounts** ([#496](https://github.com/wboayue/rust-ibapi/pull/496), open). Builders for managed accounts, account summary, account updates, account update multi, account value, family codes, current time, PnL, PnL single, plus all 13 corresponding request builders. Sync + async tests fully migrated to `assert_request<B>` body verification. 6 builder→production-decoder integration tests added in `accounts/common/decoders/tests.rs`. Tautological proto-round-trip tests removed (~32) following the lesson in §"Lessons learned".
 3. **PR 3 — Orders.** Place order, cancel, executions, open orders, completed orders, order update stream.
 4. **PR 4 — Contracts.** Contract details, matching symbols, market rule, option chain.
 5. **PR 5 — Market data.** Historical, realtime, market depth, tick-by-tick. Split if review burden warrants (e.g., historical separate from realtime).
@@ -150,3 +167,28 @@ For each PR:
 - Changing public `Client` APIs or the `MessageBus` / `AsyncMessageBus` traits.
 - Migrating tests in domains beyond what each domain PR explicitly targets.
 - Removing `src/testdata/responses.rs` constants — they stay for any tests not yet migrated.
+
+## Lessons learned (apply to PR 3+)
+
+**Don't write self-loop tests.** A test that goes `builder → encode_proto → prost::decode → assert builder fields` only verifies pass-through and prost itself. It looks thorough but exercises no production code. We removed ~32 such tests from PR 2 after the call-out. The valuable seams are:
+- **Outgoing**: client API → `MessageBusStub` captures bytes → `assert_request<B>(builder)` verifies. Exercises the production encoder.
+- **Incoming**: `builder.encode_proto()` → production decoder (`decode_*_proto`) → asserts decoded domain object. Pattern: `test_decode_*_via_builder` in `accounts/common/decoders/tests.rs`.
+
+When adding new tests for a builder, ask "what production code does this traverse?" — if the answer is "none, only my builder and prost", drop or replace it.
+
+**Mirror production-side macros on the test side.** Test macros should follow production naming so reviewers recognize the pattern. Established pairs:
+- `proto::encoders::encode_cancel_by_id!` ↔ `testdata::builders::cancel_by_request_id_builder!`
+- `proto::encoders::encode_empty_proto!` ↔ `testdata::builders::empty_request_builder!`
+- (no production counterpart) `request_id_response_builder!` for response sentinels
+
+When PR 3+ surfaces a new repeated builder shape, search `proto/encoders.rs` first to see if a parallel pattern already exists.
+
+**Keep these tests:**
+- Text wire-format invariants (field order, version bumps, conditional emit) — they test the builder's wire correctness against the actual protocol.
+- Trait-default tests using a `DummyMessage`/`DummyRequest` test type — verify the trait, not pass-through.
+- Migrated `{sync,async}/tests.rs` tests using `assert_request<B>` — the encode-path coverage.
+
+**Don't write these tests:**
+- `*_proto_round_trips_*` for response builders (builder → prost → assert builder fields).
+- Per-builder `*_round_trips` for request builders (msg_id is already verified by `assert_request<B>` in migrated tests; body is tautological).
+- "to_proto matches encode_proto bytes" — tautology of the trait default.

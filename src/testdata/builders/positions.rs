@@ -4,17 +4,15 @@
 //! `PositionMulti` (71), and `PositionMultiEnd` (72) at the message version
 //! consumed by the current decoders.
 
-use super::{RequestEncoder, ResponseEncoder};
+use super::{RequestEncoder, ResponseEncoder, ResponseProtoEncoder};
 use crate::common::test_utils::helpers::constants::{TEST_ACCOUNT, TEST_CONTRACT_ID, TEST_TICKER_ID};
 use crate::messages::OutgoingMessages;
 use crate::proto;
 use crate::proto::encoders::{some_f64_ne, some_i32_ne, some_str};
-use prost::Message;
 
 const POSITION_VERSION: i32 = 3;
 const POSITION_END_VERSION: i32 = 1;
 const POSITION_MULTI_VERSION: i32 = 3;
-const POSITION_MULTI_END_VERSION: i32 = 1;
 
 #[derive(Clone, Debug)]
 pub struct PositionResponse {
@@ -137,8 +135,10 @@ impl ResponseEncoder for PositionResponse {
     }
 }
 
-impl PositionResponse {
-    pub fn to_proto(&self) -> proto::Position {
+impl ResponseProtoEncoder for PositionResponse {
+    type Proto = proto::Position;
+
+    fn to_proto(&self) -> Self::Proto {
         proto::Position {
             account: Some(self.account.clone()),
             contract: Some(proto::Contract {
@@ -159,10 +159,6 @@ impl PositionResponse {
             avg_cost: Some(self.average_cost),
         }
     }
-
-    pub fn encode_proto(&self) -> Vec<u8> {
-        self.to_proto().encode_to_vec()
-    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -174,13 +170,11 @@ impl ResponseEncoder for PositionEndResponse {
     }
 }
 
-impl PositionEndResponse {
-    pub fn to_proto(&self) -> proto::PositionEnd {
-        proto::PositionEnd {}
-    }
+impl ResponseProtoEncoder for PositionEndResponse {
+    type Proto = proto::PositionEnd;
 
-    pub fn encode_proto(&self) -> Vec<u8> {
-        self.to_proto().encode_to_vec()
+    fn to_proto(&self) -> Self::Proto {
+        proto::PositionEnd {}
     }
 }
 
@@ -319,8 +313,10 @@ impl ResponseEncoder for PositionMultiResponse {
     }
 }
 
-impl PositionMultiResponse {
-    pub fn to_proto(&self) -> proto::PositionMulti {
+impl ResponseProtoEncoder for PositionMultiResponse {
+    type Proto = proto::PositionMulti;
+
+    fn to_proto(&self) -> Self::Proto {
         proto::PositionMulti {
             req_id: Some(self.request_id),
             account: Some(self.account.clone()),
@@ -343,47 +339,9 @@ impl PositionMultiResponse {
             model_code: some_str(&self.model_code),
         }
     }
-
-    pub fn encode_proto(&self) -> Vec<u8> {
-        self.to_proto().encode_to_vec()
-    }
 }
 
-#[derive(Clone, Debug)]
-pub struct PositionMultiEndResponse {
-    pub request_id: i32,
-}
-
-impl Default for PositionMultiEndResponse {
-    fn default() -> Self {
-        Self { request_id: TEST_TICKER_ID }
-    }
-}
-
-impl PositionMultiEndResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
-}
-
-impl ResponseEncoder for PositionMultiEndResponse {
-    fn fields(&self) -> Vec<String> {
-        vec!["72".to_string(), POSITION_MULTI_END_VERSION.to_string(), self.request_id.to_string()]
-    }
-}
-
-impl PositionMultiEndResponse {
-    pub fn to_proto(&self) -> proto::PositionMultiEnd {
-        proto::PositionMultiEnd {
-            req_id: Some(self.request_id),
-        }
-    }
-
-    pub fn encode_proto(&self) -> Vec<u8> {
-        self.to_proto().encode_to_vec()
-    }
-}
+request_id_response_builder!(PositionMultiEndResponse, "72", PositionMultiEnd);
 
 // === Request builders ===
 

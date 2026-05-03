@@ -1,16 +1,22 @@
 use super::*;
-use crate::messages::OutgoingMessages;
-use crate::testdata::responses;
-
 use crate::common::test_utils::helpers::*;
+use crate::testdata::builders::accounts::{
+    account_download_end, account_summary, account_summary_end, account_update_multi, account_update_multi_end, account_value,
+    cancel_account_summary, cancel_account_updates_multi, cancel_pnl, cancel_pnl_single, current_time, family_codes, managed_accounts,
+    request_account_summary, request_account_updates, request_account_updates_multi, request_current_time, request_family_codes,
+    request_managed_accounts, request_pnl, request_pnl_single,
+};
+use crate::testdata::builders::positions::{
+    cancel_positions, cancel_positions_multi, position, position_end, position_multi, position_multi_end, request_positions, request_positions_multi,
+};
+use crate::testdata::builders::ResponseEncoder;
 
 #[tokio::test]
 async fn test_positions() {
-    let (client, message_bus) = create_test_client_with_responses(vec![responses::POSITION.into(), responses::POSITION_END.into()]);
+    let (client, message_bus) = create_test_client_with_responses(vec![position().encode_pipe(), position_end().encode_pipe()]);
 
     let mut subscription = client.positions().await.expect("request positions failed");
 
-    // First update should be a position
     let first_update = subscription.next().await;
     assert!(
         matches!(first_update, Some(Ok(PositionUpdate::Position(_)))),
@@ -18,7 +24,6 @@ async fn test_positions() {
         first_update
     );
 
-    // Second update should be position end
     let second_update = subscription.next().await;
     assert!(
         matches!(second_update, Some(Ok(PositionUpdate::PositionEnd))),
@@ -27,19 +32,16 @@ async fn test_positions() {
     );
 
     drop(subscription); // Trigger cancellation
-
-    // Allow time for async cancellation to complete
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
-    // Check both subscribe and cancel messages
     assert_eq!(request_message_count(&message_bus), 2);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestPositions);
-    assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelPositions);
+    assert_request(&message_bus, 0, &request_positions());
+    assert_request(&message_bus, 1, &cancel_positions());
 }
 
 #[tokio::test]
 async fn test_positions_multi() {
-    let (client, message_bus) = create_test_client_with_responses(vec![responses::POSITION_MULTI.into(), responses::POSITION_MULTI_END.into()]);
+    let (client, message_bus) = create_test_client_with_responses(vec![position_multi().encode_pipe(), position_multi_end().encode_pipe()]);
 
     let account = Some(AccountId(TEST_ACCOUNT.to_string()));
     let model_code = Some(ModelCode(TEST_MODEL_CODE.to_string()));
@@ -49,14 +51,12 @@ async fn test_positions_multi() {
         .await
         .expect("request positions_multi failed");
 
-    // First update should be a position
     let first_update = subscription.next().await;
     assert!(
         matches!(first_update, Some(Ok(PositionUpdateMulti::Position(_)))),
         "Expected PositionUpdateMulti::Position"
     );
 
-    // Second update should be position end
     let second_update = subscription.next().await;
     assert!(
         matches!(second_update, Some(Ok(PositionUpdateMulti::PositionEnd))),
@@ -64,26 +64,29 @@ async fn test_positions_multi() {
     );
 
     drop(subscription); // Trigger cancellation
-
-    // Allow time for async cancellation to complete
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
-    // Check both subscribe and cancel messages
     assert_eq!(request_message_count(&message_bus), 2);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestPositionsMulti);
-    assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelPositionsMulti);
+    assert_request(
+        &message_bus,
+        0,
+        &request_positions_multi()
+            .request_id(TEST_REQ_ID_FIRST)
+            .account(TEST_ACCOUNT)
+            .model_code(TEST_MODEL_CODE),
+    );
+    assert_request(&message_bus, 1, &cancel_positions_multi().request_id(TEST_REQ_ID_FIRST));
 }
 
 #[tokio::test]
 async fn test_account_summary() {
-    let (client, message_bus) = create_test_client_with_responses(vec![responses::ACCOUNT_SUMMARY.into(), responses::ACCOUNT_SUMMARY_END.into()]);
+    let (client, message_bus) = create_test_client_with_responses(vec![account_summary().encode_pipe(), account_summary_end().encode_pipe()]);
 
     let group = AccountGroup("All".to_string());
     let tags = &[AccountSummaryTags::ACCOUNT_TYPE];
 
     let mut subscription = client.account_summary(&group, tags).await.expect("request account_summary failed");
 
-    // First update should be a summary
     let first_update = subscription.next().await;
     match first_update {
         Some(Ok(AccountSummaryResult::Summary(summary))) => {
@@ -94,7 +97,6 @@ async fn test_account_summary() {
         _ => panic!("Expected AccountSummaryResult::Summary, got {first_update:?}"),
     }
 
-    // Second update should be end
     let second_update = subscription.next().await;
     assert!(
         matches!(second_update, Some(Ok(AccountSummaryResult::End))),
@@ -103,14 +105,18 @@ async fn test_account_summary() {
     );
 
     drop(subscription); // Trigger cancellation
-
-    // Allow time for async cancellation to complete
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
-    // Check both subscribe and cancel messages
     assert_eq!(request_message_count(&message_bus), 2);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestAccountSummary);
-    assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelAccountSummary);
+    assert_request(
+        &message_bus,
+        0,
+        &request_account_summary()
+            .request_id(TEST_REQ_ID_FIRST)
+            .group("All")
+            .tags([AccountSummaryTags::ACCOUNT_TYPE]),
+    );
+    assert_request(&message_bus, 1, &cancel_account_summary().request_id(TEST_REQ_ID_FIRST));
 }
 
 #[tokio::test]
@@ -122,21 +128,17 @@ async fn test_pnl() {
 
     let subscription1 = client.pnl(&account, model_code.as_ref()).await.expect("request pnl failed");
     drop(subscription1);
-
-    // Allow time for async cancellation to complete
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     let subscription2 = client.pnl(&account, None).await.expect("request pnl failed");
     drop(subscription2);
-
-    // Allow time for async cancellation to complete
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     assert_eq!(request_message_count(&message_bus), 4);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestPnL);
-    assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelPnL);
-    assert_request_msg_id(&message_bus, 2, OutgoingMessages::RequestPnL);
-    assert_request_msg_id(&message_bus, 3, OutgoingMessages::CancelPnL);
+    assert_request(&message_bus, 0, &request_pnl().request_id(TEST_REQ_ID_FIRST));
+    assert_request(&message_bus, 1, &cancel_pnl().request_id(TEST_REQ_ID_FIRST));
+    assert_request(&message_bus, 2, &request_pnl().request_id(TEST_REQ_ID_FIRST + 1).no_model_code());
+    assert_request(&message_bus, 3, &cancel_pnl().request_id(TEST_REQ_ID_FIRST + 1));
 }
 
 #[tokio::test]
@@ -152,65 +154,55 @@ async fn test_pnl_single() {
         .await
         .expect("request pnl_single failed");
     drop(subscription1);
-
-    // Allow time for async cancellation to complete
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     let subscription2 = client.pnl_single(&account, contract_id, None).await.expect("request pnl_single failed");
     drop(subscription2);
-
-    // Allow time for async cancellation to complete
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     assert_eq!(request_message_count(&message_bus), 4);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestPnLSingle);
-    assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelPnLSingle);
-    assert_request_msg_id(&message_bus, 2, OutgoingMessages::RequestPnLSingle);
-    assert_request_msg_id(&message_bus, 3, OutgoingMessages::CancelPnLSingle);
+    assert_request(&message_bus, 0, &request_pnl_single().request_id(TEST_REQ_ID_FIRST));
+    assert_request(&message_bus, 1, &cancel_pnl_single().request_id(TEST_REQ_ID_FIRST));
+    assert_request(&message_bus, 2, &request_pnl_single().request_id(TEST_REQ_ID_FIRST + 1).no_model_code());
+    assert_request(&message_bus, 3, &cancel_pnl_single().request_id(TEST_REQ_ID_FIRST + 1));
 }
 
 #[tokio::test]
 async fn test_managed_accounts() {
-    let (client, message_bus) = create_test_client_with_responses(vec![responses::MANAGED_ACCOUNT.into()]);
+    let (client, message_bus) = create_test_client_with_responses(vec![managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_pipe()]);
 
     let accounts = client.managed_accounts().await.expect("request managed accounts failed");
     assert_eq!(accounts, &[TEST_ACCOUNT, TEST_ACCOUNT_2], "Valid accounts list mismatch");
 
-    // Check request message
     assert_eq!(request_message_count(&message_bus), 1);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestManagedAccounts);
+    assert_request(&message_bus, 0, &request_managed_accounts());
 }
 
 #[tokio::test]
 async fn test_managed_accounts_retry() {
-    let (client, message_bus) = create_test_client_with_responses(vec![
-        responses::MANAGED_ACCOUNT.into(), // Successful response
-    ]);
+    let (client, message_bus) = create_test_client_with_responses(vec![managed_accounts().accounts([TEST_ACCOUNT, TEST_ACCOUNT_2]).encode_pipe()]);
 
     let accounts = client.managed_accounts().await.expect("managed_accounts failed");
     assert_eq!(accounts, &[TEST_ACCOUNT, TEST_ACCOUNT_2], "Accounts list mismatch");
 
-    // Verify request was sent
     assert_eq!(request_message_count(&message_bus), 1);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestManagedAccounts);
+    assert_request(&message_bus, 0, &request_managed_accounts());
 }
 
 #[tokio::test]
 async fn test_server_time() {
     use time::macros::datetime;
 
-    let valid_timestamp_str = "1678890000"; // 2023-03-15 14:20:00 UTC
     let expected_datetime = datetime!(2023-03-15 14:20:00 UTC);
 
-    let (client, message_bus) = create_test_client_with_responses(vec![format!("49|1|{}|", valid_timestamp_str)]);
+    let (client, message_bus) = create_test_client_with_responses(vec![current_time().encode_pipe()]);
 
     let result = client.server_time().await;
     assert!(result.is_ok(), "Expected Ok, got Err: {:?}", result.err());
     assert_eq!(result.unwrap(), expected_datetime, "DateTime mismatch");
 
-    // Check request message
     assert_eq!(request_message_count(&message_bus), 1);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestCurrentTime);
+    assert_request(&message_bus, 0, &request_current_time());
 }
 
 #[tokio::test]
@@ -218,7 +210,7 @@ async fn test_family_codes() {
     use crate::accounts::FamilyCode;
 
     // Scenario 1: Success with multiple codes
-    let (client, message_bus) = create_test_client_with_responses(vec!["78|2|ACC1|FC1|ACC2|FC2|".into()]);
+    let (client, message_bus) = create_test_client_with_responses(vec![family_codes().push("ACC1", "FC1").push("ACC2", "FC2").encode_pipe()]);
 
     let result = client.family_codes().await;
     assert!(result.is_ok(), "Expected Ok, got Err: {:?}", result.err());
@@ -239,7 +231,7 @@ async fn test_family_codes() {
         }
     );
     assert_eq!(request_message_count(&message_bus), 1);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestFamilyCodes);
+    assert_request(&message_bus, 0, &request_family_codes());
 
     // Scenario 2: No message received (returns empty vector)
     let (client_no_msg, message_bus_no_msg) = create_test_client();
@@ -247,17 +239,15 @@ async fn test_family_codes() {
     assert!(result_no_msg.is_ok(), "Expected Ok, got Err: {:?}", result_no_msg.err());
     assert!(result_no_msg.unwrap().is_empty(), "Expected empty vector");
     assert_eq!(request_message_count(&message_bus_no_msg), 1);
-    assert_request_msg_id(&message_bus_no_msg, 0, OutgoingMessages::RequestFamilyCodes);
+    assert_request(&message_bus_no_msg, 0, &request_family_codes());
 
     // Scenario 3: Empty family codes list
-    let (client_empty, message_bus_empty) = create_test_client_with_responses(vec![
-        "78|0|".into(), // Zero family codes
-    ]);
+    let (client_empty, message_bus_empty) = create_test_client_with_responses(vec![family_codes().encode_pipe()]);
     let result_empty = client_empty.family_codes().await;
     assert!(result_empty.is_ok(), "Expected Ok for empty list");
     assert!(result_empty.unwrap().is_empty(), "Expected empty vector");
     assert_eq!(request_message_count(&message_bus_empty), 1);
-    assert_request_msg_id(&message_bus_empty, 0, OutgoingMessages::RequestFamilyCodes);
+    assert_request(&message_bus_empty, 0, &request_family_codes());
 }
 
 #[tokio::test]
@@ -266,16 +256,10 @@ async fn test_account_updates() {
 
     let account_name = AccountId(TEST_ACCOUNT.to_string());
 
-    // Create client with account update responses
-    let (client, message_bus) = create_test_client_with_responses(vec![
-        format!("{}|", responses::ACCOUNT_VALUE), // AccountValue with trailing delimiter
-        format!("54|1|{}|", TEST_ACCOUNT),        // AccountDownloadEnd
-    ]);
+    let (client, message_bus) = create_test_client_with_responses(vec![account_value().encode_pipe(), account_download_end().encode_pipe()]);
 
-    // Subscribe to account updates
     let mut subscription = client.account_updates(&account_name).await.expect("subscribe failed");
 
-    // First update should be AccountValue
     let first_update = subscription.next().await;
     match first_update {
         Some(Ok(AccountUpdate::AccountValue(av))) => {
@@ -286,7 +270,6 @@ async fn test_account_updates() {
         other => panic!("First update was not AccountValue: {other:?}"),
     }
 
-    // Second update should be End
     let second_update = subscription.next().await;
     assert!(
         matches!(second_update, Some(Ok(AccountUpdate::End))),
@@ -295,24 +278,23 @@ async fn test_account_updates() {
     );
 
     drop(subscription); // Trigger cancellation
-
-    // Allow time for async cancellation to complete
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
-    // Verify request messages - subscribe and cancel
-    let count = request_message_count(&message_bus);
-    assert!(count >= 2, "Expected subscribe and cancel messages");
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestAccountData);
-    assert_request_msg_id(&message_bus, count - 1, OutgoingMessages::RequestAccountData);
+    assert!(request_message_count(&message_bus) >= 2, "Expected subscribe and cancel messages");
+    assert_request(&message_bus, 0, &request_account_updates().account(TEST_ACCOUNT));
 }
 
 #[tokio::test]
 async fn test_account_updates_multi() {
     let (client, message_bus) = create_test_client_with_responses(vec![
-        responses::ACCOUNT_UPDATE_MULTI_CASH_BALANCE.into(),
-        responses::ACCOUNT_UPDATE_MULTI_CURRENCY.into(),
-        responses::ACCOUNT_UPDATE_MULTI_STOCK_MARKET_VALUE.into(),
-        responses::ACCOUNT_UPDATE_MULTI_END.into(),
+        account_update_multi().key("CashBalance").value("94629.71").currency("USD").encode_pipe(),
+        account_update_multi().key("Currency").value("USD").currency("USD").encode_pipe(),
+        account_update_multi()
+            .key("StockMarketValue")
+            .value("0.00")
+            .currency("BASE")
+            .encode_pipe(),
+        account_update_multi_end().encode_pipe(),
     ]);
 
     let account = Some(AccountId(TEST_ACCOUNT.to_string()));
@@ -340,10 +322,16 @@ async fn test_account_updates_multi() {
 
     subscription.cancel().await;
 
-    // Check both subscribe and cancel messages
     assert_eq!(request_message_count(&message_bus), 2);
-    assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestAccountUpdatesMulti);
-    assert_request_msg_id(&message_bus, 1, OutgoingMessages::CancelAccountUpdatesMulti);
+    assert_request(
+        &message_bus,
+        0,
+        &request_account_updates_multi()
+            .request_id(TEST_REQ_ID_FIRST)
+            .account(TEST_ACCOUNT)
+            .ledger_and_nlv(true),
+    );
+    assert_request(&message_bus, 1, &cancel_account_updates_multi().request_id(TEST_REQ_ID_FIRST));
 }
 
 // Additional comprehensive tests
@@ -398,7 +386,7 @@ async fn test_managed_accounts_scenarios() {
             .unwrap_or_else(|_| panic!("managed_accounts failed for {}", test_case.scenario));
         assert_eq!(accounts, test_case.expected, "{}: {}", test_case.scenario, test_case.description);
         assert_eq!(request_message_count(&message_bus), 1);
-        assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestManagedAccounts);
+        assert_request(&message_bus, 0, &request_managed_accounts());
     }
 }
 
@@ -430,7 +418,6 @@ async fn test_server_time_scenarios() {
             }
             Err(_) => {
                 assert!(result.is_err(), "Expected error for {}", test_case.scenario);
-                // Accept Parse, ParseInt, or Simple errors for invalid timestamps
                 match result.unwrap_err() {
                     Error::Parse(_, _, _) | Error::ParseInt(_) | Error::Simple(_) => {}
                     other => panic!("Expected Parse, ParseInt, or Simple error for {}, got: {:?}", test_case.scenario, other),
@@ -439,19 +426,17 @@ async fn test_server_time_scenarios() {
         }
 
         assert_eq!(request_message_count(&message_bus), 1);
-        assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestCurrentTime);
+        assert_request(&message_bus, 0, &request_current_time());
     }
 }
 
 #[tokio::test]
 async fn test_concurrent_subscriptions() {
-    // Test multiple concurrent subscriptions
     let (client, message_bus) = create_test_client();
 
     let account1 = AccountId("ACCOUNT1".to_string());
     let account2 = AccountId("ACCOUNT2".to_string());
 
-    // Create multiple concurrent subscriptions
     let sub1_future = client.pnl(&account1, None);
     let sub2_future = client.pnl(&account2, None);
     let sub3_future = client.positions();
@@ -466,10 +451,8 @@ async fn test_concurrent_subscriptions() {
     drop(sub2.unwrap());
     drop(sub3.unwrap());
 
-    // Allow time for async cleanup
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    // Verify all requests were sent
     assert!(
         request_message_count(&message_bus) >= 6,
         "Expected at least 6 messages (3 subscribe + 3 cancel)"
@@ -486,16 +469,13 @@ async fn test_account_summary_multiple_tags() {
         let group = AccountGroup(test_case.group.clone());
 
         if test_case.expect_responses {
-            // Create client with mock responses for tests that expect data
-            let (client, message_bus) =
-                create_test_client_with_responses(vec![responses::ACCOUNT_SUMMARY.into(), responses::ACCOUNT_SUMMARY_END.into()]);
+            let (client, message_bus) = create_test_client_with_responses(vec![account_summary().encode_pipe(), account_summary_end().encode_pipe()]);
 
             let mut subscription = client
                 .account_summary(&group, &test_case.tags)
                 .await
                 .unwrap_or_else(|_| panic!("account_summary failed for {}", test_case.description));
 
-            // Should get at least one summary
             let first_update = subscription.next().await;
             assert!(
                 matches!(first_update, Some(Ok(AccountSummaryResult::Summary(_)))),
@@ -503,7 +483,6 @@ async fn test_account_summary_multiple_tags() {
                 test_case.description
             );
 
-            // Should get end marker
             let second_update = subscription.next().await;
             assert!(
                 matches!(second_update, Some(Ok(AccountSummaryResult::End))),
@@ -514,17 +493,22 @@ async fn test_account_summary_multiple_tags() {
             drop(subscription);
             tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
-            // Verify request was sent
             if test_case.expected_tag_encoding.is_some() {
                 assert!(
                     request_message_count(&message_bus) > 0,
                     "Expected request messages for {}",
                     test_case.description
                 );
-                assert_request_msg_id(&message_bus, 0, OutgoingMessages::RequestAccountSummary);
+                assert_request(
+                    &message_bus,
+                    0,
+                    &request_account_summary()
+                        .request_id(TEST_REQ_ID_FIRST)
+                        .group(test_case.group.clone())
+                        .tags(test_case.tags.clone()),
+                );
             }
         } else {
-            // Create client without specific responses
             let (client, _) = create_test_client();
 
             let result = client.account_summary(&group, &test_case.tags).await;

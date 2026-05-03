@@ -55,6 +55,128 @@ pub(crate) trait RequestEncoder {
     }
 }
 
+/// Per-builder protobuf encoder for response messages.
+///
+/// Counterpart to [`RequestEncoder`] for the response side. Implementors
+/// declare their proto type and how to populate it from builder state; the
+/// trait provides `encode_proto` for free.
+pub(crate) trait ResponseProtoEncoder {
+    type Proto: prost::Message;
+
+    fn to_proto(&self) -> Self::Proto;
+
+    fn encode_proto(&self) -> Vec<u8> {
+        self.to_proto().encode_to_vec()
+    }
+}
+
+/// Generates a typed builder for cancel-by-request-id protobuf messages.
+///
+/// Mirrors `proto::encoders::encode_cancel_by_id!` on the production side.
+/// The generated type owns a single `request_id: i32` and emits
+/// `proto::$proto_type { req_id: Some(self.request_id) }`.
+macro_rules! cancel_by_request_id_builder {
+    ($builder:ident, $proto_type:ident, $msg_id:expr) => {
+        #[derive(Clone, Copy, Debug)]
+        pub struct $builder {
+            pub request_id: i32,
+        }
+
+        impl Default for $builder {
+            fn default() -> Self {
+                Self {
+                    request_id: $crate::common::test_utils::helpers::constants::TEST_TICKER_ID,
+                }
+            }
+        }
+
+        impl $builder {
+            pub fn request_id(mut self, v: i32) -> Self {
+                self.request_id = v;
+                self
+            }
+        }
+
+        impl $crate::testdata::builders::RequestEncoder for $builder {
+            type Proto = $crate::proto::$proto_type;
+            const MSG_ID: $crate::messages::OutgoingMessages = $msg_id;
+
+            fn to_proto(&self) -> Self::Proto {
+                $crate::proto::$proto_type {
+                    req_id: Some(self.request_id),
+                }
+            }
+        }
+    };
+}
+
+/// Generates a typed builder for response messages whose only payload is a
+/// `request_id`: header (`msg_tag|"1"|request_id|`) + proto `req_id` field.
+///
+/// Used by sentinel-style `*End` responses (e.g. `AccountSummaryEnd`,
+/// `AccountUpdateMultiEnd`, `PositionMultiEnd`). The generated type owns a
+/// single `request_id: i32`, implements [`ResponseEncoder`] (for the text
+/// path), and [`ResponseProtoEncoder`] (for protobuf round-trips).
+macro_rules! request_id_response_builder {
+    ($builder:ident, $msg_tag:literal, $proto_type:ident) => {
+        #[derive(Clone, Debug)]
+        pub struct $builder {
+            pub request_id: i32,
+        }
+
+        impl Default for $builder {
+            fn default() -> Self {
+                Self {
+                    request_id: $crate::common::test_utils::helpers::constants::TEST_TICKER_ID,
+                }
+            }
+        }
+
+        impl $builder {
+            pub fn request_id(mut self, v: i32) -> Self {
+                self.request_id = v;
+                self
+            }
+        }
+
+        impl $crate::testdata::builders::ResponseEncoder for $builder {
+            fn fields(&self) -> Vec<String> {
+                vec![$msg_tag.to_string(), "1".to_string(), self.request_id.to_string()]
+            }
+        }
+
+        impl $crate::testdata::builders::ResponseProtoEncoder for $builder {
+            type Proto = $crate::proto::$proto_type;
+
+            fn to_proto(&self) -> Self::Proto {
+                $crate::proto::$proto_type {
+                    req_id: Some(self.request_id),
+                }
+            }
+        }
+    };
+}
+
+/// Generates a typed builder for empty-body (no-field) protobuf request messages.
+///
+/// Mirrors `proto::encoders::encode_empty_proto!` on the production side. The
+/// generated type is a unit struct.
+macro_rules! empty_request_builder {
+    ($builder:ident, $proto_type:ident, $msg_id:expr) => {
+        #[derive(Clone, Copy, Debug, Default)]
+        pub struct $builder;
+
+        impl $crate::testdata::builders::RequestEncoder for $builder {
+            type Proto = $crate::proto::$proto_type;
+            const MSG_ID: $crate::messages::OutgoingMessages = $msg_id;
+
+            fn to_proto(&self) -> Self::Proto {
+                $crate::proto::$proto_type {}
+            }
+        }
+    };
+}
+
 fn join_fields(fields: &[String], sep: char) -> String {
     let mut out = fields.join(&sep.to_string());
     out.push(sep);
@@ -74,6 +196,9 @@ fn join_fields(fields: &[String], sep: char) -> String {
 pub(crate) fn response_messages(builders: &[&dyn ResponseEncoder]) -> Vec<String> {
     builders.iter().map(|b| b.encode_pipe()).collect()
 }
+
+#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
+pub(crate) mod accounts;
 
 #[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
 pub(crate) mod positions;

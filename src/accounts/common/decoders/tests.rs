@@ -900,6 +900,7 @@ fn test_decode_position_proto() {
 #[test]
 fn test_decode_position_proto_round_trips_via_builder() {
     use crate::testdata::builders::positions::position;
+    use crate::testdata::builders::ResponseProtoEncoder;
 
     let bytes = position()
         .account("DU1234")
@@ -1086,4 +1087,140 @@ fn test_decode_account_multi_value_proto() {
     assert_eq!(result.key, "NetLiquidation");
     assert_eq!(result.value, "100000");
     assert_eq!(result.currency, "USD");
+}
+
+// === Builder → production proto decoder integration tests ===
+//
+// Each test confirms that bytes produced by a typed builder decode through the
+// real production proto decoder into a domain object whose fields match the
+// builder setters. This is the "useful in the context of bytes captured and
+// verified" pattern — anything the builder gets wrong about wire layout fails
+// here, not in a self-loop.
+
+#[test]
+fn test_decode_position_multi_proto_via_builder() {
+    use crate::testdata::builders::positions::position_multi;
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let bytes = position_multi()
+        .request_id(42)
+        .account("DU8")
+        .contract_id(265598)
+        .symbol("AAPL")
+        .position(50.0)
+        .average_cost(148.5)
+        .model_code("Tech")
+        .encode_proto();
+
+    let result = super::decode_position_multi_proto(&bytes).unwrap();
+
+    assert_eq!(result.account, "DU8");
+    assert_eq!(result.contract.contract_id, 265598);
+    assert_eq!(result.contract.symbol.to_string(), "AAPL");
+    assert_eq!(result.position, 50.0);
+    assert_eq!(result.average_cost, 148.5);
+    assert_eq!(result.model_code, "Tech");
+}
+
+#[test]
+fn test_decode_account_value_proto_via_builder() {
+    use crate::testdata::builders::accounts::account_value;
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let bytes = account_value()
+        .key("NetLiquidation")
+        .value("100000")
+        .currency("USD")
+        .account("DU1")
+        .encode_proto();
+
+    let result = super::decode_account_value_proto(&bytes).unwrap();
+
+    assert_eq!(result.key, "NetLiquidation");
+    assert_eq!(result.value, "100000");
+    assert_eq!(result.currency, "USD");
+    assert_eq!(result.account, Some("DU1".into()));
+}
+
+#[test]
+fn test_decode_account_summary_proto_via_builder() {
+    use crate::testdata::builders::accounts::account_summary;
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let bytes = account_summary()
+        .request_id(7)
+        .account("DU1234")
+        .tag("NetLiquidation")
+        .value("99500")
+        .currency("USD")
+        .encode_proto();
+
+    let result = super::decode_account_summary_proto(&bytes).unwrap();
+
+    assert_eq!(result.account, "DU1234");
+    assert_eq!(result.tag, "NetLiquidation");
+    assert_eq!(result.value, "99500");
+    assert_eq!(result.currency, "USD");
+}
+
+#[test]
+fn test_decode_account_multi_value_proto_via_builder() {
+    use crate::testdata::builders::accounts::account_update_multi;
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let bytes = account_update_multi()
+        .account("DU1")
+        .model_code("Tech")
+        .key("NetLiquidation")
+        .value("100000")
+        .currency("USD")
+        .encode_proto();
+
+    let result = super::decode_account_multi_value_proto(&bytes).unwrap();
+
+    assert_eq!(result.account, "DU1");
+    assert_eq!(result.model_code, "Tech");
+    assert_eq!(result.key, "NetLiquidation");
+    assert_eq!(result.value, "100000");
+    assert_eq!(result.currency, "USD");
+}
+
+#[test]
+fn test_decode_pnl_proto_via_builder() {
+    use crate::testdata::builders::accounts::pnl;
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let bytes = pnl()
+        .daily_pnl(1234.56)
+        .unrealized_pnl(Some(500.0))
+        .realized_pnl(Some(250.0))
+        .encode_proto();
+
+    let result = super::decode_pnl_proto(&bytes).unwrap();
+
+    assert_eq!(result.daily_pnl, 1234.56);
+    assert_eq!(result.unrealized_pnl, Some(500.0));
+    assert_eq!(result.realized_pnl, Some(250.0));
+}
+
+#[test]
+fn test_decode_pnl_single_proto_via_builder() {
+    use crate::testdata::builders::accounts::pnl_single;
+    use crate::testdata::builders::ResponseProtoEncoder;
+
+    let bytes = pnl_single()
+        .position(500.0)
+        .daily_pnl(1000.0)
+        .unrealized_pnl(2000.0)
+        .realized_pnl(500.0)
+        .value(75000.0)
+        .encode_proto();
+
+    let result = super::decode_pnl_single_proto(&bytes).unwrap();
+
+    assert_eq!(result.position, 500.0);
+    assert_eq!(result.daily_pnl, 1000.0);
+    assert_eq!(result.unrealized_pnl, 2000.0);
+    assert_eq!(result.realized_pnl, 500.0);
+    assert_eq!(result.value, 75000.0);
 }
