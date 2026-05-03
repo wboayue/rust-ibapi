@@ -56,6 +56,7 @@ Changes to both branches should be made via pull requests.
 11. **Every new function needs a test**: Before opening a PR, verify every new `pub`/`pub(crate)` function has a corresponding unit test. Review test coverage as a final step — missing tests should block the PR
 12. **Pinned Rust toolchain**: `rust-toolchain.toml` pins this branch to a specific Rust version (1.95.0 on `main`, 1.93.0 on `v2-stable`); `.github/workflows/ci.yml` pins `dtolnay/rust-toolchain@<same-version>`. CI and local must agree on the version so clippy lints don't surprise anyone. To upgrade: bump both files in the same PR, fix any new lints, verify CI green
 13. **Separate test files**: Always keep tests in their own files, not inline `#[cfg(test)] mod tests` blocks. Prefer flat sibling files (`foo.rs` + `foo_tests.rs`) over a nested module (`foo/mod.rs` + `foo/tests.rs`). The test file declares `use super::*;` and lives next to the implementation. Wire it in with `#[cfg(test)] #[path = "foo_tests.rs"] mod tests;` from the implementation file (or from the parent `mod.rs` for domain submodules)
+14. **Modernize touched modules**: When modifying a module for a feature or fix, also bring the rest of it up to current project conventions in the same PR — extract inline tests to a sibling `_tests.rs`, fix small style drift, normalize patterns. Be aggressive: don't leave a module half-migrated. Large mechanical sweeps unrelated to the feature still belong in their own PR
 
 See [docs/code-style.md](docs/code-style.md#design-principles) for detailed design guidelines.
 
