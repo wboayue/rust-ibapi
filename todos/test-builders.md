@@ -6,8 +6,8 @@
 |----|-------|-------|
 | #495 | Foundation (`ResponseEncoder`/`RequestEncoder` traits, positions pilot, `MessageBusStub` consolidation, `assert_request_proto<T>` + `assert_request<B>`) | Merged |
 | #496 | Accounts (response + request builders, sync/async test migration, production-decoder integration tests) | Merged |
-| PR 3 | Orders (request + simple response builders, sync/async test migration, decoder integration tests) | Open |
-| PR 4 | Contracts | Pending |
+| #497 / #498 | Orders (request + simple response builders, sync/async test migration, decoder integration tests, /simplify cleanup) | Merged |
+| PR 4 | Contracts | Open |
 | PR 5 | Market data | Pending |
 | PR 6 | News, scanner, WSH | Pending |
 
@@ -143,10 +143,8 @@ Per user direction: foundation lands first as a separate PR, then domain-by-doma
 
 1. ✅ **PR 1 — Foundation** ([#495](https://github.com/wboayue/rust-ibapi/pull/495), merged). Builder ergonomics, pilot positions builders, `MessageBusStub` consolidation, `assert_request_proto<T>` + `assert_request<B>`. Trait set ended up larger than originally specified (`ResponseEncoder` + `ResponseProtoEncoder` + `RequestEncoder`).
 2. ✅ **PR 2 — Accounts** ([#496](https://github.com/wboayue/rust-ibapi/pull/496), merged). Builders for managed accounts, account summary, account updates, account update multi, account value, family codes, current time, PnL, PnL single, plus all 13 corresponding request builders. Sync + async tests fully migrated to `assert_request<B>` body verification. 6 builder→production-decoder integration tests added in `accounts/common/decoders/tests.rs`. Tautological proto-round-trip tests removed (~32) following the lesson in §"Lessons learned".
-3. ✅ **PR 3 — Orders** (open). Request builders for place/cancel/(all/auto)open/completed/executions/global_cancel/next_valid_order_id/exercise_options. Simple-response builders for OrderStatus, CommissionReport, ExecutionData, OpenOrderEnd, ExecutionDataEnd, CompletedOrdersEnd. Migrated sync/async tests to `assert_request<B>` body verification. 3 builder→production-decoder integration tests added in `orders/common/decoders/tests.rs`. 11 inline self-loop tests in `orders/common/encoders.rs` dropped per PR 2 lessons. OpenOrder/CompletedOrder builders deferred — those have ~100+ fields and current tests work fine with the existing inline literals.
-4. **PR 4 — Contracts.** Contract details, matching symbols, market rule, option chain.
-
-   PR 3 also un-gated `MessageBusStub::with_responses` from `#[cfg(feature = "sync")]` so the constructor is available to both sync and async test modules. Side fix that surfaced during the orders migration.
+3. ✅ **PR 3 — Orders** ([#497](https://github.com/wboayue/rust-ibapi/pull/497) + [#498](https://github.com/wboayue/rust-ibapi/pull/498), merged). Request builders for place/cancel/(all/auto)open/completed/executions/global_cancel/next_valid_order_id/exercise_options. Simple-response builders for OrderStatus, CommissionReport, ExecutionData, OpenOrderEnd, ExecutionDataEnd, CompletedOrdersEnd. Migrated sync/async tests to `assert_request<B>` body verification. 3 builder→production-decoder integration tests added in `orders/common/decoders/tests.rs`. 11 inline self-loop tests in `orders/common/encoders.rs` dropped per PR 2 lessons. OpenOrder/CompletedOrder builders deferred — those have ~100+ fields and current tests work fine with the existing inline literals. PR 3 also un-gated `MessageBusStub::with_responses` from `#[cfg(feature = "sync")]` so the constructor is available to both sync and async test modules. /simplify pass landed in #498.
+4. **PR 4 — Contracts** (in progress). Contract details, matching symbols, market rule, option chain.
 5. **PR 5 — Market data.** Historical, realtime, market depth, tick-by-tick. Split if review burden warrants (e.g., historical separate from realtime).
 6. **PR 6 — News, scanner, WSH.**
 

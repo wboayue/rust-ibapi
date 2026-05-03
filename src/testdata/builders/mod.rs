@@ -201,6 +201,9 @@ pub(crate) fn response_messages(builders: &[&dyn ResponseEncoder]) -> Vec<String
 pub(crate) mod accounts;
 
 #[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
+pub(crate) mod contracts;
+
+#[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
 pub(crate) mod orders;
 
 #[allow(dead_code)] // setters/encoders are consumed by future domain test migrations
