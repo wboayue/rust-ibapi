@@ -1,66 +1,17 @@
-//! Builders for contracts-domain response and request messages.
+//! Builders for contracts-domain request messages.
+//!
+//! No response builders here: the migrated sync/async tests reuse the inline
+//! pipe literals in `contracts/common/test_tables.rs`, and the *End sentinels
+//! contain only a request_id (no domain payload), so a typed builder would
+//! only re-test prost — see PR 3 §"Lessons learned". Add a response builder
+//! when a real test needs to construct a non-trivial body.
 
-use super::{RequestEncoder, ResponseEncoder, ResponseProtoEncoder};
+use super::RequestEncoder;
 use crate::common::test_utils::helpers::constants::TEST_REQ_ID_FIRST;
 use crate::contracts::{Contract, SecurityType};
 use crate::messages::OutgoingMessages;
 use crate::proto;
 use crate::proto::encoders::encode_contract;
-
-// =============================================================================
-// Response builders (sentinel only; full ContractData/SymbolSamples/MarketRule
-// /OptionChain bodies have many fields and are deferred — current tests work
-// fine with their inline pipe literals)
-// =============================================================================
-
-// --- ContractDataEnd (msg 52) ---
-//
-// Wire format: `52|<version>|<req_id>|`. request_id_index is 2; the production
-// path treats this as a sentinel (only the message type is checked).
-
-request_id_response_builder!(ContractDataEndResponse, "52", ContractDataEnd);
-
-// --- OptionChainEnd / SecurityDefinitionOptionParameterEnd (msg 76) ---
-//
-// Wire format: `76|<req_id>|`. request_id_index is 1, so the
-// `request_id_response_builder!` shape (which inserts a "1" version field)
-// doesn't fit — keep an explicit struct.
-
-#[derive(Clone, Copy, Debug)]
-pub struct OptionChainEndResponse {
-    pub request_id: i32,
-}
-
-impl Default for OptionChainEndResponse {
-    fn default() -> Self {
-        Self {
-            request_id: TEST_REQ_ID_FIRST,
-        }
-    }
-}
-
-impl OptionChainEndResponse {
-    pub fn request_id(mut self, v: i32) -> Self {
-        self.request_id = v;
-        self
-    }
-}
-
-impl ResponseEncoder for OptionChainEndResponse {
-    fn fields(&self) -> Vec<String> {
-        vec!["76".to_string(), self.request_id.to_string()]
-    }
-}
-
-impl ResponseProtoEncoder for OptionChainEndResponse {
-    type Proto = proto::SecDefOptParameterEnd;
-
-    fn to_proto(&self) -> Self::Proto {
-        proto::SecDefOptParameterEnd {
-            req_id: Some(self.request_id),
-        }
-    }
-}
 
 // =============================================================================
 // Request builders
@@ -277,16 +228,9 @@ impl RequestEncoder for CalculateImpliedVolatilityRequestBuilder {
     }
 }
 
-cancel_by_request_id_builder!(
-    CancelOptionPriceRequestBuilder,
-    CancelCalculateOptionPrice,
-    OutgoingMessages::CancelOptionPrice
-);
-cancel_by_request_id_builder!(
-    CancelImpliedVolatilityRequestBuilder,
-    CancelCalculateImpliedVolatility,
-    OutgoingMessages::CancelImpliedVolatility
-);
+// CancelOptionPrice / CancelImpliedVolatility builders intentionally omitted:
+// the production cancel path goes through `OptionComputation::cancel_message`
+// in `stream_decoders`, which is exercised end-to-end by `test_cancel_messages`.
 cancel_by_request_id_builder!(CancelContractDataRequestBuilder, CancelContractData, OutgoingMessages::CancelContractData);
 
 #[derive(Clone, Debug)]
@@ -352,14 +296,6 @@ impl RequestEncoder for OptionChainRequestBuilder {
 // Entry-point functions
 // =============================================================================
 
-pub fn contract_data_end() -> ContractDataEndResponse {
-    ContractDataEndResponse::default()
-}
-
-pub fn option_chain_end() -> OptionChainEndResponse {
-    OptionChainEndResponse::default()
-}
-
 pub fn contract_data_request() -> ContractDataRequestBuilder {
     ContractDataRequestBuilder::default()
 }
@@ -380,14 +316,6 @@ pub fn calculate_implied_volatility_request() -> CalculateImpliedVolatilityReque
     CalculateImpliedVolatilityRequestBuilder::default()
 }
 
-pub fn cancel_option_price_request() -> CancelOptionPriceRequestBuilder {
-    CancelOptionPriceRequestBuilder::default()
-}
-
-pub fn cancel_implied_volatility_request() -> CancelImpliedVolatilityRequestBuilder {
-    CancelImpliedVolatilityRequestBuilder::default()
-}
-
 pub fn cancel_contract_data_request() -> CancelContractDataRequestBuilder {
     CancelContractDataRequestBuilder::default()
 }
@@ -395,7 +323,3 @@ pub fn cancel_contract_data_request() -> CancelContractDataRequestBuilder {
 pub fn option_chain_request() -> OptionChainRequestBuilder {
     OptionChainRequestBuilder::default()
 }
-
-#[cfg(test)]
-#[path = "contracts_tests.rs"]
-mod tests;
