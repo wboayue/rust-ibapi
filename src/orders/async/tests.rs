@@ -2,6 +2,7 @@ use super::*;
 use crate::common::test_utils::helpers::{assert_request, request_message_count, TEST_REQ_ID_FIRST};
 use crate::contracts::{Contract, SecurityType};
 use crate::contracts::{Currency, Exchange, Symbol};
+use crate::orders::common::test_data::{COMPLETED_ORDER_ES_FUT_CANCELLED, EXERCISE_OPEN_ORDER_ES_FOP_SUBMITTED, OPEN_ORDER_ES_FUT_SUBMITTED};
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::orders::{
     cancel_order_request, commission_report, completed_orders_end, completed_orders_request, execution_data, execution_data_end, executions_request,
@@ -14,11 +15,8 @@ use tokio::time::Duration;
 
 #[tokio::test]
 async fn test_place_order() {
-    // OpenOrder text literal kept inline — no testdata builder for that message yet.
-    let open_order_submitted = "5|2|637533641|ES|FUT|20250919|0|?|50|CME|USD|ESU5|ES|BUY|1|LMT|5800.0|0.0|DAY||DU1234567||0||100|2126726143|0|0|0||2126726143.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Submitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|5801.0|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||||||";
-
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        open_order_submitted.to_owned(),
+        OPEN_ORDER_ES_FUT_SUBMITTED.to_owned(),
         order_status().order_id(1).status("Submitted").filled(0.0).remaining(1.0).encode_pipe(),
         execution_data()
             .request_id(1)
@@ -51,7 +49,6 @@ async fn test_place_order() {
 
     let mut subscription = client.place_order(1, &contract, &order).await.expect("failed to place order");
 
-    // Test OpenOrder response
     let open_order = subscription.next().await;
     assert!(
         matches!(open_order, Some(Ok(PlaceOrder::OpenOrder(_)))),
@@ -59,7 +56,6 @@ async fn test_place_order() {
         open_order
     );
 
-    // Test OrderStatus response
     let order_status = subscription.next().await;
     assert!(
         matches!(order_status, Some(Ok(PlaceOrder::OrderStatus(_)))),
@@ -67,7 +63,6 @@ async fn test_place_order() {
         order_status
     );
 
-    // Test ExecutionData response
     let execution_data = subscription.next().await;
     assert!(
         matches!(execution_data, Some(Ok(PlaceOrder::ExecutionData(_)))),
@@ -75,7 +70,6 @@ async fn test_place_order() {
         execution_data
     );
 
-    // Test CommissionReport response
     let commission_report = subscription.next().await;
     assert!(
         matches!(commission_report, Some(Ok(PlaceOrder::CommissionReport(_)))),
@@ -84,11 +78,7 @@ async fn test_place_order() {
     );
 
     assert_eq!(request_message_count(&message_bus), 1);
-    assert_request(
-        &message_bus,
-        0,
-        &place_order_request().order_id(1).contract(contract.clone()).order(order.clone()),
-    );
+    assert_request(&message_bus, 0, &place_order_request().order_id(1).contract(&contract).order(&order));
 }
 
 #[tokio::test]
@@ -118,10 +108,8 @@ async fn test_cancel_order() {
 
 #[tokio::test]
 async fn test_open_orders() {
-    let open_order_submitted = "5|2|637533641|ES|FUT|20250919|0|?|50|CME|USD|ESU5|ES|BUY|1|LMT|5800.0|0.0|DAY||DU1234567||0||100|2126726143|0|0|0||2126726143.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Submitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|5801.0|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||||||";
-
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        open_order_submitted.to_owned(),
+        OPEN_ORDER_ES_FUT_SUBMITTED.to_owned(),
         order_status()
             .order_id(1)
             .status("Submitted")
@@ -159,11 +147,8 @@ async fn test_open_orders() {
 
 #[tokio::test]
 async fn test_completed_orders() {
-    // CompletedOrder text literal kept inline — no testdata builder for that message yet.
-    let completed_order = "101|637533641|ES|FUT|20250919|0|?|50|CME|USD|ESU5|ES|BUY|1|LMT|5800.0|0.0|DAY||DU1236109||0||2126726143|0|0|0|||||||||||0||-1||||||2147483647|0|0||3|0||0|None||0|0|0||0|0||||0|0|0|2147483647|2147483647||||IB|0|0||0|Cancelled|0|0|0|5801.0|1.7976931348623157E308|0|1|0||0|2147483647|0|Not an insider or substantial shareholder|0|0|9223372036854775807|20250708 02:34:46 America/New_York|Cancelled by Trader||||||";
-
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        completed_order.to_owned(),
+        COMPLETED_ORDER_ES_FUT_CANCELLED.to_owned(),
         completed_orders_end().encode_pipe(),
     ]));
 
@@ -254,19 +239,12 @@ async fn test_submit_order() {
     client.submit_order(2, &contract, &order).await.expect("failed to submit order");
 
     assert_eq!(request_message_count(&message_bus), 1);
-    assert_request(
-        &message_bus,
-        0,
-        &place_order_request().order_id(2).contract(contract.clone()).order(order.clone()),
-    );
+    assert_request(&message_bus, 0, &place_order_request().order_id(2).contract(&contract).order(&order));
 }
 
 #[tokio::test]
 async fn test_exercise_options() {
-    // OpenOrder text literal kept inline — no testdata builder for that message yet.
-    let exercise_open_order = "5|2|637533642|ES|FOP|20250919|5800|C|50|CME|USD|ESU5C5800|ES|BUY|1|MKT|0.0|0.0|DAY||DU1234567||0||100|2126726144|0|0|0||2126726144.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Submitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|0.0|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||||||";
-
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![exercise_open_order.to_owned()]));
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![EXERCISE_OPEN_ORDER_ES_FOP_SUBMITTED.to_owned()]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 

@@ -2,6 +2,10 @@ use std::sync::Arc;
 
 use crate::common::test_utils::helpers::{assert_request, request_message_count};
 use crate::contracts::{ComboLeg, Contract, Currency, Exchange, SecurityType, Symbol};
+use crate::orders::common::test_data::{
+    COMPLETED_ORDER_AAPL_FILLED, EXERCISE_OPEN_ORDER_ES_FOP_SUBMITTED, OPEN_ORDER_TSLA_FILLED, OPEN_ORDER_TSLA_FILLED_WITH_COMMISSION,
+    OPEN_ORDER_TSLA_PRESUBMITTED,
+};
 use crate::orders::conditions::TriggerMethod;
 use crate::orders::{Action, Liquidity, OcaType, OrderOrigin, ShortSaleSlot, TimeInForce};
 use crate::stubs::MessageBusStub;
@@ -16,16 +20,11 @@ use crate::orders::common::order_builder;
 
 #[test]
 fn place_order() {
-    // OpenOrder text literals (96+ fields) are kept inline — no testdata builder yet for those.
-    let open_order_presubmitted = "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|1376327563|0|0|0||1376327563.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||";
-    let open_order_filled = "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|1376327563|0|0|0||1376327563.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Filled|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||";
-    let open_order_filled_with_commission = "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|1376327563|0|0|0||1376327563.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Filled|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.0|||USD||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||";
-
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        open_order_presubmitted.to_owned(),
+        OPEN_ORDER_TSLA_PRESUBMITTED.to_owned(),
         order_status().status("PreSubmitted").remaining(100.0).encode_pipe(),
         execution_data().encode_pipe(),
-        open_order_filled.to_owned(),
+        OPEN_ORDER_TSLA_FILLED.to_owned(),
         order_status()
             .status("Filled")
             .filled(100.0)
@@ -33,7 +32,7 @@ fn place_order() {
             .average_fill_price(Some(196.52))
             .last_fill_price(Some(196.52))
             .encode_pipe(),
-        open_order_filled_with_commission.to_owned(),
+        OPEN_ORDER_TSLA_FILLED_WITH_COMMISSION.to_owned(),
         commission_report().encode_pipe(),
     ]));
 
@@ -56,7 +55,7 @@ fn place_order() {
     assert_request(
         &message_bus,
         0,
-        &place_order_request().order_id(order_id).contract(contract.clone()).order(order.clone()),
+        &place_order_request().order_id(order_id).contract(&contract).order(&order),
     );
 
     assert!(result.is_ok(), "failed to place order: {}", result.err().unwrap());
@@ -412,11 +411,8 @@ fn next_valid_order_id() {
 fn completed_orders() {
     let _ = env_logger::try_init();
 
-    // CompletedOrder text literal kept inline — no testdata builder yet for that message.
-    let completed_order = "101|265598|AAPL|STK||0|||SMART|USD|AAPL|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||1377295418|0|0|0|||||||||||0||-1||||||2147483647|0|0||3|0||0|None||0|0|0||0|0||||0|0|0|2147483647|2147483647||||IB|0|0||0|Filled|100|0|0|150.25|1.7976931348623157E308|0|1|0||0|2147483647|0|Not an insider or substantial shareholder|0|0|9223372036854775807|20231122 10:30:00 America/Los_Angeles|Filled||||||";
-
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        completed_order.to_owned(),
+        COMPLETED_ORDER_AAPL_FILLED.to_owned(),
         crate::testdata::builders::orders::completed_orders_end().encode_pipe(),
     ]));
 
@@ -645,7 +641,7 @@ fn encode_limit_order() {
     assert_request(
         &message_bus,
         0,
-        &place_order_request().order_id(order_id).contract(contract.clone()).order(order.clone()),
+        &place_order_request().order_id(order_id).contract(&contract).order(&order),
     );
 
     assert!(results.is_ok(), "failed to place order: {}", results.err().unwrap());
@@ -690,7 +686,7 @@ fn encode_combo_market_order() {
     assert_request(
         &message_bus,
         0,
-        &place_order_request().order_id(order_id).contract(contract.clone()).order(order.clone()),
+        &place_order_request().order_id(order_id).contract(&contract).order(&order),
     );
 
     assert!(results.is_ok(), "failed to place order: {}", results.err().unwrap());
@@ -698,10 +694,7 @@ fn encode_combo_market_order() {
 
 #[test]
 fn exercise_options() {
-    // OpenOrder text literal kept inline — no testdata builder for that message yet.
-    let exercise_open_order = "5|2|637533642|ES|FOP|20250919|5800|C|50|CME|USD|ESU5C5800|ES|BUY|1|MKT|0.0|0.0|DAY||DU1234567||0||100|2126726144|0|0|0||2126726144.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|Submitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|0.0|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||||||";
-
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![exercise_open_order.to_owned()]));
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![EXERCISE_OPEN_ORDER_ES_FOP_SUBMITTED.to_owned()]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -751,7 +744,7 @@ fn submit_order() {
     assert_request(
         &message_bus,
         0,
-        &place_order_request().order_id(order_id).contract(contract.clone()).order(order.clone()),
+        &place_order_request().order_id(order_id).contract(&contract).order(&order),
     );
 
     assert!(result.is_ok(), "failed to submit order: {}", result.err().unwrap());
@@ -759,10 +752,8 @@ fn submit_order() {
 
 #[test]
 fn order_update_stream() {
-    let open_order_presubmitted = "5|13|76792991|TSLA|STK||0|?||SMART|USD|TSLA|NMS|BUY|100|MKT|0.0|0.0|DAY||DU1234567||0||100|1376327563|0|0|0||1376327563.0/DU1234567/100||||||||||0||-1|0||||||2147483647|0|0|0||3|0|0||0|0||0|None||0||||?|0|0||0|0||||||0|0|0|2147483647|2147483647|||0||IB|0|0||0|0|PreSubmitted|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308||||||0|0|0|None|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|1.7976931348623157E308|0||||0|1|0|0|0|||0||";
-
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        open_order_presubmitted.to_owned(),
+        OPEN_ORDER_TSLA_PRESUBMITTED.to_owned(),
         order_status().status("PreSubmitted").remaining(100.0).encode_pipe(),
         execution_data().encode_pipe(),
         commission_report().encode_pipe(),
@@ -775,7 +766,6 @@ fn order_update_stream() {
 
     let notifications = stream.unwrap();
 
-    // First event: OpenOrder
     if let Some(OrderUpdate::OpenOrder(open_order)) = notifications.next() {
         assert_eq!(open_order.order_id, 13, "open_order.order_id");
         assert_eq!(open_order.contract.symbol, Symbol::from("TSLA"), "contract.symbol");
@@ -786,7 +776,6 @@ fn order_update_stream() {
         assert!(false, "expected open order notification");
     }
 
-    // Second event: OrderStatus
     if let Some(OrderUpdate::OrderStatus(status)) = notifications.next() {
         assert_eq!(status.order_id, 13, "order_status.order_id");
         assert_eq!(status.status, "PreSubmitted", "order_status.status");
@@ -796,7 +785,6 @@ fn order_update_stream() {
         assert!(false, "expected order status notification");
     }
 
-    // Third event: ExecutionData
     if let Some(OrderUpdate::ExecutionData(exec_data)) = notifications.next() {
         assert_eq!(exec_data.execution.order_id, 13, "execution.order_id");
         assert_eq!(exec_data.execution.shares, 100.0, "execution.shares");
@@ -806,7 +794,6 @@ fn order_update_stream() {
         assert!(false, "expected execution data notification");
     }
 
-    // Fourth event: CommissionReport
     if let Some(OrderUpdate::CommissionReport(report)) = notifications.next() {
         assert_eq!(report.execution_id, "00025b46.63f8f39c.01.01", "report.execution_id");
         assert_eq!(report.commission, 1.0, "report.commission");
