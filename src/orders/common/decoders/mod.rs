@@ -857,17 +857,17 @@ pub(crate) fn decode_order_status(server_version: i32, message: &mut ResponseMes
         status: message.next_string()?,
         filled: message.next_double()?,
         remaining: message.next_double()?,
-        average_fill_price: message.next_double()?,
+        average_fill_price: message.next_optional_double()?,
         perm_id: message.next_long()?,
         parent_id: message.next_int()?,
-        last_fill_price: message.next_double()?,
+        last_fill_price: message.next_optional_double()?,
         client_id: message.next_int()?,
         why_held: message.next_string()?,
         ..Default::default()
     };
 
     if server_version >= server_versions::MARKET_CAP_PRICE {
-        order_status.market_cap_price = message.next_double()?;
+        order_status.market_cap_price = message.next_optional_double()?;
     }
 
     Ok(order_status)
@@ -1154,13 +1154,13 @@ pub(crate) fn decode_order_status_proto(bytes: &[u8]) -> Result<OrderStatus, Err
         status: p.status.unwrap_or_default(),
         filled: crate::proto::decoders::parse_f64(&p.filled),
         remaining: crate::proto::decoders::parse_f64(&p.remaining),
-        average_fill_price: p.avg_fill_price.unwrap_or_default(),
+        average_fill_price: p.avg_fill_price,
         perm_id: p.perm_id.unwrap_or_default(),
         parent_id: p.parent_id.unwrap_or_default(),
-        last_fill_price: p.last_fill_price.unwrap_or_default(),
+        last_fill_price: p.last_fill_price,
         client_id: p.client_id.unwrap_or_default(),
         why_held: p.why_held.unwrap_or_default(),
-        market_cap_price: p.mkt_cap_price.unwrap_or_default(),
+        market_cap_price: p.mkt_cap_price,
     })
 }
 

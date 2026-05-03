@@ -1194,13 +1194,70 @@ fn test_decode_order_status_proto() {
     assert_eq!(result.status, "Filled");
     assert_eq!(result.filled, 50.0);
     assert_eq!(result.remaining, 0.0);
-    assert_eq!(result.average_fill_price, 152.5);
+    assert_eq!(result.average_fill_price, Some(152.5));
     assert_eq!(result.perm_id, 123456);
     assert_eq!(result.parent_id, 10);
-    assert_eq!(result.last_fill_price, 152.75);
+    assert_eq!(result.last_fill_price, Some(152.75));
     assert_eq!(result.client_id, 7);
     assert_eq!(result.why_held, "locate");
-    assert_eq!(result.market_cap_price, 1.23);
+    assert_eq!(result.market_cap_price, Some(1.23));
+}
+
+#[test]
+fn test_decode_order_status_text_unset_double() {
+    // IBKR sends UNSET_DOUBLE (1.7976931348623157E308) for unset price fields;
+    // they must decode to None, not f64::MAX leaking through.
+    let raw = "3\013\0PreSubmitted\00\0100\01.7976931348623157E308\01376327563\00\01.7976931348623157E308\0100\0\01.7976931348623157E308\0";
+    let mut message = ResponseMessage::from(raw);
+
+    let result = decode_order_status(server_versions::SIZE_RULES, &mut message).unwrap();
+
+    assert_eq!(result.order_id, 13);
+    assert_eq!(result.status, "PreSubmitted");
+    assert_eq!(result.average_fill_price, None);
+    assert_eq!(result.last_fill_price, None);
+    assert_eq!(result.market_cap_price, None);
+}
+
+#[test]
+fn test_decode_order_status_text_empty_double() {
+    // Empty fields should also decode to None for the optional double slots.
+    let raw = "3\013\0PreSubmitted\00\0100\0\01376327563\00\0\0100\0\0\0";
+    let mut message = ResponseMessage::from(raw);
+
+    let result = decode_order_status(server_versions::SIZE_RULES, &mut message).unwrap();
+
+    assert_eq!(result.average_fill_price, None);
+    assert_eq!(result.last_fill_price, None);
+    assert_eq!(result.market_cap_price, None);
+}
+
+#[test]
+fn test_decode_order_status_proto_missing_doubles() {
+    // Missing optional protobuf fields should decode to None, not Some(0.0).
+    use prost::Message;
+
+    let proto_msg = crate::proto::OrderStatus {
+        order_id: Some(99),
+        status: Some("Submitted".into()),
+        filled: Some("0".into()),
+        remaining: Some("100".into()),
+        avg_fill_price: None,
+        perm_id: Some(123456),
+        parent_id: Some(0),
+        last_fill_price: None,
+        client_id: Some(7),
+        why_held: None,
+        mkt_cap_price: None,
+    };
+
+    let mut bytes = Vec::new();
+    proto_msg.encode(&mut bytes).unwrap();
+
+    let result = decode_order_status_proto(&bytes).unwrap();
+    assert_eq!(result.average_fill_price, None);
+    assert_eq!(result.last_fill_price, None);
+    assert_eq!(result.market_cap_price, None);
 }
 
 #[test]

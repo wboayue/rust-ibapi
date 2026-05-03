@@ -330,39 +330,39 @@ async fn test_async_order_update_stream() {
             status: "PendingSubmit".to_string(),
             filled: 0.0,
             remaining: 100.0,
-            average_fill_price: 0.0,
+            average_fill_price: None,
             perm_id: 12345,
             parent_id: 0,
-            last_fill_price: 0.0,
+            last_fill_price: None,
             client_id: 0,
             why_held: String::new(),
-            market_cap_price: 0.0,
+            market_cap_price: None,
         }),
         OrderUpdate::OrderStatus(OrderStatus {
             order_id: 100,
             status: "Submitted".to_string(),
             filled: 0.0,
             remaining: 100.0,
-            average_fill_price: 0.0,
+            average_fill_price: None,
             perm_id: 12345,
             parent_id: 0,
-            last_fill_price: 0.0,
+            last_fill_price: None,
             client_id: 0,
             why_held: String::new(),
-            market_cap_price: 0.0,
+            market_cap_price: None,
         }),
         OrderUpdate::OrderStatus(OrderStatus {
             order_id: 100,
             status: "Filled".to_string(),
             filled: 100.0,
             remaining: 0.0,
-            average_fill_price: 50.00,
+            average_fill_price: Some(50.00),
             perm_id: 12345,
             parent_id: 0,
-            last_fill_price: 50.00,
+            last_fill_price: Some(50.00),
             client_id: 0,
             why_held: String::new(),
-            market_cap_price: 0.0,
+            market_cap_price: None,
         }),
     ]);
 
@@ -392,7 +392,7 @@ async fn test_async_order_update_stream() {
     if let OrderUpdate::OrderStatus(status) = &updates[2] {
         assert_eq!(status.status, "Filled");
         assert_eq!(status.filled, 100.0);
-        assert_eq!(status.average_fill_price, 50.00);
+        assert_eq!(status.average_fill_price, Some(50.00));
     }
 }
 

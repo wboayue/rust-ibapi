@@ -67,6 +67,7 @@ pub struct AccountSummaryTagTestCase {
     pub description: &'static str,
     pub group: String,
     pub tags: Vec<&'static str>,
+    #[cfg_attr(not(feature = "async"), allow(dead_code))]
     pub expected_tag_encoding: Option<&'static str>,
     #[allow(dead_code)]
     pub should_succeed: bool,

@@ -52,7 +52,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 println!("  Status: {}", status.status);
                 println!("  Filled: {}", status.filled);
                 println!("  Remaining: {}", status.remaining);
-                println!("  Avg Fill Price: {}", status.average_fill_price);
+                println!(
+                    "  Avg Fill Price: {}",
+                    status.average_fill_price.map_or("-".to_string(), |v| v.to_string())
+                );
 
                 // Exit when order is filled or cancelled
                 if status.status == "Filled" || status.status == "Cancelled" {
