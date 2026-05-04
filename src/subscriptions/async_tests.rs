@@ -3,6 +3,7 @@ use crate::market_data::realtime::Bar;
 use crate::messages::{Notice, OutgoingMessages};
 use crate::stubs::MessageBusStub;
 use crate::subscriptions::common::RoutedItem;
+use futures::StreamExt;
 use std::sync::RwLock;
 use time::OffsetDateTime;
 use tokio::sync::{broadcast, mpsc};
@@ -459,8 +460,6 @@ async fn test_subscription_new_from_internal_simple() {
 
 #[tokio::test]
 async fn test_data_stream_collects_data_items() {
-    use futures::StreamExt;
-
     let (tx, rx) = mpsc::unbounded_channel::<Result<String, Error>>();
     let mut subscription = Subscription::new(rx);
 
@@ -476,8 +475,6 @@ async fn test_data_stream_collects_data_items() {
 
 #[tokio::test]
 async fn test_data_stream_yields_error_then_ends() {
-    use futures::StreamExt;
-
     let (tx, rx) = mpsc::unbounded_channel::<Result<String, Error>>();
     let mut subscription = Subscription::new(rx);
 
@@ -499,8 +496,6 @@ async fn test_data_stream_yields_error_then_ends() {
 
 #[tokio::test]
 async fn test_data_stream_filters_notices() {
-    use futures::StreamExt;
-
     let message_bus = Arc::new(MessageBusStub::default());
     let (tx, rx) = broadcast::channel(100);
     let internal = AsyncInternalSubscription::new(rx);
@@ -527,4 +522,30 @@ async fn test_data_stream_filters_notices() {
     let collected: Vec<_> = subscription.data_stream().collect().await;
     assert_eq!(collected.len(), 1);
     assert_eq!(collected[0].as_ref().unwrap(), "data");
+}
+
+// PR 3 will add a SubscriptionItem::Notice end-to-end test here once the
+// dispatcher emits notices through to Subscription::next(). In PR 2c the
+// receiver-side legacy shim still consumes RoutedItem::Notice silently
+// (see test_routed_item_notice_skipped_then_response_delivered).
+
+#[tokio::test]
+async fn test_stream_yields_error_then_ends() {
+    let (tx, rx) = mpsc::unbounded_channel::<Result<String, Error>>();
+    let mut subscription = Subscription::new(rx);
+
+    tx.send(Ok("first".to_string())).unwrap();
+    tx.send(Err(Error::ConnectionReset)).unwrap();
+    tx.send(Ok("should-not-be-yielded".to_string())).unwrap();
+
+    let mut stream = subscription.stream();
+
+    let first = stream.next().await;
+    assert!(matches!(first, Some(Ok(SubscriptionItem::Data(ref s))) if s == "first"));
+
+    let second = stream.next().await;
+    assert!(matches!(second, Some(Err(Error::ConnectionReset))));
+
+    let third = stream.next().await;
+    assert!(third.is_none(), "stream must end after a terminal error");
 }

@@ -7,7 +7,7 @@ use futures::stream::Stream;
 use log::{debug, warn};
 use tokio::sync::mpsc;
 
-use super::common::{process_decode_result, DecoderContext, ProcessingResult, SubscriptionItem};
+use super::common::{filter_notice, process_decode_result, DecoderContext, ProcessingResult, SubscriptionItem};
 use super::StreamDecoder;
 use crate::messages::{OutgoingMessages, ResponseMessage};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
@@ -265,15 +265,26 @@ impl<T> Subscription<T> {
         T: 'static,
     {
         loop {
-            match self.next().await? {
-                Ok(SubscriptionItem::Data(t)) => return Some(Ok(t)),
-                Ok(SubscriptionItem::Notice(n)) => {
-                    log::warn!("ib notice on subscription: {n}");
-                    continue;
-                }
-                Err(e) => return Some(Err(e)),
+            if let Some(out) = filter_notice(self.next().await?) {
+                return Some(out);
             }
         }
+    }
+
+    /// Async mirror of the sync [`Subscription::iter`](crate::subscriptions::sync::Subscription::iter)
+    /// adapter: returns a [`Stream`] of `Result<SubscriptionItem<T>, Error>` —
+    /// notices are surfaced for callers that want to react to them.
+    ///
+    /// The returned stream is `Unpin` so callers can chain
+    /// [`futures::StreamExt`] combinators directly without `pin_mut!`.
+    pub fn stream(&mut self) -> impl Stream<Item = Result<SubscriptionItem<T>, Error>> + Unpin + '_
+    where
+        T: 'static,
+    {
+        Box::pin(futures::stream::unfold(
+            self,
+            |sub| async move { sub.next().await.map(|item| (item, sub)) },
+        ))
     }
 
     /// Async mirror of the sync [`Subscription::iter_data`](crate::subscriptions::sync::Subscription::iter_data)
@@ -285,7 +296,7 @@ impl<T> Subscription<T> {
     /// directly without wrapping in `pin_mut!`.
     pub fn data_stream(&mut self) -> impl Stream<Item = Result<T, Error>> + Unpin + '_
     where
-        T: Send + 'static,
+        T: 'static,
     {
         Box::pin(futures::stream::unfold(self, |sub| async move {
             sub.next_data().await.map(|item| (item, sub))

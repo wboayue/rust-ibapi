@@ -33,6 +33,20 @@ impl<T> SubscriptionItem<T> {
     }
 }
 
+/// Per-item filter shared by sync `FilterData` and async `next_data` /
+/// `data_stream`: returns `Some(Ok(t))` for data, `None` for notices (logged
+/// at `warn!`), `Some(Err(e))` for errors.
+pub(crate) fn filter_notice<T>(item: Result<SubscriptionItem<T>, Error>) -> Option<Result<T, Error>> {
+    match item {
+        Ok(SubscriptionItem::Data(t)) => Some(Ok(t)),
+        Ok(SubscriptionItem::Notice(n)) => {
+            log::warn!("ib notice on subscription: {n}");
+            None
+        }
+        Err(e) => Some(Err(e)),
+    }
+}
+
 /// Pre-classified channel item delivered from the dispatcher to subscriptions.
 /// `Response` carries raw bytes the decoder must still interpret; `Notice` and
 /// `Error` are pre-classified by the dispatcher so decoders never re-classify

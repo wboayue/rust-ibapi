@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use log::{debug, error, warn};
 
-use super::common::{process_decode_result, DecoderContext, ProcessingResult, SubscriptionItem};
+use super::common::{filter_notice, process_decode_result, DecoderContext, ProcessingResult, SubscriptionItem};
 use super::StreamDecoder;
 use crate::errors::Error;
 use crate::messages::{OutgoingMessages, ResponseMessage};
@@ -284,13 +284,8 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            match self.inner.next()? {
-                Ok(SubscriptionItem::Data(t)) => return Some(Ok(t)),
-                Ok(SubscriptionItem::Notice(n)) => {
-                    log::warn!("ib notice on subscription: {n}");
-                    continue;
-                }
-                Err(e) => return Some(Err(e)),
+            if let Some(out) = filter_notice(self.inner.next()?) {
+                return Some(out);
             }
         }
     }
