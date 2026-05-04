@@ -23,7 +23,11 @@ pub mod sync;
 #[cfg(feature = "async")]
 pub mod r#async;
 
-// Common types
+// Internal channel envelope shared across sync/async transports.
+#[cfg(any(feature = "sync", feature = "async"))]
+pub(crate) use crate::subscriptions::common::RoutedItem;
+
+// Result type for the connection read path (parse / I/O outcome).
 #[allow(dead_code)]
 pub(crate) type Response = Result<ResponseMessage, Error>;
 
@@ -55,12 +59,12 @@ pub(crate) trait MessageBus: Send + Sync {
 #[cfg(feature = "sync")]
 #[derive(Debug, Default)]
 pub(crate) struct InternalSubscription {
-    receiver: Option<Receiver<Response>>,              // requests with request ids receive responses via this channel
-    sender: Option<Sender<Response>>,                  // requests with request ids receive responses via this channel
-    shared_receiver: Option<Arc<Receiver<Response>>>,  // this channel is for responses that share channel based on message type
-    signaler: Option<Sender<Signal>>,                  // for client to signal termination
-    pub(crate) request_id: Option<i32>,                // initiating request id
-    pub(crate) order_id: Option<i32>,                  // initiating order id
+    receiver: Option<Receiver<RoutedItem>>, // requests with request ids receive responses via this channel
+    sender: Option<Sender<RoutedItem>>,     // requests with request ids receive responses via this channel
+    shared_receiver: Option<Arc<Receiver<RoutedItem>>>, // this channel is for responses that share channel based on message type
+    signaler: Option<Sender<Signal>>,       // for client to signal termination
+    pub(crate) request_id: Option<i32>,     // initiating request id
+    pub(crate) order_id: Option<i32>,       // initiating order id
     pub(crate) message_type: Option<OutgoingMessages>, // initiating message type
 }
 
@@ -101,23 +105,37 @@ impl InternalSubscription {
 
     pub(crate) fn cancel(&self) {
         if let Some(sender) = &self.sender {
-            if let Err(e) = sender.send(Err(Error::Cancelled)) {
+            if let Err(e) = sender.send(Error::Cancelled.into()) {
                 log::warn!("error sending cancel notification: {e}")
             }
         }
         // TODO - shared sender
     }
 
-    fn receive(receiver: &Receiver<Response>) -> Option<Response> {
-        receiver.recv().ok()
+    fn receive(receiver: &Receiver<RoutedItem>) -> Option<Response> {
+        loop {
+            if let Some(legacy) = receiver.recv().ok()?.into_legacy() {
+                return Some(legacy);
+            }
+        }
     }
 
-    fn try_receive(receiver: &Receiver<Response>) -> Option<Response> {
-        receiver.try_recv().ok()
+    fn try_receive(receiver: &Receiver<RoutedItem>) -> Option<Response> {
+        loop {
+            if let Some(legacy) = receiver.try_recv().ok()?.into_legacy() {
+                return Some(legacy);
+            }
+        }
     }
 
-    fn timeout_receive(receiver: &Receiver<Response>, timeout: Duration) -> Option<Response> {
-        receiver.recv_timeout(timeout).ok()
+    fn timeout_receive(receiver: &Receiver<RoutedItem>, timeout: Duration) -> Option<Response> {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if let Some(legacy) = receiver.recv_timeout(remaining).ok()?.into_legacy() {
+                return Some(legacy);
+            }
+        }
     }
 }
 
@@ -153,9 +171,9 @@ pub enum Signal {
 // SubscriptionBuilder for creating InternalSubscription instances
 #[cfg(feature = "sync")]
 pub(crate) struct SubscriptionBuilder {
-    receiver: Option<Receiver<Response>>,
-    sender: Option<Sender<Response>>,
-    shared_receiver: Option<Arc<Receiver<Response>>>,
+    receiver: Option<Receiver<RoutedItem>>,
+    sender: Option<Sender<RoutedItem>>,
+    shared_receiver: Option<Arc<Receiver<RoutedItem>>>,
     signaler: Option<Sender<Signal>>,
     order_id: Option<i32>,
     request_id: Option<i32>,
@@ -176,17 +194,17 @@ impl SubscriptionBuilder {
         }
     }
 
-    pub(crate) fn receiver(mut self, receiver: Receiver<Response>) -> Self {
+    pub(crate) fn receiver(mut self, receiver: Receiver<RoutedItem>) -> Self {
         self.receiver = Some(receiver);
         self
     }
 
-    pub(crate) fn sender(mut self, sender: Sender<Response>) -> Self {
+    pub(crate) fn sender(mut self, sender: Sender<RoutedItem>) -> Self {
         self.sender = Some(sender);
         self
     }
 
-    pub(crate) fn shared_receiver(mut self, receiver: Arc<Receiver<Response>>) -> Self {
+    pub(crate) fn shared_receiver(mut self, receiver: Arc<Receiver<RoutedItem>>) -> Self {
         self.shared_receiver = Some(receiver);
         self
     }

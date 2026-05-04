@@ -113,7 +113,7 @@ impl MessageBus for MessageBusStub {
 
         // Send any pre-configured response messages
         for message in self.response_messages_decoded() {
-            sender.send(Ok(message)).unwrap();
+            sender.send(message.into()).unwrap();
         }
 
         let subscription = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).build();
@@ -158,7 +158,7 @@ fn mock_request(stub: &MessageBusStub, request_id: Option<i32>, message_type: Op
     let (s1, _r1) = channel::unbounded();
 
     for message in stub.response_messages_decoded() {
-        sender.send(Ok(message)).unwrap();
+        sender.send(message.into()).unwrap();
     }
 
     let mut subscription = SubscriptionBuilder::new().signaler(s1);
@@ -180,7 +180,7 @@ impl AsyncMessageBus for MessageBusStub {
         let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
         // Send pre-configured response messages
         for message in self.response_messages_decoded() {
-            sender.send(message).unwrap();
+            sender.send(message.into()).unwrap();
         }
 
         Ok(AsyncInternalSubscription::new(receiver))
@@ -192,7 +192,7 @@ impl AsyncMessageBus for MessageBusStub {
         let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
         // Send pre-configured response messages
         for message in self.response_messages_decoded() {
-            sender.send(message).unwrap();
+            sender.send(message.into()).unwrap();
         }
 
         Ok(AsyncInternalSubscription::new(receiver))
@@ -204,7 +204,7 @@ impl AsyncMessageBus for MessageBusStub {
         let (sender, receiver) = broadcast::channel(TEST_BROADCAST_CAPACITY);
         // Send pre-configured response messages
         for message in self.response_messages_decoded() {
-            sender.send(message).unwrap();
+            sender.send(message.into()).unwrap();
         }
 
         Ok(AsyncInternalSubscription::new(receiver))
@@ -236,7 +236,7 @@ impl AsyncMessageBus for MessageBusStub {
 
         // Send pre-configured response messages
         for message in self.response_messages_decoded() {
-            sender.send(message).unwrap();
+            sender.send(message.into()).unwrap();
         }
 
         let (cleanup_sender, mut cleanup_receiver) = tokio::sync::mpsc::unbounded_channel();

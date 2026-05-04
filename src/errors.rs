@@ -119,6 +119,38 @@ impl From<ResponseMessage> for Error {
     }
 }
 
+// Manual Clone because `std::io::Error` and `time::error::Parse` don't derive it.
+// `ParseTime` is lossy: it collapses to `Error::Simple` and a cloned value
+// no longer matches `Error::ParseTime(_)`.
+impl Clone for Error {
+    fn clone(&self) -> Self {
+        match self {
+            Error::Io(e) => Error::Io(std::io::Error::new(e.kind(), e.to_string())),
+            Error::ParseInt(e) => Error::ParseInt(e.clone()),
+            Error::FromUtf8(e) => Error::FromUtf8(e.clone()),
+            Error::ParseTime(_) => Error::Simple(self.to_string()),
+            Error::Poison(s) => Error::Poison(s.clone()),
+            Error::NotImplemented => Error::NotImplemented,
+            Error::Parse(i, v, m) => Error::Parse(*i, v.clone(), m.clone()),
+            Error::ServerVersion(a, b, s) => Error::ServerVersion(*a, *b, s.clone()),
+            Error::Simple(s) => Error::Simple(s.clone()),
+            Error::InvalidArgument(s) => Error::InvalidArgument(s.clone()),
+            Error::ConnectionFailed => Error::ConnectionFailed,
+            Error::UnsupportedTimeZone(s) => Error::UnsupportedTimeZone(s.clone()),
+            Error::ConnectionReset => Error::ConnectionReset,
+            Error::Cancelled => Error::Cancelled,
+            Error::Shutdown => Error::Shutdown,
+            Error::EndOfStream => Error::EndOfStream,
+            Error::UnexpectedResponse(m) => Error::UnexpectedResponse(m.clone()),
+            Error::UnexpectedEndOfStream => Error::UnexpectedEndOfStream,
+            Error::Message(c, m) => Error::Message(*c, m.clone()),
+            Error::AlreadySubscribed => Error::AlreadySubscribed,
+            Error::HistoricalParseError(e) => Error::HistoricalParseError(e.clone()),
+            Error::ProtobufDecode(e) => Error::ProtobufDecode(e.clone()),
+        }
+    }
+}
+
 impl<T> From<std::sync::PoisonError<T>> for Error {
     fn from(err: std::sync::PoisonError<T>) -> Error {
         Error::Poison(format!("Mutex poison error: {err}"))

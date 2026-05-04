@@ -21,7 +21,7 @@ pub mod sync;
 pub mod r#async;
 
 /// Errors surfaced while parsing historical market data parameters.
-#[derive(Debug, Error, PartialEq)]
+#[derive(Clone, Debug, Error, PartialEq)]
 pub enum HistoricalParseError {
     /// Unsupported bar size string supplied by the caller.
     #[error("Invalid BarSize input '{0}'")]
