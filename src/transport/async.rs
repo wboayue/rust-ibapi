@@ -107,12 +107,11 @@ impl AsyncInternalSubscription {
     pub async fn next(&mut self) -> Option<Result<ResponseMessage, Error>> {
         loop {
             match self.receiver.recv().await {
-                Ok(RoutedItem::Response(msg)) => return Some(Ok(msg)),
-                Ok(RoutedItem::Error(err)) => return Some(Err(err)),
-                // Defensive: PR 2a never emits Notice; reachable from PR 3 onward.
-                Ok(RoutedItem::Notice(notice)) => {
-                    log::trace!("dropping notice on async subscription channel: {notice:?}");
-                    continue;
+                Ok(item) => {
+                    if let Some(legacy) = item.into_legacy() {
+                        return Some(legacy);
+                    }
+                    // Notice items are skipped; recv next.
                 }
                 Err(broadcast::error::RecvError::Closed) => return None,
                 Err(broadcast::error::RecvError::Lagged(_)) => {
@@ -358,14 +357,14 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         {
             let channels = self.request_channels.read().await;
             for (_, sender) in channels.iter() {
-                let _ = sender.send(RoutedItem::Error(Error::ConnectionReset));
+                let _ = sender.send(Error::ConnectionReset.into());
             }
         }
 
         {
             let channels = self.order_channels.read().await;
             for (_, sender) in channels.iter() {
-                let _ = sender.send(RoutedItem::Error(Error::ConnectionReset));
+                let _ = sender.send(Error::ConnectionReset.into());
             }
         }
 
@@ -448,11 +447,11 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
         let channels = self.request_channels.read().await;
         if let Some(sender) = channels.get(&request_id) {
-            let _ = sender.send(RoutedItem::Response(message));
+            let _ = sender.send(message.into());
         } else {
             let order_channels = self.order_channels.read().await;
             if let Some(sender) = order_channels.get(&request_id) {
-                let _ = sender.send(RoutedItem::Response(message.clone()));
+                let _ = sender.send(message.clone().into());
             } else if !sent_to_update_stream && message.order_id().is_some() {
                 info!("order error message has no recipient: {:?}", message);
             }
@@ -465,7 +464,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     async fn route_to_request_channel(&self, request_id: i32, message: ResponseMessage) -> Result<(), Error> {
         let channels = self.request_channels.read().await;
         if let Some(sender) = channels.get(&request_id) {
-            let _ = sender.send(RoutedItem::Response(message));
+            let _ = sender.send(message.into());
         }
         Ok(())
     }
@@ -482,7 +481,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                     let channels = self.order_channels.read().await;
                     if let Some(sender) = channels.get(&actual_order_id) {
                         self.store_execution_mapping(&message, sender).await;
-                        let _ = sender.send(RoutedItem::Response(message));
+                        let _ = sender.send(message.into());
                         return Ok(());
                     }
                 }
@@ -490,7 +489,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                     let channels = self.request_channels.read().await;
                     if let Some(sender) = channels.get(&req_id) {
                         self.store_execution_mapping(&message, sender).await;
-                        let _ = sender.send(RoutedItem::Response(message));
+                        let _ = sender.send(message.into());
                         return Ok(());
                     }
                 }
@@ -502,14 +501,14 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                 if let Some(actual_order_id) = message.order_id() {
                     let channels = self.order_channels.read().await;
                     if let Some(sender) = channels.get(&actual_order_id) {
-                        let _ = sender.send(RoutedItem::Response(message));
+                        let _ = sender.send(message.into());
                         return Ok(());
                     }
                 }
                 if let Some(req_id) = message.request_id() {
                     let channels = self.request_channels.read().await;
                     if let Some(sender) = channels.get(&req_id) {
-                        let _ = sender.send(RoutedItem::Response(message));
+                        let _ = sender.send(message.into());
                         return Ok(());
                     }
                 }
@@ -519,7 +518,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                 if let Some(actual_order_id) = message.order_id() {
                     let channels = self.order_channels.read().await;
                     if let Some(sender) = channels.get(&actual_order_id) {
-                        let _ = sender.send(RoutedItem::Response(message));
+                        let _ = sender.send(message.into());
                         return Ok(());
                     }
                     drop(channels);
@@ -527,7 +526,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                     let shared_channels = self.shared_channel_senders.read().await;
                     if let Some(senders) = shared_channels.get(&message.message_type()) {
                         for sender in senders {
-                            let _ = sender.send(RoutedItem::Response(message.clone()));
+                            let _ = sender.send(message.clone().into());
                         }
                         return Ok(());
                     }
@@ -540,7 +539,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                 if let Some(execution_id) = message.execution_id() {
                     let exec_channels = self.execution_channels.read().await;
                     if let Some(sender) = exec_channels.get(&execution_id) {
-                        let _ = sender.send(RoutedItem::Response(message));
+                        let _ = sender.send(message.into());
                         return Ok(());
                     }
                 }
@@ -549,7 +548,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                 let shared_channels = self.shared_channel_senders.read().await;
                 if let Some(senders) = shared_channels.get(&message.message_type()) {
                     for sender in senders {
-                        let _ = sender.send(RoutedItem::Response(message.clone()));
+                        let _ = sender.send(message.clone().into());
                     }
                     return Ok(());
                 }
@@ -561,7 +560,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                 if order_id >= 0 {
                     let channels = self.order_channels.read().await;
                     if let Some(sender) = channels.get(&order_id) {
-                        let _ = sender.send(RoutedItem::Response(message));
+                        let _ = sender.send(message.into());
                         return Ok(());
                     }
                 }
@@ -601,7 +600,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         if let Some(senders) = channels.get(&message_type) {
             // Broadcast to all subscribers
             for sender in senders {
-                if let Err(e) = sender.send(RoutedItem::Response(message.clone())) {
+                if let Err(e) = sender.send(message.clone().into()) {
                     warn!("error sending to shared channel for {message_type:?}: {e}");
                 }
             }
@@ -614,7 +613,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     async fn send_order_update(&self, message: &ResponseMessage) -> bool {
         let order_update_stream = self.order_update_stream.read().await;
         if let Some(sender) = order_update_stream.as_ref() {
-            if let Err(e) = sender.send(RoutedItem::Response(message.clone())) {
+            if let Err(e) = sender.send(message.clone().into()) {
                 warn!("error sending to order update stream: {e}");
                 return false;
             }
@@ -693,7 +692,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
         // awaiting the write upgrade and self-deadlocked on the same task.
         let mut channels = self.request_channels.write().await;
         if let Some(sender) = channels.get(&request_id) {
-            let _ = sender.send(RoutedItem::Error(Error::Cancelled));
+            let _ = sender.send(Error::Cancelled.into());
         }
         channels.remove(&request_id);
 
@@ -705,7 +704,7 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
 
         let mut channels = self.order_channels.write().await;
         if let Some(sender) = channels.get(&order_id) {
-            let _ = sender.send(RoutedItem::Error(Error::Cancelled));
+            let _ = sender.send(Error::Cancelled.into());
         }
         channels.remove(&order_id);
 

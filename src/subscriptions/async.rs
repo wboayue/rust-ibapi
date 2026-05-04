@@ -301,8 +301,9 @@ impl<T> Drop for Subscription<T> {
 mod tests {
     use super::*;
     use crate::market_data::realtime::Bar;
-    use crate::messages::OutgoingMessages;
+    use crate::messages::{Notice, OutgoingMessages};
     use crate::stubs::MessageBusStub;
+    use crate::subscriptions::common::RoutedItem;
     use std::sync::RwLock;
     use time::OffsetDateTime;
     use tokio::sync::{broadcast, mpsc};
@@ -341,7 +342,7 @@ mod tests {
 
         // Send a test message
         let msg = ResponseMessage::from("1\09000\020241231 12:00:00\0100.5\0101.0\0100.0\0100.25\01000\0100.2\05\00");
-        tx.send(crate::subscriptions::common::RoutedItem::Response(msg)).unwrap();
+        tx.send(msg.into()).unwrap();
 
         // Test that we can receive the decoded message
         let mut sub = subscription;
@@ -408,8 +409,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_routed_item_error_surfaces_through_async_subscription() {
-        use crate::subscriptions::common::RoutedItem;
-
         let message_bus = Arc::new(MessageBusStub::default());
         let (tx, rx) = broadcast::channel(100);
         let internal = AsyncInternalSubscription::new(rx);
@@ -435,9 +434,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_routed_item_notice_skipped_then_response_delivered() {
-        use crate::messages::Notice;
-        use crate::subscriptions::common::RoutedItem;
-
         let message_bus = Arc::new(MessageBusStub::default());
         let (tx, rx) = broadcast::channel(100);
         let internal = AsyncInternalSubscription::new(rx);
@@ -485,7 +481,7 @@ mod tests {
 
         // Send a message that will trigger the error
         let msg = ResponseMessage::from("test\0");
-        tx.send(crate::subscriptions::common::RoutedItem::Response(msg)).unwrap();
+        tx.send(msg.into()).unwrap();
 
         let result = subscription.next().await;
         assert!(result.is_some());
@@ -510,7 +506,7 @@ mod tests {
 
         // Send a message that will trigger end of stream
         let msg = ResponseMessage::from("test\0");
-        tx.send(crate::subscriptions::common::RoutedItem::Response(msg)).unwrap();
+        tx.send(msg.into()).unwrap();
 
         let result = subscription.next().await;
         assert!(result.is_none());
@@ -543,16 +539,13 @@ mod tests {
         );
 
         // First message triggers EndOfStream
-        tx.send(crate::subscriptions::common::RoutedItem::Response(ResponseMessage::from("end\0")))
-            .unwrap();
+        tx.send(ResponseMessage::from("end\0").into()).unwrap();
         let result = subscription.next().await;
         assert!(result.is_none());
 
         // Send stray messages after stream ended
-        tx.send(crate::subscriptions::common::RoutedItem::Response(ResponseMessage::from("stray1\0")))
-            .unwrap();
-        tx.send(crate::subscriptions::common::RoutedItem::Response(ResponseMessage::from("stray2\0")))
-            .unwrap();
+        tx.send(ResponseMessage::from("stray1\0").into()).unwrap();
+        tx.send(ResponseMessage::from("stray2\0").into()).unwrap();
 
         // Subsequent calls should return None immediately without invoking decoder
         let result = subscription.next().await;
@@ -593,8 +586,7 @@ mod tests {
 
         // Send 21 messages — 20 will be "unexpected" (skipped), 1 will succeed
         for _ in 0..21 {
-            tx.send(crate::subscriptions::common::RoutedItem::Response(ResponseMessage::from("msg\0")))
-                .unwrap();
+            tx.send(ResponseMessage::from("msg\0").into()).unwrap();
         }
 
         let result = subscription.next().await;

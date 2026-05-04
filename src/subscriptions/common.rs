@@ -23,6 +23,32 @@ pub(crate) enum RoutedItem {
     Error(Error),
 }
 
+impl From<ResponseMessage> for RoutedItem {
+    fn from(message: ResponseMessage) -> Self {
+        RoutedItem::Response(message)
+    }
+}
+
+impl From<Error> for RoutedItem {
+    fn from(error: Error) -> Self {
+        RoutedItem::Error(error)
+    }
+}
+
+impl RoutedItem {
+    /// Translate to the legacy `Result<ResponseMessage, Error>` shape used by
+    /// transport-level consumers. Returns `None` for `Notice` so callers can
+    /// skip the item and recv the next one.
+    #[cfg(any(feature = "sync", feature = "async"))]
+    pub(crate) fn into_legacy(self) -> Option<Result<ResponseMessage, Error>> {
+        match self {
+            RoutedItem::Response(message) => Some(Ok(message)),
+            RoutedItem::Error(error) => Some(Err(error)),
+            RoutedItem::Notice(_) => None,
+        }
+    }
+}
+
 /// Checks if an error indicates the end of a stream
 #[allow(dead_code)]
 pub(crate) fn is_stream_end(error: &Error) -> bool {

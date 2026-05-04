@@ -68,21 +68,6 @@ pub(crate) struct InternalSubscription {
     pub(crate) message_type: Option<OutgoingMessages>, // initiating message type
 }
 
-// Convert a RoutedItem to the legacy `Result<ResponseMessage, Error>` shape used by
-// direct subscription consumers. Returns `None` for `RoutedItem::Notice` so the caller
-// can treat notices as ignorable items and recv the next one.
-#[cfg(feature = "sync")]
-fn routed_to_legacy(item: RoutedItem) -> Option<Response> {
-    match item {
-        RoutedItem::Response(msg) => Some(Ok(msg)),
-        RoutedItem::Error(err) => Some(Err(err)),
-        RoutedItem::Notice(notice) => {
-            log::trace!("dropping notice on subscription channel: {notice:?}");
-            None
-        }
-    }
-}
-
 #[cfg(feature = "sync")]
 impl InternalSubscription {
     // Blocks until next message become available.
@@ -120,7 +105,7 @@ impl InternalSubscription {
 
     pub(crate) fn cancel(&self) {
         if let Some(sender) = &self.sender {
-            if let Err(e) = sender.send(RoutedItem::Error(Error::Cancelled)) {
+            if let Err(e) = sender.send(Error::Cancelled.into()) {
                 log::warn!("error sending cancel notification: {e}")
             }
         }
@@ -129,8 +114,7 @@ impl InternalSubscription {
 
     fn receive(receiver: &Receiver<RoutedItem>) -> Option<Response> {
         loop {
-            let item = receiver.recv().ok()?;
-            if let Some(legacy) = routed_to_legacy(item) {
+            if let Some(legacy) = receiver.recv().ok()?.into_legacy() {
                 return Some(legacy);
             }
         }
@@ -138,8 +122,7 @@ impl InternalSubscription {
 
     fn try_receive(receiver: &Receiver<RoutedItem>) -> Option<Response> {
         loop {
-            let item = receiver.try_recv().ok()?;
-            if let Some(legacy) = routed_to_legacy(item) {
+            if let Some(legacy) = receiver.try_recv().ok()?.into_legacy() {
                 return Some(legacy);
             }
         }
@@ -153,8 +136,7 @@ impl InternalSubscription {
             if remaining.is_zero() {
                 return None;
             }
-            let item = receiver.recv_timeout(remaining).ok()?;
-            if let Some(legacy) = routed_to_legacy(item) {
+            if let Some(legacy) = receiver.recv_timeout(remaining).ok()?.into_legacy() {
                 return Some(legacy);
             }
         }
