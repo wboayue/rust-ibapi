@@ -7,10 +7,10 @@ use std::time::{Duration, Instant};
 
 use log::{debug, error, warn};
 
-use super::common::{filter_notice, process_decode_result, DecoderContext, ProcessingResult, SubscriptionItem};
+use super::common::{filter_notice, process_decode_result, DecoderContext, ProcessingResult, RoutedItem, SubscriptionItem};
 use super::StreamDecoder;
 use crate::errors::Error;
-use crate::messages::{OutgoingMessages, ResponseMessage};
+use crate::messages::OutgoingMessages;
 use crate::transport::{InternalSubscription, MessageBus};
 
 /// A [Subscription] is a stream of responses returned from TWS. A [Subscription] is normally returned when invoking an API that can return more than one value.
@@ -140,16 +140,16 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         }
 
         loop {
-            match self.handle_response(self.subscription.next()) {
+            match self.handle_response(self.subscription.next_routed()) {
                 NextAction::Return(val) => return val,
                 NextAction::Skip => continue,
             }
         }
     }
 
-    fn handle_response(&self, response: Option<Result<ResponseMessage, Error>>) -> NextAction<Result<SubscriptionItem<T>, Error>> {
+    fn handle_response(&self, response: Option<RoutedItem>) -> NextAction<Result<SubscriptionItem<T>, Error>> {
         match response {
-            Some(Ok(mut message)) => match process_decode_result(T::decode(&self.context, &mut message)) {
+            Some(RoutedItem::Response(mut message)) => match process_decode_result(T::decode(&self.context, &mut message)) {
                 ProcessingResult::Success(val) => {
                     if val.is_snapshot_end() {
                         self.snapshot_ended.store(true, Ordering::Relaxed);
@@ -173,11 +173,12 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                     NextAction::Return(Some(Err(err)))
                 }
             },
-            Some(Err(Error::EndOfStream)) => {
+            Some(RoutedItem::Notice(notice)) => NextAction::Return(Some(Ok(SubscriptionItem::Notice(notice)))),
+            Some(RoutedItem::Error(Error::EndOfStream)) => {
                 self.stream_ended.store(true, Ordering::Relaxed);
                 NextAction::Return(None)
             }
-            Some(Err(e)) => {
+            Some(RoutedItem::Error(e)) => {
                 self.stream_ended.store(true, Ordering::Relaxed);
                 NextAction::Return(Some(Err(e)))
             }
@@ -194,7 +195,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             return None;
         }
         loop {
-            match self.handle_response(self.subscription.try_next()) {
+            match self.handle_response(self.subscription.try_next_routed()) {
                 NextAction::Return(val) => return val,
                 NextAction::Skip => continue,
             }
@@ -212,7 +213,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             if remaining.is_zero() {
                 return None;
             }
-            match self.handle_response(self.subscription.next_timeout(remaining)) {
+            match self.handle_response(self.subscription.next_timeout_routed(remaining)) {
                 NextAction::Return(val) => return val,
                 NextAction::Skip => continue,
             }

@@ -15,11 +15,13 @@ use tokio::task;
 use tokio::time::Duration;
 
 use crate::connection::r#async::AsyncConnection;
-use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
+use crate::messages::{shared_channel_configuration, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
-use super::common::log_error_payload;
-use super::routing::{determine_routing, order_routing_strategy, DecodedError, OrderRoutingStrategy, RoutingDecision};
+use super::common::log_orphan;
+use super::routing::{
+    determine_routing, is_warning_error, order_routing_strategy, DecodedError, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID,
+};
 use super::RoutedItem;
 
 /// Default capacity for broadcast channels
@@ -111,6 +113,19 @@ impl AsyncInternalSubscription {
                         return Some(legacy);
                     }
                 }
+                Err(broadcast::error::RecvError::Closed) => return None,
+                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+            }
+        }
+    }
+
+    /// Receive the next typed envelope (Response / Notice / Error) without
+    /// the legacy projection. Consumed by `Subscription<T>::next` so it can
+    /// surface notices as `SubscriptionItem::Notice` items.
+    pub(crate) async fn next_routed(&mut self) -> Option<RoutedItem> {
+        loop {
+            match self.receiver.recv().await {
+                Ok(item) => return Some(item),
                 Err(broadcast::error::RecvError::Closed) => return None,
                 Err(broadcast::error::RecvError::Lagged(_)) => continue,
             }
@@ -404,41 +419,45 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
 
     /// Route error message using routing decision
     async fn route_error_message(&self, message: ResponseMessage, payload: DecodedError) -> Result<(), Error> {
-        let _ = self.send_order_update(&message).await;
+        let sent_to_update_stream = self.send_order_update(&message).await;
+        let request_id = payload.request_id;
+        let is_warning = is_warning_error(payload.error_code);
 
-        if payload.is_log_only() {
-            log_error_payload(&payload);
-            return Ok(());
-        }
-
-        let DecodedError {
-            request_id,
-            error_code,
-            error_message: error_msg,
-            ..
-        } = payload;
-
-        info!("Error message - Request ID: {request_id}, Code: {error_code}, Message: {error_msg}");
-
-        let sent_to_update_stream = if message.order_id().is_some() {
-            self.send_order_update(&message).await
+        if request_id == UNSPECIFIED_REQUEST_ID {
+            super::common::log_unrouted_notice(&Notice::from(payload));
         } else {
-            false
-        };
-
-        let channels = self.request_channels.read().await;
-        if let Some(sender) = channels.get(&request_id) {
-            let _ = sender.send(message.into());
-        } else {
-            let order_channels = self.order_channels.read().await;
-            if let Some(sender) = order_channels.get(&request_id) {
-                let _ = sender.send(message.clone().into());
-            } else if !sent_to_update_stream && message.order_id().is_some() {
-                info!("order error message has no recipient: {:?}", message);
-            }
+            let item = if is_warning {
+                RoutedItem::Notice(Notice::from(payload))
+            } else {
+                RoutedItem::Error(Error::from(payload))
+            };
+            self.deliver_to_request_id(request_id, item, sent_to_update_stream).await;
         }
 
         Ok(())
+    }
+
+    /// Deliver a pre-classified Notice or Error to its owning subscription.
+    /// Tries the request-channel first, falls back to the order-channel for
+    /// notices/errors that arrive bound to an order_id.
+    async fn deliver_to_request_id(&self, request_id: i32, item: RoutedItem, sent_to_update_stream: bool) {
+        {
+            let channels = self.request_channels.read().await;
+            if let Some(sender) = channels.get(&request_id) {
+                let _ = sender.send(item);
+                return;
+            }
+        }
+        {
+            let order_channels = self.order_channels.read().await;
+            if let Some(sender) = order_channels.get(&request_id) {
+                let _ = sender.send(item);
+                return;
+            }
+        }
+        if !sent_to_update_stream {
+            log_orphan(request_id, &item);
+        }
     }
 
     /// Route message to request-specific channel

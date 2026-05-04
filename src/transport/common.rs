@@ -2,29 +2,28 @@
 
 use std::time::Duration;
 
-use log::{error, warn};
+use log::{error, info, warn};
 
-use super::routing::{is_warning_error, DecodedError};
+use crate::messages::Notice;
+use crate::subscriptions::common::RoutedItem;
 
-/// Log an Error/Warning payload with the same field set across sync and async transports.
-/// Warnings (codes in `WARNING_CODE_RANGE`) log at warn level; everything else at error level.
-pub(crate) fn log_error_payload(payload: &DecodedError) {
-    let DecodedError {
-        request_id,
-        error_code,
-        error_message,
-        error_time,
-        advanced_order_reject_json,
-    } = payload;
-    let error_time = error_time.unwrap_or(0);
-    if is_warning_error(*error_code) {
-        warn!(
-            "request_id: {request_id}, warning_code: {error_code}, warning_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}, error_time: {error_time}"
-        );
+/// Log an unrouted notice (no subscription owner) at the appropriate severity.
+pub(crate) fn log_unrouted_notice(notice: &Notice) {
+    if notice.is_warning() {
+        warn!("warning: {notice}");
     } else {
-        error!(
-            "request_id: {request_id}, error_code: {error_code}, error_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}, error_time: {error_time}"
-        );
+        error!("error: {notice}");
+    }
+}
+
+/// Log a routed notice/error that arrived bound to an id with no matching
+/// request or order channel. The dispatcher only constructs `Notice` and
+/// `Error` variants for this path; `Response` is unreachable here.
+pub(crate) fn log_orphan(request_id: i32, item: &RoutedItem) {
+    match item {
+        RoutedItem::Notice(n) => info!("no recipient for notice (id={request_id}): {n}"),
+        RoutedItem::Error(e) => info!("no recipient for error (id={request_id}): {e}"),
+        RoutedItem::Response(_) => {}
     }
 }
 

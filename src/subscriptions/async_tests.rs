@@ -173,6 +173,7 @@ async fn test_routed_item_notice_skipped_then_response_delivered() {
         code: 2104,
         message: "Market data farm OK".into(),
         error_time: None,
+        advanced_order_reject_json: String::new(),
     }))
     .unwrap();
     tx.send(RoutedItem::Response(ResponseMessage::from("payload\0"))).unwrap();
@@ -514,6 +515,7 @@ async fn test_data_stream_filters_notices() {
         code: 2104,
         message: "Market data farm OK".into(),
         error_time: None,
+        advanced_order_reject_json: String::new(),
     }))
     .unwrap();
     tx.send(RoutedItem::Response(ResponseMessage::from("payload\0"))).unwrap();
@@ -524,10 +526,42 @@ async fn test_data_stream_filters_notices() {
     assert_eq!(collected[0].as_ref().unwrap(), "data");
 }
 
-// PR 3 will add a SubscriptionItem::Notice end-to-end test here once the
-// dispatcher emits notices through to Subscription::next(). In PR 2c the
-// receiver-side legacy shim still consumes RoutedItem::Notice silently
-// (see test_routed_item_notice_skipped_then_response_delivered).
+/// PR 3: dispatcher emits `RoutedItem::Notice`; `Subscription<T>::next()`
+/// surfaces it as `SubscriptionItem::Notice` without terminating the stream.
+#[tokio::test]
+async fn test_routed_item_notice_surfaces_as_subscription_item() {
+    let message_bus = Arc::new(MessageBusStub::default());
+    let (tx, rx) = broadcast::channel(100);
+    let internal = AsyncInternalSubscription::new(rx);
+
+    let mut subscription: Subscription<String> = Subscription::with_decoder(
+        internal,
+        message_bus,
+        |_context, _msg| Ok("data".to_string()),
+        None,
+        None,
+        None,
+        DecoderContext::default(),
+    );
+
+    tx.send(RoutedItem::Notice(Notice {
+        code: 2104,
+        message: "Market data farm OK".into(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    }))
+    .unwrap();
+    tx.send(RoutedItem::Response(ResponseMessage::from("payload\0"))).unwrap();
+
+    match subscription.next().await {
+        Some(Ok(SubscriptionItem::Notice(n))) => {
+            assert_eq!(n.code, 2104);
+            assert_eq!(n.message, "Market data farm OK");
+        }
+        other => panic!("expected SubscriptionItem::Notice, got {other:?}"),
+    }
+    assert!(matches!(subscription.next().await, Some(Ok(SubscriptionItem::Data(_)))));
+}
 
 #[tokio::test]
 async fn test_stream_yields_error_then_ends() {

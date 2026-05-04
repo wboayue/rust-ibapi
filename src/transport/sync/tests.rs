@@ -811,3 +811,89 @@ fn test_create_order_update_subscription_is_unique() -> Result<(), Error> {
     assert!(matches!(err, Error::AlreadySubscribed), "got: {err:?}");
     Ok(())
 }
+
+/// Warning code (2104) bound to a real request_id is delivered as a
+/// `RoutedItem::Notice` to the owning subscription — stream stays open.
+#[test]
+fn test_warning_with_request_id_delivers_notice() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let sub = bus.send_request(42, &[])?;
+
+    // Old-format Error: msg_id=4, version=2, request_id=42, code=2104, message=...
+    stream.push_inbound(body("4|2|42|2104|Market data farm connection is OK:usfarm|"));
+    bus.dispatch()?;
+
+    let item = sub.next_timeout_routed(TICK).expect("notice not delivered");
+    match item {
+        RoutedItem::Notice(notice) => {
+            assert_eq!(notice.code, 2104);
+            assert_eq!(notice.message, "Market data farm connection is OK:usfarm");
+        }
+        other => panic!("expected RoutedItem::Notice, got {other:?}"),
+    }
+
+    // Stream stays open: a follow-up send delivers normally.
+    stream.push_inbound(body("89|42|payload|"));
+    bus.dispatch()?;
+    let item = sub.next_timeout_routed(TICK).expect("follow-up message lost");
+    assert!(matches!(item, RoutedItem::Response(_)), "got: {item:?}");
+    Ok(())
+}
+
+/// Hard error (code 200) bound to a real request_id is delivered as a
+/// `RoutedItem::Error` to the owning subscription. The subscription
+/// terminates: subsequent reads return `None`.
+#[test]
+fn test_hard_error_with_request_id_terminates_subscription() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let sub = bus.send_request(42, &[])?;
+
+    stream.push_inbound(body("4|2|42|200|No security definition found|"));
+    bus.dispatch()?;
+
+    let item = sub.next_timeout_routed(TICK).expect("error not delivered");
+    match item {
+        RoutedItem::Error(Error::Message(code, msg)) => {
+            assert_eq!(code, 200);
+            assert_eq!(msg, "No security definition found");
+        }
+        other => panic!("expected RoutedItem::Error(Message), got {other:?}"),
+    }
+    Ok(())
+}
+
+/// Warning with `UNSPECIFIED_REQUEST_ID` has no owner — log only, no channel
+/// write. An in-flight subscription should not see anything.
+#[test]
+fn test_warning_with_unspecified_id_is_log_only() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let sub = bus.send_request(42, &[])?;
+
+    stream.push_inbound(body("4|2|-1|2104|Market data farm connection is OK:usfarm|"));
+    bus.dispatch()?;
+
+    assert!(sub.try_next_routed().is_none(), "unrouted notice must not be delivered to a subscription");
+    Ok(())
+}
+
+/// Order-channel fallback: a notice arrives bound to an `order_id` that
+/// matches an order subscription (not a request subscription). The
+/// `deliver_to_request_id` helper should fall back to the order channel.
+#[test]
+fn test_warning_with_order_id_falls_back_to_order_channel() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let sub = bus.send_order_request(7, &[])?;
+
+    stream.push_inbound(body("4|2|7|2104|Order warning|"));
+    bus.dispatch()?;
+
+    let item = sub.next_timeout_routed(TICK).expect("order notice not delivered");
+    match item {
+        RoutedItem::Notice(notice) => {
+            assert_eq!(notice.code, 2104);
+            assert_eq!(notice.message, "Order warning");
+        }
+        other => panic!("expected RoutedItem::Notice, got {other:?}"),
+    }
+    Ok(())
+}

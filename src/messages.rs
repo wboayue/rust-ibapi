@@ -1196,6 +1196,22 @@ impl ResponseMessage {
         }
     }
 
+    /// Extract the advanced order-reject JSON from an error message. Empty
+    /// for old-format messages (server_version < ERROR_TIME) where the field
+    /// doesn't exist, or when the field is absent in the new format.
+    pub fn advanced_order_reject_json(&self) -> String {
+        if self.server_version < crate::server_versions::ERROR_TIME {
+            return String::new();
+        }
+        // New format: msg_type, request_id, error_code, error_msg, advanced_order_reject_json, error_time
+        let idx = self.error_message_index() + 1;
+        if idx < self.fields.len() {
+            self.peek_string(idx)
+        } else {
+            String::new()
+        }
+    }
+
     /// Build a response message from a NUL-delimited payload.
     pub fn from(fields: &str) -> ResponseMessage {
         ResponseMessage {
@@ -1309,6 +1325,10 @@ pub struct Notice {
     /// Timestamp when the error occurred.
     /// Only present for server versions >= ERROR_TIME (194).
     pub error_time: Option<OffsetDateTime>,
+    /// Advanced order-reject JSON payload, present on hard order-rejection
+    /// notices for server versions >= ADVANCED_ORDER_REJECT. Empty otherwise.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub advanced_order_reject_json: String,
 }
 
 /// Error code indicating an order was cancelled (confirmation, not an error).
@@ -1324,16 +1344,28 @@ pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2169;
 /// - 1300: Socket port reset during active connection
 pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [1100, 1101, 1102, 1300];
 
-impl Notice {
-    #[allow(private_interfaces)]
+impl From<&ResponseMessage> for Notice {
     /// Construct a notice from a response message.
-    pub fn from(message: &ResponseMessage) -> Notice {
-        let code = message.error_code();
-        let error_time = message.error_time();
-        let message = message.error_message();
-        Notice { code, message, error_time }
+    fn from(message: &ResponseMessage) -> Notice {
+        Notice {
+            code: message.error_code(),
+            message: message.error_message(),
+            error_time: message.error_time(),
+            advanced_order_reject_json: message.advanced_order_reject_json(),
+        }
     }
+}
 
+impl From<&mut ResponseMessage> for Notice {
+    /// Convenience for decoder call sites that hold `&mut ResponseMessage`.
+    /// Trait dispatch doesn't auto-coerce `&mut T → &T`, so this shim avoids
+    /// `Notice::from(&*message)` boilerplate.
+    fn from(message: &mut ResponseMessage) -> Notice {
+        Notice::from(&*message)
+    }
+}
+
+impl Notice {
     /// Returns `true` if this notice indicates an order was cancelled (code 202).
     ///
     /// Code 202 is sent by TWS to confirm an order cancellation. This is an
@@ -1378,5 +1410,22 @@ impl Notice {
 impl Display for Notice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[{}] {}", self.code, self.message)
+    }
+}
+
+impl From<crate::transport::routing::DecodedError> for Notice {
+    /// Build a Notice from a dispatcher-decoded error payload, moving the
+    /// `error_message` and `advanced_order_reject_json` strings and converting
+    /// `error_time` (millis-since-epoch) to `OffsetDateTime`.
+    fn from(payload: crate::transport::routing::DecodedError) -> Notice {
+        let error_time = payload
+            .error_time
+            .and_then(|millis| OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).ok());
+        Notice {
+            code: payload.error_code,
+            message: payload.error_message,
+            error_time,
+            advanced_order_reject_json: payload.advanced_order_reject_json,
+        }
     }
 }

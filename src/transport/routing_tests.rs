@@ -14,27 +14,65 @@ fn test_decoded_error_default() {
 }
 
 #[test]
-fn test_decoded_error_is_log_only() {
-    let warning = DecodedError {
+fn test_notice_from_decoded_preserves_rich_payload() {
+    use crate::messages::Notice;
+    use time::OffsetDateTime;
+
+    let payload = DecodedError {
         request_id: 42,
         error_code: 2104,
-        ..Default::default()
+        error_message: "Market data farm OK".into(),
+        error_time: Some(1_700_000_000_000),
+        advanced_order_reject_json: "{\"reject\":1}".into(),
     };
-    assert!(warning.is_log_only(), "warning code with real request_id is log-only");
+    let notice = Notice::from(payload);
 
-    let unspecified = DecodedError {
-        request_id: UNSPECIFIED_REQUEST_ID,
+    assert_eq!(notice.code, 2104);
+    assert_eq!(notice.message, "Market data farm OK");
+    assert_eq!(notice.advanced_order_reject_json, "{\"reject\":1}");
+    let expected = OffsetDateTime::from_unix_timestamp_nanos(1_700_000_000_000_i128 * 1_000_000).unwrap();
+    assert_eq!(notice.error_time, Some(expected));
+}
+
+#[test]
+fn test_notice_from_decoded_missing_optionals() {
+    use crate::messages::Notice;
+
+    // Old format: error_time absent, JSON empty. Conversion preserves both.
+    let payload = DecodedError {
+        request_id: -1,
         error_code: 200,
-        ..Default::default()
+        error_message: "no security".into(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
     };
-    assert!(unspecified.is_log_only(), "unspecified request_id is log-only");
+    let notice = Notice::from(payload);
 
-    let hard_error = DecodedError {
+    assert_eq!(notice.code, 200);
+    assert_eq!(notice.error_time, None);
+    assert_eq!(notice.advanced_order_reject_json, "");
+}
+
+#[test]
+fn test_error_from_decoded_projects_to_message() {
+    // `From<DecodedError> for Error` projects code+message to Error::Message,
+    // mirroring the existing `From<ResponseMessage>` projection.
+    let payload = DecodedError {
         request_id: 42,
         error_code: 200,
-        ..Default::default()
+        error_message: "no security".into(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
     };
-    assert!(!hard_error.is_log_only(), "hard error with real request_id routes to subscription");
+    let err = crate::Error::from(payload);
+
+    match err {
+        crate::Error::Message(code, msg) => {
+            assert_eq!(code, 200);
+            assert_eq!(msg, "no security");
+        }
+        other => panic!("expected Error::Message, got {other:?}"),
+    }
 }
 
 #[test]

@@ -253,11 +253,13 @@ Forward-looking adjustments after the duplication / SRP / composability lens rev
 
 ## Implementation as a series of PRs
 
-Six PRs, each with a clear, standalone deliverable. Merge in order: **PR 1 → PR 2a → PR 2b → PR 2c → PR 3 → PR 4 → PR 5.**
+Eight PRs, each with a clear, standalone deliverable. Merge in order: **PR 1 → PR 2a → PR 2b → PR 2c → PR 3 → PR 4 → PR 5 → PR 6.**
 
 PR 2 is split because the internal channel-envelope refactor (2a) and the public-API widening that closes #487 (2b) are individually reviewable and the combined diff is too large to review well. Land 2a/2b in close succession to minimize the time the codebase carries a defined-but-unused `RoutedItem::Notice` arm.
 
 PR 5 (global notice stream) is an additive API that doesn't depend on PR 4 — it can land any time after PR 3 if PR 4 lags.
+
+PR 6 (docs / migration guide) lands last because it consolidates the user-facing story across PR 3 (per-subscription notices), PR 4 (verified behavior), and PR 5 (global notice stream). Inline doc-comments + examples that ship with each feature PR are still mandatory; PR 6 is for the README narrative + migration guide that ties them together.
 
 ### PR 1 — Protobuf Error full decode ✅ merged (#502)
 **Goal:** populate real `error_code` and `error_message` for protobuf-encoded Error messages so downstream classification works on the protobuf path.
@@ -401,58 +403,51 @@ Implement via `futures::stream::unfold` over `self.next_data().await`. ~30 lines
 
 ---
 
-### PR 3 — Warning classification & delivery
+### PR 3 — Warning classification & delivery (in flight)
 **Goal:** the actual feature — route warnings with a real `request_id` to their owning subscription as non-terminal `Notice` items.
 
-**Scope — classification:**
-- Add `ErrorDelivery` and `classify_error_delivery` in `src/transport/routing.rs`. Per refinement #1, prefer the struct shape:
-  ```rust
-  pub struct ErrorDelivery { pub routing: Routing, pub severity: Severity }
-  pub enum Routing  { Unrouted, Owned(i32) }     // request_id when Owned
-  pub enum Severity { Warning, HardError }       // Warning iff is_warning_error(code)
+**As-shipped diff (local branch):** 17 files, +551/-108 LOC. fmt clean; clippy clean across default, sync-only, and `--all-features` with `-D warnings`; full test suite green (sync 1113 lib + 143 doc, async 921 lib + 1 doc, all-features path 1113 sync). New tests: 5 dispatcher-level (sync) + 5 dispatcher-level (async) covering owned warning, unrouted warning, hard error, order-channel fallback, plus a `Subscription<T>` end-to-end Notice surface test in both sync/async.
 
-  pub fn classify_error_delivery(request_id: i32, error_code: i32) -> ErrorDelivery {
-      ErrorDelivery {
-          routing:  if request_id == UNSPECIFIED_REQUEST_ID { Routing::Unrouted } else { Routing::Owned(request_id) },
-          severity: if is_warning_error(error_code)         { Severity::Warning  } else { Severity::HardError },
-      }
-  }
-  ```
-  Each consumer matches on its axis. If PR 3 implementation finds the flat enum reads better, fall back to it — but make the call deliberately.
+**Scope reductions vs. original plan** (decided 2026-05-04):
+- **`Notice` widened in-place rather than via a separate constructor.** The plan offered a choice between widening the public `Notice` struct or keeping a `pub(crate)` richer constructor. Shipped: added `advanced_order_reject_json: String` to the public `Notice` struct (with `#[serde(default, skip_serializing_if = "String::is_empty")]`) and a `pub(crate) fn notice_from_decoded(&DecodedError) -> Notice` in `routing.rs` that captures both the JSON and `error_time` (millis → `OffsetDateTime`). Touched 13 existing `Notice { .. }` literals across messages tests, subscription tests, and `connection/common.rs` to add the new field — mechanical.
+- **No `dual_test!` macro experiment** (refinement #5). Each pair of sync/async tests is structurally similar but has enough fixture divergence (crossbeam channels vs `tokio::broadcast::channel`, sync vs async receiver wait) that a macro wouldn't have shaved meaningful lines. Skipped.
+- **No `SubscriptionItem::into_data` in this PR** (refinement #3) — already shipped in PR 2b commit `857890e`.
+- **Per-T `Notice` enum variants left intact** (`PlaceOrder::Message(Notice)`, `Orders::Notice(Notice)`, `MarketDepths::Notice(Notice)`, `TickTypes::Notice(Notice)`, etc.). The dispatcher pre-classification means decoders' `IncomingMessages::Error` arms are unreachable on the production path, but `MessageBusStub`-based tests still feed raw `RoutedItem::Response` messages through the decoder, so those arms remain reachable in tests. Removing the public enum variants would be a separate, large public-API change touching ~10 examples and several test files; deferred. Cleanup is a candidate for a follow-up PR if/when the per-T variants are confirmed truly redundant with `SubscriptionItem::Notice`.
+- **`Error::Message(code, msg)` kept reachable.** It's now constructed by the dispatcher (`RoutedItem::Error(Error::Message(payload.error_code, payload.error_message.clone()))`) for hard errors with a real `request_id`. The plan's "verify whether `Error::Message` is still reachable; delete if dead" check resolves to: still reachable, keep it.
 
-**Scope — dispatcher rewrite:**
-- Sync `dispatch_message` (`src/transport/sync/mod.rs:268-293`): rewrite the `RoutingDecision::Error` arm around `classify_error_delivery`. `RoutedItem::Notice(_)` now actually populated.
-- Async `route_error_message` (`src/transport/async.rs:418-458`): same shape.
-- Add `deliver_to_request_id` (two parallel implementations, one per transport — `Mutex` vs `RwLock` divergence prevents sharing) with request-channels-first / order-channels-fallback policy.
-- Per refinement #6, **factor a `log_unrouted(severity, &notice)` helper** so PR 5's broadcast call grafts onto one helper rather than two parallel arms:
-  ```rust
-  fn log_unrouted(&self, severity: Severity, notice: &Notice) {
-      match severity {
-          Severity::Warning   => warn!("warning: {notice}"),
-          Severity::HardError => error!("error: {notice}"),
-      }
-      // PR 5 adds: self.broadcast_notice(notice.clone());
-  }
-  ```
-- **Delete** `error_event` (`sync/mod.rs:600`) and async equivalent.
-- **Delete** duplicate `WARNING_CODES` const (`sync/mod.rs:30`).
-- Verify whether `Error::Message(code, msg)` is still reachable; delete if dead.
+**As-shipped — classification (`src/transport/routing.rs`):**
+- `ErrorDelivery { routing: Routing, severity: Severity }` struct + `classify_error_delivery(request_id, error_code) -> ErrorDelivery` (refinement #1, struct shape).
+- `notice_from_decoded(&DecodedError) -> Notice` constructor (preserves JSON + converts ms→`OffsetDateTime`).
+- Removed `DecodedError::is_log_only` — all callers migrated to `classify_error_delivery`.
 
-**Scope — value type tightening (refinements #2, #3):**
-- Add `Notice::from_decoded(&DecodedError)` (or extend `impl From<&ResponseMessage> for Notice`) to capture `advanced_order_reject_json` and `error_time` from `DecodedError`. Either widen the public `Notice` struct with the new field or keep a `pub(crate)` richer constructor — decide based on whether the PR scope can accommodate the public-type change.
-- Add `impl<T> SubscriptionItem<T> { pub fn into_data(self) -> Option<T> }`. Tightens PR 3 + 4 test code that asserts on the inner value.
+**As-shipped — dispatcher rewrite:**
+- Sync `dispatch_message` and async `route_error_message` rewritten around `classify_error_delivery`. Pre-classified `RoutedItem::{Notice, Error}` written to channels; `RoutedItem::Response` still flows for non-error messages.
+- New `deliver_to_request_id` on each transport (sync `TcpMessageBus`, async `AsyncTcpMessageBus`) — request channel first, order channel fallback. Two parallel impls (sync `RwLock<HashMap>` vs async `RwLock<HashMap>` with broadcast senders) — same intentional sync/async mirror as `filter_data` / `filter_data_stream`.
+- `log_unrouted(severity, &notice)` helper on each transport (refinement #6 prep) — PR 5 will add the broadcast call here.
+- Removed `transport/common.rs::log_error_payload` and the entire `transport/common.rs` `log` import. `error_event` and `WARNING_CODES` were already absent in the pre-PR codebase.
+- `Error::Message(code, msg)` reachability check resolved: still reachable — the dispatcher constructs it for hard errors with a real `request_id`. Kept.
 
-**Tests:**
-- Unit: `classify_error_delivery` covering the four shape combinations and boundary codes (2099, 2100, 2169, 2170).
-- End-to-end: code 2100 with `request_id=42` → `subscription.next()` yields `Some(Ok(SubscriptionItem::Notice(_)))`; stream stays open.
-- End-to-end: code 2100 with `UNSPECIFIED_REQUEST_ID` → only logs; no channel write.
-- End-to-end: real error (code 200) with `request_id=42` → `Some(Err(_))`; subsequent `next()` returns `None`.
-- Order-channel fallback: code 2100 with an `order_id` that maps to an order subscription only → notice delivered.
-- All mirrored in async. Per refinement #5, prototype a `dual_test!(name, |fixture| { /* body */ })` macro that emits sync+async variants from one body. Abandon if it doesn't pay for itself by the third pair.
+**As-shipped — value type tightening:**
+- `Notice` widened in-place with `advanced_order_reject_json: String` (`#[serde(default, skip_serializing_if = "String::is_empty")]`). Updated 13 existing literal constructions across messages tests, subscription tests, and `connection/common.rs`.
+- New `ResponseMessage::advanced_order_reject_json()` accessor with `server_version >= ERROR_TIME` guard. `extract_text_error` in `routing.rs` migrated to use it (single source of truth).
+- `SubscriptionItem::into_data` already shipped in PR 2b commit `857890e` (refinement #3) — no work in this PR.
 
-**Dependencies:** PR 1 (real protobuf error_code), PR 2a (`RoutedItem` channel), PR 2b (`SubscriptionItem` public type). Optional dependency on PR 2c if PR 3's tests want `Stream` combinators. PR 3 is the first PR where the dispatcher actually writes `RoutedItem::Notice`.
+**As-shipped — subscription wiring:**
+- `InternalSubscription::{next_routed, try_next_routed, next_timeout_routed}` and `AsyncInternalSubscription::next_routed` expose the typed `RoutedItem` envelope. Legacy `next/try_next/next_timeout` retain `Result<ResponseMessage, Error>` shape via `into_legacy()` for direct consumers (`orders/async/mod.rs` etc.). `Subscription<T>::handle_response` (sync) and `Subscription<T>::next` (async) pattern-match `RoutedItem`, surfacing `Notice → Ok(SubscriptionItem::Notice)` and `Error → Err(_)`.
+- Dropped `#[allow(dead_code)]` from `RoutedItem::Notice` — now reachable.
 
-**Risk:** smallest of the three. Order-channel fallback test setup is the trickiest piece.
+**As-shipped — tests:**
+- `classify_error_delivery`: four combinations + boundary codes (2099, 2100, 2169, 2170).
+- `notice_from_decoded`: rich-payload preservation + missing-optionals path.
+- Sync and async dispatcher: owned warning, owned hard error (terminal), unrouted warning (no channel write), order-id fallback. Stream stays open after Notice (verified via follow-up Response).
+- Sync and async `Subscription<T>`: end-to-end Notice surfaces as `SubscriptionItem::Notice` without terminating.
+- No `dual_test!` macro experiment (refinement #5) — sync/async fixture divergence (crossbeam vs `tokio::broadcast`, sync vs async receiver) didn't justify the macro infrastructure.
+
+**Scope deferrals:**
+- **Per-T `Notice` enum variants left intact** (`PlaceOrder::Message(Notice)`, `Orders::Notice(Notice)`, `MarketDepths::Notice(Notice)`, `TickTypes::Notice(Notice)`, etc.). Dispatcher pre-classification makes the decoders' `IncomingMessages::Error` arms unreachable on the production path, but `MessageBusStub`-based tests still feed raw `RoutedItem::Response` messages through the decoder — those arms remain reachable in tests. Removing the public enum variants would touch ~10 examples and several test files; deferred to a follow-up PR.
+- **README narrative + migration guide deferred to PR 6.** PR 3's doc-comments on `Subscription::next` already mention the `SubscriptionItem::Notice` arm with an inline doctest, but the cross-cutting README story ("how to observe vs. filter notices") waits until PR 5's global stream is also live so the docs cover both halves of the notice API at once.
+
+**Dependencies:** PR 1 (real protobuf error_code), PR 2a (`RoutedItem` channel), PR 2b (`SubscriptionItem` public type). PR 2c was not strictly required (no `Stream` combinators in PR 3 tests).
 
 ---
 
@@ -478,6 +473,9 @@ Implement via `futures::stream::unfold` over `self.next_data().await`. ~30 lines
 
 **Scope — verification of existing integration tests** (manual hand-run before merge, no new code):
 - `tests/conditional_orders_integration.rs`, `tests/order_builder_integration.rs`, `tests/test_wsh_async.rs` go through the dispatcher; run against a live gateway to confirm no order-routing regressions.
+
+**Scope — minimal docs touch:**
+- Update at least one runnable example (`examples/sync/market_data.rs` and the async mirror are good candidates) to demonstrate the `SubscriptionItem::Notice` arm explicitly — current examples already match on `TickTypes::Notice` per-T variants, but with the dispatcher now emitting `SubscriptionItem::Notice` they should additionally show the `match sub.next() { Some(Ok(SubscriptionItem::Notice(n))) => ... }` form. Bigger README narrative + migration guide deferred to PR 6.
 
 **Dependencies:** PR 1 + PR 2a + PR 2b + PR 3 all merged.
 
@@ -527,8 +525,10 @@ impl Client {                           // sync and async
 - Async: same shape, backed by `tokio::sync::broadcast::Sender::subscribe()`.
 - `Notice` already has the `From<&ResponseMessage>` projection from PR 3; the `StreamDecoder<Notice>` impl simply passes it through.
 
-**Scope — example:**
-- Add `examples/notice_stream.rs` (sync) and `examples/notice_stream_async.rs` (async) showing a connection-status monitor: subscribe to `notice_stream()`, log/print as `1100`/`1102` arrive.
+**Scope — example + inline docs:**
+- Add `examples/notice_stream.rs` (sync) and `examples/notice_stream_async.rs` (async) showing a connection-status monitor: subscribe to `notice_stream()`, log/print as `1100`/`1102` arrive. Examples should pattern-match on `notice.code` for connectivity codes (1100/1101/1102) and farm-status codes (2104/2105/2106/2107/2108) at minimum.
+- Comprehensive doc-comment on `Client::notice_stream()` — call out that this is for *globally routed* notices (no `request_id`), distinct from per-subscription notices that arrive on `Subscription<T>::next()` as `SubscriptionItem::Notice`. Cross-link both directions from the `notice_stream` doc and the `Subscription::next` doc so callers don't have to discover the distinction empirically.
+- README narrative + migration guide deferred to PR 6 (which consolidates PR 3's per-subscription notice handling with PR 5's global stream into one user-facing story).
 
 **Tests:**
 - `NoticeBroadcaster` unit tests (don't go through the dispatcher): `broadcast` fan-out to 2 subscribers; late `subscribe` after a `broadcast` receives only subsequent notices; subscriber `Drop` followed by `prune_dropped` removes the dead sender; `broadcast` after all subscribers dropped is a no-op.
@@ -544,6 +544,52 @@ impl Client {                           // sync and async
 - Typed `ConnectionStatus` enum for `1100/1101/1102/2110` specifically (option (c) from the design discussion). `notice.code` pattern-matching is sufficient until a real consumer asks for the typed shape.
 - Replay buffer for late subscribers.
 - Per-subscriber code filtering.
+
+---
+
+### PR 6 — Documentation: notification handling & v3.0 migration guide
+**Goal:** make the user-facing story for notification handling discoverable and self-contained. By the time PR 5 lands, three things have changed for callers:
+1. `Subscription<T>::next()` returns `Option<Result<SubscriptionItem<T>, Error>>` (PR 2b widening) — the wrapping `SubscriptionItem<T>` enum is new.
+2. Per-subscription notices (warning codes 2100..=2169 with a real `request_id`) now arrive as `SubscriptionItem::Notice(_)` instead of being log-only (PR 3).
+3. Globally routed notices (`request_id == -1`) are accessible programmatically via `Client::notice_stream()` (PR 5).
+
+Without a top-level docs touch, callers have to discover this from a mix of changelog entries, doc-comments on `Subscription::next`, and reading `examples/`. PR 6 fixes that.
+
+**Why a separate PR.** Keeping the docs work distinct from feature PRs has two benefits: (a) review focus — feature PRs stay reviewable for correctness without prose getting in the way; (b) the docs work needs the *whole shipped story* visible to write a coherent narrative — that's only true after PR 5 merges.
+
+**Scope — README:**
+- Add a "Handling notifications" section to `README.md` with three subsections:
+  - **Per-subscription notices**: the `SubscriptionItem::Data(t) | SubscriptionItem::Notice(n)` pattern, with a short sync + async code sample. Show both `iter_data()` (filter notices) and `iter()` (observe notices) shapes side by side.
+  - **Filtering vs. observing**: when to use `iter_data()` / `next_data()` (most call sites) vs. `iter()` / `next()` pattern-matching (UI status indicators, custom logging).
+  - **Global notice stream**: `Client::notice_stream()` for connectivity (1100/1101/1102) and farm-status (2104/2105/2106) notices. Code sample showing a connection-status monitor.
+- Each code sample compiles as a doc-test (`cargo test --doc`) so it doesn't bit-rot.
+
+**Scope — migration guide:**
+- New section in `docs/` (e.g. `docs/migration-3.0.md`) or expand the existing v3.0 release notes to cover the breaking changes for notification handling:
+  - Sync `Subscription::next()` shape change (`Option<T>` + separate `error()` accessor → `Option<Result<SubscriptionItem<T>, Error>>`). The mechanical migration is `iter_data()` for callers that don't care about notices.
+  - Async symmetry: `SubscriptionItem<T>` wrapping `T`.
+  - Removed APIs: `Subscription::error()`, `Subscription::clear_error()`, the per-T `Notice` enum variants if/when those get retired (cross-link to follow-up PR).
+- Provide a "before / after" code snippet for the three most common subscription patterns: `market_data`, `place_order`, `account_summary`.
+
+**Scope — doc-comment hardening:**
+- Audit doc-comments on `Subscription<T>::next`, `next_data`, `iter_data`, `iter`, `try_iter`, `timeout_iter`, async `data_stream`, `stream` and confirm each one explicitly mentions the `Notice` arm and links to the relevant alternative (data-only iterator vs. full iterator).
+- `Client::notice_stream` doc cross-links to `Subscription::next` and vice versa (already partially done in PR 5; PR 6 completes the matrix).
+
+**Scope — examples sweep:**
+- Confirm that all examples updated by PR 2b's mechanical sweep still demonstrate idiomatic notice handling. Promote any that still use `next_data()` to `iter()` if the example's purpose is to show user-facing observability (e.g. market-data and order-status examples).
+- Each updated example gets a 1-2 line header comment explaining what notice behavior it demonstrates ("filters notices via `iter_data()`" vs. "shows both data and notices via `iter()`").
+
+**Tests:**
+- Doc-test compilation (`cargo test --doc`) covers the README + migration code samples.
+- No new unit tests — this is a docs PR.
+
+**Dependencies:** PR 3 + PR 5 merged. Optional dependency on PR 4 (live-gateway behavior verified before promising it to users).
+
+**Risk:** doc rot. Mitigation: every code block in README/migration is a doc-test, not a free-form snippet; `just test` catches silent breakage.
+
+**Out of scope:**
+- Tutorial-style "getting started with subscriptions" content — belongs in `docs/quick-start.md`, not the notice-handling docs.
+- Architecture-level write-up of the dispatcher → subscription envelope (`RoutedItem`, `ErrorDelivery`) — internal-only, not in user-facing docs. If wanted, lives in `docs/architecture.md` as a separate task.
 
 ## Cleanups folded in
 - `src/transport/sync/mod.rs:30` defines `WARNING_CODES = 2100..=2169` — duplicates `WARNING_CODE_RANGE` in `src/messages.rs:1318`. Drop the local copy; route everything through `is_warning_error`.
@@ -600,3 +646,9 @@ Subscription API (#487 + Notice):
 - `src/subscriptions/async.rs` — widen `Ok` payload to `SubscriptionItem<T>`; mirror `iter_data` / `next_data` / async stream adapter
 - Order-subscription consumers (executions, open-orders) — same `SubscriptionItem` shape per Q1=a
 - All examples and integration tests under `examples/` and `tests/` that call `subscription.next()` / `.error()` — migrate to `iter_data()` / `next_data()` (or pattern-match `next()` if they care about notices)
+
+User-facing docs (PR 6):
+- `README.md` — new "Handling notifications" section: per-subscription notices via `SubscriptionItem::Notice`, filter-vs-observe guidance, `Client::notice_stream()` for global notices. Each code block compiles as a doc-test.
+- `docs/migration-3.0.md` (or extend the v3.0 release notes) — before/after snippets for the three breaking changes: sync `Subscription::next` shape, `Subscription::error()`/`clear_error` removal, `SubscriptionItem<T>` wrapping `T` on both sync/async.
+- Doc-comment audit on `Subscription<T>::next` / `next_data` / `iter_data` / `iter` / `try_iter` / `timeout_iter` (sync) and `next` / `next_data` / `data_stream` / `stream` (async) — confirm each names the `Notice` arm and cross-links the data-only vs. full-iterator alternatives.
+- `Client::notice_stream` ↔ `Subscription::next` cross-link — establish in PR 5, finalize in PR 6.

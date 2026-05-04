@@ -43,14 +43,6 @@ impl Default for DecodedError {
     }
 }
 
-impl DecodedError {
-    /// `true` when the payload should be logged but not delivered to a subscription:
-    /// no owning request, or a non-fatal warning code.
-    pub(crate) fn is_log_only(&self) -> bool {
-        self.request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(self.error_code)
-    }
-}
-
 /// Minimal protobuf envelope to extract the first int32 field (tag 1).
 #[derive(Clone, PartialEq, ::prost::Message)]
 struct RoutingEnvelope {
@@ -85,19 +77,13 @@ fn decode_error_envelope(raw_bytes: &[u8]) -> Option<DecodedError> {
 /// fields default to empty/None (old format / pre-`ADVANCED_ORDER_REJECT` servers).
 fn extract_text_error(message: &ResponseMessage) -> DecodedError {
     let error_msg_idx = message.error_message_index();
-    let advanced_idx = error_msg_idx + 1;
-    let advanced_order_reject_json = if advanced_idx < message.fields.len() {
-        message.peek_string(advanced_idx)
-    } else {
-        String::new()
-    };
     let error_time = message.peek_long(error_msg_idx + 2).ok();
     DecodedError {
         request_id: message.error_request_id(),
         error_code: message.error_code(),
         error_message: message.error_message(),
         error_time,
-        advanced_order_reject_json,
+        advanced_order_reject_json: message.advanced_order_reject_json(),
     }
 }
 

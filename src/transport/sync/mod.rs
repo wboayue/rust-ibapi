@@ -16,10 +16,10 @@ use log::{debug, error, info, warn};
 
 use crate::connection::sync::Connection;
 
-use super::common::log_error_payload;
-use super::routing::{determine_routing, order_routing_strategy, OrderRoutingStrategy, RoutingDecision};
+use super::common::log_orphan;
+use super::routing::{determine_routing, is_warning_error, order_routing_strategy, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID};
 use super::{InternalSubscription, MessageBus, Response, RoutedItem, Signal, SubscriptionBuilder};
-use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
+use crate::messages::{shared_channel_configuration, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
 // pub(crate) const MIN_SERVER_VERSION: i32 = 100;
@@ -265,12 +265,19 @@ impl<S: Stream> TcpMessageBus<S> {
     fn dispatch_message(&self, message: ResponseMessage) {
         match determine_routing(&message) {
             RoutingDecision::Error(payload) => {
-                let routed = self.send_order_update(&message);
+                let sent_to_update_stream = self.send_order_update(&message);
+                let request_id = payload.request_id;
+                let is_warning = is_warning_error(payload.error_code);
 
-                if payload.is_log_only() {
-                    log_error_payload(&payload);
+                if request_id == UNSPECIFIED_REQUEST_ID {
+                    super::common::log_unrouted_notice(&Notice::from(payload));
                 } else {
-                    self.process_response_with_id(payload.request_id, message, routed);
+                    let item = if is_warning {
+                        RoutedItem::Notice(Notice::from(payload))
+                    } else {
+                        RoutedItem::Error(Error::from(payload))
+                    };
+                    self.deliver_to_request_id(request_id, item, sent_to_update_stream);
                 }
             }
             RoutingDecision::ByOrderId(_) => {
@@ -301,6 +308,19 @@ impl<S: Stream> TcpMessageBus<S> {
             self.shared_channels.send_message(message.message_type(), &message);
         } else if !routed {
             info!("no recipient found for: {message:?}")
+        }
+    }
+
+    /// Deliver a pre-classified Notice or Error to its owning subscription.
+    /// Tries the request-channel first, falls back to the order-channel for
+    /// notices/errors that arrive bound to an order_id.
+    fn deliver_to_request_id(&self, request_id: i32, item: RoutedItem, sent_to_update_stream: bool) {
+        if self.requests.contains(&request_id) {
+            let _ = self.requests.send(&request_id, item);
+        } else if self.orders.contains(&request_id) {
+            let _ = self.orders.send(&request_id, item);
+        } else if !sent_to_update_stream {
+            log_orphan(request_id, &item);
         }
     }
 

@@ -213,6 +213,7 @@ impl ConnectionProtocol for ConnectionHandler {
                             code: proto.error_code.unwrap_or(0),
                             message: proto.error_msg.unwrap_or_default(),
                             error_time: None,
+                            advanced_order_reject_json: proto.advanced_order_reject_json.unwrap_or_default(),
                         })
                     })
                 } else {

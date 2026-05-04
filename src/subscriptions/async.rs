@@ -7,7 +7,7 @@ use futures::stream::Stream;
 use log::{debug, warn};
 use tokio::sync::mpsc;
 
-use super::common::{filter_notice, process_decode_result, DecoderContext, ProcessingResult, SubscriptionItem};
+use super::common::{filter_notice, process_decode_result, DecoderContext, ProcessingResult, RoutedItem, SubscriptionItem};
 use super::StreamDecoder;
 use crate::messages::{OutgoingMessages, ResponseMessage};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
@@ -219,8 +219,8 @@ impl<T> Subscription<T> {
                 decoder,
                 context,
             } => loop {
-                match subscription.next().await {
-                    Some(Ok(mut message)) => {
+                match subscription.next_routed().await {
+                    Some(RoutedItem::Response(mut message)) => {
                         let result = decoder(context, &mut message);
                         match process_decode_result(result) {
                             ProcessingResult::Success(val) => return Some(Ok(SubscriptionItem::Data(val))),
@@ -238,11 +238,12 @@ impl<T> Subscription<T> {
                             }
                         }
                     }
-                    Some(Err(Error::EndOfStream)) => {
+                    Some(RoutedItem::Notice(notice)) => return Some(Ok(SubscriptionItem::Notice(notice))),
+                    Some(RoutedItem::Error(Error::EndOfStream)) => {
                         self.stream_ended.store(true, Ordering::Relaxed);
                         return None;
                     }
-                    Some(Err(e)) => {
+                    Some(RoutedItem::Error(e)) => {
                         self.stream_ended.store(true, Ordering::Relaxed);
                         return Some(Err(e));
                     }
