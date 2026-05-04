@@ -241,13 +241,16 @@ PR 5 (global notice stream) is an additive API that doesn't depend on PR 4 — i
 
 ---
 
-### PR 2a — Internal channel envelope refactor
+### PR 2a — Internal channel envelope refactor ✅ open ([#503](https://github.com/wboayue/rust-ibapi/pull/503))
 **Goal:** widen the internal channel from `Result<ResponseMessage, Error>` (sync) / `ResponseMessage` (async) to a typed `RoutedItem` envelope so subsequent PRs can deliver pre-classified `Notice` and `Error` items without re-classifying inside decoders. **Public `Subscription<T>` API is unchanged.** Examples and integration tests are untouched.
 
 **Scope reductions vs. original plan** (decided 2026-05-03):
 - **Reuse existing `Notice`** at `src/messages.rs:1304` instead of adding a new one. The existing shape is `{ code, message, error_time }`; `request_id` rides on routing metadata (not on the value) until PR 3 needs it.
 - **Manual `impl Clone for Error`** in `src/errors.rs` so `RoutedItem` can be `Clone` (required by `tokio::sync::broadcast` on the async side). `Io` variant cloned as `io::Error::new(kind, msg)` to preserve kind + message.
 - **Decoder `IncomingMessages::Error` arms left alone in 2a.** Dispatcher pre-classification into `RoutedItem::Error` makes them unreachable but harmless. Cleanup happens in PR 3 alongside the dispatcher classification rewrite.
+- **Legacy-shape compatibility shim at `InternalSubscription::next`.** Channel item is `RoutedItem` internally, but the public `next/try_next/next_timeout` methods return `Option<Result<ResponseMessage, Error>>` via a `routed_to_legacy` helper (Notice → recv-next loop). Result: zero migration cost in domain consumers (contracts, news, scanner, historical, …). Subscription<T>'s `handle_response` stays in legacy shape too. PR 2b/3 widens the public API when ready.
+
+**As-shipped diff:** 11 files, +234/-97. Touches `errors.rs`, `market_data/historical/mod.rs` (Clone derive), `stubs.rs`, `subscriptions/{common,mod,sync,async}.rs`, `transport/{mod,sync/mod,async}.rs`. Verified: fmt clean, all three clippy configs clean, full test suite green (sync 910 lib + 124 doc, async 907 + 73, all-features 1094 + 148). One new unit test: `subscriptions::sync::tests::test_routed_item_error_terminates_subscription`.
 
 **Scope — new types (`src/subscriptions/common.rs`):**
 - `RoutedItem = Response(ResponseMessage) | Notice(Notice) | Error(Error)` with `Debug` + `Clone` derives. The `Notice` variant is `#[allow(dead_code)]` in 2a — defined but never written by the dispatcher.
