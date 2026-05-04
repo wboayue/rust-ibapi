@@ -1,6 +1,7 @@
 //! Subscription types for sync/async streaming data
 
 pub(crate) mod common;
+pub use common::SubscriptionItem;
 pub(crate) use common::{DecoderContext, StreamDecoder};
 
 #[cfg(feature = "sync")]
@@ -11,7 +12,10 @@ pub mod r#async;
 
 // Re-export the appropriate subscription types based on feature
 #[cfg(feature = "sync")]
-pub use sync::{SharesChannel, SubscriptionIter, SubscriptionOwnedIter, SubscriptionTimeoutIter, SubscriptionTryIter};
+pub use sync::{
+    SharesChannel, SubscriptionDataIter, SubscriptionIter, SubscriptionOwnedIter, SubscriptionTimeoutDataIter, SubscriptionTimeoutIter,
+    SubscriptionTryDataIter, SubscriptionTryIter,
+};
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
 pub use sync::Subscription;

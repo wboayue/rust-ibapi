@@ -1,9 +1,27 @@
 //! Common utilities for subscription processing
 
+use serde::{Deserialize, Serialize};
 use time_tz::Tz;
 
 use crate::errors::Error;
 use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
+
+/// An item yielded by a [`Subscription`](crate::subscriptions::Subscription).
+///
+/// Subscriptions return `Option<Result<SubscriptionItem<T>, Error>>` from `next`,
+/// `try_next`, and `next_timeout`. `Data(T)` is the decoded payload; `Notice` is a
+/// non-fatal IB notice (warning codes 2100..=2169) bound to this subscription —
+/// the stream stays open. Use [`Subscription::iter_data`](crate::subscriptions::Subscription::iter_data)
+/// (or async [`Subscription::data_stream`](crate::subscriptions::Subscription::data_stream))
+/// when you only care about data and want notices logged automatically.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum SubscriptionItem<T> {
+    /// A successfully decoded payload from the subscription stream.
+    Data(T),
+    /// A non-fatal IB notice (warning codes 2100..=2169) bound to this subscription.
+    /// Receiving a notice does not terminate the stream.
+    Notice(Notice),
+}
 
 /// Pre-classified channel item delivered from the dispatcher to subscriptions.
 /// `Response` carries raw bytes the decoder must still interpret; `Notice` and

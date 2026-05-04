@@ -43,7 +43,7 @@ impl Deref for DisplayGroupSubscription {
 }
 
 impl<'a> IntoIterator for &'a DisplayGroupSubscription {
-    type Item = DisplayGroupUpdate;
+    type Item = Result<crate::subscriptions::SubscriptionItem<DisplayGroupUpdate>, crate::Error>;
     type IntoIter = <&'a Subscription<DisplayGroupUpdate> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -52,7 +52,7 @@ impl<'a> IntoIterator for &'a DisplayGroupSubscription {
 }
 
 impl IntoIterator for DisplayGroupSubscription {
-    type Item = DisplayGroupUpdate;
+    type Item = Result<crate::subscriptions::SubscriptionItem<DisplayGroupUpdate>, crate::Error>;
     type IntoIter = <Subscription<DisplayGroupUpdate> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {

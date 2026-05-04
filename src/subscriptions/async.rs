@@ -6,7 +6,7 @@ use std::sync::Arc;
 use log::{debug, warn};
 use tokio::sync::mpsc;
 
-use super::common::{process_decode_result, DecoderContext, ProcessingResult};
+use super::common::{process_decode_result, DecoderContext, ProcessingResult, SubscriptionItem};
 use super::StreamDecoder;
 use crate::messages::{OutgoingMessages, ResponseMessage};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
@@ -194,8 +194,17 @@ impl<T> Subscription<T> {
         }
     }
 
-    /// Get the next value from the subscription
-    pub async fn next(&mut self) -> Option<Result<T, Error>>
+    /// Get the next item from the subscription.
+    ///
+    /// Returns `Option<Result<SubscriptionItem<T>, Error>>`:
+    /// - `None` — stream ended.
+    /// - `Some(Ok(SubscriptionItem::Data(t)))` — decoded payload.
+    /// - `Some(Ok(SubscriptionItem::Notice(n)))` — non-fatal IB notice; stream stays open.
+    /// - `Some(Err(e))` — terminal error; subsequent calls return `None`.
+    ///
+    /// When you only care about data, use [`next_data`](Self::next_data) which
+    /// filters notices.
+    pub async fn next(&mut self) -> Option<Result<SubscriptionItem<T>, Error>>
     where
         T: 'static,
     {
@@ -213,7 +222,7 @@ impl<T> Subscription<T> {
                     Some(Ok(mut message)) => {
                         let result = decoder(context, &mut message);
                         match process_decode_result(result) {
-                            ProcessingResult::Success(val) => return Some(Ok(val)),
+                            ProcessingResult::Success(val) => return Some(Ok(SubscriptionItem::Data(val))),
                             ProcessingResult::EndOfStream => {
                                 self.stream_ended.store(true, Ordering::Relaxed);
                                 return None;
@@ -222,14 +231,44 @@ impl<T> Subscription<T> {
                                 log::trace!("skipping unexpected message on shared channel");
                                 continue;
                             }
-                            ProcessingResult::Error(err) => return Some(Err(err)),
+                            ProcessingResult::Error(err) => {
+                                self.stream_ended.store(true, Ordering::Relaxed);
+                                return Some(Err(err));
+                            }
                         }
                     }
-                    Some(Err(e)) => return Some(Err(e)),
+                    Some(Err(Error::EndOfStream)) => {
+                        self.stream_ended.store(true, Ordering::Relaxed);
+                        return None;
+                    }
+                    Some(Err(e)) => {
+                        self.stream_ended.store(true, Ordering::Relaxed);
+                        return Some(Err(e));
+                    }
                     None => return None,
                 }
             },
-            SubscriptionInner::PreDecoded { receiver } => receiver.recv().await,
+            SubscriptionInner::PreDecoded { receiver } => match receiver.recv().await? {
+                Ok(t) => Some(Ok(SubscriptionItem::Data(t))),
+                Err(e) => Some(Err(e)),
+            },
+        }
+    }
+
+    /// Convenience: blocking `next` that filters notices and yields just data.
+    pub async fn next_data(&mut self) -> Option<Result<T, Error>>
+    where
+        T: 'static,
+    {
+        loop {
+            match self.next().await? {
+                Ok(SubscriptionItem::Data(t)) => return Some(Ok(t)),
+                Ok(SubscriptionItem::Notice(n)) => {
+                    log::warn!("ib notice on subscription: {n}");
+                    continue;
+                }
+                Err(e) => return Some(Err(e)),
+            }
         }
     }
 
