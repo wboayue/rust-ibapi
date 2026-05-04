@@ -3,6 +3,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use futures::stream::Stream;
 use log::{debug, warn};
 use tokio::sync::mpsc;
 
@@ -275,6 +276,22 @@ impl<T> Subscription<T> {
         }
     }
 
+    /// Async mirror of the sync [`Subscription::iter_data`](crate::subscriptions::sync::Subscription::iter_data)
+    /// adapter: returns a [`Stream`] of `Result<T, Error>` with notices filtered
+    /// (and logged at `warn!`).
+    ///
+    /// The returned stream is `Unpin` so callers can chain
+    /// [`futures::StreamExt`] combinators (`next`, `take`, `collect`, ...)
+    /// directly without wrapping in `pin_mut!`.
+    pub fn data_stream(&mut self) -> impl Stream<Item = Result<T, Error>> + Unpin + '_
+    where
+        T: Send + 'static,
+    {
+        Box::pin(futures::stream::unfold(self, |sub| async move {
+            sub.next_data().await.map(|item| (item, sub))
+        }))
+    }
+
     /// Get the request ID associated with this subscription
     pub fn request_id(&self) -> Option<i32> {
         self.request_id
@@ -335,9 +352,11 @@ impl<T> Drop for Subscription<T> {
     }
 }
 
-// Note: Stream trait implementation removed because tokio's broadcast::Receiver
-// doesn't provide poll_recv. Users should use the async next() method instead.
-// If Stream is needed, users can convert using futures::stream::unfold.
+// Note: `Subscription<T>` does not implement `futures::Stream` directly
+// (tokio's broadcast::Receiver doesn't expose poll_recv). Use
+// [`Subscription::data_stream`] for a `Stream<Item = Result<T, Error>>` adapter,
+// or [`Subscription::next`] / [`Subscription::next_data`] for await-based
+// consumption.
 
 #[cfg(all(test, feature = "async"))]
 #[path = "async_tests.rs"]
