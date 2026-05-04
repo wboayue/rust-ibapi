@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Waiting for news... (Press Ctrl+C to stop)");
 
-    while let Some(result) = news_stream.next().await {
+    while let Some(result) = news_stream.next_data().await {
         match result {
             Ok(article) => {
                 println!("\n--- Breaking News ---");

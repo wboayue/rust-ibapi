@@ -56,16 +56,16 @@ fn test_positions() {
 
     let subscription = client.positions().expect("request positions failed");
 
-    let first_update = subscription.next();
+    let first_update = subscription.next_data();
     assert!(
-        matches!(first_update, Some(PositionUpdate::Position(_))),
+        matches!(first_update, Some(Ok(PositionUpdate::Position(_)))),
         "Expected PositionUpdate::Position, got {:?}",
         first_update
     );
 
-    let second_update = subscription.next();
+    let second_update = subscription.next_data();
     assert!(
-        matches!(second_update, Some(PositionUpdate::PositionEnd)),
+        matches!(second_update, Some(Ok(PositionUpdate::PositionEnd))),
         "Expected PositionUpdate::PositionEnd, got {:?}",
         second_update
     );
@@ -95,15 +95,15 @@ fn test_positions_multi() {
         .positions_multi(account.as_ref(), model_code.as_ref())
         .expect("request positions_multi failed");
 
-    let first_update = subscription.next();
+    let first_update = subscription.next_data();
     assert!(
-        matches!(first_update, Some(PositionUpdateMulti::Position(_))),
+        matches!(first_update, Some(Ok(PositionUpdateMulti::Position(_)))),
         "Expected PositionUpdateMulti::Position"
     );
 
-    let second_update = subscription.next();
+    let second_update = subscription.next_data();
     assert!(
-        matches!(second_update, Some(PositionUpdateMulti::PositionEnd)),
+        matches!(second_update, Some(Ok(PositionUpdateMulti::PositionEnd))),
         "Expected PositionUpdateMulti::PositionEnd"
     );
 
@@ -133,9 +133,9 @@ fn test_account_summary() {
 
     let subscription = client.account_summary(&group, tags).expect("request account_summary failed");
 
-    let first_update = subscription.next();
+    let first_update = subscription.next_data();
     match first_update {
-        Some(AccountSummaryResult::Summary(summary_data)) => {
+        Some(Ok(AccountSummaryResult::Summary(ref summary_data))) => {
             assert_eq!(summary_data.account, TEST_ACCOUNT);
             assert_eq!(summary_data.tag, AccountSummaryTags::ACCOUNT_TYPE);
             assert_eq!(summary_data.value, "FA");
@@ -143,9 +143,9 @@ fn test_account_summary() {
         _ => panic!("Expected AccountSummaries::Summary, got {first_update:?}"),
     }
 
-    let second_update = subscription.next();
+    let second_update = subscription.next_data();
     assert!(
-        matches!(second_update, Some(AccountSummaryResult::End)),
+        matches!(second_update, Some(Ok(AccountSummaryResult::End))),
         "Expected AccountSummaries::End, got {:?}",
         second_update
     );
@@ -243,9 +243,9 @@ fn test_account_updates() {
 
     let subscription = client.account_updates(&account_name).expect("subscribe failed");
 
-    let first_update = subscription.next();
+    let first_update = subscription.next_data();
     match first_update {
-        Some(AccountUpdate::AccountValue(av)) => {
+        Some(Ok(AccountUpdate::AccountValue(ref av))) => {
             assert_eq!(av.key, "CashBalance");
             assert_eq!(av.value, "1000.00");
             assert_eq!(av.currency, "USD");
@@ -253,9 +253,9 @@ fn test_account_updates() {
         other => panic!("First update was not AccountValue: {other:?}"),
     }
 
-    let second_update = subscription.next();
+    let second_update = subscription.next_data();
     assert!(
-        matches!(second_update, Some(AccountUpdate::End)),
+        matches!(second_update, Some(Ok(AccountUpdate::End))),
         "Expected AccountUpdate::End, got {:?}",
         second_update
     );
@@ -339,7 +339,7 @@ fn test_account_updates_multi() {
     let expected_keys = &["CashBalance", "Currency", "StockMarketValue"];
 
     for key in expected_keys {
-        let update = subscription.next().unwrap();
+        let update = subscription.next_data().unwrap().expect("expected Ok");
         match update {
             AccountUpdateMulti::AccountMultiValue(value) => {
                 assert_eq!(value.key, *key);
@@ -350,7 +350,7 @@ fn test_account_updates_multi() {
         }
     }
 
-    let end = subscription.next().unwrap();
+    let end = subscription.next_data().unwrap().expect("expected Ok");
     assert_eq!(end, AccountUpdateMulti::End);
 
     subscription.cancel();
@@ -481,16 +481,16 @@ fn test_account_summary_comprehensive() {
                 .account_summary(&group, &test_case.tags)
                 .unwrap_or_else(|_| panic!("account_summary failed for {}", test_case.description));
 
-            let first_update = subscription.next();
+            let first_update = subscription.next_data();
             assert!(
-                matches!(first_update, Some(AccountSummaryResult::Summary(_))),
+                matches!(first_update, Some(Ok(AccountSummaryResult::Summary(_)))),
                 "Expected summary for {}",
                 test_case.description
             );
 
-            let second_update = subscription.next();
+            let second_update = subscription.next_data();
             assert!(
-                matches!(second_update, Some(AccountSummaryResult::End)),
+                matches!(second_update, Some(Ok(AccountSummaryResult::End))),
                 "Expected end marker for {}",
                 test_case.description
             );
@@ -692,8 +692,8 @@ fn test_account_updates_stream_handling() {
     let subscription = client.account_updates(&account).expect("account_updates failed");
 
     let mut update_count = 0;
-    for update_result in subscription {
-        match update_result {
+    for update_result in subscription.iter_data() {
+        match update_result.expect("subscription error") {
             AccountUpdate::AccountValue(_) => {
                 update_count += 1;
             }

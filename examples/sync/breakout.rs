@@ -28,7 +28,14 @@ fn main() {
 
     let mut channel = BreakoutChannel::new(30);
 
-    for bar in bars.iter() {
+    for bar in bars.iter_data() {
+        let bar = match bar {
+            Ok(bar) => bar,
+            Err(e) => {
+                eprintln!("error: {e}");
+                break;
+            }
+        };
         channel.add_bar(&bar);
 
         // Ensure enough bars and no open positions.
@@ -48,7 +55,14 @@ fn main() {
         let order = order_builder::market_order(action, 100.0);
 
         let notices = client.place_order(order_id, &contract, &order).unwrap();
-        for notice in notices {
+        for notice in notices.iter_data() {
+            let notice = match notice {
+                Ok(notice) => notice,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    break;
+                }
+            };
             if let PlaceOrder::ExecutionData(data) = notice {
                 println!("{} {} shares of {}", data.execution.side, data.execution.shares, data.contract.symbol);
             } else {

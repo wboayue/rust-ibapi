@@ -62,7 +62,7 @@ fn place_order() {
 
     let notifications = result.unwrap();
 
-    if let Some(PlaceOrder::OpenOrder(open_order)) = notifications.next() {
+    if let Some(Ok(PlaceOrder::OpenOrder(open_order))) = notifications.next_data() {
         assert_eq!(open_order.order_id, 13, "open_order.order_id");
 
         let contract = &open_order.contract;
@@ -208,7 +208,7 @@ fn place_order() {
         assert!(false, "message[0] expected an open order notification");
     }
 
-    if let Some(PlaceOrder::OrderStatus(order_status)) = notifications.next() {
+    if let Some(Ok(PlaceOrder::OrderStatus(order_status))) = notifications.next_data() {
         assert_eq!(order_status.order_id, 13, "order_status.order_id");
         assert_eq!(order_status.status, "PreSubmitted", "order_status.status");
         assert_eq!(order_status.filled, 0.0, "order_status.filled");
@@ -224,7 +224,7 @@ fn place_order() {
         assert!(false, "message[1] expected order status notification");
     }
 
-    if let Some(PlaceOrder::ExecutionData(execution_data)) = notifications.next() {
+    if let Some(Ok(PlaceOrder::ExecutionData(execution_data))) = notifications.next_data() {
         let contract = execution_data.contract;
         let execution = execution_data.execution;
 
@@ -265,7 +265,7 @@ fn place_order() {
         assert!(false, "message[2] expected execution notification");
     }
 
-    if let Some(PlaceOrder::OpenOrder(open_order)) = notifications.next() {
+    if let Some(Ok(PlaceOrder::OpenOrder(open_order))) = notifications.next_data() {
         let order_state = &open_order.order_state;
 
         assert_eq!(open_order.order_id, 13, "open_order.order_id");
@@ -274,7 +274,7 @@ fn place_order() {
         assert!(false, "message[3] expected an open order notification");
     }
 
-    if let Some(PlaceOrder::OrderStatus(order_status)) = notifications.next() {
+    if let Some(Ok(PlaceOrder::OrderStatus(order_status))) = notifications.next_data() {
         assert_eq!(order_status.order_id, 13, "order_status.order_id");
         assert_eq!(order_status.status, "Filled", "order_status.status");
         assert_eq!(order_status.filled, 100.0, "order_status.filled");
@@ -285,7 +285,7 @@ fn place_order() {
         assert!(false, "message[4] expected order status notification");
     }
 
-    if let Some(PlaceOrder::OpenOrder(open_order)) = notifications.next() {
+    if let Some(Ok(PlaceOrder::OpenOrder(open_order))) = notifications.next_data() {
         let order_state = &open_order.order_state;
 
         assert_eq!(open_order.order_id, 13, "open_order.order_id");
@@ -298,7 +298,7 @@ fn place_order() {
         assert!(false, "message[5] expected an open order notification");
     }
 
-    if let Some(PlaceOrder::CommissionReport(report)) = notifications.next() {
+    if let Some(Ok(PlaceOrder::CommissionReport(report))) = notifications.next_data() {
         assert_eq!(report.execution_id, "00025b46.63f8f39c.01.01", "report.execution_id");
         assert_eq!(report.commission, 1.0, "report.commission");
         assert_eq!(report.currency, "USD", "report.currency");
@@ -334,7 +334,7 @@ fn cancel_order() {
 
     let results = results.unwrap();
 
-    if let Some(CancelOrder::OrderStatus(order_status)) = results.next() {
+    if let Some(Ok(CancelOrder::OrderStatus(order_status))) = results.next_data() {
         assert_eq!(order_status.order_id, 41, "order_status.order_id");
         assert_eq!(order_status.status, "Cancelled", "order_status.status");
         assert_eq!(order_status.filled, 0.0, "order_status.filled");
@@ -348,7 +348,7 @@ fn cancel_order() {
         assert_eq!(order_status.market_cap_price, Some(0.0), "order_status.market_cap_price");
     }
 
-    if let Some(CancelOrder::Notice(notice)) = results.next() {
+    if let Some(Ok(CancelOrder::Notice(notice))) = results.next_data() {
         assert_eq!(notice.message, "Order Canceled - reason:", "order status notice");
     }
 }
@@ -426,7 +426,7 @@ fn completed_orders() {
     assert!(results.is_ok(), "failed to request completed orders: {}", results.err().unwrap());
 
     let results = results.unwrap();
-    if let Some(Orders::OrderData(order_data)) = results.next() {
+    if let Some(Ok(Orders::OrderData(order_data))) = results.next_data() {
         assert_eq!(order_data.order_id, -1, "open_order.order_id");
 
         let contract = &order_data.contract;
@@ -713,9 +713,9 @@ fn exercise_options() {
         .exercise_options(&contract, ExerciseAction::Exercise, 1, "", false, None)
         .expect("failed to exercise options");
 
-    let exercise_response = subscription.next();
+    let exercise_response = subscription.next_data();
     assert!(
-        matches!(exercise_response, Some(ExerciseOptions::OpenOrder(_))),
+        matches!(exercise_response, Some(Ok(ExerciseOptions::OpenOrder(_)))),
         "Expected ExerciseOptions::OpenOrder, got {:?}",
         exercise_response
     );
@@ -766,7 +766,7 @@ fn order_update_stream() {
 
     let notifications = stream.unwrap();
 
-    if let Some(OrderUpdate::OpenOrder(open_order)) = notifications.next() {
+    if let Some(Ok(OrderUpdate::OpenOrder(open_order))) = notifications.next_data() {
         assert_eq!(open_order.order_id, 13, "open_order.order_id");
         assert_eq!(open_order.contract.symbol, Symbol::from("TSLA"), "contract.symbol");
         assert_eq!(open_order.order.action, Action::Buy, "order.action");
@@ -776,7 +776,7 @@ fn order_update_stream() {
         assert!(false, "expected open order notification");
     }
 
-    if let Some(OrderUpdate::OrderStatus(status)) = notifications.next() {
+    if let Some(Ok(OrderUpdate::OrderStatus(status))) = notifications.next_data() {
         assert_eq!(status.order_id, 13, "order_status.order_id");
         assert_eq!(status.status, "PreSubmitted", "order_status.status");
         assert_eq!(status.filled, 0.0, "order_status.filled");
@@ -785,7 +785,7 @@ fn order_update_stream() {
         assert!(false, "expected order status notification");
     }
 
-    if let Some(OrderUpdate::ExecutionData(exec_data)) = notifications.next() {
+    if let Some(Ok(OrderUpdate::ExecutionData(exec_data))) = notifications.next_data() {
         assert_eq!(exec_data.execution.order_id, 13, "execution.order_id");
         assert_eq!(exec_data.execution.shares, 100.0, "execution.shares");
         assert_eq!(exec_data.execution.price, 196.52, "execution.price");
@@ -794,7 +794,7 @@ fn order_update_stream() {
         assert!(false, "expected execution data notification");
     }
 
-    if let Some(OrderUpdate::CommissionReport(report)) = notifications.next() {
+    if let Some(Ok(OrderUpdate::CommissionReport(report))) = notifications.next_data() {
         assert_eq!(report.execution_id, "00025b46.63f8f39c.01.01", "report.execution_id");
         assert_eq!(report.commission, 1.0, "report.commission");
         assert_eq!(report.currency, "USD", "report.currency");

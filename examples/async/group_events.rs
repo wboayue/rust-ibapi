@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Listening for events. Change the contract in TWS Group 1 (Red) to see updates.");
 
-    while let Some(result) = subscription.next().await {
+    while let Some(result) = subscription.next_data().await {
         match result {
             Ok(event) => {
                 println!("Received group event: {:?}", event);

@@ -2,12 +2,12 @@
 
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use log::{debug, error, warn};
 
-use super::common::{process_decode_result, should_store_error, DecoderContext, ProcessingResult};
+use super::common::{process_decode_result, DecoderContext, ProcessingResult, SubscriptionItem};
 use super::StreamDecoder;
 use crate::errors::Error;
 use crate::messages::{OutgoingMessages, ResponseMessage};
@@ -15,9 +15,17 @@ use crate::transport::{InternalSubscription, MessageBus};
 
 /// A [Subscription] is a stream of responses returned from TWS. A [Subscription] is normally returned when invoking an API that can return more than one value.
 ///
-/// You can convert subscriptions into blocking or non-blocking iterators using the [iter](Subscription::iter), [try_iter](Subscription::try_iter) or [timeout_iter](Subscription::timeout_iter) methods.
+/// Each call to [next](Subscription::next), [try_next](Subscription::try_next), or
+/// [next_timeout](Subscription::next_timeout) returns
+/// `Option<Result<SubscriptionItem<T>, Error>>`:
 ///
-/// Alternatively, you may poll subscriptions in a blocking or non-blocking manner using the [next](Subscription::next), [try_next](Subscription::try_next) or [next_timeout](Subscription::next_timeout) methods.
+/// * `None` — the stream has ended.
+/// * `Some(Ok(SubscriptionItem::Data(t)))` — a decoded value.
+/// * `Some(Ok(SubscriptionItem::Notice(n)))` — a non-fatal IB notice; the stream stays open.
+/// * `Some(Err(e))` — terminal error; subsequent calls return `None`.
+///
+/// When you only care about data, use [`iter_data`](Subscription::iter_data) (or
+/// [`next_data`](Subscription::next_data)) which filters notices for you.
 #[allow(private_bounds)]
 pub struct Subscription<T: StreamDecoder<T>> {
     context: DecoderContext,
@@ -30,10 +38,8 @@ pub struct Subscription<T: StreamDecoder<T>> {
     snapshot_ended: AtomicBool,
     stream_ended: AtomicBool,
     subscription: InternalSubscription,
-    error: Mutex<Option<Error>>,
 }
 
-/// Whether a response should be returned or skipped
 enum NextAction<T> {
     Return(Option<T>),
     Skip,
@@ -57,14 +63,12 @@ impl<T: StreamDecoder<T>> Subscription<T> {
             cancelled: AtomicBool::new(false),
             snapshot_ended: AtomicBool::new(false),
             stream_ended: AtomicBool::new(false),
-            error: Mutex::new(None),
         }
     }
 
     /// Cancel the subscription
     pub fn cancel(&self) {
-        // Only cancel if snapshot hasn't ended (for market data snapshots)
-        // For streaming subscriptions, snapshot_ended will remain false
+        // Skip on snapshot subscriptions whose data already arrived.
         if self.snapshot_ended.load(Ordering::Relaxed) {
             return;
         }
@@ -106,36 +110,31 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         self.request_id
     }
 
-    /// Returns the next available value, blocking if necessary until a value becomes available.
+    /// Returns the next item, blocking until one is available.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
     /// use ibapi::contracts::Contract;
+    /// use ibapi::subscriptions::SubscriptionItem;
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
     /// let contract = Contract::stock("AAPL").build();
     /// let subscription = client.market_data(&contract)
     ///     .generic_ticks(&["233"])
     ///     .subscribe()
     ///     .expect("market data request failed");
     ///
-    /// // Process data blocking until the next value is available
-    /// while let Some(data) = subscription.next() {
-    ///     println!("Received data: {data:?}");
-    /// }
-    ///
-    /// // When the loop exits, check if it was due to an error
-    /// if let Some(err) = subscription.error() {
-    ///     eprintln!("subscription error: {err}");
+    /// while let Some(result) = subscription.next() {
+    ///     match result {
+    ///         Ok(SubscriptionItem::Data(tick))   => println!("tick: {tick:?}"),
+    ///         Ok(SubscriptionItem::Notice(n))    => eprintln!("notice: {n}"),
+    ///         Err(e)                             => { eprintln!("error: {e}"); break; }
+    ///     }
     /// }
     /// ```
-    /// # Returns
-    /// * `Some(T)` - The next available item from the subscription
-    /// * `None` - If the subscription has ended or encountered an error
-    pub fn next(&self) -> Option<T> {
+    pub fn next(&self) -> Option<Result<SubscriptionItem<T>, Error>> {
         if self.stream_ended.load(Ordering::Relaxed) {
             return None;
         }
@@ -148,34 +147,14 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         }
     }
 
-    /// Returns the current error state of the subscription.
-    ///
-    /// This method allows checking if an error occurred during subscription processing.
-    /// Errors are stored internally when they occur during `next()`, `try_next()`, or `next_timeout()` calls.
-    ///
-    /// # Returns
-    /// * `Some(Error)` - If an error has occurred
-    /// * `None` - If no error has occurred
-    pub fn error(&self) -> Option<Error> {
-        let mut error = self.error.lock().unwrap();
-        error.take()
-    }
-
-    fn clear_error(&self) {
-        let mut error = self.error.lock().unwrap();
-        *error = None;
-    }
-
-    fn handle_response(&self, response: Option<Result<ResponseMessage, Error>>) -> NextAction<T> {
-        self.clear_error();
-
+    fn handle_response(&self, response: Option<Result<ResponseMessage, Error>>) -> NextAction<Result<SubscriptionItem<T>, Error>> {
         match response {
             Some(Ok(mut message)) => match process_decode_result(T::decode(&self.context, &mut message)) {
                 ProcessingResult::Success(val) => {
                     if val.is_snapshot_end() {
                         self.snapshot_ended.store(true, Ordering::Relaxed);
                     }
-                    NextAction::Return(Some(val))
+                    NextAction::Return(Some(Ok(SubscriptionItem::Data(val))))
                 }
                 ProcessingResult::Skip => {
                     log::trace!("skipping unexpected message on shared channel");
@@ -190,61 +169,30 @@ impl<T: StreamDecoder<T>> Subscription<T> {
                         Error::Message(code, msg) => warn!("subscription terminated by TWS error [{code}] {msg}"),
                         _ => error!("error decoding message: {err}"),
                     }
-                    let mut error = self.error.lock().unwrap();
-                    *error = Some(err);
-                    NextAction::Return(None)
+                    self.stream_ended.store(true, Ordering::Relaxed);
+                    NextAction::Return(Some(Err(err)))
                 }
             },
-            Some(Err(e)) => {
-                if should_store_error(&e) {
-                    let mut error = self.error.lock().unwrap();
-                    *error = Some(e);
-                }
+            Some(Err(Error::EndOfStream)) => {
+                self.stream_ended.store(true, Ordering::Relaxed);
                 NextAction::Return(None)
+            }
+            Some(Err(e)) => {
+                self.stream_ended.store(true, Ordering::Relaxed);
+                NextAction::Return(Some(Err(e)))
             }
             None => NextAction::Return(None),
         }
     }
 
-    /// Tries to return the next available value without blocking.
+    /// Returns the next item without blocking.
     ///
-    /// Returns immediately with:
-    /// - `Some(value)` if a value is available
-    /// - `None` if no data is currently available
-    ///
-    /// Use this method when you want to poll for data without blocking.
-    /// Check `error()` to determine if `None` was returned due to an error.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use ibapi::client::blocking::Client;
-    /// use ibapi::contracts::Contract;
-    /// use std::thread;
-    /// use std::time::Duration;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
-    /// let contract = Contract::stock("AAPL").build();
-    /// let subscription = client.market_data(&contract)
-    ///     .generic_ticks(&["233"])
-    ///     .subscribe()
-    ///     .expect("market data request failed");
-    ///
-    /// // Poll for data without blocking
-    /// loop {
-    ///     if let Some(data) = subscription.try_next() {
-    ///         println!("{data:?}");
-    ///     } else if let Some(err) = subscription.error() {
-    ///         eprintln!("Error: {err}");
-    ///         break;
-    ///     } else {
-    ///         // No data available, do other work or sleep
-    ///         thread::sleep(Duration::from_millis(100));
-    ///     }
-    /// }
-    /// ```
-    pub fn try_next(&self) -> Option<T> {
+    /// Returns `None` if no item is available *right now*; check the surrounding
+    /// loop or stream state to distinguish from end-of-stream.
+    pub fn try_next(&self) -> Option<Result<SubscriptionItem<T>, Error>> {
+        if self.stream_ended.load(Ordering::Relaxed) {
+            return None;
+        }
         loop {
             match self.handle_response(self.subscription.try_next()) {
                 NextAction::Return(val) => return val,
@@ -253,39 +201,11 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         }
     }
 
-    /// Waits for the next available value up to the specified timeout duration.
-    ///
-    /// Returns:
-    /// - `Some(value)` if a value becomes available within the timeout
-    /// - `None` if the timeout expires before data becomes available
-    ///
-    /// Check `error()` to determine if `None` was returned due to an error.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use ibapi::client::blocking::Client;
-    /// use ibapi::contracts::Contract;
-    /// use std::time::Duration;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
-    /// let contract = Contract::stock("AAPL").build();
-    /// let subscription = client.market_data(&contract)
-    ///     .generic_ticks(&["233"])
-    ///     .subscribe()
-    ///     .expect("market data request failed");
-    ///
-    /// // Wait up to 5 seconds for data
-    /// if let Some(data) = subscription.next_timeout(Duration::from_secs(5)) {
-    ///     println!("{data:?}");
-    /// } else if let Some(err) = subscription.error() {
-    ///     eprintln!("Error: {err}");
-    /// } else {
-    ///     eprintln!("Timeout: no data received within 5 seconds");
-    /// }
-    /// ```
-    pub fn next_timeout(&self, timeout: Duration) -> Option<T> {
+    /// Returns the next item, blocking up to `timeout`.
+    pub fn next_timeout(&self, timeout: Duration) -> Option<Result<SubscriptionItem<T>, Error>> {
+        if self.stream_ended.load(Ordering::Relaxed) {
+            return None;
+        }
         let deadline = Instant::now() + timeout;
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
@@ -299,101 +219,42 @@ impl<T: StreamDecoder<T>> Subscription<T> {
         }
     }
 
-    /// Creates a blocking iterator over the subscription data.
-    ///
-    /// The iterator will block waiting for the next value if none is immediately available.
-    /// The iterator ends when the subscription is cancelled or an unrecoverable error occurs.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use ibapi::client::blocking::Client;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
-    /// let subscription = client.positions().expect("positions request failed");
-    ///
-    /// // Process all positions as they arrive
-    /// for position in subscription.iter() {
-    ///     println!("{position:?}");
-    /// }
-    ///
-    /// // Check if iteration ended due to an error
-    /// if let Some(err) = subscription.error() {
-    ///     eprintln!("Subscription error: {err}");
-    /// }
-    /// ```
+    /// Convenience: blocking `next` that filters out notices and yields just data.
+    /// Equivalent to `iter_data().next()`.
+    pub fn next_data(&self) -> Option<Result<T, Error>> {
+        self.iter_data().next()
+    }
+
+    /// Blocking iterator yielding `Result<SubscriptionItem<T>, Error>`. Use
+    /// [`iter_data`](Subscription::iter_data) when you only want data.
     pub fn iter(&self) -> SubscriptionIter<'_, T> {
         SubscriptionIter { subscription: self }
     }
 
-    /// Creates a non-blocking iterator over the subscription data.
-    ///
-    /// The iterator will return immediately with `None` if no data is available.
-    /// Use this when you want to process available data without blocking.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use ibapi::client::blocking::Client;
-    /// use std::thread;
-    /// use std::time::Duration;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
-    /// let subscription = client.positions().expect("positions request failed");
-    ///
-    /// // Process available positions without blocking
-    /// loop {
-    ///     let mut data_received = false;
-    ///     for position in subscription.try_iter() {
-    ///         data_received = true;
-    ///         println!("{position:?}");
-    ///     }
-    ///     
-    ///     if let Some(err) = subscription.error() {
-    ///         eprintln!("Error: {err}");
-    ///         break;
-    ///     }
-    ///     
-    ///     if !data_received {
-    ///         // No data available, do other work or sleep
-    ///         thread::sleep(Duration::from_millis(100));
-    ///     }
-    /// }
-    /// ```
+    /// Non-blocking iterator. Returns `None` immediately when nothing is queued.
     pub fn try_iter(&self) -> SubscriptionTryIter<'_, T> {
         SubscriptionTryIter { subscription: self }
     }
 
-    /// Creates an iterator that waits up to the specified timeout for each value.
-    ///
-    /// The iterator will wait up to `timeout` duration for each value.
-    /// If the timeout expires, the iterator ends.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use ibapi::client::blocking::Client;
-    /// use std::time::Duration;
-    ///
-    /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
-    ///
-    /// let subscription = client.positions().expect("positions request failed");
-    ///
-    /// // Process positions with a 5 second timeout per item
-    /// for position in subscription.timeout_iter(Duration::from_secs(5)) {
-    ///     println!("{position:?}");
-    /// }
-    ///
-    /// if let Some(err) = subscription.error() {
-    ///     eprintln!("Error: {err}");
-    /// } else {
-    ///     println!("No more positions received within timeout");
-    /// }
-    /// ```
+    /// Iterator that waits up to `timeout` for each item.
     pub fn timeout_iter(&self, timeout: Duration) -> SubscriptionTimeoutIter<'_, T> {
         SubscriptionTimeoutIter { subscription: self, timeout }
+    }
+
+    /// Blocking iterator that filters notices and yields `Result<T, Error>`.
+    /// Notices are logged at `warn!` level.
+    pub fn iter_data(&self) -> FilterData<SubscriptionIter<'_, T>> {
+        self.iter().filter_data()
+    }
+
+    /// Non-blocking data iterator (notices filtered).
+    pub fn try_iter_data(&self) -> FilterData<SubscriptionTryIter<'_, T>> {
+        self.try_iter().filter_data()
+    }
+
+    /// Timeout-bounded data iterator (notices filtered).
+    pub fn timeout_iter_data(&self, timeout: Duration) -> FilterData<SubscriptionTimeoutIter<'_, T>> {
+        self.timeout_iter(timeout).filter_data()
     }
 }
 
@@ -405,14 +266,63 @@ impl<T: StreamDecoder<T>> Drop for Subscription<T> {
     }
 }
 
-/// An iterator that yields items as they become available, blocking if necessary.
+/// Adapter that filters `SubscriptionItem::Notice` items (logging them at `warn!`)
+/// from any `Iterator<Item = Result<SubscriptionItem<T>, Error>>` and yields the
+/// underlying `Result<T, Error>` to the caller.
+///
+/// Returned by [`SubscriptionItemIterExt::filter_data`].
+#[must_use = "iterator adapters are lazy and do nothing unless consumed"]
+pub struct FilterData<I> {
+    inner: I,
+}
+
+impl<I, T> Iterator for FilterData<I>
+where
+    I: Iterator<Item = Result<SubscriptionItem<T>, Error>>,
+{
+    type Item = Result<T, Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.inner.next()? {
+                Ok(SubscriptionItem::Data(t)) => return Some(Ok(t)),
+                Ok(SubscriptionItem::Notice(n)) => {
+                    log::warn!("ib notice on subscription: {n}");
+                    continue;
+                }
+                Err(e) => return Some(Err(e)),
+            }
+        }
+    }
+}
+
+/// Extension trait that adds [`filter_data`](SubscriptionItemIterExt::filter_data)
+/// to any iterator yielding `Result<SubscriptionItem<T>, Error>`. Use it to compose
+/// the data-only flow with iterator combinators that the built-in
+/// [`iter_data`](Subscription::iter_data) family doesn't already cover, e.g.
+/// `subscription.iter().take(10).filter_data()`.
+pub trait SubscriptionItemIterExt: Iterator + Sized {
+    /// Wrap `self` in a [`FilterData`] adapter that drops `SubscriptionItem::Notice`
+    /// items (logging them) and yields the underlying `Result<T, Error>`.
+    fn filter_data<T>(self) -> FilterData<Self>
+    where
+        Self: Iterator<Item = Result<SubscriptionItem<T>, Error>>,
+    {
+        FilterData { inner: self }
+    }
+}
+
+impl<I: Iterator> SubscriptionItemIterExt for I {}
+
+/// Blocking iterator over `Result<SubscriptionItem<T>, Error>`.
 #[allow(private_bounds)]
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct SubscriptionIter<'a, T: StreamDecoder<T>> {
     subscription: &'a Subscription<T>,
 }
 
 impl<T: StreamDecoder<T>> Iterator for SubscriptionIter<'_, T> {
-    type Item = T;
+    type Item = Result<SubscriptionItem<T>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.subscription.next()
@@ -420,7 +330,7 @@ impl<T: StreamDecoder<T>> Iterator for SubscriptionIter<'_, T> {
 }
 
 impl<'a, T: StreamDecoder<T>> IntoIterator for &'a Subscription<T> {
-    type Item = T;
+    type Item = Result<SubscriptionItem<T>, Error>;
     type IntoIter = SubscriptionIter<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -428,14 +338,15 @@ impl<'a, T: StreamDecoder<T>> IntoIterator for &'a Subscription<T> {
     }
 }
 
-/// An iterator that takes ownership and yields items as they become available, blocking if necessary.
+/// Owned blocking iterator over `Result<SubscriptionItem<T>, Error>`.
 #[allow(private_bounds)]
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct SubscriptionOwnedIter<T: StreamDecoder<T>> {
     subscription: Subscription<T>,
 }
 
 impl<T: StreamDecoder<T>> Iterator for SubscriptionOwnedIter<T> {
-    type Item = T;
+    type Item = Result<SubscriptionItem<T>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.subscription.next()
@@ -443,7 +354,7 @@ impl<T: StreamDecoder<T>> Iterator for SubscriptionOwnedIter<T> {
 }
 
 impl<T: StreamDecoder<T>> IntoIterator for Subscription<T> {
-    type Item = T;
+    type Item = Result<SubscriptionItem<T>, Error>;
     type IntoIter = SubscriptionOwnedIter<T>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -451,29 +362,31 @@ impl<T: StreamDecoder<T>> IntoIterator for Subscription<T> {
     }
 }
 
-/// An iterator that yields items as they become available without blocking.
+/// Non-blocking iterator.
 #[allow(private_bounds)]
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct SubscriptionTryIter<'a, T: StreamDecoder<T>> {
     subscription: &'a Subscription<T>,
 }
 
 impl<T: StreamDecoder<T>> Iterator for SubscriptionTryIter<'_, T> {
-    type Item = T;
+    type Item = Result<SubscriptionItem<T>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.subscription.try_next()
     }
 }
 
-/// An iterator that yields items with a timeout.
+/// Timeout-bounded iterator.
 #[allow(private_bounds)]
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct SubscriptionTimeoutIter<'a, T: StreamDecoder<T>> {
     subscription: &'a Subscription<T>,
     timeout: Duration,
 }
 
 impl<T: StreamDecoder<T>> Iterator for SubscriptionTimeoutIter<'_, T> {
-    type Item = T;
+    type Item = Result<SubscriptionItem<T>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.subscription.next_timeout(self.timeout)

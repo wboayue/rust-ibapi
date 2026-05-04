@@ -26,7 +26,7 @@ fn main() {
         .scanner_subscription(&scanner_subscription, &filter)
         .expect("request scanner parameters failed");
 
-    if let Some(scan_results) = subscription.next() {
+    if let Some(Ok(scan_results)) = subscription.next_data() {
         for scan_data in scan_results.iter() {
             println!(
                 "rank: {}, contract_id: {}, symbol: {}",

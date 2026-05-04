@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut subscription = client.account_summary(&AccountGroup("All".to_string()), tags).await?;
 
-    while let Some(result) = subscription.next().await {
+    while let Some(result) = subscription.next_data().await {
         match result {
             Ok(update) => match update {
                 AccountSummaryResult::Summary(summary) => {

@@ -52,7 +52,14 @@ fn main() {
 
     let subscription = client.place_order(order_id, &contract, &order).expect("could not place order");
 
-    for status in subscription {
+    for status in subscription.iter_data() {
+        let status = match status {
+            Ok(status) => status,
+            Err(e) => {
+                eprintln!("error: {e}");
+                break;
+            }
+        };
         match status {
             PlaceOrder::OrderStatus(order_status) => {
                 println!("order status: {order_status:?}")

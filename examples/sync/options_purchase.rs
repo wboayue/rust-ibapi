@@ -27,8 +27,14 @@ fn main() {
     println!("contract: {contract:?}, order: {order:?}");
 
     let subscription = client.place_order(order_id, &contract, &order).expect("could not place order");
-    for status in subscription {
-        println!("{status:?}")
+    for status in subscription.iter_data() {
+        match status {
+            Ok(status) => println!("{status:?}"),
+            Err(e) => {
+                eprintln!("error: {e}");
+                break;
+            }
+        }
     }
     let order_id = client.next_order_id();
     println!("next order id: {order_id}");
@@ -37,7 +43,14 @@ fn main() {
     println!("contract: {contract:?}, order: {order:?}");
 
     let subscription = client.place_order(order_id, &contract, &order).expect("could not place order");
-    for status in subscription {
+    for status in subscription.iter_data() {
+        let status = match status {
+            Ok(status) => status,
+            Err(e) => {
+                eprintln!("error: {e}");
+                break;
+            }
+        };
         println!("{status:?}");
         if let PlaceOrder::OrderStatus(order_status) = status {
             if order_status.remaining == 0.0 {

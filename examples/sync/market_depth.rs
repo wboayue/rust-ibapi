@@ -19,11 +19,13 @@ fn main() {
     let contract = Contract::stock("AAPL").build();
 
     let subscription = client.market_depth(&contract, 5, true).expect("error requesting market depth");
-    for row in &subscription {
-        println!("row: {row:?}")
-    }
-
-    if let Some(error) = subscription.error() {
-        println!("error: {error:?}");
+    for row in subscription.iter_data() {
+        match row {
+            Ok(row) => println!("row: {row:?}"),
+            Err(error) => {
+                println!("error: {error:?}");
+                break;
+            }
+        }
     }
 }

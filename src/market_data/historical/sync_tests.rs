@@ -664,9 +664,9 @@ fn test_historical_data_streaming_with_updates() {
         .expect("streaming request should succeed");
 
     // First: receive initial historical data
-    let update1 = subscription.next();
+    let update1 = subscription.next_data();
     assert!(update1.is_some(), "Should receive initial historical data");
-    match update1.unwrap() {
+    match update1.unwrap().expect("expected Ok") {
         HistoricalBarUpdate::Historical(data) => {
             assert_eq!(data.bars.len(), 1, "Should have 1 initial bar");
             assert_eq!(data.bars[0].open, 185.50, "Wrong open price");
@@ -675,9 +675,9 @@ fn test_historical_data_streaming_with_updates() {
     }
 
     // Second: receive streaming update
-    let update2 = subscription.next();
+    let update2 = subscription.next_data();
     assert!(update2.is_some(), "Should receive streaming update");
-    match update2.unwrap() {
+    match update2.unwrap().expect("expected Ok") {
         HistoricalBarUpdate::Update(bar) => {
             assert_eq!(bar.open, 185.80, "Wrong open price in update");
             assert_eq!(bar.high, 186.10, "Wrong high price in update");
@@ -729,9 +729,9 @@ fn test_historical_data_streaming_keep_up_to_date_false() {
         .expect("streaming request should succeed");
 
     // Receive initial historical data
-    let update1 = subscription.next();
+    let update1 = subscription.next_data();
     assert!(update1.is_some(), "Should receive initial historical data");
-    match update1.unwrap() {
+    match update1.unwrap().expect("expected Ok") {
         HistoricalBarUpdate::Historical(data) => {
             assert_eq!(data.bars.len(), 1, "Should have 1 initial bar");
         }
@@ -780,17 +780,15 @@ fn test_historical_data_streaming_error_response() {
         )
         .expect("streaming request should succeed");
 
-    // Should return None due to error
-    let update = subscription.next();
-    assert!(update.is_none(), "Should return None on error");
-
-    // Error should be accessible
-    let error = subscription.error();
-    assert!(error.is_some(), "Error should be stored");
-    assert!(
-        error.unwrap().to_string().contains("No market data permissions"),
-        "Error should contain the message"
-    );
+    // Error now flows via the Err arm of next_data()
+    let update = subscription.next_data();
+    match update {
+        Some(Err(e)) => assert!(
+            e.to_string().contains("No market data permissions"),
+            "Error should contain the message, got: {e}"
+        ),
+        other => panic!("Expected Some(Err(_)), got {other:?}"),
+    }
 }
 
 #[test]

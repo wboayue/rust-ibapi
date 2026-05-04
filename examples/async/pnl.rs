@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Process PnL updates
     println!("Waiting for PnL updates (press Ctrl+C to stop)...");
-    while let Some(result) = subscription.next().await {
+    while let Some(result) = subscription.next_data().await {
         match result {
             Ok(pnl_update) => {
                 print!("PnL Update - Daily: ${:.2}", pnl_update.daily_pnl);

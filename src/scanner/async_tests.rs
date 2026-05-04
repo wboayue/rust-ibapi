@@ -78,7 +78,7 @@ async fn test_scanner_subscription() {
         .await
         .expect("request scanner subscription failed");
 
-    let scanner_data = match subscription.next().await {
+    let scanner_data = match subscription.next_data().await {
         Some(Ok(data)) => data,
         Some(Err(e)) => panic!("Error getting scanner results: {e}"),
         None => panic!("Unexpected end of stream"),
@@ -140,7 +140,7 @@ async fn test_scanner_subscription_drop_sends_cancel() {
         .await
         .expect("request scanner subscription failed");
 
-    let _ = subscription.next().await;
+    let _ = subscription.next_data().await;
 
     assert_eq!(request_message_count(&message_bus), 1);
 

@@ -25,7 +25,13 @@ fn main() {
         .historical_news(contract_id, &provider_codes, start_time, end_time, total_results)
         .expect("request historical news failed");
 
-    for article in &articles {
-        println!("{}: {}", article.article_id, article.headline);
+    for article in articles.iter_data() {
+        match article {
+            Ok(article) => println!("{}: {}", article.article_id, article.headline),
+            Err(e) => {
+                eprintln!("error: {e}");
+                break;
+            }
+        }
     }
 }

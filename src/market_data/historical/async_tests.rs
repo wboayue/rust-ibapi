@@ -629,7 +629,7 @@ async fn test_historical_data_streaming_with_updates() {
         .expect("streaming request should succeed");
 
     // First: receive initial historical data
-    let update1 = subscription.next().await.expect("Should receive initial historical data");
+    let update1 = subscription.next_data().await.expect("Should receive initial historical data");
     match update1.expect("decode should succeed") {
         HistoricalBarUpdate::Historical(data) => {
             assert_eq!(data.bars.len(), 1, "Should have 1 initial bar");
@@ -639,7 +639,7 @@ async fn test_historical_data_streaming_with_updates() {
     }
 
     // Second: receive streaming update
-    let update2 = subscription.next().await.expect("Should receive streaming update");
+    let update2 = subscription.next_data().await.expect("Should receive streaming update");
     match update2.expect("decode should succeed") {
         HistoricalBarUpdate::Update(bar) => {
             assert_eq!(bar.open, 185.80, "Wrong open price in update");
@@ -692,7 +692,7 @@ async fn test_historical_data_streaming_keep_up_to_date_false() {
         .expect("streaming request should succeed");
 
     // Receive initial historical data
-    let update1 = subscription.next().await.expect("Should receive initial historical data");
+    let update1 = subscription.next_data().await.expect("Should receive initial historical data");
     match update1.expect("decode should succeed") {
         HistoricalBarUpdate::Historical(data) => {
             assert_eq!(data.bars.len(), 1, "Should have 1 initial bar");
@@ -743,7 +743,7 @@ async fn test_historical_data_streaming_error_response() {
         .expect("streaming request should succeed");
 
     // Should yield Some(Err(_)) — Subscription<T> surfaces errors through next().
-    let update = subscription.next().await.expect("error should arrive as Some(Err(_))");
+    let update = subscription.next_data().await.expect("error should arrive as Some(Err(_))");
     let err = update.expect_err("Should yield error result");
     assert!(err.to_string().contains("No market data permissions"), "Error should contain the message");
 }

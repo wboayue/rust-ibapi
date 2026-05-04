@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Waiting for broad tape news... (Press Ctrl+C to stop)");
     println!("Note: This will show all news from the provider, not limited to specific contracts");
 
-    while let Some(result) = news_stream.next().await {
+    while let Some(result) = news_stream.next_data().await {
         match result {
             Ok(article) => {
                 println!("\n--- Broad Tape News ---");

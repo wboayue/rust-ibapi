@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut chain_count = 0;
 
-    while let Some(result) = option_chain_stream.next().await {
+    while let Some(result) = option_chain_stream.next_data().await {
         match result {
             Ok(chain) => {
                 chain_count += 1;

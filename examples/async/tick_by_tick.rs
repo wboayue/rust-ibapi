@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut all_last_ticks = all_last_ticks;
     let mut count = 0;
-    while let Some(trade) = all_last_ticks.next().await {
+    while let Some(trade) = all_last_ticks.next_data().await {
         if count >= 5 {
             break;
         }
@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut bid_ask_ticks = bid_ask_ticks;
     let mut count = 0;
-    while let Some(quote) = bid_ask_ticks.next().await {
+    while let Some(quote) = bid_ask_ticks.next_data().await {
         if count >= 5 {
             break;
         }
@@ -102,7 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut midpoint_ticks = midpoint_ticks;
     let mut count = 0;
-    while let Some(midpoint) = midpoint_ticks.next().await {
+    while let Some(midpoint) = midpoint_ticks.next_data().await {
         if count >= 5 {
             break;
         }

@@ -32,7 +32,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         match monitor_client.order_update_stream() {
             Ok(stream) => {
-                for update in stream {
+                for update in stream.iter_data() {
+                    let update = match update {
+                        Ok(update) => update,
+                        Err(e) => {
+                            eprintln!("[Monitor] error: {e}");
+                            break;
+                        }
+                    };
                     match update {
                         OrderUpdate::OrderStatus(status) => {
                             println!(

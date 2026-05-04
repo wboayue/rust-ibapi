@@ -175,13 +175,14 @@ impl Client {
     ///     )
     ///     .expect("streaming request failed");
     ///
-    /// while let Some(update) = subscription.next() {
-    ///     match update {
+    /// while let Some(update) = subscription.next_data() {
+    ///     match update? {
     ///         HistoricalBarUpdate::Historical(data) => println!("Initial bars: {}", data.bars.len()),
     ///         HistoricalBarUpdate::Update(bar) => println!("Streaming update: {:?}", bar),
     ///         HistoricalBarUpdate::End { start, end } => println!("Stream ended: {} - {}", start, end),
     ///     }
     /// }
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn historical_data_streaming(
         &self,

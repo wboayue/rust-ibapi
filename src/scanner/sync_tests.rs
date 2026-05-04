@@ -78,13 +78,8 @@ fn test_scanner_subscription() {
         .scanner_subscription(&subscription_params, &filter)
         .expect("request scanner subscription failed");
 
-    let scanner_data: Vec<Vec<ScannerData>> = subscription.iter().collect();
+    let scanner_data: Vec<Vec<ScannerData>> = subscription.iter_data().map(|r| r.expect("error getting scanner results")).collect();
 
-    assert!(
-        subscription.error().is_none(),
-        "error getting scanner results: {}",
-        subscription.error().unwrap()
-    );
     assert_eq!(scanner_data.len(), 1);
 
     let first = &scanner_data[0][0];

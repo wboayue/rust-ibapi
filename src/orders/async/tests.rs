@@ -49,28 +49,28 @@ async fn test_place_order() {
 
     let mut subscription = client.place_order(1, &contract, &order).await.expect("failed to place order");
 
-    let open_order = subscription.next().await;
+    let open_order = subscription.next_data().await;
     assert!(
         matches!(open_order, Some(Ok(PlaceOrder::OpenOrder(_)))),
         "Expected PlaceOrder::OpenOrder, got {:?}",
         open_order
     );
 
-    let order_status = subscription.next().await;
+    let order_status = subscription.next_data().await;
     assert!(
         matches!(order_status, Some(Ok(PlaceOrder::OrderStatus(_)))),
         "Expected PlaceOrder::OrderStatus, got {:?}",
         order_status
     );
 
-    let execution_data = subscription.next().await;
+    let execution_data = subscription.next_data().await;
     assert!(
         matches!(execution_data, Some(Ok(PlaceOrder::ExecutionData(_)))),
         "Expected PlaceOrder::ExecutionData, got {:?}",
         execution_data
     );
 
-    let commission_report = subscription.next().await;
+    let commission_report = subscription.next_data().await;
     assert!(
         matches!(commission_report, Some(Ok(PlaceOrder::CommissionReport(_)))),
         "Expected PlaceOrder::CommissionReport, got {:?}",
@@ -95,7 +95,7 @@ async fn test_cancel_order() {
 
     let mut subscription = client.cancel_order(1, "").await.expect("failed to cancel order");
 
-    let cancel_response = subscription.next().await;
+    let cancel_response = subscription.next_data().await;
     assert!(
         matches!(cancel_response, Some(Ok(CancelOrder::OrderStatus(_)))),
         "Expected CancelOrder::OrderStatus, got {:?}",
@@ -124,21 +124,21 @@ async fn test_open_orders() {
 
     let mut subscription = client.open_orders().await.expect("failed to get open orders");
 
-    let order_data = subscription.next().await;
+    let order_data = subscription.next_data().await;
     assert!(
         matches!(order_data, Some(Ok(Orders::OrderData(_)))),
         "Expected Orders::OrderData, got {:?}",
         order_data
     );
 
-    let order_status = subscription.next().await;
+    let order_status = subscription.next_data().await;
     assert!(
         matches!(order_status, Some(Ok(Orders::OrderStatus(_)))),
         "Expected Orders::OrderStatus, got {:?}",
         order_status
     );
 
-    let end_response = subscription.next().await;
+    let end_response = subscription.next_data().await;
     assert!(end_response.is_none(), "Expected None (end of stream), got {:?}", end_response);
 
     assert_eq!(request_message_count(&message_bus), 1);
@@ -156,14 +156,14 @@ async fn test_completed_orders() {
 
     let mut subscription = client.completed_orders(true).await.expect("failed to get completed orders");
 
-    let next = subscription.next().await;
+    let next = subscription.next_data().await;
     assert!(
         matches!(next, Some(Ok(Orders::OrderData(_)))),
         "Expected Orders::OrderData, got {:?}",
         next
     );
 
-    let end_response = subscription.next().await;
+    let end_response = subscription.next_data().await;
     assert!(end_response.is_none(), "Expected None (end of stream), got {:?}", end_response);
 
     assert_eq!(request_message_count(&message_bus), 1);
@@ -195,21 +195,21 @@ async fn test_executions() {
     let filter = ExecutionFilter::default();
     let mut subscription = client.executions(filter).await.expect("failed to get executions");
 
-    let exec_data = subscription.next().await;
+    let exec_data = subscription.next_data().await;
     assert!(
         matches!(exec_data, Some(Ok(Executions::ExecutionData(_)))),
         "Expected Executions::ExecutionData, got {:?}",
         exec_data
     );
 
-    let commission = subscription.next().await;
+    let commission = subscription.next_data().await;
     assert!(
         matches!(commission, Some(Ok(Executions::CommissionReport(_)))),
         "Expected Executions::CommissionReport, got {:?}",
         commission
     );
 
-    let end_response = subscription.next().await;
+    let end_response = subscription.next_data().await;
     assert!(end_response.is_none(), "Expected None (end of stream), got {:?}", end_response);
 
     assert_eq!(request_message_count(&message_bus), 1);
@@ -264,7 +264,7 @@ async fn test_exercise_options() {
         .await
         .expect("failed to exercise options");
 
-    let exercise_response = subscription.next().await;
+    let exercise_response = subscription.next_data().await;
     assert!(
         matches!(exercise_response, Some(Ok(ExerciseOptions::OpenOrder(_)))),
         "Expected ExerciseOptions::OpenOrder, got {:?}",
@@ -321,13 +321,13 @@ async fn test_order_update_stream() {
 
     let mut stream = client.order_update_stream().await.unwrap();
 
-    let update = stream.next().await.unwrap().unwrap();
+    let update = stream.next_data().await.unwrap().unwrap();
     assert!(matches!(update, OrderUpdate::OrderStatus(_)));
 
-    let update = stream.next().await.unwrap().unwrap();
+    let update = stream.next_data().await.unwrap().unwrap();
     assert!(matches!(update, OrderUpdate::ExecutionData(_)));
 
-    let update = stream.next().await.unwrap().unwrap();
+    let update = stream.next_data().await.unwrap().unwrap();
     assert!(matches!(update, OrderUpdate::CommissionReport(_)));
 }
 

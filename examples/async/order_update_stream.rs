@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let monitor_handle = tokio::spawn(async move {
         println!("Starting order update monitor...");
 
-        while let Some(update) = order_stream.next().await {
+        while let Some(update) = order_stream.next_data().await {
             match update {
                 Ok(OrderUpdate::OrderStatus(status)) => {
                     println!("Order Status Update:");

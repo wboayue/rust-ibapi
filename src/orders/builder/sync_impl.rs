@@ -35,8 +35,8 @@ impl<'a> OrderBuilder<'a, Client> {
         let responses = client.place_order(order_id, contract, &order)?;
 
         // Look for the order state in the responses
-        for response in responses {
-            if let crate::orders::PlaceOrder::OpenOrder(order_data) = response {
+        for response in responses.iter_data() {
+            if let Ok(crate::orders::PlaceOrder::OpenOrder(order_data)) = response {
                 if order_data.order_id == order_id {
                     return Ok(order_data.order_state);
                 }

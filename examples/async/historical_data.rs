@@ -261,7 +261,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await?;
 
-    while let Some(update) = subscription.next().await {
+    while let Some(update) = subscription.next_data().await {
         match update {
             Ok(HistoricalBarUpdate::Historical(data)) => {
                 println!("Received {} initial historical bars", data.bars.len());

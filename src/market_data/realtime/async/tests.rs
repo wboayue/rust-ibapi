@@ -73,7 +73,7 @@ async fn test_realtime_bars() {
     // Test receiving data
     let mut received_bars = Vec::new();
     for _ in 0..2 {
-        if let Some(Ok(bar)) = bars.next().await {
+        if let Some(Ok(bar)) = bars.next_data().await {
             received_bars.push(bar);
         }
     }
@@ -129,7 +129,7 @@ async fn test_realtime_bars_error_handling() {
         .await
         .expect("Failed to create realtime bars subscription");
 
-    match bars.next().await {
+    match bars.next_data().await {
         Some(Err(crate::Error::Message(code, msg))) => {
             assert_eq!(code, 10089, "expected error code 10089");
             assert!(msg.contains("additional subscription"), "wrong error message: {msg}");
@@ -169,7 +169,7 @@ async fn test_tick_by_tick_all_last() {
     // Test receiving data
     let mut received_trades = Vec::new();
     for _ in 0..2 {
-        if let Some(Ok(trade)) = trades.next().await {
+        if let Some(Ok(trade)) = trades.next_data().await {
             received_trades.push(trade);
         }
     }
@@ -228,7 +228,7 @@ async fn test_tick_by_tick_last() {
 
     // Test receiving data
     let mut received_trades = Vec::new();
-    if let Some(Ok(trade)) = trades.next().await {
+    if let Some(Ok(trade)) = trades.next_data().await {
         received_trades.push(trade);
     }
 
@@ -279,7 +279,7 @@ async fn test_tick_by_tick_bid_ask() {
 
     // Test receiving data
     let mut received_ticks = Vec::new();
-    if let Some(Ok(tick)) = subscription.next().await {
+    if let Some(Ok(tick)) = subscription.next_data().await {
         received_ticks.push(tick);
     }
 
@@ -332,7 +332,7 @@ async fn test_tick_by_tick_midpoint() {
     // Test receiving data
     let mut received_midpoints = Vec::new();
     for _ in 0..2 {
-        if let Some(Ok(midpoint)) = midpoints.next().await {
+        if let Some(Ok(midpoint)) = midpoints.next_data().await {
             received_midpoints.push(midpoint);
         }
     }
@@ -398,7 +398,7 @@ async fn test_market_depth() {
     // Test receiving data
     let mut received_depth = Vec::new();
     for _ in 0..2 {
-        if let Some(Ok(depth)) = depth.next().await {
+        if let Some(Ok(depth)) = depth.next_data().await {
             received_depth.push(depth);
         }
     }
@@ -504,7 +504,7 @@ async fn test_basic_market_data() {
     // Test receiving data
     let mut received_ticks = Vec::new();
     for _ in 0..4 {
-        if let Some(Ok(tick)) = subscription.next().await {
+        if let Some(Ok(tick)) = subscription.next_data().await {
             received_ticks.push(tick);
         }
     }
@@ -701,7 +701,7 @@ async fn test_market_data_error_handling() {
 
     // Test receiving data
     // First should be a Notice
-    match market_data.next().await {
+    match market_data.next_data().await {
         Some(Ok(TickTypes::Notice(notice))) => {
             assert_eq!(notice.code, 2104, "Wrong notice code");
             assert!(notice.message.contains("Market data farm connection is OK"), "Wrong notice message");
@@ -710,7 +710,7 @@ async fn test_market_data_error_handling() {
     }
 
     // Second should be a Notice (since it's an error in the 2100-2200 range)
-    match market_data.next().await {
+    match market_data.next_data().await {
         Some(Ok(TickTypes::Notice(notice))) => {
             assert_eq!(notice.code, 321, "Wrong error code");
             assert!(notice.message.contains("Error validating request"), "Wrong error message");

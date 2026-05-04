@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stream = realtime_bars;
     let mut bar_count = 0;
 
-    while let Some(bar) = stream.next().await {
+    while let Some(bar) = stream.next_data().await {
         let bar = bar?;
         bar_count += 1;
 

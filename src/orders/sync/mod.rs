@@ -257,8 +257,8 @@ impl Client {
     ///
     /// let events = client.place_order(order_id, &contract, &order).expect("request failed");
     ///
-    /// for event in &events {
-    ///     match event {
+    /// for event in events.iter_data() {
+    ///     match event? {
     ///         PlaceOrder::OrderStatus(order_status) => {
     ///             println!("order status: {order_status:?}")
     ///         }
@@ -268,6 +268,7 @@ impl Client {
     ///         PlaceOrder::Message(message) => println!("message: {message:?}"),
     ///    }
     /// }
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn place_order(&self, order_id: i32, contract: &Contract, order: &super::Order) -> Result<Subscription<PlaceOrder>, Error> {
         verify::verify_order(self, order, order_id)?;
@@ -318,8 +319,8 @@ impl Client {
     /// // Monitor all order updates via the order update stream
     /// // This will receive updates for ALL orders, not just this one
     /// use ibapi::orders::OrderUpdate;
-    /// for event in client.order_update_stream()? {
-    ///     match event {
+    /// for event in client.order_update_stream()?.iter_data() {
+    ///     match event? {
     ///         OrderUpdate::OrderStatus(status) => println!("Order Status: {status:?}"),
     ///         OrderUpdate::ExecutionData(exec) => println!("Execution: {exec:?}"),
     ///         OrderUpdate::CommissionReport(report) => println!("Commission: {report:?}"),
@@ -378,8 +379,8 @@ impl Client {
     /// let updates = client.order_update_stream().expect("failed to create stream");
     ///
     /// // Process order updates
-    /// for update in updates {
-    ///     match update {
+    /// for update in updates.iter_data() {
+    ///     match update? {
     ///         OrderUpdate::OrderStatus(status) => {
     ///             println!("Order {} status: {} - filled: {}/{}",
     ///                 status.order_id, status.status, status.filled, status.remaining);
@@ -407,6 +408,7 @@ impl Client {
     ///         }
     ///     }
     /// }
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
     ///
     /// # Note

@@ -80,10 +80,10 @@ fn test_routed_item_error_terminates_subscription() {
     let stub = Arc::new(MessageBusStub::default());
     let sub: Subscription<DataItem> = Subscription::new(stub, internal, DecoderContext::default());
 
-    // Subscription terminates on terminal error.
+    // First call surfaces the terminal error via the Err arm.
+    assert!(matches!(sub.next(), Some(Err(Error::ConnectionReset))));
+    // Subsequent calls return None — the stream is terminated.
     assert!(sub.next().is_none());
-    // Error is exposed via the error() accessor.
-    assert!(matches!(sub.error(), Some(Error::ConnectionReset)));
 }
 
 #[test]

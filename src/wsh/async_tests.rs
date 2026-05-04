@@ -116,7 +116,7 @@ async fn test_wsh_event_data_by_filter_subscription_table() {
             .unwrap_or_else(|_| panic!("Test '{}' failed to create subscription", test_case.name));
 
         let mut received_events = vec![];
-        while let Some(result) = subscription.next().await {
+        while let Some(result) = subscription.next_data().await {
             match result {
                 Ok(event) => received_events.push(event.data_json),
                 Err(e) => panic!("Test '{}' unexpected error: {e:?}", test_case.name),
@@ -321,7 +321,7 @@ async fn test_subscription_integration_table() {
         let mut subscription = result.unwrap();
 
         let mut events = vec![];
-        while let Some(event_result) = subscription.next().await {
+        while let Some(event_result) = subscription.next_data().await {
             match event_result {
                 Ok(event) => events.push(event.data_json),
                 Err(e) => panic!("Test '{}' unexpected error: {e:?}", test_case.name),

@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\nScanning market... (Press Ctrl+C to stop)");
 
-    while let Some(result) = scanner_results.next().await {
+    while let Some(result) = scanner_results.next_data().await {
         match result {
             Ok(scanner_data_list) => {
                 println!("\n=== Scanner Results ===");

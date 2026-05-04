@@ -29,7 +29,14 @@ fn main() {
         .account_summary(&AccountGroup("All".to_string()), tags)
         .expect("error requesting account summary");
 
-    for update in &subscription {
+    for update in subscription.iter_data() {
+        let update = match update {
+            Ok(update) => update,
+            Err(e) => {
+                eprintln!("error: {e}");
+                break;
+            }
+        };
         match update {
             AccountSummaryResult::Summary(summary) => {
                 if summary.currency.is_empty() {

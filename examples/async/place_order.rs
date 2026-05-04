@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Order placed successfully, monitoring updates...\n");
 
     // Monitor updates for this specific order
-    while let Some(update) = order_subscription.next().await {
+    while let Some(update) = order_subscription.next_data().await {
         match update {
             Ok(PlaceOrder::OrderStatus(status)) => {
                 println!("Order Status Update:");
@@ -138,7 +138,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 async fn monitor_order(order_id: i32, mut subscription: ibapi::subscriptions::Subscription<PlaceOrder>) {
     println!("Starting monitor for order {order_id}");
 
-    while let Some(update) = subscription.next().await {
+    while let Some(update) = subscription.next_data().await {
         match update {
             Ok(PlaceOrder::OrderStatus(status)) => {
                 println!(

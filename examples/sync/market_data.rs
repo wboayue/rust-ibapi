@@ -48,7 +48,14 @@ fn example_streaming_with_tick_types(client: &Client, contract: &Contract) {
         .expect("Failed to subscribe to market data");
 
     let mut tick_count = 0;
-    for tick in &subscription {
+    for tick in subscription.iter_data() {
+        let tick = match tick {
+            Ok(tick) => tick,
+            Err(e) => {
+                eprintln!("error: {e}");
+                break;
+            }
+        };
         match tick {
             TickTypes::Price(price) => {
                 println!("Price - Type: {:?}, Value: ${:.2}", price.tick_type, price.price);
@@ -88,7 +95,14 @@ fn example_snapshot(client: &Client, contract: &Contract) {
 
     let snapshot_subscription = client.market_data(contract).snapshot().subscribe().expect("Failed to request snapshot");
 
-    for tick in &snapshot_subscription {
+    for tick in snapshot_subscription.iter_data() {
+        let tick = match tick {
+            Ok(tick) => tick,
+            Err(e) => {
+                eprintln!("error: {e}");
+                break;
+            }
+        };
         match tick {
             TickTypes::Price(price) => {
                 println!("Snapshot Price - Type: {:?}, Value: ${:.2}", price.tick_type, price.price);
@@ -123,7 +137,14 @@ fn example_builder_chaining(client: &Client, contract: &Contract) {
     println!("Listening for generic ticks...\n");
 
     let mut tick_count = 0;
-    for tick in &subscription {
+    for tick in subscription.iter_data() {
+        let tick = match tick {
+            Ok(tick) => tick,
+            Err(e) => {
+                eprintln!("error: {e}");
+                break;
+            }
+        };
         match tick {
             TickTypes::Generic(generic) => {
                 println!("Generic tick - Type: {:?}, Value: {:.2}", generic.tick_type, generic.value);
