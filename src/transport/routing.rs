@@ -1,8 +1,6 @@
 //! Common message routing logic for sync and async implementations
 
-use time::OffsetDateTime;
-
-use crate::messages::{IncomingMessages, Notice, ResponseMessage, WARNING_CODE_RANGE};
+use crate::messages::{IncomingMessages, ResponseMessage, WARNING_CODE_RANGE};
 
 /// Represents how a message should be routed
 #[derive(Debug, Clone, PartialEq)]
@@ -42,21 +40,6 @@ impl Default for DecodedError {
             error_time: None,
             advanced_order_reject_json: String::new(),
         }
-    }
-}
-
-/// Build a public [`Notice`] from the dispatcher-decoded error payload,
-/// preserving `advanced_order_reject_json` and converting `error_time`
-/// (millis-since-epoch) to `OffsetDateTime`.
-pub(crate) fn notice_from_decoded(payload: &DecodedError) -> Notice {
-    let error_time = payload
-        .error_time
-        .and_then(|millis| OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).ok());
-    Notice {
-        code: payload.error_code,
-        message: payload.error_message.clone(),
-        error_time,
-        advanced_order_reject_json: payload.advanced_order_reject_json.clone(),
     }
 }
 

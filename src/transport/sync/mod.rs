@@ -16,9 +16,7 @@ use log::{debug, error, info, warn};
 
 use crate::connection::sync::Connection;
 
-use super::routing::{
-    classify_error_delivery, determine_routing, notice_from_decoded, order_routing_strategy, OrderRoutingStrategy, Routing, RoutingDecision, Severity,
-};
+use super::routing::{classify_error_delivery, determine_routing, order_routing_strategy, OrderRoutingStrategy, Routing, RoutingDecision, Severity};
 use super::{InternalSubscription, MessageBus, Response, RoutedItem, Signal, SubscriptionBuilder};
 use crate::messages::{shared_channel_configuration, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::Error;
@@ -271,13 +269,13 @@ impl<S: Stream> TcpMessageBus<S> {
 
                 match delivery.routing {
                     Routing::Unrouted => {
-                        let notice = notice_from_decoded(&payload);
+                        let notice = Notice::from(&payload);
                         self.log_unrouted(delivery.severity, &notice);
                     }
                     Routing::Owned(request_id) => {
                         let item = match delivery.severity {
-                            Severity::Warning => RoutedItem::Notice(notice_from_decoded(&payload)),
-                            Severity::HardError => RoutedItem::Error(Error::Message(payload.error_code, payload.error_message.clone())),
+                            Severity::Warning => RoutedItem::Notice(Notice::from(&payload)),
+                            Severity::HardError => RoutedItem::Error(Error::from(&payload)),
                         };
                         self.deliver_to_request_id(request_id, item, sent_to_update_stream);
                     }
@@ -330,10 +328,7 @@ impl<S: Stream> TcpMessageBus<S> {
     /// Log an unrouted Notice (no subscription owner). PR 5 will hook the
     /// global notice broadcast onto this single helper.
     fn log_unrouted(&self, severity: Severity, notice: &Notice) {
-        match severity {
-            Severity::Warning => warn!("warning: {notice}"),
-            Severity::HardError => error!("error: {notice}"),
-        }
+        super::common::log_unrouted_notice(severity, notice);
     }
 
     fn process_orders(&self, message: ResponseMessage) {

@@ -119,6 +119,15 @@ impl From<ResponseMessage> for Error {
     }
 }
 
+impl From<&crate::transport::routing::DecodedError> for Error {
+    /// Project a dispatcher-decoded error payload to `Error::Message`. Mirrors
+    /// the existing `From<ResponseMessage>` projection but skips the wire-message
+    /// re-parse since the dispatcher already extracted the fields.
+    fn from(payload: &crate::transport::routing::DecodedError) -> Error {
+        Error::Message(payload.error_code, payload.error_message.clone())
+    }
+}
+
 // Manual Clone because `std::io::Error` and `time::error::Parse` don't derive it.
 // `ParseTime` is lossy: it collapses to `Error::Simple` and a cloned value
 // no longer matches `Error::ParseTime(_)`.

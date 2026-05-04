@@ -289,7 +289,7 @@ impl StreamDecoder<MarketDepths> for MarketDepths {
             IncomingMessages::Error => {
                 let code = message.error_code();
                 if (2100..2200).contains(&code) {
-                    Ok(MarketDepths::Notice(Notice::from(message)))
+                    Ok(MarketDepths::Notice(Notice::from(&*message)))
                 } else {
                     Err(Error::from(message.clone()))
                 }
@@ -372,7 +372,7 @@ impl StreamDecoder<TickTypes> for TickTypes {
             )?)),
             IncomingMessages::TickReqParams => Ok(TickTypes::RequestParameters(common::decoders::decode_tick_request_parameters(message)?)),
             IncomingMessages::TickSnapshotEnd => Ok(TickTypes::SnapshotEnd),
-            IncomingMessages::Error => Ok(TickTypes::Notice(Notice::from(message))),
+            IncomingMessages::Error => Ok(TickTypes::Notice(Notice::from(&*message))),
             _ => Err(Error::NotImplemented),
         }
     }

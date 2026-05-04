@@ -1344,22 +1344,19 @@ pub const WARNING_CODE_RANGE: std::ops::RangeInclusive<i32> = 2100..=2169;
 /// - 1300: Socket port reset during active connection
 pub const SYSTEM_MESSAGE_CODES: [i32; 4] = [1100, 1101, 1102, 1300];
 
-impl Notice {
-    #[allow(private_interfaces)]
+impl From<&ResponseMessage> for Notice {
     /// Construct a notice from a response message.
-    pub fn from(message: &ResponseMessage) -> Notice {
-        let code = message.error_code();
-        let error_time = message.error_time();
-        let advanced_order_reject_json = message.advanced_order_reject_json();
-        let message = message.error_message();
+    fn from(message: &ResponseMessage) -> Notice {
         Notice {
-            code,
-            message,
-            error_time,
-            advanced_order_reject_json,
+            code: message.error_code(),
+            message: message.error_message(),
+            error_time: message.error_time(),
+            advanced_order_reject_json: message.advanced_order_reject_json(),
         }
     }
+}
 
+impl Notice {
     /// Returns `true` if this notice indicates an order was cancelled (code 202).
     ///
     /// Code 202 is sent by TWS to confirm an order cancellation. This is an
@@ -1404,5 +1401,22 @@ impl Notice {
 impl Display for Notice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[{}] {}", self.code, self.message)
+    }
+}
+
+impl From<&crate::transport::routing::DecodedError> for Notice {
+    /// Build a Notice from a dispatcher-decoded error payload, preserving
+    /// `advanced_order_reject_json` and converting `error_time`
+    /// (millis-since-epoch) to `OffsetDateTime`.
+    fn from(payload: &crate::transport::routing::DecodedError) -> Notice {
+        let error_time = payload
+            .error_time
+            .and_then(|millis| OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).ok());
+        Notice {
+            code: payload.error_code,
+            message: payload.error_message.clone(),
+            error_time,
+            advanced_order_reject_json: payload.advanced_order_reject_json.clone(),
+        }
     }
 }

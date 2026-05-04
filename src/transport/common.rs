@@ -2,6 +2,22 @@
 
 use std::time::Duration;
 
+use log::{error, warn};
+
+use super::routing::Severity;
+use crate::messages::Notice;
+
+/// Log an unrouted notice (no subscription owner) at the appropriate severity.
+/// Single source of truth for the unrouted log-line format — both sync and
+/// async transports' `log_unrouted` methods delegate here. PR 5 adds the
+/// global-notice broadcast call in the per-transport wrapper, not here.
+pub(crate) fn log_unrouted_notice(severity: Severity, notice: &Notice) {
+    match severity {
+        Severity::Warning => warn!("warning: {notice}"),
+        Severity::HardError => error!("error: {notice}"),
+    }
+}
+
 /// Maximum number of reconnection attempts
 pub(crate) const MAX_RECONNECT_ATTEMPTS: i32 = 20;
 
