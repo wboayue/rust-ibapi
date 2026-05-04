@@ -217,7 +217,7 @@ impl ConnectionProtocol for ConnectionHandler {
                         })
                     })
                 } else {
-                    Some(crate::messages::Notice::from(&*message))
+                    Some(crate::messages::Notice::from(message))
                 };
                 if let Some(notice) = notice {
                     if notice.is_warning() || notice.is_system_message() {

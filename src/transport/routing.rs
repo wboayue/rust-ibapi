@@ -43,53 +43,6 @@ impl Default for DecodedError {
     }
 }
 
-/// Where an error/notice should be delivered.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Routing {
-    /// No subscription owner — the message is logged only.
-    Unrouted,
-    /// Owned by a subscription identified by `request_id` (or `order_id`,
-    /// since both share the same numeric space when delivering to the
-    /// dispatcher's request/order channels).
-    Owned(i32),
-}
-
-/// Severity of an error payload.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Severity {
-    /// Non-fatal warning (codes 2100..=2169). When `Owned`, deliver as a
-    /// `RoutedItem::Notice` without terminating the subscription.
-    Warning,
-    /// Hard error. When `Owned`, deliver as a `RoutedItem::Error` and the
-    /// subscription terminates.
-    HardError,
-}
-
-/// Classifies an error payload along two orthogonal axes — routing (owned vs.
-/// unrouted) and severity (warning vs. hard error). Each consumer matches on
-/// the axis it cares about.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct ErrorDelivery {
-    pub routing: Routing,
-    pub severity: Severity,
-}
-
-/// Classify an Error/Warning payload by its `request_id` and `error_code`.
-pub(crate) fn classify_error_delivery(request_id: i32, error_code: i32) -> ErrorDelivery {
-    ErrorDelivery {
-        routing: if request_id == UNSPECIFIED_REQUEST_ID {
-            Routing::Unrouted
-        } else {
-            Routing::Owned(request_id)
-        },
-        severity: if is_warning_error(error_code) {
-            Severity::Warning
-        } else {
-            Severity::HardError
-        },
-    }
-}
-
 /// Minimal protobuf envelope to extract the first int32 field (tag 1).
 #[derive(Clone, PartialEq, ::prost::Message)]
 struct RoutingEnvelope {

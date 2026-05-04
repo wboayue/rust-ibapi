@@ -1356,6 +1356,15 @@ impl From<&ResponseMessage> for Notice {
     }
 }
 
+impl From<&mut ResponseMessage> for Notice {
+    /// Convenience for decoder call sites that hold `&mut ResponseMessage`.
+    /// Trait dispatch doesn't auto-coerce `&mut T → &T`, so this shim avoids
+    /// `Notice::from(&*message)` boilerplate.
+    fn from(message: &mut ResponseMessage) -> Notice {
+        Notice::from(&*message)
+    }
+}
+
 impl Notice {
     /// Returns `true` if this notice indicates an order was cancelled (code 202).
     ///
@@ -1404,19 +1413,19 @@ impl Display for Notice {
     }
 }
 
-impl From<&crate::transport::routing::DecodedError> for Notice {
-    /// Build a Notice from a dispatcher-decoded error payload, preserving
-    /// `advanced_order_reject_json` and converting `error_time`
-    /// (millis-since-epoch) to `OffsetDateTime`.
-    fn from(payload: &crate::transport::routing::DecodedError) -> Notice {
+impl From<crate::transport::routing::DecodedError> for Notice {
+    /// Build a Notice from a dispatcher-decoded error payload, moving the
+    /// `error_message` and `advanced_order_reject_json` strings and converting
+    /// `error_time` (millis-since-epoch) to `OffsetDateTime`.
+    fn from(payload: crate::transport::routing::DecodedError) -> Notice {
         let error_time = payload
             .error_time
             .and_then(|millis| OffsetDateTime::from_unix_timestamp_nanos(millis as i128 * 1_000_000).ok());
         Notice {
             code: payload.error_code,
-            message: payload.error_message.clone(),
+            message: payload.error_message,
             error_time,
-            advanced_order_reject_json: payload.advanced_order_reject_json.clone(),
+            advanced_order_reject_json: payload.advanced_order_reject_json,
         }
     }
 }

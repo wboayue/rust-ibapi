@@ -119,12 +119,13 @@ impl From<ResponseMessage> for Error {
     }
 }
 
-impl From<&crate::transport::routing::DecodedError> for Error {
+impl From<crate::transport::routing::DecodedError> for Error {
     /// Project a dispatcher-decoded error payload to `Error::Message`. Mirrors
     /// the existing `From<ResponseMessage>` projection but skips the wire-message
-    /// re-parse since the dispatcher already extracted the fields.
-    fn from(payload: &crate::transport::routing::DecodedError) -> Error {
-        Error::Message(payload.error_code, payload.error_message.clone())
+    /// re-parse since the dispatcher already extracted the fields, and moves the
+    /// message string instead of cloning.
+    fn from(payload: crate::transport::routing::DecodedError) -> Error {
+        Error::Message(payload.error_code, payload.error_message)
     }
 }
 

@@ -2,19 +2,28 @@
 
 use std::time::Duration;
 
-use log::{error, warn};
+use log::{error, info, warn};
 
-use super::routing::Severity;
 use crate::messages::Notice;
+use crate::subscriptions::common::RoutedItem;
 
 /// Log an unrouted notice (no subscription owner) at the appropriate severity.
-/// Single source of truth for the unrouted log-line format — both sync and
-/// async transports' `log_unrouted` methods delegate here. PR 5 adds the
-/// global-notice broadcast call in the per-transport wrapper, not here.
-pub(crate) fn log_unrouted_notice(severity: Severity, notice: &Notice) {
-    match severity {
-        Severity::Warning => warn!("warning: {notice}"),
-        Severity::HardError => error!("error: {notice}"),
+pub(crate) fn log_unrouted_notice(notice: &Notice) {
+    if notice.is_warning() {
+        warn!("warning: {notice}");
+    } else {
+        error!("error: {notice}");
+    }
+}
+
+/// Log a routed notice/error that arrived bound to an id with no matching
+/// request or order channel. The dispatcher only constructs `Notice` and
+/// `Error` variants for this path; `Response` is unreachable here.
+pub(crate) fn log_orphan(request_id: i32, item: &RoutedItem) {
+    match item {
+        RoutedItem::Notice(n) => info!("no recipient for notice (id={request_id}): {n}"),
+        RoutedItem::Error(e) => info!("no recipient for error (id={request_id}): {e}"),
+        RoutedItem::Response(_) => {}
     }
 }
 

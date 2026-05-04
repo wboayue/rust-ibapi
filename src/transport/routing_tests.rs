@@ -14,45 +14,6 @@ fn test_decoded_error_default() {
 }
 
 #[test]
-fn test_classify_error_delivery() {
-    // Owned warning (real request_id, code in 2100..=2169) delivers as Notice.
-    assert_eq!(
-        classify_error_delivery(42, 2104),
-        ErrorDelivery {
-            routing: Routing::Owned(42),
-            severity: Severity::Warning,
-        }
-    );
-
-    // Unrouted warning (no owner): log-only at warn level.
-    assert_eq!(
-        classify_error_delivery(UNSPECIFIED_REQUEST_ID, 2104),
-        ErrorDelivery {
-            routing: Routing::Unrouted,
-            severity: Severity::Warning,
-        }
-    );
-
-    // Owned hard error: deliver as terminal Error, subscription ends.
-    assert_eq!(
-        classify_error_delivery(42, 200),
-        ErrorDelivery {
-            routing: Routing::Owned(42),
-            severity: Severity::HardError,
-        }
-    );
-
-    // Unrouted hard error: log-only at error level.
-    assert_eq!(
-        classify_error_delivery(UNSPECIFIED_REQUEST_ID, 200),
-        ErrorDelivery {
-            routing: Routing::Unrouted,
-            severity: Severity::HardError,
-        }
-    );
-}
-
-#[test]
 fn test_notice_from_decoded_preserves_rich_payload() {
     use crate::messages::Notice;
     use time::OffsetDateTime;
@@ -64,7 +25,7 @@ fn test_notice_from_decoded_preserves_rich_payload() {
         error_time: Some(1_700_000_000_000),
         advanced_order_reject_json: "{\"reject\":1}".into(),
     };
-    let notice = Notice::from(&payload);
+    let notice = Notice::from(payload);
 
     assert_eq!(notice.code, 2104);
     assert_eq!(notice.message, "Market data farm OK");
@@ -85,7 +46,7 @@ fn test_notice_from_decoded_missing_optionals() {
         error_time: None,
         advanced_order_reject_json: String::new(),
     };
-    let notice = Notice::from(&payload);
+    let notice = Notice::from(payload);
 
     assert_eq!(notice.code, 200);
     assert_eq!(notice.error_time, None);
@@ -94,7 +55,7 @@ fn test_notice_from_decoded_missing_optionals() {
 
 #[test]
 fn test_error_from_decoded_projects_to_message() {
-    // `From<&DecodedError> for Error` projects code+message to Error::Message,
+    // `From<DecodedError> for Error` projects code+message to Error::Message,
     // mirroring the existing `From<ResponseMessage>` projection.
     let payload = DecodedError {
         request_id: 42,
@@ -103,7 +64,7 @@ fn test_error_from_decoded_projects_to_message() {
         error_time: None,
         advanced_order_reject_json: String::new(),
     };
-    let err = crate::Error::from(&payload);
+    let err = crate::Error::from(payload);
 
     match err {
         crate::Error::Message(code, msg) => {
@@ -112,17 +73,6 @@ fn test_error_from_decoded_projects_to_message() {
         }
         other => panic!("expected Error::Message, got {other:?}"),
     }
-}
-
-#[test]
-fn test_classify_error_delivery_warning_boundaries() {
-    // 2099 / 2170 are outside the warning range → HardError.
-    assert_eq!(classify_error_delivery(7, 2099).severity, Severity::HardError);
-    assert_eq!(classify_error_delivery(7, 2170).severity, Severity::HardError);
-
-    // 2100 / 2169 are the inclusive endpoints → Warning.
-    assert_eq!(classify_error_delivery(7, 2100).severity, Severity::Warning);
-    assert_eq!(classify_error_delivery(7, 2169).severity, Severity::Warning);
 }
 
 #[test]

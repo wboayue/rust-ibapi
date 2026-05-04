@@ -70,74 +70,44 @@ pub(crate) struct InternalSubscription {
 
 #[cfg(feature = "sync")]
 impl InternalSubscription {
-    // Blocks until next message become available.
+    /// The underlying receiver — either the per-subscription one or the
+    /// shared-channel one. Both deliver `RoutedItem`.
+    fn pick_receiver(&self) -> Option<&Receiver<RoutedItem>> {
+        self.receiver.as_ref().or(self.shared_receiver.as_deref())
+    }
+
+    /// Blocks until next message become available.
     pub(crate) fn next(&self) -> Option<Response> {
-        if let Some(receiver) = &self.receiver {
-            Self::receive(receiver)
-        } else if let Some(receiver) = &self.shared_receiver {
-            Self::receive(receiver)
-        } else {
-            None
-        }
+        Self::receive(self.pick_receiver()?)
     }
 
-    // Returns message if available or immediately returns None.
+    /// Returns message if available or immediately returns None.
     pub(crate) fn try_next(&self) -> Option<Response> {
-        if let Some(receiver) = &self.receiver {
-            Self::try_receive(receiver)
-        } else if let Some(receiver) = &self.shared_receiver {
-            Self::try_receive(receiver)
-        } else {
-            None
-        }
+        Self::try_receive(self.pick_receiver()?)
     }
 
-    // Waits for next message until specified timeout.
+    /// Waits for next message until specified timeout.
     pub(crate) fn next_timeout(&self, timeout: Duration) -> Option<Response> {
-        if let Some(receiver) = &self.receiver {
-            Self::timeout_receive(receiver, timeout)
-        } else if let Some(receiver) = &self.shared_receiver {
-            Self::timeout_receive(receiver, timeout)
-        } else {
-            None
-        }
+        Self::timeout_receive(self.pick_receiver()?, timeout)
     }
 
     /// Blocks until the next RoutedItem is available, exposing the typed
     /// dispatcher envelope (Response / Notice / Error) without the legacy
     /// ResponseMessage/Error projection.
     pub(crate) fn next_routed(&self) -> Option<RoutedItem> {
-        if let Some(receiver) = &self.receiver {
-            receiver.recv().ok()
-        } else if let Some(receiver) = &self.shared_receiver {
-            receiver.recv().ok()
-        } else {
-            None
-        }
+        self.pick_receiver()?.recv().ok()
     }
 
     /// Non-blocking variant of [`next_routed`](Self::next_routed). Returns
     /// `None` if no `RoutedItem` is queued right now.
     pub(crate) fn try_next_routed(&self) -> Option<RoutedItem> {
-        if let Some(receiver) = &self.receiver {
-            receiver.try_recv().ok()
-        } else if let Some(receiver) = &self.shared_receiver {
-            receiver.try_recv().ok()
-        } else {
-            None
-        }
+        self.pick_receiver()?.try_recv().ok()
     }
 
     /// Bounded-wait variant of [`next_routed`](Self::next_routed). Returns
     /// `None` if no `RoutedItem` arrives within `timeout`.
     pub(crate) fn next_timeout_routed(&self, timeout: Duration) -> Option<RoutedItem> {
-        if let Some(receiver) = &self.receiver {
-            receiver.recv_timeout(timeout).ok()
-        } else if let Some(receiver) = &self.shared_receiver {
-            receiver.recv_timeout(timeout).ok()
-        } else {
-            None
-        }
+        self.pick_receiver()?.recv_timeout(timeout).ok()
     }
 
     pub(crate) fn cancel(&self) {
