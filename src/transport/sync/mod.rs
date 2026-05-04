@@ -5,7 +5,6 @@
 use std::collections::HashMap;
 use std::io::{prelude::*, Cursor};
 use std::net::TcpStream;
-use std::ops::RangeInclusive;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::{self, JoinHandle};
@@ -17,6 +16,7 @@ use log::{debug, error, info, warn};
 
 use crate::connection::sync::Connection;
 
+use super::common::log_error_fields;
 use super::routing::{determine_routing, is_warning_error, order_routing_strategy, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID};
 use super::{InternalSubscription, MessageBus, Response, Signal, SubscriptionBuilder};
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
@@ -25,9 +25,6 @@ use crate::{server_versions, Error};
 // pub(crate) const MIN_SERVER_VERSION: i32 = 100;
 // pub(crate) const MAX_SERVER_VERSION: i32 = server_versions::WSH_EVENT_DATA_FILTERS_DATE;
 const TWS_READ_TIMEOUT: Duration = Duration::from_secs(1);
-
-// Defines the range of warning codes (2100–2169) used by the TWS API.
-const WARNING_CODES: RangeInclusive<i32> = 2100..=2169;
 
 // For requests without an identifier, shared channels are created
 // to route request/response pairs based on message type.
@@ -646,18 +643,6 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), E
         }
     }
     Ok(())
-}
-
-fn log_error_fields(request_id: i32, error_code: i32, error_message: &str, advanced_order_reject_json: &str, error_time: i64) {
-    if WARNING_CODES.contains(&error_code) {
-        warn!(
-            "request_id: {request_id}, warning_code: {error_code}, warning_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}, error_time: {error_time}"
-        );
-    } else {
-        error!(
-            "request_id: {request_id}, error_code: {error_code}, error_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}, error_time: {error_time}"
-        );
-    }
 }
 
 #[derive(Debug)]

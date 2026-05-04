@@ -2,6 +2,24 @@
 
 use std::time::Duration;
 
+use log::{error, warn};
+
+use super::routing::is_warning_error;
+
+/// Log an Error/Warning message with the same field set across sync and async transports.
+/// Warnings (codes in `WARNING_CODE_RANGE`) log at warn level; everything else at error level.
+pub(crate) fn log_error_fields(request_id: i32, error_code: i32, error_message: &str, advanced_order_reject_json: &str, error_time: i64) {
+    if is_warning_error(error_code) {
+        warn!(
+            "request_id: {request_id}, warning_code: {error_code}, warning_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}, error_time: {error_time}"
+        );
+    } else {
+        error!(
+            "request_id: {request_id}, error_code: {error_code}, error_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}, error_time: {error_time}"
+        );
+    }
+}
+
 /// Maximum number of reconnection attempts
 pub(crate) const MAX_RECONNECT_ATTEMPTS: i32 = 20;
 
