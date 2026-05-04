@@ -19,8 +19,10 @@ use crate::connection::r#async::AsyncConnection;
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
-use super::common::log_error_fields;
-use super::routing::{determine_routing, is_warning_error, order_routing_strategy, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID};
+use super::common::log_error_payload;
+use super::routing::{
+    determine_routing, is_warning_error, order_routing_strategy, DecodedError, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID,
+};
 
 /// Default capacity for broadcast channels
 /// This should be large enough to handle bursts of messages without lagging
@@ -333,16 +335,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             RoutingDecision::ByOrderId(order_id) => self.route_to_order_channel(order_id, message).await,
             RoutingDecision::ByMessageType(message_type) => self.route_to_shared_channel(message_type, message).await,
             RoutingDecision::SharedMessage(message_type) => self.route_to_shared_channel(message_type, message).await,
-            RoutingDecision::Error {
-                request_id,
-                error_code,
-                error_message,
-                error_time,
-                advanced_order_reject_json,
-            } => {
-                self.route_error_message(message, request_id, error_code, error_message, error_time, advanced_order_reject_json)
-                    .await
-            }
+            RoutingDecision::Error(payload) => self.route_error_message(message, payload).await,
             RoutingDecision::Shutdown => {
                 debug!("Received shutdown message, calling request_shutdown");
                 self.request_shutdown().await;
@@ -425,21 +418,20 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     }
 
     /// Route error message using routing decision
-    async fn route_error_message(
-        &self,
-        message: ResponseMessage,
-        request_id: i32,
-        error_code: i32,
-        error_msg: String,
-        error_time: Option<i64>,
-        advanced_order_reject_json: String,
-    ) -> Result<(), Error> {
+    async fn route_error_message(&self, message: ResponseMessage, payload: DecodedError) -> Result<(), Error> {
         let _ = self.send_order_update(&message).await;
 
         // Check if this is a warning or unspecified error
-        if request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(error_code) {
-            log_error_fields(request_id, error_code, &error_msg, &advanced_order_reject_json, error_time.unwrap_or(0));
+        if payload.request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(payload.error_code) {
+            log_error_payload(&payload);
         } else {
+            let DecodedError {
+                request_id,
+                error_code,
+                error_message: error_msg,
+                ..
+            } = payload;
+
             // Route to request-specific channel or order channel
             info!("Error message - Request ID: {request_id}, Code: {error_code}, Message: {error_msg}");
 

@@ -16,8 +16,10 @@ use log::{debug, error, info, warn};
 
 use crate::connection::sync::Connection;
 
-use super::common::log_error_fields;
-use super::routing::{determine_routing, is_warning_error, order_routing_strategy, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID};
+use super::common::log_error_payload;
+use super::routing::{
+    determine_routing, is_warning_error, order_routing_strategy, DecodedError, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID,
+};
 use super::{InternalSubscription, MessageBus, Response, Signal, SubscriptionBuilder};
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::{server_versions, Error};
@@ -265,32 +267,20 @@ impl<S: Stream> TcpMessageBus<S> {
     fn dispatch_message(&self, server_version: i32, message: ResponseMessage) {
         // Use common routing logic
         match determine_routing(&message) {
-            RoutingDecision::Error {
-                request_id,
-                error_code,
-                error_message,
-                error_time,
-                advanced_order_reject_json,
-            } => {
+            RoutingDecision::Error(payload) => {
                 let routed = self.send_order_update(&message);
 
                 // Check if this is a warning or unspecified error
-                if request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(error_code) {
+                if payload.request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(payload.error_code) {
                     if message.is_protobuf {
                         // Protobuf path: error_event re-parses text fields, which doesn't work
-                        // for protobuf messages. Log directly from the routing-extracted fields.
-                        log_error_fields(
-                            request_id,
-                            error_code,
-                            &error_message,
-                            &advanced_order_reject_json,
-                            error_time.unwrap_or(0),
-                        );
+                        // for protobuf messages. Log directly from the routing-extracted payload.
+                        log_error_payload(&payload);
                     } else {
                         error_event(server_version, message).unwrap();
                     }
                 } else {
-                    self.process_response_with_id(request_id, message, routed);
+                    self.process_response_with_id(payload.request_id, message, routed);
                 }
             }
             RoutingDecision::ByOrderId(_) => {
@@ -617,12 +607,13 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), E
 
     if server_version >= server_versions::ERROR_TIME {
         // New format (>= ERROR_TIME): no version field, includes error_time
-        let request_id = packet.next_int()?;
-        let error_code = packet.next_int()?;
-        let error_message = packet.next_string()?;
-        let advanced_order_reject_json = packet.next_string().unwrap_or_default();
-        let error_time = packet.next_long().unwrap_or(0);
-        log_error_fields(request_id, error_code, &error_message, &advanced_order_reject_json, error_time);
+        log_error_payload(&DecodedError {
+            request_id: packet.next_int()?,
+            error_code: packet.next_int()?,
+            error_message: packet.next_string()?,
+            advanced_order_reject_json: packet.next_string().unwrap_or_default(),
+            error_time: packet.next_long().ok(),
+        });
     } else {
         // Old format (< ERROR_TIME): has version field
         let version = packet.next_int()?;
@@ -639,7 +630,13 @@ fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), E
             } else {
                 String::new()
             };
-            log_error_fields(request_id, error_code, &error_message, &advanced_order_reject_json, 0);
+            log_error_payload(&DecodedError {
+                request_id,
+                error_code,
+                error_message,
+                advanced_order_reject_json,
+                error_time: None,
+            });
         }
     }
     Ok(())

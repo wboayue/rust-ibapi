@@ -14,16 +14,33 @@ pub enum RoutingDecision {
     /// Route to shared message channel
     SharedMessage(IncomingMessages),
     /// Special handling for error messages
-    Error {
-        request_id: i32,
-        error_code: i32,
-        error_message: String,
-        /// Milliseconds since Unix epoch; `None` for old-format text messages without an error_time field.
-        error_time: Option<i64>,
-        advanced_order_reject_json: String,
-    },
+    Error(DecodedError),
     /// Shutdown signal
     Shutdown,
+}
+
+/// Decoded contents of an Error wire message (type 4), populated regardless of
+/// wire format. Carries both warnings (codes 2100..=2169) and hard errors.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct DecodedError {
+    pub request_id: i32,
+    pub error_code: i32,
+    pub error_message: String,
+    /// Milliseconds since Unix epoch; `None` for old-format text messages without an error_time field.
+    pub error_time: Option<i64>,
+    pub advanced_order_reject_json: String,
+}
+
+impl Default for DecodedError {
+    fn default() -> Self {
+        Self {
+            request_id: UNSPECIFIED_REQUEST_ID,
+            error_code: 0,
+            error_message: String::new(),
+            error_time: None,
+            advanced_order_reject_json: String::new(),
+        }
+    }
 }
 
 /// Minimal protobuf envelope to extract the first int32 field (tag 1).
@@ -39,16 +56,6 @@ struct RoutingEnvelope {
 /// per-message-type handling when those messages migrate to protobuf.
 fn protobuf_first_int(raw_bytes: &[u8]) -> Option<i32> {
     prost::Message::decode(raw_bytes).ok().and_then(|e: RoutingEnvelope| e.id)
-}
-
-/// Fields extracted from an Error message regardless of wire format.
-#[derive(Debug, Default)]
-struct DecodedError {
-    request_id: i32,
-    error_code: i32,
-    error_message: String,
-    error_time: Option<i64>,
-    advanced_order_reject_json: String,
 }
 
 /// Decode the protobuf Error envelope. Defaults match the text-path accessors:
@@ -122,13 +129,7 @@ pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
         } else {
             extract_text_error(message)
         };
-        return RoutingDecision::Error {
-            request_id: decoded.request_id,
-            error_code: decoded.error_code,
-            error_message: decoded.error_message,
-            error_time: decoded.error_time,
-            advanced_order_reject_json: decoded.advanced_order_reject_json,
-        };
+        return RoutingDecision::Error(decoded);
     }
 
     // Protobuf messages: extract routing ID from raw bytes

@@ -20,18 +20,12 @@ fn test_determine_routing_error_old_format() {
     let message = ResponseMessage::from(message_str);
 
     match determine_routing(&message) {
-        RoutingDecision::Error {
-            request_id,
-            error_code,
-            error_message,
-            error_time,
-            advanced_order_reject_json,
-        } => {
-            assert_eq!(request_id, 123);
-            assert_eq!(error_code, 200);
-            assert_eq!(error_message, "No security definition found");
-            assert_eq!(error_time, None, "old format has no error_time field");
-            assert_eq!(advanced_order_reject_json, "");
+        RoutingDecision::Error(payload) => {
+            assert_eq!(payload.request_id, 123);
+            assert_eq!(payload.error_code, 200);
+            assert_eq!(payload.error_message, "No security definition found");
+            assert_eq!(payload.error_time, None, "old format has no error_time field");
+            assert_eq!(payload.advanced_order_reject_json, "");
         }
         routing => panic!("Expected Error routing, got {routing:?}"),
     }
@@ -44,18 +38,12 @@ fn test_determine_routing_error_new_format() {
     let message = ResponseMessage::from(message_str).with_server_version(crate::server_versions::ERROR_TIME);
 
     match determine_routing(&message) {
-        RoutingDecision::Error {
-            request_id,
-            error_code,
-            error_message,
-            error_time,
-            advanced_order_reject_json,
-        } => {
-            assert_eq!(request_id, 123);
-            assert_eq!(error_code, 200);
-            assert_eq!(error_message, "No security definition found");
-            assert_eq!(error_time, Some(1700000000000));
-            assert_eq!(advanced_order_reject_json, "{\"reject\":1}");
+        RoutingDecision::Error(payload) => {
+            assert_eq!(payload.request_id, 123);
+            assert_eq!(payload.error_code, 200);
+            assert_eq!(payload.error_message, "No security definition found");
+            assert_eq!(payload.error_time, Some(1700000000000));
+            assert_eq!(payload.advanced_order_reject_json, "{\"reject\":1}");
         }
         routing => panic!("Expected Error routing, got {routing:?}"),
     }
@@ -68,15 +56,10 @@ fn test_determine_routing_warning_text_format() {
     let message = ResponseMessage::from(message_str);
 
     match determine_routing(&message) {
-        RoutingDecision::Error {
-            request_id,
-            error_code,
-            error_message,
-            ..
-        } => {
-            assert_eq!(request_id, 42);
-            assert_eq!(error_code, 2104);
-            assert_eq!(error_message, "Market data farm connection is OK:usfarm");
+        RoutingDecision::Error(payload) => {
+            assert_eq!(payload.request_id, 42);
+            assert_eq!(payload.error_code, 2104);
+            assert_eq!(payload.error_message, "Market data farm connection is OK:usfarm");
         }
         routing => panic!("Expected Error routing, got {routing:?}"),
     }
@@ -98,18 +81,12 @@ fn test_determine_routing_error_protobuf() {
     let message = ResponseMessage::from_protobuf(IncomingMessages::Error as i32, raw_bytes, crate::server_versions::PROTOBUF);
 
     match determine_routing(&message) {
-        RoutingDecision::Error {
-            request_id,
-            error_code,
-            error_message,
-            error_time,
-            advanced_order_reject_json,
-        } => {
-            assert_eq!(request_id, 42);
-            assert_eq!(error_code, 2100);
-            assert_eq!(error_message, "Market data farm connection is OK");
-            assert_eq!(error_time, Some(1700000000000));
-            assert_eq!(advanced_order_reject_json, "{\"hint\":\"check filters\"}");
+        RoutingDecision::Error(payload) => {
+            assert_eq!(payload.request_id, 42);
+            assert_eq!(payload.error_code, 2100);
+            assert_eq!(payload.error_message, "Market data farm connection is OK");
+            assert_eq!(payload.error_time, Some(1700000000000));
+            assert_eq!(payload.advanced_order_reject_json, "{\"hint\":\"check filters\"}");
         }
         routing => panic!("Expected Error routing, got {routing:?}"),
     }
@@ -131,18 +108,12 @@ fn test_determine_routing_error_protobuf_unspecified_id() {
     let message = ResponseMessage::from_protobuf(IncomingMessages::Error as i32, raw_bytes, crate::server_versions::PROTOBUF);
 
     match determine_routing(&message) {
-        RoutingDecision::Error {
-            request_id,
-            error_code,
-            error_message,
-            error_time,
-            advanced_order_reject_json,
-        } => {
-            assert_eq!(request_id, UNSPECIFIED_REQUEST_ID);
-            assert_eq!(error_code, 2104);
-            assert_eq!(error_message, "Market data farm connection is OK");
-            assert_eq!(error_time, None);
-            assert_eq!(advanced_order_reject_json, "");
+        RoutingDecision::Error(payload) => {
+            assert_eq!(payload.request_id, UNSPECIFIED_REQUEST_ID);
+            assert_eq!(payload.error_code, 2104);
+            assert_eq!(payload.error_message, "Market data farm connection is OK");
+            assert_eq!(payload.error_time, None);
+            assert_eq!(payload.advanced_order_reject_json, "");
         }
         routing => panic!("Expected Error routing, got {routing:?}"),
     }
