@@ -31,7 +31,7 @@ impl Client {
     ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
     ///     let mut subscription = client.positions().await.expect("error requesting positions");
     ///
-    ///     while let Some(position_response) = subscription.next().await {
+    ///     while let Some(position_response) = subscription.next_data().await {
     ///         match position_response {
     ///             Ok(PositionUpdate::Position(position)) => println!("{position:?}"),
     ///             Ok(PositionUpdate::PositionEnd) => println!("initial set of positions received"),
@@ -243,7 +243,7 @@ impl Client {
     ///
     ///     let mut subscription = client.account_updates(&account).await.expect("error requesting account updates");
     ///
-    ///     while let Some(update_result) = subscription.next().await {
+    ///     while let Some(update_result) = subscription.next_data().await {
     ///         match update_result {
     ///             Ok(update) => {
     ///                 println!("{update:?}");
@@ -287,7 +287,7 @@ impl Client {
     ///
     ///     let mut subscription = client.account_updates_multi(Some(&account), None).await.expect("error requesting account updates multi");
     ///
-    ///     while let Some(update_result) = subscription.next().await {
+    ///     while let Some(update_result) = subscription.next_data().await {
     ///         match update_result {
     ///             Ok(update) => {
     ///                 println!("{update:?}");

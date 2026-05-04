@@ -19,20 +19,24 @@ fn main() {
 
     let contract = Contract::stock("AAPL").build();
 
-    loop {
+    'retry: loop {
         // Request real-time bars data with 5-second intervals
         let subscription = client
             .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended)
             .expect("realtime bars request failed!");
 
-        for bar in &subscription {
-            // Process each bar here (e.g., print or use in calculations)
-            println!("bar: {bar:?}");
-        }
-
-        if let Some(Error::ConnectionReset) = subscription.error() {
-            eprintln!("Connection reset. Retrying stream...");
-            continue;
+        for bar in subscription.iter_data() {
+            match bar {
+                Ok(bar) => println!("bar: {bar:?}"),
+                Err(Error::ConnectionReset) => {
+                    eprintln!("Connection reset. Retrying stream...");
+                    continue 'retry;
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    break 'retry;
+                }
+            }
         }
 
         break;

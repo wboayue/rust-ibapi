@@ -23,7 +23,14 @@ fn main() {
 
     let mut option_contract = if let Ok(subscription) = option_chain_result {
         let mut chains = Vec::new();
-        for chain in subscription {
+        for chain in subscription.iter_data() {
+            let chain = match chain {
+                Ok(chain) => chain,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    break;
+                }
+            };
             println!(
                 "Found option chain for exchange: {}, trading class: {}",
                 chain.exchange, chain.trading_class
@@ -122,8 +129,14 @@ fn main() {
 
     println!("Exercise request sent. Waiting for responses...\n");
 
-    for status in &subscription {
-        println!("Response: {:?}", status);
+    for status in subscription.iter_data() {
+        match status {
+            Ok(status) => println!("Response: {:?}", status),
+            Err(e) => {
+                eprintln!("error: {e}");
+                break;
+            }
+        }
     }
 
     println!("\nExercise options example completed.");

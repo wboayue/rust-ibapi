@@ -33,12 +33,13 @@ fn main() {
         .wsh_event_data_by_filter(&filter, None, None)
         .expect("request wsh event data failed");
 
-    for event_data in &subscription {
-        println!("{event_data:?}");
-    }
-
-    // check for errors
-    if let Some(error) = subscription.error() {
-        println!("error: {error:?}");
+    for event_data in subscription.iter_data() {
+        match event_data {
+            Ok(event_data) => println!("{event_data:?}"),
+            Err(error) => {
+                println!("error: {error:?}");
+                break;
+            }
+        }
     }
 }

@@ -60,7 +60,7 @@ async fn main() {
             let mut event_count = 0;
 
             // Process events as they arrive
-            while let Some(event_result) = event_stream.next().await {
+            while let Some(event_result) = event_stream.next_data().await {
                 match event_result {
                     Ok(event_data) => {
                         event_count += 1;

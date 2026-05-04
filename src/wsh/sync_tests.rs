@@ -121,13 +121,13 @@ fn test_wsh_event_data_by_filter_subscription_sync() {
             .limit(Some(50)),
     );
 
-    let event = subscription.next().expect("first event");
+    let event = subscription.next_data().expect("first event").expect("subscription error");
     assert_eq!(event.data_json, json_responses::EVENT_DATA_EARNINGS);
 
-    let event = subscription.next().expect("second event");
+    let event = subscription.next_data().expect("second event").expect("subscription error");
     assert_eq!(event.data_json, json_responses::EVENT_DATA_DIVIDEND);
 
-    assert!(subscription.next().is_none());
+    assert!(subscription.next_data().is_none());
 }
 
 #[test]
@@ -251,8 +251,8 @@ fn test_subscription_integration_table() {
         let subscription = result.unwrap();
 
         let mut events = vec![];
-        while let Some(event) = subscription.next() {
-            events.push(event.data_json);
+        while let Some(event) = subscription.next_data() {
+            events.push(event.expect("subscription error").data_json);
         }
 
         assert_eq!(

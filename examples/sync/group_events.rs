@@ -28,11 +28,13 @@ fn main() {
 
     println!("Listening for events. Change the contract in TWS Group 1 (Red) to see updates.");
 
-    for event in &subscription {
-        println!("Received group event: {:?}", event);
-    }
-
-    if let Some(err) = subscription.error() {
-        eprintln!("Subscription error: {err}");
+    for event in subscription.iter_data() {
+        match event {
+            Ok(event) => println!("Received group event: {:?}", event),
+            Err(err) => {
+                eprintln!("Subscription error: {err}");
+                break;
+            }
+        }
     }
 }

@@ -302,14 +302,15 @@ impl Client {
     ///     .subscribe()
     ///     .expect("subscription failed");
     ///
-    /// for tick in &subscription {
-    ///     match tick {
+    /// for tick in subscription.iter_data() {
+    ///     match tick? {
     ///         TickTypes::Price(price) => println!("Price: {price:?}"),
     ///         TickTypes::Size(size) => println!("Size: {size:?}"),
     ///         TickTypes::SnapshotEnd => subscription.cancel(),
     ///         _ => {}
     ///     }
     /// }
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
     ///
     /// ```no_run
@@ -326,12 +327,13 @@ impl Client {
     ///     .subscribe()
     ///     .expect("subscription failed");
     ///
-    /// for tick in &subscription {
-    ///     if let TickTypes::SnapshotEnd = tick {
+    /// for tick in subscription.iter_data() {
+    ///     if let TickTypes::SnapshotEnd = tick? {
     ///         println!("Snapshot complete");
     ///         break;
     ///     }
     /// }
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn market_data<'a>(&'a self, contract: &'a Contract) -> MarketDataBuilder<'a, Self> {
         MarketDataBuilder::new(self, contract)

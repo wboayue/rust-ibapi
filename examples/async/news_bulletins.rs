@@ -16,7 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Waiting for news bulletins... (Press Ctrl+C to stop)");
 
-    while let Some(result) = bulletins.next().await {
+    while let Some(result) = bulletins.next_data().await {
         match result {
             Ok(bulletin) => {
                 println!("\n--- News Bulletin ---");

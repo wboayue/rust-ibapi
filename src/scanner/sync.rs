@@ -41,15 +41,17 @@ impl Client {
     ///         // Iterate over received scanner data.
     ///         // Note: Scanner subscriptions can be continuous or return a snapshot.
     ///         // This example just takes the first batch if available.
-    ///         if let Some(scanner_results_vec) = subscription.iter().next() {
-    ///             println!("Scanner Results (first batch):");
-    ///             for data in scanner_results_vec {
-    ///                 println!("  Rank: {}, Symbol: {}",
-    ///                          data.rank,
-    ///                          data.contract_details.contract.symbol);
+    ///         match subscription.iter_data().next() {
+    ///             Some(Ok(scanner_results_vec)) => {
+    ///                 println!("Scanner Results (first batch):");
+    ///                 for data in scanner_results_vec {
+    ///                     println!("  Rank: {}, Symbol: {}",
+    ///                              data.rank,
+    ///                              data.contract_details.contract.symbol);
+    ///                 }
     ///             }
-    ///         } else {
-    ///             println!("No scanner results received in the first check.");
+    ///             Some(Err(e)) => eprintln!("Scanner error: {e:?}"),
+    ///             None => println!("No scanner results received in the first check."),
     ///         }
     ///         // In a real application, you might continuously iterate or handle updates.
     ///         // Remember to cancel the subscription when no longer needed if it's continuous.
@@ -101,15 +103,17 @@ impl Client {
     ///         // Iterate over received scanner data.
     ///         // Note: Scanner subscriptions can be continuous or return a snapshot.
     ///         // This example just takes the first batch if available.
-    ///         if let Some(scanner_results_vec) = subscription.iter().next() {
-    ///             println!("Scanner Results (first batch):");
-    ///             for data in scanner_results_vec {
-    ///                 println!("  Rank: {}, Symbol: {}",
-    ///                          data.rank,
-    ///                          data.contract_details.contract.symbol);
+    ///         match subscription.iter_data().next() {
+    ///             Some(Ok(scanner_results_vec)) => {
+    ///                 println!("Scanner Results (first batch):");
+    ///                 for data in scanner_results_vec {
+    ///                     println!("  Rank: {}, Symbol: {}",
+    ///                              data.rank,
+    ///                              data.contract_details.contract.symbol);
+    ///                 }
     ///             }
-    ///         } else {
-    ///             println!("No scanner results received in the first check.");
+    ///             Some(Err(e)) => eprintln!("Scanner error: {e:?}"),
+    ///             None => println!("No scanner results received in the first check."),
     ///         }
     ///         // In a real application, you might continuously iterate or handle updates.
     ///         // Remember to cancel the subscription when no longer needed if it's continuous.

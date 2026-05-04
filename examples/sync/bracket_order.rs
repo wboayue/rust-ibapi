@@ -23,16 +23,18 @@ fn place_bracket_order(client: &Client, contract: &Contract, parent_id: i32) -> 
 
     let mut num_submitted = 0;
     while num_submitted < orders.len() {
-        subscriptions
-            .iter()
-            .filter_map(|subscription| subscription.try_next())
-            .for_each(|event| match event {
-                PlaceOrder::OrderStatus(event) if event.status == "Submitted" => {
-                    println!("{event:?}");
-                    num_submitted += 1;
+        for subscription in subscriptions.iter() {
+            while let Some(result) = subscription.try_iter_data().next() {
+                match result {
+                    Ok(PlaceOrder::OrderStatus(event)) if event.status == "Submitted" => {
+                        println!("{event:?}");
+                        num_submitted += 1;
+                    }
+                    Ok(event) => println!("Received other event: {event:?}"),
+                    Err(e) => eprintln!("error: {e}"),
                 }
-                _ => println!("Received other event: {event:?}"),
-            });
+            }
+        }
         thread::sleep(std::time::Duration::from_millis(100));
     }
 

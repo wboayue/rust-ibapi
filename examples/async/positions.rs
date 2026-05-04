@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut subscription = client.positions().await?;
 
     // Process position updates
-    while let Some(result) = subscription.next().await {
+    while let Some(result) = subscription.next_data().await {
         match result {
             Ok(update) => match update {
                 PositionUpdate::Position(position) => {

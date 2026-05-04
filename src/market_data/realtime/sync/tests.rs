@@ -70,7 +70,7 @@ fn test_realtime_bars() {
 
     // Test receiving data
     let bars = bars.expect("Failed to create realtime bars subscription");
-    let received_bars: Vec<Bar> = bars.iter().take(2).collect();
+    let received_bars: Vec<Bar> = bars.iter_data().take(2).map(|r| r.expect("subscription error")).collect();
 
     assert_eq!(received_bars.len(), 2, "Should receive 2 bars");
 
@@ -122,16 +122,17 @@ fn test_realtime_bars_error_handling() {
         .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Regular)
         .expect("Failed to create realtime bars subscription");
 
-    // Stream is terminated by the error: next() returns None.
-    assert!(bars.iter().next().is_none(), "subscription must terminate on TWS error");
-
-    match bars.error() {
-        Some(crate::Error::Message(code, msg)) => {
+    // Stream is terminated by the error: next_data() yields Some(Err(Error::Message(...))) once,
+    // then None on subsequent calls.
+    let mut iter = bars.iter_data();
+    match iter.next() {
+        Some(Err(crate::Error::Message(code, msg))) => {
             assert_eq!(code, 10089, "expected error code 10089");
             assert!(msg.contains("additional subscription"), "wrong error message: {msg}");
         }
-        other => panic!("expected Error::Message(10089, _), got {other:?}"),
+        other => panic!("expected Some(Err(Error::Message(10089, _))), got {other:?}"),
     }
+    assert!(iter.next().is_none(), "stream must end after terminal error");
 }
 
 #[test]
@@ -161,7 +162,7 @@ fn test_tick_by_tick_all_last() {
     let trades = trades.expect("Failed to create tick-by-tick subscription");
 
     // Test receiving data
-    let received_trades: Vec<Trade> = trades.iter().take(2).collect();
+    let received_trades: Vec<Trade> = trades.iter_data().take(2).map(|r| r.expect("subscription error")).collect();
 
     assert_eq!(received_trades.len(), 2, "Should receive 2 trades");
 
@@ -214,7 +215,7 @@ fn test_market_depth() {
     let depth = depth.expect("Failed to create market depth subscription");
 
     // Test receiving data
-    let received_depth: Vec<MarketDepths> = depth.iter().take(2).collect();
+    let received_depth: Vec<MarketDepths> = depth.iter_data().take(2).map(|r| r.expect("subscription error")).collect();
 
     assert_eq!(received_depth.len(), 2, "Should receive 2 depth updates");
 
@@ -310,7 +311,7 @@ fn test_tick_by_tick_bid_ask() {
 
     // Test receiving data
     let subscription = result.expect("Failed to create bid/ask subscription");
-    let received_ticks: Vec<BidAsk> = subscription.iter().take(1).collect();
+    let received_ticks: Vec<BidAsk> = subscription.iter_data().take(1).map(|r| r.expect("subscription error")).collect();
 
     assert_eq!(received_ticks.len(), 1, "Should receive 1 bid/ask tick");
 
@@ -357,7 +358,7 @@ fn test_tick_by_tick_midpoint() {
     let midpoints = midpoints.expect("Failed to create tick-by-tick midpoint subscription");
 
     // Test receiving data
-    let received_midpoints: Vec<MidPoint> = midpoints.iter().take(2).collect();
+    let received_midpoints: Vec<MidPoint> = midpoints.iter_data().take(2).map(|r| r.expect("subscription error")).collect();
 
     assert_eq!(received_midpoints.len(), 2, "Should receive 2 midpoint updates");
 
@@ -417,7 +418,7 @@ fn test_basic_market_data() {
 
     // Test receiving data
     let subscription = result.expect("Failed to create market data subscription");
-    let received_ticks: Vec<TickTypes> = subscription.iter().take(4).collect();
+    let received_ticks: Vec<TickTypes> = subscription.iter_data().take(4).map(|r| r.expect("subscription error")).collect();
 
     assert_eq!(received_ticks.len(), 4, "Should receive 4 market data updates");
 
@@ -593,11 +594,11 @@ fn test_market_data_error_handling() {
     let market_data = market_data.expect("Failed to create market data subscription");
 
     // Test receiving data
-    let mut iter = market_data.iter();
+    let mut iter = market_data.iter_data();
 
     // First should be a Notice
     match iter.next() {
-        Some(TickTypes::Notice(notice)) => {
+        Some(Ok(TickTypes::Notice(notice))) => {
             assert_eq!(notice.code, 2104, "Wrong notice code");
             assert!(notice.message.contains("Market data farm connection is OK"), "Wrong notice message");
         }
@@ -606,7 +607,7 @@ fn test_market_data_error_handling() {
 
     // Second should be a Notice (since it's an error in the 2100-2200 range)
     match iter.next() {
-        Some(TickTypes::Notice(notice)) => {
+        Some(Ok(TickTypes::Notice(notice))) => {
             assert_eq!(notice.code, 321, "Wrong error code");
             assert!(notice.message.contains("Error validating request"), "Wrong error message");
         }
@@ -638,7 +639,7 @@ fn test_tick_by_tick_last() {
 
     // Test receiving data
     let trades = result.expect("Failed to receive tick-by-tick last data");
-    let received_trades: Vec<Trade> = trades.iter().take(1).collect();
+    let received_trades: Vec<Trade> = trades.iter_data().take(1).map(|r| r.expect("subscription error")).collect();
 
     assert_eq!(received_trades.len(), 1, "Should receive 1 trade");
 

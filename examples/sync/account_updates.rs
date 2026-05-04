@@ -17,7 +17,14 @@ fn main() {
     let account = AccountId("DU1234567".to_string());
 
     let subscription = client.account_updates(&account).expect("error requesting account updates");
-    for update in &subscription {
+    for update in subscription.iter_data() {
+        let update = match update {
+            Ok(update) => update,
+            Err(e) => {
+                eprintln!("error: {e}");
+                break;
+            }
+        };
         println!("{update:?}");
 
         // stop after full initial update

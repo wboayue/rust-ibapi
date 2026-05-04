@@ -310,7 +310,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Consume positions and capture trace before drop
         println!("Starting to consume positions...");
-        while let Some(position) = positions.next() {
+        while let Some(position) = positions.next_data() {
+            let position = match position {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    break;
+                }
+            };
             if let PositionUpdate::PositionEnd = position {
                 break;
             }
@@ -351,7 +358,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let summaries = client.account_summary(&group, &tags)?;
 
         // Consume all summaries
-        while let Some(summary) = summaries.next() {
+        while let Some(summary) = summaries.next_data() {
+            let summary = match summary {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    break;
+                }
+            };
             if let AccountSummaryResult::End = summary {
                 break;
             }

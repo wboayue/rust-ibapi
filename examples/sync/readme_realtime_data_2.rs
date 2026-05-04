@@ -24,7 +24,14 @@ fn main() {
         .realtime_bars(&contract_nvda, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
         .expect("realtime bars request failed!");
 
-    for (bar_aapl, bar_nvda) in subscription_aapl.iter().zip(subscription_nvda.iter()) {
+    for (bar_aapl, bar_nvda) in subscription_aapl.iter_data().zip(subscription_nvda.iter_data()) {
+        let (bar_aapl, bar_nvda) = match (bar_aapl, bar_nvda) {
+            (Ok(a), Ok(n)) => (a, n),
+            (Err(e), _) | (_, Err(e)) => {
+                eprintln!("error: {e}");
+                break;
+            }
+        };
         // Process each bar here (e.g., print or use in calculations)
         println!("AAPL {}, NVDA {}", bar_aapl.close, bar_nvda.close);
     }

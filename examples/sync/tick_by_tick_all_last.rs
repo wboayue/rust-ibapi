@@ -29,12 +29,13 @@ fn main() {
         contract.security_type, contract.symbol
     );
 
-    for (i, trade) in ticks.timeout_iter(Duration::from_secs(10)).enumerate() {
-        println!("{}: {i:?} {trade:?}", contract.symbol);
-    }
-
-    // check for errors during streaming
-    if let Some(error) = ticks.error() {
-        println!("error: {error:?}");
+    for (i, trade) in ticks.timeout_iter_data(Duration::from_secs(10)).enumerate() {
+        match trade {
+            Ok(trade) => println!("{}: {i:?} {trade:?}", contract.symbol),
+            Err(error) => {
+                println!("error: {error:?}");
+                break;
+            }
+        }
     }
 }

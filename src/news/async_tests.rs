@@ -48,7 +48,7 @@ async fn test_news_bulletins() {
 
     assert_request(&message_bus, 0, &news_bulletins_request().all_messages(true));
 
-    let bulletin = subscription.next().await.expect("expected news bulletin").unwrap();
+    let bulletin = subscription.next_data().await.expect("expected news bulletin").unwrap();
     assert_eq!(bulletin.message_id, 1);
     assert_eq!(bulletin.message_type, 2);
     assert_eq!(bulletin.message, "Message text");
@@ -86,7 +86,7 @@ async fn test_historical_news() {
             .total_results(10),
     );
 
-    let article = subscription.next().await.expect("expected news article").unwrap();
+    let article = subscription.next_data().await.expect("expected news article").unwrap();
     assert_eq!(article.provider_code, "DJ-N");
     assert_eq!(article.article_id, "DJ-N$19985fef");
     assert_eq!(article.headline, "{A:800008,800008,800015:L:Chinese (Simplified and Traditional),Chinese (Simplified and Traditional),en:K:n/a:C:0.9882221817970276}These Stocks Are Moving the Most Today: Honda, Qualcomm, Broadcom, Lilly, ResMed, Tesla, Walmart, Rumble, and More -- Barrons.com");
@@ -142,7 +142,7 @@ async fn test_contract_news() {
             .generic_ticks(&["mdoff", "292:BZ", "292:DJ"]),
     );
 
-    let article = subscription.next().await.expect("expected news article").unwrap();
+    let article = subscription.next_data().await.expect("expected news article").unwrap();
     assert_eq!(article.provider_code, "BZ");
     assert_eq!(article.article_id, "BZ$123");
     assert_eq!(article.headline, "Breaking news headline");
@@ -171,7 +171,7 @@ async fn test_broad_tape_news() {
             .generic_ticks(&["mdoff", "292"]),
     );
 
-    let article = subscription.next().await.expect("expected news article").unwrap();
+    let article = subscription.next_data().await.expect("expected news article").unwrap();
     assert_eq!(article.provider_code, "BZ");
     assert_eq!(article.article_id, "BZ$123");
     assert_eq!(article.headline, "Breaking news headline");
@@ -189,7 +189,7 @@ async fn test_news_bulletin_cancellation() {
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
     let mut subscription = client.news_bulletins(true).await.unwrap();
-    let _ = subscription.next().await;
+    let _ = subscription.next_data().await;
 
     assert_request(&message_bus, 0, &news_bulletins_request().all_messages(true));
 
@@ -210,7 +210,7 @@ async fn test_contract_news_cancellation() {
 
     let contract = Contract::stock("TSLA").build();
     let mut subscription = client.contract_news(&contract, &["BZ"]).await.unwrap();
-    let _ = subscription.next().await;
+    let _ = subscription.next_data().await;
 
     assert_eq!(request_message_count(&message_bus), 1);
 

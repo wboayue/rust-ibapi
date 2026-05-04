@@ -54,7 +54,7 @@ async fn example_streaming_with_tick_types(client: &Arc<Client>, contract: &Cont
         .await?;
 
     let mut tick_count = 0;
-    while let Some(result) = subscription.next().await {
+    while let Some(result) = subscription.next_data().await {
         match result? {
             TickTypes::Price(price) => {
                 println!("Price - Type: {:?}, Value: ${:.2}", price.tick_type, price.price);
@@ -98,7 +98,7 @@ async fn example_snapshot(client: &Arc<Client>, contract: &Contract) -> Result<(
 
     let mut snapshot_subscription = client.market_data(contract).snapshot().subscribe().await?;
 
-    while let Some(result) = snapshot_subscription.next().await {
+    while let Some(result) = snapshot_subscription.next_data().await {
         match result? {
             TickTypes::Price(price) => {
                 println!("Snapshot Price - Type: {:?}, Value: ${:.2}", price.tick_type, price.price);
@@ -134,7 +134,7 @@ async fn example_builder_chaining(client: &Arc<Client>, contract: &Contract) -> 
     println!("Listening for generic ticks...\n");
 
     let mut tick_count = 0;
-    while let Some(result) = subscription.next().await {
+    while let Some(result) = subscription.next_data().await {
         match result? {
             TickTypes::Generic(generic) => {
                 println!("Generic tick - Type: {:?}, Value: {:.2}", generic.tick_type, generic.value);

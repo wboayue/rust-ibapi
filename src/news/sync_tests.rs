@@ -46,7 +46,7 @@ fn test_news_bulletins() {
 
     assert_request(&message_bus, 0, &news_bulletins_request().all_messages(true));
 
-    let bulletin = subscription.next().expect("expected news bulletin");
+    let bulletin = subscription.next_data().expect("expected news bulletin").expect("subscription error");
     assert_eq!(bulletin.message_id, 1);
     assert_eq!(bulletin.message_type, 2);
     assert_eq!(bulletin.message, "Message text");
@@ -83,7 +83,7 @@ fn test_historical_news() {
             .total_results(10),
     );
 
-    let article = subscription.next().expect("expected news article");
+    let article = subscription.next_data().expect("expected news article").expect("subscription error");
     assert_eq!(article.provider_code, "DJ-N");
     assert_eq!(article.article_id, "DJ-N$19985fef");
     assert_eq!(article.headline, "{A:800008,800008,800015:L:Chinese (Simplified and Traditional),Chinese (Simplified and Traditional),en:K:n/a:C:0.9882221817970276}These Stocks Are Moving the Most Today: Honda, Qualcomm, Broadcom, Lilly, ResMed, Tesla, Walmart, Rumble, and More -- Barrons.com");
@@ -136,7 +136,7 @@ fn test_contract_news() {
             .generic_ticks(&["mdoff", "292:BZ", "292:DJ"]),
     );
 
-    let article = subscription.next().expect("expected news article");
+    let article = subscription.next_data().expect("expected news article").expect("subscription error");
     assert_eq!(article.provider_code, "BZ");
     assert_eq!(article.article_id, "BZ$123");
     assert_eq!(article.headline, "Breaking news headline");
@@ -165,7 +165,7 @@ fn test_broad_tape_news() {
             .generic_ticks(&["mdoff", "292"]),
     );
 
-    let article = subscription.next().expect("expected news article");
+    let article = subscription.next_data().expect("expected news article").expect("subscription error");
     assert_eq!(article.provider_code, "BZ");
     assert_eq!(article.article_id, "BZ$123");
     assert_eq!(article.headline, "Breaking news headline");

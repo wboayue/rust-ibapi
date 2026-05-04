@@ -45,7 +45,7 @@ async fn test_subscription_with_decoder() {
 
     // Test that we can receive the decoded message
     let mut sub = subscription;
-    let result = sub.next().await;
+    let result = sub.next_data().await;
     assert!(result.is_some());
     let bar = result.unwrap().unwrap();
     assert_eq!(bar.open, 100.5);
@@ -101,7 +101,7 @@ async fn test_subscription_new_from_receiver() {
     // Send test data
     tx.send(Ok("test".to_string())).unwrap();
 
-    let result = subscription.next().await;
+    let result = subscription.next_data().await;
     assert!(result.is_some());
     assert_eq!(result.unwrap().unwrap(), "test");
 }
@@ -127,7 +127,7 @@ async fn test_routed_item_error_surfaces_through_async_subscription() {
 
     tx.send(RoutedItem::Error(Error::ConnectionReset)).unwrap();
 
-    let result = subscription.next().await;
+    let result = subscription.next_data().await;
     assert!(matches!(result, Some(Err(Error::ConnectionReset))));
 }
 
@@ -158,7 +158,7 @@ async fn test_routed_item_notice_skipped_then_response_delivered() {
     .unwrap();
     tx.send(RoutedItem::Response(ResponseMessage::from("payload\0"))).unwrap();
 
-    let result = subscription.next().await;
+    let result = subscription.next_data().await;
     assert_eq!(result.unwrap().unwrap(), "data");
 }
 
@@ -182,7 +182,7 @@ async fn test_subscription_next_with_error() {
     let msg = ResponseMessage::from("test\0");
     tx.send(msg.into()).unwrap();
 
-    let result = subscription.next().await;
+    let result = subscription.next_data().await;
     assert!(result.is_some());
     assert!(result.unwrap().is_err());
 }
@@ -207,7 +207,7 @@ async fn test_subscription_next_end_of_stream() {
     let msg = ResponseMessage::from("test\0");
     tx.send(msg.into()).unwrap();
 
-    let result = subscription.next().await;
+    let result = subscription.next_data().await;
     assert!(result.is_none());
 }
 
@@ -239,7 +239,7 @@ async fn test_subscription_no_retries_after_end_of_stream() {
 
     // First message triggers EndOfStream
     tx.send(ResponseMessage::from("end\0").into()).unwrap();
-    let result = subscription.next().await;
+    let result = subscription.next_data().await;
     assert!(result.is_none());
 
     // Send stray messages after stream ended
@@ -247,7 +247,7 @@ async fn test_subscription_no_retries_after_end_of_stream() {
     tx.send(ResponseMessage::from("stray2\0").into()).unwrap();
 
     // Subsequent calls should return None immediately without invoking decoder
-    let result = subscription.next().await;
+    let result = subscription.next_data().await;
     assert!(result.is_none());
 
     // Decoder should have been called only once (for the EndOfStream message)
@@ -288,7 +288,7 @@ async fn test_subscription_skips_unexpected_messages_without_retry_limit() {
         tx.send(ResponseMessage::from("msg\0").into()).unwrap();
     }
 
-    let result = subscription.next().await;
+    let result = subscription.next_data().await;
     assert!(
         result.is_some(),
         "subscription should not have stopped after skipping unexpected messages"

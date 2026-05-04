@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Contract ID: {contract_id}, Providers: {provider_codes:?}");
 
     let mut count = 0;
-    while let Some(result) = news_stream.next().await {
+    while let Some(result) = news_stream.next_data().await {
         match result {
             Ok(article) => {
                 count += 1;

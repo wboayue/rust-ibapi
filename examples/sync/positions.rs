@@ -15,7 +15,14 @@ fn main() {
     let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
 
     let positions = client.positions().expect("request failed");
-    while let Some(position_update) = positions.next() {
+    while let Some(position_update) = positions.next_data() {
+        let position_update = match position_update {
+            Ok(update) => update,
+            Err(e) => {
+                eprintln!("error: {e}");
+                break;
+            }
+        };
         match position_update {
             PositionUpdate::Position(position) => {
                 println!(

@@ -50,7 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Process first 20 trades for demo
     let mut count = 0;
-    while let Some(trade_result) = trades.next().await {
+    while let Some(trade_result) = trades.next_data().await {
         if count >= 20 {
             break;
         }

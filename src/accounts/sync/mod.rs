@@ -60,12 +60,13 @@ impl Client {
     ///
     /// let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
     /// let subscription = client.positions().expect("error requesting positions");
-    /// for position_response in subscription.iter() {
-    ///     match position_response {
+    /// for position_response in subscription.iter_data() {
+    ///     match position_response? {
     ///         PositionUpdate::Position(position) => println!("{position:?}"),
     ///         PositionUpdate::PositionEnd => println!("initial set of positions received"),
     ///     }
     /// }
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn positions(&self) -> Result<Subscription<PositionUpdate>, Error> {
         crate::common::request_helpers::blocking::shared_subscription(
@@ -209,7 +210,8 @@ impl Client {
     /// let account = AccountId("U1234567".to_string());
     ///
     /// let subscription = client.account_updates(&account).expect("error requesting account updates");
-    /// for update in &subscription {
+    /// for update in subscription.iter_data() {
+    ///     let update = update?;
     ///     println!("{update:?}");
     ///
     ///     // stop after full initial update
@@ -217,6 +219,7 @@ impl Client {
     ///         subscription.cancel();
     ///     }
     /// }
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn account_updates(&self, account: &AccountId) -> Result<Subscription<AccountUpdate>, Error> {
         crate::common::request_helpers::blocking::shared_request(self, OutgoingMessages::RequestAccountData, || {
@@ -245,7 +248,8 @@ impl Client {
     /// let account = AccountId("U1234567".to_string());
     ///
     /// let subscription = client.account_updates_multi(Some(&account), None).expect("error requesting account updates multi");
-    /// for update in &subscription {
+    /// for update in subscription.iter_data() {
+    ///     let update = update?;
     ///     println!("{update:?}");
     ///
     ///     // stop after full initial update
@@ -253,6 +257,7 @@ impl Client {
     ///         subscription.cancel();
     ///     }
     /// }
+    /// # Ok::<(), ibapi::Error>(())
     /// ```
     pub fn account_updates_multi(
         &self,
