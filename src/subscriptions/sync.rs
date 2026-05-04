@@ -24,6 +24,11 @@ use crate::transport::{InternalSubscription, MessageBus};
 /// * `Some(Ok(SubscriptionItem::Notice(n)))` — a non-fatal IB notice; the stream stays open.
 /// * `Some(Err(e))` — terminal error; subsequent calls return `None`.
 ///
+/// The `Notice` arm is part of the public contract but not yet emitted: the
+/// dispatcher routes IB warnings (codes 2100..=2169) globally today and will
+/// surface them per-subscription in a future release. Match it defensively now
+/// to avoid a churned migration later.
+///
 /// When you only care about data, use [`iter_data`](Subscription::iter_data) (or
 /// [`next_data`](Subscription::next_data)) which filters notices for you.
 #[allow(private_bounds)]

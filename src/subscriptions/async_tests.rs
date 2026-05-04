@@ -107,6 +107,24 @@ async fn test_subscription_new_from_receiver() {
 }
 
 #[tokio::test]
+async fn test_pre_decoded_error_terminates_stream() {
+    // Regression: the PreDecoded arm of `next()` previously did not flip
+    // `stream_ended` when surfacing an error, so subsequent calls would
+    // re-poll the receiver instead of returning `None` deterministically.
+    let (tx, rx) = mpsc::unbounded_channel::<Result<String, Error>>();
+    let mut subscription = Subscription::new(rx);
+
+    tx.send(Err(Error::ConnectionReset)).unwrap();
+    tx.send(Ok("should-not-be-yielded".to_string())).unwrap();
+
+    let first = subscription.next().await;
+    assert!(matches!(first, Some(Err(Error::ConnectionReset))));
+
+    let second = subscription.next().await;
+    assert!(second.is_none(), "stream must terminate after a terminal error");
+}
+
+#[tokio::test]
 async fn test_routed_item_error_surfaces_through_async_subscription() {
     let message_bus = Arc::new(MessageBusStub::default());
     let (tx, rx) = broadcast::channel(100);

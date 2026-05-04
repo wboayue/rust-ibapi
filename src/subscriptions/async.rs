@@ -202,6 +202,11 @@ impl<T> Subscription<T> {
     /// - `Some(Ok(SubscriptionItem::Notice(n)))` — non-fatal IB notice; stream stays open.
     /// - `Some(Err(e))` — terminal error; subsequent calls return `None`.
     ///
+    /// The `Notice` arm is part of the public contract but not yet emitted: the
+    /// dispatcher routes IB warnings (codes 2100..=2169) globally today and
+    /// will surface them per-subscription in a future release. Match it
+    /// defensively now to avoid a churned migration later.
+    ///
     /// When you only care about data, use [`next_data`](Self::next_data) which
     /// filters notices.
     pub async fn next(&mut self) -> Option<Result<SubscriptionItem<T>, Error>>
@@ -250,7 +255,10 @@ impl<T> Subscription<T> {
             },
             SubscriptionInner::PreDecoded { receiver } => match receiver.recv().await? {
                 Ok(t) => Some(Ok(SubscriptionItem::Data(t))),
-                Err(e) => Some(Err(e)),
+                Err(e) => {
+                    self.stream_ended.store(true, Ordering::Relaxed);
+                    Some(Err(e))
+                }
             },
         }
     }
