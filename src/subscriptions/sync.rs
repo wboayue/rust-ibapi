@@ -227,16 +227,7 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// Convenience: blocking `next` that filters out notices and yields just data.
     /// Equivalent to `iter_data().next()`.
     pub fn next_data(&self) -> Option<Result<T, Error>> {
-        loop {
-            match self.next()? {
-                Ok(SubscriptionItem::Data(t)) => return Some(Ok(t)),
-                Ok(SubscriptionItem::Notice(n)) => {
-                    log::warn!("ib notice on subscription: {n}");
-                    continue;
-                }
-                Err(e) => return Some(Err(e)),
-            }
-        }
+        self.iter_data().next()
     }
 
     /// Blocking iterator yielding `Result<SubscriptionItem<T>, Error>`. Use
@@ -256,19 +247,21 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     }
 
     /// Blocking iterator that filters notices and yields `Result<T, Error>`.
-    /// Notices are logged at `warn!` level.
-    pub fn iter_data(&self) -> SubscriptionDataIter<'_, T> {
-        SubscriptionDataIter { subscription: self }
+    /// Notices are logged at `warn!` level. Composes `iter().filter_data()`.
+    pub fn iter_data(&self) -> FilterData<SubscriptionIter<'_, T>> {
+        self.iter().filter_data()
     }
 
-    /// Non-blocking data iterator (notices filtered).
-    pub fn try_iter_data(&self) -> SubscriptionTryDataIter<'_, T> {
-        SubscriptionTryDataIter { subscription: self }
+    /// Non-blocking data iterator (notices filtered). Composes
+    /// `try_iter().filter_data()`.
+    pub fn try_iter_data(&self) -> FilterData<SubscriptionTryIter<'_, T>> {
+        self.try_iter().filter_data()
     }
 
-    /// Timeout-bounded data iterator (notices filtered).
-    pub fn timeout_iter_data(&self, timeout: Duration) -> SubscriptionTimeoutDataIter<'_, T> {
-        SubscriptionTimeoutDataIter { subscription: self, timeout }
+    /// Timeout-bounded data iterator (notices filtered). Composes
+    /// `timeout_iter(timeout).filter_data()`.
+    pub fn timeout_iter_data(&self, timeout: Duration) -> FilterData<SubscriptionTimeoutIter<'_, T>> {
+        self.timeout_iter(timeout).filter_data()
     }
 }
 
@@ -280,18 +273,57 @@ impl<T: StreamDecoder<T>> Drop for Subscription<T> {
     }
 }
 
-/// Convert a `Result<SubscriptionItem<T>, Error>` to `Option<Result<T, Error>>`,
-/// dropping (and logging) `SubscriptionItem::Notice` items.
-fn filter_data<T>(item: Result<SubscriptionItem<T>, Error>) -> Option<Result<T, Error>> {
-    match item {
-        Ok(SubscriptionItem::Data(t)) => Some(Ok(t)),
-        Ok(SubscriptionItem::Notice(n)) => {
-            log::warn!("ib notice on subscription: {n}");
-            None
+/// Adapter that filters `SubscriptionItem::Notice` items (logging them at `warn!`)
+/// from any `Iterator<Item = Result<SubscriptionItem<T>, Error>>` and yields the
+/// underlying `Result<T, Error>` to the caller.
+///
+/// Returned by [`SubscriptionItemIterExt::filter_data`].
+#[must_use = "iterator adapters are lazy and do nothing unless consumed"]
+pub struct FilterData<I> {
+    inner: I,
+}
+
+impl<I, T> Iterator for FilterData<I>
+where
+    I: Iterator<Item = Result<SubscriptionItem<T>, Error>>,
+{
+    type Item = Result<T, Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.inner.next()? {
+                Ok(SubscriptionItem::Data(t)) => return Some(Ok(t)),
+                Ok(SubscriptionItem::Notice(n)) => {
+                    log::warn!("ib notice on subscription: {n}");
+                    continue;
+                }
+                Err(e) => return Some(Err(e)),
+            }
         }
-        Err(e) => Some(Err(e)),
     }
 }
+
+/// Extension trait that adds [`filter_data`](SubscriptionItemIterExt::filter_data)
+/// to any iterator yielding `Result<SubscriptionItem<T>, Error>`. Use it to compose
+/// the data-only flow on top of any base iterator (`iter`, `try_iter`, `timeout_iter`,
+/// or owned).
+///
+/// ```ignore
+/// use ibapi::subscriptions::SubscriptionItemIterExt;
+/// for tick in subscription.iter().filter_data() {
+///     let tick = tick?;
+///     /* ... */
+/// }
+/// ```
+pub trait SubscriptionItemIterExt<T>: Iterator<Item = Result<SubscriptionItem<T>, Error>> + Sized {
+    /// Wrap `self` in a [`FilterData`] adapter that drops `SubscriptionItem::Notice`
+    /// items (logging them) and yields the underlying `Result<T, Error>`.
+    fn filter_data(self) -> FilterData<Self> {
+        FilterData { inner: self }
+    }
+}
+
+impl<T, I> SubscriptionItemIterExt<T> for I where I: Iterator<Item = Result<SubscriptionItem<T>, Error>> {}
 
 /// Blocking iterator over `Result<SubscriptionItem<T>, Error>`.
 #[allow(private_bounds)]
@@ -365,61 +397,6 @@ impl<T: StreamDecoder<T>> Iterator for SubscriptionTimeoutIter<'_, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.subscription.next_timeout(self.timeout)
-    }
-}
-
-/// Blocking iterator filtering notices; yields `Result<T, Error>`.
-#[allow(private_bounds)]
-pub struct SubscriptionDataIter<'a, T: StreamDecoder<T>> {
-    subscription: &'a Subscription<T>,
-}
-
-impl<T: StreamDecoder<T>> Iterator for SubscriptionDataIter<'_, T> {
-    type Item = Result<T, Error>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(out) = filter_data(self.subscription.next()?) {
-                return Some(out);
-            }
-        }
-    }
-}
-
-/// Non-blocking iterator filtering notices.
-#[allow(private_bounds)]
-pub struct SubscriptionTryDataIter<'a, T: StreamDecoder<T>> {
-    subscription: &'a Subscription<T>,
-}
-
-impl<T: StreamDecoder<T>> Iterator for SubscriptionTryDataIter<'_, T> {
-    type Item = Result<T, Error>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(out) = filter_data(self.subscription.try_next()?) {
-                return Some(out);
-            }
-        }
-    }
-}
-
-/// Timeout-bounded iterator filtering notices.
-#[allow(private_bounds)]
-pub struct SubscriptionTimeoutDataIter<'a, T: StreamDecoder<T>> {
-    subscription: &'a Subscription<T>,
-    timeout: Duration,
-}
-
-impl<T: StreamDecoder<T>> Iterator for SubscriptionTimeoutDataIter<'_, T> {
-    type Item = Result<T, Error>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(out) = filter_data(self.subscription.next_timeout(self.timeout)?) {
-                return Some(out);
-            }
-        }
     }
 }
 

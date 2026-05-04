@@ -23,6 +23,16 @@ pub enum SubscriptionItem<T> {
     Notice(Notice),
 }
 
+impl<T> SubscriptionItem<T> {
+    /// Returns the inner data value, dropping notices. Pure conversion — no side effects.
+    pub fn into_data(self) -> Option<T> {
+        match self {
+            SubscriptionItem::Data(t) => Some(t),
+            SubscriptionItem::Notice(_) => None,
+        }
+    }
+}
+
 /// Pre-classified channel item delivered from the dispatcher to subscriptions.
 /// `Response` carries raw bytes the decoder must still interpret; `Notice` and
 /// `Error` are pre-classified by the dispatcher so decoders never re-classify

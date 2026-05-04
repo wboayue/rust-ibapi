@@ -13,8 +13,7 @@ pub mod r#async;
 // Re-export the appropriate subscription types based on feature
 #[cfg(feature = "sync")]
 pub use sync::{
-    SharesChannel, SubscriptionDataIter, SubscriptionIter, SubscriptionOwnedIter, SubscriptionTimeoutDataIter, SubscriptionTimeoutIter,
-    SubscriptionTryDataIter, SubscriptionTryIter,
+    FilterData, SharesChannel, SubscriptionItemIterExt, SubscriptionIter, SubscriptionOwnedIter, SubscriptionTimeoutIter, SubscriptionTryIter,
 };
 
 #[cfg(all(feature = "sync", not(feature = "async")))]
