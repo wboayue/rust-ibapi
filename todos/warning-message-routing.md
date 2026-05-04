@@ -253,7 +253,7 @@ Forward-looking adjustments after the duplication / SRP / composability lens rev
 
 ## Implementation as a series of PRs
 
-Six PRs, each with a clear, standalone deliverable. Merge in order: **PR 1 → PR 2a → PR 2b → (PR 2c, optional) → PR 3 → PR 4 → PR 5.**
+Six PRs, each with a clear, standalone deliverable. Merge in order: **PR 1 → PR 2a → PR 2b → PR 2c → PR 3 → PR 4 → PR 5.**
 
 PR 2 is split because the internal channel-envelope refactor (2a) and the public-API widening that closes #487 (2b) are individually reviewable and the combined diff is too large to review well. Land 2a/2b in close succession to minimize the time the codebase carries a defined-but-unused `RoutedItem::Notice` arm.
 
@@ -371,7 +371,7 @@ Decoder signatures stay `Result<T, Error>`. `process_decode_result` and `should_
 
 ---
 
-### PR 2c — Async `data_stream` Stream adapter (in flight, [#505](https://github.com/wboayue/rust-ibapi/pull/505))
+### PR 2c — Async `data_stream` Stream adapter ✅ merged ([#505](https://github.com/wboayue/rust-ibapi/pull/505))
 **Goal:** close the sync/async composability gap deferred from PR 2b. Sync has `iter_data()` returning `impl Iterator<Item = Result<T, Error>>`; async users currently have only `next_data().await`. Add an async mirror returning `impl Stream<Item = Result<T, Error>>`.
 
 **Scope:**
@@ -397,7 +397,7 @@ Implement via `futures::stream::unfold` over `self.next_data().await`. ~30 lines
 - **Dropped `T: Send` bound** from `data_stream` — was over-restricting; `next_data` only requires `T: 'static` and `Box::pin` adds no `Send` requirement.
 - **Direct unit test for `filter_notice`** in `common_tests.rs`. The Notice arm wasn't reachable from any other test in this PR's state — `AsyncInternalSubscription::next` filters `RoutedItem::Notice` via `into_legacy()` before the user-facing `Subscription::next()`. PR 3 adds the end-to-end Notice flow; until then the helper itself needs direct coverage.
 
-**As-shipped diff (in flight):** 5 files, ~+140 LOC.
+**As-shipped diff:** 6 files, +190/-20 LOC.
 
 ---
 
