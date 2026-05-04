@@ -241,7 +241,7 @@ PR 5 (global notice stream) is an additive API that doesn't depend on PR 4 — i
 
 ---
 
-### PR 2a — Internal channel envelope refactor ✅ open ([#503](https://github.com/wboayue/rust-ibapi/pull/503))
+### PR 2a — Internal channel envelope refactor ✅ merged ([#503](https://github.com/wboayue/rust-ibapi/pull/503))
 **Goal:** widen the internal channel from `Result<ResponseMessage, Error>` (sync) / `ResponseMessage` (async) to a typed `RoutedItem` envelope so subsequent PRs can deliver pre-classified `Notice` and `Error` items without re-classifying inside decoders. **Public `Subscription<T>` API is unchanged.** Examples and integration tests are untouched.
 
 **Scope reductions vs. original plan** (decided 2026-05-03):
