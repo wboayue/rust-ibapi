@@ -268,12 +268,22 @@ impl<S: Stream> TcpMessageBus<S> {
     fn dispatch_message(&self, server_version: i32, message: ResponseMessage) {
         // Use common routing logic
         match determine_routing(&message) {
-            RoutingDecision::Error { request_id, error_code } => {
+            RoutingDecision::Error {
+                request_id,
+                error_code,
+                error_message,
+            } => {
                 let routed = self.send_order_update(&message);
 
                 // Check if this is a warning or unspecified error
                 if request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(error_code) {
-                    error_event(server_version, message).unwrap();
+                    if message.is_protobuf {
+                        // Protobuf path: error_event re-parses text fields, which doesn't work
+                        // for protobuf messages. Log directly from the routing-extracted fields.
+                        log_error_fields(request_id, error_code, &error_message, "", 0);
+                    } else {
+                        error_event(server_version, message).unwrap();
+                    }
                 } else {
                     self.process_response_with_id(request_id, message, routed);
                 }

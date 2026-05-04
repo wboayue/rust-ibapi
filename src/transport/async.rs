@@ -332,7 +332,11 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             RoutingDecision::ByOrderId(order_id) => self.route_to_order_channel(order_id, message).await,
             RoutingDecision::ByMessageType(message_type) => self.route_to_shared_channel(message_type, message).await,
             RoutingDecision::SharedMessage(message_type) => self.route_to_shared_channel(message_type, message).await,
-            RoutingDecision::Error { request_id, error_code } => self.route_error_message(message, request_id, error_code).await,
+            RoutingDecision::Error {
+                request_id,
+                error_code,
+                error_message,
+            } => self.route_error_message(message, request_id, error_code, error_message).await,
             RoutingDecision::Shutdown => {
                 debug!("Received shutdown message, calling request_shutdown");
                 self.request_shutdown().await;
@@ -415,10 +419,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     }
 
     /// Route error message using routing decision
-    async fn route_error_message(&self, message: ResponseMessage, request_id: i32, error_code: i32) -> Result<(), Error> {
+    async fn route_error_message(&self, message: ResponseMessage, request_id: i32, error_code: i32, error_msg: String) -> Result<(), Error> {
         let _ = self.send_order_update(&message).await;
-
-        let error_msg = message.error_message();
 
         // Check if this is a warning or unspecified error
         if request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(error_code) {

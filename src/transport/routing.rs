@@ -14,7 +14,11 @@ pub enum RoutingDecision {
     /// Route to shared message channel
     SharedMessage(IncomingMessages),
     /// Special handling for error messages
-    Error { request_id: i32, error_code: i32 },
+    Error {
+        request_id: i32,
+        error_code: i32,
+        error_message: String,
+    },
     /// Shutdown signal
     Shutdown,
 }
@@ -34,12 +38,17 @@ fn protobuf_first_int(raw_bytes: &[u8]) -> Option<i32> {
     prost::Message::decode(raw_bytes).ok().and_then(|e: RoutingEnvelope| e.id)
 }
 
-/// Decode the protobuf Error envelope to extract the request/order id and error code.
-/// Defaults: missing id → `UNSPECIFIED_REQUEST_ID`, missing error_code → 0
-/// (matching the text-path defaults in `ResponseMessage::error_request_id`/`error_code`).
-fn decode_error_envelope(raw_bytes: &[u8]) -> Option<(i32, i32)> {
+/// Decode the protobuf Error envelope into (request_id, error_code, error_message).
+/// Defaults: missing id → `UNSPECIFIED_REQUEST_ID`, missing error_code → 0,
+/// missing error_msg → empty string (matches the text-path defaults in
+/// `ResponseMessage::error_request_id`/`error_code`/`error_message`).
+fn decode_error_envelope(raw_bytes: &[u8]) -> Option<(i32, i32, String)> {
     let envelope: crate::proto::ErrorMessage = prost::Message::decode(raw_bytes).ok()?;
-    Some((envelope.id.unwrap_or(UNSPECIFIED_REQUEST_ID), envelope.error_code.unwrap_or(0)))
+    Some((
+        envelope.id.unwrap_or(UNSPECIFIED_REQUEST_ID),
+        envelope.error_code.unwrap_or(0),
+        envelope.error_msg.unwrap_or_default(),
+    ))
 }
 
 fn is_order_message(message_type: IncomingMessages) -> bool {
@@ -74,12 +83,22 @@ pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
     // Special handling for error messages
     if message_type == IncomingMessages::Error {
         if message.is_protobuf {
-            let (request_id, error_code) = message.raw_bytes().and_then(decode_error_envelope).unwrap_or((UNSPECIFIED_REQUEST_ID, 0));
-            return RoutingDecision::Error { request_id, error_code };
+            let (request_id, error_code, error_message) =
+                message
+                    .raw_bytes()
+                    .and_then(decode_error_envelope)
+                    .unwrap_or((UNSPECIFIED_REQUEST_ID, 0, String::new()));
+            return RoutingDecision::Error {
+                request_id,
+                error_code,
+                error_message,
+            };
         }
-        let request_id = message.error_request_id();
-        let error_code = message.error_code();
-        return RoutingDecision::Error { request_id, error_code };
+        return RoutingDecision::Error {
+            request_id: message.error_request_id(),
+            error_code: message.error_code(),
+            error_message: message.error_message(),
+        };
     }
 
     // Protobuf messages: extract routing ID from raw bytes

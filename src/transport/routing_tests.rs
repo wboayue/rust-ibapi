@@ -20,9 +20,14 @@ fn test_determine_routing_error_old_format() {
     let message = ResponseMessage::from(message_str);
 
     match determine_routing(&message) {
-        RoutingDecision::Error { request_id, error_code } => {
+        RoutingDecision::Error {
+            request_id,
+            error_code,
+            error_message,
+        } => {
             assert_eq!(request_id, 123);
             assert_eq!(error_code, 200);
+            assert_eq!(error_message, "No security definition found");
         }
         routing => panic!("Expected Error routing, got {routing:?}"),
     }
@@ -35,9 +40,34 @@ fn test_determine_routing_error_new_format() {
     let message = ResponseMessage::from(message_str).with_server_version(crate::server_versions::ERROR_TIME);
 
     match determine_routing(&message) {
-        RoutingDecision::Error { request_id, error_code } => {
+        RoutingDecision::Error {
+            request_id,
+            error_code,
+            error_message,
+        } => {
             assert_eq!(request_id, 123);
             assert_eq!(error_code, 200);
+            assert_eq!(error_message, "No security definition found");
+        }
+        routing => panic!("Expected Error routing, got {routing:?}"),
+    }
+}
+
+#[test]
+fn test_determine_routing_warning_text_format() {
+    // Text-format warning (code 2104, in WARNING_CODE_RANGE) — message text is captured.
+    let message_str = "4\02\042\02104\0Market data farm connection is OK:usfarm\0";
+    let message = ResponseMessage::from(message_str);
+
+    match determine_routing(&message) {
+        RoutingDecision::Error {
+            request_id,
+            error_code,
+            error_message,
+        } => {
+            assert_eq!(request_id, 42);
+            assert_eq!(error_code, 2104);
+            assert_eq!(error_message, "Market data farm connection is OK:usfarm");
         }
         routing => panic!("Expected Error routing, got {routing:?}"),
     }
@@ -45,7 +75,7 @@ fn test_determine_routing_error_new_format() {
 
 #[test]
 fn test_determine_routing_error_protobuf() {
-    // Protobuf Error with id=42 and error_code=2100 (warning) — full decode must populate both fields.
+    // Protobuf Error with id=42 and error_code=2100 (warning) — full decode must populate all three fields.
     let envelope = crate::proto::ErrorMessage {
         id: Some(42),
         error_time: None,
@@ -59,9 +89,14 @@ fn test_determine_routing_error_protobuf() {
     let message = ResponseMessage::from_protobuf(IncomingMessages::Error as i32, raw_bytes, crate::server_versions::PROTOBUF);
 
     match determine_routing(&message) {
-        RoutingDecision::Error { request_id, error_code } => {
+        RoutingDecision::Error {
+            request_id,
+            error_code,
+            error_message,
+        } => {
             assert_eq!(request_id, 42);
             assert_eq!(error_code, 2100);
+            assert_eq!(error_message, "Market data farm connection is OK");
         }
         routing => panic!("Expected Error routing, got {routing:?}"),
     }
@@ -83,9 +118,14 @@ fn test_determine_routing_error_protobuf_unspecified_id() {
     let message = ResponseMessage::from_protobuf(IncomingMessages::Error as i32, raw_bytes, crate::server_versions::PROTOBUF);
 
     match determine_routing(&message) {
-        RoutingDecision::Error { request_id, error_code } => {
+        RoutingDecision::Error {
+            request_id,
+            error_code,
+            error_message,
+        } => {
             assert_eq!(request_id, UNSPECIFIED_REQUEST_ID);
             assert_eq!(error_code, 2104);
+            assert_eq!(error_message, "Market data farm connection is OK");
         }
         routing => panic!("Expected Error routing, got {routing:?}"),
     }
