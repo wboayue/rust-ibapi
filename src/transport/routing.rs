@@ -18,6 +18,9 @@ pub enum RoutingDecision {
         request_id: i32,
         error_code: i32,
         error_message: String,
+        /// Milliseconds since Unix epoch; `None` for old-format text messages without an error_time field.
+        error_time: Option<i64>,
+        advanced_order_reject_json: String,
     },
     /// Shutdown signal
     Shutdown,
@@ -38,17 +41,49 @@ fn protobuf_first_int(raw_bytes: &[u8]) -> Option<i32> {
     prost::Message::decode(raw_bytes).ok().and_then(|e: RoutingEnvelope| e.id)
 }
 
-/// Decode the protobuf Error envelope into (request_id, error_code, error_message).
-/// Defaults: missing id → `UNSPECIFIED_REQUEST_ID`, missing error_code → 0,
-/// missing error_msg → empty string (matches the text-path defaults in
-/// `ResponseMessage::error_request_id`/`error_code`/`error_message`).
-fn decode_error_envelope(raw_bytes: &[u8]) -> Option<(i32, i32, String)> {
+/// Fields extracted from an Error message regardless of wire format.
+#[derive(Debug, Default)]
+struct DecodedError {
+    request_id: i32,
+    error_code: i32,
+    error_message: String,
+    error_time: Option<i64>,
+    advanced_order_reject_json: String,
+}
+
+/// Decode the protobuf Error envelope. Defaults match the text-path accessors:
+/// missing id → `UNSPECIFIED_REQUEST_ID`, missing error_code → 0,
+/// missing strings → empty, missing error_time → `None`.
+fn decode_error_envelope(raw_bytes: &[u8]) -> Option<DecodedError> {
     let envelope: crate::proto::ErrorMessage = prost::Message::decode(raw_bytes).ok()?;
-    Some((
-        envelope.id.unwrap_or(UNSPECIFIED_REQUEST_ID),
-        envelope.error_code.unwrap_or(0),
-        envelope.error_msg.unwrap_or_default(),
-    ))
+    Some(DecodedError {
+        request_id: envelope.id.unwrap_or(UNSPECIFIED_REQUEST_ID),
+        error_code: envelope.error_code.unwrap_or(0),
+        error_message: envelope.error_msg.unwrap_or_default(),
+        error_time: envelope.error_time,
+        advanced_order_reject_json: envelope.advanced_order_reject_json.unwrap_or_default(),
+    })
+}
+
+/// Extract Error fields from a text-format `ResponseMessage`. Field layout:
+/// `..., error_message, advanced_order_reject_json?, error_time?`. Missing trailing
+/// fields default to empty/None (old format / pre-`ADVANCED_ORDER_REJECT` servers).
+fn extract_text_error(message: &ResponseMessage) -> DecodedError {
+    let error_msg_idx = message.error_message_index();
+    let advanced_idx = error_msg_idx + 1;
+    let advanced_order_reject_json = if advanced_idx < message.fields.len() {
+        message.peek_string(advanced_idx)
+    } else {
+        String::new()
+    };
+    let error_time = message.peek_long(error_msg_idx + 2).ok();
+    DecodedError {
+        request_id: message.error_request_id(),
+        error_code: message.error_code(),
+        error_message: message.error_message(),
+        error_time,
+        advanced_order_reject_json,
+    }
 }
 
 fn is_order_message(message_type: IncomingMessages) -> bool {
@@ -82,22 +117,17 @@ pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
 
     // Special handling for error messages
     if message_type == IncomingMessages::Error {
-        if message.is_protobuf {
-            let (request_id, error_code, error_message) =
-                message
-                    .raw_bytes()
-                    .and_then(decode_error_envelope)
-                    .unwrap_or((UNSPECIFIED_REQUEST_ID, 0, String::new()));
-            return RoutingDecision::Error {
-                request_id,
-                error_code,
-                error_message,
-            };
-        }
+        let decoded = if message.is_protobuf {
+            message.raw_bytes().and_then(decode_error_envelope).unwrap_or_default()
+        } else {
+            extract_text_error(message)
+        };
         return RoutingDecision::Error {
-            request_id: message.error_request_id(),
-            error_code: message.error_code(),
-            error_message: message.error_message(),
+            request_id: decoded.request_id,
+            error_code: decoded.error_code,
+            error_message: decoded.error_message,
+            error_time: decoded.error_time,
+            advanced_order_reject_json: decoded.advanced_order_reject_json,
         };
     }
 

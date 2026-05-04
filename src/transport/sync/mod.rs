@@ -272,6 +272,8 @@ impl<S: Stream> TcpMessageBus<S> {
                 request_id,
                 error_code,
                 error_message,
+                error_time,
+                advanced_order_reject_json,
             } => {
                 let routed = self.send_order_update(&message);
 
@@ -280,7 +282,13 @@ impl<S: Stream> TcpMessageBus<S> {
                     if message.is_protobuf {
                         // Protobuf path: error_event re-parses text fields, which doesn't work
                         // for protobuf messages. Log directly from the routing-extracted fields.
-                        log_error_fields(request_id, error_code, &error_message, "", 0);
+                        log_error_fields(
+                            request_id,
+                            error_code,
+                            &error_message,
+                            &advanced_order_reject_json,
+                            error_time.unwrap_or(0),
+                        );
                     } else {
                         error_event(server_version, message).unwrap();
                     }

@@ -336,6 +336,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
                 request_id,
                 error_code,
                 error_message,
+                ..
             } => self.route_error_message(message, request_id, error_code, error_message).await,
             RoutingDecision::Shutdown => {
                 debug!("Received shutdown message, calling request_shutdown");

@@ -24,10 +24,14 @@ fn test_determine_routing_error_old_format() {
             request_id,
             error_code,
             error_message,
+            error_time,
+            advanced_order_reject_json,
         } => {
             assert_eq!(request_id, 123);
             assert_eq!(error_code, 200);
             assert_eq!(error_message, "No security definition found");
+            assert_eq!(error_time, None, "old format has no error_time field");
+            assert_eq!(advanced_order_reject_json, "");
         }
         routing => panic!("Expected Error routing, got {routing:?}"),
     }
@@ -35,8 +39,8 @@ fn test_determine_routing_error_old_format() {
 
 #[test]
 fn test_determine_routing_error_new_format() {
-    // New format (server_version >= ERROR_TIME): message_type|request_id|error_code|error_msg
-    let message_str = "4\0123\0200\0No security definition found\0\0";
+    // New format (server_version >= ERROR_TIME): msg_type|request_id|error_code|error_msg|advanced|error_time
+    let message_str = "4\0123\0200\0No security definition found\0{\"reject\":1}\01700000000000\0";
     let message = ResponseMessage::from(message_str).with_server_version(crate::server_versions::ERROR_TIME);
 
     match determine_routing(&message) {
@@ -44,10 +48,14 @@ fn test_determine_routing_error_new_format() {
             request_id,
             error_code,
             error_message,
+            error_time,
+            advanced_order_reject_json,
         } => {
             assert_eq!(request_id, 123);
             assert_eq!(error_code, 200);
             assert_eq!(error_message, "No security definition found");
+            assert_eq!(error_time, Some(1700000000000));
+            assert_eq!(advanced_order_reject_json, "{\"reject\":1}");
         }
         routing => panic!("Expected Error routing, got {routing:?}"),
     }
@@ -64,6 +72,7 @@ fn test_determine_routing_warning_text_format() {
             request_id,
             error_code,
             error_message,
+            ..
         } => {
             assert_eq!(request_id, 42);
             assert_eq!(error_code, 2104);
@@ -75,13 +84,13 @@ fn test_determine_routing_warning_text_format() {
 
 #[test]
 fn test_determine_routing_error_protobuf() {
-    // Protobuf Error with id=42 and error_code=2100 (warning) — full decode must populate all three fields.
+    // Protobuf Error with id=42 and error_code=2100 — full decode populates all five fields.
     let envelope = crate::proto::ErrorMessage {
         id: Some(42),
-        error_time: None,
+        error_time: Some(1700000000000),
         error_code: Some(2100),
         error_msg: Some("Market data farm connection is OK".to_string()),
-        advanced_order_reject_json: None,
+        advanced_order_reject_json: Some("{\"hint\":\"check filters\"}".to_string()),
     };
     let mut raw_bytes = Vec::new();
     prost::Message::encode(&envelope, &mut raw_bytes).expect("encode error envelope");
@@ -93,10 +102,14 @@ fn test_determine_routing_error_protobuf() {
             request_id,
             error_code,
             error_message,
+            error_time,
+            advanced_order_reject_json,
         } => {
             assert_eq!(request_id, 42);
             assert_eq!(error_code, 2100);
             assert_eq!(error_message, "Market data farm connection is OK");
+            assert_eq!(error_time, Some(1700000000000));
+            assert_eq!(advanced_order_reject_json, "{\"hint\":\"check filters\"}");
         }
         routing => panic!("Expected Error routing, got {routing:?}"),
     }
@@ -122,10 +135,14 @@ fn test_determine_routing_error_protobuf_unspecified_id() {
             request_id,
             error_code,
             error_message,
+            error_time,
+            advanced_order_reject_json,
         } => {
             assert_eq!(request_id, UNSPECIFIED_REQUEST_ID);
             assert_eq!(error_code, 2104);
             assert_eq!(error_message, "Market data farm connection is OK");
+            assert_eq!(error_time, None);
+            assert_eq!(advanced_order_reject_json, "");
         }
         routing => panic!("Expected Error routing, got {routing:?}"),
     }
