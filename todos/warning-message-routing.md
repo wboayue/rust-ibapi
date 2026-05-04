@@ -217,9 +217,35 @@ Async (`src/transport/async.rs:418`) is structurally identical. Order-channel fa
 
 After the change `error_event` (`src/transport/sync/mod.rs:600`) is only reachable from `LogWarning` / `LogError` arms, which now collapse to one `warn!` / `error!` line each. **Delete it** and rely on the inlined log calls above. Same for the async equivalent.
 
+## Plan refinements (decided 2026-05-04, review-driven)
+
+Forward-looking adjustments after the duplication / SRP / composability lens review. Each refinement names the PR that owns it.
+
+1. **`ErrorDelivery` is a struct, not a flat enum** *(PR 3, breaking change to the original design above)*. The four-variant `LogWarning|LogError|Notice|Error` shape conflates two orthogonal axes — routing (owner-bound vs. unrouted) and severity (warning vs. hard error). PR 5's broadcast filter wants "is unrouted" without caring about severity; PR 3's logger wants "what severity" without caring about routing. Use:
+   ```rust
+   pub struct ErrorDelivery { pub routing: Routing, pub severity: Severity }
+   pub enum Routing  { Unrouted, Owned(i32) /* request_id */ }
+   pub enum Severity { Warning, HardError }
+   ```
+   Each consumer matches on its axis. Defer or skip if PR 3 implementation finds the flat enum reads better — but make the call deliberately, not by inertia.
+
+2. **`Notice::from_decoded(&DecodedError)` preserves `advanced_order_reject_json`** *(PR 3)*. Today `DecodedError` (in `routing.rs`) carries `advanced_order_reject_json` and `error_time` that the existing public `Notice` (`messages.rs:1304`) does not expose. PR 3's `Notice::from(message)` would silently drop the JSON. Add the field to `Notice` so downstream consumers can surface order-rejection details to a UI without us reshaping the public type later. If we don't want to widen `Notice` now, add a `pub(crate)` constructor that captures it for internal use and document the deferral.
+
+3. **`SubscriptionItem<T>::into_data(self) -> Option<T>` accessor** *(PR 3)*. The free function `filter_data` in `subscriptions/sync.rs` does this for iterators; a method form is more discoverable from the type, chains naturally, and tightens the test code in PR 3 + 4 that asserts on the inner value. Trivial addition.
+
+4. **PR 2c: async `data_stream` Stream adapter** *(new pre-PR before PR 3)*. PR 2b shipped `next_data().await` but deferred the `impl Stream<Item = Result<T, Error>>` mirror. Closes the sync/async composability gap before PR 3 + 4 tests entrench around `next_data().await` loops. Tiny — ~30 lines via `futures::stream::unfold`. Land before PR 3 starts to avoid drift; can land after PR 4 as well if no test in PR 3/4 needs `Stream` combinators.
+
+5. **`dual_test!` macro for sync/async test pairs** *(experiment in PR 3)*. PR 3 says "all mirrored in async"; PR 4 same. Each test pair is structurally identical with different fixtures. Prototype a `dual_test!(name, |client, contract| { /* body */ })` macro that emits sync+async variants. If it doesn't pay for itself by the third pair, abandon. Worth the experiment because PR 4 has 4–5 more test pairs.
+
+6. **`log_unrouted(severity, notice)` helper in PR 3** *(prep for PR 5)*. PR 3's `LogWarning`/`LogError` arms each carry one log line. PR 5 grafts a `broadcast_notice(...)` call onto each. Designing PR 3's arms as `self.log_unrouted(severity, &notice)` from day one means PR 5 adds the broadcast in one place, not two. Costs nothing extra in PR 3.
+
+7. **Extract `NoticeBroadcaster` struct in PR 5** *(SRP)*. Composing `notice_broadcast: NoticeBroadcaster` into `Server` keeps "broadcast lifecycle (subscribe / fan-out / prune)" out of the dispatcher's responsibilities. The broadcaster gets its own unit tests; dispatcher tests don't have to know about it. Folds in the future replay-buffer follow-up cleanly if it ever happens.
+
+8. **Pin down `notice_stream()` return type before PR 5** *(decision needed)*. Returning `Subscription<Notice>` reuses the `iter_data()`/`next_data()`/`next()` API that data subscriptions already expose — strong composition. But `SubscriptionItem<Notice>::Notice(Notice)` ("a notice on a notice stream") is a semantic oddity. Two clean options: (a) keep `Subscription<Notice>` and document that the `Notice` arm of `SubscriptionItem` is unreachable for global streams; (b) introduce `NoticeStream` returning bare `Notice` items. (a) is API-uniform; (b) is semantically cleaner. Decide explicitly in PR 5's design discussion.
+
 ## Implementation as a series of PRs
 
-Six PRs, each with a clear, standalone deliverable. Merge in order: **PR 1 → PR 2a → PR 2b → PR 3 → PR 4 → PR 5.**
+Six PRs, each with a clear, standalone deliverable. Merge in order: **PR 1 → PR 2a → PR 2b → (PR 2c, optional) → PR 3 → PR 4 → PR 5.**
 
 PR 2 is split because the internal channel-envelope refactor (2a) and the public-API widening that closes #487 (2b) are individually reviewable and the combined diff is too large to review well. Land 2a/2b in close succession to minimize the time the codebase carries a defined-but-unused `RoutedItem::Notice` arm.
 
@@ -333,29 +359,77 @@ Decoder signatures stay `Result<T, Error>`. `process_decode_result` and `should_
 
 ---
 
+### PR 2c — Async `data_stream` Stream adapter (optional pre-PR before PR 3)
+**Goal:** close the sync/async composability gap deferred from PR 2b. Sync has `iter_data()` returning `impl Iterator<Item = Result<T, Error>>`; async users currently have only `next_data().await`. Add an async mirror returning `impl Stream<Item = Result<T, Error>>`.
+
+**Scope:**
+```rust
+impl<T> Subscription<T> {  // async
+    pub fn data_stream(&mut self) -> impl Stream<Item = Result<T, Error>> + '_;
+}
+```
+Implement via `futures::stream::unfold` over `self.next_data().await`. ~30 lines.
+
+**Tests:** stream over `[Data, Data]` collects to two items; stream after terminal `Err` yields the error then ends.
+
+**Dependencies:** PR 2b.
+
+**Risk:** none — purely additive. Skip entirely if PR 3/4 don't end up needing `Stream` combinators.
+
+**Decision rule:** land before PR 3 starts iff PR 3's planned tests use `Stream` combinators (`.take(n)`, `.collect()`, `.filter()`); otherwise defer or drop.
+
+---
+
 ### PR 3 — Warning classification & delivery
 **Goal:** the actual feature — route warnings with a real `request_id` to their owning subscription as non-terminal `Notice` items.
 
 **Scope — classification:**
-- Add `ErrorDelivery` enum (`LogWarning`/`LogError`/`Notice`/`Error`) and `classify_error_delivery` in `src/transport/routing.rs`.
+- Add `ErrorDelivery` and `classify_error_delivery` in `src/transport/routing.rs`. Per refinement #1, prefer the struct shape:
+  ```rust
+  pub struct ErrorDelivery { pub routing: Routing, pub severity: Severity }
+  pub enum Routing  { Unrouted, Owned(i32) }     // request_id when Owned
+  pub enum Severity { Warning, HardError }       // Warning iff is_warning_error(code)
+
+  pub fn classify_error_delivery(request_id: i32, error_code: i32) -> ErrorDelivery {
+      ErrorDelivery {
+          routing:  if request_id == UNSPECIFIED_REQUEST_ID { Routing::Unrouted } else { Routing::Owned(request_id) },
+          severity: if is_warning_error(error_code)         { Severity::Warning  } else { Severity::HardError },
+      }
+  }
+  ```
+  Each consumer matches on its axis. If PR 3 implementation finds the flat enum reads better, fall back to it — but make the call deliberately.
 
 **Scope — dispatcher rewrite:**
 - Sync `dispatch_message` (`src/transport/sync/mod.rs:268-293`): rewrite the `RoutingDecision::Error` arm around `classify_error_delivery`. `RoutedItem::Notice(_)` now actually populated.
 - Async `route_error_message` (`src/transport/async.rs:418-458`): same shape.
 - Add `deliver_to_request_id` (two parallel implementations, one per transport — `Mutex` vs `RwLock` divergence prevents sharing) with request-channels-first / order-channels-fallback policy.
-- **Delete** `error_event` (`sync/mod.rs:600`) and async equivalent — `LogWarning`/`LogError` arms each carry one inline `log!` call.
+- Per refinement #6, **factor a `log_unrouted(severity, &notice)` helper** so PR 5's broadcast call grafts onto one helper rather than two parallel arms:
+  ```rust
+  fn log_unrouted(&self, severity: Severity, notice: &Notice) {
+      match severity {
+          Severity::Warning   => warn!("warning: {notice}"),
+          Severity::HardError => error!("error: {notice}"),
+      }
+      // PR 5 adds: self.broadcast_notice(notice.clone());
+  }
+  ```
+- **Delete** `error_event` (`sync/mod.rs:600`) and async equivalent.
 - **Delete** duplicate `WARNING_CODES` const (`sync/mod.rs:30`).
 - Verify whether `Error::Message(code, msg)` is still reachable; delete if dead.
 
+**Scope — value type tightening (refinements #2, #3):**
+- Add `Notice::from_decoded(&DecodedError)` (or extend `impl From<&ResponseMessage> for Notice`) to capture `advanced_order_reject_json` and `error_time` from `DecodedError`. Either widen the public `Notice` struct with the new field or keep a `pub(crate)` richer constructor — decide based on whether the PR scope can accommodate the public-type change.
+- Add `impl<T> SubscriptionItem<T> { pub fn into_data(self) -> Option<T> }`. Tightens PR 3 + 4 test code that asserts on the inner value.
+
 **Tests:**
-- Unit: `classify_error_delivery` covering the four variants and boundary codes (2099, 2100, 2169, 2170).
+- Unit: `classify_error_delivery` covering the four shape combinations and boundary codes (2099, 2100, 2169, 2170).
 - End-to-end: code 2100 with `request_id=42` → `subscription.next()` yields `Some(Ok(SubscriptionItem::Notice(_)))`; stream stays open.
 - End-to-end: code 2100 with `UNSPECIFIED_REQUEST_ID` → only logs; no channel write.
 - End-to-end: real error (code 200) with `request_id=42` → `Some(Err(_))`; subsequent `next()` returns `None`.
 - Order-channel fallback: code 2100 with an `order_id` that maps to an order subscription only → notice delivered.
-- All mirrored in async.
+- All mirrored in async. Per refinement #5, prototype a `dual_test!(name, |fixture| { /* body */ })` macro that emits sync+async variants from one body. Abandon if it doesn't pay for itself by the third pair.
 
-**Dependencies:** PR 1 (real protobuf error_code), PR 2a (`RoutedItem` channel), PR 2b (`SubscriptionItem` public type). PR 3 is the first PR where the dispatcher actually writes `RoutedItem::Notice`.
+**Dependencies:** PR 1 (real protobuf error_code), PR 2a (`RoutedItem` channel), PR 2b (`SubscriptionItem` public type). Optional dependency on PR 2c if PR 3's tests want `Stream` combinators. PR 3 is the first PR where the dispatcher actually writes `RoutedItem::Notice`.
 
 **Risk:** smallest of the three. Order-channel fallback test setup is the trickiest piece.
 
@@ -373,7 +447,7 @@ Decoder signatures stay `Result<T, Error>`. `process_decode_result` and `should_
   - Request-keyed terminal: code 200 + request_id=42 → `Some(Err(_))`; subsequent `next()` returns `None`.
   - Order-keyed notice: order warning code (e.g. 399) + order_id=7 → notice delivered to a `Subscription<PlaceOrder>`.
   - Unspecified: code 2104 + `UNSPECIFIED_REQUEST_ID` → no channel write (assert via fixture's no-message expectation).
-  - Mirror sync and async.
+  - Mirror sync and async (reuse PR 3's `dual_test!` macro if it survived).
 
 **Scope — live-gateway smoke tests** (`tests/notice_delivery_integration.rs`, every test marked `#[ignore]`, run manually before release):
 - Trigger 2104 by opening a market-data subscription; drain a few items; assert at least one `SubscriptionItem::Notice`.
@@ -397,6 +471,8 @@ Decoder signatures stay `Result<T, Error>`. `process_decode_result` and `should_
 
 **Motivation.** After PR 3, notices with a real `request_id` reach their owning subscription. But the connectivity and farm-status notices (`1100/1101/1102/2103/2104/2105/2106/2107/2108/2110/2158`) all arrive with `UNSPECIFIED_REQUEST_ID` and the dispatcher's `LogWarning`/`LogError` arms only `warn!`/`error!` them. A UI can't show "🔴 market data farm down" without parsing log output.
 
+**Decision before implementation (refinement #8):** does `notice_stream()` return `Subscription<Notice>` (uniform with data subscriptions, but `SubscriptionItem<Notice>::Notice(Notice)` is semantically odd) or a dedicated `NoticeStream` returning bare `Notice` items (semantically cleaner, but a second consumer-facing API surface)? Pick one in the PR 5 design discussion before writing the implementation. The skeletons below use `Subscription<Notice>` for now.
+
 **Scope — public API:**
 ```rust
 impl Client {                           // sync and async
@@ -407,41 +483,39 @@ impl Client {                           // sync and async
 }
 ```
 
-**Filter scope: both `LogWarning` and `LogError`.** Connection-loss errors (e.g. `2110`) matter at least as much as connection-OK warnings; consumers can pattern-match `notice.code` if they only care about a subset.
+**Filter scope: severity-agnostic for unrouted only** (using PR 3's `ErrorDelivery` struct shape). The broadcast fires whenever `delivery.routing == Routing::Unrouted`, regardless of severity. Connection-loss errors (e.g. `2110`) matter at least as much as connection-OK warnings; consumers can pattern-match `notice.code` if they only care about a subset.
 
 **Scope — dispatcher:**
-- Add a `notice_broadcast` field to `Server` (sync: `Arc<Mutex<Vec<Sender<Notice>>>>`; async: `tokio::sync::broadcast::Sender<Notice>`). Sync uses fan-out over a `Vec<Sender>` because the existing sync transport is `crossbeam_channel`-based and adding `tokio::sync::broadcast` for one channel isn't worth the runtime dependency. Acceptable mirror divergence (same shape as the `filter_data` / `filter_data_stream` precedent).
-- `LogWarning` and `LogError` arms in PR 3's dispatcher rewrite gain a fan-out call:
+- Per refinement #7, **extract a `NoticeBroadcaster` struct** rather than scattering broadcast logic across `Server`. `NoticeBroadcaster` owns the subscriber list and exposes `broadcast(notice)`, `subscribe() -> Receiver<Notice>`, and `prune_dropped()`. `Server` composes it: `notice_broadcaster: NoticeBroadcaster`. The broadcaster gets its own unit tests; dispatcher tests don't have to reach into broadcast internals.
+- Sync `NoticeBroadcaster` wraps `Arc<Mutex<Vec<Sender<Notice>>>>` (crossbeam-based to match the rest of the sync transport). Async `NoticeBroadcaster` wraps `tokio::sync::broadcast::Sender<Notice>`. Acceptable mirror divergence (same shape as the `filter_data` / `filter_data_stream` precedent).
+- The `log_unrouted` helper from PR 3 (refinement #6) gains the broadcast call here:
   ```rust
-  ErrorDelivery::LogWarning => {
-      let notice = Notice::from(message);
-      warn!("Warning - Code: {}, Message: {}", notice.code, notice.message);
-      self.broadcast_notice(notice);
-  }
-  ErrorDelivery::LogError => {
-      let notice = Notice::from(message);
-      error!("Error - Code: {}, Message: {}", notice.code, notice.message);
-      self.broadcast_notice(notice);
+  fn log_unrouted(&self, severity: Severity, notice: &Notice) {
+      match severity {
+          Severity::Warning   => warn!("warning: {notice}"),
+          Severity::HardError => error!("error: {notice}"),
+      }
+      self.notice_broadcaster.broadcast(notice.clone());
   }
   ```
-- `broadcast_notice` is best-effort: dropped subscribers (`SendError`) are pruned from the `Vec`; there is no buffering for late subscribers (matches the broadcast-channel semantics).
+  PR 3's two log arms become one helper call; PR 5 grafts the broadcast onto the helper, not onto two parallel arms.
+- `NoticeBroadcaster::broadcast` is best-effort: dropped subscribers are pruned; there is no buffering for late subscribers (matches the broadcast-channel semantics).
 
 **Scope — `Client::notice_stream()`:**
-- Sync: registers a fresh `Sender<Notice>` in `notice_broadcast`, returns a `Subscription<Notice>` whose internal channel reads from the matching `Receiver`. `cancel()` removes the sender. `StreamDecoder<Notice>` for this subscription is trivial — the dispatcher already produces `Notice` values; the decoder is identity.
-- Async: subscribes to the broadcast channel via `Sender::subscribe()`; the resulting `Receiver` drives a `Subscription<Notice>` whose stream yields each `Notice`.
-- `Notice` is already a `StreamDecoder`-friendly type after PR 2a (it has the projection from `ResponseMessage`); add a `StreamDecoder<Notice>` impl that returns the value passed through (since the dispatcher pre-constructed it).
+- Sync: calls `notice_broadcaster.subscribe()`, wraps the resulting `Receiver<Notice>` in a `Subscription<Notice>`. `StreamDecoder<Notice>` is identity since the dispatcher pre-constructs the `Notice` value.
+- Async: same shape, backed by `tokio::sync::broadcast::Sender::subscribe()`.
+- `Notice` already has the `From<&ResponseMessage>` projection from PR 3; the `StreamDecoder<Notice>` impl simply passes it through.
 
 **Scope — example:**
 - Add `examples/notice_stream.rs` (sync) and `examples/notice_stream_async.rs` (async) showing a connection-status monitor: subscribe to `notice_stream()`, log/print as `1100`/`1102` arrive.
 
 **Tests:**
-- Synthesized fan-out: dispatcher receives 2 packets at codes `2104` (warning) and `1100` (warning); two subscribers each call `notice_stream()`; both receive both notices in order.
-- Late subscriber: subscriber registers after a notice has been dispatched; receives only subsequent notices.
-- Pruning: subscriber drops; subsequent notice doesn't error and the dropped sender is removed from the `Vec` (sync) or handled by broadcast's built-in cleanup (async).
-- Hard-error `UNSPECIFIED_REQUEST_ID` (e.g. code `504` "Not connected") delivered as `Notice` — confirms `LogError` filter is included.
-- Sync and async mirrors.
+- `NoticeBroadcaster` unit tests (don't go through the dispatcher): `broadcast` fan-out to 2 subscribers; late `subscribe` after a `broadcast` receives only subsequent notices; subscriber `Drop` followed by `prune_dropped` removes the dead sender; `broadcast` after all subscribers dropped is a no-op.
+- Synthesized end-to-end fan-out: dispatcher receives 2 packets at codes `2104` (warning) and `1100` (warning); two subscribers each call `notice_stream()`; both receive both notices in order.
+- Hard-error `UNSPECIFIED_REQUEST_ID` (e.g. code `504` "Not connected") delivered as `Notice` — confirms severity-agnostic filter.
+- Sync and async mirrors via `dual_test!` if it survived PR 3.
 
-**Dependencies:** PR 3 (the `LogWarning`/`LogError` arms must exist as classification points). Does **not** depend on PR 4 — can land any time after PR 3.
+**Dependencies:** PR 3 (the `log_unrouted` helper must exist as the broadcast attach point — refinement #6 makes this a single edit, not two). Does **not** depend on PR 4 — can land any time after PR 3.
 
 **Risk:** broadcast-fan-out lifecycle bugs (subscribers leaking, ordering assumptions). Mitigation: keep `broadcast_notice` minimal — no per-subscriber filtering, no buffering, no replay. Any of those features can be a follow-up if asked for.
 
