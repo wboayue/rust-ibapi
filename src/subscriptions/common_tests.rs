@@ -46,6 +46,28 @@ fn test_process_decode_result() {
 }
 
 #[test]
+fn test_filter_notice() {
+    use crate::messages::Notice;
+
+    match filter_notice::<i32>(Ok(SubscriptionItem::Data(42))) {
+        Some(Ok(42)) => {}
+        other => panic!("expected Some(Ok(42)), got {other:?}"),
+    }
+
+    let notice = Notice {
+        code: 2104,
+        message: "Market data farm OK".into(),
+        error_time: None,
+    };
+    assert!(filter_notice::<i32>(Ok(SubscriptionItem::Notice(notice))).is_none());
+
+    match filter_notice::<i32>(Err(Error::ConnectionFailed)) {
+        Some(Err(Error::ConnectionFailed)) => {}
+        other => panic!("expected Some(Err(ConnectionFailed)), got {other:?}"),
+    }
+}
+
+#[test]
 fn test_decoder_context_default() {
     let context = DecoderContext::default();
     assert_eq!(context.server_version, 0);

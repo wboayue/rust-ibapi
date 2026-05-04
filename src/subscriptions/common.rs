@@ -33,9 +33,8 @@ impl<T> SubscriptionItem<T> {
     }
 }
 
-/// Per-item filter shared by sync `FilterData` and async `next_data` /
-/// `data_stream`: returns `Some(Ok(t))` for data, `None` for notices (logged
-/// at `warn!`), `Some(Err(e))` for errors.
+/// Maps `Ok(Notice)` to `None` (logged at `warn!`); passes `Data` and `Err`
+/// through unchanged.
 pub(crate) fn filter_notice<T>(item: Result<SubscriptionItem<T>, Error>) -> Option<Result<T, Error>> {
     match item {
         Ok(SubscriptionItem::Data(t)) => Some(Ok(t)),
