@@ -17,12 +17,10 @@ use log::{debug, error, info, warn};
 use crate::connection::sync::Connection;
 
 use super::common::log_error_payload;
-use super::routing::{
-    determine_routing, is_warning_error, order_routing_strategy, DecodedError, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID,
-};
+use super::routing::{determine_routing, is_warning_error, order_routing_strategy, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID};
 use super::{InternalSubscription, MessageBus, Response, Signal, SubscriptionBuilder};
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
-use crate::{server_versions, Error};
+use crate::Error;
 
 // pub(crate) const MIN_SERVER_VERSION: i32 = 100;
 // pub(crate) const MAX_SERVER_VERSION: i32 = server_versions::WSH_EVENT_DATA_FILTERS_DATE;
@@ -202,7 +200,7 @@ impl<S: Stream> TcpMessageBus<S> {
     fn read_message(&self) -> Response {
         self.connection.read_message()
     }
-    pub(crate) fn dispatch(&self, server_version: i32) -> Result<(), Error> {
+    pub(crate) fn dispatch(&self) -> Result<(), Error> {
         use crate::client::error_handler::{is_connection_error, is_timeout_error};
 
         match self.read_message() {
@@ -211,7 +209,7 @@ impl<S: Stream> TcpMessageBus<S> {
                     self.request_shutdown();
                     Err(Error::Shutdown)
                 } else {
-                    self.dispatch_message(server_version, message);
+                    self.dispatch_message(message);
                     Ok(())
                 }
             }
@@ -247,11 +245,11 @@ impl<S: Stream> TcpMessageBus<S> {
 
     // Dispatcher thread reads messages from TWS and dispatches them to
     // appropriate channel.
-    fn start_dispatcher_thread(self: &Arc<Self>, server_version: i32) -> JoinHandle<()> {
+    fn start_dispatcher_thread(self: &Arc<Self>) -> JoinHandle<()> {
         let message_bus = Arc::clone(self);
         thread::spawn(move || {
             loop {
-                match message_bus.dispatch(server_version) {
+                match message_bus.dispatch() {
                     Ok(_) => {}
                     Err(Error::Shutdown | Error::ConnectionFailed) => break,
                     Err(e) => {
@@ -264,21 +262,14 @@ impl<S: Stream> TcpMessageBus<S> {
         })
     }
 
-    fn dispatch_message(&self, server_version: i32, message: ResponseMessage) {
+    fn dispatch_message(&self, message: ResponseMessage) {
         // Use common routing logic
         match determine_routing(&message) {
             RoutingDecision::Error(payload) => {
                 let routed = self.send_order_update(&message);
 
-                // Check if this is a warning or unspecified error
                 if payload.request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(payload.error_code) {
-                    if message.is_protobuf {
-                        // Protobuf path: error_event re-parses text fields, which doesn't work
-                        // for protobuf messages. Log directly from the routing-extracted payload.
-                        log_error_payload(&payload);
-                    } else {
-                        error_event(server_version, message).unwrap();
-                    }
+                    log_error_payload(&payload);
                 } else {
                     self.process_response_with_id(payload.request_id, message, routed);
                 }
@@ -464,8 +455,8 @@ impl<S: Stream> TcpMessageBus<S> {
         })
     }
 
-    pub(crate) fn process_messages(self: &Arc<Self>, server_version: i32, timeout: std::time::Duration) -> Result<(), Error> {
-        let handle = self.start_dispatcher_thread(server_version);
+    pub(crate) fn process_messages(self: &Arc<Self>, _server_version: i32, timeout: std::time::Duration) -> Result<(), Error> {
+        let handle = self.start_dispatcher_thread();
         self.add_join_handle(handle);
 
         let handle = self.start_cleanup_thread(timeout);
@@ -600,46 +591,6 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     fn is_connected(&self) -> bool {
         self.connected.load(Ordering::Relaxed) && !self.is_shutting_down()
     }
-}
-
-fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), Error> {
-    packet.skip(); // message_id
-
-    if server_version >= server_versions::ERROR_TIME {
-        // New format (>= ERROR_TIME): no version field, includes error_time
-        log_error_payload(&DecodedError {
-            request_id: packet.next_int()?,
-            error_code: packet.next_int()?,
-            error_message: packet.next_string()?,
-            advanced_order_reject_json: packet.next_string().unwrap_or_default(),
-            error_time: packet.next_long().ok(),
-        });
-    } else {
-        // Old format (< ERROR_TIME): has version field
-        let version = packet.next_int()?;
-
-        if version < 2 {
-            let message = packet.next_string()?;
-            error!("version 2 error: {message}");
-        } else {
-            let request_id = packet.next_int()?;
-            let error_code = packet.next_int()?;
-            let error_message = packet.next_string()?;
-            let advanced_order_reject_json = if server_version >= server_versions::ADVANCED_ORDER_REJECT {
-                packet.next_string()?
-            } else {
-                String::new()
-            };
-            log_error_payload(&DecodedError {
-                request_id,
-                error_code,
-                error_message,
-                advanced_order_reject_json,
-                error_time: None,
-            });
-        }
-    }
-    Ok(())
 }
 
 #[derive(Debug)]
