@@ -103,9 +103,9 @@ impl InternalSubscription {
         }
     }
 
-    // Blocks until the next RoutedItem is available, exposing the typed
-    // dispatcher envelope (Response / Notice / Error) without the legacy
-    // ResponseMessage/Error projection.
+    /// Blocks until the next RoutedItem is available, exposing the typed
+    /// dispatcher envelope (Response / Notice / Error) without the legacy
+    /// ResponseMessage/Error projection.
     pub(crate) fn next_routed(&self) -> Option<RoutedItem> {
         if let Some(receiver) = &self.receiver {
             receiver.recv().ok()
@@ -116,6 +116,8 @@ impl InternalSubscription {
         }
     }
 
+    /// Non-blocking variant of [`next_routed`](Self::next_routed). Returns
+    /// `None` if no `RoutedItem` is queued right now.
     pub(crate) fn try_next_routed(&self) -> Option<RoutedItem> {
         if let Some(receiver) = &self.receiver {
             receiver.try_recv().ok()
@@ -126,6 +128,8 @@ impl InternalSubscription {
         }
     }
 
+    /// Bounded-wait variant of [`next_routed`](Self::next_routed). Returns
+    /// `None` if no `RoutedItem` arrives within `timeout`.
     pub(crate) fn next_timeout_routed(&self, timeout: Duration) -> Option<RoutedItem> {
         if let Some(receiver) = &self.receiver {
             receiver.recv_timeout(timeout).ok()

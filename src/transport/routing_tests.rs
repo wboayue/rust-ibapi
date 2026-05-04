@@ -53,6 +53,43 @@ fn test_classify_error_delivery() {
 }
 
 #[test]
+fn test_notice_from_decoded_preserves_rich_payload() {
+    use time::OffsetDateTime;
+
+    let payload = DecodedError {
+        request_id: 42,
+        error_code: 2104,
+        error_message: "Market data farm OK".into(),
+        error_time: Some(1_700_000_000_000),
+        advanced_order_reject_json: "{\"reject\":1}".into(),
+    };
+    let notice = notice_from_decoded(&payload);
+
+    assert_eq!(notice.code, 2104);
+    assert_eq!(notice.message, "Market data farm OK");
+    assert_eq!(notice.advanced_order_reject_json, "{\"reject\":1}");
+    let expected = OffsetDateTime::from_unix_timestamp_nanos(1_700_000_000_000_i128 * 1_000_000).unwrap();
+    assert_eq!(notice.error_time, Some(expected));
+}
+
+#[test]
+fn test_notice_from_decoded_missing_optionals() {
+    // Old format: error_time absent, JSON empty. Conversion preserves both.
+    let payload = DecodedError {
+        request_id: -1,
+        error_code: 200,
+        error_message: "no security".into(),
+        error_time: None,
+        advanced_order_reject_json: String::new(),
+    };
+    let notice = notice_from_decoded(&payload);
+
+    assert_eq!(notice.code, 200);
+    assert_eq!(notice.error_time, None);
+    assert_eq!(notice.advanced_order_reject_json, "");
+}
+
+#[test]
 fn test_classify_error_delivery_warning_boundaries() {
     // 2099 / 2170 are outside the warning range → HardError.
     assert_eq!(classify_error_delivery(7, 2099).severity, Severity::HardError);

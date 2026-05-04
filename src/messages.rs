@@ -1197,8 +1197,13 @@ impl ResponseMessage {
     }
 
     /// Extract the advanced order-reject JSON from an error message. Empty
-    /// when the field is absent (older format / no rejection metadata).
+    /// for old-format messages (server_version < ERROR_TIME) where the field
+    /// doesn't exist, or when the field is absent in the new format.
     pub fn advanced_order_reject_json(&self) -> String {
+        if self.server_version < crate::server_versions::ERROR_TIME {
+            return String::new();
+        }
+        // New format: msg_type, request_id, error_code, error_msg, advanced_order_reject_json, error_time
         let idx = self.error_message_index() + 1;
         if idx < self.fields.len() {
             self.peek_string(idx)
