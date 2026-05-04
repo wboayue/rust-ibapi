@@ -3,10 +3,11 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use futures::stream::Stream;
 use log::{debug, warn};
 use tokio::sync::mpsc;
 
-use super::common::{process_decode_result, DecoderContext, ProcessingResult, SubscriptionItem};
+use super::common::{filter_notice, process_decode_result, DecoderContext, ProcessingResult, SubscriptionItem};
 use super::StreamDecoder;
 use crate::messages::{OutgoingMessages, ResponseMessage};
 use crate::transport::{AsyncInternalSubscription, AsyncMessageBus};
@@ -264,15 +265,42 @@ impl<T> Subscription<T> {
         T: 'static,
     {
         loop {
-            match self.next().await? {
-                Ok(SubscriptionItem::Data(t)) => return Some(Ok(t)),
-                Ok(SubscriptionItem::Notice(n)) => {
-                    log::warn!("ib notice on subscription: {n}");
-                    continue;
-                }
-                Err(e) => return Some(Err(e)),
+            if let Some(out) = filter_notice(self.next().await?) {
+                return Some(out);
             }
         }
+    }
+
+    /// Async mirror of the sync [`Subscription::iter`](crate::subscriptions::sync::Subscription::iter)
+    /// adapter: returns a [`Stream`] of `Result<SubscriptionItem<T>, Error>` —
+    /// notices are surfaced for callers that want to react to them.
+    ///
+    /// The returned stream is `Unpin` so callers can chain
+    /// [`futures::StreamExt`] combinators directly without `pin_mut!`.
+    pub fn stream(&mut self) -> impl Stream<Item = Result<SubscriptionItem<T>, Error>> + Unpin + '_
+    where
+        T: 'static,
+    {
+        Box::pin(futures::stream::unfold(
+            self,
+            |sub| async move { sub.next().await.map(|item| (item, sub)) },
+        ))
+    }
+
+    /// Async mirror of the sync [`Subscription::iter_data`](crate::subscriptions::sync::Subscription::iter_data)
+    /// adapter: returns a [`Stream`] of `Result<T, Error>` with notices filtered
+    /// (and logged at `warn!`).
+    ///
+    /// The returned stream is `Unpin` so callers can chain
+    /// [`futures::StreamExt`] combinators (`next`, `take`, `collect`, ...)
+    /// directly without wrapping in `pin_mut!`.
+    pub fn data_stream(&mut self) -> impl Stream<Item = Result<T, Error>> + Unpin + '_
+    where
+        T: 'static,
+    {
+        Box::pin(futures::stream::unfold(self, |sub| async move {
+            sub.next_data().await.map(|item| (item, sub))
+        }))
     }
 
     /// Get the request ID associated with this subscription
@@ -335,9 +363,11 @@ impl<T> Drop for Subscription<T> {
     }
 }
 
-// Note: Stream trait implementation removed because tokio's broadcast::Receiver
-// doesn't provide poll_recv. Users should use the async next() method instead.
-// If Stream is needed, users can convert using futures::stream::unfold.
+// Note: `Subscription<T>` does not implement `futures::Stream` directly
+// (tokio's broadcast::Receiver doesn't expose poll_recv). Use
+// [`Subscription::data_stream`] for a `Stream<Item = Result<T, Error>>` adapter,
+// or [`Subscription::next`] / [`Subscription::next_data`] for await-based
+// consumption.
 
 #[cfg(all(test, feature = "async"))]
 #[path = "async_tests.rs"]

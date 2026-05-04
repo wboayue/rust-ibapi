@@ -6,6 +6,14 @@
 **Recommendation:** Option 1 — route warnings with a real `request_id` to their owning subscription
 **Bundled with:** [#487 — Align sync `Subscription<T>::next()` with async](https://github.com/wboayue/rust-ibapi/issues/487). Both are breaking changes to `Subscription<T>` on `main`; ship together so consumers migrate once.
 
+## Maintaining this plan
+
+Update each PR's section as it moves through the chain — the plan is a record of *intent + outcomes*, not a synced spec.
+
+- **In flight:** append `(#NNN)` to the section heading (link to the open PR).
+- **Merged:** append `✅ merged ([#NNN](URL))` to the heading; promote any as-shipped notes (diff size, scope reductions, late-stage refactors discovered during review) into the section so downstream PRs can reason against the actual shipped shape, not the original plan. See PR 1 / PR 2a / PR 2b for the format.
+- **Divergence:** when a PR's design diverges from this doc, capture the divergence in that PR's section (under "Scope reductions" / "Scope additions" / "As-shipped diff") rather than rewriting upstream sections. Future-you needs the trail of decisions.
+
 ## Problem
 Warning codes (2100..=2169) carrying a valid `request_id` are diverted to the global error log instead of the subscription that owns them. Callers can't react programmatically. The dispatcher conflates two unrelated cases:
 
@@ -363,7 +371,7 @@ Decoder signatures stay `Result<T, Error>`. `process_decode_result` and `should_
 
 ---
 
-### PR 2c — Async `data_stream` Stream adapter (optional pre-PR before PR 3)
+### PR 2c — Async `data_stream` Stream adapter (in flight, [#505](https://github.com/wboayue/rust-ibapi/pull/505))
 **Goal:** close the sync/async composability gap deferred from PR 2b. Sync has `iter_data()` returning `impl Iterator<Item = Result<T, Error>>`; async users currently have only `next_data().await`. Add an async mirror returning `impl Stream<Item = Result<T, Error>>`.
 
 **Scope:**
@@ -381,6 +389,15 @@ Implement via `futures::stream::unfold` over `self.next_data().await`. ~30 lines
 **Risk:** none — purely additive. Skip entirely if PR 3/4 don't end up needing `Stream` combinators.
 
 **Decision rule:** land before PR 3 starts iff PR 3's planned tests use `Stream` combinators (`.take(n)`, `.collect()`, `.filter()`); otherwise defer or drop.
+
+**Scope additions during self-review (2026-05-04):**
+- **Return type widened to `+ Unpin`** via `Box::pin(unfold(...))`. The plan's `impl Stream + '_` is `!Unpin` (unfold's future is self-referential), forcing every caller into `pin_mut!` boilerplate. One heap alloc per `data_stream()` call buys ergonomic `.collect()`/`.next()` chaining; alloc is amortized over the entire stream consumption. The same `Box::pin` shape applies to the new `stream()` below.
+- **Added async `stream()`** returning `impl Stream<Item = Result<SubscriptionItem<T>, Error>> + Unpin + '_` — async mirror of sync `iter()`. Without it, notice-aware consumers had Stream combinators only on the data-only path. Symmetric to sync.
+- **Extracted `filter_notice()` helper** at `src/subscriptions/common.rs`. Sync `FilterData::next` and async `next_data` had identical match expressions (`Ok(Data) → t`, `Ok(Notice) → log+skip`, `Err → propagate`). Both now delegate.
+- **Dropped `T: Send` bound** from `data_stream` — was over-restricting; `next_data` only requires `T: 'static` and `Box::pin` adds no `Send` requirement.
+- **Direct unit test for `filter_notice`** in `common_tests.rs`. The Notice arm wasn't reachable from any other test in this PR's state — `AsyncInternalSubscription::next` filters `RoutedItem::Notice` via `into_legacy()` before the user-facing `Subscription::next()`. PR 3 adds the end-to-end Notice flow; until then the helper itself needs direct coverage.
+
+**As-shipped diff (in flight):** 5 files, ~+140 LOC.
 
 ---
 
