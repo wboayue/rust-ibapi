@@ -5,7 +5,6 @@ mod io;
 pub(crate) use io::{AsyncStream, AsyncTcpSocket};
 
 use std::collections::HashMap;
-use std::mem;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -81,7 +80,7 @@ impl Clone for AsyncInternalSubscription {
 }
 
 impl AsyncInternalSubscription {
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub(crate) fn new(receiver: broadcast::Receiver<RoutedItem>) -> Self {
         Self {
             receiver,
@@ -111,29 +110,11 @@ impl AsyncInternalSubscription {
                     if let Some(legacy) = item.into_legacy() {
                         return Some(legacy);
                     }
-                    // Notice items are skipped; recv next.
                 }
                 Err(broadcast::error::RecvError::Closed) => return None,
-                Err(broadcast::error::RecvError::Lagged(_)) => {
-                    // If we lagged, continue the loop to try again
-                    continue;
-                }
+                Err(broadcast::error::RecvError::Lagged(_)) => continue,
             }
         }
-    }
-
-    /// Extract the receiver for use in subscriptions (disables cleanup)
-    #[allow(dead_code)]
-    pub(crate) fn take_receiver(mut self) -> broadcast::Receiver<RoutedItem> {
-        // Disable cleanup by clearing the cleanup info - the subscription will now own the receiver
-        self.cleanup_sender = None;
-        self.cleanup_signal = None;
-        self.cleanup_sent = true; // Mark as sent to prevent Drop from sending
-
-        // Create a dummy receiver to replace the original one
-        let (dummy_sender, dummy_receiver) = broadcast::channel(1);
-        drop(dummy_sender); // Close the channel immediately
-        mem::replace(&mut self.receiver, dummy_receiver)
     }
 
     /// Manually send cleanup signal

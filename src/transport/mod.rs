@@ -129,13 +129,9 @@ impl InternalSubscription {
     }
 
     fn timeout_receive(receiver: &Receiver<RoutedItem>, timeout: Duration) -> Option<Response> {
-        // On a Notice, consume it and continue waiting up to the remaining time.
         let deadline = std::time::Instant::now() + timeout;
         loop {
             let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-            if remaining.is_zero() {
-                return None;
-            }
             if let Some(legacy) = receiver.recv_timeout(remaining).ok()?.into_legacy() {
                 return Some(legacy);
             }

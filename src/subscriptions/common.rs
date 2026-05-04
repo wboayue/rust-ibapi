@@ -6,20 +6,14 @@ use crate::errors::Error;
 use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 
 /// Pre-classified channel item delivered from the dispatcher to subscriptions.
-///
-/// `Response` carries raw bytes that the subscription's decoder still has to interpret.
-/// `Notice` and `Error` are pre-built by the dispatcher from `IncomingMessages::Error`
-/// frames so decoders never have to re-classify warnings vs. hard errors. PR 2a only
-/// emits `Response` and `Error`; `Notice` becomes reachable in PR 3.
+/// `Response` carries raw bytes the decoder must still interpret; `Notice` and
+/// `Error` are pre-classified by the dispatcher so decoders never re-classify
+/// warnings vs. hard errors.
 #[derive(Debug, Clone)]
 pub(crate) enum RoutedItem {
-    /// Normal data message; subscription's decoder produces the final `T`.
     Response(ResponseMessage),
-    /// Non-fatal IB notice (warning codes 2100..=2169) bound to this subscription.
-    /// Defined but unused in PR 2a — reachable from PR 3 onward.
     #[allow(dead_code)]
     Notice(Notice),
-    /// Hard error (terminal). Subscription stores the error and stops yielding.
     Error(Error),
 }
 
@@ -36,10 +30,8 @@ impl From<Error> for RoutedItem {
 }
 
 impl RoutedItem {
-    /// Translate to the legacy `Result<ResponseMessage, Error>` shape used by
-    /// transport-level consumers. Returns `None` for `Notice` so callers can
-    /// skip the item and recv the next one.
-    #[cfg(any(feature = "sync", feature = "async"))]
+    /// Translate to `Result<ResponseMessage, Error>`. Returns `None` for
+    /// `Notice` so callers can skip and recv the next item.
     pub(crate) fn into_legacy(self) -> Option<Result<ResponseMessage, Error>> {
         match self {
             RoutedItem::Response(message) => Some(Ok(message)),
