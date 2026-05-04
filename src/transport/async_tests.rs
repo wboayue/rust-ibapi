@@ -226,3 +226,94 @@ async fn test_is_connected_reflects_shutdown_flag() {
     mb.request_shutdown_sync();
     assert!(!mb.is_connected());
 }
+
+/// Receive next routed envelope with a deadline.
+async fn next_routed(sub: &mut AsyncInternalSubscription) -> RoutedItem {
+    tokio::time::timeout(TICK, sub.next_routed())
+        .await
+        .expect("subscription got no item before timeout")
+        .expect("subscription closed")
+}
+
+/// Warning code (2104) bound to a real request_id is delivered as a
+/// `RoutedItem::Notice` to the owning subscription — stream stays open.
+#[tokio::test]
+async fn test_warning_with_request_id_delivers_notice() {
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_request(42, vec![]).await.unwrap();
+
+    stream.push_inbound(body("4|2|42|2104|Market data farm connection is OK:usfarm|"));
+    bus.read_and_route_message().await.unwrap();
+
+    let item = next_routed(&mut sub).await;
+    match item {
+        RoutedItem::Notice(notice) => {
+            assert_eq!(notice.code, 2104);
+            assert_eq!(notice.message, "Market data farm connection is OK:usfarm");
+        }
+        other => panic!("expected RoutedItem::Notice, got {other:?}"),
+    }
+
+    // Stream stays open: a follow-up data message is delivered.
+    stream.push_inbound(body("89|42|payload|"));
+    bus.read_and_route_message().await.unwrap();
+    let item = next_routed(&mut sub).await;
+    assert!(matches!(item, RoutedItem::Response(_)), "got: {item:?}");
+}
+
+/// Hard error (code 200) bound to a real request_id is delivered as a
+/// `RoutedItem::Error` to the owning subscription.
+#[tokio::test]
+async fn test_hard_error_with_request_id_terminates_subscription() {
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_request(42, vec![]).await.unwrap();
+
+    stream.push_inbound(body("4|2|42|200|No security definition found|"));
+    bus.read_and_route_message().await.unwrap();
+
+    let item = next_routed(&mut sub).await;
+    match item {
+        RoutedItem::Error(Error::Message(code, msg)) => {
+            assert_eq!(code, 200);
+            assert_eq!(msg, "No security definition found");
+        }
+        other => panic!("expected RoutedItem::Error(Message), got {other:?}"),
+    }
+}
+
+/// Warning with `UNSPECIFIED_REQUEST_ID` has no owner — log only, no channel
+/// write to an in-flight subscription.
+#[tokio::test]
+async fn test_warning_with_unspecified_id_is_log_only() {
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_request(42, vec![]).await.unwrap();
+
+    stream.push_inbound(body("4|2|-1|2104|Market data farm connection is OK:usfarm|"));
+    bus.read_and_route_message().await.unwrap();
+
+    assert!(
+        matches!(sub.receiver.try_recv(), Err(TryRecvError::Empty)),
+        "unrouted notice must not be delivered to a subscription"
+    );
+}
+
+/// Order-channel fallback: a notice arrives bound to an `order_id` matching
+/// an order subscription. The dispatcher's `deliver_to_request_id` helper
+/// falls back to the order channel when no request channel matches.
+#[tokio::test]
+async fn test_warning_with_order_id_falls_back_to_order_channel() {
+    let (stream, bus) = make_bus();
+    let mut sub = bus.send_order_request(7, vec![]).await.unwrap();
+
+    stream.push_inbound(body("4|2|7|2104|Order warning|"));
+    bus.read_and_route_message().await.unwrap();
+
+    let item = next_routed(&mut sub).await;
+    match item {
+        RoutedItem::Notice(notice) => {
+            assert_eq!(notice.code, 2104);
+            assert_eq!(notice.message, "Order warning");
+        }
+        other => panic!("expected RoutedItem::Notice, got {other:?}"),
+    }
+}

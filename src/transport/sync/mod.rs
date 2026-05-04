@@ -16,10 +16,11 @@ use log::{debug, error, info, warn};
 
 use crate::connection::sync::Connection;
 
-use super::common::log_error_payload;
-use super::routing::{determine_routing, order_routing_strategy, OrderRoutingStrategy, RoutingDecision};
+use super::routing::{
+    classify_error_delivery, determine_routing, notice_from_decoded, order_routing_strategy, OrderRoutingStrategy, Routing, RoutingDecision, Severity,
+};
 use super::{InternalSubscription, MessageBus, Response, RoutedItem, Signal, SubscriptionBuilder};
-use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
+use crate::messages::{shared_channel_configuration, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
 // pub(crate) const MIN_SERVER_VERSION: i32 = 100;
@@ -265,12 +266,21 @@ impl<S: Stream> TcpMessageBus<S> {
     fn dispatch_message(&self, message: ResponseMessage) {
         match determine_routing(&message) {
             RoutingDecision::Error(payload) => {
-                let routed = self.send_order_update(&message);
+                let sent_to_update_stream = self.send_order_update(&message);
+                let delivery = classify_error_delivery(payload.request_id, payload.error_code);
 
-                if payload.is_log_only() {
-                    log_error_payload(&payload);
-                } else {
-                    self.process_response_with_id(payload.request_id, message, routed);
+                match delivery.routing {
+                    Routing::Unrouted => {
+                        let notice = notice_from_decoded(&payload);
+                        self.log_unrouted(delivery.severity, &notice);
+                    }
+                    Routing::Owned(request_id) => {
+                        let item = match delivery.severity {
+                            Severity::Warning => RoutedItem::Notice(notice_from_decoded(&payload)),
+                            Severity::HardError => RoutedItem::Error(Error::Message(payload.error_code, payload.error_message.clone())),
+                        };
+                        self.deliver_to_request_id(request_id, item, sent_to_update_stream);
+                    }
                 }
             }
             RoutingDecision::ByOrderId(_) => {
@@ -301,6 +311,28 @@ impl<S: Stream> TcpMessageBus<S> {
             self.shared_channels.send_message(message.message_type(), &message);
         } else if !routed {
             info!("no recipient found for: {message:?}")
+        }
+    }
+
+    /// Deliver a pre-classified Notice or Error to its owning subscription.
+    /// Tries the request-channel first, falls back to the order-channel for
+    /// notices/errors that arrive bound to an order_id.
+    fn deliver_to_request_id(&self, request_id: i32, item: RoutedItem, sent_to_update_stream: bool) {
+        if self.requests.contains(&request_id) {
+            let _ = self.requests.send(&request_id, item);
+        } else if self.orders.contains(&request_id) {
+            let _ = self.orders.send(&request_id, item);
+        } else if !sent_to_update_stream {
+            info!("no recipient for routed error/notice (id={request_id}): {item:?}");
+        }
+    }
+
+    /// Log an unrouted Notice (no subscription owner). PR 5 will hook the
+    /// global notice broadcast onto this single helper.
+    fn log_unrouted(&self, severity: Severity, notice: &Notice) {
+        match severity {
+            Severity::Warning => warn!("warning: {notice}"),
+            Severity::HardError => error!("error: {notice}"),
         }
     }
 

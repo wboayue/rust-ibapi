@@ -87,6 +87,51 @@ fn test_routed_item_error_terminates_subscription() {
 }
 
 #[test]
+fn test_routed_item_notice_surfaces_as_subscription_item() {
+    use crate::messages::Notice;
+    use crate::subscriptions::common::RoutedItem;
+    use crate::transport::SubscriptionBuilder;
+    use crossbeam::channel;
+
+    #[derive(Debug)]
+    struct DataItem;
+
+    impl StreamDecoder<DataItem> for DataItem {
+        fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<DataItem, Error> {
+            Ok(DataItem)
+        }
+    }
+
+    let (sender, receiver) = channel::unbounded::<RoutedItem>();
+    let (signaler, _) = channel::unbounded();
+
+    sender
+        .send(RoutedItem::Notice(Notice {
+            code: 2104,
+            message: "Market data farm OK".into(),
+            error_time: None,
+            advanced_order_reject_json: String::new(),
+        }))
+        .unwrap();
+    sender.send(RoutedItem::Response(ResponseMessage::from("1|data\0"))).unwrap();
+
+    let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).request_id(1).build();
+    let stub = Arc::new(MessageBusStub::default());
+    let sub: Subscription<DataItem> = Subscription::new(stub, internal, DecoderContext::default());
+
+    // The notice surfaces as a non-terminal SubscriptionItem::Notice.
+    match sub.next() {
+        Some(Ok(SubscriptionItem::Notice(n))) => {
+            assert_eq!(n.code, 2104);
+            assert_eq!(n.message, "Market data farm OK");
+        }
+        other => panic!("expected SubscriptionItem::Notice, got {other:?}"),
+    }
+    // Stream stays open: the next data item arrives normally.
+    assert!(matches!(sub.next(), Some(Ok(SubscriptionItem::Data(_)))));
+}
+
+#[test]
 fn test_no_retries_after_end_of_stream() {
     let stub = MessageBusStub::with_responses(vec![
         "1|data".to_string(),  // triggers EndOfStream via decoder

@@ -53,7 +53,6 @@ pub(crate) fn filter_notice<T>(item: Result<SubscriptionItem<T>, Error>) -> Opti
 #[derive(Debug, Clone)]
 pub(crate) enum RoutedItem {
     Response(ResponseMessage),
-    #[allow(dead_code)]
     Notice(Notice),
     Error(Error),
 }

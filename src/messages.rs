@@ -1196,6 +1196,17 @@ impl ResponseMessage {
         }
     }
 
+    /// Extract the advanced order-reject JSON from an error message. Empty
+    /// when the field is absent (older format / no rejection metadata).
+    pub fn advanced_order_reject_json(&self) -> String {
+        let idx = self.error_message_index() + 1;
+        if idx < self.fields.len() {
+            self.peek_string(idx)
+        } else {
+            String::new()
+        }
+    }
+
     /// Build a response message from a NUL-delimited payload.
     pub fn from(fields: &str) -> ResponseMessage {
         ResponseMessage {
@@ -1309,6 +1320,10 @@ pub struct Notice {
     /// Timestamp when the error occurred.
     /// Only present for server versions >= ERROR_TIME (194).
     pub error_time: Option<OffsetDateTime>,
+    /// Advanced order-reject JSON payload, present on hard order-rejection
+    /// notices for server versions >= ADVANCED_ORDER_REJECT. Empty otherwise.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub advanced_order_reject_json: String,
 }
 
 /// Error code indicating an order was cancelled (confirmation, not an error).
@@ -1330,8 +1345,14 @@ impl Notice {
     pub fn from(message: &ResponseMessage) -> Notice {
         let code = message.error_code();
         let error_time = message.error_time();
+        let advanced_order_reject_json = message.advanced_order_reject_json();
         let message = message.error_message();
-        Notice { code, message, error_time }
+        Notice {
+            code,
+            message,
+            error_time,
+            advanced_order_reject_json,
+        }
     }
 
     /// Returns `true` if this notice indicates an order was cancelled (code 202).

@@ -103,6 +103,39 @@ impl InternalSubscription {
         }
     }
 
+    // Blocks until the next RoutedItem is available, exposing the typed
+    // dispatcher envelope (Response / Notice / Error) without the legacy
+    // ResponseMessage/Error projection.
+    pub(crate) fn next_routed(&self) -> Option<RoutedItem> {
+        if let Some(receiver) = &self.receiver {
+            receiver.recv().ok()
+        } else if let Some(receiver) = &self.shared_receiver {
+            receiver.recv().ok()
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn try_next_routed(&self) -> Option<RoutedItem> {
+        if let Some(receiver) = &self.receiver {
+            receiver.try_recv().ok()
+        } else if let Some(receiver) = &self.shared_receiver {
+            receiver.try_recv().ok()
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn next_timeout_routed(&self, timeout: Duration) -> Option<RoutedItem> {
+        if let Some(receiver) = &self.receiver {
+            receiver.recv_timeout(timeout).ok()
+        } else if let Some(receiver) = &self.shared_receiver {
+            receiver.recv_timeout(timeout).ok()
+        } else {
+            None
+        }
+    }
+
     pub(crate) fn cancel(&self) {
         if let Some(sender) = &self.sender {
             if let Err(e) = sender.send(Error::Cancelled.into()) {

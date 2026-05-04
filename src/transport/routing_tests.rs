@@ -14,27 +14,53 @@ fn test_decoded_error_default() {
 }
 
 #[test]
-fn test_decoded_error_is_log_only() {
-    let warning = DecodedError {
-        request_id: 42,
-        error_code: 2104,
-        ..Default::default()
-    };
-    assert!(warning.is_log_only(), "warning code with real request_id is log-only");
+fn test_classify_error_delivery() {
+    // Owned warning (real request_id, code in 2100..=2169) delivers as Notice.
+    assert_eq!(
+        classify_error_delivery(42, 2104),
+        ErrorDelivery {
+            routing: Routing::Owned(42),
+            severity: Severity::Warning,
+        }
+    );
 
-    let unspecified = DecodedError {
-        request_id: UNSPECIFIED_REQUEST_ID,
-        error_code: 200,
-        ..Default::default()
-    };
-    assert!(unspecified.is_log_only(), "unspecified request_id is log-only");
+    // Unrouted warning (no owner): log-only at warn level.
+    assert_eq!(
+        classify_error_delivery(UNSPECIFIED_REQUEST_ID, 2104),
+        ErrorDelivery {
+            routing: Routing::Unrouted,
+            severity: Severity::Warning,
+        }
+    );
 
-    let hard_error = DecodedError {
-        request_id: 42,
-        error_code: 200,
-        ..Default::default()
-    };
-    assert!(!hard_error.is_log_only(), "hard error with real request_id routes to subscription");
+    // Owned hard error: deliver as terminal Error, subscription ends.
+    assert_eq!(
+        classify_error_delivery(42, 200),
+        ErrorDelivery {
+            routing: Routing::Owned(42),
+            severity: Severity::HardError,
+        }
+    );
+
+    // Unrouted hard error: log-only at error level.
+    assert_eq!(
+        classify_error_delivery(UNSPECIFIED_REQUEST_ID, 200),
+        ErrorDelivery {
+            routing: Routing::Unrouted,
+            severity: Severity::HardError,
+        }
+    );
+}
+
+#[test]
+fn test_classify_error_delivery_warning_boundaries() {
+    // 2099 / 2170 are outside the warning range → HardError.
+    assert_eq!(classify_error_delivery(7, 2099).severity, Severity::HardError);
+    assert_eq!(classify_error_delivery(7, 2170).severity, Severity::HardError);
+
+    // 2100 / 2169 are the inclusive endpoints → Warning.
+    assert_eq!(classify_error_delivery(7, 2100).severity, Severity::Warning);
+    assert_eq!(classify_error_delivery(7, 2169).severity, Severity::Warning);
 }
 
 #[test]

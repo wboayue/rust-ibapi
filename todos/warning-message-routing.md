@@ -401,8 +401,21 @@ Implement via `futures::stream::unfold` over `self.next_data().await`. ~30 lines
 
 ---
 
-### PR 3 — Warning classification & delivery
+### PR 3 — Warning classification & delivery (in flight)
 **Goal:** the actual feature — route warnings with a real `request_id` to their owning subscription as non-terminal `Notice` items.
+
+**As-shipped diff (local branch):** 17 files, +551/-108 LOC. fmt clean; clippy clean across default, sync-only, and `--all-features` with `-D warnings`; full test suite green (sync 1113 lib + 143 doc, async 921 lib + 1 doc, all-features path 1113 sync). New tests: 5 dispatcher-level (sync) + 5 dispatcher-level (async) covering owned warning, unrouted warning, hard error, order-channel fallback, plus a `Subscription<T>` end-to-end Notice surface test in both sync/async.
+
+**Scope reductions vs. original plan** (decided 2026-05-04):
+- **`Notice` widened in-place rather than via a separate constructor.** The plan offered a choice between widening the public `Notice` struct or keeping a `pub(crate)` richer constructor. Shipped: added `advanced_order_reject_json: String` to the public `Notice` struct (with `#[serde(default, skip_serializing_if = "String::is_empty")]`) and a `pub(crate) fn notice_from_decoded(&DecodedError) -> Notice` in `routing.rs` that captures both the JSON and `error_time` (millis → `OffsetDateTime`). Touched 13 existing `Notice { .. }` literals across messages tests, subscription tests, and `connection/common.rs` to add the new field — mechanical.
+- **No `dual_test!` macro experiment** (refinement #5). Each pair of sync/async tests is structurally similar but has enough fixture divergence (crossbeam channels vs `tokio::broadcast::channel`, sync vs async receiver wait) that a macro wouldn't have shaved meaningful lines. Skipped.
+- **No `SubscriptionItem::into_data` in this PR** (refinement #3) — already shipped in PR 2b commit `857890e`.
+- **Per-T `Notice` enum variants left intact** (`PlaceOrder::Message(Notice)`, `Orders::Notice(Notice)`, `MarketDepths::Notice(Notice)`, `TickTypes::Notice(Notice)`, etc.). The dispatcher pre-classification means decoders' `IncomingMessages::Error` arms are unreachable on the production path, but `MessageBusStub`-based tests still feed raw `RoutedItem::Response` messages through the decoder, so those arms remain reachable in tests. Removing the public enum variants would be a separate, large public-API change touching ~10 examples and several test files; deferred. Cleanup is a candidate for a follow-up PR if/when the per-T variants are confirmed truly redundant with `SubscriptionItem::Notice`.
+- **`Error::Message(code, msg)` kept reachable.** It's now constructed by the dispatcher (`RoutedItem::Error(Error::Message(payload.error_code, payload.error_message.clone()))`) for hard errors with a real `request_id`. The plan's "verify whether `Error::Message` is still reachable; delete if dead" check resolves to: still reachable, keep it.
+
+**Scope — classification:**
+- Added `ErrorDelivery { routing: Routing, severity: Severity }` struct + `classify_error_delivery(request_id, error_code) -> ErrorDelivery` in `src/transport/routing.rs` (refinement #1, struct shape).
+- Removed `DecodedError::is_log_only` — its callers all migrated to `classify_error_delivery`. Removed `transport/common.rs::log_error_payload` and the entire `transport/common.rs` `log` import — replaced by per-transport `log_unrouted` methods (refinement #6).
 
 **Scope — classification:**
 - Add `ErrorDelivery` and `classify_error_delivery` in `src/transport/routing.rs`. Per refinement #1, prefer the struct shape:
