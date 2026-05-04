@@ -39,28 +39,6 @@ fn test_thread_safe() {
     assert_send_and_sync::<TcpMessageBus<TcpSocket>>();
 }
 
-#[test]
-fn test_error_event_warning_handling() {
-    // Test that warning error codes (2100-2169) are handled correctly
-    let server_version = 100;
-
-    // Create a warning message (error code 2104 is a common warning)
-    // Format: "4|2|123|2104|Market data farm connection is OK:usfarm.nj"
-    let warning_message = ResponseMessage::from_simple("4|2|123|2104|Market data farm connection is OK:usfarm.nj");
-
-    // This should not panic and should handle as a warning
-    let result = error_event(server_version, warning_message);
-    assert!(result.is_ok());
-
-    // Test actual error (non-warning code)
-    // Format: "4|2|456|200|No security definition has been found"
-    let error_message = ResponseMessage::from_simple("4|2|456|200|No security definition has been found");
-
-    // This should also not panic and should handle as an error
-    let result = error_event(server_version, error_message);
-    assert!(result.is_ok());
-}
-
 // Connection test helpers
 
 fn mock_socket_error(kind: ErrorKind) -> Error {
@@ -284,16 +262,15 @@ fn test_bus_send_order_request() -> Result<(), Error> {
 
     let stream = MockSocket::new(events, 0);
     let connection = Connection::connect(stream, 28)?;
-    let server_version = connection.server_version();
     let bus = Arc::new(TcpMessageBus::new(connection)?);
 
     let subscription = bus.send_order_request(5, &request)?;
 
-    bus.dispatch(server_version)?;
-    bus.dispatch(server_version)?;
-    bus.dispatch(server_version)?;
-    bus.dispatch(server_version)?;
-    bus.dispatch(server_version)?;
+    bus.dispatch()?;
+    bus.dispatch()?;
+    bus.dispatch()?;
+    bus.dispatch()?;
+    bus.dispatch()?;
 
     subscription.next().unwrap()?;
 
@@ -453,15 +430,14 @@ fn test_send_request_after_disconnect() -> Result<(), Error> {
     let stream = MockSocket::new(events, 0);
     let connection = Connection::stubbed(stream, 28);
     connection.establish_connection(None)?;
-    let server_version = connection.server_version();
     let bus = TcpMessageBus::new(connection)?;
 
-    bus.dispatch(server_version)?;
+    bus.dispatch()?;
 
     let subscription = bus.send_request(9000, &packet)?;
 
-    bus.dispatch(server_version)?;
-    bus.dispatch(server_version)?;
+    bus.dispatch()?;
+    bus.dispatch()?;
 
     let result = subscription.next().unwrap()?;
 
@@ -497,12 +473,11 @@ fn test_request_before_disconnect_raises_error() -> Result<(), Error> {
     let stream = MockSocket::new(events, 0);
     let connection = Connection::stubbed(stream, 28);
     connection.establish_connection(None)?;
-    let server_version = connection.server_version();
     let bus = TcpMessageBus::new(connection)?;
 
     let subscription = bus.send_request(9000, &packet)?;
 
-    bus.dispatch(server_version)?;
+    bus.dispatch()?;
 
     match subscription.next() {
         Some(Err(Error::ConnectionReset)) => {}
@@ -654,8 +629,8 @@ fn test_request_id_correlation_with_interleaved_responses() -> Result<(), Error>
     stream.push_inbound(body("89|200|payload-b|"));
     stream.push_inbound(body("89|100|payload-a|"));
 
-    bus.dispatch(0)?;
-    bus.dispatch(0)?;
+    bus.dispatch()?;
+    bus.dispatch()?;
 
     let msg_a = sub_a.next_timeout(TICK).expect("sub_a got no message")?;
     let msg_b = sub_b.next_timeout(TICK).expect("sub_b got no message")?;
@@ -681,8 +656,8 @@ fn test_order_id_correlation_with_interleaved_responses() -> Result<(), Error> {
     stream.push_inbound(body("3|22|Filled|0|100|0|0|0|0|0||0|"));
     stream.push_inbound(body("3|11|Submitted|0|0|0|0|0|0|0||0|"));
 
-    bus.dispatch(0)?;
-    bus.dispatch(0)?;
+    bus.dispatch()?;
+    bus.dispatch()?;
 
     let msg_a = sub_a.next_timeout(TICK).expect("sub_a got no message")?;
     let msg_b = sub_b.next_timeout(TICK).expect("sub_b got no message")?;
@@ -711,7 +686,7 @@ fn test_shared_channel_fan_out_for_open_orders() -> Result<(), Error> {
     // OpenOrder (msg_id 5): order_id at index 1. No matching order subscription,
     // so the OrderOrShared strategy falls back to fan-out.
     stream.push_inbound(body("5|42|265598|AAPL|STK||0|||SMART|USD|AAPL|NMS|"));
-    bus.dispatch(0)?;
+    bus.dispatch()?;
 
     for (name, sub) in [("open", &sub_open), ("all", &sub_all), ("auto", &sub_auto)] {
         let msg = sub.next_timeout(TICK).unwrap_or_else(|| panic!("sub_{name} got no message"))?;
@@ -732,7 +707,7 @@ fn test_shared_channel_routing_current_time() -> Result<(), Error> {
 
     // CurrentTime (msg_id 49): "49|version|epoch_seconds|"
     stream.push_inbound(body("49|1|1700000000|"));
-    bus.dispatch(0)?;
+    bus.dispatch()?;
 
     let msg = sub.next_timeout(TICK).expect("shared subscription got no message")?;
     assert_eq!(msg.peek_int(0)?, 49);
@@ -751,7 +726,7 @@ fn test_dispatch_surfaces_connection_failure_after_eof() -> Result<(), Error> {
     let sub = bus.send_request(100, &[])?;
 
     stream.close();
-    let err = bus.dispatch(0).expect_err("dispatch should surface an error");
+    let err = bus.dispatch().expect_err("dispatch should surface an error");
     assert!(matches!(err, Error::ConnectionFailed), "unexpected error: {err:?}");
 
     let resp = sub.next_timeout(TICK).expect("subscription got no notification");

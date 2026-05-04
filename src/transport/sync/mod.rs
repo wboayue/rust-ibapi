@@ -5,7 +5,6 @@
 use std::collections::HashMap;
 use std::io::{prelude::*, Cursor};
 use std::net::TcpStream;
-use std::ops::RangeInclusive;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::{self, JoinHandle};
@@ -17,17 +16,15 @@ use log::{debug, error, info, warn};
 
 use crate::connection::sync::Connection;
 
-use super::routing::{determine_routing, is_warning_error, order_routing_strategy, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID};
+use super::common::log_error_payload;
+use super::routing::{determine_routing, order_routing_strategy, OrderRoutingStrategy, RoutingDecision};
 use super::{InternalSubscription, MessageBus, Response, Signal, SubscriptionBuilder};
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
-use crate::{server_versions, Error};
+use crate::Error;
 
 // pub(crate) const MIN_SERVER_VERSION: i32 = 100;
 // pub(crate) const MAX_SERVER_VERSION: i32 = server_versions::WSH_EVENT_DATA_FILTERS_DATE;
 const TWS_READ_TIMEOUT: Duration = Duration::from_secs(1);
-
-// Defines the range of warning codes (2100–2169) used by the TWS API.
-const WARNING_CODES: RangeInclusive<i32> = 2100..=2169;
 
 // For requests without an identifier, shared channels are created
 // to route request/response pairs based on message type.
@@ -203,7 +200,7 @@ impl<S: Stream> TcpMessageBus<S> {
     fn read_message(&self) -> Response {
         self.connection.read_message()
     }
-    pub(crate) fn dispatch(&self, server_version: i32) -> Result<(), Error> {
+    pub(crate) fn dispatch(&self) -> Result<(), Error> {
         use crate::client::error_handler::{is_connection_error, is_timeout_error};
 
         match self.read_message() {
@@ -212,7 +209,7 @@ impl<S: Stream> TcpMessageBus<S> {
                     self.request_shutdown();
                     Err(Error::Shutdown)
                 } else {
-                    self.dispatch_message(server_version, message);
+                    self.dispatch_message(message);
                     Ok(())
                 }
             }
@@ -248,11 +245,11 @@ impl<S: Stream> TcpMessageBus<S> {
 
     // Dispatcher thread reads messages from TWS and dispatches them to
     // appropriate channel.
-    fn start_dispatcher_thread(self: &Arc<Self>, server_version: i32) -> JoinHandle<()> {
+    fn start_dispatcher_thread(self: &Arc<Self>) -> JoinHandle<()> {
         let message_bus = Arc::clone(self);
         thread::spawn(move || {
             loop {
-                match message_bus.dispatch(server_version) {
+                match message_bus.dispatch() {
                     Ok(_) => {}
                     Err(Error::Shutdown | Error::ConnectionFailed) => break,
                     Err(e) => {
@@ -265,17 +262,15 @@ impl<S: Stream> TcpMessageBus<S> {
         })
     }
 
-    fn dispatch_message(&self, server_version: i32, message: ResponseMessage) {
-        // Use common routing logic
+    fn dispatch_message(&self, message: ResponseMessage) {
         match determine_routing(&message) {
-            RoutingDecision::Error { request_id, error_code } => {
+            RoutingDecision::Error(payload) => {
                 let routed = self.send_order_update(&message);
 
-                // Check if this is a warning or unspecified error
-                if request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(error_code) {
-                    error_event(server_version, message).unwrap();
+                if payload.is_log_only() {
+                    log_error_payload(&payload);
                 } else {
-                    self.process_response_with_id(request_id, message, routed);
+                    self.process_response_with_id(payload.request_id, message, routed);
                 }
             }
             RoutingDecision::ByOrderId(_) => {
@@ -459,8 +454,8 @@ impl<S: Stream> TcpMessageBus<S> {
         })
     }
 
-    pub(crate) fn process_messages(self: &Arc<Self>, server_version: i32, timeout: std::time::Duration) -> Result<(), Error> {
-        let handle = self.start_dispatcher_thread(server_version);
+    pub(crate) fn process_messages(self: &Arc<Self>, _server_version: i32, timeout: std::time::Duration) -> Result<(), Error> {
+        let handle = self.start_dispatcher_thread();
         self.add_join_handle(handle);
 
         let handle = self.start_cleanup_thread(timeout);
@@ -594,51 +589,6 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
 
     fn is_connected(&self) -> bool {
         self.connected.load(Ordering::Relaxed) && !self.is_shutting_down()
-    }
-}
-
-fn error_event(server_version: i32, mut packet: ResponseMessage) -> Result<(), Error> {
-    packet.skip(); // message_id
-
-    if server_version >= server_versions::ERROR_TIME {
-        // New format (>= ERROR_TIME): no version field, includes error_time
-        let request_id = packet.next_int()?;
-        let error_code = packet.next_int()?;
-        let error_message = packet.next_string()?;
-        let advanced_order_reject_json = packet.next_string().unwrap_or_default();
-        let error_time = packet.next_long().unwrap_or(0);
-        log_error_fields(request_id, error_code, &error_message, &advanced_order_reject_json, error_time);
-    } else {
-        // Old format (< ERROR_TIME): has version field
-        let version = packet.next_int()?;
-
-        if version < 2 {
-            let message = packet.next_string()?;
-            error!("version 2 error: {message}");
-        } else {
-            let request_id = packet.next_int()?;
-            let error_code = packet.next_int()?;
-            let error_message = packet.next_string()?;
-            let advanced_order_reject_json = if server_version >= server_versions::ADVANCED_ORDER_REJECT {
-                packet.next_string()?
-            } else {
-                String::new()
-            };
-            log_error_fields(request_id, error_code, &error_message, &advanced_order_reject_json, 0);
-        }
-    }
-    Ok(())
-}
-
-fn log_error_fields(request_id: i32, error_code: i32, error_message: &str, advanced_order_reject_json: &str, error_time: i64) {
-    if WARNING_CODES.contains(&error_code) {
-        warn!(
-            "request_id: {request_id}, warning_code: {error_code}, warning_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}, error_time: {error_time}"
-        );
-    } else {
-        error!(
-            "request_id: {request_id}, error_code: {error_code}, error_message: {error_message}, advanced_order_reject_json: {advanced_order_reject_json}, error_time: {error_time}"
-        );
     }
 }
 

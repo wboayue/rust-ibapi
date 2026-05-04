@@ -19,7 +19,8 @@ use crate::connection::r#async::AsyncConnection;
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
-use super::routing::{determine_routing, is_warning_error, order_routing_strategy, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID};
+use super::common::log_error_payload;
+use super::routing::{determine_routing, order_routing_strategy, DecodedError, OrderRoutingStrategy, RoutingDecision};
 
 /// Default capacity for broadcast channels
 /// This should be large enough to handle bursts of messages without lagging
@@ -332,7 +333,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             RoutingDecision::ByOrderId(order_id) => self.route_to_order_channel(order_id, message).await,
             RoutingDecision::ByMessageType(message_type) => self.route_to_shared_channel(message_type, message).await,
             RoutingDecision::SharedMessage(message_type) => self.route_to_shared_channel(message_type, message).await,
-            RoutingDecision::Error { request_id, error_code } => self.route_error_message(message, request_id, error_code).await,
+            RoutingDecision::Error(payload) => self.route_error_message(message, payload).await,
             RoutingDecision::Shutdown => {
                 debug!("Received shutdown message, calling request_shutdown");
                 self.request_shutdown().await;
@@ -415,42 +416,38 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
     }
 
     /// Route error message using routing decision
-    async fn route_error_message(&self, message: ResponseMessage, request_id: i32, error_code: i32) -> Result<(), Error> {
+    async fn route_error_message(&self, message: ResponseMessage, payload: DecodedError) -> Result<(), Error> {
         let _ = self.send_order_update(&message).await;
 
-        let error_msg = message.error_message();
+        if payload.is_log_only() {
+            log_error_payload(&payload);
+            return Ok(());
+        }
 
-        // Check if this is a warning or unspecified error
-        if request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(error_code) {
-            // Log warnings differently
-            if is_warning_error(error_code) {
-                warn!("Warning - Request ID: {request_id}, Code: {error_code}, Message: {error_msg}");
-            } else {
-                error!("Error - Request ID: {request_id}, Code: {error_code}, Message: {error_msg}");
-            }
+        let DecodedError {
+            request_id,
+            error_code,
+            error_message: error_msg,
+            ..
+        } = payload;
+
+        info!("Error message - Request ID: {request_id}, Code: {error_code}, Message: {error_msg}");
+
+        let sent_to_update_stream = if message.order_id().is_some() {
+            self.send_order_update(&message).await
         } else {
-            // Route to request-specific channel or order channel
-            info!("Error message - Request ID: {request_id}, Code: {error_code}, Message: {error_msg}");
+            false
+        };
 
-            // Check if this error is order-related (has an order_id)
-            let sent_to_update_stream = if message.order_id().is_some() {
-                self.send_order_update(&message).await
-            } else {
-                false
-            };
-
-            // First try request channels
-            let channels = self.request_channels.read().await;
-            if let Some(sender) = channels.get(&request_id) {
-                let _ = sender.send(message);
-            } else {
-                // If not in request channels, try order channels (for cancel_order, etc.)
-                let order_channels = self.order_channels.read().await;
-                if let Some(sender) = order_channels.get(&request_id) {
-                    let _ = sender.send(message.clone());
-                } else if !sent_to_update_stream && message.order_id().is_some() {
-                    info!("order error message has no recipient: {:?}", message);
-                }
+        let channels = self.request_channels.read().await;
+        if let Some(sender) = channels.get(&request_id) {
+            let _ = sender.send(message);
+        } else {
+            let order_channels = self.order_channels.read().await;
+            if let Some(sender) = order_channels.get(&request_id) {
+                let _ = sender.send(message.clone());
+            } else if !sent_to_update_stream && message.order_id().is_some() {
+                info!("order error message has no recipient: {:?}", message);
             }
         }
 
