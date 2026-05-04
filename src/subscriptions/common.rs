@@ -3,7 +3,25 @@
 use time_tz::Tz;
 
 use crate::errors::Error;
-use crate::messages::{IncomingMessages, OutgoingMessages, ResponseMessage};
+use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
+
+/// Pre-classified channel item delivered from the dispatcher to subscriptions.
+///
+/// `Response` carries raw bytes that the subscription's decoder still has to interpret.
+/// `Notice` and `Error` are pre-built by the dispatcher from `IncomingMessages::Error`
+/// frames so decoders never have to re-classify warnings vs. hard errors. PR 2a only
+/// emits `Response` and `Error`; `Notice` becomes reachable in PR 3.
+#[derive(Debug, Clone)]
+pub(crate) enum RoutedItem {
+    /// Normal data message; subscription's decoder produces the final `T`.
+    Response(ResponseMessage),
+    /// Non-fatal IB notice (warning codes 2100..=2169) bound to this subscription.
+    /// Defined but unused in PR 2a — reachable from PR 3 onward.
+    #[allow(dead_code)]
+    Notice(Notice),
+    /// Hard error (terminal). Subscription stores the error and stops yielding.
+    Error(Error),
+}
 
 /// Checks if an error indicates the end of a stream
 #[allow(dead_code)]

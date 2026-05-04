@@ -1,6 +1,6 @@
 //! Subscription types for sync/async streaming data
 
-mod common;
+pub(crate) mod common;
 pub(crate) use common::{DecoderContext, StreamDecoder};
 
 #[cfg(feature = "sync")]

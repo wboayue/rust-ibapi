@@ -341,7 +341,7 @@ mod tests {
 
         // Send a test message
         let msg = ResponseMessage::from("1\09000\020241231 12:00:00\0100.5\0101.0\0100.0\0100.25\01000\0100.2\05\00");
-        tx.send(msg).unwrap();
+        tx.send(crate::subscriptions::common::RoutedItem::Response(msg)).unwrap();
 
         // Test that we can receive the decoded message
         let mut sub = subscription;
@@ -424,7 +424,7 @@ mod tests {
 
         // Send a message that will trigger the error
         let msg = ResponseMessage::from("test\0");
-        tx.send(msg).unwrap();
+        tx.send(crate::subscriptions::common::RoutedItem::Response(msg)).unwrap();
 
         let result = subscription.next().await;
         assert!(result.is_some());
@@ -449,7 +449,7 @@ mod tests {
 
         // Send a message that will trigger end of stream
         let msg = ResponseMessage::from("test\0");
-        tx.send(msg).unwrap();
+        tx.send(crate::subscriptions::common::RoutedItem::Response(msg)).unwrap();
 
         let result = subscription.next().await;
         assert!(result.is_none());
@@ -482,13 +482,16 @@ mod tests {
         );
 
         // First message triggers EndOfStream
-        tx.send(ResponseMessage::from("end\0")).unwrap();
+        tx.send(crate::subscriptions::common::RoutedItem::Response(ResponseMessage::from("end\0")))
+            .unwrap();
         let result = subscription.next().await;
         assert!(result.is_none());
 
         // Send stray messages after stream ended
-        tx.send(ResponseMessage::from("stray1\0")).unwrap();
-        tx.send(ResponseMessage::from("stray2\0")).unwrap();
+        tx.send(crate::subscriptions::common::RoutedItem::Response(ResponseMessage::from("stray1\0")))
+            .unwrap();
+        tx.send(crate::subscriptions::common::RoutedItem::Response(ResponseMessage::from("stray2\0")))
+            .unwrap();
 
         // Subsequent calls should return None immediately without invoking decoder
         let result = subscription.next().await;
@@ -529,7 +532,8 @@ mod tests {
 
         // Send 21 messages — 20 will be "unexpected" (skipped), 1 will succeed
         for _ in 0..21 {
-            tx.send(ResponseMessage::from("msg\0")).unwrap();
+            tx.send(crate::subscriptions::common::RoutedItem::Response(ResponseMessage::from("msg\0")))
+                .unwrap();
         }
 
         let result = subscription.next().await;

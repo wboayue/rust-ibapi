@@ -18,7 +18,7 @@ use crate::connection::sync::Connection;
 
 use super::common::log_error_payload;
 use super::routing::{determine_routing, order_routing_strategy, OrderRoutingStrategy, RoutingDecision};
-use super::{InternalSubscription, MessageBus, Response, Signal, SubscriptionBuilder};
+use super::{InternalSubscription, MessageBus, Response, RoutedItem, Signal, SubscriptionBuilder};
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::Error;
 
@@ -31,9 +31,9 @@ const TWS_READ_TIMEOUT: Duration = Duration::from_secs(1);
 #[derive(Debug)]
 struct SharedChannels {
     // Maps an inbound reply to channel used to send responses.
-    senders: HashMap<IncomingMessages, Vec<Arc<Sender<Response>>>>,
+    senders: HashMap<IncomingMessages, Vec<Arc<Sender<RoutedItem>>>>,
     // Maps an outbound request to channel used to receive responses.
-    receivers: HashMap<OutgoingMessages, Arc<Receiver<Response>>>,
+    receivers: HashMap<OutgoingMessages, Arc<Receiver<RoutedItem>>>,
 }
 
 impl SharedChannels {
@@ -54,7 +54,7 @@ impl SharedChannels {
 
     // Maps an outgoing message to incoming message(s)
     fn register(&mut self, outbound: OutgoingMessages, inbounds: &[IncomingMessages]) {
-        let (sender, receiver) = channel::unbounded::<Response>();
+        let (sender, receiver) = channel::unbounded::<RoutedItem>();
 
         self.receivers.insert(outbound, Arc::new(receiver));
 
@@ -69,7 +69,7 @@ impl SharedChannels {
     }
 
     // Get receiver for specified message type. Panics if receiver not found.
-    fn get_receiver(&self, message_type: OutgoingMessages) -> Arc<Receiver<Response>> {
+    fn get_receiver(&self, message_type: OutgoingMessages) -> Arc<Receiver<RoutedItem>> {
         let receiver = self
             .receivers
             .get(&message_type)
@@ -86,7 +86,7 @@ impl SharedChannels {
     fn send_message(&self, message_type: IncomingMessages, message: &ResponseMessage) {
         if let Some(senders) = self.senders.get(&message_type) {
             for sender in senders.iter() {
-                if let Err(e) = sender.send(Ok(message.clone())) {
+                if let Err(e) = sender.send(RoutedItem::Response(message.clone())) {
                     warn!("error sending message: {e}");
                 }
             }
@@ -96,7 +96,7 @@ impl SharedChannels {
     // Notify all senders with a given message
     fn notify_all<F>(&self, message_fn: F)
     where
-        F: Fn() -> Response,
+        F: Fn() -> RoutedItem,
     {
         for senders in self.senders.values() {
             for sender in senders {
@@ -112,14 +112,14 @@ impl SharedChannels {
 pub struct TcpMessageBus<S: Stream> {
     connection: Connection<S>,
     handles: Mutex<Vec<JoinHandle<()>>>,
-    requests: SenderHash<i32, Response>,
-    orders: SenderHash<i32, Response>,
-    executions: SenderHash<String, Response>,
+    requests: SenderHash<i32, RoutedItem>,
+    orders: SenderHash<i32, RoutedItem>,
+    executions: SenderHash<String, RoutedItem>,
     shared_channels: SharedChannels,
     signals_send: Sender<Signal>,
     signals_recv: Receiver<Signal>,
     shutdown_requested: AtomicBool,
-    order_update_stream: Mutex<Option<Sender<Response>>>,
+    order_update_stream: Mutex<Option<Sender<RoutedItem>>>,
     connected: AtomicBool,
 }
 
@@ -149,9 +149,9 @@ impl<S: Stream> TcpMessageBus<S> {
     fn request_shutdown(&self) {
         debug!("shutdown requested");
 
-        self.requests.notify_all(|| Err(Error::Shutdown));
-        self.orders.notify_all(|| Err(Error::Shutdown));
-        self.shared_channels.notify_all(|| Err(Error::Shutdown));
+        self.requests.notify_all(|| RoutedItem::Error(Error::Shutdown));
+        self.orders.notify_all(|| RoutedItem::Error(Error::Shutdown));
+        self.shared_channels.notify_all(|| RoutedItem::Error(Error::Shutdown));
 
         self.requests.clear();
         self.orders.clear();
@@ -164,9 +164,9 @@ impl<S: Stream> TcpMessageBus<S> {
     fn reset(&self) {
         debug!("reset message bus");
 
-        self.requests.notify_all(|| Err(Error::ConnectionReset));
-        self.orders.notify_all(|| Err(Error::ConnectionReset));
-        self.shared_channels.notify_all(|| Err(Error::ConnectionReset));
+        self.requests.notify_all(|| RoutedItem::Error(Error::ConnectionReset));
+        self.orders.notify_all(|| RoutedItem::Error(Error::ConnectionReset));
+        self.shared_channels.notify_all(|| RoutedItem::Error(Error::ConnectionReset));
 
         self.requests.clear();
         self.orders.clear();
@@ -294,9 +294,9 @@ impl<S: Stream> TcpMessageBus<S> {
 
     fn process_response_with_id(&self, request_id: i32, message: ResponseMessage, routed: bool) {
         if self.requests.contains(&request_id) {
-            self.requests.send(&request_id, Ok(message)).unwrap();
+            self.requests.send(&request_id, RoutedItem::Response(message)).unwrap();
         } else if self.orders.contains(&request_id) {
-            self.orders.send(&request_id, Ok(message)).unwrap();
+            self.orders.send(&request_id, RoutedItem::Response(message)).unwrap();
         } else if self.shared_channels.contains_sender(message.message_type()) {
             self.shared_channels.send_message(message.message_type(), &message);
         } else if !routed {
@@ -315,7 +315,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 if let Some(order_id) = message.order_id() {
                     if self.orders.contains(&order_id) {
                         self.store_execution_mapping_orders(&message, order_id);
-                        if let Err(e) = self.orders.send(&order_id, Ok(message)) {
+                        if let Err(e) = self.orders.send(&order_id, RoutedItem::Response(message)) {
                             warn!("error routing message for order_id({order_id}): {e}");
                         }
                         return;
@@ -324,7 +324,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 if let Some(request_id) = message.request_id() {
                     if self.requests.contains(&request_id) {
                         self.store_execution_mapping_requests(&message, request_id);
-                        if let Err(e) = self.requests.send(&request_id, Ok(message)) {
+                        if let Err(e) = self.requests.send(&request_id, RoutedItem::Response(message)) {
                             warn!("error routing message for request_id({request_id}): {e}");
                         }
                         return;
@@ -337,7 +337,7 @@ impl<S: Stream> TcpMessageBus<S> {
             OrderRoutingStrategy::ExecutionDataEnd => {
                 if let Some(order_id) = message.order_id() {
                     if self.orders.contains(&order_id) {
-                        if let Err(e) = self.orders.send(&order_id, Ok(message)) {
+                        if let Err(e) = self.orders.send(&order_id, RoutedItem::Response(message)) {
                             warn!("error routing message for order_id({order_id}): {e}");
                         }
                         return;
@@ -345,7 +345,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 }
                 if let Some(request_id) = message.request_id() {
                     if self.requests.contains(&request_id) {
-                        if let Err(e) = self.requests.send(&request_id, Ok(message)) {
+                        if let Err(e) = self.requests.send(&request_id, RoutedItem::Response(message)) {
                             warn!("error routing message for request_id({request_id}): {e}");
                         }
                         return;
@@ -358,7 +358,7 @@ impl<S: Stream> TcpMessageBus<S> {
 
                 if let Some(order_id) = message.order_id() {
                     if self.orders.contains(&order_id) {
-                        if let Err(e) = self.orders.send(&order_id, Ok(message)) {
+                        if let Err(e) = self.orders.send(&order_id, RoutedItem::Response(message)) {
                             warn!("error routing message for order_id({order_id}): {e}");
                         }
                         return;
@@ -376,7 +376,7 @@ impl<S: Stream> TcpMessageBus<S> {
                 let sent_to_update_stream = self.send_order_update(&message);
 
                 if let Some(execution_id) = message.execution_id() {
-                    if let Err(e) = self.executions.send(&execution_id, Ok(message)) {
+                    if let Err(e) = self.executions.send(&execution_id, RoutedItem::Response(message)) {
                         warn!("error sending commission report for execution {execution_id}: {e}");
                     }
                 } else if !sent_to_update_stream {
@@ -413,7 +413,7 @@ impl<S: Stream> TcpMessageBus<S> {
     fn send_order_update(&self, message: &ResponseMessage) -> bool {
         if let Ok(order_update_stream) = self.order_update_stream.lock() {
             if let Some(sender) = order_update_stream.as_ref() {
-                if let Err(e) = sender.send(Ok(message.clone())) {
+                if let Err(e) = sender.send(RoutedItem::Response(message.clone())) {
                     warn!("error sending to order update stream: {e}");
                     return false;
                 }
@@ -502,7 +502,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     fn cancel_subscription(&self, request_id: i32, message: &[u8]) -> Result<(), Error> {
         self.connection.write_message(message)?;
 
-        if let Err(e) = self.requests.send(&request_id, Err(Error::Cancelled)) {
+        if let Err(e) = self.requests.send(&request_id, RoutedItem::Error(Error::Cancelled)) {
             info!("error sending cancel notification: {e}");
         }
 
@@ -554,7 +554,7 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
     fn cancel_order_subscription(&self, request_id: i32, message: &[u8]) -> Result<(), Error> {
         self.connection.write_message(message)?;
 
-        if let Err(e) = self.orders.send(&request_id, Err(Error::Cancelled)) {
+        if let Err(e) = self.orders.send(&request_id, RoutedItem::Error(Error::Cancelled)) {
             info!("error sending cancel notification: {e}");
         }
 

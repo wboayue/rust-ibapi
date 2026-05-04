@@ -544,6 +544,36 @@ mod tests {
     }
 
     #[test]
+    fn test_routed_item_error_terminates_subscription() {
+        use crate::subscriptions::common::RoutedItem;
+        use crate::transport::SubscriptionBuilder;
+        use crossbeam::channel;
+
+        #[derive(Debug)]
+        struct DataItem;
+
+        impl StreamDecoder<DataItem> for DataItem {
+            fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<DataItem, Error> {
+                Ok(DataItem)
+            }
+        }
+
+        let (sender, receiver) = channel::unbounded::<RoutedItem>();
+        let (signaler, _) = channel::unbounded();
+        sender.send(RoutedItem::Error(Error::ConnectionReset)).unwrap();
+
+        let internal = SubscriptionBuilder::new().receiver(receiver).signaler(signaler).request_id(1).build();
+
+        let stub = Arc::new(MessageBusStub::default());
+        let sub: Subscription<DataItem> = Subscription::new(stub, internal, DecoderContext::default());
+
+        // Subscription terminates on terminal error.
+        assert!(sub.next().is_none());
+        // Error is exposed via the error() accessor.
+        assert!(matches!(sub.error(), Some(Error::ConnectionReset)));
+    }
+
+    #[test]
     fn test_no_retries_after_end_of_stream() {
         let stub = MessageBusStub::with_responses(vec![
             "1|data".to_string(),  // triggers EndOfStream via decoder

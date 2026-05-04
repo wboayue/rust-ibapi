@@ -225,7 +225,7 @@ PR 2 is split because the internal channel-envelope refactor (2a) and the public
 
 PR 5 (global notice stream) is an additive API that doesn't depend on PR 4 — it can land any time after PR 3 if PR 4 lags.
 
-### PR 1 — Protobuf Error full decode ✅ open
+### PR 1 — Protobuf Error full decode ✅ merged (#502)
 **Goal:** populate real `error_code` and `error_message` for protobuf-encoded Error messages so downstream classification works on the protobuf path.
 
 **Scope:**
@@ -242,12 +242,15 @@ PR 5 (global notice stream) is an additive API that doesn't depend on PR 4 — i
 ---
 
 ### PR 2a — Internal channel envelope refactor
-**Goal:** widen the internal channel from `Result<ResponseMessage, Error>` to a typed `RoutedItem` envelope so subsequent PRs can deliver pre-classified `Notice` and `Error` items without re-classifying inside decoders. **Public `Subscription<T>` API is unchanged.** Examples and integration tests are untouched.
+**Goal:** widen the internal channel from `Result<ResponseMessage, Error>` (sync) / `ResponseMessage` (async) to a typed `RoutedItem` envelope so subsequent PRs can deliver pre-classified `Notice` and `Error` items without re-classifying inside decoders. **Public `Subscription<T>` API is unchanged.** Examples and integration tests are untouched.
+
+**Scope reductions vs. original plan** (decided 2026-05-03):
+- **Reuse existing `Notice`** at `src/messages.rs:1304` instead of adding a new one. The existing shape is `{ code, message, error_time }`; `request_id` rides on routing metadata (not on the value) until PR 3 needs it.
+- **Manual `impl Clone for Error`** in `src/errors.rs` so `RoutedItem` can be `Clone` (required by `tokio::sync::broadcast` on the async side). `Io` variant cloned as `io::Error::new(kind, msg)` to preserve kind + message.
+- **Decoder `IncomingMessages::Error` arms left alone in 2a.** Dispatcher pre-classification into `RoutedItem::Error` makes them unreachable but harmless. Cleanup happens in PR 3 alongside the dispatcher classification rewrite.
 
 **Scope — new types (`src/subscriptions/common.rs`):**
-- `Notice { code, message, request_id }` with `Debug/Clone/PartialEq/Eq/Serialize/Deserialize` derives.
-- `impl From<ResponseMessage> for Notice` (mirror existing `impl From<ResponseMessage> for Error` at `src/errors.rs:114`).
-- `RoutedItem = Response(ResponseMessage) | Notice(Notice) | Error(Error)`.
+- `RoutedItem = Response(ResponseMessage) | Notice(Notice) | Error(Error)` with `Debug` + `Clone` derives. The `Notice` variant is `#[allow(dead_code)]` in 2a — defined but never written by the dispatcher.
 - `SubscriptionItem<T>` is **not** introduced yet — it's a public-API type that belongs with the API change in 2b.
 
 **Scope — channel transport:**
