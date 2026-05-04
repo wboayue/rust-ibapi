@@ -287,8 +287,10 @@ Decoder signatures stay `Result<T, Error>`. `process_decode_result` and `should_
 
 ---
 
-### PR 2b — Widen `Subscription<T>` public API + migrate consumers (closes #487)
+### PR 2b — Widen `Subscription<T>` public API + migrate consumers (closes #487) ✅ open ([#504](https://github.com/wboayue/rust-ibapi/pull/504))
 **Goal:** widen the `Ok` payload to `SubscriptionItem<T>`, align sync with async per #487, add iterator adapters, migrate every consumer. After this PR the codebase is ready for PR 3 to actually emit notices.
+
+**As-shipped diff:** 77 files, +708/-545. New public type `SubscriptionItem<T>` at `ibapi::subscriptions::SubscriptionItem`. Sync drops `error()` accessor + `Mutex<Option<Error>>` field; errors flow via `Err` arm. New `next_data()` / `iter_data()` / `try_iter_data()` / `timeout_iter_data()` filter notices for callers that don't care. Notice arm structurally present but unreachable until PR 3 emits notices from the dispatcher. All 3 clippy configs clean; tests green at sync 911 + 119 doc, async 909 + 73 doc, all-features 1097 + 143 doc.
 
 **Scope — new public type (`src/subscriptions/common.rs`):**
 - `SubscriptionItem<T> = Data(T) | Notice(Notice)` with `Debug/Clone/PartialEq/Eq/Serialize/Deserialize` derives.
