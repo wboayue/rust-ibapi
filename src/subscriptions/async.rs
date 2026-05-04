@@ -407,6 +407,67 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_routed_item_error_surfaces_through_async_subscription() {
+        use crate::subscriptions::common::RoutedItem;
+
+        let message_bus = Arc::new(MessageBusStub::default());
+        let (tx, rx) = broadcast::channel(100);
+        let internal = AsyncInternalSubscription::new(rx);
+
+        // Decoder would succeed if it ran — but the channel emits a terminal
+        // RoutedItem::Error that the consumer should surface directly without
+        // ever invoking the decoder.
+        let mut subscription: Subscription<String> = Subscription::with_decoder(
+            internal,
+            message_bus,
+            |_context, _msg| Ok("should-not-be-called".to_string()),
+            None,
+            None,
+            None,
+            DecoderContext::default(),
+        );
+
+        tx.send(RoutedItem::Error(Error::ConnectionReset)).unwrap();
+
+        let result = subscription.next().await;
+        assert!(matches!(result, Some(Err(Error::ConnectionReset))));
+    }
+
+    #[tokio::test]
+    async fn test_routed_item_notice_skipped_then_response_delivered() {
+        use crate::messages::Notice;
+        use crate::subscriptions::common::RoutedItem;
+
+        let message_bus = Arc::new(MessageBusStub::default());
+        let (tx, rx) = broadcast::channel(100);
+        let internal = AsyncInternalSubscription::new(rx);
+
+        let mut subscription: Subscription<String> = Subscription::with_decoder(
+            internal,
+            message_bus,
+            |_context, _msg| Ok("data".to_string()),
+            None,
+            None,
+            None,
+            DecoderContext::default(),
+        );
+
+        // PR 2a never emits Notice from the dispatcher, but the receiver-side
+        // contract is that notices are silently consumed and the next item is
+        // delivered. Lock that contract before PR 3 starts emitting them.
+        tx.send(RoutedItem::Notice(Notice {
+            code: 2104,
+            message: "Market data farm OK".into(),
+            error_time: None,
+        }))
+        .unwrap();
+        tx.send(RoutedItem::Response(ResponseMessage::from("payload\0"))).unwrap();
+
+        let result = subscription.next().await;
+        assert_eq!(result.unwrap().unwrap(), "data");
+    }
+
+    #[tokio::test]
     async fn test_subscription_next_with_error() {
         let message_bus = Arc::new(MessageBusStub::default());
         let (tx, rx) = broadcast::channel(100);

@@ -120,8 +120,12 @@ impl From<ResponseMessage> for Error {
 }
 
 // Manual Clone — `std::io::Error` and `time::error::Parse` don't derive Clone.
-// Both are reconstructed in a way that preserves their displayed message; `Io`
-// also preserves its `ErrorKind`.
+// `Io` keeps its `ErrorKind` plus displayed message; `ParseTime` is lossy:
+// it collapses to `Error::Simple(self.to_string())`, dropping variant identity
+// (a cloned `ParseTime` no longer matches `Error::ParseTime(_)`). Channel-routed
+// errors today are only `Cancelled`/`Shutdown`/`ConnectionReset`/`Message`,
+// all of which clone losslessly; revisit if a non-cloning variant needs to
+// flow through `RoutedItem`.
 impl Clone for Error {
     fn clone(&self) -> Self {
         match self {
