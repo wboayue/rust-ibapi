@@ -2,6 +2,59 @@ use super::*;
 use crate::messages::ResponseMessage;
 
 #[test]
+fn test_decoded_error_default() {
+    // Manual Default impl: request_id falls back to UNSPECIFIED_REQUEST_ID,
+    // not i32::default (0). Guards the silent regression that swapped these.
+    let d = DecodedError::default();
+    assert_eq!(d.request_id, UNSPECIFIED_REQUEST_ID);
+    assert_eq!(d.error_code, 0);
+    assert_eq!(d.error_message, "");
+    assert_eq!(d.error_time, None);
+    assert_eq!(d.advanced_order_reject_json, "");
+}
+
+#[test]
+fn test_decoded_error_is_log_only() {
+    let warning = DecodedError {
+        request_id: 42,
+        error_code: 2104,
+        ..Default::default()
+    };
+    assert!(warning.is_log_only(), "warning code with real request_id is log-only");
+
+    let unspecified = DecodedError {
+        request_id: UNSPECIFIED_REQUEST_ID,
+        error_code: 200,
+        ..Default::default()
+    };
+    assert!(unspecified.is_log_only(), "unspecified request_id is log-only");
+
+    let hard_error = DecodedError {
+        request_id: 42,
+        error_code: 200,
+        ..Default::default()
+    };
+    assert!(!hard_error.is_log_only(), "hard error with real request_id routes to subscription");
+}
+
+#[test]
+fn test_determine_routing_error_protobuf_malformed() {
+    // Garbage bytes that aren't a valid ErrorMessage proto fall back to Default,
+    // which sets request_id = UNSPECIFIED_REQUEST_ID (not 0).
+    let raw_bytes = vec![0xFFu8; 16];
+    let message = ResponseMessage::from_protobuf(IncomingMessages::Error as i32, raw_bytes, crate::server_versions::PROTOBUF);
+
+    match determine_routing(&message) {
+        RoutingDecision::Error(payload) => {
+            assert_eq!(payload.request_id, UNSPECIFIED_REQUEST_ID);
+            assert_eq!(payload.error_code, 0);
+            assert_eq!(payload.error_message, "");
+        }
+        routing => panic!("Expected Error routing, got {routing:?}"),
+    }
+}
+
+#[test]
 fn test_determine_routing_by_request_id() {
     // Create a mock message with request ID (AccountSummary = 63)
     let message_str = "63\01\0123\0DU123456\0AccountType\0ADVISOR\0USD\0";

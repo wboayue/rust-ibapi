@@ -4,7 +4,7 @@ use crate::messages::{IncomingMessages, ResponseMessage, WARNING_CODE_RANGE};
 
 /// Represents how a message should be routed
 #[derive(Debug, Clone, PartialEq)]
-pub enum RoutingDecision {
+pub(crate) enum RoutingDecision {
     /// Route by request ID
     ByRequestId(i32),
     /// Route by order ID
@@ -40,6 +40,14 @@ impl Default for DecodedError {
             error_time: None,
             advanced_order_reject_json: String::new(),
         }
+    }
+}
+
+impl DecodedError {
+    /// `true` when the payload should be logged but not delivered to a subscription:
+    /// no owning request, or a non-fatal warning code.
+    pub(crate) fn is_log_only(&self) -> bool {
+        self.request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(self.error_code)
     }
 }
 
@@ -115,14 +123,13 @@ fn is_shared_message(message_type: IncomingMessages) -> bool {
 }
 
 /// Determine how to route an incoming message
-pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
+pub(crate) fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
     let message_type = message.message_type();
 
     if message_type == IncomingMessages::Shutdown {
         return RoutingDecision::Shutdown;
     }
 
-    // Special handling for error messages
     if message_type == IncomingMessages::Error {
         let decoded = if message.is_protobuf {
             message.raw_bytes().and_then(decode_error_envelope).unwrap_or_default()
@@ -169,7 +176,7 @@ pub fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
 /// Routing strategy for order-related messages.
 /// Describes which channel keys to try and in what order.
 #[derive(Debug, Clone, PartialEq)]
-pub enum OrderRoutingStrategy {
+pub(crate) enum OrderRoutingStrategy {
     /// Try order_id channel, then request_id channel. Store execution_id mapping.
     ExecutionData,
     /// Try order_id channel, then request_id channel.
@@ -185,7 +192,7 @@ pub enum OrderRoutingStrategy {
 }
 
 /// Determine the routing strategy for an order-related message type.
-pub fn order_routing_strategy(message_type: IncomingMessages) -> OrderRoutingStrategy {
+pub(crate) fn order_routing_strategy(message_type: IncomingMessages) -> OrderRoutingStrategy {
     match message_type {
         IncomingMessages::ExecutionData => OrderRoutingStrategy::ExecutionData,
         IncomingMessages::ExecutionDataEnd => OrderRoutingStrategy::ExecutionDataEnd,
@@ -197,12 +204,12 @@ pub fn order_routing_strategy(message_type: IncomingMessages) -> OrderRoutingStr
 }
 
 /// Check if an error code is a warning
-pub fn is_warning_error(error_code: i32) -> bool {
+pub(crate) fn is_warning_error(error_code: i32) -> bool {
     WARNING_CODE_RANGE.contains(&error_code)
 }
 
 /// Request ID for unspecified errors
-pub const UNSPECIFIED_REQUEST_ID: i32 = -1;
+pub(crate) const UNSPECIFIED_REQUEST_ID: i32 = -1;
 
 #[cfg(test)]
 #[path = "routing_tests.rs"]

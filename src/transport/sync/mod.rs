@@ -17,7 +17,7 @@ use log::{debug, error, info, warn};
 use crate::connection::sync::Connection;
 
 use super::common::log_error_payload;
-use super::routing::{determine_routing, is_warning_error, order_routing_strategy, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID};
+use super::routing::{determine_routing, order_routing_strategy, OrderRoutingStrategy, RoutingDecision};
 use super::{InternalSubscription, MessageBus, Response, Signal, SubscriptionBuilder};
 use crate::messages::{shared_channel_configuration, IncomingMessages, OutgoingMessages, ResponseMessage};
 use crate::Error;
@@ -263,12 +263,11 @@ impl<S: Stream> TcpMessageBus<S> {
     }
 
     fn dispatch_message(&self, message: ResponseMessage) {
-        // Use common routing logic
         match determine_routing(&message) {
             RoutingDecision::Error(payload) => {
                 let routed = self.send_order_update(&message);
 
-                if payload.request_id == UNSPECIFIED_REQUEST_ID || is_warning_error(payload.error_code) {
+                if payload.is_log_only() {
                     log_error_payload(&payload);
                 } else {
                     self.process_response_with_id(payload.request_id, message, routed);
