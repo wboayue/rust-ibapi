@@ -24,11 +24,6 @@ use crate::transport::{InternalSubscription, MessageBus};
 /// * `Some(Ok(SubscriptionItem::Notice(n)))` — a non-fatal IB notice; the stream stays open.
 /// * `Some(Err(e))` — terminal error; subsequent calls return `None`.
 ///
-/// The `Notice` arm is part of the public contract but not yet emitted: the
-/// dispatcher routes IB warnings (codes 2100..=2169) globally today and will
-/// surface them per-subscription in a future release. Match it defensively now
-/// to avoid a churned migration later.
-///
 /// When you only care about data, use [`iter_data`](Subscription::iter_data) (or
 /// [`next_data`](Subscription::next_data)) which filters notices for you.
 #[allow(private_bounds)]
@@ -247,19 +242,17 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     }
 
     /// Blocking iterator that filters notices and yields `Result<T, Error>`.
-    /// Notices are logged at `warn!` level. Composes `iter().filter_data()`.
+    /// Notices are logged at `warn!` level.
     pub fn iter_data(&self) -> FilterData<SubscriptionIter<'_, T>> {
         self.iter().filter_data()
     }
 
-    /// Non-blocking data iterator (notices filtered). Composes
-    /// `try_iter().filter_data()`.
+    /// Non-blocking data iterator (notices filtered).
     pub fn try_iter_data(&self) -> FilterData<SubscriptionTryIter<'_, T>> {
         self.try_iter().filter_data()
     }
 
-    /// Timeout-bounded data iterator (notices filtered). Composes
-    /// `timeout_iter(timeout).filter_data()`.
+    /// Timeout-bounded data iterator (notices filtered).
     pub fn timeout_iter_data(&self, timeout: Duration) -> FilterData<SubscriptionTimeoutIter<'_, T>> {
         self.timeout_iter(timeout).filter_data()
     }
@@ -305,28 +298,25 @@ where
 
 /// Extension trait that adds [`filter_data`](SubscriptionItemIterExt::filter_data)
 /// to any iterator yielding `Result<SubscriptionItem<T>, Error>`. Use it to compose
-/// the data-only flow on top of any base iterator (`iter`, `try_iter`, `timeout_iter`,
-/// or owned).
-///
-/// ```ignore
-/// use ibapi::subscriptions::SubscriptionItemIterExt;
-/// for tick in subscription.iter().filter_data() {
-///     let tick = tick?;
-///     /* ... */
-/// }
-/// ```
-pub trait SubscriptionItemIterExt<T>: Iterator<Item = Result<SubscriptionItem<T>, Error>> + Sized {
+/// the data-only flow with iterator combinators that the built-in
+/// [`iter_data`](Subscription::iter_data) family doesn't already cover, e.g.
+/// `subscription.iter().take(10).filter_data()`.
+pub trait SubscriptionItemIterExt: Iterator + Sized {
     /// Wrap `self` in a [`FilterData`] adapter that drops `SubscriptionItem::Notice`
     /// items (logging them) and yields the underlying `Result<T, Error>`.
-    fn filter_data(self) -> FilterData<Self> {
+    fn filter_data<T>(self) -> FilterData<Self>
+    where
+        Self: Iterator<Item = Result<SubscriptionItem<T>, Error>>,
+    {
         FilterData { inner: self }
     }
 }
 
-impl<T, I> SubscriptionItemIterExt<T> for I where I: Iterator<Item = Result<SubscriptionItem<T>, Error>> {}
+impl<I: Iterator> SubscriptionItemIterExt for I {}
 
 /// Blocking iterator over `Result<SubscriptionItem<T>, Error>`.
 #[allow(private_bounds)]
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct SubscriptionIter<'a, T: StreamDecoder<T>> {
     subscription: &'a Subscription<T>,
 }
@@ -350,6 +340,7 @@ impl<'a, T: StreamDecoder<T>> IntoIterator for &'a Subscription<T> {
 
 /// Owned blocking iterator over `Result<SubscriptionItem<T>, Error>`.
 #[allow(private_bounds)]
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct SubscriptionOwnedIter<T: StreamDecoder<T>> {
     subscription: Subscription<T>,
 }
@@ -373,6 +364,7 @@ impl<T: StreamDecoder<T>> IntoIterator for Subscription<T> {
 
 /// Non-blocking iterator.
 #[allow(private_bounds)]
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct SubscriptionTryIter<'a, T: StreamDecoder<T>> {
     subscription: &'a Subscription<T>,
 }
@@ -387,6 +379,7 @@ impl<T: StreamDecoder<T>> Iterator for SubscriptionTryIter<'_, T> {
 
 /// Timeout-bounded iterator.
 #[allow(private_bounds)]
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct SubscriptionTimeoutIter<'a, T: StreamDecoder<T>> {
     subscription: &'a Subscription<T>,
     timeout: Duration,
