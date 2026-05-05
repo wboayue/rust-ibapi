@@ -8,17 +8,80 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 use time_tz::{OffsetResult, PrimitiveDateTimeExt, Tz};
 
+use crate::accounts::AccountUpdate;
 use crate::common::timezone::find_timezone;
 use crate::errors::Error;
-use crate::messages::{encode_length, encode_protobuf_message, IncomingMessages, OutgoingMessages, ResponseMessage, PROTOBUF_MSG_ID};
+use crate::messages::{encode_length, encode_protobuf_message, IncomingMessages, Notice, OutgoingMessages, ResponseMessage, PROTOBUF_MSG_ID};
+use crate::orders::{OrderData, OrderStatus};
 use crate::server_versions;
 
-/// Callback for handling unsolicited messages during connection setup.
+/// Domain-typed messages delivered to a [`StartupMessageCallback`] during the
+/// connection handshake (initial connect *and* auto-reconnect).
 ///
-/// When TWS sends messages like `OpenOrder` or `OrderStatus` during the connection
-/// handshake, this callback is invoked to allow the application to process them
-/// instead of discarding them.
-pub type StartupMessageCallback = Box<dyn Fn(ResponseMessage) + Send + Sync>;
+/// TWS may emit any of these unsolicited at handshake time when the previous
+/// session had outstanding orders, an active `reqAccountUpdates`, etc. Anything
+/// not covered by a dedicated variant lands in `Other` so callers can still
+/// inspect the raw message.
+#[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
+pub enum StartupMessage {
+    /// Open order — typed via the order decoders.
+    OpenOrder(OrderData),
+    /// Order status — typed via the order decoders.
+    OrderStatus(OrderStatus),
+    /// End-of-open-orders marker. TWS emits this after the last `OpenOrder`
+    /// frame at handshake time so callers know they've seen the full set.
+    /// No payload.
+    OpenOrderEnd,
+    /// Account update (`AccountValue`, `PortfolioValue`, `UpdateTime`, `End`).
+    /// Reuses the existing [`AccountUpdate`] enum so the same patterns work at
+    /// startup and at runtime.
+    AccountUpdate(AccountUpdate),
+    /// Anything else that arrived unsolicited during account-info exchange —
+    /// e.g. `ExecutionData`, `CommissionReport`, `CompletedOrder`. Inspect via
+    /// [`ResponseMessage::message_type`] and decode as needed.
+    Other(ResponseMessage),
+}
+
+impl StartupMessage {
+    /// The TWS message type that produced this startup message. Useful for
+    /// telemetry / logging without unpacking the typed payload.
+    pub fn message_type(&self) -> IncomingMessages {
+        match self {
+            StartupMessage::OpenOrder(_) => IncomingMessages::OpenOrder,
+            StartupMessage::OrderStatus(_) => IncomingMessages::OrderStatus,
+            StartupMessage::OpenOrderEnd => IncomingMessages::OpenOrderEnd,
+            StartupMessage::AccountUpdate(au) => match au {
+                AccountUpdate::AccountValue(_) => IncomingMessages::AccountValue,
+                AccountUpdate::PortfolioValue(_) => IncomingMessages::PortfolioValue,
+                AccountUpdate::UpdateTime(_) => IncomingMessages::AccountUpdateTime,
+                AccountUpdate::End => IncomingMessages::AccountDownloadEnd,
+            },
+            StartupMessage::Other(rm) => rm.message_type(),
+        }
+    }
+}
+
+/// Callback for unsolicited typed messages emitted during the connection
+/// handshake (initial connect *and* every auto-reconnect handshake).
+pub type StartupMessageCallback = Box<dyn Fn(StartupMessage) + Send + Sync>;
+
+/// Callback for IB notices emitted during the connection handshake — e.g. the
+/// 2104/2106/2158 farm-status notices, 1100/1101/1102 connectivity codes.
+/// Without this callback these are log-only.
+///
+/// Fires during initial connect *and* every auto-reconnect handshake.
+pub type StartupNoticeCallback = Box<dyn Fn(Notice) + Send + Sync>;
+
+/// Bundle of the two startup-time callbacks for internal threading.
+///
+/// Public API exposes them as separate builder methods on [`ConnectionOptions`];
+/// internally they always travel together, so we pass one struct instead of two
+/// callback parameters (project rule: ≤3 fn args).
+pub(crate) struct StartupCallbacks<'a> {
+    pub startup: Option<&'a (dyn Fn(StartupMessage) + Send + Sync)>,
+    pub notice: Option<&'a (dyn Fn(Notice) + Send + Sync)>,
+}
 
 /// Options for configuring a connection to TWS or IB Gateway.
 ///
@@ -36,7 +99,8 @@ pub type StartupMessageCallback = Box<dyn Fn(ResponseMessage) + Send + Sync>;
 #[derive(Clone, Default)]
 pub struct ConnectionOptions {
     pub(crate) tcp_no_delay: bool,
-    pub(crate) startup_callback: Option<Arc<dyn Fn(ResponseMessage) + Send + Sync>>,
+    pub(crate) startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+    pub(crate) startup_notice_callback: Option<Arc<dyn Fn(Notice) + Send + Sync>>,
 }
 
 impl ConnectionOptions {
@@ -49,12 +113,26 @@ impl ConnectionOptions {
         self
     }
 
-    /// Set a callback for unsolicited messages during connection setup.
+    /// Set a callback for unsolicited typed messages during connection setup.
     ///
-    /// When TWS sends messages like `OpenOrder` or `OrderStatus` during the
-    /// connection handshake, this callback processes them instead of discarding.
-    pub fn startup_callback(mut self, callback: impl Fn(ResponseMessage) + Send + Sync + 'static) -> Self {
+    /// When TWS sends messages like `OpenOrder`, `OrderStatus`, or account-update
+    /// frames during the connection handshake, this callback receives them as
+    /// typed [`StartupMessage`] values instead of having them discarded.
+    /// Fires during the initial connect *and* every auto-reconnect handshake.
+    pub fn startup_callback(mut self, callback: impl Fn(StartupMessage) + Send + Sync + 'static) -> Self {
         self.startup_callback = Some(Arc::new(callback));
+        self
+    }
+
+    /// Set a callback for notices emitted during connection setup.
+    ///
+    /// Receives the 2104/2106/2158 farm-status notices, 1100/1101/1102
+    /// connectivity codes, and any other handshake-time error/warning messages
+    /// as typed [`Notice`] values. Without this callback these messages are
+    /// log-only. Fires during the initial connect *and* every auto-reconnect
+    /// handshake.
+    pub fn startup_notice_callback(mut self, callback: impl Fn(Notice) + Send + Sync + 'static) -> Self {
+        self.startup_notice_callback = Some(Arc::new(callback));
         self
     }
 }
@@ -74,6 +152,7 @@ impl fmt::Debug for ConnectionOptions {
         f.debug_struct("ConnectionOptions")
             .field("tcp_no_delay", &self.tcp_no_delay)
             .field("startup_callback", &self.startup_callback.is_some())
+            .field("startup_notice_callback", &self.startup_notice_callback.is_some())
             .finish()
     }
 }
@@ -101,14 +180,17 @@ pub trait ConnectionProtocol {
     /// Format the start API message as raw bytes (without length prefix).
     fn format_start_api(&self, client_id: i32, server_version: i32) -> Vec<u8>;
 
-    /// Parse account information from incoming messages
+    /// Parse account information from incoming messages.
     ///
-    /// If a callback is provided, unsolicited messages (like OpenOrder, OrderStatus)
-    /// will be passed to it instead of being discarded.
+    /// `NextValidId` and `ManagedAccounts` are consumed internally to populate
+    /// [`AccountInfo`]. Anything else is delegated to
+    /// [`dispatch_unsolicited_message`] so the callbacks decide how to surface
+    /// (or drop) it.
     fn parse_account_info(
         &self,
+        server_version: i32,
         message: &mut ResponseMessage,
-        callback: Option<&(dyn Fn(ResponseMessage) + Send + Sync)>,
+        callbacks: &StartupCallbacks<'_>,
     ) -> Result<AccountInfo, Self::Error>;
 }
 
@@ -172,8 +254,9 @@ impl ConnectionProtocol for ConnectionHandler {
 
     fn parse_account_info(
         &self,
+        server_version: i32,
         message: &mut ResponseMessage,
-        callback: Option<&(dyn Fn(ResponseMessage) + Send + Sync)>,
+        callbacks: &StartupCallbacks<'_>,
     ) -> Result<AccountInfo, Self::Error> {
         use prost::Message;
 
@@ -206,41 +289,88 @@ impl ConnectionProtocol for ConnectionHandler {
                     info.managed_accounts = Some(message.next_string()?);
                 }
             }
-            IncomingMessages::Error => {
-                let notice = if message.is_protobuf {
-                    message.raw_bytes().and_then(|bytes| {
-                        crate::proto::ErrorMessage::decode(bytes).ok().map(|proto| crate::messages::Notice {
-                            code: proto.error_code.unwrap_or(0),
-                            message: proto.error_msg.unwrap_or_default(),
-                            error_time: None,
-                            advanced_order_reject_json: proto.advanced_order_reject_json.unwrap_or_default(),
-                        })
-                    })
-                } else {
-                    Some(crate::messages::Notice::from(message))
-                };
-                if let Some(notice) = notice {
-                    if notice.is_warning() || notice.is_system_message() {
-                        info!("{notice}");
-                    } else {
-                        error!("Error during account info: {notice}");
-                    }
-                }
-            }
-            _ => {
-                // Pass unsolicited messages to callback if provided
-                if let Some(cb) = callback {
-                    cb(message.clone());
-                } else {
-                    warn!(
-                        "CONSUMING MESSAGE during connection setup: {:?} - THIS MESSAGE IS LOST!",
-                        message.message_type()
-                    );
-                }
-            }
+            _ => dispatch_unsolicited_message(server_version, message, callbacks),
         }
 
         Ok(info)
+    }
+}
+
+/// Dispatch an unsolicited message that arrived during the handshake — i.e. one
+/// that wasn't `NextValidId` / `ManagedAccounts` (which `parse_account_info`
+/// consumes itself). Errors fan out to the notice callback; `OpenOrder` /
+/// `OrderStatus` / account-update frames are decoded into typed
+/// [`StartupMessage`] values; anything else lands in `StartupMessage::Other` so
+/// the caller can still inspect it. Decode failures surface as `Other` rather
+/// than being silently dropped.
+pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut ResponseMessage, callbacks: &StartupCallbacks<'_>) {
+    use crate::accounts::common::decode_account_update_either;
+    use crate::orders::common::{decode_open_order_either, decode_order_status_either};
+    use crate::transport::routing::decode_error_envelope;
+
+    match message.message_type() {
+        IncomingMessages::Error => {
+            // Reuse the dispatcher's protobuf Error decoder + DecodedError→Notice
+            // conversion so handshake notices preserve `error_time` (millis →
+            // OffsetDateTime) the same way runtime notices do.
+            let notice = if message.is_protobuf {
+                message.raw_bytes().and_then(decode_error_envelope).map(Notice::from)
+            } else {
+                Some(Notice::from(&*message))
+            };
+            if let Some(notice) = notice {
+                if notice.is_warning() || notice.is_system_message() {
+                    info!("{notice}");
+                } else {
+                    error!("Error during account info: {notice}");
+                }
+                if let Some(cb) = callbacks.notice {
+                    cb(notice);
+                }
+            }
+        }
+        IncomingMessages::OpenOrder => {
+            if let Some(cb) = callbacks.startup {
+                let typed = decode_open_order_either(server_version, message)
+                    .map(StartupMessage::OpenOrder)
+                    .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
+                cb(typed);
+            }
+        }
+        IncomingMessages::OrderStatus => {
+            if let Some(cb) = callbacks.startup {
+                let typed = decode_order_status_either(server_version, message)
+                    .map(StartupMessage::OrderStatus)
+                    .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
+                cb(typed);
+            }
+        }
+        IncomingMessages::OpenOrderEnd => {
+            if let Some(cb) = callbacks.startup {
+                cb(StartupMessage::OpenOrderEnd);
+            }
+        }
+        IncomingMessages::AccountValue
+        | IncomingMessages::PortfolioValue
+        | IncomingMessages::AccountUpdateTime
+        | IncomingMessages::AccountDownloadEnd => {
+            if let Some(cb) = callbacks.startup {
+                let typed = decode_account_update_either(server_version, message)
+                    .map(StartupMessage::AccountUpdate)
+                    .unwrap_or_else(|_| StartupMessage::Other(message.clone()));
+                cb(typed);
+            }
+        }
+        _ => {
+            if let Some(cb) = callbacks.startup {
+                cb(StartupMessage::Other(message.clone()));
+            } else {
+                warn!(
+                    "CONSUMING MESSAGE during connection setup: {:?} - THIS MESSAGE IS LOST!",
+                    message.message_type()
+                );
+            }
+        }
     }
 }
 

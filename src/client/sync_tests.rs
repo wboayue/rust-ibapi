@@ -120,9 +120,7 @@ fn connect_handshakes_against_real_socket() {
 
 #[test]
 fn connect_with_callback_receives_unsolicited_messages() {
-    // Inject an OpenOrder frame between NextValidId and ManagedAccounts. The
-    // handshake parser routes anything that isn't NextValidId/ManagedAccounts/
-    // Error to the startup callback.
+    // Sparse OpenOrder frame: decoder fails, surfaces as Other — callback still fires.
     let mut frames = Vec::new();
     frames.push(format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes());
     frames.push(binary_text(IncomingMessages::NextValidId as i32, "1\09000\0"));

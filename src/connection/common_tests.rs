@@ -3,13 +3,33 @@ use std::sync::{Arc, Mutex};
 use time::macros::datetime;
 use time_tz::{timezones, OffsetResult, PrimitiveDateTimeExt, TimeZone};
 
+const TEST_SERVER_VERSION: i32 = server_versions::PROTOBUF;
+
+fn empty_callbacks<'a>() -> StartupCallbacks<'a> {
+    StartupCallbacks { startup: None, notice: None }
+}
+
+fn startup_callbacks<'a>(cb: &'a (dyn Fn(StartupMessage) + Send + Sync)) -> StartupCallbacks<'a> {
+    StartupCallbacks {
+        startup: Some(cb),
+        notice: None,
+    }
+}
+
+fn notice_callbacks<'a>(cb: &'a (dyn Fn(Notice) + Send + Sync)) -> StartupCallbacks<'a> {
+    StartupCallbacks {
+        startup: None,
+        notice: Some(cb),
+    }
+}
+
 #[test]
 fn test_parse_account_info_next_valid_id() {
     let handler = ConnectionHandler::default();
     // NextValidId message: message_type=9, version=1, next_order_id=1000
     let mut message = ResponseMessage::from("9\01\01000\0");
 
-    let result = handler.parse_account_info(&mut message, None);
+    let result = handler.parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_callbacks());
     assert!(result.is_ok());
 
     let info = result.unwrap();
@@ -23,7 +43,7 @@ fn test_parse_account_info_managed_accounts() {
     // ManagedAccounts message: message_type=15, version=1, accounts="DU123,DU456"
     let mut message = ResponseMessage::from("15\01\0DU123,DU456\0");
 
-    let result = handler.parse_account_info(&mut message, None);
+    let result = handler.parse_account_info(TEST_SERVER_VERSION, &mut message, &empty_callbacks());
     assert!(result.is_ok());
 
     let info = result.unwrap();
@@ -32,125 +52,229 @@ fn test_parse_account_info_managed_accounts() {
 }
 
 #[test]
-fn test_parse_account_info_callback_invoked_for_open_order() {
-    let handler = ConnectionHandler::default();
-    // OpenOrder message: message_type=5
+fn test_dispatch_unsolicited_open_order_invokes_callback() {
+    // Sparse OpenOrder frame — decoder fails, so the callback receives
+    // `StartupMessage::Other` with message_type OpenOrder. Either way, callback
+    // fires. The exhaustive typed-decode test uses a realistic frame below.
     let mut message = ResponseMessage::from("5\0123\0AAPL\0STK\0");
 
-    let callback_invoked = Arc::new(Mutex::new(false));
-    let callback_invoked_clone = callback_invoked.clone();
+    let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
+    let captured_clone = captured.clone();
+    let cb = move |msg: StartupMessage| *captured_clone.lock().unwrap() = Some(msg.message_type());
 
-    let callback: StartupMessageCallback = Box::new(move |_msg| {
-        *callback_invoked_clone.lock().unwrap() = true;
-    });
-
-    let result = handler.parse_account_info(&mut message, Some(&callback));
-    assert!(result.is_ok());
-
-    assert!(*callback_invoked.lock().unwrap(), "callback should be invoked for OpenOrder");
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
+    assert_eq!(*captured.lock().unwrap(), Some(IncomingMessages::OpenOrder));
 }
 
 #[test]
-fn test_parse_account_info_callback_invoked_for_order_status() {
-    let handler = ConnectionHandler::default();
-    // OrderStatus message: message_type=3
+fn test_dispatch_unsolicited_order_status_invokes_callback() {
     let mut message = ResponseMessage::from("3\0456\0Filled\0100\0");
 
-    let callback_invoked = Arc::new(Mutex::new(false));
-    let callback_invoked_clone = callback_invoked.clone();
+    let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
+    let captured_clone = captured.clone();
+    let cb = move |msg: StartupMessage| *captured_clone.lock().unwrap() = Some(msg.message_type());
 
-    let callback: StartupMessageCallback = Box::new(move |_msg| {
-        *callback_invoked_clone.lock().unwrap() = true;
-    });
-
-    let result = handler.parse_account_info(&mut message, Some(&callback));
-    assert!(result.is_ok());
-
-    assert!(*callback_invoked.lock().unwrap(), "callback should be invoked for OrderStatus");
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
+    assert_eq!(*captured.lock().unwrap(), Some(IncomingMessages::OrderStatus));
 }
 
 #[test]
-fn test_parse_account_info_callback_receives_message() {
-    let handler = ConnectionHandler::default();
-    // OpenOrder message with identifiable content
-    let mut message = ResponseMessage::from("5\0999\0TEST_SYMBOL\0");
+fn test_dispatch_unsolicited_account_value_typed() {
+    // AccountValue text frame: msg_type=6, version=2, key, value, currency, account
+    let mut message = ResponseMessage::from("6\02\0NetLiquidation\0123456.78\0USD\0DU1234567\0");
 
-    let received_messages = Arc::new(Mutex::new(Vec::new()));
-    let received_messages_clone = received_messages.clone();
+    let captured: Arc<Mutex<Option<crate::accounts::AccountValue>>> = Arc::new(Mutex::new(None));
+    let captured_clone = captured.clone();
+    let cb = move |msg: StartupMessage| {
+        if let StartupMessage::AccountUpdate(crate::accounts::AccountUpdate::AccountValue(av)) = msg {
+            *captured.lock().unwrap() = Some(av);
+        } else {
+            panic!("expected AccountUpdate::AccountValue, got {msg:?}");
+        }
+    };
 
-    let callback: StartupMessageCallback = Box::new(move |msg| {
-        received_messages_clone.lock().unwrap().push(msg);
-    });
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
+    let got = captured_clone.lock().unwrap().take().expect("callback didn't fire");
+    assert_eq!(got.key, "NetLiquidation");
+    assert_eq!(got.value, "123456.78");
+    assert_eq!(got.currency, "USD");
+    assert_eq!(got.account.as_deref(), Some("DU1234567"));
+}
 
-    let result = handler.parse_account_info(&mut message, Some(&callback));
-    assert!(result.is_ok());
+#[test]
+fn test_dispatch_unsolicited_open_order_end_typed() {
+    // OpenOrderEnd: msg_type=53, version=1
+    let mut message = ResponseMessage::from("53\01\0");
 
-    let messages = received_messages.lock().unwrap();
-    assert_eq!(messages.len(), 1);
-    assert_eq!(messages[0].message_type(), IncomingMessages::OpenOrder);
+    let captured: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+    let captured_clone = captured.clone();
+    let cb = move |msg: StartupMessage| {
+        if matches!(msg, StartupMessage::OpenOrderEnd) {
+            *captured.lock().unwrap() = true;
+        } else {
+            panic!("expected OpenOrderEnd, got {msg:?}");
+        }
+    };
+
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
+    assert!(*captured_clone.lock().unwrap(), "OpenOrderEnd not delivered as typed variant");
+}
+
+#[test]
+fn test_dispatch_unsolicited_account_download_end_typed() {
+    // AccountDownloadEnd: msg_type=54, version=1, account
+    let mut message = ResponseMessage::from("54\01\0DU1234567\0");
+
+    let captured: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+    let captured_clone = captured.clone();
+    let cb = move |msg: StartupMessage| {
+        if matches!(msg, StartupMessage::AccountUpdate(crate::accounts::AccountUpdate::End)) {
+            *captured.lock().unwrap() = true;
+        }
+    };
+
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
+    assert!(*captured_clone.lock().unwrap(), "End variant not delivered");
+}
+
+#[test]
+fn test_dispatch_unsolicited_unknown_falls_to_other() {
+    // CompletedOrder (msg_type=101) — no typed variant in StartupMessage yet,
+    // so it should fall through to Other.
+    let mut message = ResponseMessage::from("101\0\0");
+
+    let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
+    let captured_clone = captured.clone();
+    let cb = move |msg: StartupMessage| {
+        if let StartupMessage::Other(rm) = msg {
+            *captured.lock().unwrap() = Some(rm.message_type());
+        } else {
+            panic!("expected Other for unknown message type, got {msg:?}");
+        }
+    };
+
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
+    assert_eq!(*captured_clone.lock().unwrap(), Some(IncomingMessages::CompletedOrder));
+}
+
+#[test]
+fn test_dispatch_unsolicited_notice_warning_invokes_notice_callback() {
+    // Error frame with code 2104 (farm-status warning).
+    // Format: msg_type=4, version=2, request_id=-1, code=2104, message
+    let mut message = ResponseMessage::from("4\02\0-1\02104\0Market data farm OK\0");
+
+    let captured: Arc<Mutex<Option<Notice>>> = Arc::new(Mutex::new(None));
+    let captured_clone = captured.clone();
+    let cb = move |notice: Notice| {
+        *captured.lock().unwrap() = Some(notice);
+    };
+
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_callbacks(&cb));
+    let got = captured_clone.lock().unwrap().take().expect("notice callback didn't fire");
+    assert_eq!(got.code, 2104);
+    assert_eq!(got.message, "Market data farm OK");
+}
+
+#[test]
+fn test_dispatch_unsolicited_notice_hard_error_invokes_notice_callback() {
+    // Error frame with code 504 — non-warning, non-system message.
+    let mut message = ResponseMessage::from("4\02\0-1\0504\0Not connected\0");
+
+    let captured: Arc<Mutex<Option<Notice>>> = Arc::new(Mutex::new(None));
+    let captured_clone = captured.clone();
+    let cb = move |notice: Notice| {
+        *captured.lock().unwrap() = Some(notice);
+    };
+
+    dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &notice_callbacks(&cb));
+    let got = captured_clone.lock().unwrap().take().expect("notice callback didn't fire");
+    assert_eq!(got.code, 504);
+}
+
+#[test]
+fn test_dispatch_unsolicited_notice_only_fires_notice_callback() {
+    // Error frame should fire the notice callback, NOT the startup callback.
+    let mut message = ResponseMessage::from("4\02\0-1\02104\0farm OK\0");
+
+    let startup_fired = Arc::new(Mutex::new(false));
+    let startup_fired_clone = startup_fired.clone();
+    let startup_cb = move |_msg: StartupMessage| {
+        *startup_fired_clone.lock().unwrap() = true;
+    };
+    let notice_fired = Arc::new(Mutex::new(false));
+    let notice_fired_clone = notice_fired.clone();
+    let notice_cb = move |_notice: Notice| {
+        *notice_fired_clone.lock().unwrap() = true;
+    };
+
+    dispatch_unsolicited_message(
+        TEST_SERVER_VERSION,
+        &mut message,
+        &StartupCallbacks {
+            startup: Some(&startup_cb),
+            notice: Some(&notice_cb),
+        },
+    );
+    assert!(!*startup_fired.lock().unwrap(), "startup callback should not fire on Error");
+    assert!(*notice_fired.lock().unwrap(), "notice callback should fire on Error");
 }
 
 #[test]
 fn test_parse_account_info_callback_not_invoked_for_next_valid_id() {
+    // NextValidId is consumed internally — neither callback fires.
     let handler = ConnectionHandler::default();
-    // NextValidId message should NOT trigger callback
     let mut message = ResponseMessage::from("9\01\01000\0");
 
-    let callback_invoked = Arc::new(Mutex::new(false));
-    let callback_invoked_clone = callback_invoked.clone();
+    let fired = Arc::new(Mutex::new(false));
+    let fired_clone = fired.clone();
+    let cb = move |_: StartupMessage| {
+        *fired_clone.lock().unwrap() = true;
+    };
 
-    let callback: StartupMessageCallback = Box::new(move |_msg| {
-        *callback_invoked_clone.lock().unwrap() = true;
-    });
-
-    let result = handler.parse_account_info(&mut message, Some(&callback));
+    let result = handler.parse_account_info(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
     assert!(result.is_ok());
-
-    assert!(!*callback_invoked.lock().unwrap(), "callback should NOT be invoked for NextValidId");
+    assert!(!*fired.lock().unwrap(), "callback should NOT be invoked for NextValidId");
 }
 
 #[test]
 fn test_parse_account_info_callback_not_invoked_for_managed_accounts() {
     let handler = ConnectionHandler::default();
-    // ManagedAccounts message should NOT trigger callback
     let mut message = ResponseMessage::from("15\01\0DU123\0");
 
-    let callback_invoked = Arc::new(Mutex::new(false));
-    let callback_invoked_clone = callback_invoked.clone();
+    let fired = Arc::new(Mutex::new(false));
+    let fired_clone = fired.clone();
+    let cb = move |_: StartupMessage| {
+        *fired_clone.lock().unwrap() = true;
+    };
 
-    let callback: StartupMessageCallback = Box::new(move |_msg| {
-        *callback_invoked_clone.lock().unwrap() = true;
-    });
-
-    let result = handler.parse_account_info(&mut message, Some(&callback));
+    let result = handler.parse_account_info(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
     assert!(result.is_ok());
-
-    assert!(!*callback_invoked.lock().unwrap(), "callback should NOT be invoked for ManagedAccounts");
+    assert!(!*fired.lock().unwrap(), "callback should NOT be invoked for ManagedAccounts");
 }
 
 #[test]
 fn test_parse_account_info_multiple_messages_callback() {
     let handler = ConnectionHandler::default();
-    let received_count = Arc::new(Mutex::new(0));
-    let received_count_clone = received_count.clone();
+    let count = Arc::new(Mutex::new(0));
+    let count_clone = count.clone();
+    let cb = move |_: StartupMessage| {
+        *count_clone.lock().unwrap() += 1;
+    };
+    let cbs = startup_callbacks(&cb);
 
-    let callback: StartupMessageCallback = Box::new(move |_msg| {
-        *received_count_clone.lock().unwrap() += 1;
-    });
-
-    // First message: OpenOrder
+    // First message: OpenOrder (sparse → Other)
     let mut msg1 = ResponseMessage::from("5\0123\0AAPL\0");
-    handler.parse_account_info(&mut msg1, Some(&callback)).unwrap();
+    handler.parse_account_info(TEST_SERVER_VERSION, &mut msg1, &cbs).unwrap();
 
-    // Second message: OrderStatus
+    // Second message: OrderStatus (sparse → Other)
     let mut msg2 = ResponseMessage::from("3\0456\0Filled\0");
-    handler.parse_account_info(&mut msg2, Some(&callback)).unwrap();
+    handler.parse_account_info(TEST_SERVER_VERSION, &mut msg2, &cbs).unwrap();
 
     // Third message: NextValidId (should NOT trigger callback)
     let mut msg3 = ResponseMessage::from("9\01\01000\0");
-    handler.parse_account_info(&mut msg3, Some(&callback)).unwrap();
+    handler.parse_account_info(TEST_SERVER_VERSION, &mut msg3, &cbs).unwrap();
 
-    assert_eq!(*received_count.lock().unwrap(), 2, "callback should be invoked exactly twice");
+    assert_eq!(*count.lock().unwrap(), 2, "callback should be invoked exactly twice");
 }
 
 #[test]
@@ -391,13 +515,18 @@ fn test_connection_options_default() {
     let opts = ConnectionOptions::default();
     assert_eq!(opts.tcp_no_delay, false);
     assert!(opts.startup_callback.is_none());
+    assert!(opts.startup_notice_callback.is_none());
 }
 
 #[test]
 fn test_connection_options_builder() {
-    let opts = ConnectionOptions::default().tcp_no_delay(true).startup_callback(|_msg| {});
+    let opts = ConnectionOptions::default()
+        .tcp_no_delay(true)
+        .startup_callback(|_msg: StartupMessage| {})
+        .startup_notice_callback(|_notice: Notice| {});
     assert_eq!(opts.tcp_no_delay, true);
     assert!(opts.startup_callback.is_some());
+    assert!(opts.startup_notice_callback.is_some());
 }
 
 #[test]
@@ -413,4 +542,5 @@ fn test_connection_options_debug() {
     let debug_str = format!("{:?}", opts);
     assert!(debug_str.contains("tcp_no_delay: true"));
     assert!(debug_str.contains("startup_callback: false"));
+    assert!(debug_str.contains("startup_notice_callback: false"));
 }

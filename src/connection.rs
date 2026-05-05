@@ -6,7 +6,7 @@ use time_tz::Tz;
 pub mod common;
 
 pub use common::ConnectionOptions;
-pub use common::StartupMessageCallback;
+pub use common::{StartupMessage, StartupMessageCallback, StartupNoticeCallback};
 
 /// Metadata about the connection to TWS
 #[derive(Default, Clone, Debug)]

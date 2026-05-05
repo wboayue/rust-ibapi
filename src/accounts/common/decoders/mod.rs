@@ -8,8 +8,10 @@ use crate::proto::decoders::parse_f64 as parse_str_f64;
 use crate::{proto, server_versions, Error};
 
 use super::super::{
-    AccountMultiValue, AccountPortfolioValue, AccountSummary, AccountUpdateTime, AccountValue, FamilyCode, PnL, PnLSingle, Position, PositionMulti,
+    AccountMultiValue, AccountPortfolioValue, AccountSummary, AccountUpdate, AccountUpdateTime, AccountValue, FamilyCode, PnL, PnLSingle, Position,
+    PositionMulti,
 };
+use crate::messages::IncomingMessages;
 
 pub(crate) fn decode_position(message: &mut ResponseMessage) -> Result<Position, Error> {
     message.skip(); // message type
@@ -377,6 +379,26 @@ pub(crate) fn decode_account_multi_value_proto(bytes: &[u8]) -> Result<AccountMu
         value: p.value.unwrap_or_default(),
         currency: p.currency.unwrap_or_default(),
     })
+}
+
+/// Decode an account-update frame (`AccountValue` / `PortfolioValue` /
+/// `AccountUpdateTime` / `AccountDownloadEnd`) using protobuf or text format
+/// based on `message.is_protobuf` and dispatch to the right [`AccountUpdate`]
+/// variant. Used by the connection layer's startup callback path.
+pub(crate) fn decode_account_update_either(server_version: i32, message: &mut ResponseMessage) -> Result<AccountUpdate, Error> {
+    match message.message_type() {
+        IncomingMessages::AccountValue => message
+            .decode_proto_or_text(decode_account_value_proto, decode_account_value)
+            .map(AccountUpdate::AccountValue),
+        IncomingMessages::PortfolioValue => message
+            .decode_proto_or_text(decode_account_portfolio_value_proto, |m| {
+                decode_account_portfolio_value(server_version, m)
+            })
+            .map(AccountUpdate::PortfolioValue),
+        IncomingMessages::AccountUpdateTime => decode_account_update_time(message).map(AccountUpdate::UpdateTime),
+        IncomingMessages::AccountDownloadEnd => Ok(AccountUpdate::End),
+        other => Err(Error::Simple(format!("not an account-update message: {other:?}"))),
+    }
 }
 
 #[cfg(test)]

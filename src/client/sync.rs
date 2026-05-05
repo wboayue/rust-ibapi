@@ -81,26 +81,26 @@ impl Client {
     ///
     /// ```no_run
     /// use ibapi::client::blocking::Client;
-    /// use ibapi::StartupMessageCallback;
-    /// use ibapi::messages::IncomingMessages;
+    /// use ibapi::{StartupMessage, StartupMessageCallback};
     /// use std::sync::{Arc, Mutex};
     ///
-    /// let orders = Arc::new(Mutex::new(Vec::new()));
-    /// let orders_clone = orders.clone();
+    /// let order_ids = Arc::new(Mutex::new(Vec::new()));
+    /// let order_ids_clone = order_ids.clone();
     ///
-    /// let callback: StartupMessageCallback = Box::new(move |msg| {
-    ///     match msg.message_type() {
-    ///         IncomingMessages::OpenOrder | IncomingMessages::OrderStatus => {
-    ///             orders_clone.lock().unwrap().push(msg);
-    ///         }
-    ///         _ => {}
+    /// let callback: StartupMessageCallback = Box::new(move |msg| match msg {
+    ///     StartupMessage::OpenOrder(order_data) => {
+    ///         order_ids_clone.lock().unwrap().push(order_data.order_id);
     ///     }
+    ///     StartupMessage::OrderStatus(_)
+    ///     | StartupMessage::OpenOrderEnd
+    ///     | StartupMessage::AccountUpdate(_)
+    ///     | StartupMessage::Other(_) => {}
     /// });
     ///
     /// let client = Client::connect_with_callback("127.0.0.1:4002", 100, Some(callback))
     ///     .expect("connection failed");
     ///
-    /// println!("Received {} startup orders", orders.lock().unwrap().len());
+    /// println!("Received {} startup open-orders", order_ids.lock().unwrap().len());
     /// ```
     pub fn connect_with_callback(address: &str, client_id: i32, startup_callback: Option<StartupMessageCallback>) -> Result<Client, Error> {
         Self::connect_with_options(address, client_id, startup_callback.into())

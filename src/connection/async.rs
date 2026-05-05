@@ -1,16 +1,17 @@
 //! Asynchronous connection implementation
 
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::Arc;
 
 use log::{debug, info};
 
 use super::common::{
     parse_connection_time, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionHandler, ConnectionOptions, ConnectionProtocol,
-    StartupMessageCallback,
+    StartupCallbacks, StartupMessage, StartupMessageCallback,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
-use crate::messages::{encode_raw_length, ResponseMessage};
+use crate::messages::{encode_raw_length, Notice, ResponseMessage};
 use crate::trace;
 use crate::transport::common::{FibonacciBackoff, MAX_RECONNECT_ATTEMPTS};
 use crate::transport::r#async::{AsyncStream, AsyncTcpSocket};
@@ -22,7 +23,6 @@ type Response = Result<ResponseMessage, Error>;
 /// Asynchronous connection to TWS, generic over the underlying `AsyncStream`.
 /// The default `AsyncTcpSocket` is the production wiring; tests can substitute
 /// an in-memory stream to drive the bus deterministically.
-#[derive(Debug)]
 pub struct AsyncConnection<S: AsyncStream = AsyncTcpSocket> {
     pub(crate) client_id: i32,
     pub(crate) socket: S,
@@ -30,6 +30,21 @@ pub struct AsyncConnection<S: AsyncStream = AsyncTcpSocket> {
     pub(crate) server_version_cache: AtomicI32,
     pub(crate) recorder: MessageRecorder,
     pub(crate) connection_handler: ConnectionHandler,
+    /// Persisted callbacks copied from `ConnectionOptions`. Both fire on the
+    /// initial handshake *and* on every auto-reconnect.
+    startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+    notice_callback: Option<Arc<dyn Fn(Notice) + Send + Sync>>,
+}
+
+impl<S: AsyncStream> std::fmt::Debug for AsyncConnection<S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AsyncConnection")
+            .field("client_id", &self.client_id)
+            .field("server_version_cache", &self.server_version_cache.load(Ordering::Acquire))
+            .field("startup_callback", &self.startup_callback.is_some())
+            .field("notice_callback", &self.notice_callback.is_some())
+            .finish()
+    }
 }
 
 impl AsyncConnection<AsyncTcpSocket> {
@@ -39,23 +54,25 @@ impl AsyncConnection<AsyncTcpSocket> {
         Self::connect_with_callback(address, client_id, None).await
     }
 
-    /// Create a new async connection with a callback for unsolicited messages
+    /// Create a new async connection with a callback for unsolicited messages.
     ///
-    /// The callback will be invoked for any messages received during connection
-    /// setup that are not part of the normal handshake (e.g., OpenOrder, OrderStatus).
+    /// The callback fires for messages received during the handshake (initial
+    /// connect *and* auto-reconnect) that are not part of `NextValidId` /
+    /// `ManagedAccounts` — e.g. `OpenOrder`, `OrderStatus`, account updates.
     pub async fn connect_with_callback(address: &str, client_id: i32, startup_callback: Option<StartupMessageCallback>) -> Result<Self, Error> {
         Self::connect_with_options(address, client_id, startup_callback.into()).await
     }
 
     /// Create a new async connection with custom options.
     ///
-    /// Applies settings from [`ConnectionOptions`] (e.g. `TCP_NODELAY`, startup callback)
-    /// before performing the TWS handshake.
+    /// Applies settings from [`ConnectionOptions`] (e.g. `TCP_NODELAY`, startup callbacks)
+    /// before performing the TWS handshake. Callbacks persist across reconnects.
     pub async fn connect_with_options(address: &str, client_id: i32, options: ConnectionOptions) -> Result<Self, Error> {
         let socket = AsyncTcpSocket::connect(address, options.tcp_no_delay).await?;
-        let connection = Self::stubbed(socket, client_id);
-        let cb_ref = options.startup_callback.as_deref();
-        connection.establish_connection(cb_ref).await?;
+        let mut connection = Self::stubbed(socket, client_id);
+        connection.startup_callback = options.startup_callback;
+        connection.notice_callback = options.startup_notice_callback;
+        connection.establish_connection().await?;
         Ok(connection)
     }
 }
@@ -75,6 +92,15 @@ impl<S: AsyncStream> AsyncConnection<S> {
             server_version_cache: AtomicI32::new(0),
             recorder: MessageRecorder::from_env(),
             connection_handler: ConnectionHandler::default(),
+            startup_callback: None,
+            notice_callback: None,
+        }
+    }
+
+    fn callbacks(&self) -> StartupCallbacks<'_> {
+        StartupCallbacks {
+            startup: self.startup_callback.as_deref(),
+            notice: self.notice_callback.as_deref(),
         }
     }
 
@@ -90,7 +116,8 @@ impl<S: AsyncStream> AsyncConnection<S> {
         self.server_version_cache.load(Ordering::Acquire)
     }
 
-    /// Reconnect to TWS with fibonacci backoff
+    /// Reconnect to TWS with fibonacci backoff. Replays the handshake and
+    /// re-fires the persisted startup / notice callbacks.
     pub async fn reconnect(&self) -> Result<(), Error> {
         let mut backoff = FibonacciBackoff::new(30);
 
@@ -103,8 +130,7 @@ impl<S: AsyncStream> AsyncConnection<S> {
             match self.socket.reconnect().await {
                 Ok(_) => {
                     info!("reconnected !!!");
-                    // Reconnection doesn't use startup callback
-                    self.establish_connection(None).await?;
+                    self.establish_connection().await?;
                     return Ok(());
                 }
                 Err(e) => {
@@ -117,11 +143,11 @@ impl<S: AsyncStream> AsyncConnection<S> {
     }
 
     /// Establish connection to TWS
-    pub(crate) async fn establish_connection(&self, startup_callback: Option<&(dyn Fn(ResponseMessage) + Send + Sync)>) -> Result<(), Error> {
+    pub(crate) async fn establish_connection(&self) -> Result<(), Error> {
         self.handshake().await?;
         require_protobuf_support(self.server_version())?;
         self.start_api().await?;
-        self.receive_account_info(startup_callback).await?;
+        self.receive_account_info().await?;
         Ok(())
     }
 
@@ -204,14 +230,16 @@ impl<S: AsyncStream> AsyncConnection<S> {
     }
 
     // Fetches next order id and managed accounts.
-    pub(crate) async fn receive_account_info(&self, startup_callback: Option<&(dyn Fn(ResponseMessage) + Send + Sync)>) -> Result<(), Error> {
+    pub(crate) async fn receive_account_info(&self) -> Result<(), Error> {
         let mut account_info = AccountInfo::default();
 
         let mut attempts = 0;
         const MAX_ATTEMPTS: i32 = 100;
+        let callbacks = self.callbacks();
+        let server_version = self.server_version();
         loop {
             let mut message = self.read_message().await?;
-            let info = self.connection_handler.parse_account_info(&mut message, startup_callback)?;
+            let info = self.connection_handler.parse_account_info(server_version, &mut message, &callbacks)?;
 
             // Merge received info
             if info.next_order_id.is_some() {
