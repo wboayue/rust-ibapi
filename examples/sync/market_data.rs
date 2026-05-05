@@ -34,6 +34,11 @@ fn main() {
     // Example 3: Demonstrating builder method chaining
     example_builder_chaining(&client, &contract);
 
+    println!("\n{}\n", "=".repeat(50));
+
+    // Example 4: Observing subscription notices via SubscriptionItem
+    example_observe_notices(&client, &contract);
+
     println!("\nAll examples completed!");
 }
 
@@ -159,6 +164,33 @@ fn example_builder_chaining(client: &Client, contract: &Contract) {
                 println!("Notice - Code: {}, Message: {}", notice.code, notice.message);
             }
             _ => {}
+        }
+    }
+}
+
+// Demonstrates pattern-matching on `SubscriptionItem` directly. The earlier
+// examples filter notices via `iter_data()`; here we use `iter()` so notices
+// are surfaced as `SubscriptionItem::Notice(_)`. UIs that show connection /
+// farm-status indicators want this shape.
+fn example_observe_notices(client: &Client, contract: &Contract) {
+    println!("Example 4: Observing notices via SubscriptionItem\n");
+
+    let subscription = client
+        .market_data(contract)
+        .generic_ticks(&["233"])
+        .subscribe()
+        .expect("Failed to subscribe to market data");
+
+    for event in subscription.iter().take(8) {
+        match event {
+            Ok(SubscriptionItem::Data(_)) => println!("data tick"),
+            // Common codes: 2104 (Market data farm OK), 2107 (HMDS data farm
+            // is inactive), 2108 (data farm connection broken).
+            Ok(SubscriptionItem::Notice(n)) => println!("notice [{}] {}", n.code, n.message),
+            Err(e) => {
+                eprintln!("subscription terminated: {e}");
+                break;
+            }
         }
     }
 }

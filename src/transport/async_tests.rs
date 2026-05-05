@@ -317,3 +317,154 @@ async fn test_warning_with_order_id_falls_back_to_order_channel() {
         other => panic!("expected RoutedItem::Notice, got {other:?}"),
     }
 }
+
+// ---- end-to-end Subscription consumer tests for Notice delivery (PR 4) ----
+//
+// PR 3 verifies dispatcher classification at the `AsyncInternalSubscription`
+// seam. These tests close the loop one layer up: drive bytes through the
+// production dispatcher and assert via the public async `Subscription<T>` API
+// that the consumer sees `SubscriptionItem::Notice` / `Err(_)` / `None` as
+// expected.
+
+use crate::subscriptions::r#async::Subscription;
+use crate::subscriptions::{DecoderContext, StreamDecoder, SubscriptionItem};
+use futures::StreamExt;
+
+/// Trivial test decoder: any non-error message body decodes as `Ok(NoticeTestData)`.
+#[derive(Debug)]
+struct NoticeTestData;
+
+impl StreamDecoder<NoticeTestData> for NoticeTestData {
+    fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<NoticeTestData, Error> {
+        Ok(NoticeTestData)
+    }
+}
+
+fn wrap_subscription(
+    bus: Arc<AsyncTcpMessageBus<MemoryStream>>,
+    internal: AsyncInternalSubscription,
+    request_id: Option<i32>,
+    order_id: Option<i32>,
+) -> Subscription<NoticeTestData> {
+    Subscription::new_from_internal::<NoticeTestData>(internal, bus, request_id, order_id, None, DecoderContext::default())
+}
+
+/// Bound a `Subscription::next()` await with the test tick so a missing item
+/// surfaces as a panic rather than hanging the test thread.
+async fn next_item(sub: &mut Subscription<NoticeTestData>) -> Option<Result<SubscriptionItem<NoticeTestData>, Error>> {
+    tokio::time::timeout(TICK, sub.next())
+        .await
+        .expect("subscription got no item before timeout")
+}
+
+/// Code 2104 + request_id=42: dispatcher classifies as `RoutedItem::Notice`,
+/// `Subscription<T>::next()` surfaces it as `SubscriptionItem::Notice` without
+/// terminating. A follow-up data message arrives normally on the same stream.
+#[tokio::test]
+async fn test_subscription_notice_delivery_request_keyed() {
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(42, vec![]).await.unwrap();
+    let mut subscription = wrap_subscription(bus.clone(), internal, Some(42), None);
+
+    stream.push_inbound(body("4|2|42|2104|Market data farm connection is OK:usfarm|"));
+    bus.read_and_route_message().await.unwrap();
+
+    match next_item(&mut subscription).await {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.code, 2104);
+            assert_eq!(notice.message, "Market data farm connection is OK:usfarm");
+        }
+        other => panic!("expected SubscriptionItem::Notice, got {other:?}"),
+    }
+
+    // Stream stays open: a follow-up data message decodes normally.
+    stream.push_inbound(body("89|42|payload|"));
+    bus.read_and_route_message().await.unwrap();
+    match next_item(&mut subscription).await {
+        Some(Ok(SubscriptionItem::Data(_))) => {}
+        other => panic!("expected SubscriptionItem::Data, got {other:?}"),
+    }
+}
+
+/// Code 200 + request_id=42: dispatcher classifies as `RoutedItem::Error`,
+/// `Subscription<T>::next()` surfaces `Some(Err(_))` and subsequent calls
+/// return `None`.
+#[tokio::test]
+async fn test_subscription_hard_error_terminates_stream() {
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(42, vec![]).await.unwrap();
+    let mut subscription = wrap_subscription(bus.clone(), internal, Some(42), None);
+
+    stream.push_inbound(body("4|2|42|200|No security definition found|"));
+    bus.read_and_route_message().await.unwrap();
+
+    match next_item(&mut subscription).await {
+        Some(Err(Error::Message(code, message))) => {
+            assert_eq!(code, 200);
+            assert_eq!(message, "No security definition found");
+        }
+        other => panic!("expected Some(Err(Error::Message)), got {other:?}"),
+    }
+
+    // Stream is terminated: subsequent reads return None.
+    assert!(next_item(&mut subscription).await.is_none(), "stream must end after terminal error");
+}
+
+/// Order-keyed notice: a warning bound to an `order_id` is delivered to the
+/// order subscription via `deliver_to_request_id`'s order-channel fallback,
+/// surfacing as `SubscriptionItem::Notice` to the consumer.
+#[tokio::test]
+async fn test_subscription_notice_delivery_order_keyed() {
+    let (stream, bus) = make_bus();
+    let internal = bus.send_order_request(7, vec![]).await.unwrap();
+    let mut subscription = wrap_subscription(bus.clone(), internal, None, Some(7));
+
+    stream.push_inbound(body("4|2|7|2109|Outside RTH order warning|"));
+    bus.read_and_route_message().await.unwrap();
+
+    match next_item(&mut subscription).await {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.code, 2109);
+            assert_eq!(notice.message, "Outside RTH order warning");
+        }
+        other => panic!("expected SubscriptionItem::Notice, got {other:?}"),
+    }
+}
+
+/// Code 2104 + request_id=UNSPECIFIED: no owner — dispatcher logs and skips
+/// the channel write. An unrelated in-flight subscription sees nothing within
+/// the test tick window.
+#[tokio::test]
+async fn test_subscription_unspecified_notice_not_delivered() {
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(42, vec![]).await.unwrap();
+    let mut subscription = wrap_subscription(bus.clone(), internal, Some(42), None);
+
+    stream.push_inbound(body("4|2|-1|2104|Market data farm connection is OK:usfarm|"));
+    bus.read_and_route_message().await.unwrap();
+
+    let item = tokio::time::timeout(TICK, subscription.next()).await;
+    assert!(item.is_err(), "unrouted notice must not be delivered to a subscription, got {item:?}");
+}
+
+/// `data_stream()` filters `SubscriptionItem::Notice` entries (logging them)
+/// and yields only the underlying data values.
+#[tokio::test]
+async fn test_subscription_data_stream_filters_notices() {
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(42, vec![]).await.unwrap();
+    let mut subscription = wrap_subscription(bus.clone(), internal, Some(42), None);
+
+    stream.push_inbound(body("89|42|first|"));
+    stream.push_inbound(body("4|2|42|2104|Market data farm connection is OK:usfarm|"));
+    stream.push_inbound(body("89|42|second|"));
+    for _ in 0..3 {
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    let collected: Vec<_> = subscription.data_stream().take(2).collect().await;
+    assert_eq!(collected.len(), 2, "data_stream must yield the two data items");
+    for item in collected {
+        assert!(matches!(item, Ok(NoticeTestData)), "unexpected stream item");
+    }
+}

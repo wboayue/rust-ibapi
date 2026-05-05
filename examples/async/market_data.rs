@@ -39,6 +39,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 3: Demonstrating builder method chaining
     example_builder_chaining(&client, &contract).await?;
 
+    println!("\n{}\n", "=".repeat(50));
+
+    // Example 4: Observing subscription notices via SubscriptionItem
+    example_observe_notices(&client, &contract).await?;
+
     println!("\nAll examples completed!");
     Ok(())
 }
@@ -149,6 +154,31 @@ async fn example_builder_chaining(client: &Arc<Client>, contract: &Contract) -> 
                 println!("Notice - Code: {}, Message: {}", notice.code, notice.message);
             }
             _ => {}
+        }
+    }
+    Ok(())
+}
+
+// Demonstrates pattern-matching on `SubscriptionItem` directly. The earlier
+// examples filter notices via `next_data()`; here we use the `stream()`
+// adapter so notices are surfaced as `SubscriptionItem::Notice(_)`. UIs that
+// show connection / farm-status indicators want this shape.
+async fn example_observe_notices(client: &Arc<Client>, contract: &Contract) -> Result<(), Box<dyn std::error::Error>> {
+    println!("Example 4: Observing notices via SubscriptionItem\n");
+
+    let mut subscription = client.market_data(contract).generic_ticks(&["233"]).subscribe().await?;
+
+    let mut events = subscription.stream().take(8);
+    while let Some(event) = events.next().await {
+        match event {
+            Ok(SubscriptionItem::Data(_)) => println!("data tick"),
+            // Common codes: 2104 (Market data farm OK), 2107 (HMDS data farm
+            // is inactive), 2108 (data farm connection broken).
+            Ok(SubscriptionItem::Notice(n)) => println!("notice [{}] {}", n.code, n.message),
+            Err(e) => {
+                eprintln!("subscription terminated: {e}");
+                break;
+            }
         }
     }
     Ok(())
