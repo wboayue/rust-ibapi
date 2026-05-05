@@ -1,5 +1,5 @@
 pub(super) mod constants;
-pub(super) mod decoders;
+pub(crate) mod decoders;
 pub(crate) mod encoders;
 pub(super) mod stream_decoders;
 

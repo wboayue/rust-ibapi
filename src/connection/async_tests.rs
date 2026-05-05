@@ -1,11 +1,11 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use time_tz::timezones;
 
 use super::*;
 use crate::client::r#async::Client;
-use crate::messages::IncomingMessages;
+use crate::messages::{IncomingMessages, Notice};
 use crate::server_versions;
 use crate::transport::r#async::{AsyncTcpMessageBus, MemoryStream};
 
@@ -35,7 +35,7 @@ async fn establish_connection_rejects_pre_protobuf_server() {
     let handshake = format!("{}\020240120 12:00:00 EST\0", too_old);
     stream.push_inbound(handshake.into_bytes());
 
-    let err = connection.establish_connection(None).await.expect_err("must reject old server");
+    let err = connection.establish_connection().await.expect_err("must reject old server");
     match err {
         crate::errors::Error::ServerVersion(required, got, ref msg) => {
             assert_eq!(required, server_versions::PROTOBUF);
@@ -57,7 +57,7 @@ async fn establish_connection_populates_metadata() {
     let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
     push_handshake(&stream);
 
-    connection.establish_connection(None).await.expect("establish_connection failed");
+    connection.establish_connection().await.expect("establish_connection failed");
 
     assert_eq!(connection.client_id, CLIENT_ID);
     assert_eq!(connection.server_version(), SERVER_VERSION);
@@ -97,7 +97,7 @@ async fn make_client() -> Client {
     let stream = MemoryStream::default();
     let connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
     push_handshake(&stream);
-    connection.establish_connection(None).await.expect("establish_connection failed");
+    connection.establish_connection().await.expect("establish_connection failed");
     let server_version = connection.server_version();
 
     let bus = Arc::new(AsyncTcpMessageBus::new(connection).expect("AsyncTcpMessageBus::new"));
@@ -106,4 +106,45 @@ async fn make_client() -> Client {
         .expect("process_messages");
 
     Client::stubbed(bus, server_version)
+}
+
+/// Async mirror of `callbacks_fire_on_reconnect_handshake` — drive
+/// `establish_connection` twice and assert both callbacks fire each time.
+#[tokio::test]
+async fn callbacks_fire_on_reconnect_handshake() {
+    let stream = MemoryStream::default();
+    let mut connection = AsyncConnection::stubbed(stream.clone(), CLIENT_ID);
+
+    let startup_count = Arc::new(Mutex::new(0_usize));
+    let startup_count_clone = startup_count.clone();
+    let notice_count = Arc::new(Mutex::new(0_usize));
+    let notice_count_clone = notice_count.clone();
+
+    connection.startup_callback = Some(Arc::new(move |_msg: crate::connection::common::StartupMessage| {
+        *startup_count_clone.lock().unwrap() += 1;
+    }));
+    connection.notice_callback = Some(Arc::new(move |_notice: Notice| {
+        *notice_count_clone.lock().unwrap() += 1;
+    }));
+
+    let handshake_bytes = format!("{}\020240120 12:00:00 EST\0", SERVER_VERSION).into_bytes();
+    stream.push_inbound(handshake_bytes.clone());
+    stream.push_inbound(binary_text(IncomingMessages::OpenOrder as i32, "5\0123\0AAPL\0\0"));
+    stream.push_inbound(binary_text(IncomingMessages::Error as i32, "2\0-1\02104\0farm OK\0"));
+    stream.push_inbound(binary_text(IncomingMessages::NextValidId as i32, "1\090\0"));
+    stream.push_inbound(binary_text(IncomingMessages::ManagedAccounts as i32, "1\0DU1234567\0"));
+
+    connection.establish_connection().await.expect("first establish_connection failed");
+    assert_eq!(*startup_count.lock().unwrap(), 1, "startup callback should fire on first handshake");
+    assert_eq!(*notice_count.lock().unwrap(), 1, "notice callback should fire on first handshake");
+
+    stream.push_inbound(handshake_bytes);
+    stream.push_inbound(binary_text(IncomingMessages::OpenOrder as i32, "5\0456\0MSFT\0\0"));
+    stream.push_inbound(binary_text(IncomingMessages::Error as i32, "2\0-1\02106\0HMDS farm OK\0"));
+    stream.push_inbound(binary_text(IncomingMessages::NextValidId as i32, "1\091\0"));
+    stream.push_inbound(binary_text(IncomingMessages::ManagedAccounts as i32, "1\0DU1234567\0"));
+
+    connection.establish_connection().await.expect("second establish_connection failed");
+    assert_eq!(*startup_count.lock().unwrap(), 2, "startup callback should fire on reconnect handshake");
+    assert_eq!(*notice_count.lock().unwrap(), 2, "notice callback should fire on reconnect handshake");
 }

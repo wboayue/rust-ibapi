@@ -512,8 +512,15 @@ Implement via `futures::stream::unfold` over `self.next_data().await`. ~30 lines
 
 ---
 
-### PR 5 — Global notice stream
-**Goal:** expose IB's globally routed notices (codes with `request_id = -1`, e.g. `1100` lost connectivity, `2104` market-data farm OK) as a programmatic `Subscription<Notice>` so consumers can drive UI status indicators and reconnection logic, instead of scraping logs.
+### PR 5 — Global notice stream ✅ merged ([#512](https://github.com/wboayue/rust-ibapi/pull/512))
+
+**As-shipped — niche power-user API.** Lands as `Client::notice_stream() -> Result<NoticeStream, Error>` (dedicated `NoticeStream`, option (b) from refinement #8 — see plan history in commit `b03319c`). Live testing during implementation revealed the API only sees notices that arrive *after* `process_messages` starts — which excludes the 2104/2106/2158 farm-status snapshot that fires during the handshake. Result: `notice_stream` is genuinely useful for runtime events (connectivity loss/restore, farm flips, auto-reconnect notices) but is not the right API for the canonical "show current connection state in a UI" need. **Will not be advertised in the README or getting-started guides** (PR 6 docs scope adjusted accordingly — see "PR 6 follow-up" below). Doc-comments on the API itself are kept so rustdoc users can still find it.
+
+**Follow-up shipped on a separate branch (`startup-message-typed-callback`):** extends `ConnectionOptions` with a typed `StartupMessage` enum + `StartupNoticeCallback` so the canonical "react to handshake-time notices" use case has a first-class API that doesn't require subscribing to a live stream. That work supersedes the role PR 5 was originally intended to fill.
+
+---
+
+**Original goal:** expose IB's globally routed notices (codes with `request_id = -1`, e.g. `1100` lost connectivity, `2104` market-data farm OK) as a programmatic `Subscription<Notice>` so consumers can drive UI status indicators and reconnection logic, instead of scraping logs.
 
 **Motivation.** After PR 3, notices with a real `request_id` reach their owning subscription. But the connectivity and farm-status notices (`1100/1101/1102/2103/2104/2105/2106/2107/2108/2110/2158`) all arrive with `UNSPECIFIED_REQUEST_ID` and the dispatcher's `LogWarning`/`LogError` arms only `warn!`/`error!` them. A UI can't show "🔴 market data farm down" without parsing log output.
 
@@ -575,6 +582,11 @@ impl Client {                           // sync and async
 ---
 
 ### PR 6 — Documentation: notification handling & v3.0 migration guide
+
+**Scope adjusted post-PR-5:** when PR 6 ships, the README's "Handling notifications" section should treat `ConnectionOptions::startup_callback` (typed `StartupMessage`) + `ConnectionOptions::startup_notice_callback` (typed `Notice`) as the canonical API for connection-state UIs and handshake-time observability. `Client::notice_stream()` should *not* feature in the README or getting-started examples — at most one line cross-linking to its rustdoc for users who specifically want runtime-only unrouted-notice events. Reason: live testing of PR 5 proved `notice_stream` doesn't see the handshake snapshot (2104/2106/2158 farm-status), which is what the typical "show farm status" use case wants. The separate PR on `startup-message-typed-callback` filled that gap with an API that *does* see the snapshot.
+
+---
+
 **Goal:** make the user-facing story for notification handling discoverable and self-contained. By the time PR 5 lands, three things have changed for callers:
 1. `Subscription<T>::next()` returns `Option<Result<SubscriptionItem<T>, Error>>` (PR 2b widening) — the wrapping `SubscriptionItem<T>` enum is new.
 2. Per-subscription notices (warning codes 2100..=2169 with a real `request_id`) now arrive as `SubscriptionItem::Notice(_)` instead of being log-only (PR 3).

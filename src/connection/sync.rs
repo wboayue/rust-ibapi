@@ -1,12 +1,14 @@
 //! Synchronous connection implementation
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use log::{debug, info};
 
+use crate::messages::Notice;
+
 use super::common::{
     parse_connection_time, parse_raw_message, require_protobuf_support, AccountInfo, ConnectionHandler, ConnectionOptions, ConnectionProtocol,
-    StartupMessageCallback,
+    StartupCallbacks, StartupMessage, StartupMessageCallback,
 };
 use super::ConnectionMetadata;
 use crate::errors::Error;
@@ -20,7 +22,6 @@ use crate::transport::sync::TcpSocket;
 type Response = Result<ResponseMessage, Error>;
 
 /// Synchronous connection to TWS
-#[derive(Debug)]
 pub struct Connection<S: Stream> {
     pub(crate) client_id: i32,
     pub(crate) socket: S,
@@ -28,16 +29,32 @@ pub struct Connection<S: Stream> {
     pub(crate) max_retries: i32,
     pub(crate) recorder: MessageRecorder,
     pub(crate) connection_handler: ConnectionHandler,
+    /// Persisted callbacks copied from `ConnectionOptions`. Both fire on the
+    /// initial handshake *and* on every auto-reconnect.
+    startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+    notice_callback: Option<Arc<dyn Fn(Notice) + Send + Sync>>,
+}
+
+impl<S: Stream> std::fmt::Debug for Connection<S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Connection")
+            .field("client_id", &self.client_id)
+            .field("connection_metadata", &self.connection_metadata)
+            .field("max_retries", &self.max_retries)
+            .field("startup_callback", &self.startup_callback.is_some())
+            .field("notice_callback", &self.notice_callback.is_some())
+            .finish()
+    }
 }
 
 impl Connection<TcpSocket> {
     /// Create a connection with custom options.
     ///
-    /// Applies settings from [`ConnectionOptions`] (e.g. `TCP_NODELAY`, startup callback)
-    /// before performing the TWS handshake.
+    /// Applies settings from [`ConnectionOptions`] (e.g. `TCP_NODELAY`, startup callbacks)
+    /// before performing the TWS handshake. Callbacks persist across reconnects.
     pub fn connect_with_options(address: &str, client_id: i32, options: ConnectionOptions) -> Result<Self, Error> {
         let socket = TcpSocket::connect(address, options.tcp_no_delay)?;
-        Self::init(socket, client_id, options.startup_callback.as_deref())
+        Self::init(socket, client_id, options.startup_callback, options.startup_notice_callback)
     }
 }
 
@@ -45,19 +62,26 @@ impl<S: Stream> Connection<S> {
     /// Create a new connection
     #[allow(dead_code)]
     pub fn connect(socket: S, client_id: i32) -> Result<Self, Error> {
-        Self::init(socket, client_id, None)
+        Self::init(socket, client_id, None, None)
     }
 
     /// Create a new connection with a callback for unsolicited messages
     ///
-    /// The callback will be invoked for any messages received during connection
-    /// setup that are not part of the normal handshake (e.g., OpenOrder, OrderStatus).
+    /// The callback fires for messages received during the handshake (initial
+    /// connect *and* auto-reconnect) that are not part of `NextValidId` /
+    /// `ManagedAccounts` — e.g. `OpenOrder`, `OrderStatus`, account updates.
     #[allow(dead_code)]
     pub fn connect_with_callback(socket: S, client_id: i32, startup_callback: Option<StartupMessageCallback>) -> Result<Self, Error> {
-        Self::init(socket, client_id, startup_callback.as_deref())
+        let cb = startup_callback.map(|c| Arc::from(c) as Arc<dyn Fn(StartupMessage) + Send + Sync>);
+        Self::init(socket, client_id, cb, None)
     }
 
-    fn init(socket: S, client_id: i32, startup_callback: Option<&(dyn Fn(ResponseMessage) + Send + Sync)>) -> Result<Self, Error> {
+    fn init(
+        socket: S,
+        client_id: i32,
+        startup_callback: Option<Arc<dyn Fn(StartupMessage) + Send + Sync>>,
+        notice_callback: Option<Arc<dyn Fn(Notice) + Send + Sync>>,
+    ) -> Result<Self, Error> {
         let connection = Self {
             client_id,
             socket,
@@ -68,11 +92,20 @@ impl<S: Stream> Connection<S> {
             max_retries: MAX_RECONNECT_ATTEMPTS,
             recorder: MessageRecorder::from_env(),
             connection_handler: ConnectionHandler::default(),
+            startup_callback,
+            notice_callback,
         };
 
-        connection.establish_connection(startup_callback)?;
+        connection.establish_connection()?;
 
         Ok(connection)
+    }
+
+    fn callbacks(&self) -> StartupCallbacks<'_> {
+        StartupCallbacks {
+            startup: self.startup_callback.as_deref(),
+            notice: self.notice_callback.as_deref(),
+        }
     }
 
     /// Get a copy of the connection metadata
@@ -87,7 +120,8 @@ impl<S: Stream> Connection<S> {
         connection_metadata.server_version
     }
 
-    /// Reconnect to TWS with fibonacci backoff
+    /// Reconnect to TWS with fibonacci backoff. Replays the handshake and
+    /// re-fires the persisted startup / notice callbacks.
     pub fn reconnect(&self) -> Result<(), Error> {
         let mut backoff = FibonacciBackoff::new(30);
 
@@ -100,8 +134,7 @@ impl<S: Stream> Connection<S> {
             match self.socket.reconnect() {
                 Ok(_) => {
                     info!("reconnected !!!");
-                    // Reconnection doesn't use startup callback
-                    self.establish_connection(None)?;
+                    self.establish_connection()?;
 
                     return Ok(());
                 }
@@ -115,11 +148,11 @@ impl<S: Stream> Connection<S> {
     }
 
     /// Establish connection to TWS
-    pub(crate) fn establish_connection(&self, startup_callback: Option<&(dyn Fn(ResponseMessage) + Send + Sync)>) -> Result<(), Error> {
+    pub(crate) fn establish_connection(&self) -> Result<(), Error> {
         self.handshake()?;
         require_protobuf_support(self.server_version())?;
         self.start_api()?;
-        self.receive_account_info(startup_callback)?;
+        self.receive_account_info()?;
         Ok(())
     }
 
@@ -201,14 +234,16 @@ impl<S: Stream> Connection<S> {
     }
 
     // Fetches next order id and managed accounts.
-    pub(crate) fn receive_account_info(&self, startup_callback: Option<&(dyn Fn(ResponseMessage) + Send + Sync)>) -> Result<(), Error> {
+    pub(crate) fn receive_account_info(&self) -> Result<(), Error> {
         let mut account_info = AccountInfo::default();
 
         let mut attempts = 0;
         const MAX_ATTEMPTS: i32 = 100;
+        let callbacks = self.callbacks();
+        let server_version = self.server_version();
         loop {
             let mut message = self.read_message()?;
-            let info = self.connection_handler.parse_account_info(&mut message, startup_callback)?;
+            let info = self.connection_handler.parse_account_info(server_version, &mut message, &callbacks)?;
 
             // Merge received info
             if info.next_order_id.is_some() {
@@ -248,6 +283,8 @@ impl<S: Stream> Connection<S> {
             max_retries: MAX_RECONNECT_ATTEMPTS,
             recorder: MessageRecorder::new(false, String::from("")),
             connection_handler: ConnectionHandler::default(),
+            startup_callback: None,
+            notice_callback: None,
         }
     }
 }

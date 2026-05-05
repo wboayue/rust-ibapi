@@ -127,7 +127,14 @@ async fn connect_with_callback_receives_unsolicited_messages() {
     let captured = Arc::new(Mutex::new(Vec::<i32>::new()));
     let captured_clone = Arc::clone(&captured);
     let callback: StartupMessageCallback = Box::new(move |msg| {
-        captured_clone.lock().unwrap().push(msg.message_type() as i32);
+        let id = match msg {
+            crate::StartupMessage::OpenOrder(_) => IncomingMessages::OpenOrder as i32,
+            crate::StartupMessage::OrderStatus(_) => IncomingMessages::OrderStatus as i32,
+            crate::StartupMessage::OpenOrderEnd => IncomingMessages::OpenOrderEnd as i32,
+            crate::StartupMessage::AccountUpdate(_) => IncomingMessages::AccountValue as i32,
+            crate::StartupMessage::Other(rm) => rm.message_type() as i32,
+        };
+        captured_clone.lock().unwrap().push(id);
     });
 
     let _client = Client::connect_with_callback(&addr.to_string(), 100, Some(callback))
