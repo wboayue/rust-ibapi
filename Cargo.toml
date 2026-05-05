@@ -111,6 +111,11 @@ path = "examples/async/order_update_stream.rs"
 required-features = ["async"]
 
 [[example]]
+name = "async_notice_stream"
+path = "examples/async/notice_stream.rs"
+required-features = ["async"]
+
+[[example]]
 name = "async_place_order"
 path = "examples/async/place_order.rs"
 required-features = ["async"]
@@ -515,6 +520,11 @@ required-features = ["sync"]
 [[example]]
 name = "connection_monitoring"
 path = "examples/sync/connection_monitoring.rs"
+required-features = ["sync"]
+
+[[example]]
+name = "notice_stream"
+path = "examples/sync/notice_stream.rs"
 required-features = ["sync"]
 
 [[example]]

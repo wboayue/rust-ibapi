@@ -240,6 +240,41 @@ impl Client {
         self.message_bus.ensure_shutdown().await;
     }
 
+    /// Subscribe to globally routed IB notices (notices with no `request_id` —
+    /// connectivity codes 1100/1101/1102, farm-status 2104/2105/2106/2107/2108,
+    /// and any other unrouted error/warning).
+    ///
+    /// Each call returns a fresh, independent [`NoticeStream`]; late subscribers
+    /// do not see prior notices. The stream ends when the client disconnects.
+    ///
+    /// Per-subscription notices (codes carrying a real `request_id`) are not
+    /// delivered here — they reach their owning subscription as
+    /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem::Notice).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ibapi::Client;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    ///     let mut stream = client.notice_stream().expect("notice subscription failed");
+    ///     while let Some(notice) = stream.next().await {
+    ///         if notice.is_system_message() {
+    ///             println!("connectivity: {notice}");
+    ///         } else if notice.is_warning() {
+    ///             println!("warning: {notice}");
+    ///         } else {
+    ///             eprintln!("error: {notice}");
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub fn notice_stream(&self) -> Result<crate::subscriptions::notice_stream::async_impl::NoticeStream, Error> {
+        Ok(self.message_bus.notice_subscribe())
+    }
+
     /// Returns the ID assigned to the [Client].
     pub fn client_id(&self) -> i32 {
         self.client_id

@@ -455,3 +455,86 @@ async fn test_subscription_data_stream_filters_notices() {
         assert!(matches!(item, Ok(NoticeTestData)), "unexpected stream item");
     }
 }
+
+// ---- end-to-end NoticeStream tests (PR 5) ----
+//
+// Mirror of the sync `notice_stream` dispatcher tests on the async stack.
+
+/// An unrouted warning is delivered to a `notice_stream` subscriber.
+#[tokio::test]
+async fn test_notice_stream_receives_unrouted_warning() {
+    let (stream, bus) = make_bus();
+    let mut notice_stream = bus.notice_subscribe();
+
+    stream.push_inbound(body(FARM_OK_FRAME_UNROUTED));
+    bus.read_and_route_message().await.unwrap();
+
+    let notice = tokio::time::timeout(TICK, notice_stream.next())
+        .await
+        .expect("notice not delivered before timeout")
+        .expect("stream closed early");
+    assert_eq!(notice.code, 2104);
+    assert_eq!(notice.message, FARM_OK_MSG);
+}
+
+/// Two `notice_subscribe` calls each receive every unrouted notice.
+#[tokio::test]
+async fn test_notice_stream_fans_out_to_multiple_subscribers() {
+    let (stream, bus) = make_bus();
+    let mut s1 = bus.notice_subscribe();
+    let mut s2 = bus.notice_subscribe();
+
+    stream.push_inbound(body(FARM_OK_FRAME_UNROUTED));
+    bus.read_and_route_message().await.unwrap();
+
+    let n1 = tokio::time::timeout(TICK, s1.next()).await.unwrap().unwrap();
+    let n2 = tokio::time::timeout(TICK, s2.next()).await.unwrap().unwrap();
+    assert_eq!(n1.code, 2104);
+    assert_eq!(n2.code, 2104);
+}
+
+/// Severity-agnostic: an unrouted hard error also fans out.
+#[tokio::test]
+async fn test_notice_stream_receives_unrouted_hard_error() {
+    let (stream, bus) = make_bus();
+    let mut notice_stream = bus.notice_subscribe();
+
+    stream.push_inbound(body("4|2|-1|504|Not connected|"));
+    bus.read_and_route_message().await.unwrap();
+
+    let notice = tokio::time::timeout(TICK, notice_stream.next()).await.unwrap().unwrap();
+    assert_eq!(notice.code, 504);
+}
+
+/// A routed notice (real `request_id`) goes to the owning subscription, NOT
+/// to the global notice stream.
+#[tokio::test]
+async fn test_notice_stream_skips_routed_notices() {
+    let (stream, bus, mut subscription) = make_request_subscription(42).await;
+    let mut notice_stream = bus.notice_subscribe();
+
+    stream.push_inbound(body(FARM_OK_FRAME_42));
+    bus.read_and_route_message().await.unwrap();
+
+    // Routed to the owner.
+    let item = tokio::time::timeout(TICK, subscription.next()).await.unwrap();
+    assert!(matches!(item, Some(Ok(SubscriptionItem::Notice(_)))), "owner missed notice");
+
+    // NOT delivered to the global stream.
+    let leaked = tokio::time::timeout(TICK, notice_stream.next()).await;
+    assert!(leaked.is_err(), "routed notice leaked to global stream");
+}
+
+/// Late subscribers don't see prior notices (no replay buffer on broadcast).
+#[tokio::test]
+async fn test_notice_stream_late_subscriber_misses_prior() {
+    let (stream, bus) = make_bus();
+
+    stream.push_inbound(body(FARM_OK_FRAME_UNROUTED));
+    bus.read_and_route_message().await.unwrap();
+
+    // Subscribe AFTER the broadcast.
+    let mut late = bus.notice_subscribe();
+    let leaked = tokio::time::timeout(TICK, late.next()).await;
+    assert!(leaked.is_err(), "late subscriber should not see prior notices");
+}
