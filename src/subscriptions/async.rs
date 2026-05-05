@@ -292,9 +292,9 @@ impl<T> Subscription<T> {
         }
     }
 
-    /// Async mirror of the sync [`Subscription::iter`](crate::subscriptions::sync::Subscription::iter)
-    /// adapter: returns a [`Stream`] of `Result<SubscriptionItem<T>, Error>` —
-    /// notices are surfaced for callers that want to react to them.
+    /// Async mirror of the sync `Subscription::iter` adapter: returns a [`Stream`]
+    /// of `Result<SubscriptionItem<T>, Error>` — notices are surfaced for callers
+    /// that want to react to them.
     ///
     /// The returned stream is `Unpin` so callers can chain
     /// [`futures::StreamExt`] combinators directly without `pin_mut!`.
@@ -308,9 +308,9 @@ impl<T> Subscription<T> {
         ))
     }
 
-    /// Async mirror of the sync [`Subscription::iter_data`](crate::subscriptions::sync::Subscription::iter_data)
-    /// adapter: returns a [`Stream`] of `Result<T, Error>` with notices filtered
-    /// (and logged at `warn!`).
+    /// Async mirror of the sync `Subscription::iter_data` adapter: returns a
+    /// [`Stream`] of `Result<T, Error>` with notices filtered (and logged at
+    /// `warn!`).
     ///
     /// The returned stream is `Unpin` so callers can chain
     /// [`futures::StreamExt`] combinators (`next`, `take`, `collect`, ...)

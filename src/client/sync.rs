@@ -280,8 +280,8 @@ impl Client {
     /// connectivity codes 1100/1101/1102, farm-status 2104/2105/2106/2107/2108,
     /// and any other unrouted error/warning).
     ///
-    /// Each call returns a fresh, independent [`NoticeStream`]; late subscribers
-    /// do not see prior notices. The stream ends when the client disconnects.
+    /// Each call returns a fresh, independent [`NoticeStream`](crate::subscriptions::NoticeStream);
+    /// late subscribers do not see prior notices. The stream ends when the client disconnects.
     ///
     /// Per-subscription notices (codes carrying a real `request_id`) are not
     /// delivered here — they reach their owning subscription as
