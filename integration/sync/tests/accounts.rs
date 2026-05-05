@@ -4,6 +4,7 @@ use ibapi::accounts::types::{AccountGroup, AccountId, ContractId};
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::orders::{Action, Order, PlaceOrder};
+use ibapi::subscriptions::SubscriptionItem;
 use ibapi_test::{rate_limit, require_market_open, ClientId, GATEWAY};
 use serial_test::serial;
 
@@ -163,7 +164,7 @@ fn pnl_single_receives_updates() {
     let sub = client.place_order(order_id, &contract, &buy).expect("buy failed");
     loop {
         match sub.next_timeout(Duration::from_secs(5)) {
-            Some(PlaceOrder::OrderStatus(status)) if status.status == "Filled" => break,
+            Some(Ok(SubscriptionItem::Data(PlaceOrder::OrderStatus(status)))) if status.status == "Filled" => break,
             Some(_) => continue,
             None => panic!("buy order did not fill within 5s"),
         }

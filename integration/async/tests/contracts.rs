@@ -128,9 +128,11 @@ async fn option_chain_returns_data() {
         .await
         .expect("option_chain failed");
 
-    let item = subscription.next().await;
-    assert!(item.is_some(), "expected at least one option chain result");
-    let chain = item.unwrap().expect("option chain error");
+    let chain = subscription
+        .next_data()
+        .await
+        .expect("expected at least one option chain result")
+        .expect("option chain subscription error");
     assert!(!chain.expirations.is_empty());
     assert!(!chain.strikes.is_empty());
 }

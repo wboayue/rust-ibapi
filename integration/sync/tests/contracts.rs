@@ -125,9 +125,11 @@ fn option_chain_returns_data() {
     rate_limit();
     let subscription = client.option_chain("AAPL", "", SecurityType::Stock, con_id).expect("option_chain failed");
 
-    let chain = subscription.iter().next();
-    assert!(chain.is_some(), "expected at least one option chain result");
-    let chain = chain.unwrap();
+    let chain = subscription
+        .iter_data()
+        .next()
+        .expect("expected at least one option chain result")
+        .expect("option chain subscription error");
     assert!(!chain.expirations.is_empty());
     assert!(!chain.strikes.is_empty());
 }
