@@ -61,7 +61,7 @@ fn protobuf_first_int(raw_bytes: &[u8]) -> Option<i32> {
 /// Decode the protobuf Error envelope. Defaults match the text-path accessors:
 /// missing id → `UNSPECIFIED_REQUEST_ID`, missing error_code → 0,
 /// missing strings → empty, missing error_time → `None`.
-fn decode_error_envelope(raw_bytes: &[u8]) -> Option<DecodedError> {
+pub(crate) fn decode_error_envelope(raw_bytes: &[u8]) -> Option<DecodedError> {
     let envelope: crate::proto::ErrorMessage = prost::Message::decode(raw_bytes).ok()?;
     Some(DecodedError {
         request_id: envelope.id.unwrap_or(UNSPECIFIED_REQUEST_ID),

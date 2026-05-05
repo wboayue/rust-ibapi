@@ -277,25 +277,6 @@ impl ConnectionProtocol for ConnectionHandler {
     }
 }
 
-/// Decode a notice from an `IncomingMessages::Error` frame, supporting both
-/// protobuf and text wire formats.
-fn decode_handshake_notice(message: &ResponseMessage) -> Option<Notice> {
-    use prost::Message;
-
-    if message.is_protobuf {
-        message.raw_bytes().and_then(|bytes| {
-            crate::proto::ErrorMessage::decode(bytes).ok().map(|proto| Notice {
-                code: proto.error_code.unwrap_or(0),
-                message: proto.error_msg.unwrap_or_default(),
-                error_time: None,
-                advanced_order_reject_json: proto.advanced_order_reject_json.unwrap_or_default(),
-            })
-        })
-    } else {
-        Some(Notice::from(message))
-    }
-}
-
 /// Dispatch an unsolicited message that arrived during the handshake — i.e. one
 /// that wasn't `NextValidId` / `ManagedAccounts` (which `parse_account_info`
 /// consumes itself). Errors fan out to the notice callback; `OpenOrder` /
@@ -306,10 +287,19 @@ fn decode_handshake_notice(message: &ResponseMessage) -> Option<Notice> {
 pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut ResponseMessage, callbacks: &StartupCallbacks<'_>) {
     use crate::accounts::common::decoders::decode_account_update_either;
     use crate::orders::common::decoders::{decode_open_order_either, decode_order_status_either};
+    use crate::transport::routing::decode_error_envelope;
 
     match message.message_type() {
         IncomingMessages::Error => {
-            if let Some(notice) = decode_handshake_notice(message) {
+            // Reuse the dispatcher's protobuf Error decoder + DecodedError→Notice
+            // conversion so handshake notices preserve `error_time` (millis →
+            // OffsetDateTime) the same way runtime notices do.
+            let notice = if message.is_protobuf {
+                message.raw_bytes().and_then(decode_error_envelope).map(Notice::from)
+            } else {
+                Some(Notice::from(&*message))
+            };
+            if let Some(notice) = notice {
                 if notice.is_warning() || notice.is_system_message() {
                     info!("{notice}");
                 } else {
