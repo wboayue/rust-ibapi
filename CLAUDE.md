@@ -47,7 +47,7 @@ Changes to both branches should be made via pull requests.
 2. **Test each configuration**: Run tests for default, sync-only, and `--all-features`
 3. **Follow module structure**: Client methods live as `impl Client` blocks in domain modules (e.g., `accounts/sync.rs`), not in `client/sync.rs` or `client/async.rs`. Use `common/` for shared logic between sync/async. Protobuf decoders live in each domain's `common/decoders.rs`; shared proto→domain converters live in `proto/decoders.rs`
 4. **Minimal comments**: Keep comments concise, avoid stating the obvious
-5. **Run quality checks**: Before committing, run `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `cargo clippy --all-targets --features sync -- -D warnings`, and `cargo clippy --all-features`
+5. **Run quality checks**: Before committing, run `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `cargo clippy --all-targets --features sync -- -D warnings`, and `cargo clippy --all-features`. For docs PRs (or any PR that touches doc-comments / re-exports / feature-gated modules), also run `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps` across the same three feature configs — `cargo test --doc` only validates doc-test compilation, not intra-doc link resolution
 6. **Fluent conditional orders**: Use helper functions (`price()`, `time()`, `margin()`, etc.) and method chaining (`.condition()`, `.and_condition()`, `.or_condition()`) for building conditional orders. See [docs/order-types.md](docs/order-types.md#conditional-orders-with-conditions) and [docs/api-patterns.md](docs/api-patterns.md#conditional-order-builder-pattern) for details
 7. **Don't repeat code**: Extract repeated logic to `common/`; use shared helpers like `request_helpers`
 8. **Single responsibility**: One responsibility per function/module; split orchestration from business logic
@@ -75,6 +75,11 @@ cargo fmt
 cargo clippy --all-targets -- -D warnings
 cargo clippy --all-targets --features sync -- -D warnings
 cargo clippy --all-features
+
+# Check rustdoc intra-doc links (separate from `cargo test --doc`)
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --no-default-features --features sync
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
 
 # Run all tests
 just test

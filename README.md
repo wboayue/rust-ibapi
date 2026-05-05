@@ -49,7 +49,7 @@ use ibapi::Client;                    // async client
 use ibapi::client::blocking::Client;  // blocking client
 ```
 
-> **📚 Migrating from v1.x?** See the [Migration Guide](MIGRATION.md) for step-by-step upgrade instructions.
+> **📚 Migrating?** See the [v2.x → v3.0 guide](docs/migration-3.0.md) for the new `Subscription` shape and notification handling, or the [v1.x → v2.0 guide](MIGRATION.md) for the older transition.
 
 If you encounter any issues or require a missing feature, please review the [issues list](https://github.com/wboayue/rust-ibapi/issues) before submitting a new one.
 
@@ -222,14 +222,16 @@ async fn main() {
 
 ### Requesting Realtime Market Data
 
+These examples use `iter_data()` / `data_stream()` to focus on bars; per-subscription notices are filtered (and logged at `warn!`). See [Handling notifications](#handling-notifications) for the pattern when you also want to observe `Notice` items.
+
 #### Sync Example
 
 ```rust
+use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
 
 fn main() {
-    let connection_url = "127.0.0.1:4002";
-    let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
+    let client = Client::connect("127.0.0.1:4002", 100).expect("connection to TWS failed!");
 
     // Request real-time bars data for AAPL with 5-second intervals
     let contract = Contract::stock("AAPL").build();
@@ -237,8 +239,7 @@ fn main() {
         .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
         .expect("realtime bars request failed!");
 
-    for bar in subscription {
-        // Process each bar here (e.g., print or use in calculations)
+    for bar in subscription.iter_data().flatten() {
         println!("bar: {bar:?}");
     }
 }
@@ -248,12 +249,10 @@ fn main() {
 
 ```rust
 use ibapi::prelude::*;
-use futures::StreamExt;
 
 #[tokio::main]
 async fn main() {
-    let connection_url = "127.0.0.1:4002";
-    let client = Client::connect(connection_url, 100).await.expect("connection to TWS failed!");
+    let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection to TWS failed!");
 
     // Request real-time bars data for AAPL with 5-second intervals
     let contract = Contract::stock("AAPL").build();
@@ -262,9 +261,11 @@ async fn main() {
         .await
         .expect("realtime bars request failed!");
 
-    while let Some(bar) = subscription.next().await {
-        // Process each bar here (e.g., print or use in calculations)
-        println!("bar: {bar:?}");
+    while let Some(item) = subscription.next_data().await {
+        match item {
+            Ok(bar) => println!("bar: {bar:?}"),
+            Err(e)  => { eprintln!("error: {e}"); break; }
+        }
     }
 }
 ```
@@ -278,8 +279,9 @@ use std::time::Duration;
 
 // Example of non-blocking iteration in sync mode
 loop {
-    match subscription.try_next() {
-        Some(bar) => println!("bar: {bar:?}"),
+    match subscription.try_iter_data().next() {
+        Some(Ok(bar)) => println!("bar: {bar:?}"),
+        Some(Err(e)) => { eprintln!("error: {e}"); break; }
         None => {
             // No new data yet; perform other tasks or sleep
             std::thread::sleep(Duration::from_millis(100));
@@ -293,13 +295,12 @@ Explore the [Subscription documentation](https://docs.rs/ibapi/latest/ibapi/stru
 Since subscriptions can be converted to iterators, it is easy to iterate over multiple contracts.
 
 ```rust
+use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
 
 fn main() {
-    let connection_url = "127.0.0.1:4002";
-    let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
+    let client = Client::connect("127.0.0.1:4002", 100).expect("connection to TWS failed!");
 
-    // Request real-time bars data for AAPL with 5-second intervals
     let contract_aapl = Contract::stock("AAPL").build();
     let contract_nvda = Contract::stock("NVDA").build();
 
@@ -310,9 +311,8 @@ fn main() {
         .realtime_bars(&contract_nvda, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
         .expect("realtime bars request failed!");
 
-    for (bar_aapl, bar_nvda) in subscription_aapl.iter().zip(subscription_nvda.iter()) {
-        // Process each bar here (e.g., print or use in calculations)
-        println!("AAPL {}, NVDA {}", bar_aapl.close, bar_nvda.close);
+    for (aapl, nvda) in subscription_aapl.iter_data().flatten().zip(subscription_nvda.iter_data().flatten()) {
+        println!("AAPL {}, NVDA {}", aapl.close, nvda.close);
     }
 }
 ```
@@ -528,6 +528,136 @@ The order update stream provides real-time notifications for:
 - **CommissionReport**: Commission charges for executions
 - **Message**: System messages and notifications
 
+## Handling notifications
+
+TWS emits two flavors of notification alongside subscription data:
+
+- **Per-subscription notices** — warning codes 2100..=2169 and order-cancel code
+  202 carry a `request_id` that maps back to a specific subscription. They arrive
+  on that subscription as `SubscriptionItem::Notice(_)`; the stream stays open.
+- **Globally routed notices** — connectivity codes 1100/1101/1102 and farm-status
+  codes (2104/2105/2106/2107/2108) have no `request_id`. They are not delivered
+  to any subscription; subscribe via [`Client::notice_stream()`](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.notice_stream) instead.
+
+### Per-subscription notices
+
+`Subscription<T>::next()` returns `Option<Result<SubscriptionItem<T>, Error>>`,
+so a single match handles data, notices, and terminal errors:
+
+#### Sync example
+
+```rust
+use ibapi::client::blocking::Client;
+use ibapi::prelude::*;
+
+fn main() {
+    let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    let contract = Contract::stock("AAPL").build();
+    let subscription = client
+        .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
+        .expect("realtime bars request failed");
+
+    for item in &subscription {
+        match item {
+            Ok(SubscriptionItem::Data(bar))    => println!("bar: {bar:?}"),
+            Ok(SubscriptionItem::Notice(note)) => eprintln!("notice: {note}"),
+            Err(e)                             => { eprintln!("error: {e}"); break; }
+        }
+    }
+}
+```
+
+#### Async example
+
+```rust
+use ibapi::prelude::*;
+
+#[tokio::main]
+async fn main() {
+    let client = Client::connect("127.0.0.1:4002", 100).await.expect("connection failed");
+    let contract = Contract::stock("AAPL").build();
+    let mut subscription = client
+        .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
+        .await
+        .expect("realtime bars request failed");
+
+    while let Some(item) = subscription.next().await {
+        match item {
+            Ok(SubscriptionItem::Data(bar))    => println!("bar: {bar:?}"),
+            Ok(SubscriptionItem::Notice(note)) => eprintln!("notice: {note}"),
+            Err(e)                             => { eprintln!("error: {e}"); break; }
+        }
+    }
+}
+```
+
+### Filtering vs. observing
+
+Pick the iterator/stream shape based on whether the call site cares about
+notices:
+
+| Want                                  | Sync                            | Async                          |
+|---------------------------------------|---------------------------------|--------------------------------|
+| **Data only** (notices logged at warn) | `subscription.iter_data()` / `next_data()` | `subscription.data_stream()` / `next_data()` |
+| **Data + notices** (full visibility)   | `subscription.iter()` / `next()` | `subscription.stream()` / `next()` |
+
+Most call sites (downstream business logic, indicators, paper-trading loops)
+want `iter_data()` / `data_stream()` — notices are observability concerns and
+already log at `warn!`. UI status indicators, custom logging, and audit pipelines
+want `iter()` / `stream()` so they can react to `SubscriptionItem::Notice`.
+
+Sync data-only example:
+
+```rust
+use ibapi::client::blocking::Client;
+use ibapi::prelude::*;
+
+fn main() {
+    let client = Client::connect("127.0.0.1:4002", 100).expect("connection failed");
+    let contract = Contract::stock("AAPL").build();
+    let subscription = client
+        .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
+        .expect("realtime bars request failed");
+
+    for bar in subscription.iter_data().flatten() {
+        println!("bar: {bar:?}");
+    }
+}
+```
+
+### Handshake-time notices
+
+Farm-status codes (2104/2106/2158, etc.) typically arrive *before*
+`Client::connect` returns, so a `notice_stream` registered afterwards will not
+see that initial burst. To observe handshake-time notices — useful for
+connection-state UIs and startup telemetry — install a
+`startup_notice_callback` on `ConnectionOptions`:
+
+```rust
+use ibapi::client::blocking::Client;
+use ibapi::ConnectionOptions;
+
+fn main() {
+    let options = ConnectionOptions::default()
+        .startup_notice_callback(|notice| {
+            if notice.is_system_message() {
+                println!("startup connectivity: {notice}");
+            } else {
+                println!("startup notice: {notice}");
+            }
+        });
+
+    let client = Client::connect_with_options("127.0.0.1:4002", 100, options)
+        .expect("connection failed");
+    // ... use client
+    let _ = client;
+}
+```
+
+`startup_notice_callback` fires for every handshake — initial connect *and*
+auto-reconnect — so a single hook covers both paths. For runtime-only unrouted
+notices once the client is up, see [`Client::notice_stream`](https://docs.rs/ibapi/latest/ibapi/struct.Client.html#method.notice_stream).
+
 ## Multi-Threading
 
 The [Client](https://docs.rs/ibapi/latest/ibapi/struct.Client.html) can be shared between threads to support concurrent operations. The following example demonstrates valid multi-threaded usage of [Client](https://docs.rs/ibapi/latest/ibapi/struct.Client.html).
@@ -552,8 +682,7 @@ fn main() {
                 .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
                 .expect("realtime bars request failed!");
 
-            for bar in subscription {
-                // Process each bar here (e.g., print or use in calculations)
+            for bar in subscription.iter_data().flatten() {
                 println!("bar: {bar:?}");
             }
         });
@@ -586,8 +715,7 @@ fn main() {
                 .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
                 .expect("realtime bars request failed!");
 
-            for bar in subscription {
-                // Process each bar here (e.g., print or use in calculations)
+            for bar in subscription.iter_data().flatten() {
                 println!("bar: {bar:?}");
             }
         });
@@ -600,35 +728,37 @@ fn main() {
 
 In this model, each client instance handles only the requests it initiates, improving the reliability of concurrent operations.
 
-# Fault Tolerance
+## Fault Tolerance
 
-The API will automatically attempt to reconnect to the TWS server if a disconnection is detected. The API will attempt to reconnect up to 30 times using a Fibonacci backoff strategy. In some cases, it will retry the request in progress. When receiving responses via a [Subscription](https://docs.rs/ibapi/latest/ibapi/client/struct.Subscription.html), the application may need to handle retries manually, as shown below.
+The API will automatically attempt to reconnect to the TWS server if a disconnection is detected. The API will attempt to reconnect up to 30 times using a Fibonacci backoff strategy. In some cases, it will retry the request in progress. When receiving responses via a [Subscription](https://docs.rs/ibapi/latest/ibapi/client/struct.Subscription.html), the application may need to handle retries manually. In v3.0, terminal errors surface as `Some(Err(_))` from `Subscription::next()` (no separate `error()` accessor); inspect the error and decide whether to resubscribe:
 
 ```rust
+use ibapi::client::blocking::Client;
 use ibapi::prelude::*;
 
 fn main() {
-    let connection_url = "127.0.0.1:4002";
-    let client = Client::connect(connection_url, 100).expect("connection to TWS failed!");
-
+    let client = Client::connect("127.0.0.1:4002", 100).expect("connection to TWS failed!");
     let contract = Contract::stock("AAPL").build();
 
-    loop {
-        // Request real-time bars data with 5-second intervals
+    'outer: loop {
         let subscription = client
             .realtime_bars(&contract, RealtimeBarSize::Sec5, RealtimeWhatToShow::Trades, TradingHours::Extended)
             .expect("realtime bars request failed!");
 
-        for bar in &subscription {
-            // Process each bar here (e.g., print or use in calculations)
-            println!("bar: {bar:?}");
+        for item in &subscription {
+            match item {
+                Ok(SubscriptionItem::Data(bar)) => println!("bar: {bar:?}"),
+                Ok(SubscriptionItem::Notice(note)) => eprintln!("notice: {note}"),
+                Err(Error::ConnectionReset) => {
+                    eprintln!("Connection reset. Retrying stream...");
+                    continue 'outer;
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    break 'outer;
+                }
+            }
         }
-
-        if let Some(Error::ConnectionReset) = subscription.error() {
-            eprintln!("Connection reset. Retrying stream...");
-            continue;
-        }
-
         break;
     }
 }

@@ -11,9 +11,10 @@ use crate::messages::{IncomingMessages, Notice, OutgoingMessages, ResponseMessag
 /// Subscriptions return `Option<Result<SubscriptionItem<T>, Error>>` from `next`,
 /// `try_next`, and `next_timeout`. `Data(T)` is the decoded payload; `Notice` is a
 /// non-fatal IB notice (warning codes 2100..=2169) bound to this subscription —
-/// the stream stays open. Use [`Subscription::iter_data`](crate::subscriptions::Subscription::iter_data)
-/// (or async [`Subscription::data_stream`](crate::subscriptions::Subscription::data_stream))
-/// when you only care about data and want notices logged automatically.
+/// the stream stays open. Use
+/// [`Subscription::next_data`](crate::subscriptions::Subscription::next_data) (sync:
+/// `iter_data` family / async: `data_stream`) when you only care about data and
+/// want notices logged automatically.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SubscriptionItem<T> {
     /// A successfully decoded payload from the subscription stream.

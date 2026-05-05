@@ -17,7 +17,25 @@ use crate::Error;
 type CancelFn = Box<dyn Fn(i32, Option<i32>, Option<&DecoderContext>) -> Result<Vec<u8>, Error> + Send + Sync>;
 type DecoderFn<T> = Arc<dyn Fn(&DecoderContext, &mut ResponseMessage) -> Result<T, Error> + Send + Sync>;
 
-/// Asynchronous subscription for streaming data
+/// Asynchronous subscription for streaming data.
+///
+/// Each call to [`next`](Subscription::next) returns
+/// `Option<Result<SubscriptionItem<T>, Error>>`:
+///
+/// * `None` — the stream has ended.
+/// * `Some(Ok(SubscriptionItem::Data(t)))` — a decoded value.
+/// * `Some(Ok(SubscriptionItem::Notice(n)))` — a non-fatal IB notice (warning code
+///   2100..=2169 or order-cancel code 202) carried on this subscription's
+///   `request_id`; the stream stays open.
+/// * `Some(Err(e))` — terminal error; subsequent calls return `None`.
+///
+/// When you only care about data, use [`next_data`](Subscription::next_data) or
+/// [`data_stream`](Subscription::data_stream); both filter notices for you.
+///
+/// Notices that are *not* tied to a specific subscription — connectivity codes
+/// 1100/1101/1102, farm-status 2104/2105/2106/2107/2108, etc. — are not delivered
+/// here. Subscribe to them via [`Client::notice_stream`](crate::Client::notice_stream)
+/// instead.
 pub struct Subscription<T> {
     inner: SubscriptionInner<T>,
     /// Metadata for cancellation
@@ -260,7 +278,9 @@ impl<T> Subscription<T> {
         }
     }
 
-    /// Convenience: blocking `next` that filters notices and yields just data.
+    /// Convenience: awaits the next item and filters notices, yielding just data.
+    /// Filtered notices are logged at `warn!`. Use [`next`](Self::next) instead
+    /// when you want to observe `SubscriptionItem::Notice` items.
     pub async fn next_data(&mut self) -> Option<Result<T, Error>>
     where
         T: 'static,
@@ -272,9 +292,9 @@ impl<T> Subscription<T> {
         }
     }
 
-    /// Async mirror of the sync [`Subscription::iter`](crate::subscriptions::sync::Subscription::iter)
-    /// adapter: returns a [`Stream`] of `Result<SubscriptionItem<T>, Error>` —
-    /// notices are surfaced for callers that want to react to them.
+    /// Async mirror of the sync `Subscription::iter` adapter: returns a [`Stream`]
+    /// of `Result<SubscriptionItem<T>, Error>` — notices are surfaced for callers
+    /// that want to react to them.
     ///
     /// The returned stream is `Unpin` so callers can chain
     /// [`futures::StreamExt`] combinators directly without `pin_mut!`.
@@ -288,9 +308,9 @@ impl<T> Subscription<T> {
         ))
     }
 
-    /// Async mirror of the sync [`Subscription::iter_data`](crate::subscriptions::sync::Subscription::iter_data)
-    /// adapter: returns a [`Stream`] of `Result<T, Error>` with notices filtered
-    /// (and logged at `warn!`).
+    /// Async mirror of the sync `Subscription::iter_data` adapter: returns a
+    /// [`Stream`] of `Result<T, Error>` with notices filtered (and logged at
+    /// `warn!`).
     ///
     /// The returned stream is `Unpin` so callers can chain
     /// [`futures::StreamExt`] combinators (`next`, `take`, `collect`, ...)

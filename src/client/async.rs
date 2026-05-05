@@ -244,12 +244,21 @@ impl Client {
     /// connectivity codes 1100/1101/1102, farm-status 2104/2105/2106/2107/2108,
     /// and any other unrouted error/warning).
     ///
-    /// Each call returns a fresh, independent [`NoticeStream`]; late subscribers
-    /// do not see prior notices. The stream ends when the client disconnects.
+    /// Each call returns a fresh, independent [`NoticeStream`](crate::subscriptions::NoticeStream);
+    /// late subscribers do not see prior notices. The stream ends when the client disconnects.
     ///
     /// Per-subscription notices (codes carrying a real `request_id`) are not
     /// delivered here — they reach their owning subscription as
-    /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem::Notice).
+    /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem::Notice)
+    /// (see [`Subscription::next`](crate::subscriptions::Subscription::next)).
+    ///
+    /// # Note on handshake-time notices
+    ///
+    /// Notices emitted during the connection handshake — the typical
+    /// 2104/2106/2158 farm-status burst that arrives before `connect` returns —
+    /// will not be observed by a `NoticeStream` created afterwards. Use
+    /// [`ConnectionOptions::startup_notice_callback`](crate::ConnectionOptions::startup_notice_callback)
+    /// to capture those.
     ///
     /// # Examples
     ///
