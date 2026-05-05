@@ -21,11 +21,18 @@ use crate::transport::{InternalSubscription, MessageBus};
 ///
 /// * `None` — the stream has ended.
 /// * `Some(Ok(SubscriptionItem::Data(t)))` — a decoded value.
-/// * `Some(Ok(SubscriptionItem::Notice(n)))` — a non-fatal IB notice; the stream stays open.
+/// * `Some(Ok(SubscriptionItem::Notice(n)))` — a non-fatal IB notice (warning code
+///   2100..=2169 or order-cancel code 202) carried on this subscription's
+///   `request_id`; the stream stays open.
 /// * `Some(Err(e))` — terminal error; subsequent calls return `None`.
 ///
 /// When you only care about data, use [`iter_data`](Subscription::iter_data) (or
 /// [`next_data`](Subscription::next_data)) which filters notices for you.
+///
+/// Notices that are *not* tied to a specific subscription — connectivity codes
+/// 1100/1101/1102, farm-status 2104/2105/2106/2107/2108, etc. — are not delivered
+/// here. Subscribe to them via [`Client::notice_stream`](crate::client::blocking::Client::notice_stream)
+/// instead.
 #[allow(private_bounds)]
 pub struct Subscription<T: StreamDecoder<T>> {
     context: DecoderContext,
@@ -188,6 +195,10 @@ impl<T: StreamDecoder<T>> Subscription<T> {
 
     /// Returns the next item without blocking.
     ///
+    /// Same `SubscriptionItem<T>` shape as [`next`](Self::next): `Data`, `Notice`,
+    /// or terminal error. Use [`try_next_data`](Self::try_iter_data) (via
+    /// [`try_iter_data`](Self::try_iter_data)) when notices should be filtered.
+    ///
     /// Returns `None` if no item is available *right now*; check the surrounding
     /// loop or stream state to distinguish from end-of-stream.
     pub fn try_next(&self) -> Option<Result<SubscriptionItem<T>, Error>> {
@@ -203,6 +214,10 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     }
 
     /// Returns the next item, blocking up to `timeout`.
+    ///
+    /// Same `SubscriptionItem<T>` shape as [`next`](Self::next): `Data`, `Notice`,
+    /// or terminal error. Use [`timeout_iter_data`](Self::timeout_iter_data) when
+    /// you want notices filtered.
     pub fn next_timeout(&self, timeout: Duration) -> Option<Result<SubscriptionItem<T>, Error>> {
         if self.stream_ended.load(Ordering::Relaxed) {
             return None;
@@ -221,23 +236,29 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     }
 
     /// Convenience: blocking `next` that filters out notices and yields just data.
-    /// Equivalent to `iter_data().next()`.
+    /// Equivalent to `iter_data().next()`. Filtered notices are logged at `warn!`.
+    /// Use [`next`](Self::next) instead if you want to observe `Notice` items.
     pub fn next_data(&self) -> Option<Result<T, Error>> {
         self.iter_data().next()
     }
 
-    /// Blocking iterator yielding `Result<SubscriptionItem<T>, Error>`. Use
+    /// Blocking iterator yielding `Result<SubscriptionItem<T>, Error>` — both
+    /// `Data` and `Notice` arms surface to the caller. Use
     /// [`iter_data`](Subscription::iter_data) when you only want data.
     pub fn iter(&self) -> SubscriptionIter<'_, T> {
         SubscriptionIter { subscription: self }
     }
 
-    /// Non-blocking iterator. Returns `None` immediately when nothing is queued.
+    /// Non-blocking iterator. Same `SubscriptionItem<T>` shape as [`iter`](Self::iter)
+    /// (see [`try_iter_data`](Self::try_iter_data) for the data-only variant).
+    /// Returns `None` immediately when nothing is queued.
     pub fn try_iter(&self) -> SubscriptionTryIter<'_, T> {
         SubscriptionTryIter { subscription: self }
     }
 
-    /// Iterator that waits up to `timeout` for each item.
+    /// Iterator that waits up to `timeout` for each item. Same
+    /// `SubscriptionItem<T>` shape as [`iter`](Self::iter); see
+    /// [`timeout_iter_data`](Self::timeout_iter_data) for the data-only variant.
     pub fn timeout_iter(&self, timeout: Duration) -> SubscriptionTimeoutIter<'_, T> {
         SubscriptionTimeoutIter { subscription: self, timeout }
     }

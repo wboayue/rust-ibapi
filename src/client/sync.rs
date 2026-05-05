@@ -285,7 +285,16 @@ impl Client {
     ///
     /// Per-subscription notices (codes carrying a real `request_id`) are not
     /// delivered here — they reach their owning subscription as
-    /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem::Notice).
+    /// [`SubscriptionItem::Notice`](crate::subscriptions::SubscriptionItem::Notice)
+    /// (see [`Subscription::next`](crate::client::blocking::Subscription::next)).
+    ///
+    /// # Note on handshake-time notices
+    ///
+    /// Notices emitted during the connection handshake — the typical
+    /// 2104/2106/2158 farm-status burst that arrives before `connect` returns —
+    /// will not be observed by a `NoticeStream` created afterwards. Use
+    /// [`ConnectionOptions::startup_notice_callback`](crate::ConnectionOptions::startup_notice_callback)
+    /// to capture those.
     ///
     /// # Examples
     ///
