@@ -33,10 +33,12 @@ async fn scanner_subscription_top_gainers() {
     };
 
     rate_limit();
-    let mut subscription = client.scanner_subscription(&sub, &vec![]).await.expect("scanner_subscription failed");
+    let mut subscription = client.scanner_subscription(&sub, &[]).await.expect("scanner_subscription failed");
 
-    let item = subscription.next().await;
-    assert!(item.is_some(), "expected scanner results");
-    let results = item.unwrap().expect("scanner error");
+    let results = subscription
+        .next_data()
+        .await
+        .expect("expected scanner results")
+        .expect("scanner subscription error");
     assert!(!results.is_empty(), "expected non-empty scanner results");
 }

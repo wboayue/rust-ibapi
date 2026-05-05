@@ -1,6 +1,7 @@
 use ibapi::accounts::types::{AccountGroup, AccountId, ContractId};
 use ibapi::contracts::Contract;
 use ibapi::orders::{Action, Order, PlaceOrder};
+use ibapi::subscriptions::SubscriptionItem;
 use ibapi::Client;
 use ibapi_test::{rate_limit, require_market_open, ClientId, GATEWAY};
 use serial_test::serial;
@@ -169,7 +170,7 @@ async fn pnl_single_receives_updates() {
     let order_id = client.next_order_id();
     let mut sub = client.place_order(order_id, &contract, &buy).await.expect("buy failed");
     let filled = tokio::time::timeout(tokio::time::Duration::from_secs(5), async {
-        while let Some(Ok(event)) = sub.next().await {
+        while let Some(Ok(SubscriptionItem::Data(event))) = sub.next().await {
             if let PlaceOrder::OrderStatus(status) = &event {
                 if status.status == "Filled" {
                     return;

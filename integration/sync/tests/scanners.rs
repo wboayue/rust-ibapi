@@ -30,10 +30,11 @@ fn scanner_subscription_top_gainers() {
     };
 
     rate_limit();
-    let subscription = client.scanner_subscription(&sub, &vec![]).expect("scanner_subscription failed");
+    let subscription = client.scanner_subscription(&sub, &[]).expect("scanner_subscription failed");
 
-    let item = subscription.next();
-    assert!(item.is_some(), "expected scanner results");
-    let results = item.unwrap();
+    let results = subscription
+        .next_data()
+        .expect("expected scanner results")
+        .expect("scanner subscription error");
     assert!(!results.is_empty(), "expected non-empty scanner results");
 }

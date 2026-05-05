@@ -4,6 +4,7 @@ use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::market_data::realtime::{BarSize, WhatToShow};
 use ibapi::market_data::{MarketDataType, TradingHours};
+use ibapi::subscriptions::SubscriptionItem;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 
 #[test]
@@ -85,8 +86,7 @@ fn realtime_bars_trades() {
         .realtime_bars(&contract, BarSize::Sec5, WhatToShow::Trades, TradingHours::Extended)
         .expect("realtime_bars failed");
 
-    let item = subscription.next_timeout(Duration::from_secs(15));
-    if let Some(bar) = item {
+    if let Some(Ok(SubscriptionItem::Data(bar))) = subscription.next_timeout(Duration::from_secs(15)) {
         assert!(bar.close > 0.0, "bar close should be positive");
     }
 }
@@ -101,8 +101,7 @@ fn tick_by_tick_all_last() {
     let contract = Contract::stock("AAPL").build();
     let subscription = client.tick_by_tick_all_last(&contract, 0, false).expect("tick_by_tick_all_last failed");
 
-    let item = subscription.next_timeout(Duration::from_secs(15));
-    if let Some(trade) = item {
+    if let Some(Ok(SubscriptionItem::Data(trade))) = subscription.next_timeout(Duration::from_secs(15)) {
         assert!(trade.price > 0.0, "trade price should be positive");
     }
 }
@@ -117,8 +116,7 @@ fn tick_by_tick_bid_ask() {
     let contract = Contract::stock("AAPL").build();
     let subscription = client.tick_by_tick_bid_ask(&contract, 0, false).expect("tick_by_tick_bid_ask failed");
 
-    let item = subscription.next_timeout(Duration::from_secs(15));
-    if let Some(tick) = item {
+    if let Some(Ok(SubscriptionItem::Data(tick))) = subscription.next_timeout(Duration::from_secs(15)) {
         assert!(tick.bid_price > 0.0, "bid price should be positive");
         assert!(tick.ask_price > 0.0, "ask price should be positive");
     }
@@ -134,8 +132,7 @@ fn tick_by_tick_midpoint() {
     let contract = Contract::stock("AAPL").build();
     let subscription = client.tick_by_tick_midpoint(&contract, 0, false).expect("tick_by_tick_midpoint failed");
 
-    let item = subscription.next_timeout(Duration::from_secs(15));
-    if let Some(mp) = item {
+    if let Some(Ok(SubscriptionItem::Data(mp))) = subscription.next_timeout(Duration::from_secs(15)) {
         assert!(mp.mid_point > 0.0, "midpoint should be positive");
     }
 }
