@@ -10,6 +10,18 @@ pub mod sync;
 #[cfg(feature = "async")]
 pub mod r#async;
 
+pub(crate) mod notice_stream;
+#[cfg(feature = "sync")]
+pub use notice_stream::sync_impl::NoticeStreamIter;
+
+// Top-level `NoticeStream` mirrors the `Subscription` policy: prefer the async
+// implementation when both features are enabled. The sync version is also
+// available at `client::blocking::NoticeStream`.
+#[cfg(feature = "async")]
+pub use notice_stream::async_impl::NoticeStream;
+#[cfg(all(feature = "sync", not(feature = "async")))]
+pub use notice_stream::sync_impl::NoticeStream;
+
 // Re-export the appropriate subscription types based on feature
 #[cfg(feature = "sync")]
 pub use sync::{

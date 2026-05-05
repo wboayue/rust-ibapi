@@ -99,3 +99,24 @@ async fn outside_rth_order_subscription_smoke() {
         );
     }
 }
+
+/// `notice_stream()` should receive at least one globally routed notice
+/// (typically 2104/2107/2108 farm-status) shortly after connect.
+/// Tolerant: only logs if no notice arrives — some sessions may be quiet.
+#[tokio::test]
+async fn notice_stream_receives_global_notices() {
+    let client_id = ClientId::get();
+    rate_limit();
+    let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
+
+    let mut stream = client.notice_stream().expect("notice_stream failed");
+
+    let notice = tokio::time::timeout(Duration::from_secs(15), stream.next()).await;
+    match notice {
+        Ok(Some(notice)) => {
+            println!("received global notice: code={} message={}", notice.code, notice.message);
+        }
+        Ok(None) => eprintln!("notice stream closed unexpectedly"),
+        Err(_) => eprintln!("no global notice within 15s — quiet session, not a failure"),
+    }
+}

@@ -20,6 +20,7 @@ use super::common::log_orphan;
 use super::routing::{determine_routing, is_warning_error, order_routing_strategy, OrderRoutingStrategy, RoutingDecision, UNSPECIFIED_REQUEST_ID};
 use super::{InternalSubscription, MessageBus, Response, RoutedItem, Signal, SubscriptionBuilder};
 use crate::messages::{shared_channel_configuration, IncomingMessages, Notice, OutgoingMessages, ResponseMessage};
+use crate::subscriptions::notice_stream::sync_impl::NoticeStream;
 use crate::Error;
 
 // pub(crate) const MIN_SERVER_VERSION: i32 = 100;
@@ -108,6 +109,36 @@ impl SharedChannels {
     }
 }
 
+/// Fan-out for unrouted notices. Each subscriber gets its own crossbeam
+/// channel; `broadcast` lazily prunes subscribers whose receivers have
+/// been dropped (`Sender::send` returns `Err` once the receiver is gone).
+#[derive(Debug, Default)]
+pub(crate) struct NoticeBroadcaster {
+    senders: Mutex<Vec<Sender<Notice>>>,
+}
+
+impl NoticeBroadcaster {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn subscribe(&self) -> Receiver<Notice> {
+        let (sender, receiver) = channel::unbounded();
+        self.senders.lock().unwrap().push(sender);
+        receiver
+    }
+
+    pub(crate) fn broadcast(&self, notice: Notice) {
+        let mut senders = self.senders.lock().unwrap();
+        senders.retain(|s| s.send(notice.clone()).is_ok());
+    }
+
+    /// Drop all senders so existing receivers see channel-closed.
+    pub(crate) fn close(&self) {
+        self.senders.lock().unwrap().clear();
+    }
+}
+
 #[derive(Debug)]
 pub struct TcpMessageBus<S: Stream> {
     connection: Connection<S>,
@@ -116,6 +147,7 @@ pub struct TcpMessageBus<S: Stream> {
     orders: SenderHash<i32, RoutedItem>,
     executions: SenderHash<String, RoutedItem>,
     shared_channels: SharedChannels,
+    notice_broadcaster: NoticeBroadcaster,
     signals_send: Sender<Signal>,
     signals_recv: Receiver<Signal>,
     shutdown_requested: AtomicBool,
@@ -134,6 +166,7 @@ impl<S: Stream> TcpMessageBus<S> {
             orders: SenderHash::new(),
             executions: SenderHash::new(),
             shared_channels: SharedChannels::new(),
+            notice_broadcaster: NoticeBroadcaster::new(),
             signals_send,
             signals_recv,
             shutdown_requested: AtomicBool::new(false),
@@ -156,6 +189,7 @@ impl<S: Stream> TcpMessageBus<S> {
         self.requests.clear();
         self.orders.clear();
         self.executions.clear();
+        self.notice_broadcaster.close();
 
         self.connected.store(false, Ordering::Relaxed);
         self.shutdown_requested.store(true, Ordering::Relaxed);
@@ -270,7 +304,9 @@ impl<S: Stream> TcpMessageBus<S> {
                 let is_warning = is_warning_error(payload.error_code);
 
                 if request_id == UNSPECIFIED_REQUEST_ID {
-                    super::common::log_unrouted_notice(&Notice::from(payload));
+                    let notice = Notice::from(payload);
+                    super::common::log_unrouted_notice(&notice);
+                    self.notice_broadcaster.broadcast(notice);
                 } else {
                     let item = if is_warning {
                         RoutedItem::Notice(Notice::from(payload))
@@ -600,6 +636,10 @@ impl<S: Stream> MessageBus for TcpMessageBus<S> {
         self.connection.write_message(message)?;
         // TODO send cancel
         Ok(())
+    }
+
+    fn notice_subscribe(&self) -> NoticeStream {
+        NoticeStream::new(self.notice_broadcaster.subscribe())
     }
 
     fn ensure_shutdown(&self) {

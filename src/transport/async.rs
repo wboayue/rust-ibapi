@@ -55,6 +55,8 @@ pub trait AsyncMessageBus: Send + Sync {
 
     async fn create_order_update_subscription(&self) -> Result<AsyncInternalSubscription, Error>;
 
+    fn notice_subscribe(&self) -> crate::subscriptions::notice_stream::async_impl::NoticeStream;
+
     async fn ensure_shutdown(&self);
 
     fn request_shutdown_sync(&self);
@@ -167,6 +169,8 @@ pub struct AsyncTcpMessageBus<S: AsyncStream = AsyncTcpSocket> {
     execution_channels: Arc<RwLock<HashMap<String, BroadcastSender>>>,
     /// Optional channel for order update stream
     order_update_stream: Arc<RwLock<Option<BroadcastSender>>>,
+    /// Fan-out for unrouted notices (no `request_id`); subscribers via `notice_subscribe`.
+    notice_sender: broadcast::Sender<Notice>,
     /// Channel for cleanup signals
     cleanup_sender: mpsc::UnboundedSender<CleanupSignal>,
     /// Handle to the message processing task
@@ -206,6 +210,8 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             }
         }
 
+        let (notice_sender, _) = broadcast::channel(BROADCAST_CHANNEL_CAPACITY);
+
         let message_bus = Self {
             connection: Arc::new(connection),
             request_channels: Arc::new(RwLock::new(HashMap::new())),
@@ -214,6 +220,7 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
             order_channels: Arc::new(RwLock::new(HashMap::new())),
             execution_channels: Arc::new(RwLock::new(HashMap::new())),
             order_update_stream: Arc::new(RwLock::new(None)),
+            notice_sender,
             cleanup_sender,
             process_task: Arc::new(RwLock::new(None)),
             shutdown_requested: Arc::new(AtomicBool::new(false)),
@@ -424,7 +431,9 @@ impl<S: AsyncStream> AsyncTcpMessageBus<S> {
         let is_warning = is_warning_error(payload.error_code);
 
         if request_id == UNSPECIFIED_REQUEST_ID {
-            super::common::log_unrouted_notice(&Notice::from(payload));
+            let notice = Notice::from(payload);
+            super::common::log_unrouted_notice(&notice);
+            let _ = self.notice_sender.send(notice);
         } else {
             let item = if is_warning {
                 RoutedItem::Notice(Notice::from(payload))
@@ -727,6 +736,10 @@ impl<S: AsyncStream> AsyncMessageBus for AsyncTcpMessageBus<S> {
             self.cleanup_sender.clone(),
             CleanupSignal::OrderUpdateStream,
         ))
+    }
+
+    fn notice_subscribe(&self) -> crate::subscriptions::notice_stream::async_impl::NoticeStream {
+        crate::subscriptions::notice_stream::async_impl::NoticeStream::new(self.notice_sender.subscribe())
     }
 
     async fn ensure_shutdown(&self) {

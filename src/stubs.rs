@@ -139,6 +139,13 @@ impl MessageBus for MessageBusStub {
         Ok(())
     }
 
+    fn notice_subscribe(&self) -> crate::subscriptions::notice_stream::sync_impl::NoticeStream {
+        // No global notices delivered through the stub; hand back an empty,
+        // already-closed channel so callers see end-of-stream cleanly.
+        let (_sender, receiver) = channel::unbounded();
+        crate::subscriptions::notice_stream::sync_impl::NoticeStream::new(receiver)
+    }
+
     fn ensure_shutdown(&self) {}
 
     fn is_connected(&self) -> bool {
@@ -254,6 +261,13 @@ impl AsyncMessageBus for MessageBusStub {
             cleanup_sender,
             CleanupSignal::OrderUpdateStream,
         ))
+    }
+
+    fn notice_subscribe(&self) -> crate::subscriptions::notice_stream::async_impl::NoticeStream {
+        // No global notices delivered through the stub; the broadcast channel
+        // closes immediately so callers see end-of-stream cleanly.
+        let (_sender, receiver) = broadcast::channel(1);
+        crate::subscriptions::notice_stream::async_impl::NoticeStream::new(receiver)
     }
 
     async fn ensure_shutdown(&self) {

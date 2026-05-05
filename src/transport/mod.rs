@@ -50,6 +50,8 @@ pub(crate) trait MessageBus: Send + Sync {
 
     fn cancel_order_subscription(&self, request_id: i32, packet: &[u8]) -> Result<(), Error>;
 
+    fn notice_subscribe(&self) -> crate::subscriptions::notice_stream::sync_impl::NoticeStream;
+
     fn ensure_shutdown(&self);
 
     fn is_connected(&self) -> bool;

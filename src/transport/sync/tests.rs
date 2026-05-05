@@ -925,7 +925,11 @@ fn wrap_subscription(
     crate::subscriptions::sync::Subscription::new(bus, internal, crate::subscriptions::DecoderContext::default())
 }
 
-type NoticeFixture = (MemoryStream, Arc<TcpMessageBus<MemoryStream>>, crate::subscriptions::sync::Subscription<NoticeTestData>);
+type NoticeFixture = (
+    MemoryStream,
+    Arc<TcpMessageBus<MemoryStream>>,
+    crate::subscriptions::sync::Subscription<NoticeTestData>,
+);
 
 fn make_request_subscription(request_id: i32) -> Result<NoticeFixture, Error> {
     let (stream, bus) = make_bus();
@@ -1040,5 +1044,102 @@ fn test_subscription_iter_data_filters_notices() -> Result<(), Error> {
     assert!(matches!(iter.next(), Some(Ok(NoticeTestData))), "first data missing");
     assert!(matches!(iter.next(), Some(Ok(NoticeTestData))), "second data missing");
     assert!(iter.next().is_none(), "iterator should drain after both data items");
+    Ok(())
+}
+
+// ---- end-to-end NoticeStream tests (PR 5) ----
+//
+// Drive bytes through the production dispatcher and assert that unrouted
+// notices reach `MessageBus::notice_subscribe()` consumers, while routed
+// notices stay with their owning subscription.
+
+/// An unrouted warning (`request_id == -1`, code 2104) is delivered to a
+/// `notice_stream` subscriber.
+#[test]
+fn test_notice_stream_receives_unrouted_warning() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let notice_stream = bus.notice_subscribe();
+
+    stream.push_inbound(body(FARM_OK_FRAME_UNROUTED));
+    bus.dispatch()?;
+
+    let notice = notice_stream.next_timeout(TICK).expect("notice not delivered");
+    assert_eq!(notice.code, 2104);
+    assert_eq!(notice.message, FARM_OK_MSG);
+    Ok(())
+}
+
+/// Two `notice_subscribe` calls each receive every unrouted notice.
+#[test]
+fn test_notice_stream_fans_out_to_multiple_subscribers() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let s1 = bus.notice_subscribe();
+    let s2 = bus.notice_subscribe();
+
+    stream.push_inbound(body(FARM_OK_FRAME_UNROUTED));
+    bus.dispatch()?;
+
+    let n1 = s1.next_timeout(TICK).expect("subscriber 1 missed notice");
+    let n2 = s2.next_timeout(TICK).expect("subscriber 2 missed notice");
+    assert_eq!(n1.code, 2104);
+    assert_eq!(n2.code, 2104);
+    Ok(())
+}
+
+/// Severity-agnostic: an unrouted hard error (e.g. code 504) also fans out.
+#[test]
+fn test_notice_stream_receives_unrouted_hard_error() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let notice_stream = bus.notice_subscribe();
+
+    // code 504 — "Not connected" — is non-warning.
+    stream.push_inbound(body("4|2|-1|504|Not connected|"));
+    bus.dispatch()?;
+
+    let notice = notice_stream.next_timeout(TICK).expect("hard-error notice missed");
+    assert_eq!(notice.code, 504);
+    Ok(())
+}
+
+/// A routed notice (real `request_id`) goes to the owning subscription, NOT
+/// to the global notice stream.
+#[test]
+fn test_notice_stream_skips_routed_notices() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+    let notice_stream = bus.notice_subscribe();
+    let request_sub = bus.send_request(42, &[])?;
+
+    stream.push_inbound(body(FARM_OK_FRAME_42));
+    bus.dispatch()?;
+
+    // Routed to the owner.
+    assert!(request_sub.try_next_routed().is_some(), "owner subscription missed notice");
+    // NOT delivered to the global stream.
+    assert!(notice_stream.try_next().is_none(), "routed notice leaked to global stream");
+    Ok(())
+}
+
+/// Late subscribers don't see prior notices (no replay buffer).
+#[test]
+fn test_notice_stream_late_subscriber_misses_prior() -> Result<(), Error> {
+    let (stream, bus) = make_bus();
+
+    stream.push_inbound(body(FARM_OK_FRAME_UNROUTED));
+    bus.dispatch()?;
+
+    // Subscribe AFTER the notice was broadcast.
+    let late = bus.notice_subscribe();
+    assert!(late.try_next().is_none(), "late subscriber should not see prior notices");
+    Ok(())
+}
+
+/// Shutdown closes the broadcaster; receivers see channel-closed via `next() == None`.
+#[test]
+fn test_notice_stream_closes_on_shutdown() -> Result<(), Error> {
+    let (_stream, bus) = make_bus();
+    let notice_stream = bus.notice_subscribe();
+
+    bus.ensure_shutdown();
+    assert!(notice_stream.next().is_none(), "stream should close on shutdown");
     Ok(())
 }
