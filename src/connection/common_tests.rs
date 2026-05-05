@@ -60,16 +60,7 @@ fn test_dispatch_unsolicited_open_order_invokes_callback() {
 
     let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
     let captured_clone = captured.clone();
-    let cb = move |msg: StartupMessage| {
-        let mt = match msg {
-            StartupMessage::OpenOrder(_) => IncomingMessages::OpenOrder,
-            StartupMessage::OrderStatus(_) => IncomingMessages::OrderStatus,
-            StartupMessage::OpenOrderEnd => IncomingMessages::OpenOrderEnd,
-            StartupMessage::AccountUpdate(_) => IncomingMessages::AccountValue,
-            StartupMessage::Other(rm) => rm.message_type(),
-        };
-        *captured_clone.lock().unwrap() = Some(mt);
-    };
+    let cb = move |msg: StartupMessage| *captured_clone.lock().unwrap() = Some(msg.message_type());
 
     dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
     assert_eq!(*captured.lock().unwrap(), Some(IncomingMessages::OpenOrder));
@@ -81,20 +72,10 @@ fn test_dispatch_unsolicited_order_status_invokes_callback() {
 
     let captured: Arc<Mutex<Option<IncomingMessages>>> = Arc::new(Mutex::new(None));
     let captured_clone = captured.clone();
-    let cb = move |msg: StartupMessage| {
-        let mt = match msg {
-            StartupMessage::OpenOrder(_) => IncomingMessages::OpenOrder,
-            StartupMessage::OrderStatus(_) => IncomingMessages::OrderStatus,
-            StartupMessage::OpenOrderEnd => IncomingMessages::OpenOrderEnd,
-            StartupMessage::AccountUpdate(_) => IncomingMessages::AccountValue,
-            StartupMessage::Other(rm) => rm.message_type(),
-        };
-        *captured.lock().unwrap() = Some(mt);
-    };
+    let cb = move |msg: StartupMessage| *captured_clone.lock().unwrap() = Some(msg.message_type());
 
     dispatch_unsolicited_message(TEST_SERVER_VERSION, &mut message, &startup_callbacks(&cb));
-    // Decoder may fail on truncated frame → Other(rm) with OrderStatus type.
-    assert_eq!(*captured_clone.lock().unwrap(), Some(IncomingMessages::OrderStatus));
+    assert_eq!(*captured.lock().unwrap(), Some(IncomingMessages::OrderStatus));
 }
 
 #[test]

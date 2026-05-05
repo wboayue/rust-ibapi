@@ -43,6 +43,25 @@ pub enum StartupMessage {
     Other(ResponseMessage),
 }
 
+impl StartupMessage {
+    /// The TWS message type that produced this startup message. Useful for
+    /// telemetry / logging without unpacking the typed payload.
+    pub fn message_type(&self) -> IncomingMessages {
+        match self {
+            StartupMessage::OpenOrder(_) => IncomingMessages::OpenOrder,
+            StartupMessage::OrderStatus(_) => IncomingMessages::OrderStatus,
+            StartupMessage::OpenOrderEnd => IncomingMessages::OpenOrderEnd,
+            StartupMessage::AccountUpdate(au) => match au {
+                AccountUpdate::AccountValue(_) => IncomingMessages::AccountValue,
+                AccountUpdate::PortfolioValue(_) => IncomingMessages::PortfolioValue,
+                AccountUpdate::UpdateTime(_) => IncomingMessages::AccountUpdateTime,
+                AccountUpdate::End => IncomingMessages::AccountDownloadEnd,
+            },
+            StartupMessage::Other(rm) => rm.message_type(),
+        }
+    }
+}
+
 /// Callback for unsolicited typed messages emitted during the connection
 /// handshake (initial connect *and* every auto-reconnect handshake).
 pub type StartupMessageCallback = Box<dyn Fn(StartupMessage) + Send + Sync>;
@@ -285,8 +304,8 @@ impl ConnectionProtocol for ConnectionHandler {
 /// the caller can still inspect it. Decode failures surface as `Other` rather
 /// than being silently dropped.
 pub(crate) fn dispatch_unsolicited_message(server_version: i32, message: &mut ResponseMessage, callbacks: &StartupCallbacks<'_>) {
-    use crate::accounts::common::decoders::decode_account_update_either;
-    use crate::orders::common::decoders::{decode_open_order_either, decode_order_status_either};
+    use crate::accounts::common::decode_account_update_either;
+    use crate::orders::common::{decode_open_order_either, decode_order_status_either};
     use crate::transport::routing::decode_error_envelope;
 
     match message.message_type() {

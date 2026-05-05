@@ -1206,30 +1206,15 @@ pub(crate) fn decode_commission_report_proto(bytes: &[u8]) -> Result<CommissionR
 
 // === Combined proto-or-text helpers (for handshake-time decoding) ===
 
-/// Decode an `OpenOrder` frame using protobuf or text format based on
-/// `message.is_protobuf`. Used by the connection layer's startup callback path.
-pub(crate) fn decode_open_order_either(server_version: i32, message: &ResponseMessage) -> Result<OrderData, Error> {
-    if message.is_protobuf {
-        let bytes = message
-            .raw_bytes()
-            .ok_or_else(|| Error::Simple("missing protobuf bytes for OpenOrder".into()))?;
-        decode_open_order_proto(bytes)
-    } else {
-        decode_open_order(server_version, message.clone())
-    }
+/// Decode an `OpenOrder` frame using protobuf or text format. Used by the
+/// connection layer's startup callback path.
+pub(crate) fn decode_open_order_either(server_version: i32, message: &mut ResponseMessage) -> Result<OrderData, Error> {
+    message.decode_proto_or_text(decode_open_order_proto, |m| decode_open_order(server_version, m.clone()))
 }
 
-/// Decode an `OrderStatus` frame using protobuf or text format based on
-/// `message.is_protobuf`.
+/// Decode an `OrderStatus` frame using protobuf or text format.
 pub(crate) fn decode_order_status_either(server_version: i32, message: &mut ResponseMessage) -> Result<OrderStatus, Error> {
-    if message.is_protobuf {
-        let bytes = message
-            .raw_bytes()
-            .ok_or_else(|| Error::Simple("missing protobuf bytes for OrderStatus".into()))?;
-        decode_order_status_proto(bytes)
-    } else {
-        decode_order_status(server_version, message)
-    }
+    message.decode_proto_or_text(decode_order_status_proto, |m| decode_order_status(server_version, m))
 }
 
 #[cfg(test)]

@@ -387,27 +387,15 @@ pub(crate) fn decode_account_multi_value_proto(bytes: &[u8]) -> Result<AccountMu
 /// variant. Used by the connection layer's startup callback path.
 pub(crate) fn decode_account_update_either(server_version: i32, message: &mut ResponseMessage) -> Result<AccountUpdate, Error> {
     match message.message_type() {
-        IncomingMessages::AccountValue => {
-            if message.is_protobuf {
-                let bytes = message
-                    .raw_bytes()
-                    .ok_or_else(|| Error::Simple("missing protobuf bytes for AccountValue".into()))?;
-                Ok(AccountUpdate::AccountValue(decode_account_value_proto(bytes)?))
-            } else {
-                Ok(AccountUpdate::AccountValue(decode_account_value(message)?))
-            }
-        }
-        IncomingMessages::PortfolioValue => {
-            if message.is_protobuf {
-                let bytes = message
-                    .raw_bytes()
-                    .ok_or_else(|| Error::Simple("missing protobuf bytes for PortfolioValue".into()))?;
-                Ok(AccountUpdate::PortfolioValue(decode_account_portfolio_value_proto(bytes)?))
-            } else {
-                Ok(AccountUpdate::PortfolioValue(decode_account_portfolio_value(server_version, message)?))
-            }
-        }
-        IncomingMessages::AccountUpdateTime => Ok(AccountUpdate::UpdateTime(decode_account_update_time(message)?)),
+        IncomingMessages::AccountValue => message
+            .decode_proto_or_text(decode_account_value_proto, decode_account_value)
+            .map(AccountUpdate::AccountValue),
+        IncomingMessages::PortfolioValue => message
+            .decode_proto_or_text(decode_account_portfolio_value_proto, |m| {
+                decode_account_portfolio_value(server_version, m)
+            })
+            .map(AccountUpdate::PortfolioValue),
+        IncomingMessages::AccountUpdateTime => decode_account_update_time(message).map(AccountUpdate::UpdateTime),
         IncomingMessages::AccountDownloadEnd => Ok(AccountUpdate::End),
         other => Err(Error::Simple(format!("not an account-update message: {other:?}"))),
     }
