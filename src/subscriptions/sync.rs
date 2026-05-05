@@ -196,8 +196,8 @@ impl<T: StreamDecoder<T>> Subscription<T> {
     /// Returns the next item without blocking.
     ///
     /// Same `SubscriptionItem<T>` shape as [`next`](Self::next): `Data`, `Notice`,
-    /// or terminal error. Use [`try_next_data`](Self::try_iter_data) (via
-    /// [`try_iter_data`](Self::try_iter_data)) when notices should be filtered.
+    /// or terminal error. Use [`try_iter_data`](Self::try_iter_data) when notices
+    /// should be filtered.
     ///
     /// Returns `None` if no item is available *right now*; check the surrounding
     /// loop or stream state to distinguish from end-of-stream.

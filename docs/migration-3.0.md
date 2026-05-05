@@ -49,9 +49,14 @@ if let Some(err) = subscription.error() {
 Mechanical migration — drop notices, keep data:
 
 ```rust,ignore
-// v3.0 — data-only iteration; terminal errors visible, notices logged
-for bar in subscription.iter_data().flatten() {
-    println!("bar: {bar:?}");
+// v3.0 — data-only iteration; notices are filtered (logged at warn!).
+// `iter_data()` yields Result<T, Error>, so handle the Err arm explicitly —
+// `.flatten()` would silently drop terminal errors.
+for item in subscription.iter_data() {
+    match item {
+        Ok(bar) => println!("bar: {bar:?}"),
+        Err(e)  => { eprintln!("error: {e}"); break; }
+    }
 }
 ```
 
@@ -132,11 +137,14 @@ for tick in sub {
 ```
 
 ```rust,ignore
-// v3.0 (sync) — data-only
+// v3.0 (sync) — data-only; explicit Err arm so terminal errors aren't dropped
 use ibapi::prelude::*;
 let sub = client.market_data(&contract).generic_ticks(&["233"]).subscribe()?;
-for tick in sub.iter_data().flatten() {
-    println!("tick: {tick:?}");
+for item in sub.iter_data() {
+    match item {
+        Ok(tick) => println!("tick: {tick:?}"),
+        Err(e)   => { eprintln!("error: {e}"); break; }
+    }
 }
 ```
 
@@ -198,11 +206,14 @@ for row in sub {
 ```
 
 ```rust,ignore
-// v3.0 — data only
+// v3.0 — data only; explicit Err arm so terminal errors aren't dropped
 use ibapi::prelude::*;
 let sub = client.account_summary(&AccountGroup::All, &["NetLiquidation"])?;
-for row in sub.iter_data().flatten() {
-    println!("row: {row:?}");
+for item in sub.iter_data() {
+    match item {
+        Ok(row) => println!("row: {row:?}"),
+        Err(e)  => { eprintln!("error: {e}"); break; }
+    }
 }
 ```
 
@@ -252,7 +263,7 @@ let client = Client::connect_with_options("127.0.0.1:4002", 100, options)?;
 
 ## Quick migration checklist
 
-1. Replace `for x in &subscription` with `for x in subscription.iter_data().flatten()` (sync) or `subscription.next_data()` / `subscription.data_stream()` (async) when you only want data.
+1. Replace `for x in &subscription` with `for item in subscription.iter_data() { match item { Ok(x) => ..., Err(e) => ... } }` (sync) or the equivalent on `subscription.data_stream()` / `subscription.next_data()` (async). `iter_data().flatten()` is shorter but silently drops terminal errors — use it only when that's intentional.
 2. Use `for item in &subscription { match item { Ok(SubscriptionItem::Data(_))..., Ok(SubscriptionItem::Notice(_))..., Err(_)... } }` when you want full visibility.
 3. Replace `subscription.error()` / `subscription.clear_error()` with pattern-matching on the `Err` arm of `next()`.
 4. (Optional) Adopt `Client::notice_stream()` for runtime-only unrouted notice observability.

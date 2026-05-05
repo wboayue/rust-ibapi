@@ -249,7 +249,6 @@ fn main() {
 
 ```rust
 use ibapi::prelude::*;
-use futures::StreamExt;
 
 #[tokio::main]
 async fn main() {
@@ -262,8 +261,11 @@ async fn main() {
         .await
         .expect("realtime bars request failed!");
 
-    while let Some(Ok(bar)) = subscription.next_data().await {
-        println!("bar: {bar:?}");
+    while let Some(item) = subscription.next_data().await {
+        match item {
+            Ok(bar) => println!("bar: {bar:?}"),
+            Err(e)  => { eprintln!("error: {e}"); break; }
+        }
     }
 }
 ```
@@ -568,7 +570,6 @@ fn main() {
 #### Async example
 
 ```rust
-use futures::StreamExt;
 use ibapi::prelude::*;
 
 #[tokio::main]
