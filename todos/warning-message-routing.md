@@ -472,7 +472,7 @@ Implement via `futures::stream::unfold` over `self.next_data().await`. ~30 lines
 - Both sync and async if the existing integration-test layout supports it.
 
 **Scope — verification of existing integration tests** (manual hand-run before merge, no new code):
-- `tests/conditional_orders_integration.rs`, `tests/order_builder_integration.rs`, `tests/test_wsh_async.rs` go through the dispatcher; run against a live gateway to confirm no order-routing regressions.
+- `integration/sync/tests/conditional_orders.rs` and `integration/async/tests/conditional_orders.rs` go through the dispatcher; run against a live gateway to confirm no order-routing regressions.
 
 **Scope — minimal docs touch:**
 - Update at least one runnable example (`examples/sync/market_data.rs` and the async mirror are good candidates) to demonstrate the `SubscriptionItem::Notice` arm explicitly — current examples already match on `TickTypes::Notice` per-T variants, but with the dispatcher now emitting `SubscriptionItem::Notice` they should additionally show the `match sub.next() { Some(Ok(SubscriptionItem::Notice(n))) => ... }` form. Bigger README narrative + migration guide deferred to PR 6.

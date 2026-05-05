@@ -7,6 +7,27 @@ use time_tz::{timezones::db::america::NEW_YORK, OffsetDateTimeExt};
 
 pub const GATEWAY: &str = "127.0.0.1:4002";
 
+// Common contract IDs for tests. Verify with `client.contract_details(...)` if
+// IB ever re-numbers them.
+pub const AAPL_CON_ID: i32 = 265598;
+pub const TSLA_CON_ID: i32 = 76792991;
+pub const SPY_CON_ID: i32 = 756733;
+
+/// Build a TWS condition timestamp for today at the given hour/minute in
+/// `YYYYMMDD HH:MM:SS US/Eastern` form. TWS rejects timestamps without an
+/// explicit zone (warning code 2174).
+pub fn condition_time_today(hour: u8, minute: u8) -> String {
+    let now = time::OffsetDateTime::now_utc();
+    format!(
+        "{:04}{:02}{:02} {:02}:{:02}:00 US/Eastern",
+        now.year(),
+        now.month() as u8,
+        now.day(),
+        hour,
+        minute
+    )
+}
+
 /// Panics if US equity markets are closed (outside Mon-Fri 9:30-16:00 Eastern).
 /// Does not account for holidays.
 pub fn require_market_open() {

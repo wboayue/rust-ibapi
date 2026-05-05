@@ -314,7 +314,9 @@ fn encode_condition(condition: &OrderCondition) -> proto::OrderCondition {
             proto_cond.con_id = some_i32_ne(c.contract_id, 0);
             proto_cond.exchange = some_str(&c.exchange);
             proto_cond.price = some_f64_ne(c.price, 0.0);
-            proto_cond.trigger_method = some_i32_ne(i32::from(c.trigger_method), 0);
+            // C# PriceCondition.Serialize always writes trigger_method (incl. Default=0);
+            // omitting it makes TWS reject with "Invalid value in field # 6127".
+            proto_cond.trigger_method = Some(i32::from(c.trigger_method));
         }
         OrderCondition::Time(c) => {
             proto_cond.is_more = Some(c.is_more);
@@ -563,6 +565,23 @@ mod tests {
         assert_eq!(proto.exchange.as_deref(), Some("SMART"));
         assert_eq!(proto.price, Some(150.0));
         assert_eq!(proto.trigger_method, Some(2)); // Last = 2
+    }
+
+    #[test]
+    fn test_encode_condition_price_default_trigger_method_is_emitted() {
+        // TWS rejects ("Invalid value in field # 6127") if trigger_method is omitted.
+        use crate::orders::conditions::{PriceCondition, TriggerMethod};
+        let cond = OrderCondition::Price(PriceCondition {
+            contract_id: 265598,
+            exchange: "SMART".to_string(),
+            price: 150.0,
+            trigger_method: TriggerMethod::Default,
+            is_more: true,
+            is_conjunction: true,
+        });
+
+        let proto = encode_condition(&cond);
+        assert_eq!(proto.trigger_method, Some(0), "Default trigger_method must be emitted, not omitted");
     }
 
     #[test]
