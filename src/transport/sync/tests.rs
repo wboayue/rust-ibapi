@@ -897,3 +897,148 @@ fn test_warning_with_order_id_falls_back_to_order_channel() -> Result<(), Error>
     }
     Ok(())
 }
+
+// ---- end-to-end Subscription consumer tests for Notice delivery ----
+//
+// Mirror the dispatcher routing tests above, one layer up: drive bytes through
+// the production dispatcher and assert via the public `Subscription<T>::next()`
+// / `iter_data()` API that the consumer sees `SubscriptionItem::Notice` /
+// `Err(_)` / `None` as expected.
+
+const FARM_OK_MSG: &str = "Market data farm connection is OK:usfarm";
+const FARM_OK_FRAME_42: &str = "4|2|42|2104|Market data farm connection is OK:usfarm|";
+const FARM_OK_FRAME_UNROUTED: &str = "4|2|-1|2104|Market data farm connection is OK:usfarm|";
+
+#[derive(Debug)]
+struct NoticeTestData;
+
+impl crate::subscriptions::StreamDecoder<NoticeTestData> for NoticeTestData {
+    fn decode(_context: &crate::subscriptions::DecoderContext, _msg: &mut ResponseMessage) -> Result<NoticeTestData, Error> {
+        Ok(NoticeTestData)
+    }
+}
+
+fn wrap_subscription(
+    bus: Arc<TcpMessageBus<MemoryStream>>,
+    internal: InternalSubscription,
+) -> crate::subscriptions::sync::Subscription<NoticeTestData> {
+    crate::subscriptions::sync::Subscription::new(bus, internal, crate::subscriptions::DecoderContext::default())
+}
+
+type NoticeFixture = (MemoryStream, Arc<TcpMessageBus<MemoryStream>>, crate::subscriptions::sync::Subscription<NoticeTestData>);
+
+fn make_request_subscription(request_id: i32) -> Result<NoticeFixture, Error> {
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(request_id, &[])?;
+    let sub = wrap_subscription(bus.clone(), internal);
+    Ok((stream, bus, sub))
+}
+
+fn make_order_subscription(order_id: i32) -> Result<NoticeFixture, Error> {
+    let (stream, bus) = make_bus();
+    let internal = bus.send_order_request(order_id, &[])?;
+    let sub = wrap_subscription(bus.clone(), internal);
+    Ok((stream, bus, sub))
+}
+
+/// Code 2104 + request_id=42 surfaces as `SubscriptionItem::Notice` without
+/// terminating; a follow-up data message arrives normally on the same stream.
+#[test]
+fn test_subscription_notice_delivery_request_keyed() -> Result<(), Error> {
+    use crate::subscriptions::SubscriptionItem;
+
+    let (stream, bus, subscription) = make_request_subscription(42)?;
+
+    stream.push_inbound(body(FARM_OK_FRAME_42));
+    bus.dispatch()?;
+
+    match subscription.next_timeout(TICK) {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.code, 2104);
+            assert_eq!(notice.message, FARM_OK_MSG);
+        }
+        other => panic!("expected SubscriptionItem::Notice, got {other:?}"),
+    }
+
+    stream.push_inbound(body("89|42|payload|"));
+    bus.dispatch()?;
+    match subscription.next_timeout(TICK) {
+        Some(Ok(SubscriptionItem::Data(_))) => {}
+        other => panic!("expected SubscriptionItem::Data, got {other:?}"),
+    }
+    Ok(())
+}
+
+/// Hard error (code 200) surfaces as `Some(Err(_))`; subsequent reads return `None`.
+#[test]
+fn test_subscription_hard_error_terminates_stream() -> Result<(), Error> {
+    let (stream, bus, subscription) = make_request_subscription(42)?;
+
+    stream.push_inbound(body("4|2|42|200|No security definition found|"));
+    bus.dispatch()?;
+
+    match subscription.next_timeout(TICK) {
+        Some(Err(Error::Message(code, message))) => {
+            assert_eq!(code, 200);
+            assert_eq!(message, "No security definition found");
+        }
+        other => panic!("expected Some(Err(Error::Message)), got {other:?}"),
+    }
+
+    assert!(subscription.next_timeout(TICK).is_none(), "stream must end after terminal error");
+    Ok(())
+}
+
+/// Order-keyed notice via `deliver_to_request_id`'s order-channel fallback.
+#[test]
+fn test_subscription_notice_delivery_order_keyed() -> Result<(), Error> {
+    use crate::subscriptions::SubscriptionItem;
+
+    let (stream, bus, subscription) = make_order_subscription(7)?;
+
+    stream.push_inbound(body("4|2|7|2109|Outside RTH order warning|"));
+    bus.dispatch()?;
+
+    match subscription.next_timeout(TICK) {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.code, 2109);
+            assert_eq!(notice.message, "Outside RTH order warning");
+        }
+        other => panic!("expected SubscriptionItem::Notice, got {other:?}"),
+    }
+    Ok(())
+}
+
+/// Unrouted notice (UNSPECIFIED request_id) is log-only; no channel write.
+#[test]
+fn test_subscription_unspecified_notice_not_delivered() -> Result<(), Error> {
+    let (stream, bus, subscription) = make_request_subscription(42)?;
+
+    stream.push_inbound(body(FARM_OK_FRAME_UNROUTED));
+    bus.dispatch()?;
+
+    assert!(
+        subscription.try_next().is_none(),
+        "unrouted notice must not be delivered to a subscription"
+    );
+    Ok(())
+}
+
+/// `iter_data()` filters `SubscriptionItem::Notice` and yields only data.
+#[test]
+fn test_subscription_iter_data_filters_notices() -> Result<(), Error> {
+    let (stream, bus, subscription) = make_request_subscription(42)?;
+
+    stream.push_inbound(body("89|42|first|"));
+    stream.push_inbound(body(FARM_OK_FRAME_42));
+    stream.push_inbound(body("89|42|second|"));
+    for _ in 0..3 {
+        bus.dispatch()?;
+    }
+
+    let mut iter = subscription.timeout_iter_data(TICK);
+    assert!(matches!(iter.next(), Some(Ok(NoticeTestData))), "first data missing");
+    assert!(matches!(iter.next(), Some(Ok(NoticeTestData))), "second data missing");
+    assert!(iter.next().is_none(), "iterator should drain after both data items");
+    Ok(())
+}

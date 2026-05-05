@@ -58,6 +58,7 @@ Changes to both branches should be made via pull requests.
 13. **Separate test files**: Always keep tests in their own files, not inline `#[cfg(test)] mod tests` blocks. Prefer flat sibling files (`foo.rs` + `foo_tests.rs`) over a nested module (`foo/mod.rs` + `foo/tests.rs`). The test file declares `use super::*;` and lives next to the implementation. Wire it in with `#[cfg(test)] #[path = "foo_tests.rs"] mod tests;` from the implementation file (or from the parent `mod.rs` for domain submodules)
 14. **Modernize touched modules**: When modifying a module for a feature or fix, also bring the rest of it up to current project conventions in the same PR — extract inline tests to a sibling `_tests.rs`, fix small style drift, normalize patterns. Be aggressive: don't leave a module half-migrated. Large mechanical sweeps unrelated to the feature still belong in their own PR
 15. **Tests must exercise production code**: Self-loop tests like `builder → encode → decode → assert builder fields` only verify pass-through and prost — they don't catch real bugs. Prefer end-to-end paths: for outgoing requests, drive the real client API and verify captured bytes via `assert_request<B>(builder)`; for incoming responses, feed builder bytes through the production decoder (e.g. `decode_*_proto`). When reviewing a new test, ask "what production code does this traverse?" — if the answer is "none", drop it
+16. **Build integration crates when touching wire surfaces**: The `integration/` workspace (`ibapi-integration-sync`, `ibapi-integration-async`, `ibapi-test`) is **not** in `default-members`. Plain `cargo build` / `cargo test` / `cargo clippy --all-targets` skip these crates. When a change touches `Subscription`, the proto encoders/decoders, or anything wire-format-adjacent, also run `cargo build -p ibapi-integration-sync --tests` and the async equivalent (and the matching `cargo clippy -p ... --tests -- -D warnings`). Compilation against these crates is the contract — no live gateway needed for this check
 
 See [docs/code-style.md](docs/code-style.md#design-principles) for detailed design guidelines.
 
@@ -74,6 +75,10 @@ cargo clippy --all-features
 
 # Run all tests
 just test
+
+# Build integration crates (compile check, no live gateway)
+cargo build -p ibapi-integration-sync  --tests
+cargo build -p ibapi-integration-async --tests
 
 # Generate coverage report (opens HTML report in browser)
 just cover

@@ -451,8 +451,35 @@ Implement via `futures::stream::unfold` over `self.next_data().await`. ~30 lines
 
 ---
 
-### PR 4 — End-to-end Subscription tests for Notice delivery
+### PR 4 — End-to-end Subscription tests for Notice delivery (in flight)
 **Goal:** wire the dispatcher → subscription path under tests that actually drive `Subscription::next()`, plus an opt-in live-gateway smoke test for release verification. PR 3's tests prove dispatcher-level classification; this PR proves the full Subscription consumer path.
+
+**As-shipped diff (local branch):** 14 files, +397/-30 LOC. fmt clean; clippy clean across default, sync-only, and `--all-features` with `-D warnings`; full test suite green (sync 924 lib + 119 doc, async 927 lib + 73 doc, all-features 1125 lib + 143 doc). 5 new sync e2e tests + 5 new async e2e tests, plus 6 live-gateway integration tests (3 sync, 3 async).
+
+**Scope reductions vs. original plan** (decided 2026-05-04):
+- **Synthesized e2e tests live in `src/transport/{sync,async}_tests.rs`, not `tests/notice_delivery.rs`.** The plan named `tests/notice_delivery.rs` but the tests need `MemoryStream` / `TcpMessageBus` / `SubscriptionBuilder` (all `pub(crate)`); putting them in `tests/` would have required widening visibility just for the test. Appended to the existing PR 3 dispatcher tests instead — same `make_bus()` / `body()` / `TICK` helpers, one logical unit.
+- **Live-gateway tests live in `integration/{sync,async}/tests/notice_delivery.rs`**, not `tests/notice_delivery_integration.rs`. The repo already has a workspace pattern at `integration/` (`ibapi-test` shared helpers, ClientId pool, rate limiter, `serial_test` for shared-state ordering) — using it instead of `#[ignore]`'d top-level tests gets the rate limiter + client-id pooling for free and matches the rest of the integration suite.
+- **No `dual_test!` macro experiment** (refinement #5) — already skipped in PR 3; left out of PR 4 for the same reason.
+
+**Workspace-red fix folded in:** `integration/{sync,async}/tests/{realtime_data,contracts,scanners,accounts,orders}.rs` were never migrated to PR 2b's `Subscription::next() -> Option<Result<SubscriptionItem<T>, Error>>` shape — `cargo build -p ibapi-integration-{sync,async} --tests` was red on `main` before this PR. Mechanical fix: switched data-only callers to `next_data()` / `iter_data()` / `timeout_iter_data()`, kept the order-status loop's pattern-matching shape but layered an `Ok(_)` arm. Per the "fix workspace-red in scope" rule.
+
+**As-shipped — sync e2e tests** (`src/transport/sync/tests.rs`):
+- `test_subscription_notice_delivery_request_keyed`: code 2104 + req_id=42 → `Some(Ok(SubscriptionItem::Notice(_)))`; follow-up data arrives normally (stream stays open).
+- `test_subscription_hard_error_terminates_stream`: code 200 + req_id=42 → `Some(Err(Error::Message))`, then `None`.
+- `test_subscription_notice_delivery_order_keyed`: code 2109 + order_id=7 → notice delivered via order-channel fallback.
+- `test_subscription_unspecified_notice_not_delivered`: code 2104 + req_id=-1 → `try_next()` returns `None` (no channel write).
+- `test_subscription_iter_data_filters_notices`: `[Data, Notice, Data]` stream → `iter_data()` yields exactly the two data items.
+
+**As-shipped — async e2e tests** (`src/transport/async_tests.rs`): structural mirror of the sync set, with `data_stream()` instead of `iter_data()` for the filter test.
+
+**As-shipped — live-gateway tests** (`integration/{sync,async}/tests/notice_delivery.rs`):
+- `market_data_surfaces_notice`: subscribes to AAPL with `generic_ticks(&["233"])`, drains up to 20 items asserting at least one `SubscriptionItem::Notice` (typically code 2104 farm-status).
+- `invalid_contract_terminates_with_error`: subscribes to symbol `DOES_NOT_EXIST_XYZ` and asserts the subscription terminates with `Some(Err(_))`.
+- `outside_rth_order_surfaces_notice`: places a non-transmit outside-RTH market order on AAPL, drains the subscription expecting a Notice (logs a non-fatal warning if the gateway suppresses it for that session). `#[serial(orders)]`.
+
+**As-shipped — example update:** added a 4th `example_observe_notices` function to both `examples/sync/market_data.rs` and `examples/async/market_data.rs` that uses `iter()` / `next()` (full `SubscriptionItem`) instead of `iter_data()` / `next_data()`, with explicit pattern-matching on the `Data` and `Notice` arms. Comments call out which farm-status codes are common (2104/2107/2108).
+
+**As-shipped — prelude:** added `pub use crate::subscriptions::SubscriptionItem;` to `src/prelude.rs` so `use ibapi::prelude::*;` makes the type discoverable for callers who pattern-match `next()`.
 
 **Approach: synthesized for CI + live `#[ignore]`'d for release smoke (no recordings).**
 

@@ -51,6 +51,7 @@ pub use crate::accounts::{
 pub use crate::client::Subscription;
 #[cfg(feature = "async")]
 pub use crate::subscriptions::Subscription;
+pub use crate::subscriptions::SubscriptionItem;
 
 // Async-specific imports
 #[cfg(feature = "async")]

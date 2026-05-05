@@ -317,3 +317,141 @@ async fn test_warning_with_order_id_falls_back_to_order_channel() {
         other => panic!("expected RoutedItem::Notice, got {other:?}"),
     }
 }
+
+// ---- end-to-end Subscription consumer tests for Notice delivery ----
+//
+// Mirror the dispatcher routing tests above, one layer up: drive bytes through
+// the production dispatcher and assert via the public async `Subscription<T>`
+// API that the consumer sees `SubscriptionItem::Notice` / `Err(_)` / `None` as
+// expected.
+
+use crate::subscriptions::r#async::Subscription;
+use crate::subscriptions::{DecoderContext, StreamDecoder, SubscriptionItem};
+use futures::StreamExt;
+
+const FARM_OK_MSG: &str = "Market data farm connection is OK:usfarm";
+const FARM_OK_FRAME_42: &str = "4|2|42|2104|Market data farm connection is OK:usfarm|";
+const FARM_OK_FRAME_UNROUTED: &str = "4|2|-1|2104|Market data farm connection is OK:usfarm|";
+
+#[derive(Debug)]
+struct NoticeTestData;
+
+impl StreamDecoder<NoticeTestData> for NoticeTestData {
+    fn decode(_context: &DecoderContext, _msg: &mut ResponseMessage) -> Result<NoticeTestData, Error> {
+        Ok(NoticeTestData)
+    }
+}
+
+async fn make_request_subscription(request_id: i32) -> (MemoryStream, Arc<AsyncTcpMessageBus<MemoryStream>>, Subscription<NoticeTestData>) {
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(request_id, vec![]).await.unwrap();
+    let sub = Subscription::new_from_internal::<NoticeTestData>(internal, bus.clone(), Some(request_id), None, None, DecoderContext::default());
+    (stream, bus, sub)
+}
+
+async fn make_order_subscription(order_id: i32) -> (MemoryStream, Arc<AsyncTcpMessageBus<MemoryStream>>, Subscription<NoticeTestData>) {
+    let (stream, bus) = make_bus();
+    let internal = bus.send_order_request(order_id, vec![]).await.unwrap();
+    let sub = Subscription::new_from_internal::<NoticeTestData>(internal, bus.clone(), None, Some(order_id), None, DecoderContext::default());
+    (stream, bus, sub)
+}
+
+/// Bound a `Subscription::next()` await with the test tick so a missing item
+/// surfaces as a panic rather than hanging the test thread.
+async fn next_item(sub: &mut Subscription<NoticeTestData>) -> Option<Result<SubscriptionItem<NoticeTestData>, Error>> {
+    tokio::time::timeout(TICK, sub.next())
+        .await
+        .expect("subscription got no item before timeout")
+}
+
+/// Code 2104 + request_id=42 surfaces as `SubscriptionItem::Notice` without
+/// terminating; a follow-up data message arrives normally on the same stream.
+#[tokio::test]
+async fn test_subscription_notice_delivery_request_keyed() {
+    let (stream, bus, mut subscription) = make_request_subscription(42).await;
+
+    stream.push_inbound(body(FARM_OK_FRAME_42));
+    bus.read_and_route_message().await.unwrap();
+
+    match next_item(&mut subscription).await {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.code, 2104);
+            assert_eq!(notice.message, FARM_OK_MSG);
+        }
+        other => panic!("expected SubscriptionItem::Notice, got {other:?}"),
+    }
+
+    stream.push_inbound(body("89|42|payload|"));
+    bus.read_and_route_message().await.unwrap();
+    match next_item(&mut subscription).await {
+        Some(Ok(SubscriptionItem::Data(_))) => {}
+        other => panic!("expected SubscriptionItem::Data, got {other:?}"),
+    }
+}
+
+/// Hard error (code 200) surfaces as `Some(Err(_))`; subsequent reads return `None`.
+#[tokio::test]
+async fn test_subscription_hard_error_terminates_stream() {
+    let (stream, bus, mut subscription) = make_request_subscription(42).await;
+
+    stream.push_inbound(body("4|2|42|200|No security definition found|"));
+    bus.read_and_route_message().await.unwrap();
+
+    match next_item(&mut subscription).await {
+        Some(Err(Error::Message(code, message))) => {
+            assert_eq!(code, 200);
+            assert_eq!(message, "No security definition found");
+        }
+        other => panic!("expected Some(Err(Error::Message)), got {other:?}"),
+    }
+
+    assert!(next_item(&mut subscription).await.is_none(), "stream must end after terminal error");
+}
+
+/// Order-keyed notice via `deliver_to_request_id`'s order-channel fallback.
+#[tokio::test]
+async fn test_subscription_notice_delivery_order_keyed() {
+    let (stream, bus, mut subscription) = make_order_subscription(7).await;
+
+    stream.push_inbound(body("4|2|7|2109|Outside RTH order warning|"));
+    bus.read_and_route_message().await.unwrap();
+
+    match next_item(&mut subscription).await {
+        Some(Ok(SubscriptionItem::Notice(notice))) => {
+            assert_eq!(notice.code, 2109);
+            assert_eq!(notice.message, "Outside RTH order warning");
+        }
+        other => panic!("expected SubscriptionItem::Notice, got {other:?}"),
+    }
+}
+
+/// Unrouted notice (UNSPECIFIED request_id) is log-only; no channel write.
+#[tokio::test]
+async fn test_subscription_unspecified_notice_not_delivered() {
+    let (stream, bus, mut subscription) = make_request_subscription(42).await;
+
+    stream.push_inbound(body(FARM_OK_FRAME_UNROUTED));
+    bus.read_and_route_message().await.unwrap();
+
+    let item = tokio::time::timeout(TICK, subscription.next()).await;
+    assert!(item.is_err(), "unrouted notice must not be delivered to a subscription, got {item:?}");
+}
+
+/// `data_stream()` filters `SubscriptionItem::Notice` and yields only data.
+#[tokio::test]
+async fn test_subscription_data_stream_filters_notices() {
+    let (stream, bus, mut subscription) = make_request_subscription(42).await;
+
+    stream.push_inbound(body("89|42|first|"));
+    stream.push_inbound(body(FARM_OK_FRAME_42));
+    stream.push_inbound(body("89|42|second|"));
+    for _ in 0..3 {
+        bus.read_and_route_message().await.unwrap();
+    }
+
+    let collected: Vec<_> = subscription.data_stream().take(2).collect().await;
+    assert_eq!(collected.len(), 2, "data_stream must yield the two data items");
+    for item in collected {
+        assert!(matches!(item, Ok(NoticeTestData)), "unexpected stream item");
+    }
+}
