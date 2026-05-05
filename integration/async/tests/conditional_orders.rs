@@ -5,32 +5,15 @@ use ibapi::orders::conditions::{
 use ibapi::orders::{Action, Order, OrderCondition, PlaceOrder};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::{Client, Error};
-use ibapi_test::{rate_limit, ClientId, GATEWAY};
+use ibapi_test::{condition_time_today, rate_limit, ClientId, AAPL_CON_ID, GATEWAY, SPY_CON_ID, TSLA_CON_ID};
 use serial_test::serial;
-use time::OffsetDateTime;
 use tokio::time::{timeout, Duration};
-
-const AAPL_CON_ID: i32 = 265598;
-const TSLA_CON_ID: i32 = 76792991;
-const SPY_CON_ID: i32 = 756733;
 
 async fn connect() -> (Client, ClientId) {
     let client_id = ClientId::get();
     rate_limit();
     let client = Client::connect(GATEWAY, client_id.id()).await.expect("connection failed");
     (client, client_id)
-}
-
-fn future_time(hour: u8, minute: u8) -> String {
-    let now = OffsetDateTime::now_utc();
-    format!(
-        "{:04}{:02}{:02} {:02}:{:02}:00 US/Eastern",
-        now.year(),
-        now.month() as u8,
-        now.day(),
-        hour,
-        minute
-    )
 }
 
 async fn submit_and_cleanup(client: &Client, contract: &Contract, order: &Order) {
@@ -102,7 +85,7 @@ async fn price_condition() {
 #[serial(orders)]
 async fn time_condition() {
     let (client, _client_id) = connect().await;
-    let condition = TimeCondition::builder().greater_than(future_time(14, 30)).build();
+    let condition = TimeCondition::builder().greater_than(condition_time_today(14, 30)).build();
 
     let contract = Contract::stock("AAPL").build();
     let mut order = conditional_limit_order(Action::Buy, 10.0, vec![OrderCondition::Time(condition)]);
@@ -164,7 +147,10 @@ async fn multiple_conditions_with_and() {
         .greater_than(180.0)
         .conjunction(true)
         .build();
-    let time = TimeCondition::builder().greater_than(future_time(15, 0)).conjunction(true).build();
+    let time = TimeCondition::builder()
+        .greater_than(condition_time_today(15, 0))
+        .conjunction(true)
+        .build();
 
     let contract = Contract::stock("AAPL").build();
     let mut order = conditional_limit_order(Action::Buy, 10.0, vec![OrderCondition::Price(price), OrderCondition::Time(time)]);
