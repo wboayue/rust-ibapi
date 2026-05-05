@@ -1,16 +1,15 @@
-//! Live-gateway smoke tests for Notice delivery (PR 4) — async mirror.
+//! Live-gateway smoke tests for Notice delivery — async mirror.
 //!
 //! Verifies the dispatcher → `Subscription<T>` end-to-end path against a real
 //! IB Gateway / TWS. Synthesized routing tests in
-//! `src/transport/async_tests.rs` cover the same matrix strictly — these are
-//! the release-time safety net against protocol-level regressions.
+//! `src/transport/async_tests.rs` cover the same matrix strictly — these exist
+//! as a release-time safety net against protocol-level regressions.
 //!
-//! These tests are tolerant by design: TWS doesn't always emit
-//! per-subscription notices in the 2100-2169 range (most farm-status notices
-//! are global / `request_id == -1` and currently log-only — PR 5 adds a
-//! `notice_stream()` to surface them programmatically). Any observed
+//! The tests are tolerant by design: TWS doesn't always emit per-subscription
+//! notices in the 2100-2169 range (most farm-status notices are global /
+//! `request_id == -1` and currently log-only). Any observed
 //! `SubscriptionItem::Notice` is logged; tests only fail when the subscription
-//! itself misbehaves (panics, decoder UB, etc.).
+//! itself misbehaves.
 
 use std::time::Duration;
 
@@ -37,18 +36,19 @@ async fn invalid_contract_terminates_with_error() {
 
     let mut saw_error = false;
     for _ in 0..20 {
-        let next = tokio::time::timeout(TICK_BUDGET, subscription.next()).await;
-        match next {
-            Ok(Some(Err(e))) => {
+        let Ok(Some(item)) = tokio::time::timeout(TICK_BUDGET, subscription.next()).await else {
+            break;
+        };
+        match item {
+            Err(e) => {
                 println!("subscription terminated by TWS: {e}");
                 saw_error = true;
                 break;
             }
-            Ok(Some(Ok(SubscriptionItem::Notice(notice)))) => {
+            Ok(SubscriptionItem::Notice(notice)) => {
                 println!("notice (ignored for this test): code={} message={}", notice.code, notice.message);
             }
-            Ok(Some(Ok(SubscriptionItem::Data(_)))) => panic!("invalid contract should not yield data"),
-            Ok(None) | Err(_) => break,
+            Ok(SubscriptionItem::Data(_)) => panic!("invalid contract should not yield data"),
         }
     }
 
@@ -75,19 +75,20 @@ async fn outside_rth_order_subscription_smoke() {
 
     let mut saw_notice = false;
     for _ in 0..10 {
-        let next = tokio::time::timeout(TICK_BUDGET, subscription.next()).await;
-        match next {
-            Ok(Some(Ok(SubscriptionItem::Notice(notice)))) => {
+        let Ok(Some(item)) = tokio::time::timeout(TICK_BUDGET, subscription.next()).await else {
+            break;
+        };
+        match item {
+            Ok(SubscriptionItem::Notice(notice)) => {
                 println!("order notice: code={} message={}", notice.code, notice.message);
                 saw_notice = true;
                 break;
             }
-            Ok(Some(Ok(SubscriptionItem::Data(_)))) => {}
-            Ok(Some(Err(e))) => {
+            Ok(SubscriptionItem::Data(_)) => {}
+            Err(e) => {
                 println!("order subscription error: {e}");
                 break;
             }
-            Ok(None) | Err(_) => break,
         }
     }
 

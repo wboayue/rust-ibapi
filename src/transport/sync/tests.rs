@@ -898,17 +898,17 @@ fn test_warning_with_order_id_falls_back_to_order_channel() -> Result<(), Error>
     Ok(())
 }
 
-// ---- end-to-end Subscription consumer tests for Notice delivery (PR 4) ----
+// ---- end-to-end Subscription consumer tests for Notice delivery ----
 //
-// PR 3 verifies dispatcher classification (`RoutedItem::{Notice, Error}`) at
-// the `InternalSubscription` seam. These tests close the loop one layer up:
-// drive bytes through the production dispatcher and assert via the public
-// `Subscription<T>::next()` / `iter_data()` API that the consumer sees
-// `SubscriptionItem::Notice` / `Err(_)` / `None` as expected.
+// Mirror the dispatcher routing tests above, one layer up: drive bytes through
+// the production dispatcher and assert via the public `Subscription<T>::next()`
+// / `iter_data()` API that the consumer sees `SubscriptionItem::Notice` /
+// `Err(_)` / `None` as expected.
 
-/// Trivial test decoder: any non-error message body decodes as `Ok(NoticeTestData)`.
-/// `cancel_message` is left unimplemented so `Subscription::cancel` (run on drop)
-/// is a no-op for these tests.
+const FARM_OK_MSG: &str = "Market data farm connection is OK:usfarm";
+const FARM_OK_FRAME_42: &str = "4|2|42|2104|Market data farm connection is OK:usfarm|";
+const FARM_OK_FRAME_UNROUTED: &str = "4|2|-1|2104|Market data farm connection is OK:usfarm|";
+
 #[derive(Debug)]
 struct NoticeTestData;
 
@@ -918,8 +918,6 @@ impl crate::subscriptions::StreamDecoder<NoticeTestData> for NoticeTestData {
     }
 }
 
-/// Build a `Subscription<NoticeTestData>` over an `InternalSubscription` returned
-/// by the test bus, sharing the bus as the (unused) cancel target.
 fn wrap_subscription(
     bus: Arc<TcpMessageBus<MemoryStream>>,
     internal: InternalSubscription,
@@ -927,29 +925,41 @@ fn wrap_subscription(
     crate::subscriptions::sync::Subscription::new(bus, internal, crate::subscriptions::DecoderContext::default())
 }
 
-/// Code 2104 + request_id=42: dispatcher classifies as `RoutedItem::Notice`,
-/// `Subscription<T>::next()` surfaces it as `SubscriptionItem::Notice` without
-/// terminating. A follow-up data message arrives normally on the same stream.
+type NoticeFixture = (MemoryStream, Arc<TcpMessageBus<MemoryStream>>, crate::subscriptions::sync::Subscription<NoticeTestData>);
+
+fn make_request_subscription(request_id: i32) -> Result<NoticeFixture, Error> {
+    let (stream, bus) = make_bus();
+    let internal = bus.send_request(request_id, &[])?;
+    let sub = wrap_subscription(bus.clone(), internal);
+    Ok((stream, bus, sub))
+}
+
+fn make_order_subscription(order_id: i32) -> Result<NoticeFixture, Error> {
+    let (stream, bus) = make_bus();
+    let internal = bus.send_order_request(order_id, &[])?;
+    let sub = wrap_subscription(bus.clone(), internal);
+    Ok((stream, bus, sub))
+}
+
+/// Code 2104 + request_id=42 surfaces as `SubscriptionItem::Notice` without
+/// terminating; a follow-up data message arrives normally on the same stream.
 #[test]
 fn test_subscription_notice_delivery_request_keyed() -> Result<(), Error> {
     use crate::subscriptions::SubscriptionItem;
 
-    let (stream, bus) = make_bus();
-    let internal = bus.send_request(42, &[])?;
-    let subscription = wrap_subscription(bus.clone(), internal);
+    let (stream, bus, subscription) = make_request_subscription(42)?;
 
-    stream.push_inbound(body("4|2|42|2104|Market data farm connection is OK:usfarm|"));
+    stream.push_inbound(body(FARM_OK_FRAME_42));
     bus.dispatch()?;
 
     match subscription.next_timeout(TICK) {
         Some(Ok(SubscriptionItem::Notice(notice))) => {
             assert_eq!(notice.code, 2104);
-            assert_eq!(notice.message, "Market data farm connection is OK:usfarm");
+            assert_eq!(notice.message, FARM_OK_MSG);
         }
         other => panic!("expected SubscriptionItem::Notice, got {other:?}"),
     }
 
-    // Stream stays open: a follow-up data message decodes normally.
     stream.push_inbound(body("89|42|payload|"));
     bus.dispatch()?;
     match subscription.next_timeout(TICK) {
@@ -959,14 +969,10 @@ fn test_subscription_notice_delivery_request_keyed() -> Result<(), Error> {
     Ok(())
 }
 
-/// Code 200 + request_id=42: dispatcher classifies as `RoutedItem::Error`,
-/// `Subscription<T>::next()` surfaces `Some(Err(_))` and subsequent calls
-/// return `None`.
+/// Hard error (code 200) surfaces as `Some(Err(_))`; subsequent reads return `None`.
 #[test]
 fn test_subscription_hard_error_terminates_stream() -> Result<(), Error> {
-    let (stream, bus) = make_bus();
-    let internal = bus.send_request(42, &[])?;
-    let subscription = wrap_subscription(bus.clone(), internal);
+    let (stream, bus, subscription) = make_request_subscription(42)?;
 
     stream.push_inbound(body("4|2|42|200|No security definition found|"));
     bus.dispatch()?;
@@ -979,21 +985,16 @@ fn test_subscription_hard_error_terminates_stream() -> Result<(), Error> {
         other => panic!("expected Some(Err(Error::Message)), got {other:?}"),
     }
 
-    // Stream is terminated: subsequent reads return None.
     assert!(subscription.next_timeout(TICK).is_none(), "stream must end after terminal error");
     Ok(())
 }
 
-/// Order-keyed notice: a warning bound to an `order_id` is delivered to the
-/// order subscription via `deliver_to_request_id`'s order-channel fallback,
-/// surfacing as `SubscriptionItem::Notice` to the consumer.
+/// Order-keyed notice via `deliver_to_request_id`'s order-channel fallback.
 #[test]
 fn test_subscription_notice_delivery_order_keyed() -> Result<(), Error> {
     use crate::subscriptions::SubscriptionItem;
 
-    let (stream, bus) = make_bus();
-    let internal = bus.send_order_request(7, &[])?;
-    let subscription = wrap_subscription(bus.clone(), internal);
+    let (stream, bus, subscription) = make_order_subscription(7)?;
 
     stream.push_inbound(body("4|2|7|2109|Outside RTH order warning|"));
     bus.dispatch()?;
@@ -1008,15 +1009,12 @@ fn test_subscription_notice_delivery_order_keyed() -> Result<(), Error> {
     Ok(())
 }
 
-/// Code 2104 + request_id=UNSPECIFIED: no owner — dispatcher logs and skips
-/// the channel write. An unrelated in-flight subscription sees nothing.
+/// Unrouted notice (UNSPECIFIED request_id) is log-only; no channel write.
 #[test]
 fn test_subscription_unspecified_notice_not_delivered() -> Result<(), Error> {
-    let (stream, bus) = make_bus();
-    let internal = bus.send_request(42, &[])?;
-    let subscription = wrap_subscription(bus.clone(), internal);
+    let (stream, bus, subscription) = make_request_subscription(42)?;
 
-    stream.push_inbound(body("4|2|-1|2104|Market data farm connection is OK:usfarm|"));
+    stream.push_inbound(body(FARM_OK_FRAME_UNROUTED));
     bus.dispatch()?;
 
     assert!(
@@ -1026,17 +1024,13 @@ fn test_subscription_unspecified_notice_not_delivered() -> Result<(), Error> {
     Ok(())
 }
 
-/// `iter_data()` filters `SubscriptionItem::Notice` entries (logging them) and
-/// yields only the underlying data values. Consumers that don't care about
-/// notices get a clean `Iterator<Item = Result<T, Error>>`.
+/// `iter_data()` filters `SubscriptionItem::Notice` and yields only data.
 #[test]
 fn test_subscription_iter_data_filters_notices() -> Result<(), Error> {
-    let (stream, bus) = make_bus();
-    let internal = bus.send_request(42, &[])?;
-    let subscription = wrap_subscription(bus.clone(), internal);
+    let (stream, bus, subscription) = make_request_subscription(42)?;
 
     stream.push_inbound(body("89|42|first|"));
-    stream.push_inbound(body("4|2|42|2104|Market data farm connection is OK:usfarm|"));
+    stream.push_inbound(body(FARM_OK_FRAME_42));
     stream.push_inbound(body("89|42|second|"));
     for _ in 0..3 {
         bus.dispatch()?;

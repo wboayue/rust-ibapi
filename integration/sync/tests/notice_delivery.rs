@@ -1,16 +1,15 @@
-//! Live-gateway smoke tests for Notice delivery (PR 4).
+//! Live-gateway smoke tests for Notice delivery.
 //!
 //! Verifies the dispatcher → `Subscription<T>` end-to-end path against a real
 //! IB Gateway / TWS. Synthesized routing tests in
-//! `src/transport/sync_tests.rs` cover the same matrix strictly — these are the
-//! release-time safety net against protocol-level regressions.
+//! `src/transport/sync_tests.rs` cover the same matrix strictly — these exist
+//! as a release-time safety net against protocol-level regressions.
 //!
-//! These tests are tolerant by design: TWS doesn't always emit
-//! per-subscription notices in the 2100-2169 range (most farm-status notices
-//! are global / `request_id == -1` and currently log-only — PR 5 adds a
-//! `notice_stream()` to surface them programmatically). Any observed
+//! The tests are tolerant by design: TWS doesn't always emit per-subscription
+//! notices in the 2100-2169 range (most farm-status notices are global /
+//! `request_id == -1` and currently log-only). Any observed
 //! `SubscriptionItem::Notice` is logged; tests only fail when the subscription
-//! itself misbehaves (panics, decoder UB, etc.).
+//! itself misbehaves.
 
 use std::time::Duration;
 
