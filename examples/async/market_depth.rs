@@ -140,9 +140,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     depth.size
                 );
             }
-            MarketDepths::Notice(notice) => {
-                println!("Notice ({}): {}", notice.code, notice.message);
-            }
         }
     }
 

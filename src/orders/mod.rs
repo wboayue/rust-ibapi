@@ -1433,8 +1433,6 @@ pub enum PlaceOrder {
     ExecutionData(ExecutionData),
     /// Commission report.
     CommissionReport(CommissionReport),
-    /// Notice or error message.
-    Message(crate::messages::Notice),
 }
 
 /// Updates received when monitoring order activity.
@@ -1451,8 +1449,6 @@ pub enum OrderUpdate {
     ExecutionData(ExecutionData),
     /// Commission report.
     CommissionReport(CommissionReport),
-    /// Notice or error message.
-    Message(crate::messages::Notice),
 }
 
 /// Contains all relevant information on the current status of the order execution-wise (i.e. amount filled and pending, filling price, etc.).
@@ -1498,8 +1494,6 @@ pub struct OrderStatus {
 pub enum CancelOrder {
     /// Order status information.
     OrderStatus(OrderStatus),
-    /// Informational notice.
-    Notice(crate::messages::Notice),
 }
 
 /// Enumerates possible results from querying an [Order].
@@ -1511,8 +1505,6 @@ pub enum Orders {
     OrderData(OrderData),
     /// Order status update.
     OrderStatus(OrderStatus),
-    /// Informational notice.
-    Notice(crate::messages::Notice),
 }
 
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -1549,8 +1541,6 @@ pub enum Executions {
     ExecutionData(ExecutionData),
     /// Commission report payload.
     CommissionReport(CommissionReport),
-    /// Informational notice.
-    Notice(crate::messages::Notice),
 }
 
 /// Exercise action for options.
@@ -1572,8 +1562,6 @@ pub enum ExerciseOptions {
     OpenOrder(OrderData),
     /// Order status update.
     OrderStatus(OrderStatus),
-    /// Notice or error message.
-    Notice(crate::messages::Notice),
 }
 
 // Feature-specific implementations

@@ -212,7 +212,7 @@ async fn cancel_bracket_order() {
         SubscriptionItem::Data(CancelOrder::OrderStatus(s)) => {
             assert_eq!(s.status, "Cancelled", "parent order should be cancelled")
         }
-        SubscriptionItem::Data(CancelOrder::Notice(_)) | SubscriptionItem::Notice(_) => {} // cancellation notice is also acceptable
+        SubscriptionItem::Notice(_) => {} // cancellation notice is also acceptable
     }
 }
 

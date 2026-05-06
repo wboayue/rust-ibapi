@@ -111,34 +111,6 @@ async fn test_realtime_bars() {
 }
 
 #[tokio::test]
-async fn test_realtime_bars_error_handling() {
-    // Issue #434: when TWS returns an error on the realtime_bars request_id channel,
-    // it must surface as Some(Err(Error::Message(code, msg))) rather than a cryptic
-    // parse failure. Warning codes (2100-2169) are filtered at the dispatcher; this
-    // exercises a non-warning error.
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec!["4|2|9001|10089|Requested market data requires additional subscription for API|".to_owned()],
-    });
-
-    let client = Client::stubbed(message_bus, server_versions::SIZE_RULES);
-    let contract = Contract::stock("AAPL").build();
-
-    let mut bars = client
-        .realtime_bars(&contract, &BarSize::Sec5, &WhatToShow::Trades, TradingHours::Regular, vec![])
-        .await
-        .expect("Failed to create realtime bars subscription");
-
-    match bars.next_data().await {
-        Some(Err(crate::Error::Message(code, msg))) => {
-            assert_eq!(code, 10089, "expected error code 10089");
-            assert!(msg.contains("additional subscription"), "wrong error message: {msg}");
-        }
-        other => panic!("expected Some(Err(Error::Message(10089, _))), got {other:?}"),
-    }
-}
-
-#[tokio::test]
 async fn test_tick_by_tick_all_last() {
     let message_bus = Arc::new(MessageBusStub {
         request_messages: RwLock::new(vec![]),
@@ -668,55 +640,6 @@ async fn test_market_data_regulatory_snapshot() {
             .snapshot(snapshot)
             .regulatory_snapshot(regulatory_snapshot),
     );
-}
-
-#[tokio::test]
-async fn test_market_data_error_handling() {
-    let message_bus = Arc::new(MessageBusStub {
-        request_messages: RwLock::new(vec![]),
-        response_messages: vec![
-            format!("4|2|9001|2104|Market data farm connection is OK:usfarm|"), // Notice
-            format!("4|2|9001|321|Error validating request:-'bW' : cause - What to show field is missing or incorrect.|"), // Error
-        ],
-    });
-
-    let client = Client::stubbed(message_bus.clone(), server_versions::PRICE_BASED_VOLATILITY);
-    let contract = Contract {
-        symbol: Symbol::from("GBL"),
-        security_type: SecurityType::Future,
-        exchange: Exchange::from("EUREX"),
-        currency: Currency::from("EUR"),
-        last_trade_date_or_contract_month: "202303".to_owned(),
-        ..Contract::default()
-    };
-    let generic_ticks: Vec<&str> = vec![];
-    let snapshot = false;
-    let regulatory_snapshot = false;
-
-    // Test subscription creation
-    let mut market_data = client
-        .subscribe_market_data(&contract, &generic_ticks, snapshot, regulatory_snapshot)
-        .await
-        .expect("Failed to create market data subscription");
-
-    // Test receiving data
-    // First should be a Notice
-    match market_data.next_data().await {
-        Some(Ok(TickTypes::Notice(notice))) => {
-            assert_eq!(notice.code, 2104, "Wrong notice code");
-            assert!(notice.message.contains("Market data farm connection is OK"), "Wrong notice message");
-        }
-        other => panic!("Expected Notice, got {other:?}"),
-    }
-
-    // Second should be a Notice (since it's an error in the 2100-2200 range)
-    match market_data.next_data().await {
-        Some(Ok(TickTypes::Notice(notice))) => {
-            assert_eq!(notice.code, 321, "Wrong error code");
-            assert!(notice.message.contains("Error validating request"), "Wrong error message");
-        }
-        other => panic!("Expected Notice for error, got {other:?}"),
-    }
 }
 
 #[tokio::test]

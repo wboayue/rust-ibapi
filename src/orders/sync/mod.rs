@@ -265,7 +265,6 @@ impl Client {
     ///         PlaceOrder::OpenOrder(open_order) => println!("open order: {open_order:?}"),
     ///         PlaceOrder::ExecutionData(execution) => println!("execution: {execution:?}"),
     ///         PlaceOrder::CommissionReport(report) => println!("commission report: {report:?}"),
-    ///         PlaceOrder::Message(message) => println!("message: {message:?}"),
     ///    }
     /// }
     /// # Ok::<(), ibapi::Error>(())
@@ -403,9 +402,6 @@ impl Client {
     ///             println!("Commission: ${} for execution {}",
     ///                 report.commission, report.execution_id);
     ///         },
-    ///         OrderUpdate::Message(notice) => {
-    ///             println!("Order message: {}", notice.message);
-    ///         }
     ///     }
     /// }
     /// # Ok::<(), ibapi::Error>(())

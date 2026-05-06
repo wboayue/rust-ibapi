@@ -85,15 +85,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 println!("  Execution ID: {}", report.execution_id);
                 println!("  Commission: {} {}", report.commission, report.currency);
             }
-            Ok(PlaceOrder::Message(notice)) => {
-                println!("Order Message: {} - {}", notice.code, notice.message);
-
-                // Check for error messages that indicate order completion
-                if notice.code >= 200 && notice.code < 300 {
-                    println!("Order rejected/cancelled");
-                    break;
-                }
-            }
             Err(e) => {
                 eprintln!("Error in order subscription: {e}");
                 break;

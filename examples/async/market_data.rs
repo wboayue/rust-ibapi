@@ -82,9 +82,6 @@ async fn example_streaming_with_tick_types(client: &Arc<Client>, contract: &Cont
             TickTypes::Generic(generic) => {
                 println!("Generic - Type: {:?}, Value: {:.2}", generic.tick_type, generic.value);
             }
-            TickTypes::Notice(notice) => {
-                println!("Notice - Code: {}, Message: {}", notice.code, notice.message);
-            }
             _ => {}
         }
 
@@ -140,20 +137,14 @@ async fn example_builder_chaining(client: &Arc<Client>, contract: &Contract) -> 
 
     let mut tick_count = 0;
     while let Some(result) = subscription.next_data().await {
-        match result? {
-            TickTypes::Generic(generic) => {
-                println!("Generic tick - Type: {:?}, Value: {:.2}", generic.tick_type, generic.value);
-                tick_count += 1;
-                if tick_count >= 5 {
-                    println!("\nReceived 5 generic ticks, cancelling...");
-                    subscription.cancel().await;
-                    break;
-                }
+        if let TickTypes::Generic(generic) = result? {
+            println!("Generic tick - Type: {:?}, Value: {:.2}", generic.tick_type, generic.value);
+            tick_count += 1;
+            if tick_count >= 5 {
+                println!("\nReceived 5 generic ticks, cancelling...");
+                subscription.cancel().await;
+                break;
             }
-            TickTypes::Notice(notice) => {
-                println!("Notice - Code: {}, Message: {}", notice.code, notice.message);
-            }
-            _ => {}
         }
     }
     Ok(())
