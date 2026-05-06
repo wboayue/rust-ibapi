@@ -712,24 +712,35 @@ impl Action {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OrderStatusKind {
-    /// Order received by API but not yet sent to TWS. Uncommon.
+    /// Order has not yet been sent to the IB server, e.g. while waiting for a
+    /// security definition lookup. Uncommon in practice.
     ApiPending,
-    /// Order transmitted; not yet acknowledged by destination.
+    /// Order has been transmitted to the destination but no acknowledgment has
+    /// been received yet.
     PendingSubmit,
-    /// Cancellation requested; not yet confirmed by destination.
+    /// A cancellation request has been sent but the destination has not yet
+    /// confirmed it. Cancellation is not guaranteed at this point.
     PendingCancel,
-    /// Simulated order accepted; awaiting election criteria.
+    /// A simulated order type has been accepted by the IB system and is held
+    /// pending its election criteria; once met, it is transmitted to the
+    /// destination.
     PreSubmitted,
-    /// Order accepted by the system and working.
+    /// Order has been accepted by the system and is working at the
+    /// destination.
     #[default]
     Submitted,
-    /// Cancellation requested via API before TWS acknowledgment.
+    /// API client requested cancellation after submission but before
+    /// acknowledgment, producing this transitional state.
     ApiCancelled,
-    /// Cancellation confirmed by destination. Terminal.
+    /// Destination has confirmed the order is fully cancelled. Terminal.
+    /// May also occur if IB or the destination unexpectedly rejects the
+    /// order.
     Cancelled,
-    /// Order completely filled. Terminal.
+    /// Order has been completely filled. Terminal.
+    /// (Market orders may not always trigger this state.)
     Filled,
-    /// Order received but no longer active (rejected / cancelled). Terminal.
+    /// Order was received but is no longer active because it was rejected or
+    /// cancelled. Terminal.
     Inactive,
 }
 
@@ -1646,5 +1657,8 @@ mod sync;
 
 #[cfg(feature = "async")]
 mod r#async;
+
+#[cfg(test)]
+mod tests;
 
 // Async API methods are now on Client directly via orders/async.rs
