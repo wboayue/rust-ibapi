@@ -15,7 +15,7 @@ ceremony, no stringly-typed escape hatches, one obvious way to do each thing.
 
 Related existing tracking docs in `todos/`:
 - `algo-order-builders.md`, `generic-tick-types.md`, `legacy-text-protocol-cleanup.md`,
-  `protobuf-migration.md`, `warning-message-routing.md`.
+  `protobuf-migration.md`.
 
 ---
 
@@ -53,14 +53,9 @@ Related existing tracking docs in `todos/`:
 
 ## 2. Streaming surface
 
-- [ ] **`SubscriptionItem<T>` consistency.** Per recent PR 3/PR 4 refactors, every
-  per-T `Notice` variant (`PlaceOrder::Message`, `Orders::Notice`, …) is unreachable
-  in production — notices route through `SubscriptionItem::Notice` and the dedicated
-  `NoticeStream`. Tests still hit them via `MessageBusStub`.
-  - Action: migrate the remaining tests off `MessageBusStub`-bypass, then delete the
-    per-T `Notice` variants. Tracked separately in memory; surface here so it lands
-    before 3.0.
-  - Linked: `todos/warning-message-routing.md`.
+- [x] **`SubscriptionItem<T>` consistency.** Shipped in PR #517 — per-T `Notice`
+  variants deleted; notices route through `SubscriptionItem::Notice` and the
+  dedicated `NoticeStream`. Same PR removed the dead untyped `Err` arms.
 
 - [ ] **Standardize the consumer interface on `Stream` (async) and `Iterator` (sync).**
   Today consumers call `subscription.next_data().await` (see

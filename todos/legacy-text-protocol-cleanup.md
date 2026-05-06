@@ -33,54 +33,66 @@ End-state: raise the floor to `PROTOBUF_REST_MESSAGES_3` (213). Every text-decod
 
 ### Decoders that still parse text
 
-Per-domain counts of decoder functions that consume `ResponseMessage` field-by-field (`message.skip()`, `next_string()`, etc.). Each one needs a proto-decoder counterpart and either a `decode_proto_or_text` wrapper (transitional) or full replacement (after the gate).
+Per-domain counts. "Text-decoders" = functions consuming `ResponseMessage`
+field-by-field (`message.skip()`, `next_string()`, …). "Proto-decoders" =
+functions consuming protobuf bytes. "Dual-format calls" = number of
+`decode_proto_or_text{,_owned}` call sites in the module — the pre-existing
+text decoders are still load-bearing for servers below the family's gate.
 
-| Domain                           | Text-only decoders | Dual-format (`decode_proto_or_text`) |
-|----------------------------------|-------------------:|-------------------------------------:|
-| `accounts/common/decoders/`      |                 17 |                                    3 |
-| `contracts/common/decoders/`     |                  6 |                                    0 |
-| `orders/common/decoders/`        |                 16 |                                    0 |
-| `market_data/realtime/common/decoders/` |          21 |                                    0 |
-| `market_data/historical/common/decoders/` |        15 |                                    0 |
-| `news/common/decoders.rs`        |                  8 |                                    0 |
-| `scanner/common/decoders.rs`     |                  4 |                                    0 |
-| `display_groups/common/decoders.rs` |               0 |                                    0 |
-| `wsh/common/decoders.rs`         |                  5 |                                    0 |
+| Domain                                    | Text-decoders | Proto-decoders | Dual-format calls |
+|-------------------------------------------|--------------:|---------------:|------------------:|
+| `accounts/common/decoders/`               |            14 |             10 |                12 |
+| `contracts/common/decoders/`              |             5 |              4 |                 4 |
+| `orders/common/decoders/`                 |            16 |              5 |                 7 |
+| `market_data/realtime/common/decoders/`   |            15 |             10 |                 1 |
+| `market_data/historical/common/decoders/` |             8 |             10 |                 9 |
+| `news/common/decoders.rs`                 |             5 |              4 |                 4 |
+| `scanner/common/decoders.rs`              |             3 |              2 |                 2 |
+| `wsh/common/decoders.rs`                  |             3 |              2 |                 0 |
+| `display_groups/common/decoders.rs`       |             1 |              1 |                 0 |
 
-The three accounts dual-format decoders are the template for the rest:
-
-- `accounts::common::decoders::decode_account_summary`
-- `accounts::common::decoders::decode_server_time`
-- `accounts::common::decoders::decode_server_time_millis`
+Most domains now have proto counterparts and `decode_proto_or_text` wrappers
+in place — the remaining work in §"Per-domain done checklist" is mostly
+*deleting* the text branch once the floor passes the family's gate, not
+adding proto decoders. Realtime market data and orders still have the largest
+text-decoder surface that hasn't been converted to dual-format wrappers yet.
 
 ### Helper APIs that go away when all decoders are proto-only
 
 These exist solely to support text-format messages. Each can be deleted once no decoder reads from a text-format `ResponseMessage`.
 
-- `messages::ResponseMessage::is_protobuf` field
-- `messages::ResponseMessage::from(&str)` text constructor (and the `From<&str>` impl)
+- `messages::ResponseMessage::is_protobuf` field (`src/messages.rs:849`)
+- `messages::ResponseMessage::from(fields: &str)` inherent constructor (`src/messages.rs:1231`) — note: not a `From<&str>` impl, despite the name
 - `messages::ResponseMessage::from_binary_text` (`src/messages.rs:868`)
-- `messages::ResponseMessage::with_server_version` (`src/messages.rs:1222`)
-- `messages::ResponseMessage::decode_proto_or_text` (`src/messages.rs:886`)
-- `connection::common::parse_raw_message` text-payload branch (`src/connection/common.rs:327`)
+- `messages::ResponseMessage::with_server_version` (`src/messages.rs:1253`)
+- `messages::ResponseMessage::decode_proto_or_text{,_owned}` (`src/messages.rs:886, 901`)
+- `connection::common::parse_raw_message` text-payload branch (`src/connection/common.rs:451`)
 - All `message.skip()` calls (currently used to skip the text-format `message_type` and `message_version` header fields)
 
 ### Branching sites in production code
 
 `if message.is_protobuf` decisions outside the decoder bodies. Each disappears with the field.
 
-- `src/messages.rs:891` — inside `decode_proto_or_text`
-- `src/transport/routing.rs:68, 84` — error/notice routing
-- `src/connection/common.rs:184, 197, 210` — `NextValidId` / `ManagedAccounts` / `Error` parsing during handshake
+- `src/messages.rs:891, 906` — inside `decode_proto_or_text{,_owned}`
+- `src/messages.rs:1367` — inside `From<&ResponseMessage> for Notice`
+- `src/errors.rs:116` — inside `From<ResponseMessage> for Error`
+- `src/transport/routing.rs:120, 129` — error/notice routing
+- `src/connection/common.rs:267, 280` — handshake `NextValidId` / `ManagedAccounts` parsing
 
 ### Sentinel-message uses of the text constructor
 
-`ResponseMessage::from(&str)` is also used to fabricate in-process sentinels that never came from the wire. These need a different replacement (an enum variant on the channel, or a typed sentinel) before the text constructor can be deleted.
+Production sentinels have moved off `ResponseMessage::from(&str)` — the
+`Cancelled` / `ConnectionReset` paths now send `Error::*` directly via the
+`From<Error> for RoutedItem` impl in `subscriptions/common.rs:67`. Remaining
+production callers of `ResponseMessage::from(&str)` are limited to:
 
-- `src/transport/async.rs:356, 364` — `"ConnectionReset"`
-- `src/transport/async.rs:697, 709` — `"Cancelled"`
-- `src/subscriptions/sync.rs:519`, `src/subscriptions/async.rs:475` — `"stray\0"` for `UnexpectedResponse`
-- `src/transport/routing.rs:191` — wraps a stringified error before re-routing
+- `src/display_groups/common/decoders.rs:41` and `src/display_groups/common/stream_decoders.rs:51` — wrapping a parsed text payload after server-side framing; replace when display groups gets a proto decoder.
+- `src/connection/common.rs:454` — text-path branch of `parse_raw_message`; goes away with the helper itself.
+- `src/stubs.rs:76` — test-fixture-only.
+
+The `"stray\0"` sentinel for `UnexpectedResponse` is now test-only
+(`src/subscriptions/sync_tests.rs`, `src/subscriptions/async_tests.rs`); no
+production code emits it.
 
 ## Strategy
 
@@ -95,7 +107,7 @@ Either path ends at the same place: only the proto branches remain, the helpers 
 
 For each row in the decoder table:
 
-1. Add a proto-decoder for every response type in the domain that doesn't already have one (mirror the patterns in `src/proto/decoders.rs` and the accounts dual-format trio).
+1. Add a proto-decoder for every response type in the domain that doesn't already have one (mirror the patterns in `src/proto/decoders.rs` and the accounts dual-format trio). Most domains now have proto counterparts — see the proto-decoders column.
 2. Wrap each domain decoder in `decode_proto_or_text` *or* delete the text branch outright (depending on whether the floor has passed the family's gate).
 3. Raise the floor so the text branch is unreachable: bump the constant in `connection::common::require_protobuf_support` (the gate added by [#492](https://github.com/wboayue/rust-ibapi/pull/492)) to the family's `PROTOBUF_<FAMILY>` value, or — if the bump would be too aggressive globally — add a per-feature `check_version` call at the public API entry point.
 4. Delete the text branches and update the corresponding `_tests.rs` to drive proto fixtures only.
@@ -106,7 +118,7 @@ For each row in the decoder table:
 
 - Delete the helpers listed under "Helper APIs that go away".
 - Delete the `is_protobuf` branches listed under "Branching sites in production code".
-- Replace the sentinel uses of `ResponseMessage::from(&str)` with a typed channel-event enum or equivalent, then delete the `From<&str>` impl and the `from_binary_text` constructor.
+- Replace the remaining `ResponseMessage::from(&str)` callers (display_groups decoders, `parse_raw_message` text branch) with proto equivalents, then delete the inherent `from(fields: &str)` constructor and `from_binary_text`.
 - Simplify `ResponseMessage` to a protobuf-only payload carrier, or delete it in favor of using `prost`-decoded message types directly on the channels.
 - Bump the major version if any of the above breaks public API (most of the helpers above are `pub`).
 
