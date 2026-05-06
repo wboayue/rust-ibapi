@@ -312,15 +312,12 @@ fn place_order() {
 
 #[test]
 fn cancel_order() {
-    let message_bus = Arc::new(MessageBusStub::with_responses(vec![
-        order_status()
-            .order_id(41)
-            .status("Cancelled")
-            .remaining(100.0)
-            .perm_id(71270927)
-            .encode_pipe(),
-        "4|2|41|202|Order Canceled - reason:||".to_owned(),
-    ]));
+    let message_bus = Arc::new(MessageBusStub::with_responses(vec![order_status()
+        .order_id(41)
+        .status("Cancelled")
+        .remaining(100.0)
+        .perm_id(71270927)
+        .encode_pipe()]));
 
     let client = Client::stubbed(message_bus.clone(), server_versions::SIZE_RULES);
 
@@ -346,10 +343,6 @@ fn cancel_order() {
         assert_eq!(order_status.client_id, 100, "order_status.client_id");
         assert_eq!(order_status.why_held, "", "order_status.why_held");
         assert_eq!(order_status.market_cap_price, Some(0.0), "order_status.market_cap_price");
-    }
-
-    if let Some(Ok(CancelOrder::Notice(notice))) = results.next_data() {
-        assert_eq!(notice.message, "Order Canceled - reason:", "order status notice");
     }
 }
 

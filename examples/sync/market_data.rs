@@ -80,9 +80,6 @@ fn example_streaming_with_tick_types(client: &Client, contract: &Contract) {
             TickTypes::Generic(generic) => {
                 println!("Generic - Type: {:?}, Value: {:.2}", generic.tick_type, generic.value);
             }
-            TickTypes::Notice(notice) => {
-                println!("Notice - Code: {}, Message: {}", notice.code, notice.message);
-            }
             _ => {}
         }
 
@@ -150,20 +147,14 @@ fn example_builder_chaining(client: &Client, contract: &Contract) {
                 break;
             }
         };
-        match tick {
-            TickTypes::Generic(generic) => {
-                println!("Generic tick - Type: {:?}, Value: {:.2}", generic.tick_type, generic.value);
-                tick_count += 1;
-                if tick_count >= 5 {
-                    println!("\nReceived 5 generic ticks, cancelling...");
-                    subscription.cancel();
-                    break;
-                }
+        if let TickTypes::Generic(generic) = tick {
+            println!("Generic tick - Type: {:?}, Value: {:.2}", generic.tick_type, generic.value);
+            tick_count += 1;
+            if tick_count >= 5 {
+                println!("\nReceived 5 generic ticks, cancelling...");
+                subscription.cancel();
+                break;
             }
-            TickTypes::Notice(notice) => {
-                println!("Notice - Code: {}, Message: {}", notice.code, notice.message);
-            }
-            _ => {}
         }
     }
 }

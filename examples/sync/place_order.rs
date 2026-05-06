@@ -67,7 +67,6 @@ fn main() {
             PlaceOrder::OpenOrder(open_order) => println!("open order: {open_order:?}"),
             PlaceOrder::ExecutionData(execution) => println!("execution: {execution:?}"),
             PlaceOrder::CommissionReport(report) => println!("commission report: {report:?}"),
-            PlaceOrder::Message(message) => println!("notice: {message}"),
         }
     }
 }

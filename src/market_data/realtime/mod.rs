@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 use crate::contracts::OptionComputation;
-use crate::messages::Notice;
 use crate::messages::{IncomingMessages, ResponseMessage};
 use crate::subscriptions::{DecoderContext, StreamDecoder};
 use crate::Error;
@@ -236,8 +235,6 @@ pub enum MarketDepths {
     MarketDepth(MarketDepth),
     /// Level-2 (per exchange/MPID) depth update.
     MarketDepthL2(MarketDepthL2),
-    /// Informational notice (e.g., depth data unavailable).
-    Notice(Notice),
 }
 
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -277,7 +274,7 @@ pub struct MarketDepthL2 {
 }
 
 impl StreamDecoder<MarketDepths> for MarketDepths {
-    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2, IncomingMessages::Error];
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::MarketDepth, IncomingMessages::MarketDepthL2];
 
     fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
@@ -286,14 +283,6 @@ impl StreamDecoder<MarketDepths> for MarketDepths {
                 context.server_version,
                 message,
             )?)),
-            IncomingMessages::Error => {
-                let code = message.error_code();
-                if (2100..2200).contains(&code) {
-                    Ok(MarketDepths::Notice(Notice::from(message)))
-                } else {
-                    Err(Error::from(message.clone()))
-                }
-            }
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -338,8 +327,6 @@ pub enum TickTypes {
     OptionComputation(OptionComputation),
     /// Snapshot request completed for this ticker.
     SnapshotEnd,
-    /// Warning or informational notice from TWS.
-    Notice(Notice),
     /// Tick-by-tick request parameter information.
     RequestParameters(TickRequestParameters),
     /// Combined price and size tick.
@@ -355,7 +342,6 @@ impl StreamDecoder<TickTypes> for TickTypes {
         IncomingMessages::TickGeneric,
         IncomingMessages::TickOptionComputation,
         IncomingMessages::TickSnapshotEnd,
-        IncomingMessages::Error,
         IncomingMessages::TickReqParams,
     ];
 
@@ -372,7 +358,6 @@ impl StreamDecoder<TickTypes> for TickTypes {
             )?)),
             IncomingMessages::TickReqParams => Ok(TickTypes::RequestParameters(common::decoders::decode_tick_request_parameters(message)?)),
             IncomingMessages::TickSnapshotEnd => Ok(TickTypes::SnapshotEnd),
-            IncomingMessages::Error => Ok(TickTypes::Notice(Notice::from(message))),
             _ => Err(Error::NotImplemented),
         }
     }
