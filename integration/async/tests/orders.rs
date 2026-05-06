@@ -1,5 +1,5 @@
 use ibapi::contracts::Contract;
-use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId};
+use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderStatusKind};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::Client;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
@@ -210,7 +210,7 @@ async fn cancel_bracket_order() {
     let status = item.unwrap().expect("expected cancel order status").expect("cancel order returned error");
     match status {
         SubscriptionItem::Data(CancelOrder::OrderStatus(s)) => {
-            assert_eq!(s.status, "Cancelled", "parent order should be cancelled")
+            assert_eq!(s.status, OrderStatusKind::Cancelled, "parent order should be cancelled")
         }
         SubscriptionItem::Notice(_) => {} // cancellation notice is also acceptable
     }

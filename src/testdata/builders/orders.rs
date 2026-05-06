@@ -4,7 +4,7 @@ use super::{RequestEncoder, ResponseEncoder, ResponseProtoEncoder};
 use crate::common::test_utils::helpers::constants::{TEST_ACCOUNT, TEST_REQ_ID_FIRST};
 use crate::contracts::Contract;
 use crate::messages::OutgoingMessages;
-use crate::orders::{ExecutionFilter, ExerciseAction, Order};
+use crate::orders::{ExecutionFilter, ExerciseAction, Order, OrderStatusKind};
 use crate::proto;
 use crate::proto::encoders::{
     encode_contract, encode_contract_with_order, encode_execution_filter, encode_order, encode_order_cancel, some_bool, some_str,
@@ -26,7 +26,7 @@ const TEST_TIME: &str = "20230224  12:04:56";
 #[derive(Clone, Debug)]
 pub struct OrderStatusResponse {
     pub order_id: i32,
-    pub status: String,
+    pub status: OrderStatusKind,
     pub filled: f64,
     pub remaining: f64,
     pub average_fill_price: Option<f64>,
@@ -42,7 +42,7 @@ impl Default for OrderStatusResponse {
     fn default() -> Self {
         Self {
             order_id: 13,
-            status: "Submitted".to_string(),
+            status: OrderStatusKind::Submitted,
             filled: 0.0,
             remaining: 100.0,
             average_fill_price: Some(0.0),
@@ -61,8 +61,8 @@ impl OrderStatusResponse {
         self.order_id = v;
         self
     }
-    pub fn status(mut self, v: impl Into<String>) -> Self {
-        self.status = v.into();
+    pub fn status(mut self, v: OrderStatusKind) -> Self {
+        self.status = v;
         self
     }
     pub fn filled(mut self, v: f64) -> Self {
@@ -104,7 +104,7 @@ impl ResponseEncoder for OrderStatusResponse {
         vec![
             "3".to_string(),
             self.order_id.to_string(),
-            self.status.clone(),
+            self.status.to_string(),
             self.filled.to_string(),
             self.remaining.to_string(),
             opt_double_str(self.average_fill_price),
@@ -124,7 +124,7 @@ impl ResponseProtoEncoder for OrderStatusResponse {
     fn to_proto(&self) -> Self::Proto {
         proto::OrderStatus {
             order_id: Some(self.order_id),
-            status: Some(self.status.clone()),
+            status: Some(self.status.to_string()),
             filled: Some(self.filled.to_string()),
             remaining: Some(self.remaining.to_string()),
             avg_fill_price: self.average_fill_price,

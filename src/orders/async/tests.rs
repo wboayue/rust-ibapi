@@ -3,6 +3,7 @@ use crate::common::test_utils::helpers::{assert_request, request_message_count, 
 use crate::contracts::{Contract, SecurityType};
 use crate::contracts::{Currency, Exchange, Symbol};
 use crate::orders::common::test_data::{COMPLETED_ORDER_ES_FUT_CANCELLED, EXERCISE_OPEN_ORDER_ES_FOP_SUBMITTED, OPEN_ORDER_ES_FUT_SUBMITTED};
+use crate::orders::OrderStatusKind;
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::orders::{
     cancel_order_request, commission_report, completed_orders_end, completed_orders_request, execution_data, execution_data_end, executions_request,
@@ -17,7 +18,12 @@ use tokio::time::Duration;
 async fn test_place_order() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![
         OPEN_ORDER_ES_FUT_SUBMITTED.to_owned(),
-        order_status().order_id(1).status("Submitted").filled(0.0).remaining(1.0).encode_pipe(),
+        order_status()
+            .order_id(1)
+            .status(OrderStatusKind::Submitted)
+            .filled(0.0)
+            .remaining(1.0)
+            .encode_pipe(),
         execution_data()
             .request_id(1)
             .order_id(1)
@@ -85,7 +91,7 @@ async fn test_place_order() {
 async fn test_cancel_order() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![order_status()
         .order_id(1)
-        .status("Cancelled")
+        .status(OrderStatusKind::Cancelled)
         .filled(0.0)
         .remaining(1.0)
         .perm_id(2126726143)
@@ -112,7 +118,7 @@ async fn test_open_orders() {
         OPEN_ORDER_ES_FUT_SUBMITTED.to_owned(),
         order_status()
             .order_id(1)
-            .status("Submitted")
+            .status(OrderStatusKind::Submitted)
             .filled(0.0)
             .remaining(1.0)
             .perm_id(2126726143)
@@ -296,7 +302,7 @@ async fn test_order_update_stream() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![
         order_status()
             .order_id(100)
-            .status("Submitted")
+            .status(OrderStatusKind::Submitted)
             .filled(0.0)
             .remaining(1.0)
             .perm_id(2126726143)

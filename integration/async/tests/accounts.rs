@@ -1,6 +1,6 @@
 use ibapi::accounts::types::{AccountGroup, AccountId, ContractId};
 use ibapi::contracts::Contract;
-use ibapi::orders::{Action, Order, PlaceOrder};
+use ibapi::orders::{Action, Order, OrderStatusKind, PlaceOrder};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi::Client;
 use ibapi_test::{rate_limit, require_market_open, ClientId, GATEWAY};
@@ -172,7 +172,7 @@ async fn pnl_single_receives_updates() {
     let filled = tokio::time::timeout(tokio::time::Duration::from_secs(5), async {
         while let Some(Ok(SubscriptionItem::Data(event))) = sub.next().await {
             if let PlaceOrder::OrderStatus(status) = &event {
-                if status.status == "Filled" {
+                if status.status == OrderStatusKind::Filled {
                     return;
                 }
             }

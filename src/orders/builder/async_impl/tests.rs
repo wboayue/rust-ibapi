@@ -2,7 +2,7 @@ use crate::contracts::{Contract, Currency, Exchange, Symbol};
 use crate::errors::Error;
 use crate::orders::builder::tests::async_mock_client::mock::AsyncMockClient;
 use crate::orders::builder::{BracketOrderBuilder, BracketOrderIds, OrderBuilder, OrderId};
-use crate::orders::{Action, Order, OrderData, OrderState, OrderStatus, OrderUpdate, PlaceOrder, TimeInForce};
+use crate::orders::{Action, Order, OrderData, OrderState, OrderStatus, OrderStatusKind, OrderUpdate, PlaceOrder, TimeInForce};
 use futures::{Stream, StreamExt};
 use std::pin::Pin;
 
@@ -327,7 +327,7 @@ async fn test_async_order_update_stream() {
     client.add_order_update_stream(vec![
         OrderUpdate::OrderStatus(OrderStatus {
             order_id: 100,
-            status: "PendingSubmit".to_string(),
+            status: OrderStatusKind::PendingSubmit,
             filled: 0.0,
             remaining: 100.0,
             average_fill_price: None,
@@ -340,7 +340,7 @@ async fn test_async_order_update_stream() {
         }),
         OrderUpdate::OrderStatus(OrderStatus {
             order_id: 100,
-            status: "Submitted".to_string(),
+            status: OrderStatusKind::Submitted,
             filled: 0.0,
             remaining: 100.0,
             average_fill_price: None,
@@ -353,7 +353,7 @@ async fn test_async_order_update_stream() {
         }),
         OrderUpdate::OrderStatus(OrderStatus {
             order_id: 100,
-            status: "Filled".to_string(),
+            status: OrderStatusKind::Filled,
             filled: 100.0,
             remaining: 0.0,
             average_fill_price: Some(50.00),
@@ -382,15 +382,15 @@ async fn test_async_order_update_stream() {
 
     // Check status progression
     if let OrderUpdate::OrderStatus(status) = &updates[0] {
-        assert_eq!(status.status, "PendingSubmit");
+        assert_eq!(status.status, OrderStatusKind::PendingSubmit);
     }
 
     if let OrderUpdate::OrderStatus(status) = &updates[1] {
-        assert_eq!(status.status, "Submitted");
+        assert_eq!(status.status, OrderStatusKind::Submitted);
     }
 
     if let OrderUpdate::OrderStatus(status) = &updates[2] {
-        assert_eq!(status.status, "Filled");
+        assert_eq!(status.status, OrderStatusKind::Filled);
         assert_eq!(status.filled, 100.0);
         assert_eq!(status.average_fill_price, Some(50.00));
     }

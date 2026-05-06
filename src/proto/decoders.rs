@@ -6,8 +6,8 @@ use crate::contracts::{
 };
 use crate::orders::conditions::TriggerMethod;
 use crate::orders::{
-    Action, Execution, Liquidity, OcaType, Order, OrderAllocation, OrderCondition, OrderOpenClose, OrderOrigin, OrderState, ReferencePriceType,
-    Rule80A, ShortSaleSlot, SoftDollarTier, TimeInForce, VolatilityType,
+    Action, Execution, Liquidity, OcaType, Order, OrderAllocation, OrderCondition, OrderOpenClose, OrderOrigin, OrderState, OrderStatusKind,
+    ReferencePriceType, Rule80A, ShortSaleSlot, SoftDollarTier, TimeInForce, VolatilityType,
 };
 use crate::proto;
 use crate::Error;
@@ -34,6 +34,14 @@ pub(crate) fn optional_string_f64(opt: &Option<String>) -> Option<f64> {
     opt.as_deref()
         .and_then(|s| s.parse::<f64>().ok())
         .and_then(|v| if v == f64::MAX { None } else { Some(v) })
+}
+
+/// Parse an optional protocol string into a status. `None` or empty → `OrderStatusKind::default()`.
+pub(crate) fn parse_order_status(opt: &Option<String>) -> Result<OrderStatusKind, Error> {
+    match opt.as_deref() {
+        Some(s) if !s.is_empty() => Ok(s.parse()?),
+        _ => Ok(OrderStatusKind::default()),
+    }
 }
 
 pub(crate) fn ts(secs: i64) -> time::OffsetDateTime {
@@ -347,9 +355,9 @@ fn decode_order_condition(proto: &proto::OrderCondition) -> OrderCondition {
     }
 }
 
-pub fn decode_order_state(proto: &proto::OrderState) -> OrderState {
-    OrderState {
-        status: s(&proto.status),
+pub fn decode_order_state(proto: &proto::OrderState) -> Result<OrderState, Error> {
+    Ok(OrderState {
+        status: parse_order_status(&proto.status)?,
         initial_margin_before: optional_f64(proto.init_margin_before),
         maintenance_margin_before: optional_f64(proto.maint_margin_before),
         equity_with_loan_before: optional_f64(proto.equity_with_loan_before),
@@ -379,7 +387,7 @@ pub fn decode_order_state(proto: &proto::OrderState) -> OrderState {
         warning_text: s(&proto.warning_text),
         completed_time: s(&proto.completed_time),
         completed_status: s(&proto.completed_status),
-    }
+    })
 }
 
 fn decode_order_allocation(proto: &proto::OrderAllocation) -> OrderAllocation {

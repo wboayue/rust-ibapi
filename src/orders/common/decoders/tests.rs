@@ -1,4 +1,5 @@
 use super::*;
+use crate::orders::OrderStatusKind;
 
 #[test]
 fn test_completed_order_parsing_issue_318() {
@@ -128,7 +129,7 @@ fn test_completed_order_parsing_issue_318() {
             assert_eq!(order_data.order.action.to_string(), "BUY");
             assert_eq!(order_data.order.order_type, "LMT");
             assert_eq!(order_data.order.limit_price, Some(100.0));
-            assert_eq!(order_data.order_state.status, "Cancelled");
+            assert_eq!(order_data.order_state.status, OrderStatusKind::Cancelled);
             assert_eq!(order_data.order_state.completed_time, "20250924 01:21:07 America/New_York");
             assert_eq!(order_data.order_state.completed_status, "Cancelled by Trader");
 
@@ -287,7 +288,7 @@ fn test_completed_order_parsing_issue_318_bag() {
             assert_eq!(order_data.order.action.to_string(), "BUY");
             assert_eq!(order_data.order.order_type, "LMT");
             assert_eq!(order_data.order.limit_price, Some(-0.57));
-            assert_eq!(order_data.order_state.status, "Filled");
+            assert_eq!(order_data.order_state.status, OrderStatusKind::Filled);
             assert_eq!(order_data.order_state.completed_time, "20250922 11:49:07 America/Los_Angeles");
             assert_eq!(order_data.order_state.completed_status, "Filled Size: 1");
 
@@ -661,7 +662,7 @@ fn test_decode_open_order_v200_new_fields() {
     assert_eq!(result.order.action.to_string(), "BUY");
     assert_eq!(result.order.order_type, "LMT");
     assert_eq!(result.order.limit_price, Some(150.50));
-    assert_eq!(result.order_state.status, "Submitted");
+    assert_eq!(result.order_state.status, OrderStatusKind::Submitted);
 
     // Verify new fields
     assert_eq!(result.order.customer_account, "CUST001");
@@ -1095,7 +1096,7 @@ fn test_decode_completed_order_v200_new_fields() {
     // Verify core fields
     assert_eq!(result.contract.symbol.to_string(), "AAPL");
     assert_eq!(result.order.action.to_string(), "BUY");
-    assert_eq!(result.order_state.status, "Cancelled");
+    assert_eq!(result.order_state.status, OrderStatusKind::Cancelled);
     assert_eq!(result.order_state.completed_time, "20260115 10:30:00 America/New_York");
     assert_eq!(result.order_state.completed_status, "Cancelled by Trader");
 
@@ -1165,7 +1166,7 @@ fn test_decode_open_order_proto() {
     assert_eq!(result.order.total_quantity, 100.0);
     assert_eq!(result.order.order_type, "LMT");
     assert_eq!(result.order.limit_price, Some(150.0));
-    assert_eq!(result.order_state.status, "Submitted");
+    assert_eq!(result.order_state.status, OrderStatusKind::Submitted);
 }
 
 #[test]
@@ -1191,7 +1192,7 @@ fn test_decode_order_status_proto() {
 
     let result = decode_order_status_proto(&bytes).unwrap();
     assert_eq!(result.order_id, 99);
-    assert_eq!(result.status, "Filled");
+    assert_eq!(result.status, OrderStatusKind::Filled);
     assert_eq!(result.filled, 50.0);
     assert_eq!(result.remaining, 0.0);
     assert_eq!(result.average_fill_price, Some(152.5));
@@ -1213,7 +1214,7 @@ fn test_decode_order_status_text_unset_double() {
     let result = decode_order_status(server_versions::SIZE_RULES, &mut message).unwrap();
 
     assert_eq!(result.order_id, 13);
-    assert_eq!(result.status, "PreSubmitted");
+    assert_eq!(result.status, OrderStatusKind::PreSubmitted);
     assert_eq!(result.average_fill_price, None);
     assert_eq!(result.last_fill_price, None);
     assert_eq!(result.market_cap_price, None);
@@ -1373,7 +1374,7 @@ fn test_decode_order_status_proto_round_trips_via_builder() {
 
     let bytes = order_status()
         .order_id(99)
-        .status("Filled")
+        .status(OrderStatusKind::Filled)
         .filled(50.0)
         .remaining(0.0)
         .average_fill_price(Some(152.5))
@@ -1385,7 +1386,7 @@ fn test_decode_order_status_proto_round_trips_via_builder() {
 
     let result = super::decode_order_status_proto(&bytes).unwrap();
     assert_eq!(result.order_id, 99);
-    assert_eq!(result.status, "Filled");
+    assert_eq!(result.status, OrderStatusKind::Filled);
     assert_eq!(result.filled, 50.0);
     assert_eq!(result.remaining, 0.0);
     assert_eq!(result.average_fill_price, Some(152.5));

@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
 
                 // Exit when order is filled or cancelled
-                if status.status == "Filled" || status.status == "Cancelled" {
+                if status.status.is_terminal() {
                     println!("\nOrder completed with status: {}", status.status);
                     break;
                 }
@@ -140,7 +140,7 @@ async fn monitor_order(order_id: i32, mut subscription: ibapi::subscriptions::Su
                     status.filled + status.remaining
                 );
 
-                if status.status == "Filled" || status.status == "Cancelled" {
+                if status.status.is_terminal() {
                     break;
                 }
             }

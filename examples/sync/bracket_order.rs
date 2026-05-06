@@ -9,7 +9,7 @@
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
 use ibapi::orders::Action;
-use ibapi::orders::{order_builder, PlaceOrder};
+use ibapi::orders::{order_builder, OrderStatusKind, PlaceOrder};
 use std::thread;
 
 fn place_bracket_order(client: &Client, contract: &Contract, parent_id: i32) -> Result<(), Box<dyn std::error::Error>> {
@@ -26,7 +26,7 @@ fn place_bracket_order(client: &Client, contract: &Contract, parent_id: i32) -> 
         for subscription in subscriptions.iter() {
             while let Some(result) = subscription.try_iter_data().next() {
                 match result {
-                    Ok(PlaceOrder::OrderStatus(event)) if event.status == "Submitted" => {
+                    Ok(PlaceOrder::OrderStatus(event)) if event.status == OrderStatusKind::Submitted => {
                         println!("{event:?}");
                         num_submitted += 1;
                     }

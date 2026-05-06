@@ -7,7 +7,7 @@ use crate::orders::common::test_data::{
     OPEN_ORDER_TSLA_PRESUBMITTED,
 };
 use crate::orders::conditions::TriggerMethod;
-use crate::orders::{Action, Liquidity, OcaType, OrderOrigin, ShortSaleSlot, TimeInForce};
+use crate::orders::{Action, Liquidity, OcaType, OrderOrigin, OrderStatusKind, ShortSaleSlot, TimeInForce};
 use crate::stubs::MessageBusStub;
 use crate::testdata::builders::orders::{
     all_open_orders_request, auto_open_orders_request, cancel_order_request, commission_report, completed_orders_request, execution_data,
@@ -22,11 +22,11 @@ use crate::orders::common::order_builder;
 fn place_order() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![
         OPEN_ORDER_TSLA_PRESUBMITTED.to_owned(),
-        order_status().status("PreSubmitted").remaining(100.0).encode_pipe(),
+        order_status().status(OrderStatusKind::PreSubmitted).remaining(100.0).encode_pipe(),
         execution_data().encode_pipe(),
         OPEN_ORDER_TSLA_FILLED.to_owned(),
         order_status()
-            .status("Filled")
+            .status(OrderStatusKind::Filled)
             .filled(100.0)
             .remaining(0.0)
             .average_fill_price(Some(196.52))
@@ -162,7 +162,7 @@ fn place_order() {
         assert_eq!(order.algo_params.len(), 0, "order.algo_params.len()");
         assert_eq!(order.solicited, false, "order.solicited");
         assert_eq!(order.what_if, false, "order.what_if");
-        assert_eq!(order_state.status, "PreSubmitted", "order_state.status");
+        assert_eq!(order_state.status, OrderStatusKind::PreSubmitted, "order_state.status");
         assert_eq!(order_state.initial_margin_before, None, "order_state.initial_margin_before");
         assert_eq!(order_state.maintenance_margin_before, None, "order_state.maintenance_margin_before");
         assert_eq!(order_state.equity_with_loan_before, None, "order_state.equity_with_loan_before");
@@ -210,7 +210,7 @@ fn place_order() {
 
     if let Some(Ok(PlaceOrder::OrderStatus(order_status))) = notifications.next_data() {
         assert_eq!(order_status.order_id, 13, "order_status.order_id");
-        assert_eq!(order_status.status, "PreSubmitted", "order_status.status");
+        assert_eq!(order_status.status, OrderStatusKind::PreSubmitted, "order_status.status");
         assert_eq!(order_status.filled, 0.0, "order_status.filled");
         assert_eq!(order_status.remaining, 100.0, "order_status.remaining");
         assert_eq!(order_status.average_fill_price, Some(0.0), "order_status.average_fill_price");
@@ -269,14 +269,14 @@ fn place_order() {
         let order_state = &open_order.order_state;
 
         assert_eq!(open_order.order_id, 13, "open_order.order_id");
-        assert_eq!(order_state.status, "Filled", "order_state.status");
+        assert_eq!(order_state.status, OrderStatusKind::Filled, "order_state.status");
     } else {
         assert!(false, "message[3] expected an open order notification");
     }
 
     if let Some(Ok(PlaceOrder::OrderStatus(order_status))) = notifications.next_data() {
         assert_eq!(order_status.order_id, 13, "order_status.order_id");
-        assert_eq!(order_status.status, "Filled", "order_status.status");
+        assert_eq!(order_status.status, OrderStatusKind::Filled, "order_status.status");
         assert_eq!(order_status.filled, 100.0, "order_status.filled");
         assert_eq!(order_status.remaining, 0.0, "order_status.remaining");
         assert_eq!(order_status.average_fill_price, Some(196.52), "order_status.average_fill_price");
@@ -289,7 +289,7 @@ fn place_order() {
         let order_state = &open_order.order_state;
 
         assert_eq!(open_order.order_id, 13, "open_order.order_id");
-        assert_eq!(order_state.status, "Filled", "order_state.status");
+        assert_eq!(order_state.status, OrderStatusKind::Filled, "order_state.status");
         assert_eq!(order_state.commission, Some(1.0), "order_state.commission");
         assert_eq!(order_state.minimum_commission, None, "order_state.minimum_commission");
         assert_eq!(order_state.maximum_commission, None, "order_state.maximum_commission");
@@ -314,7 +314,7 @@ fn place_order() {
 fn cancel_order() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![order_status()
         .order_id(41)
-        .status("Cancelled")
+        .status(OrderStatusKind::Cancelled)
         .remaining(100.0)
         .perm_id(71270927)
         .encode_pipe()]));
@@ -333,7 +333,7 @@ fn cancel_order() {
 
     if let Some(Ok(CancelOrder::OrderStatus(order_status))) = results.next_data() {
         assert_eq!(order_status.order_id, 41, "order_status.order_id");
-        assert_eq!(order_status.status, "Cancelled", "order_status.status");
+        assert_eq!(order_status.status, OrderStatusKind::Cancelled, "order_status.status");
         assert_eq!(order_status.filled, 0.0, "order_status.filled");
         assert_eq!(order_status.remaining, 100.0, "order_status.remaining");
         assert_eq!(order_status.average_fill_price, Some(0.0), "order_status.average_fill_price");
@@ -362,7 +362,7 @@ fn global_cancel() {
 fn cancel_order_cme_tagging() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![order_status()
         .order_id(41)
-        .status("Cancelled")
+        .status(OrderStatusKind::Cancelled)
         .remaining(100.0)
         .perm_id(71270927)
         .encode_pipe()]));
@@ -506,7 +506,7 @@ fn completed_orders() {
         assert_eq!(order.algo_strategy, "", "order.algo_strategy");
         assert_eq!(order.algo_params.len(), 0, "order.algo_params.len()");
         assert_eq!(order.solicited, false, "order.solicited");
-        assert_eq!(order_state.status, "Filled", "order_state.status");
+        assert_eq!(order_state.status, OrderStatusKind::Filled, "order_state.status");
         assert_eq!(order.randomize_size, false, "order.randomize_size");
         assert_eq!(order.randomize_price, false, "order.randomize_price");
         assert_eq!(order.conditions.len(), 0, "order.conditions.len()");
@@ -747,7 +747,7 @@ fn submit_order() {
 fn order_update_stream() {
     let message_bus = Arc::new(MessageBusStub::with_responses(vec![
         OPEN_ORDER_TSLA_PRESUBMITTED.to_owned(),
-        order_status().status("PreSubmitted").remaining(100.0).encode_pipe(),
+        order_status().status(OrderStatusKind::PreSubmitted).remaining(100.0).encode_pipe(),
         execution_data().encode_pipe(),
         commission_report().encode_pipe(),
     ]));
@@ -764,14 +764,14 @@ fn order_update_stream() {
         assert_eq!(open_order.contract.symbol, Symbol::from("TSLA"), "contract.symbol");
         assert_eq!(open_order.order.action, Action::Buy, "order.action");
         assert_eq!(open_order.order.total_quantity, 100.0, "order.total_quantity");
-        assert_eq!(open_order.order_state.status, "PreSubmitted", "order_state.status");
+        assert_eq!(open_order.order_state.status, OrderStatusKind::PreSubmitted, "order_state.status");
     } else {
         assert!(false, "expected open order notification");
     }
 
     if let Some(Ok(OrderUpdate::OrderStatus(status))) = notifications.next_data() {
         assert_eq!(status.order_id, 13, "order_status.order_id");
-        assert_eq!(status.status, "PreSubmitted", "order_status.status");
+        assert_eq!(status.status, OrderStatusKind::PreSubmitted, "order_status.status");
         assert_eq!(status.filled, 0.0, "order_status.filled");
         assert_eq!(status.remaining, 100.0, "order_status.remaining");
     } else {
