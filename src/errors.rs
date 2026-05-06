@@ -113,9 +113,12 @@ pub enum Error {
 
 impl From<ResponseMessage> for Error {
     fn from(err: ResponseMessage) -> Error {
-        let code = err.error_code();
-        let message = err.error_message();
-        Error::Message(code, message)
+        if err.is_protobuf {
+            if let Some(decoded) = err.raw_bytes().and_then(crate::transport::routing::decode_error_envelope) {
+                return Error::from(decoded);
+            }
+        }
+        Error::Message(err.error_code(), err.error_message())
     }
 }
 

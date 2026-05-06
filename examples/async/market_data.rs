@@ -82,6 +82,9 @@ async fn example_streaming_with_tick_types(client: &Arc<Client>, contract: &Cont
             TickTypes::Generic(generic) => {
                 println!("Generic - Type: {:?}, Value: {:.2}", generic.tick_type, generic.value);
             }
+            TickTypes::MarketDataType(data_type) => {
+                println!("Active market data type: {data_type:?}");
+            }
             _ => {}
         }
 

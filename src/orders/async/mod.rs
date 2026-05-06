@@ -7,7 +7,7 @@ use crate::protocol::{check_version, Features};
 use crate::subscriptions::Subscription;
 use crate::{Client, Error};
 
-use super::common::{encoders, verify};
+use super::common::{decoders, encoders, verify};
 use super::*;
 
 impl Client {
@@ -80,9 +80,8 @@ impl Client {
         let mut internal_subscription = self.send_shared_request(OutgoingMessages::RequestIds, message).await?;
 
         match internal_subscription.next().await {
-            Some(Ok(message)) => {
-                let order_id_index = 2;
-                let next_order_id = message.peek_int(order_id_index)?;
+            Some(Ok(mut message)) => {
+                let next_order_id = decoders::decode_next_valid_id(&mut message)?;
 
                 self.set_next_order_id(next_order_id);
 

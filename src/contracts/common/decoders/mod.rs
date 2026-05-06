@@ -14,6 +14,10 @@ use crate::contracts::{
 };
 
 pub(in crate::contracts) fn decode_contract_details(server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails, Error> {
+    message.decode_proto_or_text(decode_contract_data_proto, |msg| decode_contract_details_text(server_version, msg))
+}
+
+fn decode_contract_details_text(server_version: i32, message: &mut ResponseMessage) -> Result<ContractDetails, Error> {
     message.skip(); // message type
 
     let mut message_version = 8;
@@ -182,64 +186,68 @@ pub(in crate::contracts) fn decode_contract_descriptions(
     server_version: i32,
     message: &mut ResponseMessage,
 ) -> Result<Vec<ContractDescription>, Error> {
-    message.skip(); // message type
+    message.decode_proto_or_text(decode_symbol_samples_proto, |msg| {
+        msg.skip(); // message type
 
-    let _request_id = message.next_int()?;
-    let contract_descriptions_count = message.next_int()?;
+        let _request_id = msg.next_int()?;
+        let contract_descriptions_count = msg.next_int()?;
 
-    if contract_descriptions_count < 1 {
-        return Ok(Vec::default());
-    }
-
-    let mut contract_descriptions: Vec<ContractDescription> = Vec::with_capacity(contract_descriptions_count as usize);
-
-    for _ in 0..contract_descriptions_count {
-        let mut contract = Contract {
-            contract_id: message.next_int()?,
-            symbol: Symbol::from(message.next_string()?),
-            security_type: SecurityType::from(&message.next_string()?),
-            primary_exchange: Exchange::from(message.next_string()?),
-            currency: Currency::from(message.next_string()?),
-            ..Default::default()
-        };
-
-        let derivative_security_types_count = message.next_int()?;
-        let mut derivative_security_types: Vec<String> = Vec::with_capacity(derivative_security_types_count as usize);
-        for _ in 0..derivative_security_types_count {
-            derivative_security_types.push(message.next_string()?);
+        if contract_descriptions_count < 1 {
+            return Ok(Vec::default());
         }
 
-        if server_version >= server_versions::BOND_ISSUERID {
-            contract.description = message.next_string()?;
-            contract.issuer_id = message.next_string()?;
+        let mut contract_descriptions: Vec<ContractDescription> = Vec::with_capacity(contract_descriptions_count as usize);
+
+        for _ in 0..contract_descriptions_count {
+            let mut contract = Contract {
+                contract_id: msg.next_int()?,
+                symbol: Symbol::from(msg.next_string()?),
+                security_type: SecurityType::from(&msg.next_string()?),
+                primary_exchange: Exchange::from(msg.next_string()?),
+                currency: Currency::from(msg.next_string()?),
+                ..Default::default()
+            };
+
+            let derivative_security_types_count = msg.next_int()?;
+            let mut derivative_security_types: Vec<String> = Vec::with_capacity(derivative_security_types_count as usize);
+            for _ in 0..derivative_security_types_count {
+                derivative_security_types.push(msg.next_string()?);
+            }
+
+            if server_version >= server_versions::BOND_ISSUERID {
+                contract.description = msg.next_string()?;
+                contract.issuer_id = msg.next_string()?;
+            }
+
+            contract_descriptions.push(ContractDescription {
+                contract,
+                derivative_security_types,
+            });
         }
 
-        contract_descriptions.push(ContractDescription {
-            contract,
-            derivative_security_types,
-        });
-    }
-
-    Ok(contract_descriptions)
+        Ok(contract_descriptions)
+    })
 }
 
 pub(in crate::contracts) fn decode_market_rule(message: &mut ResponseMessage) -> Result<MarketRule, Error> {
-    message.skip(); // message type
+    message.decode_proto_or_text(decode_market_rule_proto, |msg| {
+        msg.skip(); // message type
 
-    let mut market_rule = MarketRule {
-        market_rule_id: message.next_int()?,
-        ..Default::default()
-    };
+        let mut market_rule = MarketRule {
+            market_rule_id: msg.next_int()?,
+            ..Default::default()
+        };
 
-    let price_increments_count = message.next_int()?;
-    for _ in 0..price_increments_count {
-        market_rule.price_increments.push(PriceIncrement {
-            low_edge: message.next_double()?,
-            increment: message.next_double()?,
-        });
-    }
+        let price_increments_count = msg.next_int()?;
+        for _ in 0..price_increments_count {
+            market_rule.price_increments.push(PriceIncrement {
+                low_edge: msg.next_double()?,
+                increment: msg.next_double()?,
+            });
+        }
 
-    Ok(market_rule)
+        Ok(market_rule)
+    })
 }
 
 pub(crate) fn decode_option_computation(server_version: i32, message: &mut ResponseMessage) -> Result<OptionComputation, Error> {
@@ -290,37 +298,38 @@ fn next_optional_double(message: &mut ResponseMessage, none_value: f64) -> Resul
 }
 
 pub(in crate::contracts) fn decode_option_chain(message: &mut ResponseMessage) -> Result<OptionChain, Error> {
-    message.skip(); // message type
-    message.skip(); // request id
+    message.decode_proto_or_text(decode_option_chain_proto, |msg| {
+        msg.skip(); // message type
+        msg.skip(); // request id
 
-    let mut option_chain = OptionChain {
-        exchange: message.next_string()?,
-        underlying_contract_id: message.next_int()?,
-        trading_class: message.next_string()?,
-        multiplier: message.next_string()?,
-        ..Default::default()
-    };
+        let mut option_chain = OptionChain {
+            exchange: msg.next_string()?,
+            underlying_contract_id: msg.next_int()?,
+            trading_class: msg.next_string()?,
+            multiplier: msg.next_string()?,
+            ..Default::default()
+        };
 
-    let expirations_count = message.next_int()?;
-    option_chain.expirations.reserve(expirations_count as usize);
-    for _ in 0..expirations_count {
-        option_chain.expirations.push(message.next_string()?);
-    }
+        let expirations_count = msg.next_int()?;
+        option_chain.expirations.reserve(expirations_count as usize);
+        for _ in 0..expirations_count {
+            option_chain.expirations.push(msg.next_string()?);
+        }
 
-    let strikes_count = message.next_int()?;
-    option_chain.strikes.reserve(strikes_count as usize);
-    for _ in 0..strikes_count {
-        option_chain.strikes.push(message.next_double()?);
-    }
+        let strikes_count = msg.next_int()?;
+        option_chain.strikes.reserve(strikes_count as usize);
+        for _ in 0..strikes_count {
+            option_chain.strikes.push(msg.next_double()?);
+        }
 
-    Ok(option_chain)
+        Ok(option_chain)
+    })
 }
 
 // === Protobuf decoders ===
 
 use prost::Message;
 
-#[allow(dead_code)]
 pub(crate) fn decode_contract_data_proto(bytes: &[u8]) -> Result<ContractDetails, Error> {
     let p: crate::proto::ContractData = Message::decode(bytes)?;
     let default_contract = crate::proto::Contract::default();
@@ -328,6 +337,47 @@ pub(crate) fn decode_contract_data_proto(bytes: &[u8]) -> Result<ContractDetails
     let proto_contract = p.contract.as_ref().unwrap_or(&default_contract);
     let proto_details = p.contract_details.as_ref().unwrap_or(&default_details);
     Ok(crate::proto::decoders::decode_contract_details(proto_contract, proto_details))
+}
+
+pub(crate) fn decode_symbol_samples_proto(bytes: &[u8]) -> Result<Vec<ContractDescription>, Error> {
+    let p: crate::proto::SymbolSamples = Message::decode(bytes)?;
+    Ok(p.contract_descriptions
+        .into_iter()
+        .map(|d| {
+            let contract = d.contract.as_ref().map(crate::proto::decoders::decode_contract).unwrap_or_default();
+            ContractDescription {
+                contract,
+                derivative_security_types: d.derivative_sec_types,
+            }
+        })
+        .collect())
+}
+
+pub(crate) fn decode_market_rule_proto(bytes: &[u8]) -> Result<MarketRule, Error> {
+    let p: crate::proto::MarketRule = Message::decode(bytes)?;
+    Ok(MarketRule {
+        market_rule_id: p.market_rule_id.unwrap_or_default(),
+        price_increments: p
+            .price_increments
+            .into_iter()
+            .map(|pi| PriceIncrement {
+                low_edge: pi.low_edge.unwrap_or_default(),
+                increment: pi.increment.unwrap_or_default(),
+            })
+            .collect(),
+    })
+}
+
+pub(crate) fn decode_option_chain_proto(bytes: &[u8]) -> Result<OptionChain, Error> {
+    let p: crate::proto::SecDefOptParameter = Message::decode(bytes)?;
+    Ok(OptionChain {
+        exchange: p.exchange.unwrap_or_default(),
+        underlying_contract_id: p.underlying_con_id.unwrap_or_default(),
+        trading_class: p.trading_class.unwrap_or_default(),
+        multiplier: p.multiplier.unwrap_or_default(),
+        expirations: p.expirations,
+        strikes: p.strikes,
+    })
 }
 
 #[cfg(test)]

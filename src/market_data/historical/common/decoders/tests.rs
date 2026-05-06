@@ -473,3 +473,116 @@ fn test_decode_historical_ticks_bid_ask_proto() {
     assert_eq!(ticks[0].size_bid, 100);
     assert_eq!(ticks[0].size_ask, 200);
 }
+
+#[test]
+fn test_decode_histogram_data_proto() {
+    use prost::Message;
+    let proto_msg = crate::proto::HistogramData {
+        req_id: Some(1),
+        histogram_data_entries: vec![
+            crate::proto::HistogramDataEntry {
+                price: Some(100.5),
+                size: Some("50".into()),
+            },
+            crate::proto::HistogramDataEntry {
+                price: Some(101.0),
+                size: Some("75".into()),
+            },
+        ],
+    };
+    let mut bytes = Vec::new();
+    proto_msg.encode(&mut bytes).unwrap();
+
+    let result = decode_histogram_data_proto(&bytes).unwrap();
+    assert_eq!(result.len(), 2);
+    assert_eq!(result[0].price, 100.5);
+    assert_eq!(result[0].size, 50);
+    assert_eq!(result[1].price, 101.0);
+    assert_eq!(result[1].size, 75);
+}
+
+#[test]
+fn test_decode_historical_data_end_proto() {
+    use prost::Message;
+    // Wire format for start/end uses "YYYYMMDD HH:MM:SS TZ".
+    let proto_msg = crate::proto::HistoricalDataEnd {
+        req_id: Some(1),
+        start_date_str: Some("20260101 09:30:00 US/Eastern".into()),
+        end_date_str: Some("20260105 16:00:00 US/Eastern".into()),
+    };
+    let mut bytes = Vec::new();
+    proto_msg.encode(&mut bytes).unwrap();
+
+    let (start, end) = decode_historical_data_end_proto(&bytes).unwrap();
+    assert!(start < end);
+    assert_eq!(start.year(), 2026);
+    assert_eq!(end.year(), 2026);
+}
+
+#[test]
+fn test_decode_historical_schedule_proto() {
+    use prost::Message;
+    let proto_msg = crate::proto::HistoricalSchedule {
+        req_id: Some(1),
+        start_date_time: Some("20260101-09:30:00".into()),
+        end_date_time: Some("20260105-16:00:00".into()),
+        time_zone: Some("US/Eastern".into()),
+        historical_sessions: vec![crate::proto::HistoricalSession {
+            start_date_time: Some("20260102-09:30:00".into()),
+            end_date_time: Some("20260102-16:00:00".into()),
+            ref_date: Some("20260102".into()),
+        }],
+    };
+    let mut bytes = Vec::new();
+    proto_msg.encode(&mut bytes).unwrap();
+
+    let result = decode_historical_schedule_proto(&bytes).unwrap();
+    assert_eq!(result.time_zone, "US/Eastern");
+    assert_eq!(result.sessions.len(), 1);
+    assert_eq!(result.sessions[0].reference, date!(2026 - 01 - 02));
+}
+
+#[test]
+fn test_decode_historical_data_update_proto() {
+    use prost::Message;
+    let proto_msg = crate::proto::HistoricalDataUpdate {
+        req_id: Some(1),
+        historical_data_bar: Some(crate::proto::HistoricalDataBar {
+            date: Some("1681133400".into()), // unix timestamp
+            open: Some(150.0),
+            high: Some(151.0),
+            low: Some(149.5),
+            close: Some(150.75),
+            volume: Some("1000".into()),
+            wap: Some("150.5".into()),
+            bar_count: Some(42),
+        }),
+    };
+    let mut bytes = Vec::new();
+    proto_msg.encode(&mut bytes).unwrap();
+
+    let result = decode_historical_data_update_proto(&bytes).unwrap();
+    assert_eq!(result.open, 150.0);
+    assert_eq!(result.high, 151.0);
+    assert_eq!(result.low, 149.5);
+    assert_eq!(result.close, 150.75);
+    assert_eq!(result.volume, 1000.0);
+    assert_eq!(result.wap, 150.5);
+    assert_eq!(result.count, 42);
+    assert_eq!(result.date, datetime!(2023-04-10 13:30:00 UTC));
+}
+
+#[test]
+fn test_decode_historical_data_update_proto_missing_bar_defaults() {
+    use prost::Message;
+    let proto_msg = crate::proto::HistoricalDataUpdate {
+        req_id: Some(1),
+        historical_data_bar: None,
+    };
+    let mut bytes = Vec::new();
+    proto_msg.encode(&mut bytes).unwrap();
+
+    let result = decode_historical_data_update_proto(&bytes).unwrap();
+    assert_eq!(result.count, 0);
+    assert_eq!(result.date, time::OffsetDateTime::UNIX_EPOCH);
+}

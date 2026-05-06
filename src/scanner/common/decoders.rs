@@ -17,68 +17,72 @@ pub(in crate::scanner) fn decode_scanner_message(message: &mut ResponseMessage) 
 }
 
 pub(in crate::scanner) fn decode_scanner_parameters(mut message: ResponseMessage) -> Result<String, Error> {
-    message.skip(); // skip message type
-    message.skip(); // skip message version
+    message.decode_proto_or_text(decode_scanner_parameters_proto, |msg| {
+        msg.skip(); // skip message type
+        msg.skip(); // skip message version
+        msg.next_string()
+    })
+}
 
-    message.next_string()
+pub(crate) fn decode_scanner_parameters_proto(bytes: &[u8]) -> Result<String, Error> {
+    let p = crate::proto::ScannerParameters::decode(bytes)?;
+    Ok(p.xml.unwrap_or_default())
 }
 
 pub(in crate::scanner) fn decode_scanner_data(mut message: ResponseMessage) -> Result<Vec<ScannerData>, Error> {
-    message.skip(); // skip message type
-    message.skip(); // skip message version
-    message.skip(); // request id
+    message.decode_proto_or_text(decode_scanner_data_proto, |msg| {
+        msg.skip(); // skip message type
+        msg.skip(); // skip message version
+        msg.skip(); // request id
 
-    let number_of_elements = message.next_int()?;
-    let mut matches = Vec::with_capacity(number_of_elements as usize);
+        let number_of_elements = msg.next_int()?;
+        let mut matches = Vec::with_capacity(number_of_elements as usize);
 
-    for _ in 0..number_of_elements {
-        let mut scanner_data = ScannerData {
-            rank: message.next_int()?,
-            ..Default::default()
-        };
+        for _ in 0..number_of_elements {
+            let mut scanner_data = ScannerData {
+                rank: msg.next_int()?,
+                ..Default::default()
+            };
 
-        scanner_data.contract_details.contract.contract_id = message.next_int()?;
-        scanner_data.contract_details.contract.symbol = Symbol::from(message.next_string()?);
-        scanner_data.contract_details.contract.security_type = SecurityType::from(&message.next_string()?);
-        scanner_data.contract_details.contract.last_trade_date_or_contract_month = message.next_string()?;
-        scanner_data.contract_details.contract.strike = message.next_double()?;
-        scanner_data.contract_details.contract.right = message.next_string()?;
-        scanner_data.contract_details.contract.exchange = Exchange::from(message.next_string()?);
-        scanner_data.contract_details.contract.currency = Currency::from(message.next_string()?);
-        scanner_data.contract_details.contract.local_symbol = message.next_string()?;
-        scanner_data.contract_details.market_name = message.next_string()?;
-        scanner_data.contract_details.contract.trading_class = message.next_string()?;
+            scanner_data.contract_details.contract.contract_id = msg.next_int()?;
+            scanner_data.contract_details.contract.symbol = Symbol::from(msg.next_string()?);
+            scanner_data.contract_details.contract.security_type = SecurityType::from(&msg.next_string()?);
+            scanner_data.contract_details.contract.last_trade_date_or_contract_month = msg.next_string()?;
+            scanner_data.contract_details.contract.strike = msg.next_double()?;
+            scanner_data.contract_details.contract.right = msg.next_string()?;
+            scanner_data.contract_details.contract.exchange = Exchange::from(msg.next_string()?);
+            scanner_data.contract_details.contract.currency = Currency::from(msg.next_string()?);
+            scanner_data.contract_details.contract.local_symbol = msg.next_string()?;
+            scanner_data.contract_details.market_name = msg.next_string()?;
+            scanner_data.contract_details.contract.trading_class = msg.next_string()?;
 
-        message.skip(); // distance
-        message.skip(); // benchmark
-        message.skip(); // projection
+            msg.skip(); // distance
+            msg.skip(); // benchmark
+            msg.skip(); // projection
 
-        scanner_data.leg = message.next_string()?;
+            scanner_data.leg = msg.next_string()?;
 
-        matches.push(scanner_data);
-    }
+            matches.push(scanner_data);
+        }
 
-    Ok(matches)
+        Ok(matches)
+    })
 }
 
-#[allow(dead_code)]
 pub(crate) fn decode_scanner_data_proto(bytes: &[u8]) -> Result<Vec<ScannerData>, Error> {
     let p = crate::proto::ScannerData::decode(bytes)?;
 
     let mut results = Vec::with_capacity(p.scanner_data_element.len());
-    for elem in &p.scanner_data_element {
+    for elem in p.scanner_data_element {
         let contract = elem.contract.as_ref().map(crate::proto::decoders::decode_contract).unwrap_or_default();
-
-        let mut contract_details = crate::contracts::ContractDetails {
-            contract,
-            ..Default::default()
-        };
-        contract_details.market_name = elem.market_name.clone().unwrap_or_default();
-
         results.push(ScannerData {
             rank: elem.rank.unwrap_or_default(),
-            contract_details,
-            leg: elem.combo_key.clone().unwrap_or_default(),
+            contract_details: crate::contracts::ContractDetails {
+                contract,
+                market_name: elem.market_name.unwrap_or_default(),
+                ..Default::default()
+            },
+            leg: elem.combo_key.unwrap_or_default(),
         });
     }
 
@@ -135,5 +139,28 @@ mod tests {
         assert_eq!(results[0].rank, 0);
         assert_eq!(results[0].contract_details.contract.contract_id, 265598);
         assert_eq!(results[0].contract_details.market_name, "NMS");
+    }
+
+    #[test]
+    fn test_decode_scanner_parameters_proto() {
+        use prost::Message;
+        let xml = "<ScanParameterResponse><ScanTypeList /></ScanParameterResponse>";
+        let proto_msg = crate::proto::ScannerParameters { xml: Some(xml.into()) };
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_scanner_parameters_proto(&bytes).unwrap();
+        assert_eq!(result, xml);
+    }
+
+    #[test]
+    fn test_decode_scanner_parameters_proto_empty() {
+        use prost::Message;
+        let proto_msg = crate::proto::ScannerParameters { xml: None };
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_scanner_parameters_proto(&bytes).unwrap();
+        assert_eq!(result, "");
     }
 }

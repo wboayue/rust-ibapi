@@ -470,3 +470,94 @@ fn test_decode_contract_data_proto() {
     assert_eq!(result.category, "Computers");
     assert_eq!(result.subcategory, "Consumer Electronics");
 }
+
+#[test]
+fn test_decode_symbol_samples_proto() {
+    let proto_msg = crate::proto::SymbolSamples {
+        req_id: Some(1),
+        contract_descriptions: vec![
+            crate::proto::ContractDescription {
+                contract: Some(crate::proto::Contract {
+                    con_id: Some(265598),
+                    symbol: Some("AAPL".into()),
+                    sec_type: Some("STK".into()),
+                    primary_exch: Some("NASDAQ".into()),
+                    currency: Some("USD".into()),
+                    ..Default::default()
+                }),
+                derivative_sec_types: vec!["OPT".into(), "WAR".into()],
+            },
+            crate::proto::ContractDescription {
+                contract: Some(crate::proto::Contract {
+                    con_id: Some(76792991),
+                    symbol: Some("TSLA".into()),
+                    sec_type: Some("STK".into()),
+                    primary_exch: Some("NASDAQ".into()),
+                    currency: Some("USD".into()),
+                    ..Default::default()
+                }),
+                derivative_sec_types: vec![],
+            },
+        ],
+    };
+    let mut bytes = Vec::new();
+    proto_msg.encode(&mut bytes).unwrap();
+
+    let result = decode_symbol_samples_proto(&bytes).unwrap();
+    assert_eq!(result.len(), 2);
+    assert_eq!(result[0].contract.contract_id, 265598);
+    assert_eq!(result[0].contract.symbol.to_string(), "AAPL");
+    assert_eq!(result[0].derivative_security_types, vec!["OPT", "WAR"]);
+    assert_eq!(result[1].contract.contract_id, 76792991);
+    assert!(result[1].derivative_security_types.is_empty());
+}
+
+#[test]
+fn test_decode_market_rule_proto() {
+    let proto_msg = crate::proto::MarketRule {
+        market_rule_id: Some(26),
+        price_increments: vec![
+            crate::proto::PriceIncrement {
+                low_edge: Some(0.0),
+                increment: Some(0.01),
+            },
+            crate::proto::PriceIncrement {
+                low_edge: Some(1000.0),
+                increment: Some(0.05),
+            },
+        ],
+    };
+    let mut bytes = Vec::new();
+    proto_msg.encode(&mut bytes).unwrap();
+
+    let result = decode_market_rule_proto(&bytes).unwrap();
+    assert_eq!(result.market_rule_id, 26);
+    assert_eq!(result.price_increments.len(), 2);
+    assert_eq!(result.price_increments[0].low_edge, 0.0);
+    assert_eq!(result.price_increments[0].increment, 0.01);
+    assert_eq!(result.price_increments[1].low_edge, 1000.0);
+    assert_eq!(result.price_increments[1].increment, 0.05);
+}
+
+#[test]
+fn test_decode_option_chain_proto() {
+    let proto_msg = crate::proto::SecDefOptParameter {
+        req_id: Some(1),
+        exchange: Some("SMART".into()),
+        underlying_con_id: Some(265598),
+        trading_class: Some("AAPL".into()),
+        multiplier: Some("100".into()),
+        expirations: vec!["20260619".into(), "20260918".into()],
+        strikes: vec![150.0, 175.0, 200.0],
+    };
+    let mut bytes = Vec::new();
+    proto_msg.encode(&mut bytes).unwrap();
+
+    let result = decode_option_chain_proto(&bytes).unwrap();
+    assert_eq!(result.exchange, "SMART");
+    assert_eq!(result.underlying_contract_id, 265598);
+    assert_eq!(result.trading_class, "AAPL");
+    assert_eq!(result.multiplier, "100");
+    assert_eq!(result.expirations, vec!["20260619", "20260918"]);
+    assert_eq!(result.strikes, vec![150.0, 175.0, 200.0]);
+}

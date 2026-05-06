@@ -74,7 +74,7 @@ impl Client {
     ///
     /// The market rule for an instrument on a particular exchange provides details about how the minimum price increment changes with price.
     /// A list of market rule ids can be obtained by invoking [Self::contract_details()] for a particular contract.
-    /// The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [contracts::ContractDetails].
+    /// The returned market rule ID list will provide the market rule ID for the instrument in the correspond valid exchange list in [`crate::contracts::ContractDetails`].
     pub fn market_rule(&self, market_rule_id: i32) -> Result<MarketRule, Error> {
         check_version(self.server_version, Features::MARKET_RULES)?;
 

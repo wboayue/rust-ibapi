@@ -681,4 +681,166 @@ mod proto_tests {
         assert_eq!(result.market_maker, "GSCO");
         assert!(result.smart_depth);
     }
+
+    #[test]
+    fn test_decode_market_depth_exchanges_proto() {
+        let proto_msg = crate::proto::MarketDepthExchanges {
+            depth_market_data_descriptions: vec![
+                crate::proto::DepthMarketDataDescription {
+                    exchange: Some("ISLAND".into()),
+                    sec_type: Some("STK".into()),
+                    listing_exch: Some("NASDAQ".into()),
+                    service_data_type: Some("Deep2".into()),
+                    agg_group: Some(1),
+                },
+                crate::proto::DepthMarketDataDescription {
+                    exchange: Some("NYSE".into()),
+                    sec_type: Some("STK".into()),
+                    listing_exch: Some("NYSE".into()),
+                    service_data_type: Some("Deep".into()),
+                    agg_group: None,
+                },
+            ],
+        };
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_market_depth_exchanges_proto(&bytes).unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].exchange_name, "ISLAND");
+        assert_eq!(result[0].listing_exchange, "NASDAQ");
+        assert_eq!(result[0].service_data_type, "Deep2");
+        assert_eq!(result[0].aggregated_group, Some("1".to_string()));
+        assert_eq!(result[1].exchange_name, "NYSE");
+        assert_eq!(result[1].aggregated_group, None);
+    }
+
+    #[test]
+    fn test_decode_market_data_type_proto_helper() {
+        let proto_msg = crate::proto::MarketDataType {
+            req_id: Some(9000),
+            market_data_type: Some(3),
+        };
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+        assert_eq!(decode_market_data_type_proto(&bytes).unwrap(), MarketDataType::Delayed);
+
+        // Forward-compat: out-of-range int → Unknown (no error)
+        let proto_msg = crate::proto::MarketDataType {
+            req_id: Some(9000),
+            market_data_type: Some(99),
+        };
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+        assert_eq!(decode_market_data_type_proto(&bytes).unwrap(), MarketDataType::Unknown);
+    }
+
+    #[test]
+    fn test_decode_tick_request_parameters_proto() {
+        let proto_msg = crate::proto::TickReqParams {
+            req_id: Some(9000),
+            min_tick: Some("0.01".into()),
+            bbo_exchange: Some("ISLAND".into()),
+            snapshot_permissions: Some(2),
+            ..Default::default()
+        };
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let result = decode_tick_request_parameters_proto(&bytes).unwrap();
+        assert_eq!(result.min_tick, 0.01);
+        assert_eq!(result.bbo_exchange, "ISLAND");
+        assert_eq!(result.snapshot_permissions, 2);
+    }
+}
+
+#[cfg(test)]
+mod market_data_type_tests {
+    use super::*;
+    use crate::subscriptions::common::StreamDecoder;
+
+    #[test]
+    fn test_decode_market_data_type_through_tick_types() {
+        // Wire format: msg_type=58, version=1, request_id=9000, market_data_type=3 (Delayed).
+        // Drives TickTypes::decode — the production entry point — not the helper directly.
+        let mut message = ResponseMessage::from("58\01\09000\03\0");
+        let context = DecoderContext::new(0, None);
+
+        let decoded = TickTypes::decode(&context, &mut message).expect("decode failed");
+        match decoded {
+            TickTypes::MarketDataType(MarketDataType::Delayed) => {}
+            other => panic!("expected MarketDataType(Delayed), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_market_data_type_unknown_value_is_forward_compat() {
+        // Forward-compat: out-of-range int must not error or future TWS values kill subscriptions.
+        let mut message = ResponseMessage::from("58\01\09000\099\0");
+        let context = DecoderContext::new(0, None);
+
+        let decoded = TickTypes::decode(&context, &mut message).expect("decode must not fail");
+        match decoded {
+            TickTypes::MarketDataType(MarketDataType::Unknown) => {}
+            other => panic!("expected MarketDataType(Unknown), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_tick_types_decode_unknown_message_type_skips() {
+        // Unknown message types must skip-classify (UnexpectedResponse), not terminate.
+        // 92 = AccountValue, an arbitrary id not in TickTypes::RESPONSE_MESSAGE_IDS.
+        let mut message = ResponseMessage::from("92\0\0AccountCode\0DU12345\0\0DU12345\0");
+        let context = DecoderContext::new(0, None);
+
+        match TickTypes::decode(&context, &mut message) {
+            Err(Error::UnexpectedResponse(_)) => {}
+            other => panic!("expected UnexpectedResponse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_market_data_type_proto_through_tick_types() {
+        // Live TWS sends MarketDataType as protobuf (msg_id 258 → real_type 58).
+        // Drive end-to-end: build proto bytes, wrap via from_protobuf, decode.
+        let proto_msg = crate::proto::MarketDataType {
+            req_id: Some(9000),
+            market_data_type: Some(3),
+        };
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let mut message = ResponseMessage::from_protobuf(crate::messages::IncomingMessages::MarketDataType as i32, bytes, server_versions::PROTOBUF);
+        let context = DecoderContext::new(server_versions::PROTOBUF, None);
+
+        match TickTypes::decode(&context, &mut message).expect("proto decode failed") {
+            TickTypes::MarketDataType(MarketDataType::Delayed) => {}
+            other => panic!("expected MarketDataType(Delayed), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_tick_req_params_proto_through_tick_types() {
+        let proto_msg = crate::proto::TickReqParams {
+            req_id: Some(9000),
+            min_tick: Some("0.01".into()),
+            bbo_exchange: Some("ISLAND".into()),
+            snapshot_permissions: Some(2),
+            ..Default::default()
+        };
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        let mut message = ResponseMessage::from_protobuf(crate::messages::IncomingMessages::TickReqParams as i32, bytes, server_versions::PROTOBUF);
+        let context = DecoderContext::new(server_versions::PROTOBUF, None);
+
+        match TickTypes::decode(&context, &mut message).expect("proto decode failed") {
+            TickTypes::RequestParameters(p) => {
+                assert_eq!(p.min_tick, 0.01);
+                assert_eq!(p.bbo_exchange, "ISLAND");
+                assert_eq!(p.snapshot_permissions, 2);
+            }
+            other => panic!("expected RequestParameters, got {other:?}"),
+        }
+    }
 }

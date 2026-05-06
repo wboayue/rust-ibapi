@@ -141,14 +141,30 @@ pub(in crate::<module>) fn encode_my_request(request_id: i32, param: &str) -> Re
 }
 
 // src/<module>/common/decoders.rs
-pub(in crate::<module>) fn decode_my_response(message: ResponseMessage) -> Result<MyData, Error> {
-    let mut fields = message.into_iter();
-    fields.next(); // Skip message type
-    
-    let field = fields.next_string()?;
-    Ok(MyData { field })
+//
+// Dispatch on wire format. On server_version >= PROTOBUF (201), TWS may send
+// either text or protobuf for the same message type — text decoders run on a
+// protobuf ResponseMessage will EOF on field 2, because the protobuf form
+// carries only [msg_id_str] in `fields` and the payload lives in `raw_bytes`.
+pub(in crate::<module>) fn decode_my_response(message: &mut ResponseMessage) -> Result<MyData, Error> {
+    message.decode_proto_or_text(decode_my_response_proto, |msg| {
+        msg.skip(); // message type
+        msg.skip(); // request id (if present in this message type)
+        Ok(MyData {
+            field: msg.next_string()?,
+        })
+    })
+}
+
+pub(crate) fn decode_my_response_proto(bytes: &[u8]) -> Result<MyData, Error> {
+    let p = crate::proto::MyResponse::decode(bytes)?;
+    Ok(MyData {
+        field: p.field.unwrap_or_default(),
+    })
 }
 ```
+
+For `StreamDecoder::decode`, end the match with `_ => Err(Error::UnexpectedResponse(message.clone()))`. `process_decode_result` skip-classifies `UnexpectedResponse`; `NotImplemented` or `Simple` terminate the subscription on any unknown message type — that's the bug class of issue #508.
 
 ### Step 5: Implement Sync Version
 

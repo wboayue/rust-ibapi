@@ -40,6 +40,9 @@ impl TradingHours {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MarketDataType {
+    /// Sentinel for values not recognized by this client (forward compatibility).
+    /// Decode-only in spirit — encoding sends `0`, which TWS will reject.
+    Unknown = 0,
     /// Live market data
     Realtime = 1,
     /// Frozen market data (for when market is closed)
@@ -48,6 +51,18 @@ pub enum MarketDataType {
     Delayed = 3,
     /// Delayed frozen market data
     DelayedFrozen = 4,
+}
+
+impl From<i32> for MarketDataType {
+    fn from(value: i32) -> Self {
+        match value {
+            1 => Self::Realtime,
+            2 => Self::Frozen,
+            3 => Self::Delayed,
+            4 => Self::DelayedFrozen,
+            _ => Self::Unknown,
+        }
+    }
 }
 
 pub(crate) mod encoders {
