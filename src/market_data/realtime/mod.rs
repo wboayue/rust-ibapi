@@ -68,7 +68,6 @@ impl StreamDecoder<BidAsk> for BidAsk {
     fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::TickByTick => common::decoders::decode_bid_ask_tick(context, message),
-            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -105,7 +104,6 @@ impl StreamDecoder<MidPoint> for MidPoint {
     fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::TickByTick => common::decoders::decode_mid_point_tick(context, message),
-            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -139,12 +137,11 @@ pub struct Bar {
 }
 
 impl StreamDecoder<Bar> for Bar {
-    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::RealTimeBars, IncomingMessages::Error];
+    const RESPONSE_MESSAGE_IDS: &[IncomingMessages] = &[IncomingMessages::RealTimeBars];
 
     fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::RealTimeBars => common::decoders::decode_realtime_bar(context, message),
-            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
@@ -181,7 +178,6 @@ impl StreamDecoder<Trade> for Trade {
     fn decode(context: &DecoderContext, message: &mut ResponseMessage) -> Result<Self, Error> {
         match message.message_type() {
             IncomingMessages::TickByTick => common::decoders::decode_trade_tick(context, message),
-            IncomingMessages::Error => Err(Error::from(message.clone())),
             _ => Err(Error::UnexpectedResponse(message.clone())),
         }
     }
