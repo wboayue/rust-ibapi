@@ -175,6 +175,21 @@ match status.status {
 
 `Display`-format strings still match the IB wire vocabulary, so `format!("{}", status.status)` and `status.status.to_string()` produce the same values you saw in 2.x.
 
+### 6. `ResponseMessage::peek_string` returns `Result`
+
+`peek_string` previously returned `String` and panicked on out-of-bounds indices. It now returns `Result<String, Error>` matching its `peek_int` / `peek_long` siblings — the panic was the root cause of an issue where `CommissionsReport` proto messages (with `fields = [msg_id]`) crashed the dispatcher thread.
+
+```rust,ignore
+// v2.x
+let s = message.peek_string(2);
+
+// v3.0
+let s = message.peek_string(2)?;            // propagate
+let s = message.peek_string(2).unwrap_or_default();  // tolerate missing
+```
+
+This is a low-level cursor primitive most users will never touch directly; if you do, the upgrade is mechanical.
+
 ## Before / after: common subscription patterns
 
 ### Market data

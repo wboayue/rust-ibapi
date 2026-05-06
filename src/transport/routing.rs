@@ -43,21 +43,6 @@ impl Default for DecodedError {
     }
 }
 
-/// Minimal protobuf envelope to extract the first int32 field (tag 1).
-#[derive(Clone, PartialEq, ::prost::Message)]
-struct RoutingEnvelope {
-    #[prost(int32, optional, tag = "1")]
-    pub id: Option<i32>,
-}
-
-/// Try to extract a request/order ID from protobuf raw bytes.
-/// Most protobuf messages encode `req_id` or `order_id` at tag 1 as an int32.
-/// Messages where tag 1 is not the routing ID (e.g. CommissionsReport) will need
-/// per-message-type handling when those messages migrate to protobuf.
-fn protobuf_first_int(raw_bytes: &[u8]) -> Option<i32> {
-    prost::Message::decode(raw_bytes).ok().and_then(|e: RoutingEnvelope| e.id)
-}
-
 /// Decode the protobuf Error envelope. Defaults match the text-path accessors:
 /// missing id → `UNSPECIFIED_REQUEST_ID`, missing error_code → 0,
 /// missing strings → empty, missing error_time → `None`.
@@ -125,38 +110,18 @@ pub(crate) fn determine_routing(message: &ResponseMessage) -> RoutingDecision {
         return RoutingDecision::Error(decoded);
     }
 
-    // Protobuf messages: extract routing ID from raw bytes
-    if message.is_protobuf {
-        if is_order_message(message_type) {
-            let id = message.raw_bytes().and_then(protobuf_first_int).unwrap_or(-1);
-            return RoutingDecision::ByOrderId(id);
-        }
-        if is_shared_message(message_type) {
-            return RoutingDecision::SharedMessage(message_type);
-        }
-        let id = message.raw_bytes().and_then(protobuf_first_int).unwrap_or(-1);
-        if id >= 0 {
-            return RoutingDecision::ByRequestId(id);
-        }
-        return RoutingDecision::ByMessageType(message_type);
-    }
-
-    // Text messages: order routing
+    // ResponseMessage::{order_id, request_id} are proto-aware, so the same
+    // dispatch handles text and protobuf wire formats.
     if is_order_message(message_type) {
-        let order_id = message.order_id().unwrap_or(-1);
-        return RoutingDecision::ByOrderId(order_id);
+        return RoutingDecision::ByOrderId(message.order_id().unwrap_or(-1));
     }
-
-    // Check if message has a request ID
+    if is_shared_message(message_type) {
+        return RoutingDecision::SharedMessage(message_type);
+    }
     if let Some(request_id) = message.request_id() {
         return RoutingDecision::ByRequestId(request_id);
     }
-
-    if is_shared_message(message_type) {
-        RoutingDecision::SharedMessage(message_type)
-    } else {
-        RoutingDecision::ByMessageType(message_type)
-    }
+    RoutingDecision::ByMessageType(message_type)
 }
 
 /// Routing strategy for order-related messages.

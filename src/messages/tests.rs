@@ -597,6 +597,24 @@ fn test_request_id_protobuf_message_type_without_request_id_returns_none() {
 }
 
 #[test]
+fn test_proto_accessors_with_missing_raw_bytes_return_none() {
+    // Defensive: if `is_protobuf` is set but `raw_bytes` was somehow not
+    // populated (shouldn't happen via `from_protobuf` but a manually-built
+    // ResponseMessage could land in this state), all proto-aware accessors
+    // must short-circuit to None rather than decode garbage.
+    let message = ResponseMessage {
+        i: 0,
+        fields: vec![(IncomingMessages::ExecutionData as i32).to_string()],
+        server_version: crate::server_versions::PROTOBUF,
+        is_protobuf: true,
+        raw_bytes: None,
+    };
+    assert_eq!(message.request_id(), None);
+    assert_eq!(message.order_id(), None);
+    assert_eq!(message.execution_id(), None);
+}
+
+#[test]
 fn test_request_message_index() {
     let message = RequestMessage {
         fields: vec!["field0".to_string(), "field1".to_string(), "field2".to_string()],

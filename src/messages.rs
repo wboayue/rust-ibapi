@@ -836,9 +836,11 @@ impl std::ops::Index<usize> for RequestMessage {
     }
 }
 
-/// Minimal protobuf envelope decoding the int32 at tag 1. Used by routing
-/// helpers when the `req_id`/`order_id` (when at tag 1) is the only field
-/// they need. Mirrors `transport::routing::RoutingEnvelope`.
+/// Minimal protobuf envelope decoding the int32 at tag 1, used as the generic
+/// `request_id` shape across most TWS protobuf messages (`req_id` is always at
+/// tag 1 by convention). Per-message-type quirks (e.g. `ExecutionDetails`
+/// nesting `order_id` under `execution`) are handled inline in the accessor
+/// rather than here.
 #[derive(Clone, Copy, PartialEq, Eq, ::prost::Message)]
 struct ProtoIdEnvelope {
     #[prost(int32, optional, tag = "1")]
