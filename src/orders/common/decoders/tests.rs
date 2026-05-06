@@ -1261,6 +1261,34 @@ fn test_decode_order_status_proto_missing_doubles() {
 }
 
 #[test]
+fn test_decode_order_status_proto_rejects_empty_status() {
+    // Missing or empty status must error rather than silently defaulting to
+    // Submitted; matches the text decoder which fails on empty status fields.
+    use prost::Message;
+
+    for status in [None, Some(String::new())] {
+        let proto_msg = crate::proto::OrderStatus {
+            order_id: Some(99),
+            status,
+            filled: Some("0".into()),
+            remaining: Some("100".into()),
+            avg_fill_price: None,
+            perm_id: Some(1),
+            parent_id: Some(0),
+            last_fill_price: None,
+            client_id: Some(0),
+            why_held: None,
+            mkt_cap_price: None,
+        };
+
+        let mut bytes = Vec::new();
+        proto_msg.encode(&mut bytes).unwrap();
+
+        assert!(matches!(decode_order_status_proto(&bytes), Err(crate::Error::Parse(..))));
+    }
+}
+
+#[test]
 fn test_decode_commission_report_proto() {
     use prost::Message;
 

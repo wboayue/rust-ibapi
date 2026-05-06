@@ -148,7 +148,7 @@ if status.status.is_terminal() {
 
 `is_active()` covers `PreSubmitted`, `PendingSubmit`, `PendingCancel`, `Submitted`. The two helpers together cover 8 of 9 variants; `ApiPending` is neither active nor terminal — do not assume `!is_active() ⇒ is_terminal()`.
 
-`OrderStatusKind` implements `Display` (round-trips back to the IB string) and `FromStr`. The decoder propagates `Error::Parse` if TWS sends an unknown status string.
+`OrderStatusKind` implements `Display` (round-trips back to the IB string) and `FromStr`. The decoder propagates `Error::Parse` if TWS sends an unknown, empty, or missing status string — incomplete responses fail loudly rather than silently defaulting to `Submitted`. If your 2.x code treated `status: ""` as "no status yet," handle the new `Err(Error::Parse(_))` arm on the subscription instead.
 
 `OrderState.completed_status` stays `String` — TWS uses that field for free-form descriptions like `"Cancelled by Trader"` or `"Filled Size: 1"`, not enum values.
 

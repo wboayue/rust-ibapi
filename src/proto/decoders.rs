@@ -36,11 +36,14 @@ pub(crate) fn optional_string_f64(opt: &Option<String>) -> Option<f64> {
         .and_then(|v| if v == f64::MAX { None } else { Some(v) })
 }
 
-/// Parse an optional protocol string into a status. `None` or empty → `OrderStatusKind::default()`.
+/// Parse an optional protocol string into a status. Both `None` and empty
+/// strings surface as `Error::Parse` so incomplete TWS responses fail loudly
+/// instead of silently defaulting to `OrderStatusKind::Submitted` (which
+/// would mask the missing field downstream).
 pub(crate) fn parse_order_status(opt: &Option<String>) -> Result<OrderStatusKind, Error> {
     match opt.as_deref() {
-        Some(s) if !s.is_empty() => Ok(s.parse()?),
-        _ => Ok(OrderStatusKind::default()),
+        Some(s) if !s.is_empty() => s.parse(),
+        _ => Err(Error::Parse(0, String::new(), "missing OrderStatus".into())),
     }
 }
 
