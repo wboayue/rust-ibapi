@@ -16,12 +16,10 @@ pub(crate) fn decode_display_group_updated(message: &mut ResponseMessage) -> Res
     }
 
     // DisplayGroupUpdated: message_type, version, request_id, contract_info
-    let contract_info = if message.len() > 3 {
-        message.peek_string(3)
-    } else {
+    let contract_info = message.peek_string(3).unwrap_or_else(|_| {
         warn!("DisplayGroupUpdated message has fewer fields than expected (len={})", message.len());
         String::new()
-    };
+    });
 
     Ok(DisplayGroupUpdate::new(contract_info))
 }

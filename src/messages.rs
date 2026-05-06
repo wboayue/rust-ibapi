@@ -836,6 +836,15 @@ impl std::ops::Index<usize> for RequestMessage {
     }
 }
 
+/// Minimal protobuf envelope decoding the int32 at tag 1. Used by routing
+/// helpers when the `req_id`/`order_id` (when at tag 1) is the only field
+/// they need. Mirrors `transport::routing::RoutingEnvelope`.
+#[derive(Clone, Copy, PartialEq, Eq, ::prost::Message)]
+struct ProtoIdEnvelope {
+    #[prost(int32, optional, tag = "1")]
+    pub id: Option<i32>,
+}
+
 /// Parsed inbound message from TWS/Gateway.
 #[derive(Clone, Default, Debug)]
 pub struct ResponseMessage {
@@ -937,31 +946,81 @@ impl ResponseMessage {
     }
 
     /// Try to extract the request id from the message.
+    ///
+    /// For `server_version >= PROTOBUF`, the request id lives at proto tag 1
+    /// (int32) in `raw_bytes`. The text path reads it from the field index
+    /// returned by [`request_id_index`].
     pub fn request_id(&self) -> Option<i32> {
-        if let Some(i) = request_id_index(self.message_type()) {
-            if let Ok(request_id) = self.peek_int(i) {
-                return Some(request_id);
-            }
-        }
-        None
+        let i = request_id_index(self.message_type())?;
+        self.proto_or_text_int(i, |b| {
+            let env: ProtoIdEnvelope = prost::Message::decode(b).ok()?;
+            env.id
+        })
     }
 
     /// Try to extract the order id from the message.
+    ///
+    /// For `server_version >= PROTOBUF`, the proto layout differs per message
+    /// type — `OpenOrder`/`OrderStatus` carry `order_id` at tag 1, but
+    /// `ExecutionDetails` nests it under `execution.order_id`.
     pub fn order_id(&self) -> Option<i32> {
-        if let Some(i) = order_id_index(self.message_type()) {
-            if let Ok(order_id) = self.peek_int(i) {
-                return Some(order_id);
+        let i = order_id_index(self.message_type())?;
+        let kind = self.message_type();
+        self.proto_or_text_int(i, |b| match kind {
+            IncomingMessages::OpenOrder => {
+                let p: crate::proto::OpenOrder = prost::Message::decode(b).ok()?;
+                p.order_id
             }
-        }
-        None
+            IncomingMessages::OrderStatus => {
+                let p: crate::proto::OrderStatus = prost::Message::decode(b).ok()?;
+                p.order_id
+            }
+            IncomingMessages::ExecutionData => {
+                let p: crate::proto::ExecutionDetails = prost::Message::decode(b).ok()?;
+                p.execution.and_then(|e| e.order_id)
+            }
+            IncomingMessages::ExecutionDataEnd => {
+                let p: crate::proto::ExecutionDetailsEnd = prost::Message::decode(b).ok()?;
+                p.req_id
+            }
+            _ => None,
+        })
     }
 
     /// Try to extract the execution id from the message.
+    ///
+    /// For `server_version >= PROTOBUF`, `ExecutionData` and `CommissionsReport`
+    /// arrive as protobuf with `fields = [msg_id]`; the exec_id lives inside
+    /// `raw_bytes` instead of at a fixed text-field index.
     pub fn execution_id(&self) -> Option<String> {
         match self.message_type() {
-            IncomingMessages::ExecutionData => Some(self.peek_string(14)),
-            IncomingMessages::CommissionsReport => Some(self.peek_string(2)),
+            IncomingMessages::ExecutionData => self.proto_or_text_string(14, |b| {
+                let p: crate::proto::ExecutionDetails = prost::Message::decode(b).ok()?;
+                p.execution.and_then(|e| e.exec_id)
+            }),
+            IncomingMessages::CommissionsReport => self.proto_or_text_string(2, |b| {
+                let p: crate::proto::CommissionAndFeesReport = prost::Message::decode(b).ok()?;
+                p.exec_id
+            }),
             _ => None,
+        }
+    }
+
+    /// Pull a string out of either the protobuf payload or a text-field index.
+    fn proto_or_text_string(&self, text_idx: usize, proto_extract: impl FnOnce(&[u8]) -> Option<String>) -> Option<String> {
+        if self.is_protobuf {
+            proto_extract(self.raw_bytes()?)
+        } else {
+            self.peek_string(text_idx).ok()
+        }
+    }
+
+    /// Pull an int out of either the protobuf payload or a text-field index.
+    fn proto_or_text_int(&self, text_idx: usize, proto_extract: impl FnOnce(&[u8]) -> Option<i32>) -> Option<i32> {
+        if self.is_protobuf {
+            proto_extract(self.raw_bytes()?)
+        } else {
+            self.peek_int(text_idx).ok()
         }
     }
 
@@ -992,8 +1051,11 @@ impl ResponseMessage {
     }
 
     /// Peek a string field without advancing the cursor.
-    pub fn peek_string(&self, i: usize) -> String {
-        self.fields[i].to_owned()
+    pub fn peek_string(&self, i: usize) -> Result<String, Error> {
+        if i >= self.fields.len() {
+            return Err(Error::Simple("expected string and found end of message".into()));
+        }
+        Ok(self.fields[i].to_owned())
     }
 
     /// Consume and parse the next integer field.
@@ -1191,11 +1253,7 @@ impl ResponseMessage {
     /// Extract the error message text from an error message.
     pub fn error_message(&self) -> String {
         let idx = self.error_message_index();
-        if idx < self.fields.len() {
-            self.peek_string(idx)
-        } else {
-            String::from("Unknown error")
-        }
+        self.peek_string(idx).unwrap_or_else(|_| String::from("Unknown error"))
     }
 
     /// Extract the error timestamp from an error message.
@@ -1220,11 +1278,7 @@ impl ResponseMessage {
         }
         // New format: msg_type, request_id, error_code, error_msg, advanced_order_reject_json, error_time
         let idx = self.error_message_index() + 1;
-        if idx < self.fields.len() {
-            self.peek_string(idx)
-        } else {
-            String::new()
-        }
+        self.peek_string(idx).unwrap_or_default()
     }
 
     /// Build a response message from a NUL-delimited payload.

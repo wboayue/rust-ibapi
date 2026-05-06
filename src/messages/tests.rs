@@ -430,8 +430,9 @@ fn test_response_message_peek_operations() {
     assert!(message.peek_int(4).is_err()); // Out of bounds (only 4 fields, indices 0-3)
 
     // Test peek_string
-    assert_eq!(message.peek_string(2), "abc");
-    assert_eq!(message.peek_string(0), "1");
+    assert_eq!(message.peek_string(2).unwrap(), "abc");
+    assert_eq!(message.peek_string(0).unwrap(), "1");
+    assert!(message.peek_string(99).is_err()); // Out of bounds
 }
 
 #[test]
@@ -480,6 +481,119 @@ fn test_response_message_special_fields() {
     // CommissionsReport message (message type 59) - execution_id at index 2
     let commission_message = ResponseMessage::from("59\0field1\0exec123\0");
     assert_eq!(commission_message.execution_id(), Some("exec123".to_string()));
+}
+
+#[test]
+fn test_execution_id_protobuf_commissions_report() {
+    use prost::Message;
+    let p = crate::proto::CommissionAndFeesReport {
+        exec_id: Some("exec-proto-1".into()),
+        ..Default::default()
+    };
+    let mut bytes = Vec::new();
+    p.encode(&mut bytes).unwrap();
+    let message = ResponseMessage::from_protobuf(IncomingMessages::CommissionsReport as i32, bytes, crate::server_versions::PROTOBUF);
+    assert_eq!(message.execution_id(), Some("exec-proto-1".to_string()));
+}
+
+#[test]
+fn test_execution_id_protobuf_execution_data() {
+    use prost::Message;
+    let p = crate::proto::ExecutionDetails {
+        req_id: Some(7),
+        contract: None,
+        execution: Some(crate::proto::Execution {
+            exec_id: Some("exec-proto-2".into()),
+            ..Default::default()
+        }),
+    };
+    let mut bytes = Vec::new();
+    p.encode(&mut bytes).unwrap();
+    let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionData as i32, bytes, crate::server_versions::PROTOBUF);
+    assert_eq!(message.execution_id(), Some("exec-proto-2".to_string()));
+}
+
+#[test]
+fn test_execution_id_protobuf_unknown_message_type_returns_none() {
+    let message = ResponseMessage::from_protobuf(IncomingMessages::OpenOrder as i32, Vec::new(), crate::server_versions::PROTOBUF);
+    assert_eq!(message.execution_id(), None);
+}
+
+#[test]
+fn test_order_id_protobuf_open_order() {
+    use prost::Message;
+    let p = crate::proto::OpenOrder {
+        order_id: Some(42),
+        ..Default::default()
+    };
+    let mut bytes = Vec::new();
+    p.encode(&mut bytes).unwrap();
+    let message = ResponseMessage::from_protobuf(IncomingMessages::OpenOrder as i32, bytes, crate::server_versions::PROTOBUF);
+    assert_eq!(message.order_id(), Some(42));
+}
+
+#[test]
+fn test_order_id_protobuf_order_status() {
+    use prost::Message;
+    let p = crate::proto::OrderStatus {
+        order_id: Some(99),
+        status: Some("Filled".into()),
+        ..Default::default()
+    };
+    let mut bytes = Vec::new();
+    p.encode(&mut bytes).unwrap();
+    let message = ResponseMessage::from_protobuf(IncomingMessages::OrderStatus as i32, bytes, crate::server_versions::PROTOBUF);
+    assert_eq!(message.order_id(), Some(99));
+}
+
+#[test]
+fn test_order_id_protobuf_execution_data_nested() {
+    use prost::Message;
+    // ExecutionData carries order_id nested under `execution.order_id`,
+    // not at proto tag 1 (which is req_id).
+    let p = crate::proto::ExecutionDetails {
+        req_id: Some(7),
+        contract: None,
+        execution: Some(crate::proto::Execution {
+            order_id: Some(123),
+            ..Default::default()
+        }),
+    };
+    let mut bytes = Vec::new();
+    p.encode(&mut bytes).unwrap();
+    let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionData as i32, bytes, crate::server_versions::PROTOBUF);
+    assert_eq!(message.order_id(), Some(123));
+    assert_eq!(message.request_id(), Some(7));
+}
+
+#[test]
+fn test_order_id_protobuf_execution_data_end() {
+    use prost::Message;
+    let p = crate::proto::ExecutionDetailsEnd { req_id: Some(55) };
+    let mut bytes = Vec::new();
+    p.encode(&mut bytes).unwrap();
+    let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionDataEnd as i32, bytes, crate::server_versions::PROTOBUF);
+    // Existing text-path returns peek_int(2) (which is req_id in text layout);
+    // proto path mirrors that semantic.
+    assert_eq!(message.order_id(), Some(55));
+}
+
+#[test]
+fn test_request_id_protobuf_tag1() {
+    use prost::Message;
+    // HistoricalDataEnd-shaped envelope: just req_id at tag 1.
+    let p = ProtoIdEnvelope { id: Some(314) };
+    let mut bytes = Vec::new();
+    p.encode(&mut bytes).unwrap();
+    let message = ResponseMessage::from_protobuf(IncomingMessages::HistoricalDataEnd as i32, bytes, crate::server_versions::PROTOBUF);
+    assert_eq!(message.request_id(), Some(314));
+}
+
+#[test]
+fn test_request_id_protobuf_message_type_without_request_id_returns_none() {
+    // OpenOrder has no entry in request_id_index → None regardless of payload.
+    let message = ResponseMessage::from_protobuf(IncomingMessages::OpenOrder as i32, Vec::new(), crate::server_versions::PROTOBUF);
+    assert_eq!(message.request_id(), None);
 }
 
 #[test]
@@ -1260,8 +1374,8 @@ fn test_response_message_access_patterns() {
     assert_eq!(message.message_type(), IncomingMessages::OpenOrder);
 
     // Test multiple peeks don't change state
-    assert_eq!(message.peek_string(2), "field2");
-    assert_eq!(message.peek_string(2), "field2");
+    assert_eq!(message.peek_string(2).unwrap(), "field2");
+    assert_eq!(message.peek_string(2).unwrap(), "field2");
     assert_eq!(message.peek_int(1).unwrap(), 123);
     assert_eq!(message.peek_int(1).unwrap(), 123);
 
