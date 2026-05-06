@@ -418,6 +418,9 @@ fn main() {
                 OrderUpdate::OrderStatus(status) => {
                     println!("Order {} Status: {}", status.order_id, status.status);
                     println!("  Filled: {}, Remaining: {}", status.filled, status.remaining);
+                    if status.status.is_terminal() {
+                        break;
+                    }
                 }
                 OrderUpdate::OpenOrder(data) => {
                     println!("Open Order {}: {} {}",
@@ -429,9 +432,6 @@ fn main() {
                 }
                 OrderUpdate::CommissionReport(report) => {
                     println!("Commission: ${}", report.commission);
-                }
-                OrderUpdate::Message(msg) => {
-                    println!("Message: {}", msg.message);
                 }
             }
         }
@@ -476,6 +476,9 @@ async fn main() {
                 Ok(OrderUpdate::OrderStatus(status)) => {
                     println!("Order {} Status: {}", status.order_id, status.status);
                     println!("  Filled: {}, Remaining: {}", status.filled, status.remaining);
+                    if status.status.is_terminal() {
+                        break;
+                    }
                 }
                 Ok(OrderUpdate::OpenOrder(data)) => {
                     println!("Open Order {}: {} {}",
@@ -487,9 +490,6 @@ async fn main() {
                 }
                 Ok(OrderUpdate::CommissionReport(report)) => {
                     println!("Commission: ${}", report.commission);
-                }
-                Ok(OrderUpdate::Message(msg)) => {
-                    println!("Message: {}", msg.message);
                 }
                 Err(e) => {
                     eprintln!("Error: {:?}", e);
@@ -522,11 +522,12 @@ async fn main() {
 ```
 
 The order update stream provides real-time notifications for:
-- **OrderStatus**: Status changes (Submitted, Filled, Cancelled, etc.)
+- **OrderStatus**: Status changes typed as [`OrderStatusKind`](https://docs.rs/ibapi/latest/ibapi/orders/enum.OrderStatusKind.html) (`Submitted`, `Filled`, `Cancelled`, …) with `is_active()` / `is_terminal()` helpers
 - **OpenOrder**: Order details when opened or modified
 - **ExecutionData**: Fill notifications with price and quantity
 - **CommissionReport**: Commission charges for executions
-- **Message**: System messages and notifications
+
+Per-order TWS warnings (e.g. quote-throttling 2100 codes scoped to an order) flow through `SubscriptionItem::Notice` on the per-order subscription returned by `place_order`, not through `OrderUpdate`. See [Handling notifications](#handling-notifications).
 
 ## Handling notifications
 

@@ -129,3 +129,24 @@ Use this format for GitHub release notes:
 ## Maintaining Documentation
 
 Keep `CLAUDE.md`, `README.md`, and documentation up to date as the codebase evolves. When patterns change, conventions are established, or new modules are added, update the relevant files.
+
+### Keep `README.md` and `docs/migration-3.0.md` in sync with v3.0 work
+
+Treat `README.md` and `docs/migration-3.0.md` as part of the public API. Every PR that lands a v3.0 breaking change must update both in the same PR — leaving them stale produces the worst kind of drift, where the migration guide tells users to follow patterns that no longer compile.
+
+Update `docs/migration-3.0.md` whenever the PR:
+
+- Removes or renames a public type, struct field, enum variant, method, or re-export.
+- Changes the type of a public field (`String` → typed enum, `bool` → typed mode enum, etc.).
+- Changes the shape of a return type (e.g. `Subscription<T>::next()` envelope changes, new `Result` variants).
+- Adds or removes a public builder method, callback hook, or feature flag that 2.x users would discover via search.
+
+Update `README.md` whenever the PR:
+
+- Touches code shown in any README example (the examples must still compile and reflect the canonical idiom).
+- Removes a variant matched on in any README `match` block.
+- Adds an idiom that should be the canonical happy-path (e.g. `is_terminal()` instead of magic-string compares — once shipped, the README should show the new form).
+
+Mechanical check before opening the PR: grep `README.md` and `docs/migration-3.0.md` for any name you changed, removed, or replaced in this PR. Stale references are blockers, not nits.
+
+Cross-link in both directions: a new section in `docs/migration-3.0.md` should usually be linkable from a README example or its surrounding prose, and the README's "Migrating?" pointer near the top should keep working.

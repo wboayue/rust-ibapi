@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use ibapi::client::blocking::Client;
 use ibapi::contracts::Contract;
-use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId};
+use ibapi::orders::{Action, BracketOrderIds, CancelOrder, ExecutionFilter, Order, OrderId, OrderStatusKind};
 use ibapi::subscriptions::SubscriptionItem;
 use ibapi_test::{rate_limit, ClientId, GATEWAY};
 use serial_test::serial;
@@ -205,7 +205,7 @@ fn cancel_bracket_order() {
         .expect("cancel subscription error");
     match item {
         SubscriptionItem::Data(CancelOrder::OrderStatus(s)) => {
-            assert_eq!(s.status, "Cancelled", "parent order should be cancelled")
+            assert_eq!(s.status, OrderStatusKind::Cancelled, "parent order should be cancelled")
         }
         SubscriptionItem::Notice(_) => {} // cancellation notice is also acceptable
     }

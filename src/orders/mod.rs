@@ -702,6 +702,100 @@ impl Action {
     }
 }
 
+/// The lifecycle state of an order, as reported by TWS.
+///
+/// See the [IB OrderStatus reference](https://interactivebrokers.github.io/tws-api/order_submission.html#order_status).
+///
+/// Default is [`OrderStatusKind::Submitted`] to match the [`Action`] enum's
+/// pragmatic default; [`OrderStatus::default`] callers should overwrite it
+/// before reading.
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OrderStatusKind {
+    /// Order has not yet been sent to the IB server, e.g. while waiting for a
+    /// security definition lookup. Uncommon in practice.
+    ApiPending,
+    /// Order has been transmitted to the destination but no acknowledgment has
+    /// been received yet.
+    PendingSubmit,
+    /// A cancellation request has been sent but the destination has not yet
+    /// confirmed it. Cancellation is not guaranteed at this point.
+    PendingCancel,
+    /// A simulated order type has been accepted by the IB system and is held
+    /// pending its election criteria; once met, it is transmitted to the
+    /// destination.
+    PreSubmitted,
+    /// Order has been accepted by the system and is working at the
+    /// destination.
+    #[default]
+    Submitted,
+    /// API client requested cancellation after submission but before
+    /// acknowledgment, producing this transitional state.
+    ApiCancelled,
+    /// Destination has confirmed the order is fully cancelled. Terminal.
+    /// May also occur if IB or the destination unexpectedly rejects the
+    /// order.
+    Cancelled,
+    /// Order has been completely filled. Terminal.
+    /// (Market orders may not always trigger this state.)
+    Filled,
+    /// Order was received but is no longer active because it was rejected or
+    /// cancelled. Terminal.
+    Inactive,
+}
+
+impl std::fmt::Display for OrderStatusKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            OrderStatusKind::ApiPending => "ApiPending",
+            OrderStatusKind::PendingSubmit => "PendingSubmit",
+            OrderStatusKind::PendingCancel => "PendingCancel",
+            OrderStatusKind::PreSubmitted => "PreSubmitted",
+            OrderStatusKind::Submitted => "Submitted",
+            OrderStatusKind::ApiCancelled => "ApiCancelled",
+            OrderStatusKind::Cancelled => "Cancelled",
+            OrderStatusKind::Filled => "Filled",
+            OrderStatusKind::Inactive => "Inactive",
+        })
+    }
+}
+
+impl std::str::FromStr for OrderStatusKind {
+    type Err = crate::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "ApiPending" => Self::ApiPending,
+            "PendingSubmit" => Self::PendingSubmit,
+            "PendingCancel" => Self::PendingCancel,
+            "PreSubmitted" => Self::PreSubmitted,
+            "Submitted" => Self::Submitted,
+            "ApiCancelled" => Self::ApiCancelled,
+            "Cancelled" => Self::Cancelled,
+            "Filled" => Self::Filled,
+            "Inactive" => Self::Inactive,
+            other => return Err(crate::Error::Parse(0, other.to_string(), "unknown OrderStatus".into())),
+        })
+    }
+}
+
+impl OrderStatusKind {
+    /// Order is still working in the market: `PreSubmitted`, `PendingSubmit`,
+    /// `PendingCancel`, `Submitted`.
+    ///
+    /// Note that [`is_active`](Self::is_active) and
+    /// [`is_terminal`](Self::is_terminal) together cover 8 of 9 variants —
+    /// `ApiPending` is neither, so do not assume `!is_active() ⇒ is_terminal()`.
+    pub fn is_active(self) -> bool {
+        matches!(self, Self::PreSubmitted | Self::PendingSubmit | Self::PendingCancel | Self::Submitted)
+    }
+
+    /// Order has reached a final state: `Filled`, `Cancelled`, `ApiCancelled`,
+    /// `Inactive`.
+    pub fn is_terminal(self) -> bool {
+        matches!(self, Self::Filled | Self::Cancelled | Self::ApiCancelled | Self::Inactive)
+    }
+}
+
 /// Time in force specifies how long an order remains active.
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -1182,8 +1276,8 @@ pub struct OrderData {
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct OrderState {
-    /// The order's current status
-    pub status: String,
+    /// The order's current status. See [`OrderStatusKind`].
+    pub status: OrderStatusKind,
     /// The account's current initial margin.
     pub initial_margin_before: Option<f64>,
     /// The account's current maintenance margin
@@ -1240,7 +1334,8 @@ pub struct OrderState {
     pub warning_text: String,
     /// Timestamp when the order completed execution.
     pub completed_time: String,
-    /// Status value after completion (e.g. `Filled`).
+    /// Free-form descriptive status sent at completion (e.g. `"Cancelled by Trader"`,
+    /// `"Filled Size: 1"`). For the canonical lifecycle state, use [`status`](Self::status).
     pub completed_status: String,
 }
 
@@ -1457,17 +1552,9 @@ pub enum OrderUpdate {
 pub struct OrderStatus {
     /// The order's client id.
     pub order_id: i32,
-    /// The current status of the order. Possible values:
-    /// * ApiPending - indicates order has not yet been sent to IB server, for instance if there is a delay in receiving the security definition. Uncommonly received.
-    /// * PendingSubmit - indicates that you have transmitted the order, but have not yet received confirmation that it has been accepted by the order destination.
-    /// * PendingCancel - indicates that you have sent a request to cancel the order but have not yet received cancel confirmation from the order destination. At this point, your order is not confirmed canceled. It is not guaranteed that the cancellation will be successful.
-    /// * PreSubmitted - indicates that a simulated order type has been accepted by the IB system and that this order has yet to be elected. The order is held in the IB system until the election criteria are met. At that time the order is transmitted to the order destination as specified .
-    /// * Submitted - indicates that your order has been accepted by the system.
-    /// * ApiCancelled - after an order has been submitted and before it has been acknowledged, an API client client can request its cancelation, producing this state.
-    /// * Cancelled - indicates that the balance of your order has been confirmed canceled by the IB system. This could occur unexpectedly when IB or the destination has rejected your order.
-    /// * Filled - indicates that the order has been completely filled. Market orders executions will not always trigger a Filled status.
-    /// * Inactive - indicates that the order was received by the system but is no longer active because it was rejected or canceled.
-    pub status: String,
+    /// The current status of the order. See [`OrderStatusKind`] for variant
+    /// definitions and helpers like [`is_terminal`](OrderStatusKind::is_terminal).
+    pub status: OrderStatusKind,
     /// Number of filled positions.
     pub filled: f64,
     /// The remnant positions.
@@ -1570,5 +1657,8 @@ mod sync;
 
 #[cfg(feature = "async")]
 mod r#async;
+
+#[cfg(test)]
+mod tests;
 
 // Async API methods are now on Client directly via orders/async.rs

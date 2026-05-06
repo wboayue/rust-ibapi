@@ -683,7 +683,7 @@ impl OrderDecoder {
     }
 
     fn read_order_status(&mut self) -> Result<(), Error> {
-        self.order_state.status = self.message.next_string()?;
+        self.order_state.status = self.message.next_string()?.parse()?;
         Ok(())
     }
 
@@ -859,7 +859,7 @@ pub(crate) fn decode_order_status(server_version: i32, message: &mut ResponseMes
 
         let mut order_status = OrderStatus {
             order_id: msg.next_int()?,
-            status: msg.next_string()?,
+            status: msg.next_string()?.parse()?,
             filled: msg.next_double()?,
             remaining: msg.next_double()?,
             average_fill_price: msg.next_optional_double()?,
@@ -1148,7 +1148,12 @@ pub(crate) fn decode_open_order_proto(bytes: &[u8]) -> Result<OrderData, Error> 
     let p: crate::proto::OpenOrder = prost::Message::decode(bytes)?;
     let contract = p.contract.as_ref().map(crate::proto::decoders::decode_contract).unwrap_or_default();
     let order = p.order.as_ref().map(crate::proto::decoders::decode_order).unwrap_or_default();
-    let order_state = p.order_state.as_ref().map(crate::proto::decoders::decode_order_state).unwrap_or_default();
+    let order_state = p
+        .order_state
+        .as_ref()
+        .map(crate::proto::decoders::decode_order_state)
+        .transpose()?
+        .unwrap_or_default();
 
     Ok(OrderData {
         order_id: p.order_id.unwrap_or_default(),
@@ -1163,7 +1168,7 @@ pub(crate) fn decode_order_status_proto(bytes: &[u8]) -> Result<OrderStatus, Err
 
     Ok(OrderStatus {
         order_id: p.order_id.unwrap_or_default(),
-        status: p.status.unwrap_or_default(),
+        status: crate::proto::decoders::parse_order_status(&p.status)?,
         filled: crate::proto::decoders::parse_f64(&p.filled),
         remaining: crate::proto::decoders::parse_f64(&p.remaining),
         average_fill_price: p.avg_fill_price,
@@ -1190,7 +1195,12 @@ pub(crate) fn decode_completed_order_proto(bytes: &[u8]) -> Result<OrderData, Er
     let p: crate::proto::CompletedOrder = prost::Message::decode(bytes)?;
     let contract = p.contract.as_ref().map(crate::proto::decoders::decode_contract).unwrap_or_default();
     let order = p.order.as_ref().map(crate::proto::decoders::decode_order).unwrap_or_default();
-    let order_state = p.order_state.as_ref().map(crate::proto::decoders::decode_order_state).unwrap_or_default();
+    let order_state = p
+        .order_state
+        .as_ref()
+        .map(crate::proto::decoders::decode_order_state)
+        .transpose()?
+        .unwrap_or_default();
 
     Ok(OrderData {
         order_id: order.order_id,
