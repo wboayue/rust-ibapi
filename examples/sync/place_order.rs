@@ -30,9 +30,13 @@ fn main() {
     let connection_string = matches.get_one::<String>("connection_string").expect("connection_string is required");
     let stock_symbol = matches.get_one::<String>("stock").expect("stock symbol is required");
 
-    if let Some((action, quantity)) = get_order(&matches) {
-        println!("action: {action}, quantity: {quantity}");
-    }
+    let (action_str, quantity) = get_order(&matches).expect("specify --buy <QTY> or --sell <QTY>");
+    let action = match action_str.as_str() {
+        "BUY" => orders::Action::Buy,
+        "SELL" => orders::Action::Sell,
+        _ => unreachable!("get_order only emits BUY or SELL"),
+    };
+    println!("action: {action}, quantity: {quantity}");
 
     println!("connection_string: {connection_string}, stock_symbol: {stock_symbol}");
 
@@ -46,7 +50,7 @@ fn main() {
 
     let order_id = client.next_order_id();
     println!("order_id: {order_id}");
-    let order = order_builder::market_order(orders::Action::Buy, 100.0);
+    let order = order_builder::market_order(action, f64::from(quantity));
 
     println!("contract: {contract:?}, order: {order:?}");
 
