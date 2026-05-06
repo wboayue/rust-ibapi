@@ -1,3 +1,5 @@
+use prost::Message;
+
 use super::*;
 use crate::messages::ResponseMessage;
 
@@ -276,23 +278,16 @@ fn test_order_message_routing() {
     }
 }
 
-// === Proto-form routing — exercises the `message.{order_id,request_id}`
-// proto path through `determine_routing`. Regression guard against the bug
-// class fixed by PR #519: text-field accessors silently failed on protobuf
-// messages, breaking subscription delivery. ===
-
-fn encode_proto<P: prost::Message>(p: &P) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    p.encode(&mut bytes).expect("proto encode");
-    bytes
-}
+// Proto-form routing: exercises the `message.{order_id,request_id}` proto
+// path through `determine_routing`.
 
 #[test]
 fn test_determine_routing_protobuf_open_order() {
-    let bytes = encode_proto(&crate::proto::OpenOrder {
+    let bytes = crate::proto::OpenOrder {
         order_id: Some(58),
         ..Default::default()
-    });
+    }
+    .encode_to_vec();
     let message = ResponseMessage::from_protobuf(IncomingMessages::OpenOrder as i32, bytes, crate::server_versions::PROTOBUF);
     match determine_routing(&message) {
         RoutingDecision::ByOrderId(id) => assert_eq!(id, 58),
@@ -302,11 +297,12 @@ fn test_determine_routing_protobuf_open_order() {
 
 #[test]
 fn test_determine_routing_protobuf_order_status() {
-    let bytes = encode_proto(&crate::proto::OrderStatus {
+    let bytes = crate::proto::OrderStatus {
         order_id: Some(58),
         status: Some("Filled".into()),
         ..Default::default()
-    });
+    }
+    .encode_to_vec();
     let message = ResponseMessage::from_protobuf(IncomingMessages::OrderStatus as i32, bytes, crate::server_versions::PROTOBUF);
     match determine_routing(&message) {
         RoutingDecision::ByOrderId(id) => assert_eq!(id, 58),
@@ -318,14 +314,15 @@ fn test_determine_routing_protobuf_order_status() {
 fn test_determine_routing_protobuf_execution_data_uses_nested_order_id() {
     // ExecutionData's tag 1 is req_id (-1 for unsolicited). The order_id is
     // nested under `execution.order_id`. Routing must pick the nested value.
-    let bytes = encode_proto(&crate::proto::ExecutionDetails {
+    let bytes = crate::proto::ExecutionDetails {
         req_id: Some(-1),
         contract: None,
         execution: Some(crate::proto::Execution {
             order_id: Some(58),
             ..Default::default()
         }),
-    });
+    }
+    .encode_to_vec();
     let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionData as i32, bytes, crate::server_versions::PROTOBUF);
     match determine_routing(&message) {
         RoutingDecision::ByOrderId(id) => assert_eq!(id, 58),
@@ -335,7 +332,7 @@ fn test_determine_routing_protobuf_execution_data_uses_nested_order_id() {
 
 #[test]
 fn test_determine_routing_protobuf_execution_data_end() {
-    let bytes = encode_proto(&crate::proto::ExecutionDetailsEnd { req_id: Some(7) });
+    let bytes = crate::proto::ExecutionDetailsEnd { req_id: Some(7) }.encode_to_vec();
     let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionDataEnd as i32, bytes, crate::server_versions::PROTOBUF);
     match determine_routing(&message) {
         RoutingDecision::ByOrderId(id) => assert_eq!(id, 7),
@@ -348,10 +345,11 @@ fn test_determine_routing_protobuf_commissions_report_no_order_id() {
     // CommissionsReport has no order_id (in either proto or text); routing
     // falls back to ByOrderId(-1) and the dispatcher then reroutes via
     // execution_id.
-    let bytes = encode_proto(&crate::proto::CommissionAndFeesReport {
+    let bytes = crate::proto::CommissionAndFeesReport {
         exec_id: Some("0000e0d5.69fb6496.01.01".into()),
         ..Default::default()
-    });
+    }
+    .encode_to_vec();
     let message = ResponseMessage::from_protobuf(IncomingMessages::CommissionsReport as i32, bytes, crate::server_versions::PROTOBUF);
     match determine_routing(&message) {
         RoutingDecision::ByOrderId(id) => assert_eq!(id, -1),
@@ -362,10 +360,11 @@ fn test_determine_routing_protobuf_commissions_report_no_order_id() {
 #[test]
 fn test_determine_routing_protobuf_request_id_message() {
     // AccountSummary uses ByRequestId and proto `req_id` lives at tag 1.
-    let bytes = encode_proto(&crate::proto::AccountSummary {
+    let bytes = crate::proto::AccountSummary {
         req_id: Some(314),
         ..Default::default()
-    });
+    }
+    .encode_to_vec();
     let message = ResponseMessage::from_protobuf(IncomingMessages::AccountSummary as i32, bytes, crate::server_versions::PROTOBUF);
     match determine_routing(&message) {
         RoutingDecision::ByRequestId(id) => assert_eq!(id, 314),

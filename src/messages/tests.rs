@@ -1,3 +1,4 @@
+use prost::Message;
 use time::macros::datetime;
 use time_tz::timezones::db::america::NEW_YORK;
 
@@ -485,30 +486,26 @@ fn test_response_message_special_fields() {
 
 #[test]
 fn test_execution_id_protobuf_commissions_report() {
-    use prost::Message;
-    let p = crate::proto::CommissionAndFeesReport {
+    let bytes = crate::proto::CommissionAndFeesReport {
         exec_id: Some("exec-proto-1".into()),
         ..Default::default()
-    };
-    let mut bytes = Vec::new();
-    p.encode(&mut bytes).unwrap();
+    }
+    .encode_to_vec();
     let message = ResponseMessage::from_protobuf(IncomingMessages::CommissionsReport as i32, bytes, crate::server_versions::PROTOBUF);
     assert_eq!(message.execution_id(), Some("exec-proto-1".to_string()));
 }
 
 #[test]
 fn test_execution_id_protobuf_execution_data() {
-    use prost::Message;
-    let p = crate::proto::ExecutionDetails {
+    let bytes = crate::proto::ExecutionDetails {
         req_id: Some(7),
         contract: None,
         execution: Some(crate::proto::Execution {
             exec_id: Some("exec-proto-2".into()),
             ..Default::default()
         }),
-    };
-    let mut bytes = Vec::new();
-    p.encode(&mut bytes).unwrap();
+    }
+    .encode_to_vec();
     let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionData as i32, bytes, crate::server_versions::PROTOBUF);
     assert_eq!(message.execution_id(), Some("exec-proto-2".to_string()));
 }
@@ -521,46 +518,40 @@ fn test_execution_id_protobuf_unknown_message_type_returns_none() {
 
 #[test]
 fn test_order_id_protobuf_open_order() {
-    use prost::Message;
-    let p = crate::proto::OpenOrder {
+    let bytes = crate::proto::OpenOrder {
         order_id: Some(42),
         ..Default::default()
-    };
-    let mut bytes = Vec::new();
-    p.encode(&mut bytes).unwrap();
+    }
+    .encode_to_vec();
     let message = ResponseMessage::from_protobuf(IncomingMessages::OpenOrder as i32, bytes, crate::server_versions::PROTOBUF);
     assert_eq!(message.order_id(), Some(42));
 }
 
 #[test]
 fn test_order_id_protobuf_order_status() {
-    use prost::Message;
-    let p = crate::proto::OrderStatus {
+    let bytes = crate::proto::OrderStatus {
         order_id: Some(99),
         status: Some("Filled".into()),
         ..Default::default()
-    };
-    let mut bytes = Vec::new();
-    p.encode(&mut bytes).unwrap();
+    }
+    .encode_to_vec();
     let message = ResponseMessage::from_protobuf(IncomingMessages::OrderStatus as i32, bytes, crate::server_versions::PROTOBUF);
     assert_eq!(message.order_id(), Some(99));
 }
 
 #[test]
 fn test_order_id_protobuf_execution_data_nested() {
-    use prost::Message;
     // ExecutionData carries order_id nested under `execution.order_id`,
     // not at proto tag 1 (which is req_id).
-    let p = crate::proto::ExecutionDetails {
+    let bytes = crate::proto::ExecutionDetails {
         req_id: Some(7),
         contract: None,
         execution: Some(crate::proto::Execution {
             order_id: Some(123),
             ..Default::default()
         }),
-    };
-    let mut bytes = Vec::new();
-    p.encode(&mut bytes).unwrap();
+    }
+    .encode_to_vec();
     let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionData as i32, bytes, crate::server_versions::PROTOBUF);
     assert_eq!(message.order_id(), Some(123));
     assert_eq!(message.request_id(), Some(7));
@@ -568,10 +559,7 @@ fn test_order_id_protobuf_execution_data_nested() {
 
 #[test]
 fn test_order_id_protobuf_execution_data_end() {
-    use prost::Message;
-    let p = crate::proto::ExecutionDetailsEnd { req_id: Some(55) };
-    let mut bytes = Vec::new();
-    p.encode(&mut bytes).unwrap();
+    let bytes = crate::proto::ExecutionDetailsEnd { req_id: Some(55) }.encode_to_vec();
     let message = ResponseMessage::from_protobuf(IncomingMessages::ExecutionDataEnd as i32, bytes, crate::server_versions::PROTOBUF);
     // Existing text-path returns peek_int(2) (which is req_id in text layout);
     // proto path mirrors that semantic.
@@ -580,11 +568,8 @@ fn test_order_id_protobuf_execution_data_end() {
 
 #[test]
 fn test_request_id_protobuf_tag1() {
-    use prost::Message;
     // HistoricalDataEnd-shaped envelope: just req_id at tag 1.
-    let p = ProtoIdEnvelope { id: Some(314) };
-    let mut bytes = Vec::new();
-    p.encode(&mut bytes).unwrap();
+    let bytes = ProtoIdEnvelope { id: Some(314) }.encode_to_vec();
     let message = ResponseMessage::from_protobuf(IncomingMessages::HistoricalDataEnd as i32, bytes, crate::server_versions::PROTOBUF);
     assert_eq!(message.request_id(), Some(314));
 }

@@ -836,15 +836,34 @@ impl std::ops::Index<usize> for RequestMessage {
     }
 }
 
-/// Minimal protobuf envelope decoding the int32 at tag 1, used as the generic
-/// `request_id` shape across most TWS protobuf messages (`req_id` is always at
-/// tag 1 by convention). Per-message-type quirks (e.g. `ExecutionDetails`
-/// nesting `order_id` under `execution`) are handled inline in the accessor
-/// rather than here.
+/// Minimal protobuf envelope decoding the int32 at tag 1. Covers `request_id`
+/// across most TWS protobuf messages and `order_id` for `OpenOrder` /
+/// `OrderStatus` / `ExecutionDetailsEnd`. Avoids the full struct decode
+/// (`OpenOrder` nests `Contract` + `Order` + `OrderState` — ~30 String
+/// allocations) just to read one int32; prost length-prefix-skips unknown
+/// trailing tags.
 #[derive(Clone, Copy, PartialEq, Eq, ::prost::Message)]
 struct ProtoIdEnvelope {
     #[prost(int32, optional, tag = "1")]
     pub id: Option<i32>,
+}
+
+/// Minimal envelope for `ExecutionDetails` reading only the nested
+/// `execution.order_id` (tag 3 → tag 1) and `execution.exec_id` (tag 3 →
+/// tag 2). Skips the `contract` sub-message at tag 2, avoiding ~20 String
+/// allocations per inbound `ExecutionData`.
+#[derive(Clone, PartialEq, ::prost::Message)]
+struct ExecutionDetailsMinimal {
+    #[prost(message, optional, tag = "3")]
+    pub execution: Option<ExecutionMinimal>,
+}
+
+#[derive(Clone, PartialEq, ::prost::Message)]
+struct ExecutionMinimal {
+    #[prost(int32, optional, tag = "1")]
+    pub order_id: Option<i32>,
+    #[prost(string, optional, tag = "2")]
+    pub exec_id: Option<String>,
 }
 
 /// Parsed inbound message from TWS/Gateway.
@@ -962,28 +981,20 @@ impl ResponseMessage {
 
     /// Try to extract the order id from the message.
     ///
-    /// For `server_version >= PROTOBUF`, the proto layout differs per message
-    /// type — `OpenOrder`/`OrderStatus` carry `order_id` at tag 1, but
-    /// `ExecutionDetails` nests it under `execution.order_id`.
+    /// For `server_version >= PROTOBUF`, three message types carry `order_id`
+    /// at proto tag 1 (decoded via the minimal `ProtoIdEnvelope`);
+    /// `ExecutionDetails` nests it under `execution.order_id` and uses
+    /// `ExecutionDetailsMinimal` to skip the `contract` sub-message.
     pub fn order_id(&self) -> Option<i32> {
-        let i = order_id_index(self.message_type())?;
         let kind = self.message_type();
+        let i = order_id_index(kind)?;
         self.proto_or_text_int(i, |b| match kind {
-            IncomingMessages::OpenOrder => {
-                let p: crate::proto::OpenOrder = prost::Message::decode(b).ok()?;
-                p.order_id
-            }
-            IncomingMessages::OrderStatus => {
-                let p: crate::proto::OrderStatus = prost::Message::decode(b).ok()?;
-                p.order_id
+            IncomingMessages::OpenOrder | IncomingMessages::OrderStatus | IncomingMessages::ExecutionDataEnd => {
+                prost::Message::decode(b).ok().and_then(|e: ProtoIdEnvelope| e.id)
             }
             IncomingMessages::ExecutionData => {
-                let p: crate::proto::ExecutionDetails = prost::Message::decode(b).ok()?;
+                let p: ExecutionDetailsMinimal = prost::Message::decode(b).ok()?;
                 p.execution.and_then(|e| e.order_id)
-            }
-            IncomingMessages::ExecutionDataEnd => {
-                let p: crate::proto::ExecutionDetailsEnd = prost::Message::decode(b).ok()?;
-                p.req_id
             }
             _ => None,
         })
@@ -997,7 +1008,7 @@ impl ResponseMessage {
     pub fn execution_id(&self) -> Option<String> {
         match self.message_type() {
             IncomingMessages::ExecutionData => self.proto_or_text_string(14, |b| {
-                let p: crate::proto::ExecutionDetails = prost::Message::decode(b).ok()?;
+                let p: ExecutionDetailsMinimal = prost::Message::decode(b).ok()?;
                 p.execution.and_then(|e| e.exec_id)
             }),
             IncomingMessages::CommissionsReport => self.proto_or_text_string(2, |b| {
